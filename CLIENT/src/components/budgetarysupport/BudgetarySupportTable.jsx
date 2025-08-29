@@ -1,0 +1,1290 @@
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRegion } from '../../context/RegionContext';
+import {
+  Box,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Typography,
+  IconButton,
+  CircularProgress,
+  Alert,
+  Chip,
+  Tooltip,
+  Card,
+  CardContent,
+  Grid,
+  Menu,
+  MenuItem,
+  Fade,
+  Zoom
+} from '@mui/material';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import GetAppIcon from '@mui/icons-material/GetApp';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import InfoIcon from '@mui/icons-material/Info';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
+import api from '../../config/api';
+import { toast } from 'react-toastify';
+import { useUser } from '../../context/UserContext';
+
+const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, groupedItems = {} }) => {
+  const [amount, setAmount] = useState(0);
+  const [exportMenuAnchor, setExportMenuAnchor] = useState(null);
+  const [compactView, setCompactView] = useState(false);
+  const queryClient = useQueryClient();
+  const { currentUser } = useUser();
+  const { selectedRegion } = useRegion();
+
+  // Extract region name properly - handle both string and object cases
+  const regionName = useMemo(() => {
+    if (!selectedRegion) return null;
+    
+    // If selectedRegion is already a string, use it
+    if (typeof selectedRegion === 'string') {
+      return selectedRegion;
+    }
+    
+    // If selectedRegion is an object, extract the name
+    if (typeof selectedRegion === 'object') {
+      return selectedRegion.name || selectedRegion.regionName || selectedRegion.Region || null;
+    }
+    
+    return null;
+  }, [selectedRegion]);
+
+  // No custom formatting needed since amount is read-only
+
+  // Check if we have valid fiscalYear and budgetType
+  const hasValidParams = !!fiscalYear && !!budgetType;
+  // Fetch calculated budgetary support from the new endpoint
+  const { data: calculatedBudgetarySupport } = useQuery({
+    queryKey: ['calculated-budgetary-support', fiscalYear, budgetType, regionName],
+    queryFn: async () => {
+      if (!hasValidParams) return null;
+      
+      // Prepare parameters
+      const params = { 
+        fiscalYear: Number(fiscalYear), 
+        budgetType: budgetType 
+      };
+      
+      // Add region in multiple formats if regionName exists
+      if (regionName) {
+        const cleanedRegion = regionName.trim();
+        params.region = cleanedRegion;
+        params.Region = cleanedRegion; // Try capital R version
+      }
+
+      const response = await api.get('/budgetary-support/calculate', { params });
+
+      return response.data;
+    },
+    enabled: hasValidParams
+  });
+
+  // Fetch Capital Outlay data to calculate subsidy total
+  const { data: capitalOutlayData } = useQuery({
+    queryKey: ['capital-outlays', fiscalYear, budgetType, regionName],
+    queryFn: async () => {
+      if (!hasValidParams) return [];
+      
+      // Prepare parameters with multiple region format attempts
+      const params = { 
+        fiscalYear: Number(fiscalYear), 
+        budgetType: budgetType 
+      };
+      
+      // Add region in multiple formats if regionName exists
+      if (regionName) {
+        const cleanedRegion = regionName.trim();
+        params.region = cleanedRegion;
+        params.Region = cleanedRegion; // Try capital R version
+      }
+
+      // First, try a simple API call without any filters to see if the endpoint works
+      try {
+        const basicTest = await api.get('/api/consolidated-reports/capital-outlay-data', { 
+          params: { 
+            limit: 5,
+            fiscalYear: Number(fiscalYear),
+            budgetType: budgetType
+          } 
+        });
+      } catch (basicError) {
+        console.error('❌ Basic Capital Outlay API test failed:', basicError);
+      }
+      
+      const response = await api.get('/api/consolidated-reports/capital-outlay-data', { params });
+
+      // Capital Outlay data comes directly as array or with data property
+      const data = response.data?.data || response.data || [];
+      
+      // Debug: Log the first few records to see field structure
+      if (data.length > 0) {
+      }
+      
+      // If no data returned, try alternative endpoint names
+      if (data.length === 0) {
+        
+        const alternativeEndpoints = [
+          '/capital-outlays',
+          '/capital-outlay',
+          '/capital_outlays',
+          '/capital_outlay',
+          '/capitalOutlays',
+          '/capitalOutlay'
+        ];
+        
+        for (const endpoint of alternativeEndpoints) {
+          try {
+            const testResponse = await api.get(endpoint, { params: { limit: 5 } });
+            
+            if (testResponse.data && (Array.isArray(testResponse.data) || testResponse.data.length > 0)) {
+              // Try with our actual parameters
+              const actualResponse = await api.get(endpoint, { params });
+              const actualData = actualResponse.data?.capitalOutlays || actualResponse.data?.data || actualResponse.data || [];
+              
+              if (actualData.length > 0) {
+                return actualData;
+              }
+            }
+          } catch (err) {
+          }
+        }
+      }
+      
+      // If no data returned with region filter, try without region filter
+      if (data.length === 0 && regionName) {
+        
+        const paramsWithoutRegion = { 
+          fiscalYear: Number(fiscalYear), 
+          budgetType: budgetType 
+        };
+        
+        const responseNoRegion = await api.get('/api/consolidated-reports/capital-outlay-data', { params: paramsWithoutRegion });
+        const dataNoRegion = responseNoRegion.data?.data || responseNoRegion.data || [];
+
+        if (dataNoRegion.length > 0) {
+          return dataNoRegion;
+        }
+      }
+      
+      return data;
+    },
+    enabled: hasValidParams
+  });
+
+  // Fetch MOOE data to get actual income amounts
+  const { data: mooeData } = useQuery({
+    queryKey: ['mooe-list', fiscalYear, budgetType, regionName],
+    queryFn: async () => {
+      if (!hasValidParams) return [];
+      
+      try {
+        // Build query string parameters like ProposalCustomPage does
+        const queryParams = [];
+        if (regionName) {
+          queryParams.push(`region=${encodeURIComponent(regionName)}`);
+        }
+        if (fiscalYear) {
+          queryParams.push(`fiscalYear=${encodeURIComponent(fiscalYear)}`);
+        }
+        if (budgetType) {
+          queryParams.push(`budgetType=${encodeURIComponent(budgetType)}`);
+        }
+        
+        const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
+        const response = await api.get(`/mooe-list${queryString}`);
+        
+        // Response is directly an array like in ProposalCustomPage
+        const data = response.data || [];
+        
+        return data;
+      } catch (error) {
+        return [];
+      }
+    },
+    enabled: hasValidParams
+  });
+
+  // Fetch Personal Services data for Use of Funds breakdown (Combined Permanent + Casual)
+  const { data: personalServicesData, error: personnelError } = useQuery({
+    queryKey: ['personnel-services-combined', fiscalYear, budgetType, regionName],
+    queryFn: async () => {
+      if (!hasValidParams) return [];
+      
+      // Setup base parameters with proper data types and validation
+      const baseParams = {
+        fiscalYear: Number(fiscalYear), // Ensure fiscal year is a number
+        budgetType: budgetType,
+        limit: 1000,
+        page: 1
+      };
+
+      // Clean and validate region parameter if present
+      if (regionName) {
+        const cleanedRegion = regionName.trim().replace(/\s+/g, ' ');
+        if (cleanedRegion) {
+          // Try different region parameter formats that the API might expect
+          baseParams.region = cleanedRegion; // Don't encode, send as plain string
+          baseParams.Region = cleanedRegion; // Try capital R version
+        }
+      }
+
+      try {
+        // Fetch personnel data from all employment types in a single call
+        
+        const response = await api.get('/getpersonnels', { 
+          params: { 
+            ...baseParams,
+            region: regionName,
+            fiscalYear: Number(fiscalYear)
+          } 
+        });
+
+        const personnelData = response.data || [];
+
+        // Debug: Log field structure for personnel data
+        if (personnelData.length > 0) {
+          
+          // Check appointment status distribution
+          const statusCounts = {};
+          personnelData.forEach(p => {
+            const status = p.statusOfAppointment || 'Unknown';
+            statusCounts[status] = (statusCounts[status] || 0) + 1;
+          });
+        }
+        
+        // If no data returned, try alternative endpoint names
+        if (personnelData.length === 0) {
+          
+          const alternativeEndpoints = [
+            '/personnelServices',
+            '/personnel-services',
+            '/personnel_services', 
+            '/personnel',
+            '/employees',
+            '/personnel-service'
+          ];
+          
+          for (const endpoint of alternativeEndpoints) {
+            try {
+              const testResponse = await api.get(endpoint, { params: { limit: 5 } });
+              
+              if (testResponse.data && (Array.isArray(testResponse.data) || testResponse.data.length > 0)) {
+                // Try with our actual parameters
+                const actualResponse = await api.get(endpoint, { params: baseParams });
+                const actualData = actualResponse.data?.personnelServices || actualResponse.data || [];
+                
+                if (actualData.length > 0) {
+                  return actualData;
+                }
+              }
+            } catch (err) {
+            }
+          }
+        }
+        
+        // If no data returned with region filter, try without region filter
+        if (personnelData.length === 0 && regionName) {
+          
+          const paramsWithoutRegion = {
+            fiscalYear: Number(fiscalYear),
+            budgetType: budgetType,
+            limit: 1000,
+            page: 1
+          };
+          
+          const responseNoRegion = await api.get('/getpersonnels', { params: paramsWithoutRegion });
+          const dataNoRegion = responseNoRegion.data || [];
+
+          // Use the data without region filter and we'll filter it locally
+          if (dataNoRegion.length > 0) {
+            return dataNoRegion;
+          }
+        }
+
+        // Ensure we have arrays
+        if (!Array.isArray(personnelData)) {
+          throw new Error('Personnel services data is not in the expected format');
+        }
+        
+        return personnelData;
+      } catch (error) {
+        // Only log if it's not a 500 error to reduce console noise
+        if (error.response?.status !== 500) {
+          console.error('Personnel services error details:', {
+            error: error,
+            response: error.response?.data,
+            status: error.response?.status,
+            config: {
+              url: error.config?.url,
+              params: error.config?.params
+            }
+          });
+        }
+
+        // Try to get data from calculatedBudgetarySupport as fallback
+        if (calculatedBudgetarySupport?.breakdown) {
+          const psBreakdown = calculatedBudgetarySupport.breakdown.find(item => 
+            item.source?.includes('PERSONAL SERVICES') || 
+            item.source?.includes('PS')
+          );
+          
+          if (psBreakdown) {
+            return [{
+              Total: psBreakdown.amount,
+              region: selectedRegion,
+              employeeFullName: 'Consolidated PS',
+              description: 'Total Personal Services from Budgetary Support Calculation'
+            }];
+          }
+        }
+
+        // If no fallback data available, just return empty array
+        return [];
+      }
+    },
+    enabled: hasValidParams,
+    retry: 2, // Increase retry attempts
+    retryDelay: 2000, // Increase delay between retries to 2 seconds
+    onError: (error) => {
+      console.error('Personnel services query error:', error);
+      toast.error(`Error: ${error.message}`);
+    }
+  });
+
+  // Note: Corporate Income data is now received via callback from IncomeTable component
+  // No need to fetch it separately here anymore
+
+  // Use React Query for existing budgetary support data (for reference only)
+  const {
+    data,
+    isLoading,
+    error
+  } = useQuery({
+    queryKey: ['budgetary-support', fiscalYear, budgetType],
+    queryFn: async () => {
+      if (!hasValidParams) {
+        // Missing required parameters
+        return null;
+      }
+
+      // Fetching budgetary support
+      const response = await api.get('/budgetary-support', {
+        params: { fiscalYear, budgetType, region: selectedRegion }
+      });
+      // Budgetary support loaded
+      return response.data && response.data.length > 0 ? response.data[0] : null;
+    },
+    enabled: hasValidParams, // Only run query if we have valid params
+    onError: (err) => {
+      console.error('Error fetching budgetary support data:', err);
+      toast.error(`Error loading budgetary support data: ${err.message}`);
+    }
+  });
+  // Use calculated budgetary support amount with better validation
+  useEffect(() => {
+    let newAmount = 0;
+
+    if (calculatedBudgetarySupport?.totalSubsidy) {
+      newAmount = Number(calculatedBudgetarySupport.totalSubsidy);
+    } else if (calculatedBudgetarySupport?.amount) {
+      newAmount = Number(calculatedBudgetarySupport.amount);
+    } else if (data?.amount) {
+      newAmount = Number(data.amount);
+    } else {
+      newAmount = 0;
+    }
+    
+    // Validate the amount
+    if (isNaN(newAmount) || newAmount < 0) {
+      console.warn('⚠️ Invalid amount detected, setting to 0:', newAmount);
+      newAmount = 0;
+    }
+    
+    setAmount(newAmount);
+  }, [calculatedBudgetarySupport, data]);
+
+  // Amount is now auto-calculated, no manual changes allowed
+
+  // Refresh data
+  const handleRefresh = useCallback(() => {
+    queryClient.invalidateQueries(['budgetary-support', fiscalYear, budgetType]);
+    queryClient.invalidateQueries(['calculated-budgetary-support', fiscalYear, budgetType, regionName]);
+    queryClient.invalidateQueries(['capital-outlays', fiscalYear, budgetType]);
+    queryClient.invalidateQueries(['personnel-services-combined', fiscalYear, budgetType, regionName]);
+    
+    // Note: Corporate income will refresh automatically when IncomeTable refreshes
+    
+    toast.info("Data refreshed");
+  }, [queryClient, fiscalYear, budgetType, regionName]);
+
+  // Helper function to get corporate income from actual data sources
+  const getCorporateIncomeFromBreakdown = useCallback((category) => {
+    let totalIncome = 0;
+    
+    if (category === 'MOOE') {
+      // Get MOOE income from the actual MOOE data first
+      // The breakdown data doesn't have income - we need the actual data
+      if (mooeData && Array.isArray(mooeData)) {
+        // If mooeData is a flat array (like from /mooe-list)
+        totalIncome = mooeData.reduce((sum, item) => {
+          const incomeValue = Number(item.income) || 0;
+          return sum + incomeValue;
+        }, 0);
+      } else if (mooeData && mooeData.formattedData && Array.isArray(mooeData.formattedData)) {
+        // If mooeData has nested structure with formattedData
+        totalIncome = mooeData.formattedData.reduce((sum, row) => {
+          return sum + (row.children || []).reduce((childSum, child) => {
+            const incomeValue = Number(child.income) || 0;
+            return childSum + incomeValue;
+          }, 0);
+        }, 0);
+      }
+      
+      // Fallback: Check breakdown data (unlikely to have income but check anyway)
+      if (totalIncome === 0 && calculatedBudgetarySupport?.breakdown) {
+        const mooeItems = calculatedBudgetarySupport.breakdown.filter(item => 
+          item.source?.includes('MOOE') || 
+          item.source?.includes('IAs O&M') ||
+          item.source?.includes('MAINTENANCE')
+        );
+        
+        mooeItems.forEach(item => {
+          // Look for income property in the breakdown data
+          const incomeValue = item.income || item.corporateIncome || item.regionalIncome || 0;
+          totalIncome += Number(incomeValue);
+        });
+      }
+      
+    } else if (category === 'CAPITAL_OUTLAY') {
+      // Get Capital Outlay income from the actual Capital Outlay data
+      // The breakdown data doesn't have income - we need the actual data
+      if (capitalOutlayData && Array.isArray(capitalOutlayData)) {
+        // Filter by current region and sum totalIncome (not income)
+        const regionFilteredData = capitalOutlayData.filter(item => {
+          // Handle different region name formats
+          if (!regionName || regionName === 'All') return true;
+          
+          // Match region names (handle variations)
+          const itemRegion = item.region?.toLowerCase();
+          const currentRegion = regionName.toLowerCase();
+          
+          return itemRegion === currentRegion || 
+                 itemRegion === currentRegion.replace(' region', '') ||
+                 currentRegion === 'central office' && itemRegion === 'central region';
+        });
+        
+        totalIncome = regionFilteredData.reduce((sum, item) => {
+          // Use totalIncome property instead of income
+          const incomeValue = Number(item.totalIncome) || Number(item.income) || 0;
+          return sum + incomeValue;
+        }, 0);
+      }
+      
+      // Fallback: Check if breakdown has income data (unlikely but check anyway)
+      if (totalIncome === 0 && calculatedBudgetarySupport?.breakdown) {
+        const coItems = calculatedBudgetarySupport.breakdown.filter(item => 
+          item.source?.includes('CAPITAL OUTLAY') || 
+          item.source?.includes('Capital Outlay') ||
+          item.source?.includes('CAPITAL OUTLAYS') ||
+          item.source?.includes('CO')
+        );
+        
+        coItems.forEach(item => {
+          const incomeValue = item.income || item.corporateIncome || item.regionalIncome || 0;
+          totalIncome += Number(incomeValue);
+        });
+      }
+    }
+    
+    return totalIncome;
+  }, [calculatedBudgetarySupport, capitalOutlayData, mooeData]);
+  const useOfFundsBreakdown = useMemo(() => {
+    // A.1 CORPORATE INCOME - Direct copy from IncomeTable
+    const corporateIncome = incomeGrandTotal || 0;
+
+    // Debug: Log calculatedBudgetarySupport structure
+    if (calculatedBudgetarySupport?.breakdown) {
+      calculatedBudgetarySupport.breakdown.forEach((item, index) => {
+      });
+    }
+
+    // B.1.1 PERSONAL SERVICES - Use Total field approach like Budget Summary cards
+    let personalServices = 0;
+    if (personalServicesData && Array.isArray(personalServicesData)) {
+      
+      // Check for duplicate data by appointment status
+      const statusBreakdown = {};
+      personalServicesData.forEach(p => {
+        const status = p.statusOfAppointment || 'Unknown';
+        if (!statusBreakdown[status]) statusBreakdown[status] = 0;
+        statusBreakdown[status]++;
+      });
+      
+      // Filter by region if needed (in case API didn't filter properly)
+      const filteredPersonnel = regionName 
+        ? personalServicesData.filter(p => (p.region || p.Region) === regionName)
+        : personalServicesData;
+
+      // Check for duplicates - if we have both PERMANENT and CASUAL with similar names/amounts, we may be double-counting
+      const uniquePersonnel = [];
+      const seen = new Set();
+      
+      filteredPersonnel.forEach(p => {
+        // Create a unique key based on employee details
+        const key = `${p.employeeFullName}_${p.positionTitle}_${p.department}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniquePersonnel.push(p);
+        } else {
+        }
+      });
+
+      if (uniquePersonnel.length > 0) {
+      }
+      
+      // Use Total field approach (matches Budget Summary cards in Proposal pages)
+      personalServices = uniquePersonnel.reduce((sum, p) => {
+        if (!p) return sum;
+        return sum + (Number(p.Total) || Number(p.total) || 0);
+      }, 0);
+
+      // Show sample Total field values for verification
+      if (uniquePersonnel.length > 0 && uniquePersonnel.length <= 5) {
+        uniquePersonnel.forEach((p, index) => {
+          const totalValue = Number(p.Total) || Number(p.total) || 0;
+        });
+      }
+    } else {
+    }
+
+    // B.1.2 MOOE - Direct from server calculation
+    const maintenanceAndOperating = calculatedBudgetarySupport?.breakdown?.find(item => 
+      item.source?.includes('MOOE') || item.source?.includes('IAs O&M')
+    )?.amount || 0;
+
+    // B.2 CAPITAL OUTLAYS - Get from server breakdown 
+    let capitalOutlays = 0;
+    if (calculatedBudgetarySupport?.breakdown) {
+      const coFromBreakdown = calculatedBudgetarySupport.breakdown.find(item => 
+        item.source?.includes('CAPITAL OUTLAY') || 
+        item.source?.includes('Capital Outlay') ||
+        item.source?.includes('CAPITAL OUTLAYS') ||
+        item.source?.includes('Capital Outlays') ||
+        item.source?.includes('CO')
+      );
+      
+      if (coFromBreakdown) {
+        capitalOutlays = coFromBreakdown.amount || 0;
+      }
+    }
+
+    // Operating Requirements Total
+    const operatingRequirements =  personalServices + maintenanceAndOperating + capitalOutlays;
+    
+    return {
+      corporateIncome,
+      personalServices,
+      maintenanceAndOperating,
+      capitalOutlays,
+      operatingRequirements
+    };
+  }, [capitalOutlayData, personalServicesData, calculatedBudgetarySupport, selectedRegion, incomeGrandTotal]);
+
+  // Enhanced export functionality
+  const handleExportToExcel = useCallback(() => {
+    // Calculate values for export using the helper function
+    const mooeIncomeFromRegion = getCorporateIncomeFromBreakdown('MOOE');
+    const coIncomeFromRegion = getCorporateIncomeFromBreakdown('CAPITAL_OUTLAY');
+
+    const exportData = [
+      {
+        'Description': 'Budgetary Support Total',
+        'Amount': parseFloat(amount || 0),
+        'Fiscal Year': fiscalYear,
+        'Budget Type': budgetType,
+        'Region': selectedRegion || '',
+        'Last Updated': new Date().toLocaleString(),
+        'Status': 'Auto-calculated'
+      },
+      {
+        'Description': 'A.1 CORPORATE INCOME',
+        'Amount': parseFloat(useOfFundsBreakdown.corporateIncome || 0),
+        'Fiscal Year': fiscalYear,
+        'Budget Type': budgetType,
+        'Region': selectedRegion || '',
+        'Last Updated': new Date().toLocaleString(),
+        'Status': 'Auto-calculated'
+      },
+      {
+        'Description': 'B.1.1 PERSONAL SERVICES',
+        'Projected Corporate Income': 0,
+        'Projected Subsidy': parseFloat(useOfFundsBreakdown.personalServices || 0),
+        'Proposed Budget': parseFloat(useOfFundsBreakdown.personalServices || 0),
+        'Fiscal Year': fiscalYear,
+        'Budget Type': budgetType,
+        'Region': selectedRegion || '',
+        'Last Updated': new Date().toLocaleString(),
+        'Status': 'Auto-calculated'
+      },
+      {
+        'Description': 'B.1.2 MAINTENANCE AND OTHER OPERATING EXPENSES',
+        'Projected Corporate Income': parseFloat(mooeIncomeFromRegion || 0),
+        'Projected Subsidy': parseFloat(useOfFundsBreakdown.maintenanceAndOperating || 0),
+        'Proposed Budget': parseFloat((Number(mooeIncomeFromRegion) + Number(useOfFundsBreakdown.maintenanceAndOperating)) || 0),
+        'Fiscal Year': fiscalYear,
+        'Budget Type': budgetType,
+        'Region': selectedRegion || '',
+        'Last Updated': new Date().toLocaleString(),
+        'Status': 'Auto-calculated'
+      },
+      {
+        'Description': 'B.2 CAPITAL OUTLAYS',
+        'Projected Corporate Income': parseFloat(coIncomeFromRegion || 0),
+        'Projected Subsidy': parseFloat(useOfFundsBreakdown.capitalOutlays || 0),
+        'Proposed Budget': parseFloat((Number(coIncomeFromRegion) + Number(useOfFundsBreakdown.capitalOutlays)) || 0),
+        'Fiscal Year': fiscalYear,
+        'Budget Type': budgetType,
+        'Region': selectedRegion || '',
+        'Last Updated': new Date().toLocaleString(),
+        'Status': 'Auto-calculated'
+      },
+      {
+        'Description': 'TOTAL USES OF FUNDS',
+        'Projected Corporate Income': parseFloat((Number(mooeIncomeFromRegion) + Number(coIncomeFromRegion)) || 0),
+        'Projected Subsidy': parseFloat(useOfFundsBreakdown.operatingRequirements || 0),
+        'Proposed Budget': parseFloat((Number(mooeIncomeFromRegion) + Number(coIncomeFromRegion) + Number(useOfFundsBreakdown.operatingRequirements)) || 0),
+        'Fiscal Year': fiscalYear,
+        'Budget Type': budgetType,
+        'Region': selectedRegion || '',
+        'Last Updated': new Date().toLocaleString(),
+        'Status': 'Auto-calculated'
+      },
+      {
+        'Description': 'TOTAL SOURCES OF FUNDS',
+        'Projected Corporate Income': parseFloat((Number(mooeIncomeFromRegion) + Number(coIncomeFromRegion)) || 0),
+        'Projected Subsidy': parseFloat(useOfFundsBreakdown.operatingRequirements || 0),
+        'Proposed Budget': parseFloat((Number(mooeIncomeFromRegion) + Number(coIncomeFromRegion) + Number(useOfFundsBreakdown.operatingRequirements)) || 0),
+        'Fiscal Year': fiscalYear,
+        'Budget Type': budgetType,
+        'Region': selectedRegion || '',
+        'Last Updated': new Date().toLocaleString(),
+        'Status': 'Auto-calculated'
+      }
+    ];
+
+    // Create CSV content
+    const headers = Object.keys(exportData[0]);
+    const csvContent = [
+      headers.join(','),
+      ...exportData.map(row => headers.map(header => `"${row[header] || ''}"`).join(','))
+    ].join('\n');
+
+    // Download file
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Budgetary_Support_UseOfFunds_Enhanced_${fiscalYear}_${budgetType}_${regionName || 'All'}_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+
+    toast.success("Enhanced budgetary support and use of funds data exported successfully!");
+    setExportMenuAnchor(null);
+  }, [amount, fiscalYear, budgetType, selectedRegion, regionName, useOfFundsBreakdown, calculatedBudgetarySupport, getCorporateIncomeFromBreakdown]);
+
+  // No add/edit functionality - amount is auto-calculated
+
+  // Show summary for A.1.1 IRRIGATION SERVICE FEES (Corporate Income)
+  const irrigationServiceFees = useOfFundsBreakdown.corporateIncome || 0;
+
+  if (!hasValidParams) {
+    return (
+      <Box sx={{ width: '100%', mb: 4 }}>
+        <Card sx={{ mb: 2, p: 2, background: '#f5f5f5' }}>
+          <Typography variant="h6" color="primary">
+            A.1.1 IRRIGATION SERVICE FEES = {irrigationServiceFees.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </Typography>
+          {regionName && (
+            <Typography variant="body2" color="textSecondary">
+              Region: {regionName}
+            </Typography>
+          )}
+        </Card>
+        <Alert severity="warning">
+          Cannot load budgetary support data: Missing fiscal year or budget type.
+        </Alert>
+      </Box>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <Box sx={{ width: '100%', mb: 4, display: 'flex', justifyContent: 'center', p: 3 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ width: '100%', mb: 4 }}>
+        <Alert severity="error">
+          Error loading budgetary support data: {error.message}
+        </Alert>
+      </Box>
+    );
+  }
+
+  // Enhanced toolbar component
+  const renderEnhancedToolbar = () => (
+    <Box sx={{ mb: 3 }}>
+      {/* Top Row - Main Controls */}
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+        <Box display="flex" alignItems="center" gap={2}>
+          {/* Info chip showing auto-calculation removed */}
+        </Box>
+
+        <Box display="flex" alignItems="center" gap={1}>
+          {/* Export button */}
+          <Tooltip title="Export data">
+            <IconButton
+              onClick={(e) => setExportMenuAnchor(e.currentTarget)}
+              color="primary"
+            >
+              <GetAppIcon />
+            </IconButton>
+          </Tooltip>
+
+          {/* Refresh button */}
+          <Tooltip title="Refresh data">
+            <IconButton onClick={handleRefresh} color="primary">
+              <RefreshIcon />
+            </IconButton>
+          </Tooltip>
+
+          {/* View toggle */}
+          <Tooltip title="Toggle compact view">
+            <IconButton
+              onClick={() => setCompactView(!compactView)}
+              color={compactView ? "primary" : "default"}
+            >
+              <VisibilityIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      </Box>
+    </Box>
+  );
+
+  return (
+    <Box sx={{ width: '100%', mb: 4 }}>
+      {/* Enhanced Toolbar */}
+      {renderEnhancedToolbar()}
+
+      {/* Use of Funds Table */}
+      <Card sx={{ mb: 3, bgcolor: '#fff', boxShadow: 3, borderRadius: 3 }}>
+        <CardContent sx={{ p: 3 }}>
+        <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+          <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1976d2', letterSpacing: 0.5 }}>
+            A. SOURCES OF FUNDS
+          </Typography>
+          <Box display="flex" alignItems="center" gap={1}>
+            <Chip
+              label="Auto-calculated from available data"
+              size="small"
+              color="info"
+              variant="outlined"
+            />
+            <Tooltip title="PROJECTED CORPORATE INCOME comes from income data. PROJECTED SUBSIDY is government funding. PROPOSED BUDGET is the total requirement.">
+              <IconButton size="small">
+                <InfoIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        </Box>
+        <TableContainer sx={{ mb: 3, boxShadow: 2, borderRadius: 2, border: '1px solid #e0e0e0' }}>
+          <Table size={compactView ? 'small' : 'medium'}>
+            <TableHead>
+              <TableRow sx={{ backgroundColor: '#1976d2' }}>
+                <TableCell sx={{ fontWeight: 'bold', color: 'white', width: '40%', fontSize: compactView ? '0.95rem' : '1.05rem', letterSpacing: 0.5, py: 2 }}>
+                  1. CORPORATE INCOME
+                </TableCell>
+                <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '20%', fontSize: compactView ? '0.95rem' : '1.05rem', letterSpacing: 0.5, py: 2 }}>
+                  PROJECTED CORPORATE INCOME
+                </TableCell>
+                <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '20%', fontSize: compactView ? '0.95rem' : '1.05rem', letterSpacing: 0.5, py: 2 }}>
+                  PROJECTED SUBSIDY
+                </TableCell>
+                <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '20%', fontSize: compactView ? '0.95rem' : '1.05rem', letterSpacing: 0.5, py: 2 }}>
+                  PROPOSED BUDGET
+                </TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {[
+                { label: 'A.1.1 IRRIGATION SERVICE FEES', key: 'Irrigation Service Fees' },
+                { label: 'A.1.2 RENT INCOME', key: 'Rent Income' },
+                { label: 'A.1.3 WATER SERVICE FEE', key: 'Water Service Fee' },
+                { label: 'A.1.4 MISCELLENEOUS INCOME', key: 'Miscellaneous Income' }
+              ].map((row, idx) => (
+                <TableRow key={row.key} sx={{ 
+                  backgroundColor: idx % 2 === 0 ? '#f9f9f9' : '#fff',
+                  '&:hover': { backgroundColor: '#f0f4f8' }
+                }}>
+                  <TableCell sx={{ pl: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                    <Typography variant="body2" sx={{ fontWeight: 500, letterSpacing: 0.2 }}>
+                      {row.label}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                    <Typography variant="body2" sx={{ fontWeight: 500, color: '#1565c0', letterSpacing: 0.2 }}>
+                      ₱{(groupedItems?.[row.key]?.subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                    <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.secondary', letterSpacing: 0.2 }}>
+                      -
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                    <Typography variant="body2" sx={{ fontWeight: 500, color: '#1565c0', letterSpacing: 0.2 }}>
+                      ₱{(groupedItems?.[row.key]?.subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ))}
+              <TableRow sx={{ 
+                backgroundColor: '#e3f2fd',
+                borderTop: '2px solid #1976d2'
+              }}>
+                <TableCell sx={{ pl: 3, py: 2 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', color: '#1976d2', letterSpacing: 0.5 }}>
+                    TOTAL CORPORATE INCOME
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: '#1565c0' }}>
+                    ₱{(
+                      ["Irrigation Service Fees", "Rent Income", "Water Service Fee", "Miscellaneous Income"]
+                        .map(cat => groupedItems?.[cat]?.subtotal || 0)
+                        .reduce((a, b) => a + b, 0)
+                      || incomeGrandTotal
+                    ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', color: 'text.secondary', letterSpacing: 0.5 }}>
+                    -
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: '#1565c0' }}>
+                    ₱{(
+                      ["Irrigation Service Fees", "Rent Income", "Water Service Fee", "Miscellaneous Income"]
+                        .map(cat => groupedItems?.[cat]?.subtotal || 0)
+                        .reduce((a, b) => a + b, 0)
+                      || incomeGrandTotal
+                    ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </CardContent>
+    </Card>
+
+      <Card sx={{ mb: 3, bgcolor: '#fff', boxShadow: 3, borderRadius: 3 }}>
+        <CardContent sx={{ p: 3 }}>
+          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1976d2', letterSpacing: 0.5 }}>
+              2. BUDGETARY SUPPORT
+            </Typography>
+            <Box display="flex" alignItems="center" gap={1}>
+              <Chip
+                label="Auto-calculated subsidy requirements"
+                size="small"
+                color="success"
+                variant="outlined"
+              />
+              <Tooltip title="PROJECTED CORPORATE INCOME comes from region-specific income data. PROJECTED SUBSIDY is government funding. PROPOSED BUDGET is the total requirement.">
+                <IconButton size="small">
+                  <InfoIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          </Box>
+          <TableContainer sx={{ mb: 3, boxShadow: 2, borderRadius: 2, border: '1px solid #e0e0e0' }}>
+            <Table size={compactView ? 'small' : 'medium'}>
+              <TableHead>
+                <TableRow sx={{ backgroundColor: '#1976d2' }}>
+                  <TableCell sx={{ fontWeight: 'bold', color: 'white', width: '40%', fontSize: compactView ? '0.95rem' : '1.05rem', letterSpacing: 0.5, py: 2 }}>
+                    2. BUDGETARY SUPPORT
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '20%', fontSize: compactView ? '0.95rem' : '1.05rem', letterSpacing: 0.5, py: 2 }}>
+                    PROJECTED CORPORATE INCOME
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '20%', fontSize: compactView ? '0.95rem' : '1.05rem', letterSpacing: 0.5, py: 2 }}>
+                    PROJECTED SUBSIDY
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '20%', fontSize: compactView ? '0.95rem' : '1.05rem', letterSpacing: 0.5, py: 2 }}>
+                    PROPOSED BUDGET
+                  </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                <TableRow sx={{ 
+                  backgroundColor: '#f9f9f9',
+                  '&:hover': { backgroundColor: '#f0f4f8' }
+                }}>
+                  <TableCell sx={{ pl: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                    <Typography variant="body2" sx={{ fontWeight: 500, letterSpacing: 0.2 }}>
+                      Subsidy to the National Irrigation Administration:
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                    <Typography variant="body2" color="text.secondary">
+                      -
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                    <Typography variant="body2" color="text.secondary">
+                      -
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                    <Typography variant="body2" color="text.secondary">
+                      -
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+                <TableRow sx={{ 
+                  backgroundColor: '#fff',
+                  '&:hover': { backgroundColor: '#f0f4f8' }
+                }}>
+                  <TableCell sx={{ pl: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem' }}>
+                    <Box display="flex" alignItems="center" gap={1}>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        a. Operating Requirements
+                      </Typography>
+                      <Chip
+                        label="Auto-calculated"
+                        size="small"
+                        color="info"
+                        sx={{ fontSize: '0.75rem' }}
+                      />
+                    </Box>
+                  </TableCell>
+                  <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                    <Typography variant="body2" color="text.secondary">
+                      -
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                    <Typography sx={{ fontWeight: 'medium', fontSize: compactView ? '0.95rem' : '1rem', color: '#2e7d32' }}>
+                      ₱{useOfFundsBreakdown.operatingRequirements.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                    <Typography sx={{ fontWeight: 'medium', fontSize: compactView ? '0.95rem' : '1rem', color: '#1565c0' }}>
+                      ₱{useOfFundsBreakdown.operatingRequirements.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+                <TableRow sx={{ 
+                  background: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)',
+                  borderTop: '2px solid #1976d2'
+                }}>
+                  <TableCell sx={{ fontWeight: 'bold', fontSize: compactView ? '0.95rem' : '1.05rem', pl: 3, py: 2 }}>
+                    <Box display="flex" alignItems="center" gap={1}>
+                      <TrendingUpIcon color="primary" fontSize="small" />
+                      <Typography variant="body2" fontWeight="bold" sx={{ color: '#1976d2' }}>
+                        TOTAL BUDGETARY SUPPORT
+                      </Typography>
+                    </Box>
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: compactView ? '0.95rem' : '1.05rem', pr: 3, py: 2 }}>
+                    <Typography variant="body2" fontWeight="bold" sx={{ color: '#666' }}>
+                      -
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: compactView ? '0.95rem' : '1.05rem', pr: 3, py: 2 }}>
+                    <Typography variant="body2" fontWeight="bold" sx={{ color: '#2e7d32' }}>
+                      ₱{useOfFundsBreakdown.operatingRequirements.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: compactView ? '0.95rem' : '1.05rem', pr: 3, py: 2 }}>
+                    <Typography variant="body2" fontWeight="bold" sx={{ color: '#1976d2' }}>
+                      ₱{useOfFundsBreakdown.operatingRequirements.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+
+                {/* TOTAL SOURCES OF FUNDS ROW */}
+                <TableRow sx={{ 
+                  backgroundColor: '#1b4e2c',
+                  borderTop: '2px solid #2e7d32'
+                }}>
+                  <TableCell sx={{ fontWeight: 'bold', fontSize: compactView ? '0.95rem' : '1.05rem', pl: 3, py: 2 }}>
+                    <Typography variant="body2" fontWeight="bold" sx={{ color: 'white' }}>
+                      TOTAL SOURCES OF FUNDS
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: compactView ? '0.95rem' : '1.05rem', pr: 3, py: 2 }}>
+                    <Typography variant="body2" fontWeight="bold" sx={{ color: 'white' }}>
+                      ₱{(getCorporateIncomeFromBreakdown('MOOE') + getCorporateIncomeFromBreakdown('CAPITAL_OUTLAY')).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: compactView ? '0.95rem' : '1.05rem', pr: 3, py: 2 }}>
+                    <Typography variant="body2" fontWeight="bold" sx={{ color: 'white' }}>
+                      ₱{(
+                        useOfFundsBreakdown.operatingRequirements + 
+                        0 // TOTAL CORPORATE INCOME PROJECTED SUBSIDY is 0 (dash)
+                      ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: compactView ? '0.95rem' : '1.05rem', pr: 3, py: 2 }}>
+                    <Typography variant="body2" fontWeight="bold" sx={{ color: 'white' }}>
+                      ₱{(
+                        getCorporateIncomeFromBreakdown('MOOE') + 
+                        getCorporateIncomeFromBreakdown('CAPITAL_OUTLAY') + 
+                        useOfFundsBreakdown.operatingRequirements +
+                        0 // TOTAL CORPORATE INCOME PROJECTED SUBSIDY is 0 (dash)
+                      ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+            </TableBody>
+          </Table>
+        </TableContainer>
+        </CardContent>
+      </Card>
+
+      <Card sx={{ mb: 3, bgcolor: '#fff', boxShadow: 3, borderRadius: 3 }}>
+        <CardContent sx={{ p: 3 }}>
+          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1976d2', letterSpacing: 0.5 }}>
+              B. USES OF FUNDS
+            </Typography>
+            <Box display="flex" alignItems="center" gap={1}>
+              <Chip
+                label="Region-based CORPORATE INCOME and SUBSIDY breakdown"
+                size="small"
+                color="info"
+                variant="outlined"
+              />
+              <Tooltip title="PROJECTED CORPORATE INCOME comes from region-specific income data. PROJECTED SUBSIDY is government funding. PROPOSED BUDGET is the total requirement.">
+                <IconButton size="small">
+                  <InfoIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          </Box>
+          <TableContainer sx={{ mb: 3, boxShadow: 2, borderRadius: 2, border: '1px solid #e0e0e0' }}>
+            <Table size={compactView ? 'small' : 'medium'}>
+              <TableHead>
+                <TableRow sx={{ backgroundColor: '#1976d2' }}>
+                  <TableCell sx={{ fontWeight: 'bold', color: 'white', width: '40%', fontSize: compactView ? '0.95rem' : '1.05rem', letterSpacing: 0.5, py: 2 }}>
+                    USE OF FUNDS
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '20%', fontSize: compactView ? '0.95rem' : '1.05rem', letterSpacing: 0.5, py: 2 }}>
+                    PROJECTED CORPORATE INCOME
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '20%', fontSize: compactView ? '0.95rem' : '1.05rem', letterSpacing: 0.5, py: 2 }}>
+                    PROJECTED SUBSIDY
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '20%', fontSize: compactView ? '0.95rem' : '1.05rem', letterSpacing: 0.5, py: 2 }}>
+                    PROPOSED BUDGET
+                  </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+              {/* B.1.1 PERSONAL SERVICES - Only PROJECTED SUBSIDY (no corporate income allocated) */}
+              <TableRow sx={{ 
+                backgroundColor: '#f9f9f9',
+                '&:hover': { backgroundColor: '#f0f4f8' }
+              }}>
+                <TableCell sx={{ pl: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, letterSpacing: 0.2 }}>
+                    B.1.1 PERSONAL SERVICES
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontStyle: 'italic' }}>
+                    (100% Subsidy - No corporate income allocation)
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#666', letterSpacing: 0.2 }}>
+                    -
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#2e7d32', letterSpacing: 0.2 }}>
+                    ₱{Number(useOfFundsBreakdown.personalServices || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#1976d2', letterSpacing: 0.2 }}>
+                    ₱{Number(useOfFundsBreakdown.personalServices || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+
+              {/* B.1.2 MAINTENANCE AND OTHER OPERATING EXPENSES - Has both CORPORATE INCOME and SUBSIDY */}
+              <TableRow sx={{ 
+                backgroundColor: '#fff',
+                '&:hover': { backgroundColor: '#f0f4f8' }
+              }}>
+                <TableCell sx={{ pl: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, letterSpacing: 0.2 }}>
+                    B.1.2 MAINTENANCE AND OTHER OPERATING EXPENSES
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontStyle: 'italic' }}>
+                    (Mixed funding: Regional income + Subsidy)
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#d32f2f', letterSpacing: 0.2 }}>
+                    ₱{getCorporateIncomeFromBreakdown('MOOE').toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#2e7d32', letterSpacing: 0.2 }}>
+                    ₱{Number(useOfFundsBreakdown.maintenanceAndOperating || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#1976d2', letterSpacing: 0.2 }}>
+                    ₱{(getCorporateIncomeFromBreakdown('MOOE') + Number(useOfFundsBreakdown.maintenanceAndOperating || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+
+              {/* B.2 CAPITAL OUTLAYS - Has both CORPORATE INCOME and SUBSIDY */}
+              <TableRow sx={{ 
+                backgroundColor: '#f9f9f9',
+                '&:hover': { backgroundColor: '#f0f4f8' }
+              }}>
+                <TableCell sx={{ pl: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, letterSpacing: 0.2 }}>
+                    B.2 CAPITAL OUTLAYS
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontStyle: 'italic' }}>
+                    (Mixed funding: Regional income + Subsidy)
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#d32f2f', letterSpacing: 0.2 }}>
+                    ₱{getCorporateIncomeFromBreakdown('CAPITAL_OUTLAY').toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#2e7d32', letterSpacing: 0.2 }}>
+                    ₱{Number(useOfFundsBreakdown.capitalOutlays || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#1976d2', letterSpacing: 0.2 }}>
+                    ₱{(getCorporateIncomeFromBreakdown('CAPITAL_OUTLAY') + Number(useOfFundsBreakdown.capitalOutlays || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+
+              {/* TOTAL ROW */}
+              <TableRow sx={{ 
+                background: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)',
+                borderTop: '2px solid #1976d2'
+              }}>
+                <TableCell sx={{ pl: 3, py: 2 }}>
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <TrendingUpIcon color="primary" fontSize="small" />
+                    <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', color: '#1976d2', letterSpacing: 0.5 }}>
+                      TOTAL USES OF FUNDS
+                    </Typography>
+                  </Box>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: '#d32f2f' }}>
+                    ₱{(getCorporateIncomeFromBreakdown('MOOE') + getCorporateIncomeFromBreakdown('CAPITAL_OUTLAY')).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: '#2e7d32' }}>
+                    ₱{useOfFundsBreakdown.operatingRequirements.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: '#1976d2' }}>
+                    ₱{(
+                      getCorporateIncomeFromBreakdown('MOOE') + 
+                      getCorporateIncomeFromBreakdown('CAPITAL_OUTLAY') + 
+                      useOfFundsBreakdown.operatingRequirements
+                    ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+
+              {/* SURPLUS/DEFICIT ROW */}
+              <TableRow sx={{ 
+                background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)',
+                borderTop: '2px solid #f57c00'
+              }}>
+                <TableCell sx={{ pl: 3, py: 2 }}>
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', color: '#f57c00', letterSpacing: 0.5 }}>
+                      SURPLUS/DEFICIT
+                    </Typography>
+                  </Box>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: '#f57c00' }}>
+                    ₱{(0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: '#f57c00' }}>
+                    ₱{(0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: '#f57c00' }}>
+                    ₱{(0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </TableContainer>
+        </CardContent>
+      </Card>
+
+
+      {/* Export Menu */}
+      <Menu
+        anchorEl={exportMenuAnchor}
+        open={Boolean(exportMenuAnchor)}
+        onClose={() => setExportMenuAnchor(null)}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+      >
+        <MenuItem onClick={handleExportToExcel}>
+          <GetAppIcon sx={{ mr: 1 }} />
+          Export to CSV
+        </MenuItem>
+      </Menu>
+    </Box>
+  );
+};
+
+export default BudgetarySupportTable;
+

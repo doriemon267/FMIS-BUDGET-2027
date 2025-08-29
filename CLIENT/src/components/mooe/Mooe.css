@@ -1,0 +1,13 @@
+/* Mooe.css */
+.table-header {
+    background-color: #375e38 !important; /* Add !important to ensure this takes priority */
+  }
+  
+  .table-header-cell {
+    color: white;
+    text-transform: uppercase;
+    font-size: 14px; /* Adjust font size as needed */
+    white-space: normal;
+    word-wrap: break-word;
+  }
+  

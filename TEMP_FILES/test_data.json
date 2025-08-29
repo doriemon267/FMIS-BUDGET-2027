@@ -1,0 +1,7 @@
+{
+  "incomeCategoryName": "Test Category",
+  "incomeSubcategoryName": ["Subcategory 1"],
+  "description": "Test description",
+  "isGlobal": false,
+  "regions": ["Region 1"]
+}

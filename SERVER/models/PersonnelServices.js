@@ -1,0 +1,245 @@
+// Rename this file to PersonnelServices.js (with capital P)
+const mongoose = require("mongoose");
+
+const personnelServicesSchema = new mongoose.Schema(
+  {
+    date_process: { type: Date, default: Date.now },
+    department: String,
+    region: String,
+    fiscal_year: Number,
+    budgetType: String,
+    username_process: String,
+    status: {
+      type: String,
+      enum: ["Submitted", "Not Submitted","Approved", "Returned","Draft"],
+      default: "Not Submitted"
+    },
+    processBy: {
+      type: String,
+      required: true,
+    },
+    processDate: {
+      type: Date,
+      required: true,
+    },
+    fiscalYear: {
+      type: String,
+   
+    },
+    itemNumber: {
+      type: String,
+    },
+    positionTitle: {
+      type: String,
+      required: true,
+    },
+    gradelevel_SG: {
+      type: String,
+   
+    },
+    step: {
+      type: String,
+      
+    },
+    gradelevel_JG: {
+      type: String,
+     
+    },
+    employeeFullName: {
+      type: String,
+      required: true,
+    },
+     DateOfAppointment: {
+      type: Date,
+      required: true,
+    },
+    DateOfBirth: {
+      type: Date,
+      // Not required initially to avoid breaking existing data
+      // TODO: Make this required after data migration
+    },
+    employeeStatus: { type: String, enum: ["Active", "Inactive"], required: true },
+    employeeNumber: {
+      type: String,
+    },
+    department: {
+      type: String,
+      required: true,
+    },
+    division: {
+      type: String,
+    },
+    section: {
+      type: String,
+    },
+    unit: {
+      type: String,
+    },
+    statusOfAppointment: {
+      type: String,
+      required: true,
+    },
+    monthlySalary: {
+      type: Number,
+      required: true,
+    },
+    noOfDependent: {
+      type: Number,
+      required: true,
+    },
+    hazardPay: {
+      type: Number,
+      required: true,
+    },
+    subsistenceAllowance: {
+      type: Number,
+      required: true,
+    },
+    honoraria: {
+      type: Number,
+      required: true,
+    },
+    annualSalary: {
+      type: Number,
+      required: true,
+    },
+    RATA: {
+      type: Number,
+      required: true,
+    },
+    PERA: {
+      type: Number,
+      required: true,
+    },
+    uniformALLOWANCE: {
+      type: Number,
+      required: true,
+    },
+    productivityIncentive: {
+      type: Number,
+      required: true,
+    },
+    medical: {
+      type: Number,
+    },
+    childrenAllowance: {
+      type: Number,
+    },
+    meal: {
+      type: Number,
+    },
+    cashGift: {
+      type: Number,
+      required: true,
+    },
+    subsistenceAllowanceMDS: {
+      type: Number, 
+      
+    },
+    subsistenceAllowanceST: {
+      type: Number,
+    },
+    midyearBonus: {
+      type: Number,
+      required: true,
+    },
+    yearEndBonus: {
+      type: Number,
+      required: true,
+    },
+    gsisPremium: {
+      type: Number,
+      required: true,
+    },
+    philhealthPremium: {
+      type: Number,
+      required: true,
+    },
+    pagibigPremium: {
+      type: Number,
+      required: true,
+    },
+    employeeCompensation: {
+      type: Number,
+      required: true,
+    },
+    loyaltyAward: {
+      type: Number,
+    },
+    overtimePay: {
+      type: Number,
+    },
+    earnedLeaves: {
+      type: Number,
+    },
+    retirementBenefits: {
+      type: Number,
+    },
+    terminalLeave: {
+      type: Number,
+    },
+courtAppearance: {
+      type: Number,
+    },
+
+    Total: {
+      type: Number,
+      required: true,
+    },
+  },
+  { timestamps: true }
+);
+
+// Add a pre-save hook to ensure meal is properly set
+personnelServicesSchema.pre('save', function(next) {
+  // If meal is undefined or null, set it to 0
+  if (this.meal === undefined || this.meal === null) {
+    this.meal = 0;
+  }
+  
+  // Ensure meal is a number
+  this.meal = Number(this.meal);
+  
+  next();
+});
+
+// Add a static method to reset meal allowance
+personnelServicesSchema.statics.resetMealAllowance = async function(employeeNumber, fiscalYear) {
+  try {
+    const result = await this.updateOne(
+      { employeeNumber, fiscalYear },
+      { $set: { meal: 0 } }
+    );
+    
+    // Recalculate total
+    const doc = await this.findOne({ employeeNumber, fiscalYear });
+    if (doc) {
+      // Get all numeric fields
+      const numericFields = [
+        "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
+        "medical", "meal", "cashGift", "midyearBonus", "yearEndBonus",
+        "gsisPremium", "philhealthPremium", "pagibigPremium", "employeeCompensation",
+        "subsistenceAllowanceMDS", "subsistenceAllowanceST", "overtimePay", "loyaltyAward",
+        "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
+        "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
+      ];
+      
+      // Calculate new total
+      doc.Total = numericFields.reduce(
+        (acc, field) => acc + (Number(doc[field]) || 0),
+        0
+      );
+      
+      await doc.save();
+    }
+    
+    return { success: true, result };
+  } catch (error) {
+    console.error("Error resetting meal allowance:", error);
+    return { success: false, error };
+  }
+};
+
+const PersonnelServices = mongoose.models.PersonnelServices || mongoose.model("PersonnelServices", personnelServicesSchema);
+
+module.exports = PersonnelServices;

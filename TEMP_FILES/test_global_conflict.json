@@ -1,0 +1,7 @@
+{
+  "incomeCategoryName": "Test Category",
+  "incomeSubcategoryName": ["Global attempt"],
+  "description": "Trying to create global version when regional exists",
+  "isGlobal": true,
+  "regions": []
+}

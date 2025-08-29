@@ -1,0 +1,41 @@
+const {
+  getAllEmployees,
+  addEmployee,
+  editEmployee,
+  deleteEmployee,
+  getEligibleForLoyaltyPay,
+  getEligibleForRetirement,
+  getEmployeeStats,
+} = require("../controllers/employeeListController");
+
+const Router = require("express").Router;
+const checkToken = require('../middleware/checkToken');
+
+const employeeRouter = Router();
+
+// Apply authentication middleware to all routes in this router
+employeeRouter.use(checkToken);
+
+// Get all employees
+employeeRouter.get("/employees", getAllEmployees);
+
+// Add a new employee
+employeeRouter.post("/employees", addEmployee);
+
+// Edit an existing employee
+employeeRouter.put("/employees/:id", editEmployee);
+
+// Delete an employee
+employeeRouter.delete("/employees/:id", deleteEmployee);
+
+// Get employees eligible for loyalty pay
+employeeRouter.get("/employees/loyalty-pay", getEligibleForLoyaltyPay);
+
+// Get employees eligible for retirement
+employeeRouter.get("/eligible-for-retirement", getEligibleForRetirement);
+
+// Get employee statistics
+employeeRouter.get("/employees/stats", getEmployeeStats);
+
+module.exports = employeeRouter;
+  

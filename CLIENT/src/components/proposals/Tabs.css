@@ -1,0 +1,205 @@
+/* Enhanced Tabs CSS with Mobile Optimization */
+.tabs-container {
+  max-width: 100%;
+  margin: 0 auto;
+  font-family: 'Inter', Arial, sans-serif;
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.action-tab-container {
+  display: flex;
+  flex-direction: column;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  border: 1px solid #e0e0e0;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+
+.tab-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.75rem 1rem 0;
+  border-bottom: 2px solid #375e38;
+  background-color: #fff;
+}
+
+/* Mobile responsiveness for tab buttons */
+@media (max-width: 768px) {
+  .tab-buttons {
+    display: none; /* Hide desktop tabs on mobile */
+  }
+  
+  .action-tab-container {
+    margin-bottom: 0;
+  }
+  
+  .tab-content {
+    padding: 12px !important;
+    border-radius: 4px !important;
+  }
+  
+  .button-group {
+    flex-direction: column !important;
+    gap: 0.75rem !important;
+  }
+  
+  .button-group button {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .tabs-container {
+    padding: 0 8px;
+  }
+  
+  .tab-content {
+    padding: 8px !important;
+  }
+}
+
+.tab-buttons button {
+  padding: 10px 15px;
+  background-color: #f0f0f0;
+  border: 1px solid #ccc;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  position: relative;
+  bottom: -2px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+/* Enhanced active state */
+.tab-buttons button.active {
+  background-color: #375e38;
+  color: white;
+  border-color: #375e38;
+  z-index: 1;
+  box-shadow: 0 2px 4px rgba(55, 94, 56, 0.3);
+}
+
+/* Hover effects */
+.tab-buttons button:hover:not(.active) {
+  background-color: #e8f5e9;
+  border-color: #4caf50;
+  transform: translateY(-1px);
+}
+
+.button-group {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.75rem 1rem;
+  background-color: #f9f9f9;
+  border-top: 1px solid #e0e0e0;
+  margin-top: auto;
+}
+
+/* Enhanced button group responsiveness */
+@media (max-width: 640px) {
+  .button-group {
+    justify-content: center;
+    padding: 1rem;
+  }
+}
+
+.tab-content {
+  padding: 24px;
+  background-color: #fff;
+  transition: opacity 0.3s ease;
+  position: relative;
+}
+
+.tab-content h2 {
+    margin-top: 0;
+    font-weight: 600;
+    font-size: clamp(20px, 4vw, 24px);
+}
+
+.tab-content p {
+    margin: 8px 0 0;
+    font-size: clamp(14px, 2.5vw, 16px);
+}
+
+.button-container {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 480px) {
+  .button-container {
+    flex-direction: column;
+  }
+  
+  .button-container button {
+    width: 100%;
+  }
+}
+
+.add-personnel-button {
+    background-color: #2e7d32;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    margin-bottom: 16px;
+    transition: background-color 0.3s ease;
+    min-width: 140px;
+}
+
+.add-personnel-button:hover {
+    background-color: #1b5e20;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .tab-buttons button {
+        font-size: 0.8rem;
+        padding: 0.4rem 0.6rem;
+        min-width: 100px;
+    }
+    
+    .tab-buttons {
+        gap: 0.3rem;
+    }
+    
+    .action-tab-container {
+        top: 120px;
+    }
+}
+
+@media (max-width: 480px) {
+    .tab-buttons button {
+        font-size: 0.7rem;
+        padding: 0.3rem 0.5rem;
+        min-width: 80px;
+        max-width: 120px;
+    }
+    
+    .button-group button {
+        font-size: 0.8rem;
+    }
+}

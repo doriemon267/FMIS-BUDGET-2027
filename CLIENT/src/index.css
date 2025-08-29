@@ -1,0 +1,55 @@
+* {
+    margin: 0;
+    padding: 0;
+}
+
+/* App.css */
+
+.signature {
+    width: 100px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    background-color: white;
+    border-radius: 4px;
+    z-index: 10;
+}
+
+
+.loading-cell {
+    background-color: #dcdcdc;
+    animation: fadeInOut 1s infinite alternate;
+}
+
+@keyframes fadeInOut {
+    from {
+        opacity: 0.2;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+/* Increase text contrast globally */
+body {
+  color: #000000;
+  font-weight: 500;
+}
+
+/* Ensure all text has sufficient contrast */
+p, span, div, h1, h2, h3, h4, h5, h6, button, a {
+  color: inherit;
+}
+
+/* Increase contrast for table text */
+table {
+  color: #000000;
+}
+
+/* Ensure form inputs have dark text */
+input, select, textarea {
+  color: #000000;
+}

@@ -1,0 +1,18 @@
+.credit-card-icon {
+    transition: all 0.3s ease;
+    cursor: pointer;
+  }
+  
+  /* Hover State: add glow effect and change color */
+  .credit-card-icon:hover {
+    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.8)); /* Creates a glow effect */
+    color: #ff6f61;  /* Change to your desired color when hovered */
+  }
+  
+  /* Focus State: change color and apply glow effect */
+  .credit-card-icon:focus {
+    outline: none;  /* Remove default focus outline */
+    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.8));
+    color: #00bcd4;  /* Change to your desired color when focused */
+  }
+  

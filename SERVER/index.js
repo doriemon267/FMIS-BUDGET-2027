@@ -1,0 +1,311 @@
+require("dotenv").config();
+
+const express = require("express");
+const cookieParser = require("cookie-parser");
+const cors = require("cors");
+const testRouter = require("./routers/testRoutes");
+const personnelRoutes = require("./routers/personnel");
+const positionTitleRoutes = require("./routers/PositionTitle");
+const departmentRouter = require("./routers/Department");
+const employeeRouter = require("./routers/employeeListRoutes");
+const statusRouter = require("./routers/Status");
+const salaryRouter = require("./routers/salaryRoutes");
+const mooeRoutes = require('./routers/mooeRoutes');
+const fiscalYearRoutes = require("./routers/fiscalYearRoutes");
+const personnelServicesRouter = require("./routers/personnelServicesRoutes");
+const excelUploadRouter = require("./routers/excelUpload");
+const capitalOutlayRouter = require("./routers/capitalOutlayRouter");
+const categoryRouter = require("./routers/category");
+const proposalRouter = require("./routers/proposalRoutes");
+const proposalRBACRouter = require("./routers/proposalRoutesRBAC");
+const rataRoutes = require("./routers/rataRoutes");
+const regionRouter = require("./routers/regionRoutes");
+const settings = require("./routers/settingsRoutes");
+const annexRouter = require("./routers/annex");
+const personnelServicesAnnexesRoutes = require("./routers/ps_annexes");
+const setupRouter = require("./routers/setupRoutes");
+const employeeCourtAppearanceRouter = require("./routers/employeeCourtAppearanceRoutes");
+const subsistenceSTRouter = require("./routers/subsistenceAllowanceSTRoutes");
+// const overtimeRouter = require("./routers/overtimeRoutes");
+const overtimeRouter = require("./routers/overtimeRoutes");
+const subsistenceAllowanceRouter = require("./routers/subsistenceAllowanceMDSRoutes");
+const loyaltyPayRouter = require("./routers/loyaltyPayRoutes");
+const reportsRouter = require("./routers/reports.routes");
+const cosPersonnelRouter = require("./routers/cosPersonnelRoutes");
+const proposalSummaryRoutes = require("./routers/proposalSummary");
+//PARA SA MGA UPLOADER
+const chartOfAccountsRouter = require("./routers/uploader/chartOfAccounts");
+const uploadcategories = require("./routers/uploader/categories");
+const uploadstatus = require("./routers/uploader/statuses");
+const uploadregions = require("./routers/uploader/regions");
+const uploaddepartments = require("./routers/uploader/departments");
+const uploadpositions = require("./routers/uploader/positionTitles");
+const uploadsalaries = require("./routers/uploader/salaryGrades");
+const uploadstatuses = require("./routers/uploader/statuses");
+const uploadratas = require("./routers/uploader/ratas");
+const mealAllowance = require("./routers/mealAllowanceRoutes")
+const incomeCategoryRouter = require("./routers/incomeCategoryRoutes")
+const incomeSubcategoryRouter = require("./routers/incomeSubcategoryRoutes")
+const incomeSubcategoryRoutes = require("./routers/income_subcategories");
+const statsRouter = require("./routers/statsRoutes");
+const childrenAllowance = require("./routers/childrenAllowanceRoutes");
+const exportRoutes = require("./routers/exportRoutes");
+const medicalAllowanceRouter = require("./routers/medicalAllowanceRoutes");
+const incomeRouter = require("./routers/incomeRoutes");
+const incomeExcelUploadRouter = require("./routers/incomeExcelUploadRoutes");
+const discountSettingsRouter = require("./routes/discountSettings");
+const retireeRouter = require("./routers/retireeRoutes");
+const budgetarySupportRoutes = require("./routers/budgetarySupportRoutes");
+const chartOfAccountsCRUDRouter = require("./routers/chartOfAccountsRoutes");
+const titleMappingRouter = require("./routers/titleMappingRoutes");
+const employeeMasterRouter = require("./routers/employeeMasterRoutes");
+const iasOMCostRouter = require("./routers/iasOMCostRoutes");
+const consolidatedReportsRouter = require("./routers/consolidatedReportsRoutes");
+const consolidatedCapitalOutlayRouter = require("./routers/consolidatedCapitalOutlayRoutes");
+const consolidatedPersonnelServicesRouter = require("./routers/consolidatedPersonnelServicesRoutes");
+const comprehensiveReportsRouter = require("./routers/comprehensiveReportsRoutes");
+const databaseBackupRouter = require("./routers/databaseBackupRoutes");
+const checkToken = require('./middleware/checkToken');
+const enforceOrgAccess = require('./middleware/enforceOrgAccess');
+const { initializeCleanupScheduler } = require("./utils/backupCleanup");
+const { initializeBackupSystem } = require("./backup-scripts/initBackupSystem");
+const income_categories = require("./routers/income_categories");
+require("./config/mongo_db")();
+
+// Fix database index for region isolation
+const mongoose = require('mongoose');
+mongoose.connection.once('open', async () => {
+  try {
+    // console.log('🔧 Checking database indexes for region isolation...');
+
+    const db = mongoose.connection.db;
+    const collection = db.collection('mooeproposals');
+
+    // Check if old problematic index exists
+    const indexes = await collection.indexes();
+    const hasOldIndex = indexes.some(idx =>
+      idx.key &&
+      idx.key.uacsCode === 1 &&
+      idx.key.fiscalYear === 1 &&
+      !idx.key.region
+    );
+
+    if (hasOldIndex) {
+      console.log('🗑️ Dropping old problematic index...');
+      try {
+        await collection.dropIndex({ uacsCode: 1, fiscalYear: 1 });
+        console.log('✅ Old index dropped successfully');
+      } catch (error) {
+        console.log('ℹ️ Could not drop old index:', error.message);
+      }
+    }
+
+    // Ensure new index with region exists
+    try {
+      await collection.createIndex(
+        { uacsCode: 1, fiscalYear: 1, region: 1 },
+        { unique: true, background: true }
+      );
+      console.log('✅ Region isolation index created/verified successfully');
+    } catch (error) {
+      if (error.code !== 85) { // 85 = index already exists
+        console.log('ℹ️ Index creation info:', error.message);
+      }
+    }
+  // Ensure Settings collection has compound unique index (fiscalYear, budgetType) and drop old unique FY index if present
+  try {
+    const settingsCol = mongoose.connection.db.collection('settings');
+    const settingsIndexes = await settingsCol.indexes();
+    const hasUniqueFYOnly = settingsIndexes.some(idx => idx.key && idx.key.fiscalYear === 1 && idx.unique && !idx.key.budgetType);
+    if (hasUniqueFYOnly) {
+      try {
+        await settingsCol.dropIndex('fiscalYear_1');
+        console.log('✅ Dropped legacy unique index on settings.fiscalYear');
+      } catch (e) {
+        console.log('ℹ️ Could not drop legacy settings index:', e.message);
+      }
+    }
+    try {
+      await settingsCol.createIndex({ fiscalYear: 1, budgetType: 1 }, { unique: true, background: true });
+      console.log('✅ Ensured compound unique index on settings(fiscalYear, budgetType)');
+    } catch (e) {
+      if (e.code !== 85) {
+        console.log('ℹ️ Settings index creation info:', e.message);
+      }
+    }
+  } catch (e) {
+    console.log('ℹ️ Settings index verification skipped:', e.message);
+  }
+
+
+  } catch (error) {
+    console.error('⚠️ Database index check failed:', error.message);
+  }
+});
+
+const app = express();
+
+// MIDDLEWARE
+app.use(
+  cors({
+    origin: [
+      process.env.CLIENT1,
+      process.env.CLIENT2,
+      process.env.CLIENT3,
+      // list more allowed origins
+    ],
+    credentials: true,
+  })
+);
+// Increase payload limits for export functionality
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(cookieParser());
+
+app.get("/", (req, res) => res.json({ message: "server is UP!" }));
+
+// Test endpoint without MongoDB
+app.get('/test', (req, res) => {
+  res.json({
+    message: 'Server is working without MongoDB!',
+    timestamp: new Date(),
+    status: 'OK',
+    note: 'MongoDB temporarily disabled due to authentication issues'
+  });
+});
+
+// Removed mock stats endpoint - now using actual statsController
+
+app.use(testRouter);
+
+// Global organizational enforcement for all mutating routes (non-GET)
+app.use((req, res, next) => {
+  try {
+    if (req.method === 'GET') return next();
+
+    // Skip enforcement for hierarchical assignment management endpoints
+    const p = (req.path || '').toLowerCase();
+    if (p.startsWith('/api/hierarchical-rbac/assignments')) {
+      return next();
+    }
+
+    // Ensure user is authenticated before enforcing org access
+    return checkToken(req, res, () => enforceOrgAccess(req, res, next));
+  } catch (e) {
+    console.error('Global org enforcement error:', e);
+    return res.status(500).json({ message: 'Server error during access enforcement' });
+  }
+});
+app.use(employeeRouter);
+app.use(statusRouter);
+app.use(salaryRouter);
+// Routes
+app.use(personnelRoutes);
+//Position Title Routes
+app.use(positionTitleRoutes);
+app.use(mooeRoutes);
+app.use(fiscalYearRoutes);
+//Department Title Routes
+app.use(departmentRouter);
+app.use(personnelServicesRouter);
+app.use("/api", excelUploadRouter); // Excel Upload Route
+
+app.use(capitalOutlayRouter);
+app.use(categoryRouter);
+app.use(proposalRouter);
+app.use(proposalRBACRouter);
+app.use(rataRoutes);
+app.use(settings);
+app.use("/api", regionRouter);
+app.use(annexRouter);
+app.use(personnelServicesAnnexesRoutes);
+app.use(setupRouter);
+app.use(employeeCourtAppearanceRouter);
+app.use(overtimeRouter);
+app.use(subsistenceAllowanceRouter);
+app.use(iasOMCostRouter);
+app.use(subsistenceSTRouter);
+app.use(loyaltyPayRouter);
+app.use('/reports', reportsRouter); // Mount with /reports prefix
+app.use(cosPersonnelRouter);
+app.use('/', mooeRoutes);
+
+app.use(proposalSummaryRoutes);
+
+
+//para sa mga uploader
+app.use(chartOfAccountsRouter);
+app.use(uploadcategories);
+app.use(uploadstatus);
+app.use(uploadregions);
+app.use(uploaddepartments);
+app.use(uploadpositions);
+app.use(uploadsalaries);
+app.use(uploadstatuses);
+app.use(uploadratas);
+app.use(mealAllowance);
+app.use(incomeCategoryRouter);
+app.use(incomeSubcategoryRouter);
+app.use(incomeSubcategoryRoutes);
+app.use("/stats", statsRouter);
+app.use(childrenAllowance);
+app.use("/api/export", exportRoutes);
+app.use(medicalAllowanceRouter);
+app.use(incomeRouter);
+app.use(income_categories);
+app.use("/income", incomeExcelUploadRouter); // Mount under /income prefix
+app.use("/api/consolidated-reports", consolidatedReportsRouter); // Mount consolidated reports routes
+app.use("/api/consolidated-reports", consolidatedCapitalOutlayRouter); // Mount consolidated capital outlay routes
+app.use("/api/consolidated-reports", consolidatedPersonnelServicesRouter); // Mount consolidated personnel services routes
+app.use("/api/comprehensive-reports", comprehensiveReportsRouter); // Mount comprehensive reports routes
+app.use("/api/database-backup", databaseBackupRouter); // Mount database backup routes
+// app.use("/api", overtimeRouter);
+// Add this line to use the new router
+app.use(require("./routers/personnelParamsRoutes"));
+
+// Keep the original routers
+app.use(require("./routers/personnelServicesRoutes"));
+// app.use(require("./routers/medicalAllowanceRoutes"));
+app.use("/api/discount-settings", discountSettingsRouter);
+app.use(retireeRouter);
+app.use(budgetarySupportRoutes);
+app.use(chartOfAccountsCRUDRouter);
+app.use(titleMappingRouter);
+// Legacy user-region and organizational assignment routers removed in favor of hierarchical RBAC
+// const userRegionAssignmentRouter = require('./routers/UserRegionAssignmentRoutes');
+// app.use("/api", userRegionAssignmentRouter);
+// const userOrgAssignmentRouter = require('./routers/UserOrganizationalAssignmentRoutes');
+// app.use(userOrgAssignmentRouter);
+const userProfileRouter = require('./routers/UserProfileRoutes');
+app.use("/api", userProfileRouter);
+const budgetManagerOrgRoutes = require('./routers/budgetManagerOrgRoutes');
+app.use(budgetManagerOrgRoutes);
+
+// 🏢 Hierarchical RBAC Routes - Enhanced organizational access control with Division → Department → Region consolidation
+const hierarchicalRBACRoutes = require('./routers/hierarchicalRBACRoutes');
+app.use("/api/hierarchical-rbac", hierarchicalRBACRoutes);
+
+// 🧪 Test route for organization structure (temporary)
+const testOrgStructureRoutes = require('./routers/testOrgStructure');
+app.use("/api/test", testOrgStructureRoutes);
+
+// Register employee master router
+app.use(employeeMasterRouter);
+const mooeExcelUploadRouter = require("./routers/mooeExcelUploadRoutes");
+app.use("/income", mooeExcelUploadRouter); // Mount under /income prefix for MOOE upload
+
+
+app.listen(process.env.APP_PORT, () => {
+  console.log(`🚀 Server running at: http://localhost:${process.env.APP_PORT}`);
+
+  // Initialize backup system
+  initializeBackupSystem();
+
+  // Initialize backup cleanup scheduler
+  setTimeout(() => {
+    initializeCleanupScheduler();
+    console.log(`✅ Server fully initialized and ready!`);
+  }, 5000); // Wait 5 seconds for database connection to be established
+
+  return null;
+});

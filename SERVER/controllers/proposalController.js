@@ -1,0 +1,1651 @@
+const mongoose = require('mongoose');
+const Proposal = require('../models/Proposal');
+const DraftProposal = require('../models/DraftProposal');
+const PersonnelService = require('../models/personnelServices');
+const MooeProposal = require('../models/mooeProposals');
+const CapitalOutlay = require('../models/CapitalOutlay');
+const BudgetarySupport = require('../models/BudgetarySupport');
+const IncomeSubcategory = require('../models/IncomeSubcategory');
+
+// Remove the checkUserRegionAccess function
+// const checkUserRegionAccess = async (userId, region) => {
+//   try {
+//     // If no region specified, allow access
+//     if (!region) return true;
+//     
+//     // Find user's region assignments
+//     const userAssignment = await UserRegionAssignment.findOne({ userId }).populate('regions');
+//     
+//     // If no assignments found, check if any assignments exist in the system
+//     if (!userAssignment) {
+//       const anyAssignments = await UserRegionAssignment.countDocuments();
+//       // If no assignments exist in the system, allow access (system not using region restrictions yet)
+//       if (anyAssignments === 0) return true;
+//       // Otherwise, deny access
+//       return false;
+//     }
+//     
+//     // Check if user is assigned to this region
+//     return userAssignment.regions.some(r => r.Region === region);
+//   } catch (error) {
+//     console.error('Error checking user region access:', error);
+//     return false;
+//   }
+// };
+
+exports.updateProposalStatus = async (req, res) => {
+  try {
+    const { 
+      personnelIds, 
+      mooeIds, 
+      capitalOutlayIds, 
+      incomeIds, 
+      budgetType, 
+      processBy,
+      region,
+      userId // Add userId to the request
+    } = req.body;
+    
+    // Change from const to let for fiscalYear
+    let { fiscalYear } = req.body;
+    
+    // Ensure region is included in the request
+    if (!fiscalYear || !budgetType || !region) {
+      console.error("Missing required fields in request body:", req.body);
+      return res.status(400).json({ message: "Missing fiscalYear, budgetType, or region" });
+    }
+    
+    fiscalYear = fiscalYear.toString();
+    
+    // Optimize: Run all database updates in parallel for better performance
+    const updatePromises = [];
+
+    if (personnelIds && Array.isArray(personnelIds) && personnelIds.length > 0) {
+      const validPersonnelIds = personnelIds
+        .filter(id => mongoose.Types.ObjectId.isValid(id))
+        .map(id => new mongoose.Types.ObjectId(id));
+
+      updatePromises.push(
+        PersonnelService.updateMany(
+          { _id: { $in: validPersonnelIds } },
+          { $set: { status: "Submitted", fiscalYear, budgetType, processBy, region } }
+        )
+      );
+    }
+
+    if (mooeIds && Array.isArray(mooeIds) && mooeIds.length > 0) {
+      console.log("Updating MooeProposal proposals for IDs:", mooeIds);
+      const validMooeIds = mooeIds
+        .filter((id) => {
+          const isValid = mongoose.Types.ObjectId.isValid(id);
+          if (!isValid) {
+            console.error("Invalid MOOE id encountered:", id);
+          }
+          return isValid;
+        })
+        .map((id) => new mongoose.Types.ObjectId(id));
+
+      updatePromises.push(
+        MooeProposal.updateMany(
+          { _id: { $in: validMooeIds } },
+          { $set: { status: "Submitted", fiscalYear, budgetType, processBy, region } }
+        )
+      );
+    }
+
+    if (capitalOutlayIds && Array.isArray(capitalOutlayIds) && capitalOutlayIds.length > 0) {
+      console.log("Updating CapitalOutlay proposals for IDs:", capitalOutlayIds);
+      const validCapitalIds = capitalOutlayIds
+        .filter((id) => {
+          const isValid = mongoose.Types.ObjectId.isValid(id);
+          if (!isValid) {
+            console.error("Invalid Capital Outlay id encountered:", id);
+          }
+          return isValid;
+        })
+        .map((id) => new mongoose.Types.ObjectId(id));
+
+      updatePromises.push(
+        CapitalOutlay.updateMany(
+          { _id: { $in: validCapitalIds } },
+          { $set: { status: "Submitted", fiscalYear, budgetType, processBy, region } }
+        )
+      );
+    }
+
+    if (incomeIds && Array.isArray(incomeIds) && incomeIds.length > 0) {
+      console.log("Updating IncomeSubcategory proposals for IDs:", incomeIds);
+      const validIncomeIds = incomeIds
+        .filter((id) => {
+          const isValid = mongoose.Types.ObjectId.isValid(id);
+          if (!isValid) {
+            console.error("Invalid Income id encountered:", id);
+          }
+          return isValid;
+        })
+        .map((id) => new mongoose.Types.ObjectId(id));
+
+      updatePromises.push(
+        IncomeSubcategory.updateMany(
+          { _id: { $in: validIncomeIds } },
+          { $set: { status: "Submitted", fiscalYear, budgetType, processBy, region } }
+        )
+      );
+    }
+
+    // Execute all updates in parallel
+    console.log("🚀 Executing", updatePromises.length, "database updates in parallel...");
+    const updateResults = await Promise.all(updatePromises);
+    console.log("✅ All database updates completed:", updateResults.map(r => r.modifiedCount));
+
+    const status = "Submitted";
+
+    // Calculate personnel expenses
+    const personnel = await PersonnelService.aggregate([
+      { 
+        $match: { 
+          status, 
+          fiscalYear, 
+          budgetType, 
+          processBy,
+          region
+        } 
+      },
+      {
+        $project: {
+          processBy: 1,
+          region: 1,
+          statusOfAppointment: 1,
+          // Make sure all fields are properly converted to numbers
+          computedTotal: {
+            $sum: [
+              { $toDouble: { $ifNull: ["$annualSalary", 0] } },
+              { $toDouble: { $ifNull: ["$RATA", 0] } },
+              { $toDouble: { $ifNull: ["$PERA", 0] } },
+              { $toDouble: { $ifNull: ["$uniformALLOWANCE", 0] } },
+              { $toDouble: { $ifNull: ["$productivityIncentive", 0] } },
+              { $toDouble: { $ifNull: ["$medical", 0] } },
+              { $toDouble: { $ifNull: ["$childrenAllowance", 0] } },
+              { $toDouble: { $ifNull: ["$meal", 0] } },
+              { $toDouble: { $ifNull: ["$cashGift", 0] } },
+              { $toDouble: { $ifNull: ["$subsistenceAllowanceMDS", 0] } },
+              { $toDouble: { $ifNull: ["$subsistenceAllowanceST", 0] } },
+              { $toDouble: { $ifNull: ["$midyearBonus", 0] } },
+              { $toDouble: { $ifNull: ["$yearEndBonus", 0] } },
+              { $toDouble: { $ifNull: ["$gsisPremium", 0] } },
+              { $toDouble: { $ifNull: ["$philhealthPremium", 0] } },
+              { $toDouble: { $ifNull: ["$pagibigPremium", 0] } },
+              { $toDouble: { $ifNull: ["$employeeCompensation", 0] } },
+              { $toDouble: { $ifNull: ["$loyaltyAward", 0] } },
+              { $toDouble: { $ifNull: ["$overtimePay", 0] } },
+              { $toDouble: { $ifNull: ["$earnedLeaves", 0] } },
+              { $toDouble: { $ifNull: ["$retirementBenefits", 0] } },
+              { $toDouble: { $ifNull: ["$terminalLeave", 0] } },
+              { $toDouble: { $ifNull: ["$courtAppearance", 0] } }
+            ]
+          }
+        }
+      },
+      {
+        $group: {
+          _id: { 
+            processBy: "$processBy", 
+            region: "$region", 
+            statusOfAppointment: "$statusOfAppointment" 
+          },
+          totalCost: { $sum: "$computedTotal" }
+        }
+      }
+    ]);
+
+    // Log the result to see if it has values
+    console.log("Personnel aggregation result:", personnel);
+
+    // Transform personnel data for proposal summary
+    const personnelTransformed = personnel.map((p) => ({
+      processBy: p._id.processBy,
+      region: p._id.region,
+      fiscalYear,
+      budgetType,
+      submittedDate: new Date(),
+      status,
+      cobExpenditures: `Personnel Services - ${p._id.statusOfAppointment}`,
+      totalExpenses: Number(p.totalCost) || 0,  // Ensure it's a number
+      totalIncome: 0
+    }));
+
+    // Calculate MOOE expenses
+    const mooe = await MooeProposal.aggregate([
+      { $match: { status, fiscalYear, budgetType, processBy, region } },
+      {
+        $group: {
+          _id: { processBy: "$processBy", region: "$region" },
+          totalCost: { $sum: { $toDouble: { $ifNull: ["$amount", 0] } } },
+        },
+      },
+    ]);
+    console.log("MOOE aggregation result:", mooe);
+    
+    // Transform MOOE data for proposal summary
+    const mooeTransformed = mooe.map((p) => ({
+      processBy: p._id.processBy,
+      region: p._id.region,
+      fiscalYear,
+      budgetType,
+      submittedDate: new Date(),
+      status,
+      cobExpenditures: "MOOE",
+      totalExpenses: Number(p.totalCost) || 0,  // Ensure it's a number
+      totalIncome: 0
+    }));
+
+    // Calculate Capital Outlay expenses
+    const capitalOutlays = await CapitalOutlay.aggregate([
+      { $match: { status, fiscalYear, budgetType, processBy, region } },
+      {
+        $group: {
+          _id: { processBy: "$processBy", region: "$region" },
+          totalCost: { $sum: { $toDouble: { $ifNull: ["$cost", 0] } } },
+        },
+      },
+    ]);
+    console.log("Capital Outlay aggregation result:", capitalOutlays);
+    
+    // Transform Capital Outlay data for proposal summary
+    const capitalOutlaysTransformed = capitalOutlays.map((p) => ({
+      processBy: p._id.processBy,
+      region: p._id.region,
+      fiscalYear,
+      budgetType,
+      submittedDate: new Date(),
+      status,
+      cobExpenditures: "Capital Outlay",
+      totalExpenses: Number(p.totalCost) || 0,  // Ensure it's a number
+      totalIncome: 0
+    }));
+
+    // Calculate Income with consistent filtering
+    const income = await IncomeSubcategory.aggregate([
+      { 
+        $match: { 
+          status, 
+          fiscalYear, 
+          budgetType, 
+          processBy, 
+          region 
+        } 
+      },
+      {
+        $group: {
+          _id: { 
+            processBy: "$processBy", 
+            region: "$region" 
+          },
+          totalAmount: { 
+            $sum: { 
+              $toDouble: { 
+                $ifNull: ["$amount", 0] 
+              } 
+            } 
+          },
+        },
+      },
+    ]);
+    console.log("Income aggregation result with details:", {
+      matchCriteria: { status, fiscalYear, budgetType, processBy, region },
+      result: income
+    });
+
+    // Transform Income data for proposal summary with explicit conversion
+    const incomeTransformed = income.map((p) => {
+      const totalIncome = Number(p.totalAmount) || 0;
+      console.log(`Income for ${p._id.processBy} in ${p._id.region}: ${totalIncome}`);
+      
+      return {
+        processBy: p._id.processBy,
+        region: p._id.region,
+        fiscalYear,
+        budgetType,
+        submittedDate: new Date(),
+        status,
+        cobExpenditures: "Income",
+        totalExpenses: 0,
+        totalIncome: totalIncome
+      };
+    });
+
+    const summary = [
+      ...personnelTransformed,
+      ...mooeTransformed,
+      ...capitalOutlaysTransformed,
+      ...incomeTransformed,
+    ];
+    console.log("Summary to upsert:", summary);
+
+    // Optimize: Use bulkWrite for better performance instead of sequential updates
+    if (summary.length > 0) {
+      console.log("🚀 Bulk updating", summary.length, "proposal summaries...");
+      const bulkOps = summary.map(item => ({
+        updateOne: {
+          filter: {
+            processBy: item.processBy,
+            region: item.region,
+            fiscalYear: item.fiscalYear,
+            budgetType: item.budgetType,
+            cobExpenditures: item.cobExpenditures,
+          },
+          update: {
+            $set: {
+              submittedDate: item.submittedDate,
+              status: item.status,
+              totalExpenses: item.totalExpenses,
+              totalIncome: item.totalIncome,
+            },
+          },
+          upsert: true
+        }
+      }));
+
+      const bulkResult = await Proposal.bulkWrite(bulkOps);
+      console.log("✅ Bulk update completed:", bulkResult.modifiedCount, "modified,", bulkResult.upsertedCount, "created");
+    }
+
+    return res.status(200).json({
+      message: "Proposals status updated and summary saved successfully",
+    });
+  } catch (error) {
+    console.error("Error updating proposal status and saving summary:", error.stack);
+    return res.status(500).json({
+      message: "Error updating proposal status and saving summary",
+      error: error.message,
+    });
+  }
+};
+
+exports.saveAsDraft = async (req, res) => {
+  try {
+    console.log("=== SAVE AS DRAFT REQUEST RECEIVED ===");
+    console.log("Request body:", req.body);
+    console.log("Request headers:", req.headers);
+
+    let {
+      personnelIds,
+      mooeIds,
+      capitalOutlayIds,
+      incomeIds,
+      budgetarySupportIds,
+      fiscalYear,
+      budgetType,
+      processBy,
+      region
+    } = req.body;
+
+    // Enhanced validation with detailed error messages
+    const missingFields = [];
+    if (!fiscalYear) missingFields.push('fiscalYear');
+    if (!budgetType) missingFields.push('budgetType');
+    if (!processBy) missingFields.push('processBy');
+    if (!region) missingFields.push('region');
+
+    if (missingFields.length > 0) {
+      console.error("Missing required fields:", missingFields);
+      console.error("Full request body:", req.body);
+      return res.status(400).json({
+        message: `Missing required fields: ${missingFields.join(', ')}`,
+        missingFields,
+        receivedData: req.body
+      });
+    }
+    
+    // Log the region being used for this draft
+    console.log(`Saving draft proposals for region: ${region}`);
+    
+    // Ensure region is properly set
+    if (!region) {
+      return res.status(400).json({
+        message: "Region is required for saving drafts",
+        error: "REGION_REQUIRED"
+      });
+    }
+    
+    // IMPORTANT: We will only update items that already belong to this region
+    // This prevents changing the region of items from other regions
+    console.log(`IMPORTANT: Only updating items that already belong to region: ${region}`);
+
+    fiscalYear = fiscalYear.toString();
+
+    console.log("Received save as draft request with:", {
+      personnelIds: personnelIds ? personnelIds.length : 0,
+      mooeIds: mooeIds ? mooeIds.length : 0,
+      capitalOutlayIds: capitalOutlayIds ? capitalOutlayIds.length : 0,
+      incomeIds: incomeIds ? incomeIds.length : 0,
+      budgetarySupportIds: budgetarySupportIds ? budgetarySupportIds.length : 0,
+      fiscalYear,
+      budgetType,
+      processBy,
+      region
+    });
+
+    // Create or update draft proposal
+    const draftData = {
+      fiscalYear,
+      budgetType,
+      processBy,
+      region,
+      status: "Draft",
+      lastEditedAt: new Date(),
+      // Add any other fields needed
+      cobExpenditures: [],
+      totalAmount: 0
+    };
+
+    // Try to find existing draft
+    let existingDraft = await DraftProposal.findOne({
+      fiscalYear,
+      budgetType,
+      processBy,
+      region
+    });
+
+    if (existingDraft) {
+      console.log("Updating existing draft:", existingDraft._id);
+      existingDraft = await DraftProposal.findByIdAndUpdate(
+        existingDraft._id,
+        draftData,
+        { new: true }
+      );
+    } else {
+      console.log("Creating new draft proposal");
+      const newDraft = new DraftProposal(draftData);
+      existingDraft = await newDraft.save();
+    }
+
+    // Check if there are any proposals to update
+    const totalProposals = (personnelIds?.length || 0) + (mooeIds?.length || 0) +
+                          (capitalOutlayIds?.length || 0) + (incomeIds?.length || 0) +
+                          (budgetarySupportIds?.length || 0);
+
+    if (totalProposals === 0) {
+      console.log("No proposals provided for draft saving");
+      return res.status(200).json({
+        message: "No proposals were provided to save as draft",
+        draft: existingDraft,
+        warning: "No proposal items were updated"
+      });
+    }
+
+    console.log(`Processing ${totalProposals} total proposals for draft saving`);
+
+    // Update related items to Draft status
+    if (personnelIds && Array.isArray(personnelIds) && personnelIds.length > 0) {
+      console.log("Updating PersonnelService proposals to Draft for IDs:", personnelIds);
+      const validPersonnelIds = personnelIds
+        .filter((id) => {
+          const isValid = mongoose.Types.ObjectId.isValid(id);
+          if (!isValid) {
+            console.error("Invalid Personnel id encountered:", id);
+          }
+          return isValid;
+        })
+        .map((id) => new mongoose.Types.ObjectId(id));
+
+      // CRITICAL: Only update items that already belong to this region
+      // This prevents changing the region of items from other regions
+      const personnelResult = await PersonnelService.updateMany(
+        { 
+          _id: { $in: validPersonnelIds },
+          region: region  // Only update items that already belong to this region
+        },
+        { 
+          $set: { 
+            status: "Draft", 
+            fiscalYear, 
+            budgetType, 
+            processBy
+            // Don't set region here as we're only updating items that already have this region
+          } 
+        }
+      );
+      console.log(`Updated ${personnelResult.modifiedCount} personnel items to Draft status with region: ${region}`);
+      console.log("Personnel draft update result:", personnelResult);
+    }
+
+    // Update MOOE proposals to Draft status
+    if (mooeIds && Array.isArray(mooeIds) && mooeIds.length > 0) {
+      console.log("Updating MOOE proposals to Draft for IDs:", mooeIds);
+      const validMooeIds = mooeIds
+        .filter((id) => {
+          const isValid = mongoose.Types.ObjectId.isValid(id);
+          if (!isValid) {
+            console.error("Invalid MOOE id encountered:", id);
+          }
+          return isValid;
+        })
+        .map((id) => new mongoose.Types.ObjectId(id));
+
+      // CRITICAL: Only update items that already belong to this region
+      const mooeResult = await MooeProposal.updateMany(
+        { 
+          _id: { $in: validMooeIds },
+          region: region  // Only update items that already belong to this region
+        },
+        { 
+          $set: { 
+            status: "Draft", 
+            fiscalYear, 
+            budgetType, 
+            processBy
+            // Don't set region here as we're only updating items that already have this region
+          } 
+        }
+      );
+      console.log(`Updated ${mooeResult.modifiedCount} MOOE items to Draft status with region: ${region}`);
+      console.log("MOOE draft update result:", mooeResult);
+    }
+
+    // Update Capital Outlay proposals to Draft status
+    if (capitalOutlayIds && Array.isArray(capitalOutlayIds) && capitalOutlayIds.length > 0) {
+      console.log("Updating Capital Outlay proposals to Draft for IDs:", capitalOutlayIds);
+      const validCapitalIds = capitalOutlayIds
+        .filter((id) => {
+          const isValid = mongoose.Types.ObjectId.isValid(id);
+          if (!isValid) {
+            console.error("Invalid Capital Outlay id encountered:", id);
+          }
+          return isValid;
+        })
+        .map((id) => new mongoose.Types.ObjectId(id));
+
+      // CRITICAL: Only update items that already belong to this region
+      const capitalResult = await CapitalOutlay.updateMany(
+        { 
+          _id: { $in: validCapitalIds },
+          region: region  // Only update items that already belong to this region
+        },
+        { 
+          $set: { 
+            status: "Draft", 
+            fiscalYear, 
+            budgetType, 
+            processBy
+            // Don't set region here as we're only updating items that already have this region
+          } 
+        }
+      );
+      console.log(`Updated ${capitalResult.modifiedCount} Capital Outlay items to Draft status with region: ${region}`);
+      console.log("Capital Outlay draft update result:", capitalResult);
+    }
+
+    // Update Budgetary Support proposals to Draft status
+    if (budgetarySupportIds && Array.isArray(budgetarySupportIds) && budgetarySupportIds.length > 0) {
+      console.log("Updating Budgetary Support proposals to Draft for IDs:", budgetarySupportIds);
+      const validBudgetaryIds = budgetarySupportIds
+        .filter((id) => {
+          const isValid = mongoose.Types.ObjectId.isValid(id);
+          if (!isValid) {
+            console.error("Invalid Budgetary Support id encountered:", id);
+          }
+          return isValid;
+        })
+        .map((id) => new mongoose.Types.ObjectId(id));
+
+      // CRITICAL: Only update items that already belong to this region
+      const budgetaryResult = await BudgetarySupport.updateMany(
+        { 
+          _id: { $in: validBudgetaryIds },
+          region: region  // Only update items that already belong to this region
+        },
+        { 
+          $set: { 
+            status: "Draft", 
+            fiscalYear, 
+            budgetType, 
+            processBy
+            // Don't set region here as we're only updating items that already have this region
+          } 
+        }
+      );
+      console.log("Budgetary Support draft update result:", budgetaryResult);
+    }
+
+    // Create default result objects for categories that weren't processed
+    let personnelResultObj = { modifiedCount: 0 };
+    let mooeResultObj = { modifiedCount: 0 };
+    let capitalResultObj = { modifiedCount: 0 };
+    let budgetaryResultObj = { modifiedCount: 0 };
+    let incomeResultObj = { modifiedCount: 0 };
+    
+    // Use the actual results if they exist
+    if (personnelIds && Array.isArray(personnelIds) && personnelIds.length > 0 && typeof personnelResult !== 'undefined') {
+      personnelResultObj = personnelResult;
+    }
+    
+    if (mooeIds && Array.isArray(mooeIds) && mooeIds.length > 0 && typeof mooeResult !== 'undefined') {
+      mooeResultObj = mooeResult;
+    }
+    
+    if (capitalOutlayIds && Array.isArray(capitalOutlayIds) && capitalOutlayIds.length > 0 && typeof capitalResult !== 'undefined') {
+      capitalResultObj = capitalResult;
+    }
+    
+    if (budgetarySupportIds && Array.isArray(budgetarySupportIds) && budgetarySupportIds.length > 0 && typeof budgetaryResult !== 'undefined') {
+      budgetaryResultObj = budgetaryResult;
+    }
+    
+    // Handle Income items
+    if (incomeIds && Array.isArray(incomeIds) && incomeIds.length > 0) {
+      console.log("Updating Income proposals to Draft for IDs:", incomeIds);
+      const validIncomeIds = incomeIds
+        .filter((id) => {
+          const isValid = mongoose.Types.ObjectId.isValid(id);
+          if (!isValid) {
+            console.error("Invalid Income id encountered:", id);
+          }
+          return isValid;
+        })
+        .map((id) => new mongoose.Types.ObjectId(id));
+
+      // CRITICAL: Only update items that already belong to this region
+      const incomeResult = await IncomeSubcategory.updateMany(
+        { 
+          _id: { $in: validIncomeIds },
+          region: region  // Only update items that already belong to this region
+        },
+        { 
+          $set: { 
+            status: "Draft", 
+            fiscalYear, 
+            budgetType, 
+            processBy
+            // Don't set region here as we're only updating items that already have this region
+          } 
+        }
+      );
+      console.log(`Updated ${incomeResult.modifiedCount} Income items to Draft status with region: ${region}`);
+      console.log("Income draft update result:", incomeResult);
+      
+      // Store the result
+      incomeResultObj = incomeResult;
+    }
+    
+    // Count how many items were actually updated
+    const updatedCounts = {
+      personnel: personnelResultObj.modifiedCount || 0,
+      mooe: mooeResultObj.modifiedCount || 0,
+      capitalOutlay: capitalResultObj.modifiedCount || 0,
+      budgetarySupport: budgetaryResultObj.modifiedCount || 0,
+      income: incomeResultObj.modifiedCount || 0
+    };
+    
+    const totalUpdated = Object.values(updatedCounts).reduce((sum, count) => sum + count, 0);
+    
+    console.log(`Total items updated to Draft status: ${totalUpdated}`);
+    console.log(`Items updated by category:`, updatedCounts);
+    
+    // Check if any items were not updated because they belong to a different region
+    const notUpdatedCounts = {
+      personnel: personnelIds && Array.isArray(personnelIds) ? personnelIds.length - (personnelResultObj.modifiedCount || 0) : 0,
+      mooe: mooeIds && Array.isArray(mooeIds) ? mooeIds.length - (mooeResultObj.modifiedCount || 0) : 0,
+      capitalOutlay: capitalOutlayIds && Array.isArray(capitalOutlayIds) ? capitalOutlayIds.length - (capitalResultObj.modifiedCount || 0) : 0,
+      budgetarySupport: budgetarySupportIds && Array.isArray(budgetarySupportIds) ? budgetarySupportIds.length - (budgetaryResultObj.modifiedCount || 0) : 0,
+      income: incomeIds && Array.isArray(incomeIds) ? incomeIds.length - (incomeResultObj.modifiedCount || 0) : 0
+    };
+    
+    const totalNotUpdated = Object.values(notUpdatedCounts).reduce((sum, count) => sum + count, 0);
+    
+    if (totalNotUpdated > 0) {
+      console.log(`WARNING: ${totalNotUpdated} items were not updated because they belong to a different region`);
+      console.log(`Items not updated by category:`, notUpdatedCounts);
+    }
+    
+    return res.status(200).json({
+      message: `Proposal saved as draft successfully. ${totalUpdated} items updated.`,
+      draft: existingDraft,
+      updatedCounts,
+      notUpdatedCounts,
+      warning: totalNotUpdated > 0 ? 
+        `${totalNotUpdated} items were not updated because they belong to a different region than ${region}` : 
+        undefined
+    });
+  } catch (error) {
+    console.error("Error saving proposal as draft:", error.stack);
+    return res.status(500).json({
+      message: "Error saving proposal as draft",
+      error: error.message,
+    });
+  }
+};
+
+// ... (rest of the controller remains unchanged)
+
+exports.createProposal = async (req, res) => {
+  try {
+    const proposalData = { ...req.body };
+    
+    // Apply hierarchical consolidation if user has assignment
+    if (req.userHierarchicalAssignment && req.userHierarchicalAssignment.assignmentLevel !== 'NONE') {
+      const assignment = req.userHierarchicalAssignment;
+      
+      // Set the organizational context based on user's assignment level
+      switch (assignment.assignmentLevel) {
+        case 'DIVISION':
+          // Division users: data consolidates to department level, but track original division
+          proposalData.region = assignment.regions[0]?.regionName;
+          proposalData.department = assignment.departments[0]?.departmentName;
+          proposalData.division = assignment.divisions[0];
+          proposalData.originalDivision = assignment.divisions[0]; // Track original for reference
+          break;
+          
+        case 'DEPARTMENT':
+          // Department users: data consolidates to region level, but track original department
+          proposalData.region = assignment.regions[0]?.regionName;
+          proposalData.department = assignment.departments[0]?.departmentName;
+          proposalData.originalDepartment = assignment.departments[0]?.departmentName;
+          break;
+          
+        case 'REGION':
+          // Region users: data stays at region level
+          proposalData.region = assignment.regions[0]?.regionName;
+          break;
+          
+        case 'FULL':
+          // Full access users can specify any organizational context
+          // Keep the data as provided in request
+          break;
+      }
+      
+      // Add audit fields
+      proposalData.createdByAssignmentLevel = assignment.assignmentLevel;
+      proposalData.createdByUserId = req.user.id;
+      
+      console.log(`🏢 Creating proposal with hierarchical context: ${assignment.assignmentLevel}`, {
+        region: proposalData.region,
+        department: proposalData.department,
+        division: proposalData.division
+      });
+    }
+    
+    const newProposal = new Proposal(proposalData);
+    const savedProposal = await newProposal.save();
+    
+    res.status(201).json(savedProposal);
+  } catch (error) {
+    console.error('Error creating proposal:', error);
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.getProposals = async (req, res) => {
+  try {
+    console.log("GET /proposals request received with params:", req.query);
+    
+    const { 
+      page = 0, 
+      limit = 20, 
+      sort = "updatedAt", 
+      order = "desc", 
+      search = "",
+      filterField = "",
+      filterValue = "",
+      filterOperator = "="
+    } = req.query;
+    
+    // Convert page and limit to numbers
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    
+    // Build the query
+    const query = {};
+    
+    // Apply hierarchical filters first
+    if (req.hierarchicalFilters) {
+      Object.assign(query, req.hierarchicalFilters);
+      console.log("🏢 Applied hierarchical filters:", req.hierarchicalFilters);
+    }
+    
+    // Add search condition if provided
+    if (search) {
+      const searchConditions = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { processBy: { $regex: search, $options: 'i' } },
+        { region: { $regex: search, $options: 'i' } }
+      ];
+      
+      // If hierarchical filters exist, combine with AND
+      if (Object.keys(query).length > 0) {
+        query.$and = [
+          query, // existing hierarchical filters
+          { $or: searchConditions }
+        ];
+        // Remove the original query properties since they're now in $and
+        Object.keys(req.hierarchicalFilters || {}).forEach(key => delete query[key]);
+      } else {
+        query.$or = searchConditions;
+      }
+    }
+    
+    // Add filter condition if provided
+    if (filterField && filterValue) {
+      if (filterOperator === "=") {
+        query[filterField] = filterValue;
+      } else if (filterOperator === ">") {
+        query[filterField] = { $gt: filterValue };
+      } else if (filterOperator === "<") {
+        query[filterField] = { $lt: filterValue };
+      } else if (filterOperator === ">=") {
+        query[filterField] = { $gte: filterValue };
+      } else if (filterOperator === "<=") {
+        query[filterField] = { $lte: filterValue };
+      }
+    }
+    
+    console.log("Query:", query);
+    console.log("Sort:", { [sort]: order === "asc" ? 1 : -1 });
+    
+    // Get proposals with pagination
+    const proposals = await Proposal.find(query)
+      .sort({ [sort]: order === "asc" ? 1 : -1 })
+      .skip(pageNum * limitNum)
+      .limit(limitNum);
+    
+    console.log(`Found ${proposals.length} proposals`);
+    
+    // Get total count for pagination
+    const totalRecords = await Proposal.countDocuments(query);
+    
+    // Return the response with the actual values from the database
+    res.status(200).json({
+      proposals: proposals,
+      totalRecords,
+      page: pageNum,
+      limit: limitNum
+    });
+    
+  } catch (error) {
+    console.error("Error in getProposals:", error);
+    res.status(500).json({ 
+      message: "Failed to fetch proposals",
+      error: error.message 
+    });
+  }
+};
+
+exports.getMyProposals = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      orderBy,
+      order = "asc",
+      processBy,
+      fiscalYear,
+      budgetType,
+      status,
+      submittedDate,
+    } = req.query;
+
+    let query = {};
+
+    if (search && search.split("-").length !== 3) {
+      query.$or = [
+        { processBy: { $regex: search, $options: "i" } },
+        { fiscalYear: { $regex: search, $options: "i" } },
+        { budgetType: { $regex: search, $options: "i" } },
+        { region: { $regex: search, $options: "i" } },
+        { cobExpenditures: { $regex: search, $options: "i" } },
+        { status: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    if (processBy) query.processBy = processBy;
+    if (fiscalYear) query.fiscalYear = fiscalYear;
+    if (budgetType) query.budgetType = budgetType;
+    if (status) query.status = status;
+    if (submittedDate) query.submittedDate = new Date(submittedDate);
+
+    const sortByField = orderBy || "submittedDate";
+    const sortOrder = order.toLowerCase() === "desc" ? -1 : 1;
+    const sortQuery = { [sortByField]: sortOrder };
+
+    const pageNum = Math.max(1, Number(page));
+    const limitNum = Math.max(1, Number(limit));
+    const skip = (pageNum - 1) * limitNum;
+
+    const myproposals = await Proposal.find(query)
+      .skip(skip)
+      .limit(limitNum)
+      .sort(sortQuery);
+
+    const totalRecords = await Proposal.countDocuments(query);
+
+    const groupedObj = {};
+
+    for (const prop of myproposals) {
+      const submittedDateStr = prop.submittedDate
+        ? new Date(prop.submittedDate).toISOString().split("T")[0]
+        : null;
+      const rejectedDateStr = prop.rejectedDate
+        ? new Date(prop.rejectedDate).toISOString().split("T")[0]
+        : null;
+      const key = [
+        prop.processBy,
+        prop.region,
+        prop.fiscalYear,
+        prop.budgetType,
+        prop.status,
+      ].join("|");
+
+      if (!groupedObj[key]) {
+        groupedObj[key] = {
+          proposalIds: [],
+          processBy: prop.processBy,
+          region: prop.region,
+          fiscalYear: prop.fiscalYear,
+          budgetType: prop.budgetType,
+          submittedDate: submittedDateStr,
+          rejectedDate: rejectedDateStr,
+          rejectionReason: prop.rejectionReason || "",
+          status: prop.status,
+          cost: 0,
+        };
+      }
+      groupedObj[key].proposalIds.push(prop._id);
+      groupedObj[key].cost += prop.cost || 0;
+    }
+
+    const groupedProposals = Object.values(groupedObj).map((grp) => {
+      const isClearedStatus = ["Approved", "Submitted", "Draft"].includes(
+        grp.status
+      );
+
+      return {
+        proposalIds: grp.proposalIds,
+        processBy: grp.processBy,
+        region: grp.region,
+        fiscalYear: grp.fiscalYear,
+        budgetType: grp.budgetType,
+        submittedDate: isClearedStatus ? null : grp.submittedDate,
+        rejectedDate: isClearedStatus ? null : grp.rejectedDate,
+        rejectionReason: isClearedStatus ? "" : grp.rejectionReason,
+        status: grp.status,
+        cost: grp.cost,
+      };
+    });
+
+    return res.json({
+      myproposals: groupedProposals,
+      totalPages: Math.ceil(totalRecords / limitNum),
+      currentPage: pageNum,
+      totalRecords,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Something went wrong." });
+  }
+};
+
+exports.getProposalById = async (req, res) => {
+  try {
+    const proposal = await Proposal.findById(req.params.id);
+    if (!proposal) {
+      return res.status(404).json({ message: "Proposal not found" });
+    }
+    return res.json(proposal);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.updateProposal = async (req, res) => {
+  try {
+    const updatedProposal = await Proposal.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
+    res.json(updatedProposal);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.deleteProposal = async (req, res) => {
+  try {
+    await Proposal.findByIdAndDelete(req.params.id);
+    res.json({ message: "Proposal deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.deleteAllProposals = async (req, res) => {
+  try {
+    await Proposal.deleteMany({});
+    res.json({ message: "All proposals deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.getAllProposals = async (req, res) => {
+  try {
+    const proposals = await Proposal.find()
+      .sort({ createdAt: -1 });
+    
+    res.status(200).json(proposals);
+  } catch (error) {
+    console.error("Error fetching proposals:", error);
+    res.status(500).json({ error: "Failed to fetch proposals" });
+  }
+};
+
+exports.approveProposal = async (req, res) => {
+  try {
+    const { fiscalYear, budgetType, processBy, region, approvedDate } =
+      req.body;
+
+    if (!fiscalYear || !budgetType || !processBy || !region) {
+      return res.status(400).json({
+        message:
+          "Missing required fields: fiscalYear, budgetType, processBy, or region.",
+      });
+    }
+
+    const update = {
+      $set: {
+        status: "Approved",
+        approvedDate: approvedDate ? new Date(approvedDate) : new Date(),
+      },
+    };
+
+    const [personnelResult, mooeResult, capitalResult, proposalResult] =
+      await Promise.all([
+        PersonnelService.updateMany(
+          { status: "Submitted", fiscalYear, budgetType, processBy, region },
+          update
+        ),
+        MooeProposal.updateMany(
+          { status: "Submitted", fiscalYear, budgetType, processBy, region },
+          update
+        ),
+        CapitalOutlay.updateMany(
+          { status: "Submitted", fiscalYear, budgetType, processBy, region },
+          update
+        ),
+        Proposal.updateMany(
+          { status: "Submitted", fiscalYear, budgetType, processBy, region },
+          update
+        ),
+      ]);
+
+    return res.status(200).json({
+      message: "All proposals approved successfully.",
+      personnelModified: personnelResult.modifiedCount,
+      mooeModified: mooeResult.modifiedCount,
+      capitalModified: capitalResult.modifiedCount,
+      proposalModified: proposalResult.modifiedCount,
+    });
+  } catch (error) {
+    console.error("Error approving proposals:", error);
+    return res.status(500).json({
+      message: "Error approving proposals",
+      error: error.message,
+    });
+  }
+};
+
+exports.rejectAllProposals = async (req, res) => {
+  try {
+    const { fiscalYear, budgetType, processBy, region, reason, reasonDate } =
+      req.body;
+
+    if (!fiscalYear || !budgetType || !processBy || !region) {
+      return res.status(400).json({
+        message:
+          "Missing required fields: fiscalYear, budgetType, processBy, or region.",
+      });
+    }
+
+    const update = {
+      $set: {
+        status: "Returned",
+        rejectedDate: reasonDate ? new Date(reasonDate) : new Date(),
+        rejectionReason: reason || "",
+      },
+    };
+
+    const [personnelResult, mooeResult, capitalResult, proposalResult] =
+      await Promise.all([
+        PersonnelService.updateMany(
+          { status: "Submitted", fiscalYear, budgetType, processBy, region },
+          update
+        ),
+        MooeProposal.updateMany(
+          { status: "Submitted", fiscalYear, budgetType, processBy, region },
+          update
+        ),
+        CapitalOutlay.updateMany(
+          { status: "Submitted", fiscalYear, budgetType, processBy, region },
+          update
+        ),
+        Proposal.updateMany(
+          { status: "Submitted", fiscalYear, budgetType, processBy, region },
+          update
+        ),
+      ]);
+
+    return res.status(200).json({
+      message: "All proposals rejected successfully.",
+      personnelModified: personnelResult.modifiedCount,
+      mooeModified: mooeResult.modifiedCount,
+      capitalModified: capitalResult.modifiedCount,
+      proposalModified: proposalResult.modifiedCount,
+    });
+  } catch (error) {
+    console.error("Error rejecting proposals:", error);
+    return res.status(500).json({
+      message: "Error rejecting proposals",
+      error: error.message,
+    });
+  }
+};
+
+exports.getAllUserProposals = async (req, res) => {
+  try {
+    const { processBy } = req.query;
+    
+    if (!processBy) {
+      return res.status(400).json({ message: 'processBy parameter is required' });
+    }
+    
+    // Get all proposals for this user
+    const [personnel, mooe, capitalOutlay, income, drafts] = await Promise.all([
+      // Regular proposals
+      Proposal.find({ 
+        processBy, 
+        category: 'personnel' 
+      }).lean(),
+      Proposal.find({ 
+        processBy, 
+        category: 'mooe' 
+      }).lean(),
+      Proposal.find({ 
+        processBy, 
+        category: 'capitalOutlay' 
+      }).lean(),
+      Proposal.find({ 
+        processBy, 
+        category: 'income' 
+      }).lean(),
+      // Draft proposals
+      DraftProposal.find({ 
+        processBy 
+      }).lean()
+    ]);
+    
+    // Process draft proposals to add them to the correct category
+    const categorizedDrafts = {
+      personnel: [],
+      mooe: [],
+      capitalOutlay: [],
+      income: []
+    };
+    
+    drafts.forEach(draft => {
+      const category = draft.category || 'uncategorized';
+      if (categorizedDrafts[category]) {
+        categorizedDrafts[category].push(draft);
+      }
+    });
+    
+    // Combine regular and draft proposals
+    const result = {
+      personnel: [...personnel, ...categorizedDrafts.personnel],
+      mooe: [...mooe, ...categorizedDrafts.mooe],
+      capitalOutlay: [...capitalOutlay, ...categorizedDrafts.capitalOutlay],
+      income: [...income, ...categorizedDrafts.income],
+      // Include uncategorized drafts if any
+      uncategorized: categorizedDrafts.uncategorized || []
+    };
+    
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('Error fetching user proposals:', error);
+    res.status(500).json({ 
+      message: 'Server error while fetching user proposals',
+      error: error.message
+    });
+  }
+};
+
+exports.updateMissingRegions = async (req, res) => {
+  try {
+    const { type, ids, region, processBy } = req.body;
+    
+    if (!type || !Array.isArray(ids) || ids.length === 0 || !region) {
+      return res.status(400).json({ message: "Missing required parameters" });
+    }
+    
+    const validIds = ids
+      .filter(id => mongoose.Types.ObjectId.isValid(id))
+      .map(id => new mongoose.Types.ObjectId(id));
+      
+    if (validIds.length === 0) {
+      return res.status(400).json({ message: "No valid IDs provided" });
+    }
+    
+    let result;
+    
+    switch (type) {
+      case "personnel":
+        result = await PersonnelService.updateMany(
+          { _id: { $in: validIds } },
+          { $set: { region, processBy } }
+        );
+        break;
+      case "mooe":
+        result = await MooeProposal.updateMany(
+          { _id: { $in: validIds } },
+          { $set: { region, processBy } }
+        );
+        break;
+      case "capitalOutlay":
+        result = await CapitalOutlay.updateMany(
+          { _id: { $in: validIds } },
+          { $set: { region, processBy } }
+        );
+        break;
+      case "income":
+        result = await IncomeSubcategory.updateMany(
+          { _id: { $in: validIds } },
+          { $set: { region, processBy } }
+        );
+        break;
+      default:
+        return res.status(400).json({ message: "Invalid proposal type" });
+    }
+    
+    return res.status(200).json({
+      message: `Updated ${result.modifiedCount} ${type} proposals with missing regions`,
+      result
+    });
+  } catch (error) {
+    console.error("Error updating missing regions:", error);
+    return res.status(500).json({ message: "Server error updating missing regions" });
+  }
+};
+
+// Helper function to calculate personnel total
+function calculatePersonnelTotal(personnel) {
+  if (!personnel) return 0;
+  
+  return (
+    (Number(personnel.annualSalary) || 0) +
+    (Number(personnel.RATA) || 0) +
+    (Number(personnel.PERA) || 0) +
+    (Number(personnel.uniformALLOWANCE) || 0) +
+    (Number(personnel.productivityIncentive) || 0) +
+    (Number(personnel.medical) || 0) +
+    (Number(personnel.childrenAllowance) || 0) +
+    (Number(personnel.meal) || 0) +
+    (Number(personnel.cashGift) || 0) +
+    (Number(personnel.subsistenceAllowanceMDS) || 0) +
+    (Number(personnel.subsistenceAllowanceST) || 0) +
+    (Number(personnel.midyearBonus) || 0) +
+    (Number(personnel.yearEndBonus) || 0) +
+    (Number(personnel.gsisPremium) || 0) +
+    (Number(personnel.philhealthPremium) || 0) +
+    (Number(personnel.pagibigPremium) || 0) +
+    (Number(personnel.employeeCompensation) || 0) +
+    (Number(personnel.loyaltyAward) || 0) +
+    (Number(personnel.overtimePay) || 0) +
+    (Number(personnel.earnedLeaves) || 0) +
+    (Number(personnel.retirementBenefits) || 0) +
+    (Number(personnel.terminalLeave) || 0) +
+    (Number(personnel.courtAppearance) || 0)
+  );
+}
+
+exports.returnProposal = async (req, res) => {
+  try {
+    const { fiscalYear, budgetType, processBy, region, reason, cobExpenditures } = req.body;
+
+    if (!fiscalYear || !budgetType || !processBy || !region || !cobExpenditures) {
+      return res.status(400).json({
+        message: "Missing required fields: fiscalYear, budgetType, processBy, region, or cobExpenditures.",
+      });
+    }
+
+    const update = {
+      $set: {
+        status: "Returned",
+        rejectedDate: new Date(),
+        rejectionReason: reason || "",
+        returnedExpenditureType: cobExpenditures // Add this field to track which type was returned
+      },
+    };
+
+    // Only update the specific proposal type based on cobExpenditures
+    let personnelResult = { modifiedCount: 0 };
+    let mooeResult = { modifiedCount: 0 };
+    let capitalResult = { modifiedCount: 0 };
+    let incomeResult = { modifiedCount: 0 };
+    let proposalResult = { modifiedCount: 0 };
+
+    // Update only the specific type of proposal
+    if (cobExpenditures === "Personnel" || cobExpenditures === "PS") {
+      personnelResult = await PersonnelService.updateMany(
+        { status: "Submitted", fiscalYear, budgetType, processBy, region },
+        update
+      );
+    } else if (cobExpenditures === "MOOE") {
+      mooeResult = await MooeProposal.updateMany(
+        { status: "Submitted", fiscalYear, budgetType, processBy, region },
+        update
+      );
+    } else if (cobExpenditures === "Capital Outlay") {
+      capitalResult = await CapitalOutlay.updateMany(
+        { status: "Submitted", fiscalYear, budgetType, processBy, region },
+        update
+      );
+    } else if (cobExpenditures === "Income") {
+      incomeResult = await IncomeSubcategory.updateMany(
+        { status: "Submitted", fiscalYear, budgetType, processBy, region },
+        update
+      );
+    }
+
+    // Update the proposal summary record
+    proposalResult = await Proposal.updateMany(
+      { 
+        status: "Submitted", 
+        fiscalYear, 
+        budgetType, 
+        processBy, 
+        region,
+        cobExpenditures // Only update the matching expenditure type
+      },
+      update
+    );
+
+    return res.status(200).json({
+      message: `${cobExpenditures} proposal returned successfully.`,
+      personnelModified: personnelResult.modifiedCount,
+      mooeModified: mooeResult.modifiedCount,
+      capitalModified: capitalResult.modifiedCount,
+      incomeModified: incomeResult.modifiedCount,
+      proposalModified: proposalResult.modifiedCount,
+    });
+  } catch (error) {
+    console.error("Error returning proposal:", error);
+    return res.status(500).json({
+      message: "Error returning proposal",
+      error: error.message,
+    });
+  }
+};
+
+// Add this function to get proposal details with detailed data
+exports.getProposalDetails = async (req, res) => {
+  try {
+    const { fiscalYear, budgetType, processBy, region } = req.query;
+    
+    console.log("getProposalDetails called with params:", { fiscalYear, budgetType, processBy, region });
+    
+    // Validate required parameters
+    if (!fiscalYear || !budgetType || !processBy || !region) {
+      console.log("Missing required parameters:", { fiscalYear, budgetType, processBy, region });
+      return res.status(400).json({ 
+        message: 'Missing required parameters',
+        parameters: { fiscalYear, budgetType, processBy, region }
+      });
+    }
+    
+    // First try to find in regular proposals
+    let proposal = await Proposal.findOne({
+      fiscalYear,
+      budgetType,
+      processBy,
+      region,
+    }).lean();
+    
+    console.log("Found proposal in main collection:", proposal ? "Yes" : "No");
+    
+    // If not found in regular proposals, check draft proposals
+    if (!proposal) {
+      proposal = await DraftProposal.findOne({
+        fiscalYear,
+        budgetType,
+        processBy,
+        region,
+      }).lean();
+      
+      console.log("Found proposal in drafts collection:", proposal ? "Yes" : "No");
+      
+      if (!proposal) {
+        console.log("No proposal found in either collection");
+        
+        // Create a basic proposal object with the provided parameters
+        proposal = {
+          fiscalYear,
+          budgetType,
+          processBy,
+          region,
+          status: "Unknown",
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+      }
+    }
+    
+    // Determine the expenditure type if not already set
+    if (!proposal.cobExpenditures) {
+      console.log("No cobExpenditures found, determining type...");
+      
+      // Check if there are any personnel services for this proposal
+      const personnelCount = await PersonnelService.countDocuments({
+        fiscalYear,
+        budgetType,
+        processBy,
+        region
+      });
+      
+      console.log("Personnel count:", personnelCount);
+      
+      if (personnelCount > 0) {
+        proposal.cobExpenditures = "Personnel Services";
+      } else {
+        // Check if there are any MOOE items
+        const mooeCount = await MooeProposal.countDocuments({
+          fiscalYear,
+          budgetType,
+          processBy,
+          region
+        });
+        
+        console.log("MOOE count:", mooeCount);
+        
+        if (mooeCount > 0) {
+          proposal.cobExpenditures = "MOOE";
+        } else {
+          // Check if there are any capital outlay items
+          const capitalOutlayCount = await CapitalOutlay.countDocuments({
+            fiscalYear,
+            budgetType,
+            processBy,
+            region
+          });
+          
+          console.log("Capital Outlay count:", capitalOutlayCount);
+          
+          if (capitalOutlayCount > 0) {
+            proposal.cobExpenditures = "Capital Outlay";
+          } else {
+            // Check if there are any income items
+            const incomeCount = await IncomeSubcategory.countDocuments({
+              fiscalYear,
+              budgetType,
+              processBy,
+              region
+            });
+            
+            console.log("Income count:", incomeCount);
+            
+            if (incomeCount > 0) {
+              proposal.cobExpenditures = "Income";
+            } else {
+              console.log("No expenditure type found for this proposal");
+              proposal.cobExpenditures = null;
+            }
+          }
+        }
+      }
+      
+      console.log("Determined expenditure type:", proposal.cobExpenditures);
+    }
+    
+    // Return the proposal with all details
+    console.log("Returning proposal with expenditure type:", proposal.cobExpenditures);
+    res.status(200).json(proposal);
+  } catch (error) {
+    console.error('Error fetching proposal details:', error);
+    res.status(500).json({ 
+      message: 'Server error while fetching proposal details',
+      error: error.message
+    });
+  }
+};
+
+// Add this function to handle draft proposals
+exports.saveDraftProposal = async (req, res) => {
+  try {
+    const proposalData = req.body;
+    
+    // Ensure status is set to Draft
+    proposalData.status = "Draft";
+    proposalData.lastEditedAt = new Date();
+    
+    // If there's an existing draft with the same key info, update it
+    const query = {
+      fiscalYear: proposalData.fiscalYear,
+      budgetType: proposalData.budgetType,
+      processBy: proposalData.processBy,
+      region: proposalData.region
+    };
+    
+    // Use findOneAndUpdate with upsert option to create if not exists
+    const savedDraft = await DraftProposal.findOneAndUpdate(
+      query,
+      proposalData,
+      { 
+        new: true,
+        upsert: true,
+        setDefaultsOnInsert: true
+      }
+    );
+    
+    res.status(200).json({
+      message: 'Draft saved successfully',
+      draft: savedDraft
+    });
+  } catch (error) {
+    console.error('Error saving draft proposal:', error.stack);
+    
+    // Handle duplicate key error specifically
+    if (error.code === 11000) {
+      return res.status(400).json({
+        message: 'A draft with these details already exists',
+        error: 'Duplicate draft'
+      });
+    }
+    
+    res.status(500).json({ 
+      message: 'Server error while saving draft',
+      error: error.message
+    });
+  }
+};
+
+// Add this function to get a specific draft proposal
+exports.getDraftProposal = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Find the draft proposal
+    const draftProposal = await DraftProposal.findById(id).lean();
+    
+    if (!draftProposal) {
+      return res.status(404).json({ 
+        message: 'Draft proposal not found',
+        id
+      });
+    }
+    
+    res.status(200).json(draftProposal);
+  } catch (error) {
+    console.error('Error fetching draft proposal:', error);
+    res.status(500).json({ 
+      message: 'Server error while fetching draft proposal',
+      error: error.message
+    });
+  }
+};
+
+// Add this function to get all user proposals including drafts
+exports.getAllUserProposals = async (req, res) => {
+  try {
+    const { processBy } = req.query;
+    
+    if (!processBy) {
+      return res.status(400).json({ message: "processBy parameter is required" });
+    }
+    
+    console.log("Getting all proposals for user:", processBy);
+    
+    // Get all personnel services including drafts
+    const personnel = await PersonnelService.find({ 
+      processBy: processBy
+    }).sort({ updatedAt: -1 });
+    console.log(`Found ${personnel.length} personnel services`);
+    
+    // Get all MOOE proposals including drafts
+    const mooe = await MooeProposal.find({ 
+      processBy: processBy
+    }).sort({ updatedAt: -1 });
+    console.log(`Found ${mooe.length} MOOE proposals`);
+    
+    // Get all capital outlay proposals including drafts
+    const capitalOutlay = await CapitalOutlay.find({ 
+      processBy: processBy
+    }).sort({ updatedAt: -1 });
+    console.log(`Found ${capitalOutlay.length} capital outlay proposals`);
+    
+    // Get all income proposals including drafts
+    const income = await IncomeSubcategory.find({ 
+      processBy: processBy
+    }).sort({ updatedAt: -1 });
+    console.log(`Found ${income.length} income proposals`);
+    
+    // Get all draft proposals
+    const drafts = await DraftProposal.find({
+      processBy: processBy
+    }).sort({ updatedAt: -1 });
+    console.log(`Found ${drafts.length} draft proposals`);
+    
+    return res.status(200).json({
+      personnel,
+      mooe,
+      capitalOutlay,
+      income,
+      drafts
+    });
+  } catch (error) {
+    console.error("Error getting all user proposals:", error);
+    return res.status(500).json({ 
+      message: "Error getting all user proposals", 
+      error: error.message 
+    });
+  }
+};

@@ -1,0 +1,7 @@
+# Ignore all backup files
+*.gz
+*.zip
+*.tar
+
+# Keep this directory
+!.gitignore
