@@ -2445,13 +2445,14 @@ const CustomPage = ({
                     }}
                   >
                     {availableFiscalYears.length > 0 ? (
-                      availableFiscalYears.map((year) => (
-                        <option key={year} value={year}>
+                      // Use index in combination with year to ensure unique keys
+                      availableFiscalYears.map((year, index) => (
+                        <option key={`${year}-${index}`} value={year}>
                           {year}
                         </option>
                       ))
                     ) : (
-                      <option value={activeFiscalYear}>
+                      <option key="default" value={activeFiscalYear}>
                         {activeFiscalYear || "No fiscal years available"}
                       </option>
                     )}

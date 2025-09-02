@@ -15,6 +15,7 @@ const fiscalYearRoutes = require("./routers/fiscalYearRoutes");
 const personnelServicesRouter = require("./routers/personnelServicesRoutes");
 const excelUploadRouter = require("./routers/excelUpload");
 const capitalOutlayRouter = require("./routers/capitalOutlayRouter");
+const capitalOutlayDetailsRouter = require("./routers/capitalOutlayDetailsRouter");
 const categoryRouter = require("./routers/category");
 const proposalRouter = require("./routers/proposalRoutes");
 const proposalRBACRouter = require("./routers/proposalRoutesRBAC");
@@ -211,6 +212,7 @@ app.use(personnelServicesRouter);
 app.use("/api", excelUploadRouter); // Excel Upload Route
 
 app.use(capitalOutlayRouter);
+app.use("/api", capitalOutlayDetailsRouter);
 app.use(categoryRouter);
 app.use(proposalRouter);
 app.use(proposalRBACRouter);

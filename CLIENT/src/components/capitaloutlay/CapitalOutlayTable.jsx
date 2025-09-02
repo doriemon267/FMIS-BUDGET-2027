@@ -63,10 +63,12 @@ import {
   Settings,
   Visibility,
   VisibilityOff,
+  List,
 } from "@mui/icons-material";
 import { useUser } from "../../context/UserContext";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import CapitalOutlayDetailsModal from "./CapitalOutlayDetailsModal";
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -180,6 +182,13 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
   
   // Due date status
   const [dueDateStatus, setDueDateStatus] = useState(null);
+
+  // Modal state for capital outlay details
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+  const [selectedCapitalOutlay, setSelectedCapitalOutlay] = useState(null);
+  
+  // State to store details for each capital outlay item
+  const [capitalOutlayDetails, setCapitalOutlayDetails] = useState({});
 
   // Check if user can delete items (admin users)
   const canDeleteItems = useMemo(() => {
@@ -317,6 +326,63 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
       handleDeleteOutlay(itemToDelete);
       setDeleteConfirmOpen(false);
       setItemToDelete(null);
+    }
+  };
+
+  // Modal handlers for capital outlay details
+  const handleOpenDetailsModal = (capitalOutlay) => {
+    setSelectedCapitalOutlay(capitalOutlay);
+    setDetailsModalOpen(true);
+  };
+
+  const handleCloseDetailsModal = () => {
+    setDetailsModalOpen(false);
+    setSelectedCapitalOutlay(null);
+  };
+
+  // Callback when details are saved - refresh the details and update the main table
+  const handleDetailsSaved = useCallback(async (capitalOutlayId, totals) => {
+    // Refresh the details for this item
+    try {
+      const response = await api.get(`/api/capital-outlay/${capitalOutlayId}/details`);
+      setCapitalOutlayDetails(prev => ({
+        ...prev,
+        [capitalOutlayId]: response.data.details || []
+      }));
+    } catch (error) {
+      console.error("Error fetching capital outlay details:", error);
+    }
+    
+    // Update the main capital outlay record with new totals
+    setCapitalOutlays(prev => prev.map(item => 
+      item._id === capitalOutlayId 
+        ? { 
+            ...item, 
+            income: totals.income, 
+            subsidy: totals.subsidy, 
+            cost: totals.cost 
+          }
+        : item
+    ));
+    
+    // Notify parent component of data change
+    const updatedOutlays = capitalOutlays.map(item => 
+      item._id === capitalOutlayId 
+        ? { 
+            ...item, 
+            income: totals.income, 
+            subsidy: totals.subsidy, 
+            cost: totals.cost 
+          }
+        : item
+    );
+    onDataChange?.(updatedOutlays);
+  }, [capitalOutlays, onDataChange]);
+
+  const handleDetailsModalSave = async (totals) => {
+    if (selectedCapitalOutlay) {
+      await handleDetailsSaved(selectedCapitalOutlay._id, totals);
+      toast.success("Capital outlay details updated successfully");
     }
   };
 
@@ -550,6 +616,22 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
     [fetchAccountingTitles]
   );
 
+  // Function to fetch details for all capital outlays
+  const fetchAllCapitalOutlayDetails = useCallback(async (outlays) => {
+    const detailsPromises = outlays.map(async (outlay) => {
+      try {
+        const response = await api.get(`/api/capital-outlay/${outlay._id}/details`);
+        setCapitalOutlayDetails(prev => ({
+          ...prev,
+          [outlay._id]: response.data.details || []
+        }));
+      } catch (error) {
+        console.error(`Error fetching details for outlay ${outlay._id}:`, error);
+      }
+    });
+    await Promise.allSettled(detailsPromises);
+  }, []);
+
   // Update region filter when active region changes
   useEffect(() => {
     if (activeRegion) {
@@ -597,6 +679,9 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
           setDueDateStatus(dueDateRes.data);
         }
 
+        // Fetch details for all capital outlays
+        await fetchAllCapitalOutlayDetails(outlaysWithStatus);
+
         setStatus(outlaysRes.data.status || "Not Submitted");
         onDataChange?.(outlaysWithStatus);
       } catch (error) {
@@ -623,7 +708,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
 
     fetchData();
     fetchFiscalYear();
-  }, [onDataChange, regionFilter]);
+  }, [onDataChange, regionFilter, fetchAllCapitalOutlayDetails]);
 
   const handleEditOutlay = useCallback(
     (id) => {
@@ -685,6 +770,10 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
         }));
 
         setCapitalOutlays(updatedData);
+        
+        // Fetch details for all updated capital outlays
+        await fetchAllCapitalOutlayDetails(updatedData);
+        
         setEditingId(null);
         setEditedOutlay({});
         setErrors({});
@@ -825,6 +914,10 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
         }));
 
         setCapitalOutlays(updatedData);
+        
+        // Fetch details for all updated capital outlays
+        await fetchAllCapitalOutlayDetails(updatedData);
+        
         setNewOutlays((prev) => ({ ...prev, [categoryId]: {} }));
         setAddingCategoryId(null);
         setErrors({});
@@ -1590,6 +1683,18 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                                 </IconButton>
                               </Tooltip>
                             )}
+                            
+                            {/* Always show Add Item Details button */}
+                            <Tooltip title="Add Item Details">
+                              <IconButton
+                                color="info"
+                                onClick={() => handleOpenDetailsModal(item)}
+                                size="small"
+                              >
+                                <List fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            
                             <Tooltip 
                               title={
                                 item.status === "Submitted" || item.status === "Approved" 
@@ -1627,10 +1732,26 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                               <TextField value={editedOutlay.particulars || ""} onChange={e => handleEditChange("particulars", e.target.value)} size="small" />
                             </TableCell>
                             <TableCell align="right">
-                              <TextField value={editedOutlay.income || ""} onChange={e => handleEditChange("income", e.target.value)} size="small" />
+                              <TextField 
+                                value={editedOutlay.income || ""} 
+                                size="small" 
+                                InputProps={{
+                                  readOnly: true,
+                                  style: { backgroundColor: '#f5f5f5' }
+                                }}
+                                helperText="Calculated from breakdown"
+                              />
                             </TableCell>
                             <TableCell align="right">
-                              <TextField value={editedOutlay.subsidy || ""} onChange={e => handleEditChange("subsidy", e.target.value)} size="small" />
+                              <TextField 
+                                value={editedOutlay.subsidy || ""} 
+                                size="small" 
+                                InputProps={{
+                                  readOnly: true,
+                                  style: { backgroundColor: '#f5f5f5' }
+                                }}
+                                helperText="Calculated from breakdown"
+                              />
                             </TableCell>
                             <TableCell align="right">
                               <Typography fontWeight="bold">
@@ -1648,7 +1769,32 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                             <TableCell>{item.sublineItem}</TableCell>
                             <TableCell>{item.accountingTitle}</TableCell>
                             <TableCell>{item.uacsCode}</TableCell>
-                            <TableCell>{item.particulars}</TableCell>
+                            <TableCell>
+                              {/* Show main particulars */}
+                              <Typography variant="body2" sx={{ fontWeight: 'medium', mb: 0.5 }}>
+                                {item.particulars}
+                              </Typography>
+                              
+                              {/* Show breakdown items if available */}
+                              {capitalOutlayDetails[item._id] && capitalOutlayDetails[item._id].length > 0 && (
+                                <Box sx={{ mt: 1 }}>
+                                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 'bold' }}>
+                                    Breakdown:
+                                  </Typography>
+                                  {capitalOutlayDetails[item._id].map((detail, index) => (
+                                    <Typography 
+                                      key={index} 
+                                      variant="caption" 
+                                      display="block" 
+                                      color="text.secondary"
+                                      sx={{ pl: 1, fontSize: '0.75rem' }}
+                                    >
+                                      • {detail.particulars} (₱{(detail.income_amount + detail.subsidy_amount).toLocaleString()})
+                                    </Typography>
+                                  ))}
+                                </Box>
+                              )}
+                            </TableCell>
                             <TableCell align="right" sx={{ minWidth: '150px', width: '150px' }}>
                               {(() => {
                                 const income = parseFloat(item.income || 0);
@@ -1811,17 +1957,16 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                         <TableCell sx={{ minWidth: '150px', width: '150px' }}>
                           <TextField
                             value={newOutlays[group.categoryId]?.income || ""}
-                            onChange={(e) => handleOutlayChange(group.categoryId, "income", e.target.value)}
                             placeholder="0.00"
                             fullWidth
                             size="medium"
                             error={!!errors.income}
-                            disabled={disableIncomeInputs}
                             InputProps={{
+                              readOnly: true,
                               inputComponent: NumberFormatCustom,
                             }}
                             sx={{ 
-                              backgroundColor: disableIncomeInputs ? "#f5f5f5" : "white",
+                              backgroundColor: "#f5f5f5",
                               width: '150px',
                               '& .MuiInputBase-input': {
                                 padding: '12px 14px',
@@ -1830,22 +1975,23 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                                 fontWeight: 'normal'
                               }
                             }}
+                            helperText="Calculated from breakdown"
                           />
                           {errors.income && <FormHelperText error>{errors.income}</FormHelperText>}
                         </TableCell>
                         <TableCell sx={{ minWidth: '150px', width: '150px' }}>
                           <TextField
                             value={newOutlays[group.categoryId]?.subsidy || ""}
-                            onChange={(e) => handleOutlayChange(group.categoryId, "subsidy", e.target.value)}
                             placeholder="0.00"
                             fullWidth
                             size="medium"
                             error={!!errors.subsidy}
                             InputProps={{
+                              readOnly: true,
                               inputComponent: NumberFormatCustom,
                             }}
                             sx={{ 
-                              backgroundColor: "white",
+                              backgroundColor: "#f5f5f5",
                               width: '150px',
                               '& .MuiInputBase-input': {
                                 padding: '12px 14px',
@@ -1854,6 +2000,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                                 fontWeight: 'normal'
                               }
                             }}
+                            helperText="Calculated from breakdown"
                           />
                           {errors.subsidy && <FormHelperText error>{errors.subsidy}</FormHelperText>}
                         </TableCell>
@@ -2135,6 +2282,15 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
             </Typography>
           </Box>
         )}
+
+        {/* Capital Outlay Details Modal */}
+        <CapitalOutlayDetailsModal
+          open={detailsModalOpen}
+          onClose={handleCloseDetailsModal}
+          capitalOutlayId={selectedCapitalOutlay?._id}
+          accountingTitle={selectedCapitalOutlay?.accountingTitle}
+          onSave={handleDetailsModalSave}
+        />
       </Box>
     </ErrorBoundary>
   );
