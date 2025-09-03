@@ -138,7 +138,7 @@ const applyHierarchicalFilters = (req, res, next) => {
 
     case 'REGION':
       // Can see all data from their region (all departments and divisions within)
-      if (assignment.regions.length > 0) {
+      if (assignment.regions.length > 0 && assignment.regions[0].regionName) {
         filters = {
           region: assignment.regions[0].regionName
         };

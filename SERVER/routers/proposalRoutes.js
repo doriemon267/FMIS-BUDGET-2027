@@ -17,7 +17,9 @@ const {
   returnProposal,
   getProposalDetails,
   saveDraftProposal,
-  getDraftProposal
+  getDraftProposal,
+  consolidateProposals,
+  debugProposals
 } = require("../controllers/proposalController");
 
 const Router = require("express").Router;
@@ -147,5 +149,11 @@ if (typeof getDraftProposal === 'function') {
 if (typeof saveDraftProposal === 'function') {
   proposalRouter.post('/proposals/draft', saveDraftProposal);
 }
+
+// Manual consolidation route for fixing missing proposals
+proposalRouter.post('/consolidate-proposals', consolidateProposals);
+
+// Debug route to check database content
+proposalRouter.get('/debug-proposals', debugProposals);
 
 module.exports = proposalRouter;

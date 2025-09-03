@@ -71,11 +71,16 @@ HierarchicalUserAssignmentSchema.pre('save', function(next) {
 
 // Static method to get user permissions for access control
 HierarchicalUserAssignmentSchema.statics.getUserPermissions = async function(userId) {
+  console.log(`🔍 DEBUG getUserPermissions called for userId: ${userId}`);
+  
   const assignment = await this.findOne({ userId, isActive: true })
     .populate('regionId', 'regionName RegionName')
     .populate('departmentId', 'departmentName DepartmentName');
   
+  console.log(`🔍 DEBUG Found assignment:`, assignment);
+  
   if (!assignment) {
+    console.log(`🔍 DEBUG No assignment found for user ${userId}, returning default permissions`);
     return {
       userId,
       accessScope: 'OWN_ONLY',
@@ -103,10 +108,22 @@ HierarchicalUserAssignmentSchema.statics.getUserPermissions = async function(use
   let accessibleDivisions = [];
 
   if (assignment.regionId) {
+    console.log(`🔍 DEBUG assignment.regionId:`, assignment.regionId);
+    
+    // Manually load region name since populate isn't working
+    console.log(`🔍 DEBUG Starting manual region lookup...`);
+    const mongoose = require('mongoose');
+    const regionId = assignment.regionId._id || assignment.regionId;
+    console.log(`🔍 DEBUG Looking for region with ID:`, regionId);
+    
+    const regionDoc = await mongoose.connection.db.collection('regions').findOne({ _id: regionId });
+    console.log(`🔍 DEBUG Found region document:`, regionDoc);
+    
     accessibleRegions.push({
-      _id: assignment.regionId._id,
-      regionName: assignment.regionId.regionName || assignment.regionId.RegionName
+      _id: regionId,
+      regionName: regionDoc ? (regionDoc.regionName || regionDoc.Region) : 'Central Office'
     });
+    console.log(`🔍 DEBUG Added region to accessibleRegions:`, accessibleRegions[0]);
   }
 
   if (assignment.departmentId) {

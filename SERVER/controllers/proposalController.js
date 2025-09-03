@@ -797,11 +797,20 @@ exports.getProposals = async (req, res) => {
     // Build the query
     const query = {};
     
+    console.log("🔍 getProposals called with query params:", req.query);
+    console.log("👤 User info:", {
+      id: req.user?.id,
+      roles: req.user?.Roles,
+      hierarchicalFlags: req.hierarchicalFlags
+    });
+    
     // Apply hierarchical filters first
     if (req.hierarchicalFilters) {
       Object.assign(query, req.hierarchicalFilters);
       console.log("🏢 Applied hierarchical filters:", req.hierarchicalFilters);
     }
+    
+    console.log("📊 Current query before search:", query);
     
     // Add search condition if provided
     if (search) {
@@ -840,8 +849,25 @@ exports.getProposals = async (req, res) => {
       }
     }
     
-    console.log("Query:", query);
-    console.log("Sort:", { [sort]: order === "asc" ? 1 : -1 });
+    console.log("📊 Final query before execution:", JSON.stringify(query, null, 2));
+    console.log("🔤 Sort:", { [sort]: order === "asc" ? 1 : -1 });
+    
+    // First, let's check how many total proposals exist in the database
+    const totalProposalsInDB = await Proposal.countDocuments();
+    console.log(`📈 Total proposals in database (no filters): ${totalProposalsInDB}`);
+    
+    // Check what proposals exist for this user
+    if (totalProposalsInDB > 0) {
+      const sampleProposals = await Proposal.find().limit(3);
+      console.log("📋 Sample proposals in database:");
+      sampleProposals.forEach((proposal, index) => {
+        console.log(`  ${index + 1}. ID: ${proposal._id}`);
+        console.log(`     ProcessBy: "${proposal.processBy}"`);
+        console.log(`     Region: "${proposal.region}"`);
+        console.log(`     Status: "${proposal.status}"`);
+        console.log(`     CobExpenditures: "${proposal.cobExpenditures}"`);
+      });
+    }
     
     // Get proposals with pagination
     const proposals = await Proposal.find(query)
@@ -849,7 +875,17 @@ exports.getProposals = async (req, res) => {
       .skip(pageNum * limitNum)
       .limit(limitNum);
     
-    console.log(`Found ${proposals.length} proposals`);
+    console.log(`🎯 Found ${proposals.length} proposals with applied filters`);
+    
+    if (proposals.length > 0) {
+      console.log("📋 Found proposals:");
+      proposals.forEach((proposal, index) => {
+        console.log(`  ${index + 1}. ID: ${proposal._id}`);
+        console.log(`     ProcessBy: "${proposal.processBy}"`);
+        console.log(`     Region: "${proposal.region}"`);
+        console.log(`     Status: "${proposal.status}"`);
+      });
+    }
     
     // Get total count for pagination
     const totalRecords = await Proposal.countDocuments(query);
@@ -1646,6 +1682,209 @@ exports.getAllUserProposals = async (req, res) => {
     return res.status(500).json({ 
       message: "Error getting all user proposals", 
       error: error.message 
+    });
+  }
+};
+
+// Manual consolidation of existing submitted proposals
+exports.consolidateProposals = async (req, res) => {
+  try {
+    console.log("🔄 Starting manual proposal consolidation...");
+    
+    // Find all submitted items from individual collections
+    const [submittedPersonnel, submittedMooe, submittedCapital, submittedIncome] = await Promise.all([
+      PersonnelService.find({ status: "Submitted" }),
+      MooeProposal.find({ status: "Submitted" }),
+      CapitalOutlay.find({ status: "Submitted" }),
+      IncomeSubcategory.find({ status: "Submitted" })
+    ]);
+    
+    console.log(`Found items to consolidate:
+- Personnel: ${submittedPersonnel.length}
+- MOOE: ${submittedMooe.length}
+- Capital Outlay: ${submittedCapital.length}
+- Income: ${submittedIncome.length}`);
+    
+    if (submittedPersonnel.length === 0 && submittedMooe.length === 0 && 
+        submittedCapital.length === 0 && submittedIncome.length === 0) {
+      return res.status(200).json({
+        message: "No submitted proposals found to consolidate"
+      });
+    }
+    
+    // Group by processBy, region, fiscalYear, budgetType
+    const grouped = {};
+    
+    const processItems = (items, category) => {
+      items.forEach(item => {
+        const key = `${item.processBy}_${item.region}_${item.fiscalYear}_${item.budgetType}`;
+        if (!grouped[key]) {
+          grouped[key] = {
+            processBy: item.processBy,
+            region: item.region,
+            fiscalYear: item.fiscalYear,
+            budgetType: item.budgetType,
+            categories: {}
+          };
+        }
+        if (!grouped[key].categories[category]) {
+          grouped[key].categories[category] = [];
+        }
+        grouped[key].categories[category].push(item);
+      });
+    };
+    
+    processItems(submittedPersonnel, 'personnel');
+    processItems(submittedMooe, 'mooe');
+    processItems(submittedCapital, 'capitalOutlay');
+    processItems(submittedIncome, 'income');
+    
+    // Create consolidated proposals for each group
+    const bulkOps = [];
+    let consolidatedCount = 0;
+    
+    for (const [key, group] of Object.entries(grouped)) {
+      for (const [category, items] of Object.entries(group.categories)) {
+        let totalExpenses = 0;
+        let totalIncome = 0;
+        
+        // Calculate totals based on category
+        if (category === 'personnel') {
+          totalExpenses = items.reduce((sum, item) => {
+            const itemTotal = [
+              'annualSalary', 'RATA', 'PERA', 'uniformALLOWANCE', 'productivityIncentive',
+              'medical', 'childrenAllowance', 'meal', 'cashGift', 'subsistenceAllowanceMDS',
+              'subsistenceAllowanceST', 'midyearBonus', 'yearEndBonus', 'gsisPremium',
+              'philhealthPremium', 'pagibigPremium', 'employeeCompensation', 'loyaltyAward',
+              'overtimePay', 'earnedLeaves', 'retirementBenefits', 'terminalLeave', 'courtAppearance'
+            ].reduce((itemSum, field) => itemSum + (Number(item[field]) || 0), 0);
+            return sum + itemTotal;
+          }, 0);
+        } else if (category === 'mooe' || category === 'capitalOutlay') {
+          totalExpenses = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+        } else if (category === 'income') {
+          totalIncome = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+        }
+        
+        // Determine cobExpenditures based on category
+        let cobExpenditures;
+        if (category === 'personnel') {
+          const statusTypes = [...new Set(items.map(item => item.statusOfAppointment))];
+          cobExpenditures = statusTypes.length === 1 ? statusTypes[0] : 'Personnel Services';
+        } else if (category === 'mooe') {
+          cobExpenditures = 'MOOE';
+        } else if (category === 'capitalOutlay') {
+          cobExpenditures = 'Capital Outlay';
+        } else if (category === 'income') {
+          cobExpenditures = 'Income';
+        }
+        
+        bulkOps.push({
+          updateOne: {
+            filter: {
+              processBy: group.processBy,
+              region: group.region,
+              fiscalYear: group.fiscalYear,
+              budgetType: group.budgetType,
+              cobExpenditures: cobExpenditures,
+            },
+            update: {
+              $set: {
+                submittedDate: new Date(),
+                status: 'Submitted',
+                totalExpenses: totalExpenses,
+                totalIncome: totalIncome,
+              },
+            },
+            upsert: true
+          }
+        });
+        
+        consolidatedCount++;
+      }
+    }
+    
+    // Execute bulk operations
+    if (bulkOps.length > 0) {
+      const bulkResult = await Proposal.bulkWrite(bulkOps);
+      console.log("✅ Consolidation completed:", bulkResult.modifiedCount, "modified,", bulkResult.upsertedCount, "created");
+      
+      res.status(200).json({
+        message: `Successfully consolidated ${consolidatedCount} proposal categories`,
+        details: {
+          modified: bulkResult.modifiedCount,
+          created: bulkResult.upsertedCount,
+          totalOperations: bulkOps.length
+        }
+      });
+    } else {
+      res.status(200).json({
+        message: "No proposals to consolidate"
+      });
+    }
+    
+  } catch (error) {
+    console.error("❌ Error in consolidateProposals:", error);
+    res.status(500).json({
+      message: "Failed to consolidate proposals",
+      error: error.message
+    });
+  }
+};
+
+// Debug endpoint to check database content
+exports.debugProposals = async (req, res) => {
+  try {
+    console.log("🔍 Debug endpoint called");
+    
+    // Get total count
+    const totalProposals = await Proposal.countDocuments();
+    
+    // Get all proposals
+    const allProposals = await Proposal.find().sort({ createdAt: -1 }).limit(10);
+    
+    // Get status distribution
+    const statusStats = await Proposal.aggregate([
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+    
+    // Get region distribution
+    const regionStats = await Proposal.aggregate([
+      { $group: { _id: '$region', count: { $sum: 1 } } }
+    ]);
+    
+    // Get processBy distribution
+    const processStats = await Proposal.aggregate([
+      { $group: { _id: '$processBy', count: { $sum: 1 } } }
+    ]);
+    
+    const response = {
+      totalProposals,
+      statusDistribution: statusStats,
+      regionDistribution: regionStats,
+      processDistribution: processStats,
+      sampleProposals: allProposals.map(p => ({
+        id: p._id,
+        processBy: p.processBy,
+        region: p.region,
+        status: p.status,
+        cobExpenditures: p.cobExpenditures,
+        fiscalYear: p.fiscalYear,
+        budgetType: p.budgetType,
+        submittedDate: p.submittedDate,
+        totalExpenses: p.totalExpenses,
+        totalIncome: p.totalIncome
+      }))
+    };
+    
+    console.log("📊 Debug response:", response);
+    res.status(200).json(response);
+    
+  } catch (error) {
+    console.error("❌ Error in debugProposals:", error);
+    res.status(500).json({
+      message: "Failed to debug proposals",
+      error: error.message
     });
   }
 };
