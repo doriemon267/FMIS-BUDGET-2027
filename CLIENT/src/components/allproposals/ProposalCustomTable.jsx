@@ -45,6 +45,8 @@ const ProposalCustomTable = forwardRef(({
   const fetchData = async () => {
     setLoading(true);
     try {
+      console.log("🔍 Fetching proposals data from:", apiPath);
+      console.log("📋 Request params:", { page, limit: rowsPerPage, search: searchValue });
       
       const response = await api.get(apiPath, {
         params: {
@@ -54,7 +56,8 @@ const ProposalCustomTable = forwardRef(({
         },
       });
       
-      // console.log("API Response:", response.data);
+      console.log("📥 API Response:", response.data);
+      console.log("📊 Response status:", response.status);
       
       // Handle different response formats based on the endpoint
       let extractedData = [];
@@ -63,19 +66,25 @@ const ProposalCustomTable = forwardRef(({
       if (response.data && response.data.proposals && Array.isArray(response.data.proposals)) {
         extractedData = response.data.proposals;
         totalRecords = response.data.totalRecords || 0;
+        console.log("✅ Found proposals array with", extractedData.length, "items");
       } else if (response.data && Array.isArray(response.data)) {
         extractedData = response.data;
         totalRecords = response.data.length;
+        console.log("✅ Found direct array with", extractedData.length, "items");
       } else if (response.data && response.data[dataListName] && Array.isArray(response.data[dataListName])) {
         extractedData = response.data[dataListName];
         totalRecords = response.data.totalRecords || response.data[dataListName].length;
+        console.log("✅ Found", dataListName, "array with", extractedData.length, "items");
       } else {
         // Fallback for other formats
-        console.warn("Unexpected response format:", response.data);
+        console.warn("⚠️ Unexpected response format:", response.data);
         const extracted = extractDataFromResponse(response.data);
         extractedData = extracted.data;
         totalRecords = extracted.count;
       }
+      
+      console.log("📋 Final extracted data:", extractedData);
+      console.log("🔢 Total records:", totalRecords);
       
       setRows(extractedData);
       setTotalCount(totalRecords);
@@ -92,8 +101,10 @@ const ProposalCustomTable = forwardRef(({
       }
       
     } catch (err) {
-      console.error("Error fetching data:", err);
-      setError(`Failed to load data: ${err.response?.data?.error || err.message}`);
+      console.error("❌ Error fetching data:", err);
+      console.error("❌ Error response:", err.response?.data);
+      console.error("❌ Error status:", err.response?.status);
+      setError(`Failed to load data: ${err.response?.data?.error || err.response?.data?.message || err.message}`);
       toast.error("Failed to load data");
       setRows([]);
     } finally {

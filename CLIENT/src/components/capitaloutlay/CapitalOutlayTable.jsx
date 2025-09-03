@@ -41,8 +41,6 @@ import {
   Toolbar,
   AppBar,
   Fab,
-  Zoom,
-  Fade,
 } from "@mui/material";
 import {
   Edit,
@@ -186,6 +184,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
   // Modal state for capital outlay details
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [selectedCapitalOutlay, setSelectedCapitalOutlay] = useState(null);
+  const [newlyAddedItemId, setNewlyAddedItemId] = useState(null);
   
   // State to store details for each capital outlay item
   const [capitalOutlayDetails, setCapitalOutlayDetails] = useState({});
@@ -338,6 +337,22 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
   const handleCloseDetailsModal = () => {
     setDetailsModalOpen(false);
     setSelectedCapitalOutlay(null);
+    
+    // If this was a newly added item, scroll to it and highlight it briefly
+    if (newlyAddedItemId) {
+      setTimeout(() => {
+        const element = document.getElementById(`capital-outlay-row-${newlyAddedItemId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Add a brief highlight effect
+          element.style.backgroundColor = '#e3f2fd';
+          setTimeout(() => {
+            element.style.backgroundColor = '';
+          }, 2000);
+        }
+        setNewlyAddedItemId(null);
+      }, 100);
+    }
   };
 
   // Callback when details are saved - refresh the details and update the main table
@@ -889,7 +904,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
         const subsidy = parseFloat(newEntry.subsidy) || 0;
         const cost = income + subsidy;
 
-        await api.post("/capital-outlays", {
+        const response = await api.post("/capital-outlays", {
           ...newEntry,
           income,
           subsidy,
@@ -903,20 +918,20 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
           status: "Not Submitted",
         });
 
-        const params = new URLSearchParams();
-        if (regionFilter) {
-          params.append('region', regionFilter);
-        }
-        const outlaysRes = await api.get(`/capital-outlays?${params.toString()}`);
-        const updatedData = outlaysRes.data.capitalOutlays.map((item) => ({
-          ...item,
-          status: item.status || "Not Submitted",
-        }));
-
+        // Add the new item to existing state instead of refetching all data
+        const newItem = {
+          ...response.data.capitalOutlay,
+          status: "Not Submitted",
+        };
+        
+        const updatedData = [...capitalOutlays, newItem];
         setCapitalOutlays(updatedData);
         
-        // Fetch details for all updated capital outlays
-        await fetchAllCapitalOutlayDetails(updatedData);
+        // Initialize empty details for the new item
+        setCapitalOutlayDetails(prev => ({
+          ...prev,
+          [newItem._id]: []
+        }));
         
         setNewOutlays((prev) => ({ ...prev, [categoryId]: {} }));
         setAddingCategoryId(null);
@@ -926,14 +941,6 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
 
         // Trigger parent data refresh for global save as draft functionality
         onDataChange?.(updatedData);
-
-        // Add a small delay then trigger a parent refresh to ensure global state is updated
-        setTimeout(() => {
-          if (window.location.pathname.includes('proposals')) {
-            // Trigger a global data refresh if we're in the proposals page
-            window.dispatchEvent(new CustomEvent('capitalOutlayDataChanged'));
-          }
-        }, 500);
 
         toast.success("Outlay added successfully.");
       } catch (error) {
@@ -972,6 +979,92 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
       setHasUnsavedChanges(true);
     },
     [disableIncomeInputs]
+  );
+
+  // New function to handle accounting title selection with auto-save and modal opening
+  const handleAccountingTitleSelection = useCallback(
+    async (categoryId, selectedTitle, selectedTitleObj) => {
+      try {
+        // Update the accounting title and UACS code
+        handleOutlayChange(categoryId, "accountingTitle", selectedTitle);
+        if (selectedTitleObj?.uacsCode) {
+          handleOutlayChange(categoryId, "uacsCode", selectedTitleObj.uacsCode);
+        }
+
+        // Get the current new entry data
+        const currentEntry = newOutlays[categoryId] || {};
+        
+        // When accounting title is selected, create a draft item immediately and open modal
+        if (currentEntry.sublineItem && selectedTitle) {
+          // Create a draft item with minimal required data
+          setLoading(true);
+          
+          const draftEntry = {
+            sublineItem: currentEntry.sublineItem,
+            accountingTitle: selectedTitle,
+            uacsCode: selectedTitleObj?.uacsCode || "",
+            particulars: currentEntry.particulars || "",
+            income: parseFloat(currentEntry.income) || 0,
+            subsidy: parseFloat(currentEntry.subsidy) || 0,
+          };
+          
+          const cost = draftEntry.income + draftEntry.subsidy;
+
+          const response = await api.post("/capital-outlays", {
+            ...draftEntry,
+            cost,
+            category: categoryId,
+            processBy: `${currentUser.FirstName} ${currentUser.LastName}`,
+            region: regionFilter || activeRegion?.name || currentUser.Region,
+            processDate: new Date(),
+            fiscalYear,
+            budgetType,
+            status: "Not Submitted",
+          });
+
+          // Add the new item to existing state
+          const newItem = {
+            ...response.data.capitalOutlay,
+            status: "Not Submitted",
+            accountingTitle: selectedTitle, // Ensure accountingTitle is set for modal
+          };
+          
+          const updatedData = [...capitalOutlays, newItem];
+          setCapitalOutlays(updatedData);
+          
+          // Initialize empty details for the new item
+          setCapitalOutlayDetails(prev => ({
+            ...prev,
+            [newItem._id]: []
+          }));
+          
+          // Clear the form
+          setNewOutlays((prev) => ({ ...prev, [categoryId]: {} }));
+          setAddingCategoryId(null);
+          setErrors({});
+          setHasUnsavedChanges(false);
+          setLastSaved(new Date());
+
+          // Trigger parent data refresh
+          onDataChange?.(updatedData);
+
+          toast.success("Item created! Now add the breakdown details.");
+          
+          // Immediately open details modal
+          setNewlyAddedItemId(newItem._id);
+          setTimeout(() => {
+            handleOpenDetailsModal(newItem);
+          }, 100);
+          
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error("Error auto-saving item:", error);
+        toast.error(`Error creating item: ${error.response?.data?.error || error.message}`);
+        setLoading(false);
+      }
+    },
+    [newOutlays, handleOutlayChange, validateInput, currentUser, regionFilter, activeRegion, fiscalYear, budgetType, capitalOutlays, onDataChange, handleOpenDetailsModal]
   );
 
   const handleEditChange = useCallback(
@@ -1526,7 +1619,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
             const isExpanded = expandedCategories.includes(group.categoryId);
 
             return (
-              <Zoom in={true} timeout={600} key={group.categoryId}>
+              <Box key={group.categoryId}>
                 <Box
                   sx={{
                     mb: compactView ? 2 : 4,
@@ -1534,11 +1627,6 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                     borderRadius: 2,
                     overflow: "hidden",
                     boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
-                    transition: 'all 0.3s ease',
-                    '&:hover': {
-                      boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
-                      transform: 'translateY(-2px)'
-                    }
                   }}
                 >
                 <CategoryHeader
@@ -1636,16 +1724,14 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                     {group.items.map((item, itemIndex) => (
                       <TableRow
                         key={item._id}
+                        id={`capital-outlay-row-${item._id}`}
                         sx={{
                           backgroundColor: selectedRows.includes(item._id)
                             ? "#e3f2fd"
                             : itemIndex % 2 === 0 ? "white" : "#f9f9f9",
                           height: compactView ? 'auto' : 'inherit',
-                          transition: 'all 0.2s ease',
                           "&:hover": {
                             backgroundColor: selectedRows.includes(item._id) ? "#bbdefb" : "#e8f5e9",
-                            transform: 'translateY(-1px)',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
                           },
                         }}
                       >
@@ -1889,15 +1975,13 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                             value={newOutlays[group.categoryId]?.accountingTitle || ""}
                             onChange={(e) => {
                               const selectedTitle = e.target.value;
-                              handleOutlayChange(group.categoryId, "accountingTitle", selectedTitle);
                               
                               const selectedTitleObj = accountingTitles[newOutlays[group.categoryId]?.sublineItem]?.find(
                                 (title) => title.accountingTitle === selectedTitle
                               );
                               
-                              if (selectedTitleObj?.uacsCode) {
-                                handleOutlayChange(group.categoryId, "uacsCode", selectedTitleObj.uacsCode);
-                              }
+                              // Use the new function that auto-saves and opens modal
+                              handleAccountingTitleSelection(group.categoryId, selectedTitle, selectedTitleObj);
                             }}
                             fullWidth
                             size={compactView ? "small" : "small"}
@@ -2102,7 +2186,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                 </TableContainer>
                 </Collapse>
                 </Box>
-              </Zoom>
+              </Box>
             );
           })}
         </Box>
@@ -2133,16 +2217,14 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
           </Box>
         )}
 
-        {/* Grand Total Section with Fade Animation */}
-        <Fade in={true} timeout={1000}>
-          <TableContainer sx={{
-            mt: 2,
-            mb: 2,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
-            borderRadius: 2,
-            overflow: "hidden",
-            transition: 'all 0.3s ease'
-          }}>
+        {/* Grand Total Section */}
+        <TableContainer sx={{
+          mt: 2,
+          mb: 2,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+          borderRadius: 2,
+          overflow: "hidden",
+        }}>
             <Table>
               <TableHead>
                 <TableRow sx={{ backgroundColor: "#375e38" }}>
@@ -2201,7 +2283,6 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
             </TableHead>
             </Table>
           </TableContainer>
-        </Fade>
 
         <Box
           sx={{

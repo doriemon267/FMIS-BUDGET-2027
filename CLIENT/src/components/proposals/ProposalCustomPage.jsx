@@ -1008,12 +1008,21 @@ const CustomPage = ({
   });
 
   const handleSubmitAll = async () => {
-    // First update any proposals with missing regions
-    const regionsUpdated = await updateMissingRegions();
-    if (!regionsUpdated) {
-      console.error("Failed to update missing regions");
-      return;
+    // Check user permissions before proceeding
+    try {
+      // Quick permission check by calling a simple endpoint
+      await api.get("/my-proposals?limit=1");
+    } catch (error) {
+      if (error.response?.status === 403) {
+        setSnackbar({
+          open: true,
+          message: "You don't have permission to submit proposals. Please contact your administrator to assign proper permissions.",
+          severity: "error",
+        });
+        return;
+      }
     }
+
     // Use the active region from context instead of user's default region
     // This ensures we use the currently selected region, not just the user's default
     const userRegion = activeRegion
@@ -1109,6 +1118,20 @@ const CustomPage = ({
         "Error updating proposal status:",
         error.response?.data || error.message
       );
+      
+      // Handle permission errors specifically
+      if (error.response?.status === 403) {
+        const errorData = error.response.data;
+        if (errorData.code === 'INSUFFICIENT_PERMISSIONS' && errorData.required === 'canEditOwnProposals') {
+          setSnackbar({
+            open: true,
+            message: "You don't have permission to submit proposals. Please contact your administrator to grant 'canEditOwnProposals' permission.",
+            severity: "error",
+          });
+          return;
+        }
+      }
+      
       setSnackbar({
         open: true,
         message:
