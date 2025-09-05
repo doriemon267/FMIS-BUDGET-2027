@@ -68,21 +68,21 @@ const App = () => {
         <Route 
         path="/proposal" 
         element={
-          <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>  
+          <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>  
           <Proposals />
           </ProtectedRoute>} 
         />
         <Route 
         path="/myProposals" 
         element={
-          <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}> 
+          <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}> 
           <ProposalPage />
           </ProtectedRoute>
        } />
         <Route 
         path="/employee" 
         element={
-          <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}> 
+          <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}> 
            <EmployeeList />
            </ProtectedRoute>
        } />
@@ -90,7 +90,7 @@ const App = () => {
         <Route 
         path="/retirees" 
         element={
-        <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>
+        <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>
         <EmployeeBenefitsPage />
          </ProtectedRoute>
        } />
@@ -99,7 +99,7 @@ const App = () => {
         <Route
           path="/categories"
           element={
-            <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>
+            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>
               <Categories />
             </ProtectedRoute>
           }
@@ -107,7 +107,7 @@ const App = () => {
         <Route
           path="/rata"
           element={
-            <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>
+            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>
               <RataPage />
             </ProtectedRoute>
           }
@@ -115,7 +115,7 @@ const App = () => {
         <Route
           path="/fysettings"
           element={
-            <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
+            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
               <FiscalYearSettingsPage />
             </ProtectedRoute>
           }
@@ -124,7 +124,7 @@ const App = () => {
         <Route
           path="/compsettings"
           element={
-            <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
+            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
               <CompensationSettingsPage />
             </ProtectedRoute>
           }
@@ -132,7 +132,7 @@ const App = () => {
         <Route
           path="/settings"
           element={
-            <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>
+            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>
               <SettingsManagement />
             </ProtectedRoute>
           }
@@ -140,7 +140,7 @@ const App = () => {
         <Route
           path="/AllProposals"
           element={
-            <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>
+            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>
               <AllProposalsPage />
             </ProtectedRoute>
           }
@@ -148,7 +148,7 @@ const App = () => {
         <Route
           path="/income-management"
           element={
-            <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>
+            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>
               <IncomeManagementPage />
             </ProtectedRoute>
           }
@@ -156,7 +156,7 @@ const App = () => {
         <Route
           path="/categories"
           element={
-            <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>
+            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>
               <CapitalOutlayTitleMappingPage />
             </ProtectedRoute>
           }
@@ -168,7 +168,7 @@ const App = () => {
         <Route
          path="/employeeBenefits" 
          element={
-          <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>  
+          <ProtectedRoute allowedRoles={["SUPER ADMIN","ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>  
           <EmployeeBenefitsPage /> 
           </ProtectedRoute>}
          />
@@ -204,7 +204,7 @@ const App = () => {
         <Route 
           path="/corporate-income-upload" 
           element={
-            <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
+            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
               <CorporateIncomeUploadPage />
             </ProtectedRoute>
           } 
@@ -212,7 +212,7 @@ const App = () => {
         <Route 
           path="/consolidated-corporate-income" 
           element={
-            <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
+            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
               <ConsolidatedCorporateIncomePage />
             </ProtectedRoute>
           } 
@@ -220,7 +220,7 @@ const App = () => {
         <Route 
           path="/mooe-upload" 
           element={
-            <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
+            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
               <MooeUploadPage />
             </ProtectedRoute>
           } 
@@ -228,7 +228,7 @@ const App = () => {
         <Route 
           path="/consolidated-reports" 
           element={
-            <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
+            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
               <ConsolidatedReportsPage />
             </ProtectedRoute>
           } 
@@ -236,7 +236,7 @@ const App = () => {
         <Route 
           path="/consolidated-capital-outlay-reports" 
           element={
-            <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
+            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
               <ConsolidatedCapitalOutlayReportsPage />
             </ProtectedRoute>
           } 
@@ -244,7 +244,7 @@ const App = () => {
         <Route 
           path="/consolidated-personnel-services-reports" 
           element={
-            <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
+            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
               <ConsolidatedPersonnelServicesReportsPage />
             </ProtectedRoute>
           } 
@@ -252,7 +252,7 @@ const App = () => {
         <Route 
           path="/comprehensive-reports" 
           element={
-            <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET ADMIN"]}>
+            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN"]}>
               <ComprehensiveReportsPage />
             </ProtectedRoute>
           } 
@@ -260,7 +260,7 @@ const App = () => {
         <Route 
           path="/database-backup" 
           element={
-            <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
+            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
               <DatabaseBackupPage />
             </ProtectedRoute>
           } 

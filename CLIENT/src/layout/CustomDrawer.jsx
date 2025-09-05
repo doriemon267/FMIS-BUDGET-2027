@@ -29,10 +29,11 @@ import { GiMeal } from "react-icons/gi";
 import { BiSolidShieldPlus } from "react-icons/bi";
 import { FaAward } from "react-icons/fa6";
 import { BiData } from "react-icons/bi";
-
+import { isBudgetAdmin, isSuperAdmin } from "../utils/checkRole";
+import { useUser } from "../context/UserContext";
 const CustomDrawer = ({ collapsed = false }) => {
   const [openSettings, setOpenSettings] = useState(false);
-
+const {currentUser} =  useUser();
   return (
     <Box
       sx={{
@@ -60,7 +61,7 @@ const CustomDrawer = ({ collapsed = false }) => {
           <LinkTo
             icon={<HiOutlineBanknotes />}
             name="Budget Proposal Management"
-            isAllow
+              isAllow
             collapsed={collapsed}
             iconRight={<FaChevronCircleDown />}
             subLinks={[
@@ -177,7 +178,7 @@ const CustomDrawer = ({ collapsed = false }) => {
           <LinkTo
             icon={<IoSettingsOutline />}
             name="Settings"
-            isAllow
+             isAllow={isSuperAdmin(currentUser) || isBudgetAdmin(currentUser)}
             collapsed={collapsed}
             iconRight={<FaChevronCircleDown />}
             subLinks={[
@@ -223,9 +224,11 @@ const CustomDrawer = ({ collapsed = false }) => {
 
 
               {
+                
                 link: "/hierarchical-user-assignments",
                 name: "Hierarchical User Assignments",
                 icon: <IoSettingsOutline />,
+                
               }
 
 
@@ -236,6 +239,7 @@ const CustomDrawer = ({ collapsed = false }) => {
               // }
 
             ]}
+           
           />
 
           {/* <LinkTo icon={<FiUsers />} name="Uploader" link="/uploader" isAllow /> */}

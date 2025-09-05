@@ -37,10 +37,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import FilterListIcon from '@mui/icons-material/FilterList';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
 import GetAppIcon from '@mui/icons-material/GetApp';
-import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
-import EditIcon from '@mui/icons-material/Edit';
 import PrintIcon from '@mui/icons-material/Print';
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -73,16 +70,13 @@ const PSPCustomPageTable = ({
   const queryClient = useQueryClient();
 
   // Enhanced state management
-  const [selectedRows, setSelectedRows] = useState([]);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(null);
   const [columnVisibility, setColumnVisibility] = useState({});
   const [anchorEl, setAnchorEl] = useState(null);
   const [filterMenuAnchor, setFilterMenuAnchor] = useState(null);
-  const [bulkActionAnchor, setBulkActionAnchor] = useState(null);
   const [exportMenuAnchor, setExportMenuAnchor] = useState(null);
   const [viewDetailsDialog, setViewDetailsDialog] = useState({ open: false, data: null });
-  const [bulkDeleteDialog, setBulkDeleteDialog] = useState(false);
   const [currentTableData, setCurrentTableData] = useState([]);
   const [printPreviewDialog, setPrintPreviewDialog] = useState({ open: false, content: '', data: [] });
 
@@ -194,8 +188,6 @@ const PSPCustomPageTable = ({
   const handleMenuClose = () => setAnchorEl(null);
   const handleFilterMenuClick = (event) => setFilterMenuAnchor(event.currentTarget);
   const handleFilterMenuClose = () => setFilterMenuAnchor(null);
-  const handleBulkActionClick = (event) => setBulkActionAnchor(event.currentTarget);
-  const handleBulkActionClose = () => setBulkActionAnchor(null);
   const handleExportMenuClick = (event) => setExportMenuAnchor(event.currentTarget);
   const handleExportMenuClose = () => setExportMenuAnchor(null);
 
@@ -262,33 +254,6 @@ const PSPCustomPageTable = ({
   // View details handler
   const handleViewDetails = (row) => {
     setViewDetailsDialog({ open: true, data: row });
-  };
-
-  // Bulk delete handler
-  const handleBulkDelete = async () => {
-    if (selectedRows.length === 0) {
-      toast.warning("Please select rows to delete");
-      return;
-    }
-    setBulkDeleteDialog(true);
-  };
-
-  const confirmBulkDelete = async () => {
-    setLoading(true);
-    try {
-      await Promise.all(
-        selectedRows.map(id => api.delete(`${apiPath}/${id}`))
-      );
-      toast.success(`${selectedRows.length} records deleted successfully`);
-      setSelectedRows([]);
-      await fetchData();
-      queryClient.invalidateQueries(dataListName);
-    } catch (error) {
-      toast.error("Failed to delete selected records");
-    } finally {
-      setLoading(false);
-      setBulkDeleteDialog(false);
-    }
   };
 
   // Enhanced print function with preview dialog
@@ -657,71 +622,71 @@ const PSPCustomPageTable = ({
     ));
 
     // Add duplicate record option
-    options.push((props) => (
-      <MenuItem
-        key="duplicate-record"
-        onClick={() => {
-          // Create a copy of the record without _id
-          const duplicateData = { ...props.row };
-          delete duplicateData._id;
-          delete duplicateData.createdAt;
-          delete duplicateData.updatedAt;
-          // You can implement duplicate functionality here
-          toast.info("Duplicate functionality to be implemented");
-          props.parentClose();
-        }}
-        sx={{ display: "flex", gap: 1 }}
-      >
-        <EditIcon fontSize="small" />
-        Duplicate Record
-      </MenuItem>
-    ));
+    // options.push((props) => (
+    //   <MenuItem
+    //     key="duplicate-record"
+    //     onClick={() => {
+    //       // Create a copy of the record without _id
+    //       const duplicateData = { ...props.row };
+    //       delete duplicateData._id;
+    //       delete duplicateData.createdAt;
+    //       delete duplicateData.updatedAt;
+    //       // You can implement duplicate functionality here
+    //       toast.info("Duplicate functionality to be implemented");
+    //       props.parentClose();
+    //     }}
+    //     sx={{ display: "flex", gap: 1 }}
+    //   >
+    //     <EditIcon fontSize="small" />
+    //     Duplicate Record
+    //   </MenuItem>
+    // ));
 
     // Add print option
-    options.push((props) => (
-      <MenuItem
-        key="print-record"
-        onClick={() => {
-          // Create a print-friendly view of the record
-          const printWindow = window.open('', '_blank');
-          const printContent = `
-            <html>
-              <head>
-                <title>Personnel Record - ${props.row.employeeFullName}</title>
-                <style>
-                  body { font-family: Arial, sans-serif; margin: 20px; }
-                  .header { text-align: center; margin-bottom: 30px; }
-                  .field { margin-bottom: 10px; }
-                  .label { font-weight: bold; display: inline-block; width: 200px; }
-                  .value { display: inline-block; }
-                </style>
-              </head>
-              <body>
-                <div class="header">
-                  <h2>Personnel Record</h2>
-                  <h3>${props.row.employeeFullName}</h3>
-                </div>
-                ${Object.keys(schema).map(key =>
-                  schema[key].label && key !== 'action' ?
-                    `<div class="field">
-                      <span class="label">${schema[key].label}:</span>
-                      <span class="value">${props.row[key] || 'N/A'}</span>
-                    </div>` : ''
-                ).join('')}
-              </body>
-            </html>
-          `;
-          printWindow.document.write(printContent);
-          printWindow.document.close();
-          printWindow.print();
-          props.parentClose();
-        }}
-        sx={{ display: "flex", gap: 1 }}
-      >
-        <PrintIcon fontSize="small" />
-        Print Record
-      </MenuItem>
-    ));
+    // options.push((props) => (
+    //   <MenuItem
+    //     key="print-record"
+    //     onClick={() => {
+    //       // Create a print-friendly view of the record
+    //       const printWindow = window.open('', '_blank');
+    //       const printContent = `
+    //         <html>
+    //           <head>
+    //             <title>Personnel Record - ${props.row.employeeFullName}</title>
+    //             <style>
+    //               body { font-family: Arial, sans-serif; margin: 20px; }
+    //               .header { text-align: center; margin-bottom: 30px; }
+    //               .field { margin-bottom: 10px; }
+    //               .label { font-weight: bold; display: inline-block; width: 200px; }
+    //               .value { display: inline-block; }
+    //             </style>
+    //           </head>
+    //           <body>
+    //             <div class="header">
+    //               <h2>Personnel Record</h2>
+    //               <h3>${props.row.employeeFullName}</h3>
+    //             </div>
+    //             ${Object.keys(schema).map(key =>
+    //               schema[key].label && key !== 'action' ?
+    //                 `<div class="field">
+    //                   <span class="label">${schema[key].label}:</span>
+    //                   <span class="value">${props.row[key] || 'N/A'}</span>
+    //                 </div>` : ''
+    //             ).join('')}
+    //           </body>
+    //         </html>
+    //       `;
+    //       printWindow.document.write(printContent);
+    //       printWindow.document.close();
+    //       printWindow.print();
+    //       props.parentClose();
+    //     }}
+    //     sx={{ display: "flex", gap: 1 }}
+    //   >
+    //     <PrintIcon fontSize="small" />
+    //     Print Record
+    //   </MenuItem>
+    // ));
 
     return options;
   }, [additionalMenuOptions, schema]);
@@ -774,14 +739,6 @@ const PSPCustomPageTable = ({
           </Box>
 
           <Box display="flex" alignItems="center" gap={1}>
-            {selectedRows.length > 0 && (
-              <Chip
-                label={`${selectedRows.length} selected`}
-                color="primary"
-                variant="outlined"
-              />
-            )}
-
             <Tooltip title="Column Visibility">
               <IconButton onClick={handleFilterMenuClick}>
                 <VisibilityIcon />
@@ -793,14 +750,6 @@ const PSPCustomPageTable = ({
                 <GetAppIcon />
               </IconButton>
             </Tooltip>
-
-            {selectedRows.length > 0 && (
-              <Tooltip title="Bulk Actions">
-                <IconButton onClick={handleBulkActionClick}>
-                  <MoreVertIcon />
-                </IconButton>
-              </Tooltip>
-            )}
           </Box>
         </Box>
       </Paper>
@@ -984,31 +933,7 @@ const PSPCustomPageTable = ({
         </MenuItem>
       </Menu>
 
-      {/* Bulk Actions Menu */}
-      <Menu
-        anchorEl={bulkActionAnchor}
-        open={Boolean(bulkActionAnchor)}
-        onClose={handleBulkActionClose}
-      >
-        <MenuItem onClick={() => {
-          handleBulkDelete();
-          handleBulkActionClose();
-        }}>
-          <ListItemIcon>
-            <DeleteSweepIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Delete Selected</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={() => {
-          // Bulk edit functionality
-          handleBulkActionClose();
-        }}>
-          <ListItemIcon>
-            <EditIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Bulk Edit</ListItemText>
-        </MenuItem>
-      </Menu>
+
 
       {/* Bulk Add Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog}>
@@ -1032,27 +957,7 @@ const PSPCustomPageTable = ({
         </DialogActions>
       </Dialog>
 
-      {/* Bulk Delete Confirmation Dialog */}
-      <Dialog open={bulkDeleteDialog} onClose={() => setBulkDeleteDialog(false)}>
-        <DialogTitle>Confirm Bulk Delete</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Are you sure you want to delete {selectedRows.length} selected personnel records? This action cannot be undone.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setBulkDeleteDialog(false)} color="primary">
-            Cancel
-          </Button>
-          <Button
-            onClick={confirmBulkDelete}
-            color="error"
-            autoFocus
-          >
-            {loading ? <CircularProgress size={24} /> : "Delete"}
-          </Button>
-        </DialogActions>
-      </Dialog>
+
 
       {/* View Details Dialog */}
       <Dialog
@@ -1166,8 +1071,6 @@ const PSPCustomPageTable = ({
         dataListName={dataListName}
         apiPath={apiPath}
         rows={filteredRows}
-        selectedRows={selectedRows}
-        onRowSelectionChange={setSelectedRows}
         onDataChange={setCurrentTableData}
         columns={useMemo(() => Object.keys(schema)
           .filter((key) => (columnVisibility[key] !== false && (schema[key].show === true || key === "action")))
