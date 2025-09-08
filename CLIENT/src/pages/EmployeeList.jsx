@@ -23,6 +23,7 @@ import {
 } from "@mui/material";
 import EmployeeCustomPage from "../components/employee/EmployeeCustomPage";
 import EmployeeCustomAdd from "../components/employee/EmployeeCustomAdd";
+import EmployeeEditDialog from "../components/employee/EmployeeEditDialog";
 import TextSearchable from "../global/components/TextSearchable";
 import api from "../config/api";
 import { toast } from "react-hot-toast";
@@ -521,6 +522,7 @@ const EmployeeList = () => {
             hasDelete={false}
             ROWS_PER_PAGE={20}
             customAddElement={<EmployeeCustomAdd onDataChange={refreshStats} />}
+            customEditElement={<EmployeeEditDialog dataListName="employees" onDataChange={refreshStats} />}
             onDataChange={refreshStats}
             tableContainerProps={{
               sx: {

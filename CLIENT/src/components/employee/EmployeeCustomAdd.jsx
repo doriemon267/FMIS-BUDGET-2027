@@ -79,6 +79,8 @@ const AddEmployeeDialog = ({ parentClose }) => {
   const [activeStep, setActiveStep] = useState(0);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [activeSettings, setActiveSettings] = useState(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [formDataToSave, setFormDataToSave] = useState(null);
   const { activeRegion } = useRegion();
   const { currentUser } = useUser(); // Get currentUser from context
   const queryClient = useQueryClient(); // Add query client for data refresh
@@ -456,6 +458,14 @@ const AddEmployeeDialog = ({ parentClose }) => {
   };
 
   const handleSave = async (data) => {
+    // Store the form data and show confirmation dialog
+    setFormDataToSave(data);
+    setShowConfirmDialog(true);
+  };
+
+  const handleConfirmSave = async () => {
+    const data = formDataToSave;
+    
     // Check if a region is selected
     if (!activeRegion) {
       toast.error("Please select a region before adding an employee", {
@@ -465,6 +475,7 @@ const AddEmployeeDialog = ({ parentClose }) => {
           color: theme.palette.mode === "dark" ? "#fff" : "#333",
         },
       });
+      setShowConfirmDialog(false);
       return;
     }
 
@@ -480,6 +491,7 @@ const AddEmployeeDialog = ({ parentClose }) => {
           },
         }
       );
+      setShowConfirmDialog(false);
       return;
     }
 
@@ -505,6 +517,7 @@ const AddEmployeeDialog = ({ parentClose }) => {
             },
           }
         );
+        setShowConfirmDialog(false);
         return;
       }
     } catch (error) {
@@ -542,6 +555,8 @@ const AddEmployeeDialog = ({ parentClose }) => {
     console.log("🎂 DateOfBirth in data:", data.DateOfBirth);
 
     setLoading(true);
+    setShowConfirmDialog(false);
+    
     try {
       const response = await api.post("/employees", data);
       
@@ -573,7 +588,13 @@ const AddEmployeeDialog = ({ parentClose }) => {
       });
     } finally {
       setLoading(false);
+      setFormDataToSave(null);
     }
+  };
+
+  const handleCancelSave = () => {
+    setShowConfirmDialog(false);
+    setFormDataToSave(null);
   };
 
   const handleNext = async () => {
@@ -1516,6 +1537,95 @@ const AddEmployeeDialog = ({ parentClose }) => {
             </DialogActions>
           </form>
         </FormProvider>
+      </Dialog>
+
+      {/* Confirmation Dialog */}
+      <Dialog
+        open={showConfirmDialog}
+        onClose={handleCancelSave}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: "12px",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            p: 3,
+            background: `linear-gradient(135deg, ${theme.palette.success.main} 0%, ${theme.palette.success.dark} 100%)`,
+            color: "white",
+            textAlign: "center",
+          }}
+        >
+          <Box display="flex" alignItems="center" justifyContent="center" gap={2}>
+            <PersonAddIcon fontSize="large" />
+            <Typography variant="h6" component="span">
+              Confirm Save Employee
+            </Typography>
+          </Box>
+        </DialogTitle>
+
+        <DialogContent sx={{ p: 3, textAlign: "center" }}>
+          <Typography variant="h6" gutterBottom>
+            Are you sure you want to save this employee?
+          </Typography>
+          
+          {formDataToSave && (
+            <Box sx={{ mt: 2, p: 2, bgcolor: "rgba(0,0,0,0.05)", borderRadius: "8px" }}>
+              <Typography variant="subtitle1" fontWeight="bold">
+                {formDataToSave.EmployeeFullName}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                ID: {formDataToSave.EmployeeID}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Position: {formDataToSave.PositionTitle || "N/A"}
+              </Typography>
+              {activeSettings?.fiscalYear && (
+                <Typography variant="body2" color="text.secondary">
+                  Fiscal Year: {activeSettings.fiscalYear}
+                </Typography>
+              )}
+            </Box>
+          )}
+
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+            This action will add the employee to the system and cannot be undone.
+          </Typography>
+        </DialogContent>
+
+        <DialogActions sx={{ p: 3, justifyContent: "center", gap: 2 }}>
+          <Button
+            onClick={handleCancelSave}
+            variant="outlined"
+            color="inherit"
+            sx={{
+              borderRadius: "8px",
+              textTransform: "none",
+              px: 3,
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmSave}
+            variant="contained"
+            color="success"
+            disabled={loading}
+            startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <PersonAddIcon />}
+            sx={{
+              borderRadius: "8px",
+              textTransform: "none",
+              fontWeight: 600,
+              px: 3,
+            }}
+          >
+            {loading ? "Saving..." : "Yes, Save Employee"}
+          </Button>
+        </DialogActions>
       </Dialog>
 
       {/* Import Employees Dialog */}

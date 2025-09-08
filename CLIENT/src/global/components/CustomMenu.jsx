@@ -77,7 +77,7 @@ export default function CustomMenu({
       >
         <List>
           {/* Edit Option */}
-          {hasEdit && (
+          {hasEdit && !customEditElement && (
             <CustomCreateUpdateDialog
               dataListName={dataListName}
               endpoint={endpoint}
@@ -86,9 +86,16 @@ export default function CustomMenu({
               schema={schema}
             />
           )}
+          
+          {/* Custom Edit Element */}
+          {customEditElement && React.cloneElement(customEditElement, { 
+            row, 
+            parentClose: handleClose,
+            dataListName,
+            endpoint 
+          })}
+          
           {/* Delete Option */}
-
-          {customEditElement && customEditElement}
           {/* Additional Options */}
           {additionalMenuOptions.map((Component, index) => (
             <Component
