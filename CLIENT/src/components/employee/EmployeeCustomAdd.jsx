@@ -83,131 +83,233 @@ const AddEmployeeDialog = ({ parentClose }) => {
   const { currentUser } = useUser(); // Get currentUser from context
   const queryClient = useQueryClient(); // Add query client for data refresh
 
-  // Dynamic options for Division and Section based on Department
-  const [divisionOptions, setDivisionOptions] = useState([]);
-  const [sectionOptions, setSectionOptions] = useState([]);
+  // Debug user context
+  useEffect(() => {
+    console.log("👤 Current user in EmployeeCustomAdd:", currentUser);
+    if (currentUser) {
+      console.log("📝 User details:", {
+        FirstName: currentUser.FirstName,
+        LastName: currentUser.LastName,
+        fullName: `${currentUser.FirstName} ${currentUser.LastName}`
+      });
+    } else {
+      console.log("❌ No current user found in context");
+    }
+  }, [currentUser]);
 
-  // Division/Section cascading effect is defined after useForm initialization to avoid watch being undefined here.
-
+  // Initialize react-hook-form
   const methods = useForm({
     defaultValues: {
-      EmployeeID: "",
-      EmployeeFullName: "",
-      Region: activeRegion ? activeRegion.name || activeRegion.regionName : "",
+      Region: "",
       Department: "",
       Division: "",
       Section: "",
-      PositionTitle: "",
-      StatusOfAppointment: "",
-      SG: "",
-      JG: "",
-      Step: "",
-      Rate: "",
       Status: "Active",
-      DateOfAppointment: "",
+      DateOfBirth: "",
     },
-    mode: "onChange",
   });
 
   const {
-    control,
-    handleSubmit,
-    reset,
-    setValue,
-    trigger,
-    getValues,
     watch,
-    formState: { errors, isValid, isDirty },
+    setValue,
+    handleSubmit,
+    control,
+    formState: { errors },
+    trigger,
   } = methods;
 
-  // Watch for form values to show preview
+  // Watch all form values for the review step
   const watchedValues = watch();
 
-  // Update Region field when activeRegion changes
+  // Dynamic options for Division and Section based on Department
+  const [divisionOptions, setDivisionOptions] = useState([]);
+  const [sectionOptions, setSectionOptions] = useState([]);
+  const [departmentOptions, setDepartmentOptions] = useState([]);
+  const [positionOptions, setPositionOptions] = useState([]);
+  const [organizationStructure, setOrganizationStructure] = useState(null);
+
+  // Set Region value when activeRegion changes
   useEffect(() => {
     if (activeRegion) {
-      setValue("Region", activeRegion.name || activeRegion.regionName);
+      setValue(
+        "Region",
+        activeRegion.Region || activeRegion.name || activeRegion
+      );
     }
   }, [activeRegion, setValue]);
 
-  // Fetch active settings for fiscal year
+  // Fetch position options
+  useEffect(() => {
+    const fetchPositions = async () => {
+      try {
+        const response = await api.get("/positions");
+        console.log("📋 Fetched positions for dropdown:", response.data);
+        setPositionOptions(response.data.positions || []);
+      } catch (error) {
+        console.error("Error fetching positions:", error);
+        setPositionOptions([]);
+      }
+    };
+
+    fetchPositions();
+  }, []);
+
+  // Fetch active settings (fiscal year)
   useEffect(() => {
     const fetchActiveSettings = async () => {
       try {
+        console.log("🔄 Fetching active settings...");
         const response = await api.get("/settings/active");
-        if (response.data) {
+        console.log("⚙️ Fetched active settings:", response.data);
+        if (response.data && response.data.fiscalYear) {
           setActiveSettings(response.data);
+          console.log("✅ Active fiscal year set:", response.data.fiscalYear);
         } else {
-          toast.error("No active fiscal year found");
+          console.log("❌ No fiscal year in response:", response.data);
+          setActiveSettings(null);
         }
       } catch (error) {
-        console.error("Error fetching active settings:", error);
-        toast.error("Failed to fetch fiscal year settings");
+        console.error("❌ Error fetching active settings:", error);
+        console.error("Error details:", error.response?.data);
+        setActiveSettings(null);
       }
     };
 
     fetchActiveSettings();
   }, []);
 
-  const handleOpen = () => setIsOpen(true);
-  const handleClose = () => {
-    setIsOpen(false);
-    setActiveStep(0);
-    reset();
-    parentClose && parentClose();
-  };
+  useEffect(() => {
+    const fetchOrganizationStructure = async () => {
+      try {
+        const response = await api.get(
+          "/api/hierarchical-rbac/organization-structure"
+        );
+        if (response.data?.data) {
+          setOrganizationStructure(response.data.data);
 
-  const handleImportOpen = () => setIsImportOpen(true);
-  const handleImportClose = () => {
-    setIsImportOpen(false);
-    setUploadError(null);
-    setSelectedFile(null);
-    setUploadProgress(0);
-  };
+          // Set department options based on active region
+          if (activeRegion) {
+            const regionMappings =
+              response.data.data.mappings?.filter(
+                (mapping) => mapping.regionId === activeRegion._id
+              ) || [];
+            const departmentIds = regionMappings.map(
+              (mapping) => mapping.departmentId
+            );
+            const depts =
+              response.data.data.availableUnits?.departments?.filter((dept) =>
+                departmentIds.includes(dept.id)
+              ) || [];
+            setDepartmentOptions(depts);
+          } else {
+            setDepartmentOptions(
+              response.data.data.availableUnits?.departments || []
+            );
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching organization structure:", error);
+        setDepartmentOptions([]);
+      }
+    };
+
+    fetchOrganizationStructure();
+  }, [activeRegion]);
+
+  // Update department options when activeRegion changes
+  useEffect(() => {
+    if (organizationStructure && activeRegion) {
+      const regionMappings =
+        organizationStructure.mappings?.filter(
+          (mapping) => mapping.regionId === activeRegion._id
+        ) || [];
+      const departmentIds = regionMappings.map(
+        (mapping) => mapping.departmentId
+      );
+      const depts =
+        organizationStructure.availableUnits?.departments?.filter((dept) =>
+          departmentIds.includes(dept.id)
+        ) || [];
+      setDepartmentOptions(depts);
+    }
+  }, [activeRegion, organizationStructure]);
+
+  // When Department/Division changes, fetch divisions based on selected Department
+  useEffect(() => {
+    const subscription = watch((values, { name }) => {
+      if (name === "Department") {
+        const deptName = values?.Department || "";
+        setValue("Division", "");
+        setValue("Section", "");
+        setSectionOptions([]);
+
+        if (!deptName || !organizationStructure) {
+          setDivisionOptions([]);
+          return;
+        }
+
+        // Find the department in the hierarchical structure
+        const departmentsWithDivisions =
+          organizationStructure.availableUnits?.departmentsWithDivisions || [];
+        const matched = departmentsWithDivisions.find(
+          (d) =>
+            String(d.departmentName).toLowerCase() ===
+            String(deptName).toLowerCase()
+        );
+
+        if (matched) {
+          const divisions =
+            matched.divisions?.map((div) => div.name).filter(Boolean) || [];
+          setDivisionOptions(divisions);
+        } else {
+          setDivisionOptions([]);
+        }
+      }
+
+      if (name === "Division") {
+        const divName = values?.Division || "";
+        if (!divName) {
+          setSectionOptions([]);
+        } else {
+          // Find the selected division in the hierarchical structure
+          const departmentsWithDivisions =
+            organizationStructure.availableUnits?.departmentsWithDivisions ||
+            [];
+          const matchedDept = departmentsWithDivisions.find((dept) =>
+            dept.divisions?.some((div) => div.name === divName)
+          );
+
+          if (matchedDept) {
+            const matchedDiv = matchedDept.divisions.find(
+              (div) => div.name === divName
+            );
+            if (matchedDiv && matchedDiv.sections) {
+              const sections = matchedDiv.sections
+                .map((section) => section.name)
+                .filter(Boolean);
+              setSectionOptions(sections);
+            } else {
+              setSectionOptions([]);
+            }
+          } else {
+            setSectionOptions([]);
+          }
+        }
+        setValue("Section", "");
+      }
+    });
+
+    return () => {
+      if (subscription && typeof subscription.unsubscribe === "function") {
+        subscription.unsubscribe();
+      }
+    };
+  }, [watch, setValue, organizationStructure]);
 
   const handleFileChange = (event) => {
     const file = event.target.files[0];
     setSelectedFile(file);
 
-  // When Department/Division changes, fetch divisions based on selected Department
-  useEffect(() => {
-    const subscription = watch((values, { name }) => {
-      if (name === 'Department') {
-        const deptName = values?.Department || '';
-        setValue('Division', '');
-        setValue('Section', '');
-        setSectionOptions([]);
-
-        if (!deptName) {
-          setDivisionOptions([]);
-          return;
-        }
-
-        api.get('/api/hierarchical-rbac/organization-structure')
-          .then(res => {
-            const data = res.data?.data;
-            const departments = data?.departments || [];
-            const matched = departments.find(d => String(d.name).toLowerCase() === String(deptName).toLowerCase());
-            const divisions = matched?.divisions?.map(div => div.name).filter(Boolean) || [];
-            setDivisionOptions(divisions);
-          })
-          .catch(() => {
-            setDivisionOptions([]);
-          });
-      }
-
-      if (name === 'Division') {
-        const divName = values?.Division || '';
-        if (!divName) setSectionOptions([]);
-      }
-    });
-
-    return () => {
-      if (subscription && typeof subscription.unsubscribe === 'function') {
-        subscription.unsubscribe();
-      }
-    };
-  }, [watch, setValue]);
     // Reset any previous errors
     setUploadError(null);
 
@@ -381,6 +483,35 @@ const AddEmployeeDialog = ({ parentClose }) => {
       return;
     }
 
+    // Check for duplicate employee in the same fiscal year
+    try {
+      console.log("🔍 Checking for duplicate employee...");
+      const duplicateCheck = await api.get(`/employees/check-duplicate`, {
+        params: {
+          fullName: data.EmployeeFullName,
+          fiscalYear: activeSettings.fiscalYear,
+          region: activeRegion.name || activeRegion.regionName
+        }
+      });
+
+      if (duplicateCheck.data.exists) {
+        toast.error(
+          `Employee "${data.EmployeeFullName}" already exists in fiscal year ${activeSettings.fiscalYear} for this region.`,
+          {
+            style: {
+              borderRadius: "10px",
+              background: theme.palette.mode === "dark" ? "#333" : "#fff",
+              color: theme.palette.mode === "dark" ? "#fff" : "#333",
+            },
+          }
+        );
+        return;
+      }
+    } catch (error) {
+      console.error("Error checking for duplicate:", error);
+      // Continue with save if duplicate check fails (don't block the user)
+    }
+
     // Ensure the Region field is set to the active region
     data.Region = activeRegion.name || activeRegion.regionName;
 
@@ -392,9 +523,32 @@ const AddEmployeeDialog = ({ parentClose }) => {
     // Add fiscal year to the employee data
     data.fiscalYear = activeSettings.fiscalYear;
 
+    // Add processBy field with current user information
+    const processBy = currentUser?.FirstName && currentUser?.LastName
+      ? `${currentUser.FirstName} ${currentUser.LastName}`
+      : currentUser?.fullName
+      ? currentUser.fullName
+      : currentUser?.name
+      ? currentUser.name
+      : currentUser?.username
+      ? currentUser.username
+      : "Admin";
+    
+    data.processBy = processBy;
+    
+    console.log("💾 Saving employee with processBy:", processBy);
+    console.log("👤 Current user context:", currentUser);
+    console.log("📄 Full employee data being sent:", data);
+    console.log("🎂 DateOfBirth in data:", data.DateOfBirth);
+
     setLoading(true);
     try {
-      await api.post("/employees", data);
+      const response = await api.post("/employees", data);
+      
+      // Refresh the employee data after successful save
+      queryClient.invalidateQueries(['employees']);
+      queryClient.invalidateQueries(['employee-list']);
+      
       toast.success("Employee added successfully", {
         style: {
           borderRadius: "10px",
@@ -406,6 +560,8 @@ const AddEmployeeDialog = ({ parentClose }) => {
           secondary: "#FFFAEE",
         },
       });
+      
+      console.log("✅ Employee saved successfully, refreshing table...");
       handleClose();
     } catch (error) {
       toast.error(error.response?.data?.error || "Failed to save employee", {
@@ -421,9 +577,33 @@ const AddEmployeeDialog = ({ parentClose }) => {
   };
 
   const handleNext = async () => {
-    const isStepValid = await trigger(getFieldsForStep(activeStep));
-    if (isStepValid) {
-      setActiveStep((prevActiveStep) => prevActiveStep + 1);
+    console.log("handleNext called, activeStep:", activeStep);
+    const fieldsForStep = getFieldsForStep(activeStep);
+    console.log("Fields to validate:", fieldsForStep);
+
+    // Log current form values for debugging
+    const currentValues = watch();
+    console.log("Current form values:", currentValues);
+
+    try {
+      const isStepValid = await trigger(fieldsForStep);
+      console.log("Validation result:", isStepValid);
+      console.log("Current errors:", errors);
+
+      if (isStepValid) {
+        console.log("Moving to next step");
+        setActiveStep((prevActiveStep) => prevActiveStep + 1);
+      } else {
+        console.log("Validation failed, staying on current step");
+        // Show which specific fields are failing
+        fieldsForStep.forEach((field) => {
+          if (errors[field]) {
+            console.log(`Field ${field} has error:`, errors[field].message);
+          }
+        });
+      }
+    } catch (error) {
+      console.error("Error during validation:", error);
     }
   };
 
@@ -431,24 +611,44 @@ const AddEmployeeDialog = ({ parentClose }) => {
     setActiveStep((prevActiveStep) => prevActiveStep - 1);
   };
 
+  const handleOpen = () => {
+    setIsOpen(true);
+  };
+
+  const handleClose = () => {
+    setIsOpen(false);
+    if (parentClose) {
+      parentClose();
+    }
+  };
+
+  const handleImportOpen = () => {
+    setIsImportOpen(true);
+  };
+
+  const handleImportClose = () => {
+    setIsImportOpen(false);
+  };
+
   // Define which fields belong to each step
   const getFieldsForStep = (step) => {
     switch (step) {
       case 0: // Basic Information
-        return [
+        const basicFields = [
           "EmployeeID",
           "EmployeeFullName",
-          "Region",
-          "Department",
-          "Division",
-          "Section",
+          "Department", // Only require department, not all hierarchy levels
         ];
+        // Only add Region if no activeRegion is set
+        if (!activeRegion) {
+          basicFields.push("Region");
+        }
+        return basicFields;
       case 1: // Position Information
         return [
           "PositionTitle",
           "StatusOfAppointment",
-          "DateOfAppointment",
-          "Status",
+          // Make DateOfAppointment and Status optional for now
         ];
       case 2: // Salary Information
         return ["SG", "JG", "Step", "Rate"];
@@ -655,6 +855,31 @@ const AddEmployeeDialog = ({ parentClose }) => {
                         }}
                       />
                     </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <CustomTextField
+                        fieldName="DateOfBirth"
+                        control={control}
+                        label="Date of Birth"
+                        type="date"
+                        InputLabelProps={{ shrink: true }}
+                        rules={{
+                          validate: (value) => {
+                            if (!value) return true; // Optional field
+                            const today = new Date();
+                            const birthDate = new Date(value);
+                            const age = today.getFullYear() - birthDate.getFullYear();
+                            
+                            if (age < 16) {
+                              return "Employee must be at least 16 years old";
+                            }
+                            if (age > 100) {
+                              return "Please enter a valid birth date";
+                            }
+                            return true;
+                          }
+                        }}
+                      />
+                    </Grid>
 
                     <Grid item xs={12}>
                       {activeRegion ? (
@@ -712,19 +937,15 @@ const AddEmployeeDialog = ({ parentClose }) => {
                       <CustomAutoComplete
                         fieldName="Department"
                         label="Department"
-                        apiList={{
-                          api: api,
-                          endpoint: "/departments",
-                          listName: "departments",
-                        }}
+                        options={departmentOptions}
                         control={control}
-                        getOptionLabel="Department"
+                        getOptionLabel="name"
                         required
                         rules={{ required: "Department is required" }}
                         onChange={(val) => {
                           // val can be object or string - we set via watcher already; keep here for safety
-                          setValue('Division', '');
-                          setValue('Section', '');
+                          setValue("Division", "");
+                          setValue("Section", "");
                         }}
                       />
                     </Grid>
@@ -736,7 +957,7 @@ const AddEmployeeDialog = ({ parentClose }) => {
                         control={control}
                         onChange={() => {
                           // Clear Section when Division changes
-                          setValue('Section', '');
+                          setValue("Section", "");
                         }}
                       />
                     </Grid>
@@ -766,17 +987,14 @@ const AddEmployeeDialog = ({ parentClose }) => {
                   </Typography>
 
                   <Grid container spacing={2}>
-                    <Grid item xs={12}>
+                    {/* <Grid item xs={12}>
                       <CustomAutoComplete
                         fieldName="PositionTitle"
                         label="Position Title"
-                        apiList={{
-                          api: api,
-                          endpoint: "/positions",
-                          listName: "positions",
-                        }}
+                        options={positionOptions}
                         control={control}
                         getOptionLabel="PositionTitle"
+                        freeSolo={true}
                         required
                         rules={{ required: "Position title is required" }}
                         InputProps={{
@@ -787,7 +1005,28 @@ const AddEmployeeDialog = ({ parentClose }) => {
                           ),
                         }}
                       />
+                    </Grid> */}
+
+                    <Grid item xs={12}>
+                      <CustomAutoComplete
+                        fieldName="PositionTitle"
+                        label="Position Title"
+                        apiList={
+                         {
+                            api: api,
+                            endpoint: "/positions",
+                            listName: "positions",
+                          }}
+                  
+                        control={control}
+                        getOptionLabel="PositionTitle"
+                       
+                        required
+                        rules={{ required: "Position title is required" }}
+                     
+                      />
                     </Grid>
+
                     <Grid item xs={12} sm={6}>
                       <CustomAutoComplete
                         fieldName="StatusOfAppointment"
@@ -798,7 +1037,7 @@ const AddEmployeeDialog = ({ parentClose }) => {
                           listName: "status",
                         }}
                         control={control}
-                        getOptionLabel="StatusOfAppointment"
+                        getOptionLabel="Status"
                         required
                         rules={{
                           required: "Status of appointment is required",
@@ -1071,6 +1310,11 @@ const AddEmployeeDialog = ({ parentClose }) => {
                         <Typography variant="body2">
                           ID: {watchedValues.EmployeeID || "N/A"}
                         </Typography>
+                        {watchedValues.DateOfBirth && (
+                          <Typography variant="body2">
+                            Born: {new Date(watchedValues.DateOfBirth).toLocaleDateString()}
+                          </Typography>
+                        )}
                       </Box>
                     </Box>
                     <CardContent>
@@ -1118,6 +1362,17 @@ const AddEmployeeDialog = ({ parentClose }) => {
                                 : ""}
                             </Typography>
                           </Box>
+
+                          {watchedValues.DateOfBirth && (
+                            <Box sx={{ mb: 2 }}>
+                              <Typography variant="body2" color="text.secondary">
+                                Date of Birth
+                              </Typography>
+                              <Typography variant="body1">
+                                {new Date(watchedValues.DateOfBirth).toLocaleDateString()}
+                              </Typography>
+                            </Box>
+                          )}
 
                           <Box sx={{ mb: 2 }}>
                             <Typography variant="body2" color="text.secondary">

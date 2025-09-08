@@ -3,8 +3,10 @@ const PersonnelServices = require("../models/personnelServices");
 const EmployeeMaster = require("../models/EmployeeList");
 const Settings = require("../models/Settings");
 // Import MealAllowance and MedicalAllowance models safely
-const MealAllowance = mongoose.models.MealAllowance || require("../models/mealAllowance");
-const MedicalAllowance = mongoose.models.MedicalAllowance || require("../models/medicalAllowance");
+const MealAllowance =
+  mongoose.models.MealAllowance || require("../models/mealAllowance");
+const MedicalAllowance =
+  mongoose.models.MedicalAllowance || require("../models/medicalAllowance");
 const {
   numberFilter,
   dateFilter,
@@ -19,62 +21,84 @@ async function syncMealAllowanceData(employeeNumber, fiscalYear) {
     // Find the meal allowance record for this employee
     const mealAllowance = await MealAllowance.findOne({
       employeeNumber,
-      fiscalYear
+      fiscalYear,
     });
     // Check if employee is permanent (case insensitive)
     const personnel = await PersonnelServices.findOne({
       employeeNumber,
       fiscalYear,
-      statusOfAppointment: { $regex: new RegExp('^PERMANENT$', 'i') }
+      statusOfAppointment: { $regex: new RegExp("^PERMANENT$", "i") },
     });
     if (mealAllowance) {
       // Get the current settings
-      const settings = await Settings.findOne({ 
-        fiscalYear, 
-        isActive: true 
+      const settings = await Settings.findOne({
+        fiscalYear,
+        isActive: true,
       }).lean();
-      
+
       if (settings && settings.meal) {
         // Calculate the correct annual amount
         const monthlyAmount = mealAllowance.actualDays * settings.meal;
         const annualAmount = monthlyAmount * 12;
-        
+
         // Update the personnel services record
         await PersonnelServices.updateOne(
           { employeerails: true },
           { employeeNumber, fiscalYear },
           { meal: annualAmount }
         );
-        
-        console.log(`Synced meal allowance for employee ${employeeNumber}: Annual amount = ${annualAmount}`);
-        
+
+        console.log(
+          `Synced meal allowance for employee ${employeeNumber}: Annual amount = ${annualAmount}`
+        );
+
         // Recalculate the Total field
         const updatedPersonnel = await PersonnelServices.findOne({
           employeeNumber,
           fiscalYear,
         });
-        
+
         if (updatedPersonnel) {
           const numericFields = [
-            "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
-            "medical", "meal", "cashGift", "midyearBonus", "yearEndBonus",
-            "gsisPremium", "philhealthPremium", "pagibigPremium", "employeeCompensation",
-            "subsistenceAllowanceMDS", "subsistenceAllowanceST", "overtimePay", "loyaltyAward",
-            "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
-            "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
+            "annualSalary",
+            "RATA",
+            "PERA",
+            "uniformALLOWANCE",
+            "productivityIncentive",
+            "medical",
+            "meal",
+            "cashGift",
+            "midyearBonus",
+            "yearEndBonus",
+            "gsisPremium",
+            "philhealthPremium",
+            "pagibigPremium",
+            "employeeCompensation",
+            "subsistenceAllowanceMDS",
+            "subsistenceAllowanceST",
+            "overtimePay",
+            "loyaltyAward",
+            "earnedLeaves",
+            "retirementBenefits",
+            "terminalLeave",
+            "courtAppearance",
+            "hazardPay",
+            "subsistenceAllowance",
+            "honoraria",
+            "childrenAllowance",
           ];
-          
+
           const newTotal = numericFields.reduce(
             (acc, field) => acc + (Number(updatedPersonnel[field]) || 0),
             0
           );
-          
+
           await PersonnelServices.updateOne(
             { employeeNumber, fiscalYear },
             { Total: newTotal }
           );
         }
-        
+
         return true;
       }
     }
@@ -90,34 +114,48 @@ exports.syncAllMealAllowances = async (req, res) => {
   try {
     const activeSettings = await Settings.findOne({ isActive: true });
     if (!activeSettings) {
-      return res.status(400).json({ message: "Active settings not found", details: "No active settings available" });
+      return res
+        .status(400)
+        .json({
+          message: "Active settings not found",
+          details: "No active settings available",
+        });
     }
-    
+
     const fiscalYear = activeSettings.fiscalYear;
-    
+
     // Get all meal allowances for the fiscal year
     const mealAllowances = await MealAllowance.find({ fiscalYear });
-    
+
     if (mealAllowances.length === 0) {
-      return res.status(200).json({ message: "No meal allowances found for the current fiscal year" });
+      return res
+        .status(200)
+        .json({
+          message: "No meal allowances found for the current fiscal year",
+        });
     }
-    
+
     let syncCount = 0;
-    
+
     for (const ma of mealAllowances) {
-      const success = await syncMealAllowanceData(ma.employeeNumber, fiscalYear);
+      const success = await syncMealAllowanceData(
+        ma.employeeNumber,
+        fiscalYear
+      );
       if (success) {
         syncCount++;
       }
     }
-    
-    return res.status(200).json({ 
+
+    return res.status(200).json({
       message: `Successfully synced ${syncCount} meal allowance records`,
-      fiscalYear
+      fiscalYear,
     });
   } catch (error) {
     console.error("Error syncing all meal allowances:", error.stack);
-    return res.status(500).json({ message: "Server error", details: error.message });
+    return res
+      .status(500)
+      .json({ message: "Server error", details: error.message });
   }
 };
 
@@ -141,12 +179,17 @@ exports.getAllPersonnelServices = async (req, res) => {
 
     const activeSettings = await Settings.findOne({ isActive: true });
     if (!activeSettings) {
-      return res.status(400).json({ message: "Active settings not found", details: "No active settings available" });
+      return res
+        .status(400)
+        .json({
+          message: "Active settings not found",
+          details: "No active settings available",
+        });
     }
 
     // Set strict fiscal year filter
     const query = {
-      fiscalYear: activeSettings.fiscalYear // Strict fiscal year filter
+      fiscalYear: activeSettings.fiscalYear, // Strict fiscal year filter
     };
 
     // Only fetch personnel for active fiscal year
@@ -163,7 +206,7 @@ exports.getAllPersonnelServices = async (req, res) => {
     if (statusOfAppointment) {
       query.statusOfAppointment = statusOfAppointment;
     }
-    
+
     // Add region filter if provided
     if (region) {
       query.region = region;
@@ -174,10 +217,15 @@ exports.getAllPersonnelServices = async (req, res) => {
     const sortQuery = { [sortByField]: sortOrder };
 
     // If syncMealAllowances is true, sync meal allowances before returning results
-    if (syncMealAllowances === 'true') {
-      const mealAllowances = await MealAllowance.find({ fiscalYear: activeSettings.fiscalYear });
+    if (syncMealAllowances === "true") {
+      const mealAllowances = await MealAllowance.find({
+        fiscalYear: activeSettings.fiscalYear,
+      });
       for (const ma of mealAllowances) {
-        await syncMealAllowanceData(ma.employeeNumber, activeSettings.fiscalYear);
+        await syncMealAllowanceData(
+          ma.employeeNumber,
+          activeSettings.fiscalYear
+        );
       }
     }
 
@@ -189,20 +237,24 @@ exports.getAllPersonnelServices = async (req, res) => {
 
     // Recalculate fields
     personnelServices = personnelServices.map((personnel) => {
-      const recalculatedSubsistenceAllowanceMDS = personnel.subsistenceAllowanceMDS;
-      const recalculatedSubsistenceAllowanceST = personnel.subsistenceAllowanceST;
+      const recalculatedSubsistenceAllowanceMDS =
+        personnel.subsistenceAllowanceMDS;
+      const recalculatedSubsistenceAllowanceST =
+        personnel.subsistenceAllowanceST;
       const recalculatedLoyaltyAward = personnel.loyaltyAward;
       const recalculatedOvertimePay = personnel.overtimePay;
       const recalculatedAnnualSalary = personnel.monthlySalary * 12;
       const recalculatedRATA = personnel.RATA;
       const recalculatedPERA = activeSettings.PERA * 12;
       const recalculatedUniform = activeSettings.uniformAllowance;
-      const recalculatedProductivityIncentive = activeSettings.productivityIncentive;
+      const recalculatedProductivityIncentive =
+        activeSettings.productivityIncentive;
       const recalculatedCashGift = activeSettings.cashGift;
       const recalculatedMidyearBonus = personnel.midyearBonus;
       const recalculatedYearEndBonus = personnel.yearEndBonus;
       const recalculatedCourtAppearanceAmount = personnel.courtAppearance;
-      const recalculatedGsis = personnel.annualSalary * activeSettings.gsisPremium;
+      const recalculatedGsis =
+        personnel.annualSalary * activeSettings.gsisPremium;
 
       // Calculate PhilHealth premium for 2025 per Circular 2019-0009
       let monthlyPhilhealthPremium;
@@ -218,6 +270,8 @@ exports.getAllPersonnelServices = async (req, res) => {
 
       const recalculatedPagibig = activeSettings.pagibigPremium * 12;
       const recalculatedEmpComp = activeSettings.employeeCompensation * 12;
+      const recalculatedTerminalLeave = personnel.terminalLeave;
+      const recalculatedearnedLeaves = personnel.earnedLeaves;
 
       const recalculatedTotal =
         recalculatedAnnualSalary +
@@ -239,6 +293,8 @@ exports.getAllPersonnelServices = async (req, res) => {
         recalculatedGsis +
         recalculatedPhilhealth +
         recalculatedPagibig +
+        recalculatedearnedLeaves +
+        recalculatedTerminalLeave +
         recalculatedEmpComp;
 
       return {
@@ -260,6 +316,8 @@ exports.getAllPersonnelServices = async (req, res) => {
         philhealthPremium: recalculatedPhilhealth,
         pagibigPremium: recalculatedPagibig,
         employeeCompensation: recalculatedEmpComp,
+        terminalLeave: recalculatedTerminalLeave,
+        earnedLeaves: recalculatedearnedLeaves,
         Total: recalculatedTotal,
       };
     });
@@ -272,7 +330,9 @@ exports.getAllPersonnelServices = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in getAllPersonnelServices:", error.stack);
-    return res.status(500).json({ message: "Server error", details: error.message });
+    return res
+      .status(500)
+      .json({ message: "Server error", details: error.message });
   }
 };
 
@@ -283,7 +343,8 @@ exports.getPersonnelServices = async (req, res) => {
 
     if (!employeeNumber || !fiscalYear) {
       return res.status(400).json({
-        message: "Missing required query parameters: employeeNumber and fiscalYear are required",
+        message:
+          "Missing required query parameters: employeeNumber and fiscalYear are required",
       });
     }
 
@@ -308,12 +369,22 @@ exports.bulkAddPersonnelServices = async (req, res) => {
   try {
     const { statusOfAppointment, RATA } = req.body;
     if (!statusOfAppointment || !RATA) {
-      return res.status(400).json({ message: "Missing required fields: statusOfAppointment and RATA are required" });
+      return res
+        .status(400)
+        .json({
+          message:
+            "Missing required fields: statusOfAppointment and RATA are required",
+        });
     }
 
     const activeSettings = await Settings.findOne({ isActive: true });
     if (!activeSettings) {
-      return res.status(400).json({ message: "Active settings not found", details: "No active settings available" });
+      return res
+        .status(400)
+        .json({
+          message: "Active settings not found",
+          details: "No active settings available",
+        });
     }
     const fiscalYear = activeSettings.fiscalYear;
     const budgetType = activeSettings.budgetType;
@@ -321,20 +392,22 @@ exports.bulkAddPersonnelServices = async (req, res) => {
     console.log("Received RATA data:", RATA);
 
     // Get region from request body
-    const { region } = req.body;    // Build query for employees with fiscal year
+    const { region } = req.body; // Build query for employees with fiscal year
     const employeeQuery = {
       StatusOfAppointment: statusOfAppointment,
       employeeStatus: "Active", // Only get active employees
-      fiscalYear: fiscalYear // Only get employees for the current fiscal year
+      fiscalYear: fiscalYear, // Only get employees for the current fiscal year
     };
-    
+
     // Add region filter if provided
     if (region) {
       employeeQuery.Region = region;
-      console.log(`Filtering employees by region: ${region} for fiscal year ${fiscalYear}`);
+      console.log(
+        `Filtering employees by region: ${region} for fiscal year ${fiscalYear}`
+      );
     }
-    
-    console.log('Employee Query:', employeeQuery);
+
+    console.log("Employee Query:", employeeQuery);
 
     // Fetch only Active employees with the specified StatusOfAppointment and region (if provided)
     const employees = await EmployeeMaster.find(employeeQuery);
@@ -343,13 +416,14 @@ exports.bulkAddPersonnelServices = async (req, res) => {
     if (employees.length === 0) {
       console.log("No active employees found with the specified status.");
       return res.status(200).json([]);
-    }    const personnelServicesData = [];
-    
+    }
+    const personnelServicesData = [];
+
     for (const employee of employees) {
       // Check if employee already exists in PersonnelServices for current fiscal year
       const existingPersonnelService = await PersonnelServices.findOne({
         employeeNumber: employee.EmployeeID,
-        fiscalYear: fiscalYear
+        fiscalYear: fiscalYear,
       });
 
       if (existingPersonnelService) {
@@ -363,7 +437,6 @@ exports.bulkAddPersonnelServices = async (req, res) => {
       const annualSalary = monthlySalary * 12;
       const gradeLevelSG = employee.SG?.toString() || "";
       const statusAppointment = employee.StatusOfAppointment;
-      
 
       console.log(
         `Processing employee: ${employee.EmployeeID}, Grade Level: ${gradeLevelSG}, Status: ${employee.Status}`
@@ -416,7 +489,8 @@ exports.bulkAddPersonnelServices = async (req, res) => {
         RATA: rataAmount * 12,
         PERA: (req.body.PERA || activeSettings.PERA) * 12,
         uniformALLOWANCE: activeSettings.uniformAllowance || 0,
-        productivityIncentive: req.body.compensation?.productivityIncentive || 0,
+        productivityIncentive:
+          req.body.compensation?.productivityIncentive || 0,
         medical: (req.body.medicalAllowance || 0) * 12,
         meal: 0,
         cashGift: req.body.compensation?.cashGift || 0,
@@ -542,7 +616,12 @@ exports.updatePersonnelService = async (req, res) => {
 
     const personnelServices = await PersonnelServices.findById(id);
     if (!personnelServices) {
-      return res.status(404).json({ message: "Personnel service not found", details: "No record found for the given ID" });
+      return res
+        .status(404)
+        .json({
+          message: "Personnel service not found",
+          details: "No record found for the given ID",
+        });
     }
 
     const updatedPersonnelService = await PersonnelServices.findByIdAndUpdate(
@@ -552,7 +631,12 @@ exports.updatePersonnelService = async (req, res) => {
     );
 
     if (!updatedPersonnelService) {
-      return res.status(404).json({ message: "Personnel service not found", details: "No record found for the given ID" });
+      return res
+        .status(404)
+        .json({
+          message: "Personnel service not found",
+          details: "No record found for the given ID",
+        });
     }
 
     const numericFields = [
@@ -625,16 +709,16 @@ exports.getGrandTotalPermanent = async (req, res) => {
     }
 
     const { fiscalYear } = activeSettings;
-    
+
     // Get region from query parameters
     const { region } = req.query;
-    
+
     // Build query criteria
     const query = {
       statusOfAppointment: "PERMANENT",
       fiscalYear,
     };
-    
+
     // Add region filter if provided
     if (region) {
       query.region = region;
@@ -679,7 +763,9 @@ exports.getGrandTotalPermanent = async (req, res) => {
     return res.json({ fiscalYear, grandTotal });
   } catch (error) {
     console.error("Error in getGrandTotalPermanent:", error.stack);
-    return res.status(500).json({ message: "Server error", details: error.message });
+    return res
+      .status(500)
+      .json({ message: "Server error", details: error.message });
   }
 };
 
@@ -701,16 +787,16 @@ exports.getGrandTotalCasual = async (req, res) => {
     }
 
     const { fiscalYear } = activeSettings;
-    
+
     // Get region from query parameters
     const { region } = req.query;
-    
+
     // Build query criteria
     const query = {
       statusOfAppointment: "CASUAL",
       fiscalYear,
     };
-    
+
     // Add region filter if provided
     if (region) {
       query.region = region;
@@ -753,7 +839,9 @@ exports.getGrandTotalCasual = async (req, res) => {
     return res.json({ fiscalYear, grandTotal });
   } catch (error) {
     console.error("Error in getGrandTotalCasual:", error.stack);
-    return res.status(500).json({ message: "Server error", details: error.message });
+    return res
+      .status(500)
+      .json({ message: "Server error", details: error.message });
   }
 };
 
@@ -788,13 +876,13 @@ exports.getGrandTotal = async (req, res) => {
       });
     }
     const { fiscalYear } = activeSettings;
-    
+
     // Get region from query parameters
     const { region } = req.query;
-    
+
     // Build match criteria
     const matchCriteria = { fiscalYear };
-    
+
     // Add region filter if provided
     if (region) {
       matchCriteria.region = region;
@@ -826,7 +914,8 @@ exports.getPersonnelHiredBeforeJune1988 = async (req, res) => {
     const { fiscalYear } = activeSettings;
 
     // Get region from query parameters, user context, or headers
-    const region = req.query.region || req.user?.Region || req.headers['x-region'];
+    const region =
+      req.query.region || req.user?.Region || req.headers["x-region"];
 
     // Build filter object
     const filter = {

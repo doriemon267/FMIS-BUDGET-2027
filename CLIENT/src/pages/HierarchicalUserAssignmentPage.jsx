@@ -298,7 +298,13 @@ const HierarchicalUserAssignmentPage = () => {
       return [];
     }
     
-    const department = organizationStructure.availableUnits.departmentsWithDivisions.find(
+    // Filter departmentsWithDivisions by selected region if applicable
+    let deptsWithDivisions = organizationStructure.availableUnits.departmentsWithDivisions;
+    if (formData.regionId) {
+      deptsWithDivisions = deptsWithDivisions.filter(dept => dept.regionId === formData.regionId);
+    }
+    
+    const department = deptsWithDivisions.find(
       dept => dept.departmentId === formData.departmentId
     );
     
@@ -316,8 +322,42 @@ const HierarchicalUserAssignmentPage = () => {
       return [];
     }
     
-    const depts = organizationStructure.availableUnits.departmentsWithDivisions;
-    console.log('🏢 Departments with divisions:', depts.length, depts);
+    let depts = organizationStructure.availableUnits.departmentsWithDivisions;
+    
+    // Filter by selected region if one is selected
+    if (formData.regionId) {
+      depts = depts.filter(dept => dept.regionId === formData.regionId);
+      console.log('🏢 Filtered departments with divisions by region:', formData.regionId, depts.length, depts);
+    } else {
+      console.log('🏢 Departments with divisions (no region filter):', depts.length, depts);
+    }
+    
+    return depts;
+  };
+
+  // Get departments filtered by selected region (for Department level assignments)
+  const getFilteredDepartments = () => {
+    if (!organizationStructure?.availableUnits?.departments) {
+      console.log('❌ No departments found in organization structure');
+      return [];
+    }
+    
+    let depts = organizationStructure.availableUnits.departments;
+    
+    // Filter by selected region if one is selected
+    if (formData.regionId) {
+      // Get department IDs from mappings that match the selected region
+      const regionMappings = organizationStructure.mappings?.filter(mapping => 
+        mapping.regionId === formData.regionId
+      ) || [];
+      const departmentIds = regionMappings.map(mapping => mapping.departmentId);
+      
+      depts = depts.filter(dept => departmentIds.includes(dept.id));
+      console.log('🏢 Filtered departments by region:', formData.regionId, depts.length, depts);
+    } else {
+      console.log('🏢 Departments (no region filter):', depts.length, depts);
+    }
+    
     return depts;
   };
 
@@ -328,7 +368,13 @@ const HierarchicalUserAssignmentPage = () => {
       return false;
     }
     
-    const department = organizationStructure.availableUnits.departmentsWithDivisions.find(
+    // Filter departmentsWithDivisions by selected region if applicable
+    let deptsWithDivisions = organizationStructure.availableUnits.departmentsWithDivisions;
+    if (formData.regionId) {
+      deptsWithDivisions = deptsWithDivisions.filter(dept => dept.regionId === formData.regionId);
+    }
+    
+    const department = deptsWithDivisions.find(
       dept => dept.departmentId === formData.departmentId
     );
     
@@ -638,7 +684,14 @@ const HierarchicalUserAssignmentPage = () => {
                     <InputLabel>Region</InputLabel>
                     <Select
                       value={formData.regionId}
-                      onChange={(e) => handleFormChange('regionId', e.target.value)}
+                      onChange={(e) => {
+                        handleFormChange('regionId', e.target.value);
+                        // Reset department and division when region changes
+                        handleFormChange('departmentId', '');
+                        if (formData.assignmentLevel === 'DIVISION') {
+                          handleFormChange('divisionName', '');
+                        }
+                      }}
                       label="Region"
                     >
                       {organizationStructure?.availableUnits?.regions?.map((region) => (
@@ -681,7 +734,7 @@ const HierarchicalUserAssignmentPage = () => {
                             </Box>
                           </MenuItem>
                         )) :
-                        organizationStructure?.availableUnits?.departments?.map((department) => (
+                        getFilteredDepartments().map((department) => (
                           <MenuItem key={department.id} value={department.id}>
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                               <Typography>{department.name}</Typography>

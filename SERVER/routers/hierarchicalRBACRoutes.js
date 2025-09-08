@@ -414,17 +414,33 @@ router.get(
         code: region.RegionCode || region.code || region.regionCode
       }));
       
-      const formattedDepartments = departments.map(dept => ({
-        id: dept._id,
-        name: dept.Department || dept.name || dept.departmentName,
-        code: dept.DepartmentCode || dept.code || dept.departmentCode
-      }));
+      const formattedDepartments = departments.map(dept => {
+        // Check if this department has subdivisions
+        const hasSubDivisions = mappings.some(mapping => 
+          mapping.departmentId.toString() === dept._id.toString() && 
+          mapping.hasSubDivisions && 
+          mapping.divisions && 
+          mapping.divisions.length > 0
+        );
+        
+        return {
+          id: dept._id,
+          name: dept.Department || dept.name || dept.departmentName,
+          code: dept.DepartmentCode || dept.code || dept.departmentCode,
+          hasSubDivisions
+        };
+      });
       
       const formattedMappings = mappings.map(mapping => ({
         departmentId: mapping.departmentId,
         departmentName: mapping.departmentName,
-        divisions: mapping.divisions ? mapping.divisions.filter(div => div.isActive !== false) : [],
-        hasSubDivisions: mapping.hasSubDivisions || false
+        divisions: mapping.divisions ? mapping.divisions.filter(div => div.isActive !== false).map(div => ({
+          name: div.name,
+          code: div.code,
+          sections: div.sections ? div.sections.filter(section => section.isActive !== false) : []
+        })) : [],
+        hasSubDivisions: mapping.hasSubDivisions || false,
+        regionId: mapping.regionId
       }));
       
       // Get departments with divisions

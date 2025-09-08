@@ -26,3 +26,4 @@ export const isCashAdmin = (currentUser) => {
 export const isAllowAdminsOnly = (currentUser) => {
     return isSuperAdmin(currentUser) || isBudgetAdmin(currentUser) || isAccountantAdmin(currentUser) || isDVAdmin(currentUser) || isCashAdmin(currentUser)
 }
+

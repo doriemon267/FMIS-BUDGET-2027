@@ -8,7 +8,8 @@ const {
   deleteEmployee,
   getEmployeeStats,
   checkEmployeeRegions,
-  fixEmployeeRegions
+  fixEmployeeRegions,
+  checkEmployeeDuplicate
 } = require("../controllers/employeeMasterController");
 
 const employeeMasterRouter = express.Router();
@@ -18,6 +19,9 @@ employeeMasterRouter.use(checkToken);
 
 // Get employee statistics - MUST be before other routes to avoid conflict with :id
 employeeMasterRouter.get("/employees/stats", getEmployeeStats);
+
+// Check for duplicate employee - MUST be before other routes to avoid conflict with :id
+employeeMasterRouter.get("/employees/check-duplicate", checkEmployeeDuplicate);
 
 // Utility endpoints to check and fix employee regions
 employeeMasterRouter.get("/employees/check-regions", checkEmployeeRegions);

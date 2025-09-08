@@ -12,24 +12,28 @@ const CustomTextField = ({
   size = "small",
   variant = "outlined",
   required = false,
+  rules,
   multiline = false,
   rows = 3,
   ...rest
 }) => {
+  // Use provided rules, or fall back to basic required validation
+  const validationRules = rules || (required
+    ? {
+        required: `${label} field is required`,
+        ...(type === "email"
+          ? { pattern: { value: /^\S+@\S+\.\S+$/, message: "Invalid email" } }
+          : {}),
+      }
+    : undefined);
+
   const {
     field,
     fieldState: { error },
   } = useController({
     name: fieldName,
     control,
-    rules: required
-      ? {
-          required: `${label} field is required`,
-          ...(type === "email"
-            ? { pattern: { value: /^\S+@\S+\.\S+$/, message: "Invalid email" } }
-            : {}),
-        }
-      : undefined,
+    rules: validationRules,
   });
   // If the type is boolean, render a Switch instead
   if (type === "boolean") {

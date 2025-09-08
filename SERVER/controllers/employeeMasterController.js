@@ -4,10 +4,35 @@ const EmployeeMaster = require("../models/employee_master");
 // Create a new employee
 const createEmployee = async (req, res) => {
   try {
+    const { EmployeeFullName, fiscalYear, Region } = req.body;
+
+    console.log("📨 Received employee data:", req.body);
+    console.log("🎂 DateOfBirth in request:", req.body.DateOfBirth);
+
+    // Check for duplicate employee in the same fiscal year and region
+    if (EmployeeFullName && fiscalYear && Region) {
+      const existingEmployee = await EmployeeMaster.findOne({
+        EmployeeFullName: { $regex: new RegExp(`^${EmployeeFullName}$`, 'i') }, // Case-insensitive exact match
+        fiscalYear: fiscalYear,
+        Region: Region
+      });
+
+      if (existingEmployee) {
+        return res.status(400).json({ 
+          error: `Employee "${EmployeeFullName}" already exists in fiscal year ${fiscalYear} for region ${Region}` 
+        });
+      }
+    }
+
     const employee = new EmployeeMaster(req.body);
+    console.log("💾 Employee object before save:", employee);
     await employee.save();
+    
+    console.log(`✅ New employee created: ${EmployeeFullName} in ${fiscalYear} for ${Region}`);
+    console.log("🎂 Saved DateOfBirth:", employee.DateOfBirth);
     res.status(201).json(employee);
   } catch (error) {
+    console.error("Error creating employee:", error);
     res.status(400).json({ error: error.message });
   }
 };
@@ -333,6 +358,44 @@ const fixEmployeeRegions = async (req, res) => {
   }
 };
 
+// Check for duplicate employee in the same fiscal year and region
+const checkEmployeeDuplicate = async (req, res) => {
+  try {
+    const { fullName, fiscalYear, region } = req.query;
+
+    if (!fullName || !fiscalYear || !region) {
+      return res.status(400).json({ 
+        error: "fullName, fiscalYear, and region are required parameters" 
+      });
+    }
+
+    console.log(`🔍 Checking for duplicate: ${fullName} in ${fiscalYear} for region ${region}`);
+
+    const existingEmployee = await EmployeeMaster.findOne({
+      EmployeeFullName: { $regex: new RegExp(`^${fullName}$`, 'i') }, // Case-insensitive exact match
+      fiscalYear: fiscalYear,
+      Region: region
+    });
+
+    const exists = !!existingEmployee;
+    
+    console.log(`${exists ? '❌' : '✅'} Duplicate check result: ${exists ? 'EXISTS' : 'NOT FOUND'}`);
+    
+    res.status(200).json({ 
+      exists,
+      employee: exists ? {
+        id: existingEmployee._id,
+        name: existingEmployee.EmployeeFullName,
+        fiscalYear: existingEmployee.fiscalYear,
+        region: existingEmployee.Region
+      } : null
+    });
+  } catch (error) {
+    console.error("Error in checkEmployeeDuplicate:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 module.exports = {
   createEmployee,
   getAllEmployees,
@@ -341,5 +404,6 @@ module.exports = {
   deleteEmployee,
   getEmployeeStats,
   checkEmployeeRegions,
-  fixEmployeeRegions
+  fixEmployeeRegions,
+  checkEmployeeDuplicate
 };

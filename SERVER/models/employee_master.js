@@ -70,9 +70,23 @@ const EmployeeMasterSchema = mongoose.Schema({
     type: String,
     required: true
   },
+  // Add date of birth field
+  DateOfBirth: {
+    type: Date
+  },
   // Add date of appointment field
   DateOfAppointment: {
     type: Date
+  },
+  // Add processBy field to track who created/processed the employee
+  processBy: {
+    type: String,
+    default: "Admin"
+  },
+  // Add fiscal year field
+  fiscalYear: {
+    type: String,
+    required: true
   },
   // Add timestamps for created/updated tracking
   createdAt: {

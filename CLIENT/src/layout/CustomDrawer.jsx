@@ -61,7 +61,7 @@ const {currentUser} =  useUser();
           <LinkTo
             icon={<HiOutlineBanknotes />}
             name="Budget Proposal Management"
-              isAllow
+             isAllow
             collapsed={collapsed}
             iconRight={<FaChevronCircleDown />}
             subLinks={[

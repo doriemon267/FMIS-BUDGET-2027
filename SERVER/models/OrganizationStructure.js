@@ -14,6 +14,14 @@ const departmentDivisionMappingSchema = new mongoose.Schema({
   divisions: [{
     name: String,
     code: String,
+    sections: [{
+      name: String,
+      code: String,
+      isActive: {
+        type: Boolean,
+        default: true
+      }
+    }],
     isActive: {
       type: Boolean,
       default: true
