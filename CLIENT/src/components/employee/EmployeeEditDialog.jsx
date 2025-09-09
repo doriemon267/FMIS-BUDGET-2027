@@ -806,7 +806,7 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                         label="Section"
                         options={sectionOptions}
                         control={control}
-                        disabled={userAccessLevel === 'DIVISION'}
+                        disabled={false} // Section should always be enabled for Division level users
                       />
                     </Grid>
                   </Grid>

@@ -68,6 +68,8 @@ const AddEmployeeDialog = ({ parentClose }) => {
   const theme = useTheme();
   const { mode } = useThemeContext();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const { currentUser } = useUser(); // Add this line to get currentUser from context
+  const { activeRegion } = useRegion(); // Add this line to get activeRegion from context
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -1042,7 +1044,7 @@ const AddEmployeeDialog = ({ parentClose }) => {
                         label="Section"
                         options={sectionOptions}
                         control={control}
-                        disabled={userAccessLevel === 'DIVISION'}
+                        disabled={false} // Section should always be enabled for Division level users
                       />
                     </Grid>
                   </Grid>

@@ -31,9 +31,9 @@ Form fields are now enabled/disabled based on user's access level:
 
 | Access Level | Region | Department | Division | Section |
 |-------------|--------|------------|----------|---------|
-| DIVISION    | ✅ Auto | ✅ Auto    | ✅ Auto  | ❌ Enabled |
-| DEPARTMENT  | ✅ Auto | ✅ Auto    | ❌ Enabled | ❌ Enabled |
-| REGION      | ✅ Auto | ❌ Enabled | ❌ Enabled | ❌ Enabled |
+| DIVISION    | ✅ Auto | ✅ Auto    | ✅ Auto  | ✅ Enabled |
+| DEPARTMENT  | ✅ Auto | ✅ Auto    | ✅ Enabled | ✅ Enabled |
+| REGION      | ✅ Auto | ✅ Enabled | ✅ Enabled | ✅ Enabled |
 
 ### 2. Form Field Updates
 
