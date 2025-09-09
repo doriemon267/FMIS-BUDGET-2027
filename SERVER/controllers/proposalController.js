@@ -33,6 +33,87 @@ const IncomeSubcategory = require('../models/IncomeSubcategory');
 //   }
 // };
 
+// Workflow transition handlers (additive, non-breaking)
+exports.approveAtDivision = async (req, res) => {
+  try {
+    const { ids = [], entity = 'personnel' } = req.body; // entity: 'personnel' | 'mooe' | 'capital' | 'income'
+    const userId = req.user?.id || 'system';
+    const Model = entity === 'personnel' ? require('../models/PersonnelServices')
+      : entity === 'mooe' ? require('../models/mooeProposals')
+      : entity === 'capital' ? require('../models/CapitalOutlay')
+      : require('../models/Income');
+
+    const result = await Model.updateMany(
+      { _id: { $in: ids } },
+      { $set: { status: 'Submitted', divisionApproved: { by: userId, at: new Date() } } }
+    );
+    return res.status(200).json({ message: 'Division approval applied', modified: result.modifiedCount });
+  } catch (e) {
+    console.error('approveAtDivision error:', e);
+    return res.status(500).json({ message: 'approveAtDivision failed', error: e.message });
+  }
+};
+
+exports.consolidateAtDepartment = async (req, res) => {
+  try {
+    const { ids = [], entity = 'personnel' } = req.body;
+    const userId = req.user?.id || 'system';
+    const Model = entity === 'personnel' ? require('../models/PersonnelServices')
+      : entity === 'mooe' ? require('../models/mooeProposals')
+      : entity === 'capital' ? require('../models/CapitalOutlay')
+      : require('../models/Income');
+
+    const result = await Model.updateMany(
+      { _id: { $in: ids } },
+      { $set: { departmentConsolidated: { by: userId, at: new Date() } } }
+    );
+    return res.status(200).json({ message: 'Department consolidation recorded', modified: result.modifiedCount });
+  } catch (e) {
+    console.error('consolidateAtDepartment error:', e);
+    return res.status(500).json({ message: 'consolidateAtDepartment failed', error: e.message });
+  }
+};
+
+exports.submitToRegion = async (req, res) => {
+  try {
+    const { ids = [], entity = 'personnel' } = req.body;
+    const userId = req.user?.id || 'system';
+    const Model = entity === 'personnel' ? require('../models/PersonnelServices')
+      : entity === 'mooe' ? require('../models/mooeProposals')
+      : entity === 'capital' ? require('../models/CapitalOutlay')
+      : require('../models/Income');
+
+    const result = await Model.updateMany(
+      { _id: { $in: ids } },
+      { $set: { status: 'Submitted', departmentSubmitted: { by: userId, at: new Date() } } }
+    );
+    return res.status(200).json({ message: 'Submitted to region', modified: result.modifiedCount });
+  } catch (e) {
+    console.error('submitToRegion error:', e);
+    return res.status(500).json({ message: 'submitToRegion failed', error: e.message });
+  }
+};
+
+exports.finalVerifyAtRegion = async (req, res) => {
+  try {
+    const { ids = [], entity = 'personnel' } = req.body;
+    const userId = req.user?.id || 'system';
+    const Model = entity === 'personnel' ? require('../models/PersonnelServices')
+      : entity === 'mooe' ? require('../models/mooeProposals')
+      : entity === 'capital' ? require('../models/CapitalOutlay')
+      : require('../models/Income');
+
+    const result = await Model.updateMany(
+      { _id: { $in: ids } },
+      { $set: { status: 'Approved', regionFinalVerified: { by: userId, at: new Date() } } }
+    );
+    return res.status(200).json({ message: 'Region final verification applied', modified: result.modifiedCount });
+  } catch (e) {
+    console.error('finalVerifyAtRegion error:', e);
+    return res.status(500).json({ message: 'finalVerifyAtRegion failed', error: e.message });
+  }
+};
+
 exports.updateProposalStatus = async (req, res) => {
   try {
     const { 

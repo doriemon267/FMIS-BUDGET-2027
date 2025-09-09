@@ -171,6 +171,20 @@ const UserProvider = ({ children }) => {
     fetchUser();
   }, [nav]);
 
+  // Convenience: derive workflow roles and assignment
+  const hierarchical = currentUser?.hierarchicalAccess || {};
+  const workflowRoles = Array.isArray(hierarchical.workflowRoles) ? hierarchical.workflowRoles : [];
+  const assignmentLevel = hierarchical.scope || hierarchical.assignmentLevel || 'NONE';
+
+  const hasWorkflowRole = (role) => workflowRoles.includes(role);
+
+  const canTransition = {
+    divisionApprove: assignmentLevel === 'DIVISION' || assignmentLevel === 'FULL' ? hasWorkflowRole('divisionApprover') : false,
+    departmentConsolidate: (assignmentLevel === 'DEPARTMENT' || assignmentLevel === 'FULL') && hasWorkflowRole('departmentConsolidator'),
+    departmentSubmit: (assignmentLevel === 'DEPARTMENT' || assignmentLevel === 'FULL') && hasWorkflowRole('departmentSubmission'),
+    regionFinalVerify: (assignmentLevel === 'REGION' || assignmentLevel === 'FULL') && hasWorkflowRole('regionFinalVerifier')
+  };
+
   const value = {
     currentUser,
     setCurrentUser: handleSetUserInitialization,
@@ -179,6 +193,11 @@ const UserProvider = ({ children }) => {
     isLoading,
     loading: isLoading || isRefetching, // Provide both for compatibility
     jwtToken: getToken(),
+    // Expose workflow helpers
+    workflowRoles,
+    assignmentLevel,
+    hasWorkflowRole,
+    canTransition,
   };
 
   if (isLoading) return <Loading />;

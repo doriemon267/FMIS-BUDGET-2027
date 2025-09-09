@@ -216,6 +216,8 @@ app.use("/api", capitalOutlayDetailsRouter);
 app.use(categoryRouter);
 app.use(proposalRouter);
 app.use(proposalRBACRouter);
+// Workflow-specific endpoints
+app.use('/api/workflow', require('./routers/proposalWorkflowRoutes'));
 app.use(rataRoutes);
 app.use(settings);
 app.use("/api", regionRouter);

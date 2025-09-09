@@ -51,6 +51,23 @@ const mooeProposalSchema = new Schema({
   },
   budgetType: {
     type: String
+  },
+  // Workflow audit fields
+  divisionApproved: {
+    by: { type: String },
+    at: { type: Date }
+  },
+  departmentConsolidated: {
+    by: { type: String },
+    at: { type: Date }
+  },
+  departmentSubmitted: {
+    by: { type: String },
+    at: { type: Date }
+  },
+  regionFinalVerified: {
+    by: { type: String },
+    at: { type: Date }
   }
 }, { timestamps: true });
 
