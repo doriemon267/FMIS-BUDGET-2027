@@ -40,11 +40,16 @@ Form fields are now enabled/disabled based on user's access level:
 #### EmployeeCustomAdd.jsx:
 - Department field: `disabled={userAccessLevel === 'DIVISION' || userAccessLevel === 'DEPARTMENT'}`
 - Division field: `disabled={userAccessLevel === 'DIVISION'}`
-- Section field: `disabled={userAccessLevel === 'DIVISION'}`
+- Section field: `disabled={false}` // Always enabled for all access levels
+- **Added useEffect hooks** to handle default value changes and fetch dependent options:
+  - Region → Department options
+  - Department → Division options
+  - Division → Section options
 
 #### EmployeeEditDialog.jsx:
 - Same disable logic applied to edit form
 - Updated watch handlers to respect access level restrictions
+- **Added useEffect hooks** to handle default value changes and fetch dependent options
 - Modified change handlers to not clear fields when user cannot change them
 
 ## How It Works
@@ -95,6 +100,30 @@ useEffect(() => {
 2. **Improves User Experience**: Auto-population reduces manual data entry
 3. **Enforces Business Rules**: Maintains organizational hierarchy integrity
 4. **Reduces Training**: Form behavior is intuitive based on user role
+5. **Cascading Dropdowns**: When default values are set, dependent options are automatically fetched
+
+## Cascading Dropdown Fix
+
+### Problem
+When default values were set programmatically (e.g., for Division level users), the dependent dropdown options weren't being fetched because React Hook Form's `watch()` function only triggers on user interactions, not programmatic `setValue()` calls.
+
+### Solution
+Added separate `useEffect` hooks that watch for changes in form field values and trigger the appropriate API calls to fetch dependent options:
+
+```javascript
+// Handle default Region value changes - fetch departments
+useEffect(() => {
+  const regionValue = watch("Region");
+  if (regionValue && organizationStructure) {
+    // Fetch department options based on selected region
+  }
+}, [watch("Region"), organizationStructure]);
+```
+
+This ensures that:
+- ✅ When Region has a default value → Department options are fetched
+- ✅ When Department has a default value → Division options are fetched  
+- ✅ When Division has a default value → Section options are fetched
 
 ## Files Modified
 

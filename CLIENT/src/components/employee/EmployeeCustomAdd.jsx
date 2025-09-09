@@ -358,6 +358,78 @@ const AddEmployeeDialog = ({ parentClose }) => {
     };
   }, [watch, setValue, organizationStructure]);
 
+  // Handle default Region value changes - fetch departments
+  useEffect(() => {
+    const regionValue = watch("Region");
+    if (regionValue && organizationStructure) {
+      const regionMappings =
+        organizationStructure.mappings?.filter(
+          (mapping) => mapping.regionId === regionValue._id || mapping.regionName === regionValue
+        ) || [];
+      const departmentIds = regionMappings.map(
+        (mapping) => mapping.departmentId
+      );
+      const depts =
+        organizationStructure.availableUnits?.departments?.filter((dept) =>
+          departmentIds.includes(dept.id)
+        ) || [];
+      setDepartmentOptions(depts);
+    }
+  }, [watch("Region"), organizationStructure]);
+
+  // Handle default Department value changes - fetch divisions
+  useEffect(() => {
+    const deptValue = watch("Department");
+    if (deptValue && organizationStructure) {
+      // Find the department in the hierarchical structure
+      const departmentsWithDivisions =
+        organizationStructure.availableUnits?.departmentsWithDivisions || [];
+      const matched = departmentsWithDivisions.find(
+        (d) =>
+          String(d.departmentName).toLowerCase() ===
+          String(deptValue).toLowerCase()
+      );
+
+      if (matched) {
+        const divisions =
+          matched.divisions?.map((div) => div.name).filter(Boolean) || [];
+        setDivisionOptions(divisions);
+      } else {
+        setDivisionOptions([]);
+      }
+    }
+  }, [watch("Department"), organizationStructure]);
+
+  // Handle default Division value changes - fetch sections
+  useEffect(() => {
+    const divValue = watch("Division");
+    if (divValue && organizationStructure) {
+      // Find the selected division in the hierarchical structure
+      const departmentsWithDivisions =
+        organizationStructure.availableUnits?.departmentsWithDivisions ||
+        [];
+      const matchedDept = departmentsWithDivisions.find((dept) =>
+        dept.divisions?.some((div) => div.name === divValue)
+      );
+
+      if (matchedDept) {
+        const matchedDiv = matchedDept.divisions.find(
+          (div) => div.name === divValue
+        );
+        if (matchedDiv && matchedDiv.sections) {
+          const sections = matchedDiv.sections
+            .map((section) => section.name)
+            .filter(Boolean);
+          setSectionOptions(sections);
+        } else {
+          setSectionOptions([]);
+        }
+      } else {
+        setSectionOptions([]);
+      }
+    }
+  }, [watch("Division"), organizationStructure]);
+
   const handleFileChange = (event) => {
     const file = event.target.files[0];
     setSelectedFile(file);
