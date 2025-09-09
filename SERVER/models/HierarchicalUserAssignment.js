@@ -49,6 +49,15 @@ const HierarchicalUserAssignmentSchema = new mongoose.Schema({
     canManageUsers: { type: Boolean, default: false },
     canManageSettings: { type: Boolean, default: false }
   },
+  workflowRoles: {
+    type: [String],
+    enum: [
+      'divisionCreator', 'divisionApprover',
+      'departmentCreator', 'departmentConsolidator', 'departmentSubmission',
+      'regionCreator', 'regionFinalVerifier'
+    ],
+    default: []
+  },
   isActive: {
     type: Boolean,
     default: true
@@ -71,23 +80,20 @@ HierarchicalUserAssignmentSchema.pre('save', function(next) {
 
 // Static method to get user permissions for access control
 HierarchicalUserAssignmentSchema.statics.getUserPermissions = async function(userId) {
-  console.log(`🔍 DEBUG getUserPermissions called for userId: ${userId}`);
-  
-  const assignment = await this.findOne({ userId, isActive: true })
-    .populate('regionId', 'regionName RegionName')
-    .populate('departmentId', 'departmentName DepartmentName');
-  
-  console.log(`🔍 DEBUG Found assignment:`, assignment);
-  
-  if (!assignment) {
-    console.log(`🔍 DEBUG No assignment found for user ${userId}, returning default permissions`);
+  const doc = await this.findOne({ userId, isActive: true })
+    .populate('regionId', 'regionName Region RegionName')
+    .populate('departmentId', 'Department departmentName DepartmentName');
+
+  if (!doc) {
+    // Return a safe default object with stubbed access-check methods
     return {
       userId,
-      accessScope: 'OWN_ONLY',
       assignmentLevel: 'NONE',
+      accessScope: 'OWN_ONLY',
       regions: [],
       departments: [],
       divisions: [],
+      workflowRoles: [],
       rolePermissions: {
         canCreateProposals: false,
         canEditOwnProposals: true,
@@ -97,76 +103,76 @@ HierarchicalUserAssignmentSchema.statics.getUserPermissions = async function(use
         canViewReports: false,
         canManageUsers: false,
         canManageSettings: false
-      }
+      },
+      hasRegionAccess: () => false,
+      hasDepartmentAccess: () => false,
+      hasDivisionAccess: () => false
     };
   }
 
-  // Build access scope based on assignment level
-  let accessScope = assignment.assignmentLevel;
-  let accessibleRegions = [];
-  let accessibleDepartments = [];
-  let accessibleDivisions = [];
+  // Build name-based accessible snapshots
+  const mongoose = require('mongoose');
+  const accessibleRegions = [];
+  const accessibleDepartments = [];
+  const accessibleDivisions = [];
 
-  if (assignment.regionId) {
-    console.log(`🔍 DEBUG assignment.regionId:`, assignment.regionId);
-    
-    // Manually load region name since populate isn't working
-    console.log(`🔍 DEBUG Starting manual region lookup...`);
-    const mongoose = require('mongoose');
-    const regionId = assignment.regionId._id || assignment.regionId;
-    console.log(`🔍 DEBUG Looking for region with ID:`, regionId);
-    
-    const regionDoc = await mongoose.connection.db.collection('regions').findOne({ _id: regionId });
-    console.log(`🔍 DEBUG Found region document:`, regionDoc);
-    
-    accessibleRegions.push({
-      _id: regionId,
-      regionName: regionDoc ? (regionDoc.regionName || regionDoc.Region) : 'Central Office'
-    });
-    console.log(`🔍 DEBUG Added region to accessibleRegions:`, accessibleRegions[0]);
+  if (doc.regionId) {
+    const regionId = doc.regionId._id || doc.regionId;
+    let regionName = doc.regionId.regionName || doc.regionId.Region || null;
+    if (!regionName) {
+      const regionDoc = await mongoose.connection.db.collection('regions').findOne({ _id: regionId });
+      regionName = regionDoc ? (regionDoc.regionName || regionDoc.Region) : null;
+    }
+    accessibleRegions.push({ _id: regionId, regionName: regionName || 'Central Office' });
   }
 
-  if (assignment.departmentId) {
+  if (doc.departmentId) {
     accessibleDepartments.push({
-      _id: assignment.departmentId._id,
-      departmentName: assignment.departmentId.departmentName || assignment.departmentId.DepartmentName
+      _id: doc.departmentId._id || doc.departmentId,
+      departmentName: doc.departmentId.Department || doc.departmentId.departmentName || doc.departmentId.DepartmentName || null
     });
   }
 
-  if (assignment.divisionName) {
-    accessibleDivisions.push(assignment.divisionName);
+  if (doc.divisionName) {
+    accessibleDivisions.push(doc.divisionName);
   }
 
-  return {
-    userId: assignment.userId,
-    assignmentLevel: assignment.assignmentLevel,
-    accessScope,
-    regions: accessibleRegions,
-    departments: accessibleDepartments,
-    divisions: accessibleDivisions,
-    rolePermissions: assignment.rolePermissions
-  };
+  // Attach transient fields and return the Mongoose document so instance methods work
+  doc.accessScope = doc.assignmentLevel;
+  doc.regions = accessibleRegions;
+  doc.departments = accessibleDepartments;
+  doc.divisions = accessibleDivisions;
+  doc.workflowRoles = Array.isArray(doc.workflowRoles) ? doc.workflowRoles : [];
+  return doc;
 };
 
-// Method to check if user has access to specific region
-HierarchicalUserAssignmentSchema.methods.hasRegionAccess = function(regionId) {
+// Method to check if user has access to specific region (accepts name or id)
+HierarchicalUserAssignmentSchema.methods.hasRegionAccess = function(regionOrId) {
   if (this.assignmentLevel === 'FULL') return true;
-  return this.regionId && this.regionId.toString() === regionId.toString();
+  const regionName = this.regionId?.regionName || this.regionId?.Region || this.accessibleRegionNames?.[0];
+  if (typeof regionOrId === 'string') {
+    return !!regionName && regionName === regionOrId;
+  }
+  return this.regionId && this.regionId.toString() === String(regionOrId);
 };
 
-// Method to check if user has access to specific department
-HierarchicalUserAssignmentSchema.methods.hasDepartmentAccess = function(departmentId) {
+// Method to check if user has access to specific department (accepts name or id)
+HierarchicalUserAssignmentSchema.methods.hasDepartmentAccess = function(deptOrId) {
   if (this.assignmentLevel === 'FULL') return true;
   if (this.assignmentLevel === 'REGION') return true; // Region users can access all departments in their region
-  return this.departmentId && this.departmentId.toString() === departmentId.toString();
+  const departmentName = this.departmentId?.departmentName || this.departmentId?.DepartmentName || this.accessibleDepartmentNames?.[0];
+  if (typeof deptOrId === 'string') {
+    return !!departmentName && departmentName === deptOrId;
+  }
+  return this.departmentId && this.departmentId.toString() === String(deptOrId);
 };
 
-// Method to check if user has access to specific division
+// Method to check if user has access to specific division (by name)
 HierarchicalUserAssignmentSchema.methods.hasDivisionAccess = function(divisionName) {
   if (this.assignmentLevel === 'FULL') return true;
   if (this.assignmentLevel === 'REGION') return true; // Region users can access all divisions in their region
   if (this.assignmentLevel === 'DEPARTMENT') return true; // Department users can access all divisions in their department
-  return this.divisionName === divisionName;
+  return (this.divisionName || this.accessibleDivisionNames?.[0]) === divisionName;
 };
 
 // Method to get consolidation target (where data should be saved)

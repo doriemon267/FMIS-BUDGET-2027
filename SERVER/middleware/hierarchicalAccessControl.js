@@ -246,7 +246,10 @@ const handleHierarchicalWrite = async (req, res, next, assignment, consolidation
  * Apply hierarchical consolidation to request data
  */
 const applyHierarchicalConsolidation = (req, assignment, consolidationInfo) => {
-  const { consolidationData } = consolidationInfo;
+  // Prefer names for identifiers as per project standard
+  const regionName = assignment?.regions?.[0]?.regionName || req.body.region || null;
+  const departmentName = assignment?.departments?.[0]?.departmentName || req.body.department || null;
+  const divisionName = assignment?.divisions?.[0] || req.body.division || null;
 
   // Store original organizational context
   req.originalOrgContext = {
@@ -258,26 +261,26 @@ const applyHierarchicalConsolidation = (req, assignment, consolidationInfo) => {
   // Apply consolidation based on user's access scope
   switch (assignment.accessScope) {
     case 'DIVISION':
-      // Division submissions consolidate to Department level
+      // Division submissions consolidate to Department level (names)
       req.body.originalLevel = 'DIVISION';
-      req.body.originalDivision = consolidationData.originalValue;
-      req.body.department = consolidationData.targetValue; // Consolidate to department
-      req.body.region = consolidationData.region; // Ensure region is set
+      req.body.originalDivision = divisionName;
+      req.body.department = departmentName; // Consolidate to department name
+      req.body.region = regionName; // Ensure region name is set
       req.body.consolidatedFrom = 'DIVISION';
       break;
 
     case 'DEPARTMENT':
-      // Department submissions consolidate to Region level
+      // Department submissions consolidate to Region level (names)
       req.body.originalLevel = 'DEPARTMENT';
-      req.body.originalDepartment = consolidationData.originalValue;
-      req.body.region = consolidationData.targetValue; // Consolidate to region
+      req.body.originalDepartment = departmentName;
+      req.body.region = regionName; // Consolidate to region name
       req.body.consolidatedFrom = 'DEPARTMENT';
       break;
 
     case 'REGION':
-      // Region submissions stay at region level
+      // Region submissions stay at region level (names)
       req.body.originalLevel = 'REGION';
-      req.body.region = consolidationData.originalValue;
+      req.body.region = regionName || req.body.region || null;
       break;
   }
 
@@ -286,7 +289,7 @@ const applyHierarchicalConsolidation = (req, assignment, consolidationInfo) => {
     submittedBy: req.user.id,
     submittedByScope: assignment.accessScope,
     submissionTimestamp: new Date(),
-    consolidationApplied: consolidationData.originalLevel !== consolidationData.targetLevel,
+    consolidationApplied: true, // Using name-based consolidation
     originalContext: req.originalOrgContext,
     consolidatedContext: {
       region: req.body.region,
@@ -369,7 +372,7 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
     let assignmentDoc = await HierarchicalUserAssignment
       .findOne({ userId, isActive: true })
       .populate('regionId', 'regionName RegionName Region')
-      .populate('departmentId', 'departmentName DepartmentName');
+      .populate('departmentId', 'Department departmentName DepartmentName');
 
     // Fallback: handle potential type mismatches (numeric vs string userId)
     if (!assignmentDoc) {
@@ -385,7 +388,7 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
           assignmentDoc = await HierarchicalUserAssignment
             .findById(raw._id)
             .populate('regionId', 'regionName RegionName Region')
-            .populate('departmentId', 'departmentName DepartmentName');
+            .populate('departmentId', 'Department departmentName DepartmentName');
         }
       } catch (e) {
         console.warn('⚠️ Hierarchical assignment fallback lookup failed:', e?.message);
@@ -400,7 +403,7 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
           ? [{ _id: assignmentDoc.regionId._id, regionName: assignmentDoc.regionId.regionName || assignmentDoc.regionId.RegionName || assignmentDoc.regionId.Region }]
           : [];
         const accessibleDepartments = assignmentDoc.departmentId
-          ? [{ _id: assignmentDoc.departmentId._id, departmentName: assignmentDoc.departmentId.departmentName || assignmentDoc.departmentId.DepartmentName }]
+          ? [{ _id: assignmentDoc.departmentId._id, departmentName: assignmentDoc.departmentId.Department || assignmentDoc.departmentId.departmentName || assignmentDoc.departmentId.DepartmentName || null }]
           : [];
         const accessibleDivisions = assignmentDoc.divisionName ? [assignmentDoc.divisionName] : [];
 
@@ -449,7 +452,7 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
       ? [{ _id: assignmentDoc.regionId._id, regionName: assignmentDoc.regionId.regionName || assignmentDoc.regionId.RegionName || assignmentDoc.regionId.Region }]
       : [];
     const accessibleDepartments = assignmentDoc.departmentId
-      ? [{ _id: assignmentDoc.departmentId._id, departmentName: assignmentDoc.departmentId.departmentName || assignmentDoc.departmentId.DepartmentName }]
+      ? [{ _id: assignmentDoc.departmentId._id, departmentName: assignmentDoc.departmentId.Department || assignmentDoc.departmentId.departmentName || assignmentDoc.departmentId.DepartmentName || null }]
       : [];
     const accessibleDivisions = assignmentDoc.divisionName ? [assignmentDoc.divisionName] : [];
 
@@ -474,10 +477,61 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
   }
 };
 
+// Enforce workflow transitions based on assignment level and workflowRoles
+const enforceWorkflowTransition = (transition) => {
+  const requiredRoleByTransition = {
+    divisionApprove: 'divisionApprover',
+    departmentConsolidate: 'departmentConsolidator',
+    departmentSubmit: 'departmentSubmission',
+    regionFinalVerify: 'regionFinalVerifier',
+  };
+
+  const requiredLevelByTransition = {
+    divisionApprove: 'DIVISION',
+    departmentConsolidate: 'DEPARTMENT',
+    departmentSubmit: 'DEPARTMENT',
+    regionFinalVerify: 'REGION',
+  };
+
+  return async (req, res, next) => {
+    try {
+      const userId = req.user.id;
+      // Reuse same source of truth for assignments
+      const assignment = await HierarchicalUserAssignment.getUserPermissions(userId);
+      if (!assignment) {
+        return res.status(403).json({ message: 'No organizational assignment', code: 'NO_ORG_ASSIGNMENT' });
+      }
+
+      const requiredRole = requiredRoleByTransition[transition];
+      const requiredLevel = requiredLevelByTransition[transition];
+      const roles = assignment.workflowRoles || [];
+
+      const levelOk = assignment.assignmentLevel === requiredLevel || assignment.assignmentLevel === 'FULL';
+      const roleOk = roles.includes(requiredRole);
+
+      if (!levelOk || !roleOk) {
+        return res.status(403).json({
+          message: 'Insufficient workflow permissions',
+          code: 'WORKFLOW_ROLE_REQUIRED',
+          transition,
+          requiredRole,
+          requiredLevel
+        });
+      }
+
+      next();
+    } catch (e) {
+      console.error('Workflow enforcement error', e);
+      res.status(500).json({ message: 'Workflow enforcement error' });
+    }
+  };
+};
+
 module.exports = {
   hierarchicalAccessControl,
   strictHierarchicalControl,
   getHierarchicalAccessInfo,
   applyHierarchicalConsolidation,
-  validateHierarchicalAccess
+  validateHierarchicalAccess,
+  enforceWorkflowTransition
 };

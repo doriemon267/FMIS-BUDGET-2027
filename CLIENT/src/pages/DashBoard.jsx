@@ -51,11 +51,54 @@ const HomePage = () => {
   const isDarkMode = mode === 'dark';
   const [animationDelay, setAnimationDelay] = useState(0);
   
+  // Get user's hierarchical access information
+  const userAccessLevel = currentUser?.hierarchicalAccess?.scope || 'REGION';
+  const userDivision = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
+  const userDepartment = currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+  
   // Get the active region name
   const regionName = activeRegion?.name || activeRegion?.regionName;
 
+  // Determine display name and level based on user's access
+  const getDisplayInfo = () => {
+    switch (userAccessLevel) {
+      case 'DIVISION':
+        return {
+          level: 'Division',
+          name: userDivision || 'Your Division',
+          scope: `${userDivision || 'Division'} (${userDepartment || 'Department'}, ${regionName || 'Region'})`
+        };
+      case 'DEPARTMENT':
+        return {
+          level: 'Department',
+          name: userDepartment || 'Your Department',
+          scope: `${userDepartment || 'Department'} (${regionName || 'Region'})`
+        };
+      case 'REGION':
+        return {
+          level: 'Region',
+          name: regionName || 'Your Region',
+          scope: `${regionName || 'Region'}`
+        };
+      case 'FULL':
+        return {
+          level: 'System',
+          name: 'All Regions',
+          scope: 'Full System Access'
+        };
+      default:
+        return {
+          level: 'Region',
+          name: regionName || 'Your Region',
+          scope: `${regionName || 'Region'}`
+        };
+    }
+  };
+
+  const displayInfo = getDisplayInfo();
+
   const { data: stats, isLoading } = useQuery({
-    queryKey: ["dashboardStats", regionName],
+    queryKey: ["dashboardStats", regionName, userAccessLevel],
     queryFn: async () => {
       // Include the region as a query parameter
       const res = await api.get(`/stats/overview?region=${regionName || ''}`);
@@ -183,15 +226,15 @@ const HomePage = () => {
   };
 
   const handleRefreshStats = async () => {
-    await queryClient.invalidateQueries(["dashboardStats", regionName]);
+    await queryClient.invalidateQueries(["dashboardStats", regionName, userAccessLevel]);
     await queryClient.invalidateQueries(["activeSettings"]);
   };
 
   return (
     <>
       <DashboardHeader
-        title={`Dashboard ${regionName ? `- ${regionName} Region` : ''}`}
-        description={`Overview of budget proposals and system status ${regionName ? `for ${regionName} region` : ''}`}
+        title={`Dashboard - ${displayInfo.scope}`}
+        description={`Overview of budget proposals and system status for ${displayInfo.name}`}
         action={
           <Stack direction="row" spacing={2} alignItems="center">
             <Chip
@@ -286,16 +329,16 @@ const HomePage = () => {
                     />
                   </Stack>
                   <Typography variant="h6" sx={{ opacity: 0.9, mb: 2 }}>
-                    Budget Proposal Management System {regionName ? `- ${regionName} Region` : ''}
+                    Budget Proposal Management System - {displayInfo.scope}
                   </Typography>
                   <Typography variant="body1" sx={{ opacity: 0.8, maxWidth: '600px', mb: 3 }}>
-                    Manage and track all your budget proposals in one place. Create new proposals, monitor their status, and generate comprehensive reports for {regionName || 'your region'}.
+                    Manage and track all your budget proposals in one place. Create new proposals, monitor their status, and generate comprehensive reports for {displayInfo.name}.
                   </Typography>
                   
                   <Stack direction="row" spacing={2} flexWrap="wrap">
-                    {regionName && (
+                    {displayInfo.name && (
                       <Chip
-                        label={`Active Region: ${regionName}`}
+                        label={`Active ${displayInfo.level}: ${displayInfo.name}`}
                         color="primary"
                         variant="outlined"
                         size="medium"
@@ -370,11 +413,11 @@ const HomePage = () => {
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
             <Box>
               <Typography variant="h5" fontWeight="bold">
-                📊 Proposal Statistics {regionName ? `- ${regionName} Region` : ''}
+                📊 Proposal Statistics - {displayInfo.scope}
               </Typography>
               {stats?.region && (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  Showing data for {stats.region === 'All' ? 'all regions' : `${stats.region} region only`}. 
+                  Showing data for {displayInfo.name}. 
                   Excludes Budgetary Support items. Last updated: {new Date().toLocaleTimeString('en-PH')}
                 </Typography>
               )}
@@ -1544,9 +1587,9 @@ const HomePage = () => {
                         borderRadius: 2,
                         bgcolor: alpha('#3b82f6', 0.1)
                       }}>
-                        <Typography variant="body2" fontWeight="600">Region Active:</Typography>
+                        <Typography variant="body2" fontWeight="600">{displayInfo.level} Active:</Typography>
                         <Chip 
-                          label={regionName || 'N/A'} 
+                          label={displayInfo.name || 'N/A'} 
                           size="small" 
                           color="info" 
                           sx={{ fontWeight: 600 }}
