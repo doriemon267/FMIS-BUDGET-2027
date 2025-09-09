@@ -10,8 +10,27 @@ const {
 
 exports.getAllEmployees = async (req, res) => {
   try {
-    const {
-      page = 1,
+    cexports.getEligibleForLoyaltyPay = async (req, res) => {
+  try {
+    // Get hierarchical filters from middleware
+    const hierarchicalFilters = req.hierarchicalFilters || {};
+    console.log('🏢 Loyalty Pay hierarchical filters:', hierarchicalFilters);
+
+    // Get the region and fiscal year from the query parameters
+    const { region, fiscalYear: requestedFiscalYear } = req.query;
+
+    // Use hierarchical filters as base, or fall back to region filter
+    let baseFilters = { ...hierarchicalFilters };
+    if (!Object.keys(hierarchicalFilters).length && region) {
+      baseFilters.region = region;
+    }
+
+    if (!Object.keys(baseFilters).length) {
+      return res.status(400).json({
+        error: "Region parameter is required",
+        message: "Please specify a region to view eligible employees"
+      });
+    }age = 1,
       limit = 10,
       search,
       orderBy,
@@ -35,43 +54,60 @@ exports.getAllEmployees = async (req, res) => {
       Status,
     } = req.query;
 
-    // CRITICAL SECURITY CHECK: Ensure region is provided
-    if (!region) {
-      // console.log("ERROR: No region specified in request");
-      return res.status(400).json({ 
-        error: "Region parameter is required", 
-        message: "Please specify a region to view employees" 
+    // Get hierarchical filters from middleware
+    const hierarchicalFilters = req.hierarchicalFilters || {};
+    console.log('🏢 Employee hierarchical filters:', hierarchicalFilters);
+
+    // Start with hierarchical filters as base
+    let query = { ...hierarchicalFilters };
+
+    // If no hierarchical filters, require region parameter
+    if (!Object.keys(hierarchicalFilters).length && !region) {
+      return res.status(400).json({
+        error: "Region parameter is required",
+        message: "Please specify a region to view employees"
       });
     }
-    
-    // console.log(`Request to get employees for region: ${region}`);
 
-    // Start with a strict region filter
-    let query = { Region: region };
+    // If region is provided and no hierarchical region filter, use it
+    if (region && !hierarchicalFilters.region) {
+      query.Region = region;
+    }
 
     // Add search functionality if provided
     if (search) {
-      query = {
-        ...query,
-        $and: [
-          { Region: region }, // Keep the region filter as top priority
-          {
-            $or: [
-              { Department: { $regex: search, $options: "i" } },
-              { positionTitle: { $regex: search, $options: "i" } },
-              { Division: { $regex: search, $options: "i" } },
-              { Section: { $regex: search, $options: "i" } },
-              { StatusOfAppointment: { $regex: search, $options: "i" } },
-              { EmployeeFullName: { $regex: search, $options: "i" } },
-              { employeeID: { $regex: search, $options: "i" } },
-              { Status: { $regex: search, $options: "i" } },
-            ]
-          }
+      const searchConditions = {
+        $or: [
+          { Department: { $regex: search, $options: "i" } },
+          { positionTitle: { $regex: search, $options: "i" } },
+          { Division: { $regex: search, $options: "i" } },
+          { Section: { $regex: search, $options: "i" } },
+          { StatusOfAppointment: { $regex: search, $options: "i" } },
+          { EmployeeFullName: { $regex: search, $options: "i" } },
+          { employeeID: { $regex: search, $options: "i" } },
+          { Status: { $regex: search, $options: "i" } },
         ]
       };
+
+      // Combine hierarchical filters with search
+      if (Object.keys(hierarchicalFilters).length > 0) {
+        query = {
+          $and: [
+            hierarchicalFilters,
+            searchConditions
+          ]
+        };
+      } else {
+        query = {
+          $and: [
+            { Region: region },
+            searchConditions
+          ]
+        };
+      }
     }
 
-    // Apply other filters but ensure region filter is preserved
+    // Apply other filters while preserving hierarchical filters
     const filterParams = {
       positionTitle,
       StatusOfAppointment,
@@ -84,28 +120,34 @@ exports.getAllEmployees = async (req, res) => {
       Section,
       Status,
     };
-    
+
     // Remove undefined values
     Object.keys(filterParams).forEach(key => {
       if (filterParams[key] === undefined) {
         delete filterParams[key];
       }
     });
-    
+
     // Apply text filters if there are any
     if (Object.keys(filterParams).length > 0) {
-      if (!query.$and) {
-        query.$and = [{ Region: region }];
-      }
-      
       const textFilterQuery = {};
       textFilter(textFilterQuery, filterParams);
-      
+
       if (Object.keys(textFilterQuery).length > 0) {
-        query.$and.push(textFilterQuery);
+        if (query.$and) {
+          query.$and.push(textFilterQuery);
+        } else if (Object.keys(hierarchicalFilters).length > 0) {
+          query = {
+            $and: [hierarchicalFilters, textFilterQuery]
+          };
+        } else {
+          query = {
+            $and: [{ Region: region }, textFilterQuery]
+          };
+        }
       }
     }
-    
+
     // Apply number filters
     const numberParams = { sg, step, Rate };
     Object.keys(numberParams).forEach(key => {
@@ -113,19 +155,26 @@ exports.getAllEmployees = async (req, res) => {
         delete numberParams[key];
       }
     });
-    
+
     if (Object.keys(numberParams).length > 0) {
       const numberFilterQuery = {};
       numberFilter(numberFilterQuery, numberParams, operator);
-      
+
       if (Object.keys(numberFilterQuery).length > 0) {
-        if (!query.$and) {
-          query.$and = [{ Region: region }];
+        if (query.$and) {
+          query.$and.push(numberFilterQuery);
+        } else if (Object.keys(hierarchicalFilters).length > 0) {
+          query = {
+            $and: [hierarchicalFilters, numberFilterQuery]
+          };
+        } else {
+          query = {
+            $and: [{ Region: region }, numberFilterQuery]
+          };
         }
-        query.$and.push(numberFilterQuery);
       }
     }
-    
+
     // Apply date filters
     const dateParams = { DateOfAppointment, DateOfBirth };
     Object.keys(dateParams).forEach(key => {
@@ -133,16 +182,23 @@ exports.getAllEmployees = async (req, res) => {
         delete dateParams[key];
       }
     });
-    
+
     if (Object.keys(dateParams).length > 0) {
       const dateFilterQuery = {};
       dateFilter(dateFilterQuery, dateParams);
-      
+
       if (Object.keys(dateFilterQuery).length > 0) {
-        if (!query.$and) {
-          query.$and = [{ Region: region }];
+        if (query.$and) {
+          query.$and.push(dateFilterQuery);
+        } else if (Object.keys(hierarchicalFilters).length > 0) {
+          query = {
+            $and: [hierarchicalFilters, dateFilterQuery]
+          };
+        } else {
+          query = {
+            $and: [{ Region: region }, dateFilterQuery]
+          };
         }
-        query.$and.push(dateFilterQuery);
       }
     }
 
@@ -362,14 +418,16 @@ exports.getEligibleForLoyaltyPay = async (req, res) => {
     const cutoffDate = settings?.loyaltyPay?.cutoffDate || "06-22";
     // console.log(`Using loyalty pay cutoff date: ${cutoffDate}`);
 
-    // First try to get data from PersonnelServices model, filtered by region
-    const personnelServices = await PersonnelServices.find({
+    // First try to get data from PersonnelServices model, filtered by hierarchical access
+    const personnelQuery = {
       employeeStatus: "Active",
       DateOfAppointment: { $exists: true, $ne: null },
-      region: region // Filter by the specified region
-    }).lean();
+      ...baseFilters // Apply hierarchical filters
+    };
 
-    // console.log(`Found ${personnelServices.length} active personnel services records with DateOfAppointment in region ${region}`);
+    const personnelServices = await PersonnelServices.find(personnelQuery).lean();
+
+    console.log(`🏢 Found ${personnelServices.length} active personnel services records with hierarchical filters:`, baseFilters);
 
     // Filter employees based on years of service with June 22 cutoff
     const eligibleEmployees = [];
@@ -440,25 +498,33 @@ exports.getEligibleForLoyaltyPay = async (req, res) => {
 // Get employee statistics
 exports.getEmployeeStats = async (req, res) => {
   try {
+    // Get hierarchical filters from middleware
+    const hierarchicalFilters = req.hierarchicalFilters || {};
+    console.log('🏢 Employee Stats hierarchical filters:', hierarchicalFilters);
+
     const { region } = req.query;
-    
-    // CRITICAL SECURITY CHECK: Ensure region is provided
-    if (!region) {
-      // console.log("ERROR: No region specified in stats request");
-      return res.status(400).json({ 
-        error: "Region parameter is required", 
-        message: "Please specify a region to view employee statistics" 
+
+    // Use hierarchical filters as base, or fall back to region filter
+    let baseFilters = { ...hierarchicalFilters };
+    if (!Object.keys(hierarchicalFilters).length && region) {
+      baseFilters.Region = region;
+    }
+
+    if (!Object.keys(baseFilters).length) {
+      return res.status(400).json({
+        error: "Region parameter is required",
+        message: "Please specify a region to view employee statistics"
       });
     }
-    
-    // console.log(`Request to get stats for region: ${region}`);
-    
+
+    console.log(`🏢 Request to get stats with hierarchical filters:`, baseFilters);
+
     // DIRECT APPROACH: Use the raw MongoDB driver to ensure we're using the correct collection
     const db = mongoose.connection.db;
     const collection = db.collection('employees'); // This is the actual collection name
-    
-    // Count total employees for the region with exact match
-    const total = await collection.countDocuments({ Region: region });
+
+    // Count total employees with hierarchical filters
+    const total = await collection.countDocuments(baseFilters);
     
     // Count active employees for the region
     const active = await collection.countDocuments({ 
@@ -502,28 +568,35 @@ exports.getEmployeeStats = async (req, res) => {
 
 exports.getEligibleForRetirement = async (req, res) => {
   try {
+    // Get hierarchical filters from middleware
+    const hierarchicalFilters = req.hierarchicalFilters || {};
+    console.log('🏢 Retirement hierarchical filters:', hierarchicalFilters);
+
     console.log("Getting eligible employees for retirement");
-    
+
     // Get active settings to determine the fiscal year
     const Settings = require("../models/Settings");
     const activeSettings = await Settings.findOne({ isActive: true }).lean();
-    
+
     // Use fiscal year from settings, or fallback to current year
-    const fiscalYear = activeSettings?.fiscalYear 
-      ? parseInt(activeSettings.fiscalYear) 
+    const fiscalYear = activeSettings?.fiscalYear
+      ? parseInt(activeSettings.fiscalYear)
       : new Date().getFullYear();
-    
+
     console.log(`Using fiscal year: ${fiscalYear}`);
     const currentDate = new Date();
-    
-    // First try to get data from PersonnelServices model
-    const personnelServices = await PersonnelServices.find({
+
+    // First try to get data from PersonnelServices model with hierarchical filters
+    const personnelQuery = {
       employeeStatus: "Active",
       DateOfAppointment: { $exists: true, $ne: null },
-      DateOfBirth: { $exists: true, $ne: null }
-    }).lean();
+      DateOfBirth: { $exists: true, $ne: null },
+      ...hierarchicalFilters // Apply hierarchical filters
+    };
 
-    console.log(`Found ${personnelServices.length} active personnel services records with DateOfAppointment and DateOfBirth`);
+    const personnelServices = await PersonnelServices.find(personnelQuery).lean();
+
+    console.log(`🏢 Found ${personnelServices.length} active personnel services records with hierarchical filters:`, hierarchicalFilters);
     
     // Filter employees based on age and years of service
     const eligibleEmployees = [];
