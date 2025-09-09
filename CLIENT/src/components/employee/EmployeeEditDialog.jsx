@@ -59,6 +59,12 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
   const { currentUser } = useUser();
   const queryClient = useQueryClient();
 
+  // Get user's hierarchical access information
+  const userAccessLevel = currentUser?.hierarchicalAccess?.scope || 'REGION';
+  const userDivision = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
+  const userDepartment = currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+  const userRegion = currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
+
   // Dynamic options for Division and Section based on Department
   const [divisionOptions, setDivisionOptions] = useState([]);
   const [sectionOptions, setSectionOptions] = useState([]);
@@ -224,17 +230,69 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
     }
   }, [isOpen, activeRegion, row]);
 
+  // Auto-populate fields based on user's hierarchical access level
+  useEffect(() => {
+    if (currentUser?.hierarchicalAccess && isOpen) {
+      const accessLevel = userAccessLevel;
+      
+      switch (accessLevel) {
+        case 'DIVISION':
+          // For DIVISION level: Auto-select Division and Region, only Section is selectable
+          if (userDivision) {
+            setValue("Division", userDivision);
+          }
+          if (userRegion) {
+            setValue("Region", userRegion);
+          }
+          if (userDepartment) {
+            setValue("Department", userDepartment);
+          }
+          break;
+          
+        case 'DEPARTMENT':
+          // For DEPARTMENT level: Auto-select Department and Region, Division and Section are selectable
+          if (userDepartment) {
+            setValue("Department", userDepartment);
+          }
+          if (userRegion) {
+            setValue("Region", userRegion);
+          }
+          break;
+          
+        case 'REGION':
+          // For REGION level: Auto-select Region, Department, Division, and Section are selectable
+          if (userRegion) {
+            setValue("Region", userRegion);
+          }
+          break;
+          
+        default:
+          // For other levels or no specific access, use activeRegion
+          if (activeRegion) {
+            setValue("Region", activeRegion.Region || activeRegion.name || activeRegion);
+          }
+          break;
+      }
+    }
+  }, [currentUser, userAccessLevel, userDivision, userDepartment, userRegion, activeRegion, setValue, isOpen]);
+
   // When Department/Division changes, fetch divisions based on selected Department
   useEffect(() => {
     const subscription = watch((values, { name }) => {
       if (name === "Department") {
         const deptName = values?.Department || "";
-        setValue("Division", "");
-        setValue("Section", "");
-        setSectionOptions([]);
+        
+        // Only clear Division and Section if user can change Department
+        if (userAccessLevel !== 'DIVISION' && userAccessLevel !== 'DEPARTMENT') {
+          setValue("Division", "");
+          setValue("Section", "");
+          setSectionOptions([]);
+        }
 
         if (!deptName || !organizationStructure) {
-          setDivisionOptions([]);
+          if (userAccessLevel !== 'DIVISION' && userAccessLevel !== 'DEPARTMENT') {
+            setDivisionOptions([]);
+          }
           return;
         }
 
@@ -252,40 +310,46 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
             matched.divisions?.map((div) => div.name).filter(Boolean) || [];
           setDivisionOptions(divisions);
         } else {
-          setDivisionOptions([]);
+          if (userAccessLevel !== 'DIVISION' && userAccessLevel !== 'DEPARTMENT') {
+            setDivisionOptions([]);
+          }
         }
       }
 
       if (name === "Division") {
         const divName = values?.Division || "";
-        if (!divName) {
-          setSectionOptions([]);
-        } else {
-          // Find the selected division in the hierarchical structure
-          const departmentsWithDivisions =
-            organizationStructure.availableUnits?.departmentsWithDivisions ||
-            [];
-          const matchedDept = departmentsWithDivisions.find((dept) =>
-            dept.divisions?.some((div) => div.name === divName)
-          );
-
-          if (matchedDept) {
-            const matchedDiv = matchedDept.divisions.find(
-              (div) => div.name === divName
+        
+        // Only clear Section if user can change Division
+        if (userAccessLevel !== 'DIVISION') {
+          if (!divName) {
+            setSectionOptions([]);
+          } else {
+            // Find the selected division in the hierarchical structure
+            const departmentsWithDivisions =
+              organizationStructure.availableUnits?.departmentsWithDivisions ||
+              [];
+            const matchedDept = departmentsWithDivisions.find((dept) =>
+              dept.divisions?.some((div) => div.name === divName)
             );
-            if (matchedDiv && matchedDiv.sections) {
-              const sections = matchedDiv.sections
-                .map((section) => section.name)
-                .filter(Boolean);
-              setSectionOptions(sections);
+
+            if (matchedDept) {
+              const matchedDiv = matchedDept.divisions.find(
+                (div) => div.name === divName
+              );
+              if (matchedDiv && matchedDiv.sections) {
+                const sections = matchedDiv.sections
+                  .map((section) => section.name)
+                  .filter(Boolean);
+                setSectionOptions(sections);
+              } else {
+                setSectionOptions([]);
+              }
             } else {
               setSectionOptions([]);
             }
-          } else {
-            setSectionOptions([]);
           }
+          setValue("Section", "");
         }
-        setValue("Section", "");
       }
     });
 
@@ -713,9 +777,12 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                         getOptionLabel="name"
                         required
                         rules={{ required: "Department is required" }}
+                        disabled={userAccessLevel === 'DIVISION' || userAccessLevel === 'DEPARTMENT'}
                         onChange={(val) => {
-                          setValue("Division", "");
-                          setValue("Section", "");
+                          if (userAccessLevel !== 'DIVISION' && userAccessLevel !== 'DEPARTMENT') {
+                            setValue("Division", "");
+                            setValue("Section", "");
+                          }
                         }}
                       />
                     </Grid>
@@ -725,8 +792,11 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                         label="Division"
                         options={divisionOptions}
                         control={control}
+                        disabled={userAccessLevel === 'DIVISION'}
                         onChange={() => {
-                          setValue("Section", "");
+                          if (userAccessLevel !== 'DIVISION') {
+                            setValue("Section", "");
+                          }
                         }}
                       />
                     </Grid>
@@ -736,6 +806,7 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                         label="Section"
                         options={sectionOptions}
                         control={control}
+                        disabled={userAccessLevel === 'DIVISION'}
                       />
                     </Grid>
                   </Grid>

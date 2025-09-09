@@ -81,9 +81,11 @@ const AddEmployeeDialog = ({ parentClose }) => {
   const [activeSettings, setActiveSettings] = useState(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [formDataToSave, setFormDataToSave] = useState(null);
-  const { activeRegion } = useRegion();
-  const { currentUser } = useUser(); // Get currentUser from context
-  const queryClient = useQueryClient(); // Add query client for data refresh
+  // Get user's hierarchical access information
+  const userAccessLevel = currentUser?.hierarchicalAccess?.scope || 'REGION';
+  const userDivision = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
+  const userDepartment = currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+  const userRegion = currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
 
   // Debug user context
   useEffect(() => {
@@ -139,6 +141,52 @@ const AddEmployeeDialog = ({ parentClose }) => {
       );
     }
   }, [activeRegion, setValue]);
+
+  // Auto-populate fields based on user's hierarchical access level
+  useEffect(() => {
+    if (currentUser?.hierarchicalAccess) {
+      const accessLevel = userAccessLevel;
+      
+      switch (accessLevel) {
+        case 'DIVISION':
+          // For DIVISION level: Auto-select Division and Region, only Section is selectable
+          if (userDivision) {
+            setValue("Division", userDivision);
+          }
+          if (userRegion) {
+            setValue("Region", userRegion);
+          }
+          if (userDepartment) {
+            setValue("Department", userDepartment);
+          }
+          break;
+          
+        case 'DEPARTMENT':
+          // For DEPARTMENT level: Auto-select Department and Region, Division and Section are selectable
+          if (userDepartment) {
+            setValue("Department", userDepartment);
+          }
+          if (userRegion) {
+            setValue("Region", userRegion);
+          }
+          break;
+          
+        case 'REGION':
+          // For REGION level: Auto-select Region, Department, Division, and Section are selectable
+          if (userRegion) {
+            setValue("Region", userRegion);
+          }
+          break;
+          
+        default:
+          // For other levels or no specific access, use activeRegion
+          if (activeRegion) {
+            setValue("Region", activeRegion.Region || activeRegion.name || activeRegion);
+          }
+          break;
+      }
+    }
+  }, [currentUser, userAccessLevel, userDivision, userDepartment, userRegion, activeRegion, setValue]);
 
   // Fetch position options
   useEffect(() => {
@@ -963,10 +1011,13 @@ const AddEmployeeDialog = ({ parentClose }) => {
                         getOptionLabel="name"
                         required
                         rules={{ required: "Department is required" }}
+                        disabled={userAccessLevel === 'DIVISION' || userAccessLevel === 'DEPARTMENT'}
                         onChange={(val) => {
                           // val can be object or string - we set via watcher already; keep here for safety
-                          setValue("Division", "");
-                          setValue("Section", "");
+                          if (userAccessLevel !== 'DIVISION' && userAccessLevel !== 'DEPARTMENT') {
+                            setValue("Division", "");
+                            setValue("Section", "");
+                          }
                         }}
                       />
                     </Grid>
@@ -976,9 +1027,12 @@ const AddEmployeeDialog = ({ parentClose }) => {
                         label="Division"
                         options={divisionOptions}
                         control={control}
+                        disabled={userAccessLevel === 'DIVISION'}
                         onChange={() => {
                           // Clear Section when Division changes
-                          setValue("Section", "");
+                          if (userAccessLevel !== 'DIVISION') {
+                            setValue("Section", "");
+                          }
                         }}
                       />
                     </Grid>
@@ -988,6 +1042,7 @@ const AddEmployeeDialog = ({ parentClose }) => {
                         label="Section"
                         options={sectionOptions}
                         control={control}
+                        disabled={userAccessLevel === 'DIVISION'}
                       />
                     </Grid>
                   </Grid>
