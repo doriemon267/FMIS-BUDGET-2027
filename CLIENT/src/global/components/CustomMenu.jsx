@@ -44,6 +44,7 @@ export default function CustomMenu({
   hasClose,
   customEditElement,
   additionalMenuOptions = [],
+  onDataChange,
 }) {
   const [anchorEl, setAnchorEl] = React.useState(null);
   const open = Boolean(anchorEl);
@@ -92,7 +93,8 @@ export default function CustomMenu({
             row, 
             parentClose: handleClose,
             dataListName,
-            endpoint 
+            endpoint,
+            onDataChange
           })}
           
           {/* Delete Option */}

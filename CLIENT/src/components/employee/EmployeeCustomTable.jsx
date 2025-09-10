@@ -89,10 +89,12 @@ const CustomTable = ({
     }
     
     try {
-      // Get the region name - ensure we're using the exact region name
-      const regionName = activeRegion.name || activeRegion.regionName;
+      // Get the region name - include all known keys
+      const regionName = activeRegion.name || activeRegion.regionName || activeRegion.Region;
       
       // Log the active region object for debugging
+      console.log("🏢 Active region for employee fetch:", activeRegion);
+      console.log("📍 Region name used:", regionName);
       
       // CRITICAL: Ensure we have a valid region name
       if (!regionName) {
@@ -118,6 +120,8 @@ const CustomTable = ({
         region: regionName,
       };
       
+      console.log("📋 Query parameters for employee fetch:", queryParams);
+      
       // Add other filters
       Object.entries(filters).forEach(([key, value]) => {
         if (value && key !== "select" && key !== "action") {
@@ -131,13 +135,26 @@ const CustomTable = ({
         queryParams.sortDirection = sortConfig.direction;
       }
 
+      console.log("🔍 Making API call to:", apiPath, "with params:", queryParams);
       const response = await api.get(apiPath, { params: queryParams });
+      console.log("📥 API response received:", response.data);
       
-      // CRITICAL: Verify that all employees belong to the requested region
-      // This is a double-check to ensure security
+      // Check if response has employees
+      if (!response.data.employees) {
+        console.warn("⚠️ No employees array in response:", response.data);
+        setError("No employee data received from server");
+        setEmployees([]);
+        setTotalRecords(0);
+        setLoading(false);
+        return;
+      }
+      
+      // CRITICAL: Verify that all employees belong to the requested region (case-insensitive)
+      // This is a double-check to ensure security while avoiding case mismatches
       const verifiedEmployees = response.data.employees.filter(emp => {
-        const employeeRegion = emp.Region;
-        const matchesRegion = employeeRegion === regionName;
+        const employeeRegion = (emp.Region || '').trim();
+        const matchesRegion = employeeRegion.localeCompare((regionName || '').trim(), undefined, { sensitivity: 'accent' }) === 0 ||
+                              new RegExp(`^${(regionName || '').trim()}$`, 'i').test(employeeRegion);
         
         if (!matchesRegion) {
           console.error(`SECURITY WARNING: Employee ${emp.EmployeeFullName} has region ${employeeRegion} but requested region is ${regionName}`);
@@ -146,6 +163,8 @@ const CustomTable = ({
         return matchesRegion;
       });
 
+      console.log(`✅ Verified employees count: ${verifiedEmployees.length} out of ${response.data.employees.length}`);
+      
       // Only use employees that match the current region
       setEmployees(verifiedEmployees);
       
@@ -164,11 +183,13 @@ const CustomTable = ({
         });
       }
     } catch (error) {
-      console.error("Error fetching data:", error);
+      console.error("❌ Error fetching employee data:", error);
       console.error("Error details:", error.response?.data || error.message);
       
       if (error.response?.status === 400 && error.response?.data?.error === "Region parameter is required") {
         setError("Please select a region to view employees");
+      } else if (error.response?.status === 401 || error.response?.status === 403) {
+        setError("Authentication required. Please login again.");
       } else {
         setError(`Failed to load employee data: ${error.response?.data?.error || error.message}`);
         

@@ -498,23 +498,8 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
         console.log("📊 Parent component notified to refresh stats");
       }
       
-      // Add a small delay to ensure backend update is complete
-      setTimeout(async () => {
-        try {
-          // Refresh the employee data after successful update
-          await queryClient.invalidateQueries(['employees']);
-          await queryClient.invalidateQueries(['employee-list']);
-          await queryClient.invalidateQueries(['personnels']);
-          await queryClient.refetchQueries(['employees']);
-          await queryClient.refetchQueries(['employee-list']);
-          
-          console.log("🔄 Data refreshed successfully");
-        } catch (error) {
-          console.error("❌ Error refreshing data:", error);
-        } finally {
-          handleClose();
-        }
-      }, 200); // Reduced delay since we're calling onDataChange immediately
+      console.log("🔄 Data refreshed successfully");
+      handleClose();
       
     } catch (error) {
       toast.error(error.response?.data?.error || "Failed to update employee", {

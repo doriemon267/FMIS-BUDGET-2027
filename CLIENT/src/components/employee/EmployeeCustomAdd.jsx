@@ -64,7 +64,7 @@ const VisuallyHiddenInput = styled("input")({
   width: 1,
 });
 
-const AddEmployeeDialog = ({ parentClose }) => {
+const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
   const theme = useTheme();
   const { mode } = useThemeContext();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -683,8 +683,9 @@ const AddEmployeeDialog = ({ parentClose }) => {
       const response = await api.post("/employees", data);
       
       // Refresh the employee data after successful save
-      queryClient.invalidateQueries(['employees']);
-      queryClient.invalidateQueries(['employee-list']);
+      if (onDataChange) {
+        onDataChange();
+      }
       
       toast.success("Employee added successfully", {
         style: {
@@ -1200,6 +1201,10 @@ const AddEmployeeDialog = ({ parentClose }) => {
                         control={control}
                         label="Date of Appointment"
                         type="date"
+                        required
+                        rules={{
+                          required: "Date of appointment is required"
+                        }}
                         InputLabelProps={{ shrink: true }}
                       />
                     </Grid>

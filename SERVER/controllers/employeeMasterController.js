@@ -61,8 +61,9 @@ const getAllEmployees = async (req, res) => {
     const db = mongoose.connection.db;
     const collection = db.collection('employee_masters');
     
-    // Build the base query with strict region matching
-    let mongoQuery = { Region: region };
+    // Build the base query with case-insensitive exact Region matching
+    // Match Region exactly ignoring case: ^REGION I$ with 'i'
+    let mongoQuery = { Region: { $regex: new RegExp(`^${region}$`, 'i') } };
     
     // Add search if provided
     if (search) {
@@ -109,21 +110,22 @@ const getAllEmployees = async (req, res) => {
     
     // Convert MongoDB documents to plain objects
     const employees = employeesRaw.map(emp => {
-      // Verify the region one more time
-      if (emp.Region !== region) {
-        // console.error(`SECURITY ERROR: Employee ${emp.EmployeeFullName} has region ${emp.Region} but requested region is ${region}`);
+      // Verify the region one more time (case-insensitive exact)
+      const matches = new RegExp(`^${region}$`, 'i').test(emp.Region || '');
+      if (!matches) {
         return null;
       }
       return emp;
     }).filter(Boolean); // Remove any null entries
     
-    // Return the response
+    // Return the response with minimal debug
     res.status(200).json({
       employees,
       totalRecords,
       totalPages: Math.ceil(totalRecords / limitNumber),
       currentPage: pageNumber,
-      region
+      region,
+      debug: { usedRegion: region, query: mongoQuery }
     });
   } catch (error) {
     console.error("Error in getAllEmployees:", error);

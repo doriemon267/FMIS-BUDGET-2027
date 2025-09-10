@@ -118,10 +118,15 @@ const applyHierarchicalFilters = (req, res, next) => {
     case 'DIVISION':
       // Can only see data from their specific division
       if (assignment.regions.length > 0 && assignment.departments.length > 0 && assignment.divisions.length > 0) {
+        // Normalize values from populated docs to match Employee collection
+        const regionName = assignment.regions[0].Region || assignment.regions[0].regionName;
+        const departmentName = assignment.departments[0].Department || assignment.departments[0].departmentName || assignment.departments[0].DepartmentName;
+        const divisionName = (assignment.divisions[0] || '').trim();
         filters = {
-          region: assignment.regions[0].regionName,
-          department: assignment.departments[0].departmentName,
-          division: assignment.divisions[0]
+          Region: regionName,
+          Department: departmentName,
+          // Only include Division filter if non-empty
+          ...(divisionName ? { Division: divisionName } : {})
         };
       }
       break;
@@ -129,18 +134,21 @@ const applyHierarchicalFilters = (req, res, next) => {
     case 'DEPARTMENT':
       // Can see all data from their department (all divisions within)
       if (assignment.regions.length > 0 && assignment.departments.length > 0) {
+        const regionName = assignment.regions[0].Region || assignment.regions[0].regionName;
+        const departmentName = assignment.departments[0].Department || assignment.departments[0].departmentName || assignment.departments[0].DepartmentName;
         filters = {
-          region: assignment.regions[0].regionName,
-          department: assignment.departments[0].departmentName
+          Region: regionName,
+          Department: departmentName
         };
       }
       break;
 
     case 'REGION':
       // Can see all data from their region (all departments and divisions within)
-      if (assignment.regions.length > 0 && assignment.regions[0].regionName) {
+      if (assignment.regions.length > 0 && (assignment.regions[0].regionName || assignment.regions[0].Region)) {
+        const regionName = assignment.regions[0].Region || assignment.regions[0].regionName;
         filters = {
-          region: assignment.regions[0].regionName
+          Region: regionName
         };
       }
       break;

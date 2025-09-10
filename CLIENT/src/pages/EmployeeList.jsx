@@ -20,7 +20,9 @@ import {
   alpha,
   Fade,
   Grow,
+  Button,
 } from "@mui/material";
+import { useNavigate } from "react-router-dom";
 import EmployeeCustomPage from "../components/employee/EmployeeCustomPage";
 import EmployeeCustomAdd from "../components/employee/EmployeeCustomAdd";
 import EmployeeEditDialog from "../components/employee/EmployeeEditDialog";
@@ -33,6 +35,7 @@ import EventIcon from "@mui/icons-material/Event";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import GroupIcon from "@mui/icons-material/Group";
+import LocationIcon from "@mui/icons-material/LocationOn";
 import { useThemeContext } from "../context/ThemeContext";
 import { useRegion } from "../context/RegionContext";
 
@@ -41,6 +44,7 @@ const EmployeeList = () => {
   const { mode } = useThemeContext();
   const { activeRegion } = useRegion();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const navigate = useNavigate();
   const [employeeStats, setEmployeeStats] = useState({
     total: 0,
     active: 0,
@@ -493,6 +497,24 @@ const EmployeeList = () => {
               Employee data is region-specific for security and data isolation
               purposes.
             </Typography>
+            <Box sx={{ mt: 3 }}>
+              <Button
+                variant="contained"
+                color="primary"
+                size="large"
+                onClick={() => navigate('/region-selection')}
+                startIcon={<LocationIcon />}
+                sx={{
+                  borderRadius: "8px",
+                  textTransform: "none",
+                  fontWeight: 600,
+                  px: 4,
+                  py: 1.5,
+                }}
+              >
+                Select Region
+              </Button>
+            </Box>
           </Paper>
         </Fade>
       ) : (
@@ -521,8 +543,8 @@ const EmployeeList = () => {
             hasEdit={true}
             hasDelete={false}
             ROWS_PER_PAGE={20}
-            customAddElement={<EmployeeCustomAdd onDataChange={refreshStats} />}
-            customEditElement={<EmployeeEditDialog dataListName="employees" onDataChange={refreshStats} />}
+            customAddElement={<EmployeeCustomAdd />}
+            customEditElement={<EmployeeEditDialog dataListName="employees" />}
             onDataChange={refreshStats}
             tableContainerProps={{
               sx: {
@@ -651,7 +673,7 @@ const EmployeeList = () => {
                       <Typography variant="h6" sx={{ opacity: 0.9 }}>
                         {activeRegion
                           ? `Managing employees in ${
-                              activeRegion.name || activeRegion.regionName
+                              activeRegion.name || activeRegion.regionName || activeRegion.Region
                             } region`
                           : "Employee management dashboard"}
                       </Typography>

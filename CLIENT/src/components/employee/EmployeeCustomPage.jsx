@@ -37,6 +37,7 @@ const EmployeeCustomPage = ({
   tableContainerProps = {},
   footerElement = null,
   headerContent = null,
+  onDataChange = null,
 }) => {
   const theme = useTheme();
   const { mode } = useThemeContext();
@@ -110,7 +111,7 @@ const EmployeeCustomPage = ({
             
             <Box>
               {customAddElement ? (
-                customAddElement
+                React.cloneElement(customAddElement, { onDataChange })
               ) : hasAdd ? (
                 <CustomCreateUpdateDialog
                   endpoint={apiPath}
@@ -222,6 +223,7 @@ const EmployeeCustomPage = ({
                         schema={schema}
                         endpoint={apiPath}
                         dataListName={dataListName}
+                        onDataChange={onDataChange}
                       />
                     );
                   }

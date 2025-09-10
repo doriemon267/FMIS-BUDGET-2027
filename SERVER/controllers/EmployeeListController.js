@@ -10,27 +10,11 @@ const {
 
 exports.getAllEmployees = async (req, res) => {
   try {
-    cexports.getEligibleForLoyaltyPay = async (req, res) => {
-  try {
-    // Get hierarchical filters from middleware
-    const hierarchicalFilters = req.hierarchicalFilters || {};
-    console.log('🏢 Loyalty Pay hierarchical filters:', hierarchicalFilters);
-
-    // Get the region and fiscal year from the query parameters
-    const { region, fiscalYear: requestedFiscalYear } = req.query;
-
-    // Use hierarchical filters as base, or fall back to region filter
-    let baseFilters = { ...hierarchicalFilters };
-    if (!Object.keys(hierarchicalFilters).length && region) {
-      baseFilters.region = region;
-    }
-
-    if (!Object.keys(baseFilters).length) {
-      return res.status(400).json({
-        error: "Region parameter is required",
-        message: "Please specify a region to view eligible employees"
-      });
-    }age = 1,
+    console.log('📝 getAllEmployees called with query:', req.query);
+    console.log('👤 User from token:', req.user ? `${req.user.id}` : 'No user');
+    
+    const {
+      page = 1,
       limit = 10,
       search,
       orderBy,
@@ -63,16 +47,36 @@ exports.getAllEmployees = async (req, res) => {
 
     // If no hierarchical filters, require region parameter
     if (!Object.keys(hierarchicalFilters).length && !region) {
+      console.log('❌ No hierarchical filters and no region parameter provided');
       return res.status(400).json({
         error: "Region parameter is required",
         message: "Please specify a region to view employees"
       });
     }
 
-    // If region is provided and no hierarchical region filter, use it
-    if (region && !hierarchicalFilters.region) {
-      query.Region = region;
+    // Allow requested region to override hierarchical Region if user has access to it
+    const assignment = req.userHierarchicalAssignment || {};
+    const assignedRegions = Array.isArray(assignment.regions) ? assignment.regions : [];
+    const hasRequestedRegionAccess = region ? assignedRegions.some(r => {
+      const rn = (r.Region || r.regionName || r.name || '').trim();
+      return rn && (rn.localeCompare(region.trim(), undefined, { sensitivity: 'accent' }) === 0 || new RegExp(`^${region.trim()}$`, 'i').test(rn));
+    }) : false;
+
+    if (region) {
+      if (!hierarchicalFilters.Region) {
+        // No hierarchical region set, use requested region
+        query.Region = region;
+        console.log('📍 Using Region from query parameter (no hierarchical Region):', region);
+      } else if (hasRequestedRegionAccess) {
+        // User has access to requested region, override hierarchical Region to match UI selection
+        query.Region = region;
+        console.log('🔄 Overriding hierarchical Region with requested Region due to access:', region);
+      } else {
+        console.log('⛔ Requested region differs from hierarchical Region and user lacks access. Keeping hierarchical Region.');
+      }
     }
+
+    console.log('🔍 Final query for database:', query);
 
     // Add search functionality if provided
     if (search) {
@@ -216,6 +220,29 @@ exports.getAllEmployees = async (req, res) => {
     const db = mongoose.connection.db;
     const collection = db.collection('employees'); // This is the actual collection name
     
+    console.log('🔍 Executing query on employees collection:', JSON.stringify(query, null, 2));
+    console.log('📄 Pagination: skip =', skip, ', limit =', limitNum);
+    
+    // Normalize Region and Department filters for case-insensitive exact match
+    const normalizeExact = (v) => {
+      if (typeof v === 'string' && v.trim()) return { $regex: new RegExp(`^${v.trim()}$`, 'i') };
+      return v;
+    };
+    if (query.Region && typeof query.Region === 'string') {
+      query.Region = normalizeExact(query.Region);
+    } else if (!query.Region && region) {
+      // Ensure Region gets set when only hierarchicalFilters had CENTRAL OFFICE
+      query.Region = normalizeExact(region);
+    }
+    if (query.Department && typeof query.Department === 'string') {
+      query.Department = normalizeExact(query.Department);
+    }
+    if (query.Division && typeof query.Division === 'string') {
+      const d = query.Division.trim();
+      if (!d) delete query.Division; // drop empty division filters
+      else query.Division = normalizeExact(d);
+    }
+
     // Execute the query
     const employees = await collection.find(query)
       .skip(skip)
@@ -223,28 +250,59 @@ exports.getAllEmployees = async (req, res) => {
       .sort(sortQuery)
       .toArray();
       
-    // console.log(`Found ${employees.length} employees for region ${region}`);
+    console.log(`📊 Raw query result: Found ${employees.length} employees`);
     
-    // Double-check that all returned employees belong to the requested region
-    const verifiedEmployees = employees.filter(emp => emp.Region === region);
+    if (employees.length > 0) {
+      console.log('📝 First employee sample:', {
+        name: employees[0].EmployeeFullName,
+        region: employees[0].Region,
+        department: employees[0].Department
+      });
+    }
+    
+    // Double-check that all returned employees belong to the requested region (case-insensitive exact)
+    const verifiedEmployees = region
+      ? employees.filter(emp => {
+          const empRegion = (emp.Region || '').trim();
+          return empRegion.localeCompare(region.trim(), undefined, { sensitivity: 'accent' }) === 0 ||
+                 new RegExp(`^${region.trim()}$`, 'i').test(empRegion);
+        })
+      : employees;
     
     if (employees.length !== verifiedEmployees.length) {
-      console.error(`SECURITY WARNING: Found ${employees.length - verifiedEmployees.length} employees with incorrect region`);
+      console.error(`SECURITY WARNING: Found ${employees.length - verifiedEmployees.length} employees with region mismatch relative to requested '${region}'`);
     }
     
     // Get total count for pagination
     const totalRecords = await collection.countDocuments(query);
+    console.log(`📈 Total records in database matching query: ${totalRecords}`);
 
-    return res.json({
+    const response = {
       employees: verifiedEmployees,
       totalPages: Math.ceil(totalRecords / limitNum),
       currentPage: pageNum,
       totalRecords: totalRecords,
-      region
-    });
+      region,
+      queryUsed: query,
+      debug: {
+        originalEmployeeCount: employees.length,
+        verifiedEmployeeCount: verifiedEmployees.length,
+        hierarchicalFilters,
+        requestedRegion: region,
+        note: 'Region/Department/Division are matched case-insensitively and Division omitted when empty.'
+      }
+    };
+    
+    console.log('📤 Sending response with', verifiedEmployees.length, 'employees');
+    return res.json(response);
   } catch (e) {
-    console.error(e);
-    return res.status(500).json({ error: "Something went wrong." });
+    console.error('❌ Error in getAllEmployees:', e);
+    console.error('Error stack:', e.stack);
+    return res.status(500).json({ 
+      error: "Something went wrong.",
+      message: e.message,
+      details: process.env.NODE_ENV === 'development' ? e.stack : undefined
+    });
   }
 };
 
@@ -523,18 +581,27 @@ exports.getEmployeeStats = async (req, res) => {
     const db = mongoose.connection.db;
     const collection = db.collection('employees'); // This is the actual collection name
 
+    // Normalize for case-insensitive exact matching and omit empty Division
+    const norm = (v) => (typeof v === 'string' && v.trim()) ? { $regex: new RegExp(`^${v.trim()}$`, 'i') } : v;
+    const filtersCi = { ...baseFilters };
+    if (typeof filtersCi.Region === 'string') filtersCi.Region = norm(filtersCi.Region);
+    if (typeof filtersCi.Department === 'string') filtersCi.Department = norm(filtersCi.Department);
+    if (typeof filtersCi.Division === 'string') {
+      const d = filtersCi.Division.trim();
+      if (!d) delete filtersCi.Division; else filtersCi.Division = norm(d);
+    }
+
     // Count total employees with hierarchical filters
-    const total = await collection.countDocuments(baseFilters);
+    const total = await collection.countDocuments(filtersCi);
     
-    // Count active employees for the region
+    // Derive active/inactive using the same filtersCi + status
     const active = await collection.countDocuments({ 
-      Region: region,
+      ...filtersCi,
       employeeStatus: "Active"
     });
     
-    // Count inactive employees for the region
     const inactive = await collection.countDocuments({ 
-      Region: region,
+      ...filtersCi,
       employeeStatus: "Inactive"
     });
     
