@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-
 const LoyaltyPaySchema = mongoose.Schema(
   {
     employeeNumber: String,
@@ -18,5 +17,4 @@ const LoyaltyPaySchema = mongoose.Schema(
   },
   { timestamps: true }
 );
-
-module.exports = mongoose.model("LoyaltyPay", LoyaltyPaySchema);
+module.exports = mongoose.model("LoyaltyPay", LoyaltyPaySchema);

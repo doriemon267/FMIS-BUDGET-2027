@@ -1,17 +1,11 @@
 const express = require('express');
 const router = express.Router();
-
 // Test endpoint to check organization structure without auth
 router.get('/test-org-structure', async (req, res) => {
   try {
-    console.log('🔍 Testing organization structure retrieval...');
-    
     const DepartmentDivisionMapping = require('../models/OrganizationStructure');
-    
     // Test basic queries
     const mappingCount = await DepartmentDivisionMapping.countDocuments();
-    console.log(`Found ${mappingCount} department-division mappings`);
-    
     if (mappingCount === 0) {
       return res.json({
         success: false,
@@ -19,19 +13,10 @@ router.get('/test-org-structure', async (req, res) => {
         data: { mappingCount: 0 }
       });
     }
-    
     // Get complete organization structure
     const organizationStructure = await DepartmentDivisionMapping.getCompleteOrganizationStructure();
-    console.log('Organization structure retrieved:', {
-      regions: organizationStructure.regions.length,
-      departments: organizationStructure.departments.length,
-      mappings: organizationStructure.mappings.length
-    });
-    
     // Get departments with divisions
     const departmentsWithDivisions = await DepartmentDivisionMapping.getDepartmentsWithDivisions();
-    console.log(`Departments with divisions: ${departmentsWithDivisions.length}`);
-    
     const response = {
       success: true,
       message: 'Organization structure retrieved successfully',
@@ -51,9 +36,7 @@ router.get('/test-org-structure', async (req, res) => {
         }
       }
     };
-    
     res.json(response);
-    
   } catch (error) {
     console.error('❌ Error testing organization structure:', error);
     res.status(500).json({
@@ -64,5 +47,4 @@ router.get('/test-org-structure', async (req, res) => {
     });
   }
 });
-
-module.exports = router;
+module.exports = router;

@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-
 const fiscalYearSchema = new mongoose.Schema({
   year: {
     type: String,
@@ -26,7 +25,6 @@ const fiscalYearSchema = new mongoose.Schema({
     required: true,
   },
 });
-
 fiscalYearSchema.index({ year: 1, budgetType: 1 }, { unique: true });
 const FiscalYear = mongoose.model('FiscalYear', fiscalYearSchema);
-module.exports = FiscalYear;
+module.exports = FiscalYear;

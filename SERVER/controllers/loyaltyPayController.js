@@ -1,5 +1,4 @@
 // controllers/loyaltyPayController.js
-
 const LoyaltyPay        = require("../models/loyaltyPay");
 const Settings          = require("../models/Settings");
 const PersonnelServices = require("../models/personnelServices");
@@ -9,7 +8,6 @@ const {
   getEligibleLoyaltyPayYear,
   calculateLoyaltyPayAmount
 } = require("../utils/loyaltyPayUtils");
-
 /**
  * Helper: compute total loyalty pay for an employee in a fiscal year
  */
@@ -20,7 +18,6 @@ async function computeTotalLoyalty(employeeFullName, fiscalYear) {
   ]);
   return result[0]?.totalAmount || 0;
 }
-
 /**
  * Create a new Loyalty Pay record,
  * then immediately sync combined loyaltyAward in PersonnelServices.
@@ -41,20 +38,16 @@ exports.createLoyaltyPay = async (req, res) => {
       processBy,
       processDate,
     } = req.body;
-
     // 1) Get settings
     const settings = fiscalYear
       ? await Settings.findOne({ fiscalYear, isActive: true }).lean()
       : await Settings.findOne({ isActive: true }).lean();
-
     if (!settings?.loyaltyPay) {
       return res.status(400).json({
         message: "Active settings with loyalty pay not found."
       });
     }
-
     const usedFY = fiscalYear || settings.fiscalYear;
-
     // 2) Calculate years of service with June 22 cutoff
     let calculatedYears;
     if (appointmentDate) {
@@ -64,10 +57,8 @@ exports.createLoyaltyPay = async (req, res) => {
       // Fallback to provided years if no appointment date
       calculatedYears = Number(yearsInService);
     }
-
     // 3) Compute amount using utility function
     const amount = calculateLoyaltyPayAmount(calculatedYears, settings.loyaltyPay);
-
     // 4) Save LoyaltyPay record
     const loyalty = new LoyaltyPay({
       employeeNumber,
@@ -85,7 +76,6 @@ exports.createLoyaltyPay = async (req, res) => {
       processDate,
     });
     await loyalty.save();
-
     // 5) Sync combined loyaltyAward to PersonnelServices
     const totalLoyalty = await computeTotalLoyalty(employeeFullName, usedFY);
     const person = await PersonnelServices.findOne({
@@ -96,7 +86,6 @@ exports.createLoyaltyPay = async (req, res) => {
       person.loyaltyAward = totalLoyalty;
       await person.save();
     }
-
     return res.status(201).json({
       message: "Loyalty Pay record saved and PersonnelServices updated",
       data: loyalty,
@@ -107,7 +96,6 @@ exports.createLoyaltyPay = async (req, res) => {
     return res.status(500).json({ message: "Server error", error: err.message });
   }
 };
-
 /**
  * Get all Loyalty Pay records
  * (original logic unchanged)
@@ -129,7 +117,6 @@ exports.getAllLoyaltyPays = async (req, res) => {
     return res.status(500).json({ message: "Server error", error: err.message });
   }
 };
-
 /**
  * Update a Loyalty Pay record,
  * then recompute & sync combined loyaltyAward to PersonnelServices.
@@ -138,7 +125,6 @@ exports.updateLoyaltyPay = async (req, res) => {
   try {
     const { id } = req.params;
     const { yearsInService, appointmentDate, fiscalYear } = req.body;
-
     // 1) Get settings
     const settings = fiscalYear
       ? await Settings.findOne({ fiscalYear, isActive: true }).lean()
@@ -148,9 +134,7 @@ exports.updateLoyaltyPay = async (req, res) => {
         message: "Active settings with loyalty pay not found."
       });
     }
-
     const usedFY = fiscalYear || settings.fiscalYear;
-
     // 2) Calculate years of service with June 22 cutoff
     let calculatedYears;
     if (appointmentDate) {
@@ -160,10 +144,8 @@ exports.updateLoyaltyPay = async (req, res) => {
       // Fallback to provided years if no appointment date
       calculatedYears = Number(yearsInService);
     }
-
     // 3) Compute amount using utility function
     const amount = calculateLoyaltyPayAmount(calculatedYears, settings.loyaltyPay);
-
     // 4) Update record
     const updated = await LoyaltyPay.findByIdAndUpdate(
       id,
@@ -171,7 +153,6 @@ exports.updateLoyaltyPay = async (req, res) => {
       { new: true }
     );
     if (!updated) return res.status(404).json({ message: "Record not found." });
-
     // 5) Sync to PersonnelServices
     const totalLoyalty = await computeTotalLoyalty(updated.employeeFullName, usedFY);
     const person = await PersonnelServices.findOne({
@@ -182,7 +163,6 @@ exports.updateLoyaltyPay = async (req, res) => {
       person.loyaltyAward = totalLoyalty;
       await person.save();
     }
-
     return res.status(200).json({
       ...updated.toObject(),
       calculatedYears: calculatedYears // Include calculated years for debugging
@@ -192,7 +172,6 @@ exports.updateLoyaltyPay = async (req, res) => {
     return res.status(500).json({ message: "Server error", error: err.message });
   }
 };
-
 /**
  * Delete a Loyalty Pay record,
  * then recompute & sync combined loyaltyAward to PersonnelServices.
@@ -202,9 +181,7 @@ exports.deleteLoyaltyPay = async (req, res) => {
     const { id } = req.params;
     const toDel = await LoyaltyPay.findById(id);
     if (!toDel) return res.status(404).json({ message: "Record not found." });
-
     await LoyaltyPay.findByIdAndDelete(id);
-
     const totalLoyalty = await computeTotalLoyalty(toDel.employeeNumber, toDel.fiscalYear);
     const person = await PersonnelServices.findOne({
       employeeNumber: toDel.employeeNumber,
@@ -218,22 +195,18 @@ exports.deleteLoyaltyPay = async (req, res) => {
       );
       await person.save();
     }
-
     return res.status(200).json({ message: "Deleted and PersonnelServices updated." });
   } catch (err) {
     console.error("❌ Error in deleteLoyaltyPay:", err);
     return res.status(500).json({ message: "Server error", error: err.message });
   }
 };
-
 /**
  * Get loyalty pay statistics
  */
 exports.getLoyaltyPayStats = async (req, res) => {
   try {
-    console.log("📊 Loyalty Pay Stats API called");
     const { fiscalYear } = req.query;
-
     // Build query to filter by fiscal year (same logic as getAllLoyaltyPays)
     let query = {};
     if (fiscalYear) {
@@ -248,9 +221,7 @@ exports.getLoyaltyPayStats = async (req, res) => {
       }
       query.fiscalYear = settings.fiscalYear;
     }
-
     const totalRecords = await LoyaltyPay.countDocuments(query);
-
     // Get the sum of all amounts with fiscal year filter
     const aggregationResult = await LoyaltyPay.aggregate([
       {
@@ -263,30 +234,22 @@ exports.getLoyaltyPayStats = async (req, res) => {
         }
       }
     ]);
-
     const totalAmount = aggregationResult.length > 0 ? aggregationResult[0].totalAmount : 0;
     const averageAmount = totalRecords > 0 ? totalAmount / totalRecords : 0;
-
     // Get unique employees count with fiscal year filter
     const uniqueEmployees = await LoyaltyPay.distinct('employeeNumber', query);
-
     const result = {
       totalRecords,
       totalAmount,
       averageAmount,
       uniqueEmployees: uniqueEmployees.length
     };
-
-    console.log("📊 Loyalty Pay Stats Result:", result);
-    console.log("📊 Query used:", query);
-
     res.status(200).json(result);
   } catch (error) {
     console.error("Error fetching loyalty pay stats:", error);
     res.status(500).json({ message: "Failed to fetch loyalty pay statistics" });
   }
 };
-
 /**
  * Get sum of Loyalty Pay amounts for active fiscal year
  * (original logic unchanged)
@@ -310,4 +273,4 @@ exports.getSumOfLoyaltyPay = async (req, res) => {
       .status(500)
       .json({ error: "Failed to calculate total loyalty pay amount.", message: err.message });
   }
-};
+};

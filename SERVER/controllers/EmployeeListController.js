@@ -7,12 +7,8 @@ const {
   textFilter,
   booleanFilter,
 } = require("../utils/controller_get_process");
-
 exports.getAllEmployees = async (req, res) => {
   try {
-    console.log('📝 getAllEmployees called with query:', req.query);
-    console.log('👤 User from token:', req.user ? `${req.user.id}` : 'No user');
-    
     const {
       page = 1,
       limit = 10,
@@ -37,23 +33,17 @@ exports.getAllEmployees = async (req, res) => {
       DateOfBirth,
       Status,
     } = req.query;
-
     // Get hierarchical filters from middleware
     const hierarchicalFilters = req.hierarchicalFilters || {};
-    console.log('🏢 Employee hierarchical filters:', hierarchicalFilters);
-
     // Start with hierarchical filters as base
     let query = { ...hierarchicalFilters };
-
     // If no hierarchical filters, require region parameter
     if (!Object.keys(hierarchicalFilters).length && !region) {
-      console.log('❌ No hierarchical filters and no region parameter provided');
       return res.status(400).json({
         error: "Region parameter is required",
         message: "Please specify a region to view employees"
       });
     }
-
     // Allow requested region to override hierarchical Region if user has access to it
     const assignment = req.userHierarchicalAssignment || {};
     const assignedRegions = Array.isArray(assignment.regions) ? assignment.regions : [];
@@ -61,23 +51,17 @@ exports.getAllEmployees = async (req, res) => {
       const rn = (r.Region || r.regionName || r.name || '').trim();
       return rn && (rn.localeCompare(region.trim(), undefined, { sensitivity: 'accent' }) === 0 || new RegExp(`^${region.trim()}$`, 'i').test(rn));
     }) : false;
-
     if (region) {
       if (!hierarchicalFilters.Region) {
         // No hierarchical region set, use requested region
         query.Region = region;
-        console.log('📍 Using Region from query parameter (no hierarchical Region):', region);
+        :', region);
       } else if (hasRequestedRegionAccess) {
         // User has access to requested region, override hierarchical Region to match UI selection
         query.Region = region;
-        console.log('🔄 Overriding hierarchical Region with requested Region due to access:', region);
-      } else {
-        console.log('⛔ Requested region differs from hierarchical Region and user lacks access. Keeping hierarchical Region.');
-      }
+        } else {
+        }
     }
-
-    console.log('🔍 Final query for database:', query);
-
     // Add search functionality if provided
     if (search) {
       const searchConditions = {
@@ -92,7 +76,6 @@ exports.getAllEmployees = async (req, res) => {
           { Status: { $regex: search, $options: "i" } },
         ]
       };
-
       // Combine hierarchical filters with search
       if (Object.keys(hierarchicalFilters).length > 0) {
         query = {
@@ -110,7 +93,6 @@ exports.getAllEmployees = async (req, res) => {
         };
       }
     }
-
     // Apply other filters while preserving hierarchical filters
     const filterParams = {
       positionTitle,
@@ -124,19 +106,16 @@ exports.getAllEmployees = async (req, res) => {
       Section,
       Status,
     };
-
     // Remove undefined values
     Object.keys(filterParams).forEach(key => {
       if (filterParams[key] === undefined) {
         delete filterParams[key];
       }
     });
-
     // Apply text filters if there are any
     if (Object.keys(filterParams).length > 0) {
       const textFilterQuery = {};
       textFilter(textFilterQuery, filterParams);
-
       if (Object.keys(textFilterQuery).length > 0) {
         if (query.$and) {
           query.$and.push(textFilterQuery);
@@ -151,7 +130,6 @@ exports.getAllEmployees = async (req, res) => {
         }
       }
     }
-
     // Apply number filters
     const numberParams = { sg, step, Rate };
     Object.keys(numberParams).forEach(key => {
@@ -159,11 +137,9 @@ exports.getAllEmployees = async (req, res) => {
         delete numberParams[key];
       }
     });
-
     if (Object.keys(numberParams).length > 0) {
       const numberFilterQuery = {};
       numberFilter(numberFilterQuery, numberParams, operator);
-
       if (Object.keys(numberFilterQuery).length > 0) {
         if (query.$and) {
           query.$and.push(numberFilterQuery);
@@ -178,7 +154,6 @@ exports.getAllEmployees = async (req, res) => {
         }
       }
     }
-
     // Apply date filters
     const dateParams = { DateOfAppointment, DateOfBirth };
     Object.keys(dateParams).forEach(key => {
@@ -186,11 +161,9 @@ exports.getAllEmployees = async (req, res) => {
         delete dateParams[key];
       }
     });
-
     if (Object.keys(dateParams).length > 0) {
       const dateFilterQuery = {};
       dateFilter(dateFilterQuery, dateParams);
-
       if (Object.keys(dateFilterQuery).length > 0) {
         if (query.$and) {
           query.$and.push(dateFilterQuery);
@@ -205,24 +178,17 @@ exports.getAllEmployees = async (req, res) => {
         }
       }
     }
-
-    // console.log("Final query:", JSON.stringify(query));
-
+    // );
     const sortByField = orderBy || "createdAt";
     const sortOrder = order.toLowerCase() === "desc" ? -1 : 1;
     const sortQuery = { [sortByField]: sortOrder };
-
     const pageNum = Math.max(1, Number(page));
     const limitNum = Math.max(1, Number(limit));
     const skip = (pageNum - 1) * limitNum;
-
     // DIRECT APPROACH: Use the raw MongoDB driver to ensure we're using the correct collection
     const db = mongoose.connection.db;
     const collection = db.collection('employees'); // This is the actual collection name
-    
-    console.log('🔍 Executing query on employees collection:', JSON.stringify(query, null, 2));
-    console.log('📄 Pagination: skip =', skip, ', limit =', limitNum);
-    
+    );
     // Normalize Region and Department filters for case-insensitive exact match
     const normalizeExact = (v) => {
       if (typeof v === 'string' && v.trim()) return { $regex: new RegExp(`^${v.trim()}$`, 'i') };
@@ -242,24 +208,14 @@ exports.getAllEmployees = async (req, res) => {
       if (!d) delete query.Division; // drop empty division filters
       else query.Division = normalizeExact(d);
     }
-
     // Execute the query
     const employees = await collection.find(query)
       .skip(skip)
       .limit(limitNum)
       .sort(sortQuery)
       .toArray();
-      
-    console.log(`📊 Raw query result: Found ${employees.length} employees`);
-    
     if (employees.length > 0) {
-      console.log('📝 First employee sample:', {
-        name: employees[0].EmployeeFullName,
-        region: employees[0].Region,
-        department: employees[0].Department
-      });
-    }
-    
+      }
     // Double-check that all returned employees belong to the requested region (case-insensitive exact)
     const verifiedEmployees = region
       ? employees.filter(emp => {
@@ -268,15 +224,11 @@ exports.getAllEmployees = async (req, res) => {
                  new RegExp(`^${region.trim()}$`, 'i').test(empRegion);
         })
       : employees;
-    
     if (employees.length !== verifiedEmployees.length) {
       console.error(`SECURITY WARNING: Found ${employees.length - verifiedEmployees.length} employees with region mismatch relative to requested '${region}'`);
     }
-    
     // Get total count for pagination
     const totalRecords = await collection.countDocuments(query);
-    console.log(`📈 Total records in database matching query: ${totalRecords}`);
-
     const response = {
       employees: verifiedEmployees,
       totalPages: Math.ceil(totalRecords / limitNum),
@@ -292,8 +244,6 @@ exports.getAllEmployees = async (req, res) => {
         note: 'Region/Department/Division are matched case-insensitively and Division omitted when empty.'
       }
     };
-    
-    console.log('📤 Sending response with', verifiedEmployees.length, 'employees');
     return res.json(response);
   } catch (e) {
     console.error('❌ Error in getAllEmployees:', e);
@@ -305,24 +255,20 @@ exports.getAllEmployees = async (req, res) => {
     });
   }
 };
-
 exports.addEmployee = async (req, res) => {
   try {
     // If fiscal year is not provided in the request, get it from active settings
     if (!req.body.fiscalYear) {
       const Settings = require("../models/Settings");
       const activeSettings = await Settings.findOne({ isActive: true }).lean();
-      
       if (!activeSettings?.fiscalYear) {
         return res.status(400).json({ 
           error: "No active fiscal year found",
           message: "Please set up the fiscal year in settings first"
         });
       }
-      
       req.body.fiscalYear = activeSettings.fiscalYear;
     }
-
     // Validate Region field
     if (!req.body.Region) {
       return res.status(400).json({
@@ -330,13 +276,9 @@ exports.addEmployee = async (req, res) => {
         message: "Please specify a region for the employee"
       });
     }
-
     const newEmployee = new Employee(req.body);
     await newEmployee.save();
-
-    // console.log(`Created new employee ${newEmployee.EmployeeFullName} in region ${newEmployee.Region} for fiscal year ${newEmployee.fiscalYear}`);
-
-    return res.status(201).json({
+    // return res.status(201).json({
       message: "Employee created successfully.",
       employee: newEmployee,
     });
@@ -345,7 +287,6 @@ exports.addEmployee = async (req, res) => {
     return res.status(500).json({ error: "Failed to create employee." });
   }
 };
-
 exports.editEmployee = async (req, res) => {
   try {
     const { id } = req.params;
@@ -353,11 +294,9 @@ exports.editEmployee = async (req, res) => {
       new: true,
       runValidators: true,
     });
-
     if (!updatedEmployee) {
       return res.status(404).json({ error: "Employee not found." });
     }
-
     return res.json({
       message: "Employee updated successfully.",
       employee: updatedEmployee,
@@ -367,7 +306,6 @@ exports.editEmployee = async (req, res) => {
     return res.status(500).json({ error: "Failed to update employee." });
   }
 };
-
 exports.deleteEmployee = async (req, res) => {
   try {
     const { id } = req.params;
@@ -375,20 +313,16 @@ exports.deleteEmployee = async (req, res) => {
     if (!deletedEmployee) {
       return res.status(404).json({ error: "Employee not found." });
     }
-
     return res.json({ message: "Employee deleted successfully." });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Failed to delete employee." });
   }
 };
-
 exports.getPersonnels = async (req, res) => {
   try {
     const { search } = req.query;
-
     let query = {};
-
     if (search) {
       query.$or = [
         { EmployeeFullName: { $regex: search, $options: "i" } },
@@ -402,9 +336,7 @@ exports.getPersonnels = async (req, res) => {
         { Status: { $regex: search, $options: "i" } },
       ];
     }
-
     const employees = await PersonnelServices.find(query).limit(20);
-
     const formattedEmployees = employees.map((emp) => ({
       _id: emp._id,
       employeeNumber: emp.employeeNumber,
@@ -413,38 +345,29 @@ exports.getPersonnels = async (req, res) => {
       department: emp.Department || emp.department || "",
       status: emp.Status || "Active",
     }));
-
     return res.json(formattedEmployees);
   } catch (error) {
     console.error("Error in getPersonnels:", error);
     return res.status(500).json({ error: "Failed to fetch personnel data" });
   }
 };
-
 // Get employees eligible for loyalty pay based on years of service
 exports.getEligibleForLoyaltyPay = async (req, res) => {
   try {
-    // console.log("Getting eligible employees for loyalty pay");
-    
-    // Get the region and fiscal year from the query parameters
+    // // Get the region and fiscal year from the query parameters
     const { region, fiscalYear: requestedFiscalYear } = req.query;
-    
     if (!region) {
       return res.status(400).json({ 
         error: "Region parameter is required", 
         message: "Please specify a region to view eligible employees" 
       });
     }
-    
-    // console.log(`Filtering eligible employees for region: ${region}`);
-
-    // Get active settings to determine the fiscal year
+    // // Get active settings to determine the fiscal year
     const Settings = require("../models/Settings");
     const {
       calculateLoyaltyPayYearsOfService,
       getEligibleLoyaltyPayYear
     } = require("../utils/loyaltyPayUtils");
-
     // If a specific fiscal year was requested, find those settings
     // Otherwise use the active settings
     let settings;
@@ -459,53 +382,36 @@ exports.getEligibleForLoyaltyPay = async (req, res) => {
     } else {
       settings = await Settings.findOne({ isActive: true }).lean();
     }
-
     if (!settings) {
       return res.status(404).json({
         error: "Settings not found",
         message: "No active settings found in the system"
       });
     }
-
     // Use fiscal year from settings
     const fiscalYear = parseInt(settings.fiscalYear);
-    
-    // console.log(`Using fiscal year: ${fiscalYear}`);
-
-    // Get cutoff date from settings
+    // // Get cutoff date from settings
     const cutoffDate = settings?.loyaltyPay?.cutoffDate || "06-22";
-    // console.log(`Using loyalty pay cutoff date: ${cutoffDate}`);
-
-    // First try to get data from PersonnelServices model, filtered by hierarchical access
+    // // First try to get data from PersonnelServices model, filtered by hierarchical access
     const personnelQuery = {
       employeeStatus: "Active",
       DateOfAppointment: { $exists: true, $ne: null },
       ...baseFilters // Apply hierarchical filters
     };
-
     const personnelServices = await PersonnelServices.find(personnelQuery).lean();
-
-    console.log(`🏢 Found ${personnelServices.length} active personnel services records with hierarchical filters:`, baseFilters);
-
     // Filter employees based on years of service with June 22 cutoff
     const eligibleEmployees = [];
-
     for (const employee of personnelServices) {
       if (!employee.DateOfAppointment) continue;
-
       // Calculate years of service with June 22 cutoff
       const yearsOfService = calculateLoyaltyPayYearsOfService(
         employee.DateOfAppointment,
         fiscalYear.toString(),
         cutoffDate
       );
-
       // Get the eligible loyalty pay year (milestone) - must be exact match
       const eligibleYear = getEligibleLoyaltyPayYear(yearsOfService);
-
-      // console.log(`Employee: ${employee.employeeFullName}, Years of Service: ${yearsOfService}, Eligible Year: ${eligibleYear ? eligibleYear : 'Not eligible - not an exact milestone year'}`);
-
-      // Only include employees who have reached a milestone year
+      // // Only include employees who have reached a milestone year
       if (eligibleYear !== null) {
         // Check if this employee already received loyalty pay for this milestone in this fiscal year
         const LoyaltyPay = require("../models/loyaltyPay");
@@ -514,7 +420,6 @@ exports.getEligibleForLoyaltyPay = async (req, res) => {
           yearsInService: eligibleYear,
           fiscalYear: fiscalYear.toString()
         }).lean();
-
         if (!existingRecord) {
           eligibleEmployees.push({
             ...employee,
@@ -522,14 +427,10 @@ exports.getEligibleForLoyaltyPay = async (req, res) => {
             actualYearsOfService: yearsOfService // Include actual years for reference
           });
         } else {
-          // console.log(`Employee ${employee.employeeFullName} already received loyalty pay for ${eligibleYear} years in fiscal year ${fiscalYear}`);
-        }
+          // }
       }
     }
-    
-    // console.log(`Found ${eligibleEmployees.length} eligible employees in region ${region} for fiscal year ${fiscalYear}`);
-    
-    // Format the response
+    // // Format the response
     const formattedEmployees = eligibleEmployees.map(emp => ({
       _id: emp._id,
       employeeNumber: emp.employeeNumber,
@@ -544,43 +445,33 @@ exports.getEligibleForLoyaltyPay = async (req, res) => {
       cutoffDate: cutoffDate, // Include cutoff date for reference
       fiscalYear: fiscalYear.toString() // Include fiscal year for reference
     }));
-    
     return res.status(200).json(formattedEmployees);
   } catch (err) {
     console.error("Error getting eligible employees for loyalty pay:", err);
     return res.status(500).json({ message: "Server error", error: err.message });
   }
 };
-
 // Get employees eligible for retirement
 // Get employee statistics
 exports.getEmployeeStats = async (req, res) => {
   try {
     // Get hierarchical filters from middleware
     const hierarchicalFilters = req.hierarchicalFilters || {};
-    console.log('🏢 Employee Stats hierarchical filters:', hierarchicalFilters);
-
     const { region } = req.query;
-
     // Use hierarchical filters as base, or fall back to region filter
     let baseFilters = { ...hierarchicalFilters };
     if (!Object.keys(hierarchicalFilters).length && region) {
       baseFilters.Region = region;
     }
-
     if (!Object.keys(baseFilters).length) {
       return res.status(400).json({
         error: "Region parameter is required",
         message: "Please specify a region to view employee statistics"
       });
     }
-
-    console.log(`🏢 Request to get stats with hierarchical filters:`, baseFilters);
-
     // DIRECT APPROACH: Use the raw MongoDB driver to ensure we're using the correct collection
     const db = mongoose.connection.db;
     const collection = db.collection('employees'); // This is the actual collection name
-
     // Normalize for case-insensitive exact matching and omit empty Division
     const norm = (v) => (typeof v === 'string' && v.trim()) ? { $regex: new RegExp(`^${v.trim()}$`, 'i') } : v;
     const filtersCi = { ...baseFilters };
@@ -590,37 +481,26 @@ exports.getEmployeeStats = async (req, res) => {
       const d = filtersCi.Division.trim();
       if (!d) delete filtersCi.Division; else filtersCi.Division = norm(d);
     }
-
     // Count total employees with hierarchical filters
     const total = await collection.countDocuments(filtersCi);
-    
     // Derive active/inactive using the same filtersCi + status
     const active = await collection.countDocuments({ 
       ...filtersCi,
       employeeStatus: "Active"
     });
-    
     const inactive = await collection.countDocuments({ 
       ...filtersCi,
       employeeStatus: "Inactive"
     });
-    
     // Log for debugging
-    // console.log(`Stats for region ${region}: Total=${total}, Active=${active}, Inactive=${inactive}`);
-    
-    // Get all unique regions for debugging
+    // // Get all unique regions for debugging
     const uniqueRegions = await collection.distinct('Region');
-    // console.log("All regions in database:", uniqueRegions);
-    
-    // Get counts by region for debugging
-    // console.log("COUNTS BY REGION:");
-    for (const r of uniqueRegions) {
+    // // Get counts by region for debugging
+    // for (const r of uniqueRegions) {
       if (r) {
         const count = await collection.countDocuments({ Region: r });
-        // console.log(`- ${r}: ${count} employees`);
-      }
+        // }
     }
-    
     res.status(200).json({
       total,
       active,
@@ -632,27 +512,18 @@ exports.getEmployeeStats = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
-
 exports.getEligibleForRetirement = async (req, res) => {
   try {
     // Get hierarchical filters from middleware
     const hierarchicalFilters = req.hierarchicalFilters || {};
-    console.log('🏢 Retirement hierarchical filters:', hierarchicalFilters);
-
-    console.log("Getting eligible employees for retirement");
-
     // Get active settings to determine the fiscal year
     const Settings = require("../models/Settings");
     const activeSettings = await Settings.findOne({ isActive: true }).lean();
-
     // Use fiscal year from settings, or fallback to current year
     const fiscalYear = activeSettings?.fiscalYear
       ? parseInt(activeSettings.fiscalYear)
       : new Date().getFullYear();
-
-    console.log(`Using fiscal year: ${fiscalYear}`);
     const currentDate = new Date();
-
     // First try to get data from PersonnelServices model with hierarchical filters
     const personnelQuery = {
       employeeStatus: "Active",
@@ -660,17 +531,11 @@ exports.getEligibleForRetirement = async (req, res) => {
       DateOfBirth: { $exists: true, $ne: null },
       ...hierarchicalFilters // Apply hierarchical filters
     };
-
     const personnelServices = await PersonnelServices.find(personnelQuery).lean();
-
-    console.log(`🏢 Found ${personnelServices.length} active personnel services records with hierarchical filters:`, hierarchicalFilters);
-    
     // Filter employees based on age and years of service
     const eligibleEmployees = [];
-    
     for (const employee of personnelServices) {
       if (!employee.DateOfAppointment || !employee.DateOfBirth) continue;
-
       // Calculate age more accurately
       const birthDate = new Date(employee.DateOfBirth);
       let age = currentDate.getFullYear() - birthDate.getFullYear();
@@ -678,7 +543,6 @@ exports.getEligibleForRetirement = async (req, res) => {
       if (monthDiff < 0 || (monthDiff === 0 && currentDate.getDate() < birthDate.getDate())) {
         age--;
       }
-
       // Calculate years of service more accurately
       const appointmentDate = new Date(employee.DateOfAppointment);
       let yearsOfService = currentDate.getFullYear() - appointmentDate.getFullYear();
@@ -686,15 +550,11 @@ exports.getEligibleForRetirement = async (req, res) => {
       if (serviceMonthDiff < 0 || (serviceMonthDiff === 0 && currentDate.getDate() < appointmentDate.getDate())) {
         yearsOfService--;
       }
-
       // Check if employee is eligible for compulsory retirement (65 years old)
       const isEligibleForCompulsory = age >= 65;
-
       // Check if employee is eligible for optional retirement (60-64 years old with at least 15 years of service)
       const isEligibleForOptional = (age >= 60 && age < 65) && yearsOfService >= 15;
-
-      // console.log(`Employee: ${employee.employeeFullName}, Age: ${age}, Years of Service: ${yearsOfService}, Birth: ${birthDate.toDateString()}, Appointment: ${appointmentDate.toDateString()}`);
-
+      // }, Appointment: ${appointmentDate.toDateString()}`);
       // Include employees who are eligible for either type of retirement
       if (isEligibleForCompulsory || isEligibleForOptional) {
         eligibleEmployees.push({
@@ -706,16 +566,11 @@ exports.getEligibleForRetirement = async (req, res) => {
         });
       }
     }
-    
-    console.log(`Found ${eligibleEmployees.length} eligible employees for retirement from PersonnelServices`);
-
     // We now use ONLY PersonnelServices (no EmployeeList fallback)
-    
     // Format the response with proper employee number format
     const formattedEmployees = eligibleEmployees.map(emp => {
       // Get the correct employee number
       let employeeNum = "";
-      
       // Try to get the employee number from various possible fields
       if (emp.employeeNumber) {
         employeeNum = emp.employeeNumber;
@@ -724,10 +579,7 @@ exports.getEligibleForRetirement = async (req, res) => {
       } else if (emp.employeeID) {
         employeeNum = emp.employeeID;
       }
-      
-      // console.log(`Employee ${emp.employeeFullName || emp.EmployeeFullName}: employee number = ${employeeNum}`);
-      
-      return {
+      // return {
         _id: emp._id,
         employeeNumber: employeeNum, // This should be a string like "336155"
         employeeFullName: emp.employeeFullName || emp.EmployeeFullName || "",
@@ -741,16 +593,11 @@ exports.getEligibleForRetirement = async (req, res) => {
         earnedLeaves: emp.earnedLeaves || 0 // Include earned leaves for terminal leave calculation
       };
     });
-
     // Log the formatted employees to verify the employee number format
-    // console.log("Employees with formatted numbers:", formattedEmployees.map(e => ({
-    //   name: e.employeeFullName,
-    //   employeeNumber: e.employeeNumber // Should be like "336155"
-    // })));
-
+    // ));
     return res.status(200).json(formattedEmployees);
   } catch (err) {
     console.error("Error getting eligible employees for retirement:", err);
     return res.status(500).json({ message: "Server error", error: err.message });
   }
-};
+};

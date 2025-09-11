@@ -1,5 +1,4 @@
 const { body, param, query, validationResult } = require('express-validator');
-
 // MongoDB injection prevention middleware
 const sanitizeInput = (req, res, next) => {
   const sanitize = (obj) => {
@@ -18,15 +17,12 @@ const sanitizeInput = (req, res, next) => {
       obj.forEach(item => sanitize(item));
     }
   };
-  
   // Sanitize all input sources
   if (req.body) sanitize(req.body);
   if (req.query) sanitize(req.query);
   if (req.params) sanitize(req.params);
-  
   next();
 };
-
 // MOOE data validation rules
 const validateMooeData = [
   body('*.income')
@@ -35,40 +31,34 @@ const validateMooeData = [
     .withMessage('Income must be a number')
     .custom(value => value >= 0)
     .withMessage('Income cannot be negative'),
-  
   body('*.subsidy')
     .optional()
     .isNumeric()
     .withMessage('Subsidy must be a number')
     .custom(value => value >= 0)
     .withMessage('Subsidy cannot be negative'),
-    
   body('*.uacsCode')
     .optional()
     .matches(/^[0-9\-]+$/)
     .withMessage('Invalid UACS code format')
     .isLength({ max: 20 })
     .withMessage('UACS code too long'),
-    
   body('*.region')
     .optional()
     .isLength({ min: 1, max: 100 })
     .escape()
     .withMessage('Invalid region'),
-    
   body('*.sublineItem')
     .optional()
     .isLength({ max: 200 })
     .escape()
     .withMessage('Subline item too long'),
-    
   body('*.accountingTitle')
     .optional()
     .isLength({ max: 200 })
     .escape()
     .withMessage('Accounting title too long')
 ];
-
 // File upload validation
 const validateFileUpload = [
   body('activeRegion')
@@ -76,14 +66,12 @@ const validateFileUpload = [
     .withMessage('Region is required')
     .isLength({ max: 100 })
     .escape(),
-    
   body('processBy')
     .optional()
     .isLength({ max: 100 })
     .escape()
     .withMessage('Process by field too long')
 ];
-
 // Employee data validation
 const validateEmployeeData = [
   body('*.firstName')
@@ -91,19 +79,16 @@ const validateEmployeeData = [
     .isLength({ min: 1, max: 50 })
     .escape()
     .withMessage('First name required and must be less than 50 characters'),
-    
   body('*.lastName')
     .optional()
     .isLength({ min: 1, max: 50 })
     .escape()
     .withMessage('Last name required and must be less than 50 characters'),
-    
   body('*.email')
     .optional()
     .isEmail()
     .normalizeEmail()
     .withMessage('Invalid email format'),
-    
   body('*.employeeId')
     .optional()
     .matches(/^[A-Z0-9\-]+$/)
@@ -111,7 +96,6 @@ const validateEmployeeData = [
     .isLength({ max: 20 })
     .withMessage('Employee ID too long')
 ];
-
 // Income data validation
 const validateIncomeData = [
   body('*.amount')
@@ -120,27 +104,23 @@ const validateIncomeData = [
     .withMessage('Amount must be a number')
     .custom(value => value >= 0)
     .withMessage('Amount cannot be negative'),
-    
   body('*.categoryName')
     .optional()
     .isLength({ min: 1, max: 100 })
     .escape()
     .withMessage('Category name required'),
-    
   body('*.subcategoryName')
     .optional()
     .isLength({ max: 100 })
     .escape()
     .withMessage('Subcategory name too long')
 ];
-
 // Parameter validation for routes
 const validateObjectId = [
   param('id')
     .isMongoId()
     .withMessage('Invalid ID format')
 ];
-
 const validateRegionParam = [
   query('region')
     .optional()
@@ -148,29 +128,24 @@ const validateRegionParam = [
     .escape()
     .withMessage('Invalid region parameter')
 ];
-
 const validatePaginationParams = [
   query('page')
     .optional()
     .isInt({ min: 1, max: 1000 })
     .withMessage('Page must be a positive integer (max 1000)'),
-    
   query('limit')
     .optional()
     .isInt({ min: 1, max: 100 })
     .withMessage('Limit must be between 1 and 100'),
-    
   query('orderBy')
     .optional()
     .matches(/^[a-zA-Z_]+$/)
     .withMessage('Invalid orderBy field'),
-    
   query('order')
     .optional()
     .isIn(['asc', 'desc'])
     .withMessage('Order must be asc or desc')
 ];
-
 // Error handler for validation
 const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
@@ -186,13 +161,11 @@ const handleValidationErrors = (req, res, next) => {
   }
   next();
 };
-
 // Advanced sanitization for specific data types
 const sanitizeMongoQuery = (query) => {
   if (typeof query !== 'object' || query === null) {
     return query;
   }
-  
   const sanitized = {};
   for (const key in query) {
     if (query.hasOwnProperty(key)) {
@@ -200,7 +173,6 @@ const sanitizeMongoQuery = (query) => {
       if (key.startsWith('$') || key.includes('.')) {
         continue;
       }
-      
       if (typeof query[key] === 'object' && query[key] !== null) {
         sanitized[key] = sanitizeMongoQuery(query[key]);
       } else if (typeof query[key] === 'string') {
@@ -213,7 +185,6 @@ const sanitizeMongoQuery = (query) => {
   }
   return sanitized;
 };
-
 // Rate limiting validation
 const validateRateLimit = (req, res, next) => {
   // Track request frequency per user
@@ -224,7 +195,6 @@ const validateRateLimit = (req, res, next) => {
   }
   next();
 };
-
 module.exports = {
   sanitizeInput,
   validateMooeData,
@@ -237,4 +207,4 @@ module.exports = {
   handleValidationErrors,
   sanitizeMongoQuery,
   validateRateLimit
-};
+};

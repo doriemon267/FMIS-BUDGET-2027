@@ -2,17 +2,14 @@ const express = require("express");
 const multer = require("multer");
 const xlsx = require("xlsx");
 const PositionTitle = require("../../models/PositionTitle"); // Make sure your PositionTitle model exists
-
 const router = express.Router();
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
-
 router.post("/uploadpositiontitles", upload.single("file"), async (req, res) => {
   try {
     const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
     const sheetData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
-
     for (let record of sheetData) {
       if (record._id) {
         const existing = await PositionTitle.findById(record._id);
@@ -25,12 +22,10 @@ router.post("/uploadpositiontitles", upload.single("file"), async (req, res) => 
         await PositionTitle.create(record);
       }
     }
-
     res.json({ message: "Position Titles file processed successfully!" });
   } catch (error) {
     console.error("Error processing position titles file:", error);
     res.status(500).json({ error: "Error uploading file" });
   }
 });
-
-module.exports = router;
+module.exports = router;

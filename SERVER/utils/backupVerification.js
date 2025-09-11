@@ -3,16 +3,12 @@ const path = require('path');
 const { exec } = require('child_process');
 const zlib = require('zlib');
 const { promisify } = require('util');
-
 const execAsync = promisify(exec);
-
 /**
  * Verify backup file integrity
  */
 const verifyBackupIntegrity = async (filePath) => {
   try {
-    console.log(`🔍 Verifying backup integrity: ${filePath}`);
-    
     const verification = {
       fileExists: false,
       fileSize: 0,
@@ -23,23 +19,19 @@ const verifyBackupIntegrity = async (filePath) => {
       verificationTime: new Date(),
       errors: []
     };
-
     // Check if file exists
     if (!fs.existsSync(filePath)) {
       verification.errors.push('Backup file does not exist');
       return verification;
     }
     verification.fileExists = true;
-
     // Get file stats
     const stats = fs.statSync(filePath);
     verification.fileSize = stats.size;
-
     if (verification.fileSize === 0) {
       verification.errors.push('Backup file is empty');
       return verification;
     }
-
     // Verify gzip integrity
     try {
       const buffer = fs.readFileSync(filePath);
@@ -49,7 +41,6 @@ const verifyBackupIntegrity = async (filePath) => {
       verification.errors.push(`Invalid gzip format: ${error.message}`);
       verification.isValidGzip = false;
     }
-
     // Try to extract and analyze backup content
     if (verification.isValidGzip) {
       try {
@@ -57,20 +48,16 @@ const verifyBackupIntegrity = async (filePath) => {
         if (!fs.existsSync(tempDir)) {
           fs.mkdirSync(tempDir, { recursive: true });
         }
-
         // Extract backup to temporary directory for analysis
         const { stdout, stderr } = await execAsync(`mongorestore --gzip --archive="${filePath}" --dryRun --verbose`);
-        
         if (stderr && !stderr.includes('done')) {
           verification.errors.push(`Mongorestore verification failed: ${stderr}`);
         } else {
           verification.canExtract = true;
-          
           // Parse mongorestore output to get collection info
           const lines = stdout.split('\n');
           const collections = [];
           let recordCount = 0;
-          
           for (const line of lines) {
             if (line.includes('collection') && line.includes('documents')) {
               const match = line.match(/(\w+)\.(\w+).*?(\d+)\s+document/);
@@ -85,25 +72,20 @@ const verifyBackupIntegrity = async (filePath) => {
               }
             }
           }
-          
           verification.collections = collections;
           verification.estimatedRecords = recordCount;
         }
-
         // Cleanup temp directory
         if (fs.existsSync(tempDir)) {
           fs.rmSync(tempDir, { recursive: true, force: true });
         }
-
       } catch (error) {
         verification.errors.push(`Extraction test failed: ${error.message}`);
         verification.canExtract = false;
       }
     }
-
-    console.log(`✅ Backup verification completed for ${path.basename(filePath)}`);
+    }`);
     return verification;
-
   } catch (error) {
     console.error('❌ Backup verification failed:', error);
     return {
@@ -118,19 +100,16 @@ const verifyBackupIntegrity = async (filePath) => {
     };
   }
 };
-
 /**
  * Compare two backups
  */
 const compareBackups = async (backup1Path, backup2Path) => {
   try {
-    console.log(`🔄 Comparing backups: ${path.basename(backup1Path)} vs ${path.basename(backup2Path)}`);
-    
+    } vs ${path.basename(backup2Path)}`);
     const [verification1, verification2] = await Promise.all([
       verifyBackupIntegrity(backup1Path),
       verifyBackupIntegrity(backup2Path)
     ]);
-
     const comparison = {
       backup1: {
         path: backup1Path,
@@ -149,20 +128,16 @@ const compareBackups = async (backup1Path, backup2Path) => {
       },
       comparisonTime: new Date()
     };
-
     // Compare collections
     const collections1 = verification1.collections.map(c => `${c.database}.${c.collection}`);
     const collections2 = verification2.collections.map(c => `${c.database}.${c.collection}`);
-
     comparison.differences.collectionsOnlyIn1 = collections1.filter(c => !collections2.includes(c));
     comparison.differences.collectionsOnlyIn2 = collections2.filter(c => !collections1.includes(c));
-
     // Compare collection document counts
     for (const col1 of verification1.collections) {
       const col2 = verification2.collections.find(c => 
         c.database === col1.database && c.collection === col1.collection
       );
-      
       if (col2 && col1.documentCount !== col2.documentCount) {
         comparison.differences.collectionDifferences.push({
           collection: `${col1.database}.${col1.collection}`,
@@ -172,10 +147,7 @@ const compareBackups = async (backup1Path, backup2Path) => {
         });
       }
     }
-
-    console.log(`✅ Backup comparison completed`);
     return comparison;
-
   } catch (error) {
     console.error('❌ Backup comparison failed:', error);
     return {
@@ -184,7 +156,6 @@ const compareBackups = async (backup1Path, backup2Path) => {
     };
   }
 };
-
 /**
  * Generate backup report
  */
@@ -192,7 +163,6 @@ const generateBackupReport = async (backupPath) => {
   try {
     const verification = await verifyBackupIntegrity(backupPath);
     const fileName = path.basename(backupPath);
-    
     const report = {
       fileName,
       filePath: backupPath,
@@ -207,28 +177,22 @@ const generateBackupReport = async (backupPath) => {
       },
       generatedAt: new Date()
     };
-
     // Generate recommendations
     if (verification.fileSize === 0) {
       report.summary.recommendations.push('Backup file is empty - recreation recommended');
     } else if (verification.fileSize < 1024) {
       report.summary.recommendations.push('Backup file is unusually small - verify completeness');
     }
-
     if (!verification.isValidGzip) {
       report.summary.recommendations.push('File is corrupted - recreation required');
     }
-
     if (!verification.canExtract) {
       report.summary.recommendations.push('Backup cannot be restored - recreation recommended');
     }
-
     if (verification.estimatedRecords === 0) {
       report.summary.recommendations.push('No data found in backup - verify database content');
     }
-
     return report;
-
   } catch (error) {
     return {
       fileName: path.basename(backupPath),
@@ -242,7 +206,6 @@ const generateBackupReport = async (backupPath) => {
     };
   }
 };
-
 /**
  * Format bytes to human readable format
  */
@@ -253,25 +216,19 @@ const formatBytes = (bytes) => {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
 };
-
 /**
  * Batch verify multiple backups
  */
 const batchVerifyBackups = async (backupPaths) => {
-  console.log(`🔍 Starting batch verification of ${backupPaths.length} backups...`);
-  
   const results = [];
   let healthyCount = 0;
   let corruptedCount = 0;
-
   for (let i = 0; i < backupPaths.length; i++) {
     const backupPath = backupPaths[i];
-    console.log(`Verifying ${i + 1}/${backupPaths.length}: ${path.basename(backupPath)}`);
-    
+    }`);
     try {
       const report = await generateBackupReport(backupPath);
       results.push(report);
-      
       if (report.summary.status === 'HEALTHY') {
         healthyCount++;
       } else {
@@ -287,9 +244,6 @@ const batchVerifyBackups = async (backupPaths) => {
       corruptedCount++;
     }
   }
-
-  console.log(`✅ Batch verification completed: ${healthyCount} healthy, ${corruptedCount} with issues`);
-  
   return {
     totalBackups: backupPaths.length,
     healthyBackups: healthyCount,
@@ -298,7 +252,6 @@ const batchVerifyBackups = async (backupPaths) => {
     completedAt: new Date()
   };
 };
-
 module.exports = {
   verifyBackupIntegrity,
   compareBackups,

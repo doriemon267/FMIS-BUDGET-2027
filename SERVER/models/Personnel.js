@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-
 const PersonnelSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -14,5 +13,4 @@ const PersonnelSchema = new mongoose.Schema({
     required: true,
   },
 });
-
 module.exports = mongoose.model("Personnel", PersonnelSchema);

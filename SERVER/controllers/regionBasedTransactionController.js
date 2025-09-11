@@ -5,12 +5,10 @@
  * for transactional operations. Users can only perform transactions in regions
  * they are explicitly assigned to through the UserOrganizationalAssignment system.
  */
-
 const { regionBasedAccessControl, getUserAccessibleRegions } = require('../middleware/regionBasedAccessControl');
 const UserOrganizationalAssignment = require('../models/UserOrganizationalAssignment');
 const Region = require('../models/Region');
 const { hasFullAccess } = require('../middleware/securityMiddleware');
-
 /**
  * Get user's accessible regions
  * This endpoint returns the regions a user can transact in
@@ -20,13 +18,10 @@ const getUserRegionAccess = async (req, res) => {
     const userId = req.user.id;
     const userRoles = req.user.Roles;
     const userName = req.user.username || req.user.name;
-
-    console.log(`🔍 Getting region access for user: ${userName} (${userId})`);
-
+    `);
     // Check if user has full access
     if (hasFullAccess(userRoles)) {
       const allRegions = await Region.find({}).select('Region RegionCode _id').lean();
-      
       return res.status(200).json({
         success: true,
         accessType: 'FULL_ACCESS',
@@ -40,10 +35,8 @@ const getUserRegionAccess = async (req, res) => {
         }
       });
     }
-
     // Get user's specific organizational assignments
     const assignment = await UserOrganizationalAssignment.getUserPermissions(userId);
-    
     if (!assignment || !assignment.regions || assignment.regions.length === 0) {
       return res.status(200).json({
         success: true,
@@ -62,15 +55,12 @@ const getUserRegionAccess = async (req, res) => {
         ]
       });
     }
-
     // Populate region details
     const populatedAssignment = await UserOrganizationalAssignment
       .findById(assignment._id)
       .populate('regions', 'Region RegionCode _id')
       .lean();
-
     const accessibleRegions = populatedAssignment?.regions || [];
-
     return res.status(200).json({
       success: true,
       accessType: 'REGION_BASED',
@@ -85,7 +75,6 @@ const getUserRegionAccess = async (req, res) => {
         roles: userRoles
       }
     });
-
   } catch (error) {
     console.error('🚨 Error getting user region access:', error);
     return res.status(500).json({
@@ -95,7 +84,6 @@ const getUserRegionAccess = async (req, res) => {
     });
   }
 };
-
 /**
  * Validate region access for a transaction
  * This endpoint checks if a user can perform a specific operation in a region
@@ -105,7 +93,6 @@ const validateRegionTransaction = async (req, res) => {
     const userId = req.user.id;
     const userRoles = req.user.Roles;
     const { region, operation = 'read' } = req.body;
-
     if (!region) {
       return res.status(400).json({
         success: false,
@@ -113,9 +100,6 @@ const validateRegionTransaction = async (req, res) => {
         code: 'REGION_REQUIRED'
       });
     }
-
-    console.log(`🔍 Validating ${operation} access for user ${userId} in region: ${region}`);
-
     // Check if user has full access
     if (hasFullAccess(userRoles)) {
       return res.status(200).json({
@@ -127,10 +111,8 @@ const validateRegionTransaction = async (req, res) => {
         accessType: 'FULL_ACCESS'
       });
     }
-
     // Get user's assignments and check region access
     const assignment = await UserOrganizationalAssignment.getUserPermissions(userId);
-    
     // Check region access
     const hasRegionAccess = assignment.regions?.some(assignedRegion => {
       if (typeof assignedRegion === 'string') {
@@ -138,10 +120,8 @@ const validateRegionTransaction = async (req, res) => {
       }
       return assignedRegion.Region === region || assignedRegion._id?.toString() === region;
     }) || false;
-
     if (!hasRegionAccess) {
       const allowedRegions = assignment.regions?.map(r => r.Region || r) || [];
-      
       return res.status(403).json({
         success: false,
         accessGranted: false,
@@ -152,11 +132,9 @@ const validateRegionTransaction = async (req, res) => {
         code: 'REGION_ACCESS_DENIED'
       });
     }
-
     // Check operation permissions
     const permissions = assignment.rolePermissions || {};
     let canPerformOperation = true;
-
     switch (operation) {
       case 'create':
         canPerformOperation = permissions.canCreateProposals !== false;
@@ -168,7 +146,6 @@ const validateRegionTransaction = async (req, res) => {
         canPerformOperation = permissions.canDeleteProposals === true;
         break;
     }
-
     if (!canPerformOperation) {
       return res.status(403).json({
         success: false,
@@ -180,7 +157,6 @@ const validateRegionTransaction = async (req, res) => {
         rolePermissions: permissions
       });
     }
-
     return res.status(200).json({
       success: true,
       accessGranted: true,
@@ -190,7 +166,6 @@ const validateRegionTransaction = async (req, res) => {
       accessType: 'REGION_BASED',
       permissions
     });
-
   } catch (error) {
     console.error('🚨 Error validating region transaction:', error);
     return res.status(500).json({
@@ -200,7 +175,6 @@ const validateRegionTransaction = async (req, res) => {
     });
   }
 };
-
 /**
  * Example of a protected transactional endpoint
  * This shows how to implement region-based access control in actual business logic
@@ -209,16 +183,11 @@ const createRegionBasedTransaction = async (req, res) => {
   try {
     const userId = req.user.id;
     const { region, transactionData, transactionType } = req.body;
-
     // The regionBasedAccessControl middleware has already validated:
     // 1. User has access to the specified region
     // 2. User has permission to create transactions
     // 3. Region is properly validated and stored in req.validatedRegion
-
     const validatedRegion = req.validatedRegion || region;
-
-    console.log(`💼 Creating ${transactionType} transaction for user ${userId} in region: ${validatedRegion}`);
-
     // Simulate transaction creation with region enforcement
     const transaction = {
       id: `txn_${Date.now()}`,
@@ -229,17 +198,14 @@ const createRegionBasedTransaction = async (req, res) => {
       data: transactionData,
       status: 'PENDING'
     };
-
     // In a real implementation, this would save to your database
     // const savedTransaction = await YourTransactionModel.create(transaction);
-
     return res.status(201).json({
       success: true,
       message: 'Transaction created successfully',
       transaction,
       regionAccess: req.userRegionAccess
     });
-
   } catch (error) {
     console.error('🚨 Error creating region-based transaction:', error);
     return res.status(500).json({
@@ -249,7 +215,6 @@ const createRegionBasedTransaction = async (req, res) => {
     });
   }
 };
-
 /**
  * Get transactions with automatic region filtering
  * This shows how read operations are automatically filtered by user's region access
@@ -258,39 +223,30 @@ const getRegionFilteredTransactions = async (req, res) => {
   try {
     const userId = req.user.id;
     const requestedRegion = req.query.region;
-
     // The regionBasedAccessControl middleware has already:
     // 1. Applied appropriate region filters in req.regionFilters
     // 2. Set accessible regions in req.accessibleRegions
-
     const regionFilters = req.regionFilters || {};
     const accessibleRegions = req.accessibleRegions || [];
-
-    console.log(`📋 Getting transactions for user ${userId} with filters:`, regionFilters);
-
     // Simulate database query with region filters
     const mockTransactions = [
       { id: 1, region: 'NCR', type: 'PROPOSAL', amount: 100000 },
       { id: 2, region: 'REGION_IV', type: 'BUDGET', amount: 200000 },
       { id: 3, region: 'REGION_VII', type: 'PROPOSAL', amount: 150000 }
     ];
-
     // Apply region filters (in real implementation, this would be done in the database)
     let filteredTransactions = mockTransactions;
-    
     if (regionFilters.region && regionFilters.region.$in) {
       filteredTransactions = mockTransactions.filter(txn => 
         regionFilters.region.$in.includes(txn.region)
       );
     }
-
     // If a specific region was requested, further filter
     if (requestedRegion) {
       filteredTransactions = filteredTransactions.filter(txn => 
         txn.region === requestedRegion
       );
     }
-
     return res.status(200).json({
       success: true,
       message: 'Transactions retrieved successfully',
@@ -300,7 +256,6 @@ const getRegionFilteredTransactions = async (req, res) => {
       accessibleRegions: accessibleRegions,
       requestedRegion: requestedRegion || 'ALL'
     });
-
   } catch (error) {
     console.error('🚨 Error getting region-filtered transactions:', error);
     return res.status(500).json({
@@ -310,7 +265,6 @@ const getRegionFilteredTransactions = async (req, res) => {
     });
   }
 };
-
 /**
  * Bulk assign regions to a user (Admin only)
  * This endpoint allows administrators to assign regions to users
@@ -319,7 +273,6 @@ const assignUserRegions = async (req, res) => {
   try {
     const { targetUserId, regions, accessScope = 'REGION', rolePermissions = {} } = req.body;
     const adminUserId = req.user.id;
-
     if (!targetUserId) {
       return res.status(400).json({
         success: false,
@@ -327,7 +280,6 @@ const assignUserRegions = async (req, res) => {
         code: 'USER_ID_REQUIRED'
       });
     }
-
     if (!regions || !Array.isArray(regions) || regions.length === 0) {
       return res.status(400).json({
         success: false,
@@ -335,9 +287,6 @@ const assignUserRegions = async (req, res) => {
         code: 'REGIONS_REQUIRED'
       });
     }
-
-    console.log(`👨‍💼 Admin ${adminUserId} assigning regions to user ${targetUserId}:`, regions);
-
     // Validate that all specified regions exist
     const validRegions = await Region.find({ 
       $or: [
@@ -345,7 +294,6 @@ const assignUserRegions = async (req, res) => {
         { Region: { $in: regions } }
       ]
     }).lean();
-
     if (validRegions.length !== regions.length) {
       return res.status(400).json({
         success: false,
@@ -354,12 +302,9 @@ const assignUserRegions = async (req, res) => {
         code: 'INVALID_REGIONS'
       });
     }
-
     // Create or update user organizational assignment
     const regionIds = validRegions.map(r => r._id);
-    
     let assignment = await UserOrganizationalAssignment.findOne({ userId: targetUserId });
-    
     if (assignment) {
       assignment.regions = regionIds;
       assignment.accessScope = accessScope;
@@ -390,13 +335,11 @@ const assignUserRegions = async (req, res) => {
         lastModifiedBy: adminUserId
       });
     }
-
     // Populate the result
     const populatedAssignment = await UserOrganizationalAssignment
       .findById(assignment._id)
       .populate('regions', 'Region RegionCode _id')
       .lean();
-
     return res.status(200).json({
       success: true,
       message: 'User region assignment updated successfully',
@@ -404,7 +347,6 @@ const assignUserRegions = async (req, res) => {
       assignedRegions: populatedAssignment.regions,
       totalRegions: populatedAssignment.regions.length
     });
-
   } catch (error) {
     console.error('🚨 Error assigning user regions:', error);
     return res.status(500).json({
@@ -414,11 +356,10 @@ const assignUserRegions = async (req, res) => {
     });
   }
 };
-
 module.exports = {
   getUserRegionAccess,
   validateRegionTransaction,
   createRegionBasedTransaction,
   getRegionFilteredTransactions,
   assignUserRegions
-};
+};

@@ -10,7 +10,6 @@ const {
   textFilter,
   booleanFilter,
 } = require("../utils/controller_get_process");
-
 exports.createSettings = async (req, res) => {
   try {
     const { fiscalYear, budgetType, isActive } = req.body;
@@ -21,18 +20,15 @@ exports.createSettings = async (req, res) => {
         .status(400)
         .json({ field: "fiscalYear", message: "Settings for this fiscal year and budget type already exist." });
     }
-
     if (isActive) {
       await Settings.updateMany({}, { isActive: false });
     }
-
     // Ensure default values for medical and meal allowances if not provided
     const settingsData = {
       ...req.body,
       medicalAllowance: req.body.medicalAllowance !== undefined ? req.body.medicalAllowance : 200,
       meal: req.body.meal !== undefined ? req.body.meal : 200
     };
-
     const newSettings = new Settings(settingsData);
     await newSettings.save();
     res.status(201).json(newSettings);
@@ -41,7 +37,6 @@ exports.createSettings = async (req, res) => {
     res.status(500).json({ message: "Server error", error });
   }
 };
-
 exports.getAllSettings = async (req, res) => {
   try {
     const {
@@ -53,29 +48,22 @@ exports.getAllSettings = async (req, res) => {
       operator,
       ...filters
     } = req.query;
-
     let query = {};
-
     if (search && search.split("-").length !== 3) {
       query.$or = [{ fiscalYear: { $regex: search, $options: "i" } }];
     }
-
     numberFilter(query, filters, operator);
     booleanFilter(query, { isActive: filters.isActive });
     dateFilter(query, { createdAt: filters.createdAt });
-
     const sortQuery = {
       [orderBy || "createdAt"]: order.toLowerCase() === "desc" ? -1 : 1,
     };
-
     const skip = (Number(page) - 1) * Number(limit);
     const settings = await Settings.find(query)
       .skip(skip)
       .limit(Number(limit))
       .sort(sortQuery);
-
     const totalRecords = await Settings.countDocuments(query);
-
     return res.json({
       settings,
       totalPages: Math.ceil(totalRecords / limit),
@@ -87,7 +75,6 @@ exports.getAllSettings = async (req, res) => {
     return res.status(500).json({ message: "Server error", error });
   }
 };
-
 exports.getActiveSettings = async (req, res) => {
   try {
     const activeSettings = await Settings.findOne({ isActive: true });
@@ -100,7 +87,6 @@ exports.getActiveSettings = async (req, res) => {
     res.status(500).json({ message: "Server error", error });
   }
 };
-
 exports.updateSettings = async (req, res) => {
   try {
     const { id } = req.params;
@@ -114,13 +100,11 @@ exports.updateSettings = async (req, res) => {
       medicalAllowance,
       ...otherSettings
     } = req.body;
-
     // Check if settings exist without using a session
     const existing = await Settings.findById(id);
     if (!existing) {
       return res.status(404).json({ message: "Settings not found." });
     }
-
     if (
       (fiscalYear !== undefined && fiscalYear !== existing.fiscalYear) ||
       (budgetType !== undefined && budgetType !== existing.budgetType)
@@ -135,12 +119,10 @@ exports.updateSettings = async (req, res) => {
           .json({ field: "fiscalYear", message: "Settings for this fiscal year and budget type already exist." });
       }
     }
-
     // If isActive is being set to true, set all others to false
     if (isActive === true && existing.isActive === false) {
       await Settings.updateMany({}, { $set: { isActive: false } });
     }
-
     const toUpdate = {};
     if (fiscalYear !== undefined) toUpdate.fiscalYear = fiscalYear;
     if (startDate !== undefined) toUpdate.startDate = new Date(startDate);
@@ -151,56 +133,34 @@ exports.updateSettings = async (req, res) => {
     for (const [k, v] of Object.entries(otherSettings)) {
       if (v !== undefined) toUpdate[k] = v;
     }
-
     const updatedSettings = await Settings.findByIdAndUpdate(
       id,
       { $set: toUpdate },
       { new: true, runValidators: true }
     );
-
     const mealChanged = meal !== undefined && meal !== existing.meal;
     const medicalChanged =
       medicalAllowance !== undefined &&
       medicalAllowance !== existing.medicalAllowance;
-
-    console.log("Meal changed:", mealChanged, "from", existing.meal, "to", meal);
-    console.log(
-      "Medical changed:",
-      medicalChanged,
-      "from",
-      existing.medicalAllowance,
-      "to",
-      medicalAllowance
-    );
-
     let mealAllowancesUpdated = false;
     if (mealChanged || medicalChanged) {
-      console.log(
-        "Updating personnel services and meal allowances for fiscal year:",
-        updatedSettings.fiscalYear
-      );
-
       // Find employees with MealAllowance records and hired before June 1988
       const mealAllowanceEmployees = await MealAllowance.find({
         fiscalYear: updatedSettings.fiscalYear,
       }).select("employeeNumber actualDays");
-
       const employeeNumbers = mealAllowanceEmployees.map((ma) => ma.employeeNumber);
-
       // Filter PersonnelServices for employees with MealAllowance and hired before June 1988
       const personnelToUpdate = await PersonnelServices.find({
         fiscalYear: updatedSettings.fiscalYear,
         employeeNumber: { $in: employeeNumbers },
         DateOfAppointment: { $lt: new Date("1988-06-01") },
       });
-
       // Update PersonnelServices.meal based on corresponding MealAllowance.actualDays
       for (const personnel of personnelToUpdate) {
         const mealAllowance = await MealAllowance.findOne({
           fiscalYear: updatedSettings.fiscalYear,
           employeeNumber: personnel.employeeNumber,
         });
-
         if (mealAllowance) {
           const updatedMonthlyAmount = mealAllowance.actualDays * meal;
           const updatedAnnualAmount = updatedMonthlyAmount * 12; // Calculate annual amount
@@ -210,7 +170,6 @@ exports.updateSettings = async (req, res) => {
           );
         }
       }
-
       // Only update meal allowances for employees who already have a meal allowance record
       await MealAllowance.updateMany(
         {
@@ -227,7 +186,6 @@ exports.updateSettings = async (req, res) => {
       );
       mealAllowancesUpdated = true;
     }
-
     return res.status(200).json({
       ...updatedSettings.toObject(),
       _debug: {
@@ -242,7 +200,6 @@ exports.updateSettings = async (req, res) => {
     return res.status(500).json({ message: "Server error", error });
   }
 };
-
 exports.deleteSettings = async (req, res) => {
   try {
     const { id } = req.params;
@@ -253,7 +210,6 @@ exports.deleteSettings = async (req, res) => {
     res.status(500).json({ message: "Server error", error });
   }
 };
-
 exports.setActiveFiscalYear = async (req, res) => {
   try {
     const { id } = req.params;
@@ -273,7 +229,6 @@ exports.setActiveFiscalYear = async (req, res) => {
     res.status(500).json({ message: "Server error", error });
   }
 };
-
 exports.getAdvancedSettings = async (req, res) => {
   try {
     const { fiscalYear } = req.params;
@@ -310,13 +265,11 @@ exports.getAdvancedSettings = async (req, res) => {
     res.status(500).json({ message: "Server error", error });
   }
 };
-
 exports.updateAdvancedSettings = async (req, res) => {
   try {
     const { fiscalYear } = req.params;
     const { budgetType } = req.query;
     const updateData = req.body;
-
     // Enforce 5% for 2025 per PhilHealth Circular 2019-0009
     if (fiscalYear === "2025" && updateData.philhealthPremium !== undefined) {
       if (updateData.philhealthPremium !== 0.05) {
@@ -325,10 +278,8 @@ exports.updateAdvancedSettings = async (req, res) => {
         });
       }
     }
-
     const filter = { fiscalYear };
     if (budgetType) filter.budgetType = budgetType;
-
     const settings = await Settings.findOneAndUpdate(
       filter,
       updateData,
@@ -339,7 +290,6 @@ exports.updateAdvancedSettings = async (req, res) => {
         .status(404)
         .json({ message: "Settings not found for this fiscal year." });
     }
-
     // Recalculate philhealthPremium for all PersonnelServices
     if (updateData.philhealthPremium !== undefined) {
       const personnelServices = await PersonnelServices.find({ fiscalYear });
@@ -354,7 +304,6 @@ exports.updateAdvancedSettings = async (req, res) => {
           monthlyPhilhealthPremium = monthlySalary * 0.05; // 5% rate for 2025
         }
         const newPhilhealthPremium = (monthlyPhilhealthPremium * 12) / 2;
-
         const numericFields = [
           "annualSalary",
           "RATA",
@@ -390,7 +339,6 @@ exports.updateAdvancedSettings = async (req, res) => {
         await personnel.save();
       }
     }
-
     res.status(200).json({
       message: "Advanced settings updated successfully.",
       settings,
@@ -399,4 +347,4 @@ exports.updateAdvancedSettings = async (req, res) => {
     console.error("Error updating advanced settings:", error.stack);
     res.status(500).json({ message: "Server error", error });
   }
-};
+};

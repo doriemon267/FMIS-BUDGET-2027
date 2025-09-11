@@ -1,19 +1,14 @@
 // Test MOOE API endpoint
 const express = require('express');
 const cors = require('cors');
-
 const app = express();
 const PORT = 5006; // Use different port to avoid conflicts
-
 // Middleware
 app.use(cors());
 app.use(express.json());
-
 // Test MOOE endpoint with hardcoded data
 app.get('/mooe-data', (req, res) => {
-  // console.log('🔧 Test MOOE endpoint called');
-  
-  try {
+  // try {
     // Hardcoded Chart of Accounts for MOOE
     const chartOfAccounts = [
       {
@@ -92,7 +87,6 @@ app.get('/mooe-data', (req, res) => {
         uacsCode: "5-02-99-990"
       }
     ];
-    
     // Create entries array
     const entries = chartOfAccounts.map(row => ({
       id: null,
@@ -103,7 +97,6 @@ app.get('/mooe-data', (req, res) => {
       subsidy: "0",
       amount: "0"
     }));
-    
     const response = {
       entries,
       status: "Draft",
@@ -112,22 +105,12 @@ app.get('/mooe-data', (req, res) => {
         budgetType: "Initial"
       }
     };
-    
-    // console.log('📤 Sending test response:');
-    // console.log('- Entries count:', response.entries.length);
-    // console.log('- Status:', response.status);
-    // console.log('- Settings:', response.settings);
-    
-    res.status(200).json(response);
-    
+    // // // // res.status(200).json(response);
   } catch (error) {
     console.error('❌ Error in test endpoint:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-
 // Start server
 app.listen(PORT, () => {
-  console.log(`🚀 Test MOOE server running at http://localhost:${PORT}`);
-  console.log('📋 Test endpoint: http://localhost:' + PORT + '/mooe-data');
-});
+  });

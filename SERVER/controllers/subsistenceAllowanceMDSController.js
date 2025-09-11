@@ -1,9 +1,7 @@
 // controllers/subsistenceAllowanceMDSController.js
-
 const SubsistenceAllowanceMDS = require("../models/subsistenceAllowanceMDS");
 const Settings = require("../models/Settings");
 const PersonnelServices = require("../models/PersonnelServices");
-
 /**
  * Create a new Subsistence Allowance MDS record,
  * then immediately update the corresponding PersonnelServices entry.
@@ -22,22 +20,18 @@ exports.createSubsistenceAllowance = async (req, res) => {
       fiscalYear, // optional
       budgetType, // optional
     } = req.body;
-
     // 1) Get active settings (or by fiscalYear if provided)
     const settings = fiscalYear
       ? await Settings.findOne({ fiscalYear, isActive: true }).lean()
       : await Settings.findOne({ isActive: true }).lean();
-
     if (!settings?.subsistenceAllowanceRate) {
       return res.status(404).json({
         message:
           "Walang active settings na may subsistence allowance rate para sa fiscal year na ito.",
       });
     }
-
     const amount = settings.subsistenceAllowanceRate;
     const usedFiscalYear = fiscalYear || settings.fiscalYear;
-
     // 2) Save new SubsistenceAllowanceMDS record
     const record = new SubsistenceAllowanceMDS({
       employeeNumber,
@@ -53,7 +47,6 @@ exports.createSubsistenceAllowance = async (req, res) => {
       budgetType: budgetType || settings.budgetType,
     });
     await record.save();
-
     // 3) Sync to PersonnelServices
     const personnel = await PersonnelServices.findOne({
       employeeNumber,
@@ -64,8 +57,6 @@ exports.createSubsistenceAllowance = async (req, res) => {
       personnel.subsistenceAllowanceMDS = amount;
       await personnel.save();
     }
-    
-
     return res.status(201).json({
       message:
         "Subsistence Allowance record saved and PersonnelServices updated.",
@@ -76,7 +67,6 @@ exports.createSubsistenceAllowance = async (req, res) => {
     return res.status(500).json({ message: "Server error", error: error.message });
   }
 };
-
 /**
  * Fetch paginated SubsistenceAllowanceMDS records.
  */
@@ -85,7 +75,6 @@ exports.getAllSubsistenceAllowances = async (req, res) => {
     const { fiscalYear, page = 1, limit = 10, search, orderBy, order = "asc" } =
       req.query;
     let query = {};
-
     if (search) {
       query.$or = [
         { employeeFullName: { $regex: search, $options: "i" } },
@@ -95,7 +84,6 @@ exports.getAllSubsistenceAllowances = async (req, res) => {
         { region:           { $regex: search, $options: "i" } },
       ];
     }
-
     // Determine fiscalYear
     let fy = fiscalYear;
     if (!fy) {
@@ -104,16 +92,13 @@ exports.getAllSubsistenceAllowances = async (req, res) => {
       fy = active.fiscalYear;
     }
     query.fiscalYear = fy;
-
     // Pagination & sorting
     const skip = (page - 1) * limit;
     const sort = { [orderBy || "createdAt"]: order === "desc" ? -1 : 1 };
-
     const [records, total] = await Promise.all([
       SubsistenceAllowanceMDS.find(query).lean().skip(skip).limit(+limit).sort(sort),
       SubsistenceAllowanceMDS.countDocuments(query),
     ]);
-
     return res.status(200).json({
       data: records,
       totalPages: Math.ceil(total / limit),
@@ -125,7 +110,6 @@ exports.getAllSubsistenceAllowances = async (req, res) => {
     return res.status(500).json({ message: "Server error", error: error.message });
   }
 };
-
 /**
  * Update an existing SubsistenceAllowanceMDS record,
  * then sync the change to PersonnelServices.
@@ -145,7 +129,6 @@ exports.updateSubsistenceAllowance = async (req, res) => {
       fiscalYear,
       budgetType,
     } = req.body;
-
     // Get settings
     const settings = fiscalYear
       ? await Settings.findOne({ fiscalYear, isActive: true }).lean()
@@ -155,10 +138,8 @@ exports.updateSubsistenceAllowance = async (req, res) => {
         message: "Active settings with subsistence allowance rate not found.",
       });
     }
-
     const amount = settings.subsistenceAllowanceRate;
     const usedFiscalYear = fiscalYear || settings.fiscalYear;
-
     // Update record
     const updated = await SubsistenceAllowanceMDS.findByIdAndUpdate(
       id,
@@ -178,7 +159,6 @@ exports.updateSubsistenceAllowance = async (req, res) => {
       { new: true }
     );
     if (!updated) return res.status(404).json({ message: "Record not found." });
-
     // Sync to PersonnelServices
     const personnel = await PersonnelServices.findOne({
       employeeNumber,
@@ -189,15 +169,12 @@ exports.updateSubsistenceAllowance = async (req, res) => {
       personnel.subsistenceAllowanceMDS = amount;
       await personnel.save();
     }
-    
-
     return res.status(200).json(updated);
   } catch (error) {
     console.error("❌ Error in updateSubsistenceAllowance:", error);
     return res.status(500).json({ message: "Server error", error: error.message });
   }
 };
-
 /**
  * Delete a SubsistenceAllowanceMDS record,
  * then clear the corresponding field in PersonnelServices.
@@ -207,10 +184,8 @@ exports.deleteSubsistenceAllowance = async (req, res) => {
     const { id } = req.params;
     const toDelete = await SubsistenceAllowanceMDS.findById(id);
     if (!toDelete) return res.status(404).json({ message: "Record not found." });
-
     // Remove the record
     await SubsistenceAllowanceMDS.findByIdAndDelete(id);
-
     // Sync deletion to PersonnelServices
     const personnel = await PersonnelServices.findOne({
       employeeNumber: toDelete.employeeNumber,
@@ -224,14 +199,12 @@ exports.deleteSubsistenceAllowance = async (req, res) => {
       );
       await personnel.save();
     }
-
     return res.status(200).json({ message: "Deleted and synced successfully." });
   } catch (error) {
     console.error("❌ Error in deleteSubsistenceAllowance:", error);
     return res.status(500).json({ message: "Server error", error: error.message });
   }
 };
-
 /**
  * Get sum of all subsistence allowances for the active fiscal year.
  */
@@ -239,12 +212,10 @@ exports.getSumOfSubsistenceAllowance = async (req, res) => {
   try {
     const active = await Settings.findOne({ isActive: true }).lean();
     if (!active) return res.status(400).json({ message: "Active settings not found." });
-
     const result = await SubsistenceAllowanceMDS.aggregate([
       { $match: { fiscalYear: active.fiscalYear } },
       { $group: { _id: null, totalAmount: { $sum: "$Amount" } } },
     ]);
-
     const totalAmount = result[0]?.totalAmount || 0;
     return res.status(200).json({ totalAmount });
   } catch (error) {
@@ -252,7 +223,6 @@ exports.getSumOfSubsistenceAllowance = async (req, res) => {
     return res.status(500).json({ message: "Server error", error: error.message });
   }
 };
-
 exports.getAllPerServicesMDS = async (req, res) => {
   try {
     // Find the active fiscal year from settings
@@ -260,11 +230,9 @@ exports.getAllPerServicesMDS = async (req, res) => {
     if (!activeSettings) {
       return res.status(404).json({ error: "No active fiscal year found" });
     }
-
     const activeFiscalYear = activeSettings.fiscalYear;
     // Only include records with these statuses
     const statuses = ["Not Submitted", "Returned", "Drafts"];
-
     // Fetch personnel services for the active fiscal year and specified statuses
     // Also filter by MEDICAL AND DENTAL SERVICES division
     const personnelServices = await PersonnelServices.find({
@@ -272,22 +240,16 @@ exports.getAllPerServicesMDS = async (req, res) => {
       status: { $in: statuses },
       division: "MEDICAL AND DENTAL SERVICES"
     });
-
-    console.log(`Found ${personnelServices.length} personnel from MEDICAL AND DENTAL SERVICES division`);
     res.status(200).json(personnelServices);
   } catch (error) {
     console.error("Error fetching personnel services:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
-
 // New endpoint that supports filtering by parameters including region
 exports.getAllPerServicesMDSByParams = async (req, res) => {
   try {
     const { fiscalYear, budgetType, processBy, region, status } = req.query;
-    
-    console.log("Fetching MDS personnel with params:", { fiscalYear, budgetType, processBy, region, status });
-    
     // Find the active fiscal year from settings if not provided
     let activeFiscalYear = fiscalYear;
     if (!activeFiscalYear) {
@@ -297,35 +259,27 @@ exports.getAllPerServicesMDSByParams = async (req, res) => {
       }
       activeFiscalYear = activeSettings.fiscalYear;
     }
-    
     // Build query
     const query = { 
       fiscalYear: activeFiscalYear,
       // Always filter by MEDICAL AND DENTAL SERVICES division
       division: "MEDICAL AND DENTAL SERVICES"
     };
-    
     // Add filters if provided
     if (budgetType) query.budgetType = budgetType;
     if (processBy) query.processBy = processBy;
     if (region) query.region = region;
-    
     // Default status filter if not provided
     if (status) {
       query.status = status;
     } else {
       query.status = { $in: ["Not Submitted", "Returned", "Drafts"] };
     }
-    
-    console.log("Query for MDS personnel:", query);
-    
     // Fetch personnel services with the constructed query
     const personnelServices = await PersonnelServices.find(query).lean();
-    
-    console.log(`Found ${personnelServices.length} MDS personnel records from MEDICAL AND DENTAL SERVICES division`);
     res.status(200).json(personnelServices);
   } catch (error) {
     console.error("Error fetching MDS personnel by params:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
-};
+};

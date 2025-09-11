@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-
 const MealAllowanceSchema = mongoose.Schema(
   {
     employeeNumber: { type: String, required: true, trim: true },
@@ -33,10 +32,8 @@ const MealAllowanceSchema = mongoose.Schema(
     toObject: { virtuals: true }
   }
 );
-
 // Add index for better query performance
 MealAllowanceSchema.index({ employeeNumber: 1, fiscalYear: 1 });
 MealAllowanceSchema.index({ fiscalYear: 1 });
-
 // Check if the model already exists before creating it
-module.exports = mongoose.model("MealAllowance", MealAllowanceSchema);
+module.exports = mongoose.model("MealAllowance", MealAllowanceSchema);

@@ -1,6 +1,5 @@
 // models/Settings.js
 const mongoose = require("mongoose");
-
 const settingsSchema = new mongoose.Schema(
   {
     fiscalYear: { type: String, required: true },
@@ -25,7 +24,6 @@ const settingsSchema = new mongoose.Schema(
     retirementBenefits: { type: Number },
     terminalLeave: { type: Number },
     courtAppearance: { type: Number },
-
     weekdayMultiplier: { type: Number },
     weekendMultiplier: { type: Number},
 // -    RATA: [{ type: mongoose.Schema.Types.ObjectId, ref: "RATA" }],
@@ -44,7 +42,6 @@ const settingsSchema = new mongoose.Schema(
         lessThanEightDays: { type: Number },
       },
     },
-
     loyaltyPay: {
       baseYears: { type: Number}, // First 10 years
       baseAmount: { type: Number }, // ₱10,000
@@ -55,13 +52,10 @@ const settingsSchema = new mongoose.Schema(
         default: "06-22" // MM-DD format for June 22 cutoff
       },
     },
-
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true }
 );
-
 // Ensure compound unique index on (fiscalYear, budgetType)
 settingsSchema.index({ fiscalYear: 1, budgetType: 1 }, { unique: true });
-
-module.exports = mongoose.model("Settings", settingsSchema);
+module.exports = mongoose.model("Settings", settingsSchema);

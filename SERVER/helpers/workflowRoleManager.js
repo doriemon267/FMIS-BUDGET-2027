@@ -6,20 +6,16 @@
  * - Department Approvers: Can approve department submissions  
  * - Region Approvers: Can provide final approval
  */
-
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
-
 /**
  * Assign workflow roles to users based on their organizational level
  */
 const assignWorkflowRoles = async (userId, assignmentLevel, workflowRoles = []) => {
   try {
     const assignment = await HierarchicalUserAssignment.findOne({ userId, isActive: true });
-    
     if (!assignment) {
       throw new Error('User assignment not found');
     }
-
     // Auto-assign default workflow roles based on assignment level if none provided
     if (workflowRoles.length === 0) {
       switch (assignmentLevel) {
@@ -37,11 +33,9 @@ const assignWorkflowRoles = async (userId, assignmentLevel, workflowRoles = []) 
           break;
       }
     }
-
     // Update the assignment with workflow roles
     assignment.workflowRoles = workflowRoles;
     await assignment.save();
-
     return {
       success: true,
       message: 'Workflow roles assigned successfully',
@@ -49,7 +43,6 @@ const assignWorkflowRoles = async (userId, assignmentLevel, workflowRoles = []) 
       assignmentLevel,
       workflowRoles
     };
-
   } catch (error) {
     console.error('Error assigning workflow roles:', error);
     return {
@@ -59,25 +52,21 @@ const assignWorkflowRoles = async (userId, assignmentLevel, workflowRoles = []) 
     };
   }
 };
-
 /**
  * Check if user has specific workflow role
  */
 const hasWorkflowRole = async (userId, requiredRole) => {
   try {
     const assignment = await HierarchicalUserAssignment.findOne({ userId, isActive: true });
-    
     if (!assignment) {
       return false;
     }
-
     return assignment.workflowRoles && assignment.workflowRoles.includes(requiredRole);
   } catch (error) {
     console.error('Error checking workflow role:', error);
     return false;
   }
 };
-
 /**
  * Get users with specific workflow role in an organizational unit
  */
@@ -87,7 +76,6 @@ const getUsersWithWorkflowRole = async (role, organizationalFilter = {}) => {
       isActive: true,
       workflowRoles: role
     };
-
     // Add organizational filters
     if (organizationalFilter.regionId) {
       query.regionId = organizationalFilter.regionId;
@@ -98,11 +86,9 @@ const getUsersWithWorkflowRole = async (role, organizationalFilter = {}) => {
     if (organizationalFilter.divisionName) {
       query.divisionName = organizationalFilter.divisionName;
     }
-
     const users = await HierarchicalUserAssignment.find(query)
       .populate('regionId', 'regionName Region')
       .populate('departmentId', 'Department departmentName');
-
     return users.map(user => ({
       userId: user.userId,
       userName: user.userName,
@@ -113,31 +99,24 @@ const getUsersWithWorkflowRole = async (role, organizationalFilter = {}) => {
       department: user.departmentId?.Department || user.departmentId?.departmentName,
       division: user.divisionName
     }));
-
   } catch (error) {
     console.error('Error getting users with workflow role:', error);
     return [];
   }
 };
-
 /**
  * Setup default workflow role assignments for existing users
  */
 const setupDefaultWorkflowRoles = async () => {
   try {
-    console.log('🔄 Setting up default workflow roles...');
-
     const assignments = await HierarchicalUserAssignment.find({ isActive: true });
     let updatedCount = 0;
-
     for (const assignment of assignments) {
       // Skip if already has workflow roles
       if (assignment.workflowRoles && assignment.workflowRoles.length > 0) {
         continue;
       }
-
       let defaultRoles = [];
-      
       switch (assignment.assignmentLevel) {
         case 'DIVISION':
           defaultRoles = ['divisionCreator'];
@@ -156,24 +135,18 @@ const setupDefaultWorkflowRoles = async () => {
           ];
           break;
       }
-
       if (defaultRoles.length > 0) {
         assignment.workflowRoles = defaultRoles;
         await assignment.save();
         updatedCount++;
-        
-        console.log(`✅ Assigned workflow roles to ${assignment.userName} (${assignment.assignmentLevel}):`, defaultRoles);
+        :`, defaultRoles);
       }
     }
-
-    console.log(`🎉 Default workflow roles setup complete. Updated ${updatedCount} assignments.`);
-    
     return {
       success: true,
       message: `Default workflow roles assigned to ${updatedCount} users`,
       updatedCount
     };
-
   } catch (error) {
     console.error('Error setting up default workflow roles:', error);
     return {
@@ -183,7 +156,6 @@ const setupDefaultWorkflowRoles = async () => {
     };
   }
 };
-
 /**
  * Workflow role descriptions for admin interface
  */
@@ -196,7 +168,6 @@ const WORKFLOW_ROLE_DESCRIPTIONS = {
   'regionCreator': 'Can create and edit region-level data',
   'regionFinalVerifier': 'Can provide final approval for all submissions'
 };
-
 /**
  * Get workflow permissions for a user
  */
@@ -205,16 +176,13 @@ const getUserWorkflowPermissions = async (userId) => {
     const assignment = await HierarchicalUserAssignment.findOne({ userId, isActive: true })
       .populate('regionId', 'regionName Region')
       .populate('departmentId', 'Department departmentName');
-
     if (!assignment) {
       return {
         success: false,
         message: 'User assignment not found'
       };
     }
-
     const workflowRoles = assignment.workflowRoles || [];
-    
     return {
       success: true,
       userId,
@@ -236,7 +204,6 @@ const getUserWorkflowPermissions = async (userId) => {
         division: assignment.divisionName
       }
     };
-
   } catch (error) {
     console.error('Error getting user workflow permissions:', error);
     return {
@@ -246,7 +213,6 @@ const getUserWorkflowPermissions = async (userId) => {
     };
   }
 };
-
 module.exports = {
   assignWorkflowRoles,
   hasWorkflowRole,
@@ -254,4 +220,4 @@ module.exports = {
   setupDefaultWorkflowRoles,
   getUserWorkflowPermissions,
   WORKFLOW_ROLE_DESCRIPTIONS
-};
+};

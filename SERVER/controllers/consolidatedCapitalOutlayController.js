@@ -1,6 +1,5 @@
 const CapitalOutlay = require('../models/CapitalOutlay');
 const Region = require('../models/Region');
-
 const consolidatedCapitalOutlayController = {
   // Get consolidated Capital Outlay data for all or specific regions
   getConsolidatedCapitalOutlayData: async (req, res) => {
@@ -11,16 +10,13 @@ const consolidatedCapitalOutlayController = {
         const regionList = Array.isArray(regions) ? regions : [regions];
         regionFilter = { region: { $in: regionList } };
       }
-      
       // Apply sophisticated hierarchical filtering based on user access scope
       const accessScope = req.hierarchicalAccess?.scope;
       const accessibleRegionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
-
       // Add region filter based on access scope
       if (accessScope && accessScope !== 'FULL' && accessibleRegionName) {
         regionFilter.region = accessibleRegionName;
       }
-
       // Add finer filters based on access scope
       if (accessScope === 'DIVISION') {
         // Division users: only their division within their department and region
@@ -56,7 +52,6 @@ const consolidatedCapitalOutlayController = {
           }
         ];
       }
-
       // Handle explicit regions parameter while preserving hierarchical filtering
       if (regions) {
         const regionList = Array.isArray(regions) ? regions : [regions];
@@ -85,11 +80,9 @@ const consolidatedCapitalOutlayController = {
           regionFilter.region = { $in: regionList };
         }
       }
-      
       const coQuery = { ...regionFilter };
       if (fiscalYear) coQuery.fiscalYear = fiscalYear;
       if (budgetType) coQuery.budgetType = budgetType;
-
       // Fetch all Capital Outlay proposals matching the query
       const coData = await CapitalOutlay.find(coQuery).lean();
       if (!Array.isArray(coData) || coData.length === 0) {
@@ -104,7 +97,6 @@ const consolidatedCapitalOutlayController = {
           }
         });
       }
-
       // Group by region and category
       const grouped = {};
       let grandTotal = 0;
@@ -129,7 +121,6 @@ const consolidatedCapitalOutlayController = {
         const cost = Number(item.cost || 0);
         const income = Number(item.income || 0);
         const subsidy = Number(item.subsidy || 0);
-        
         grouped[key].items.push({
           uacsCode: item.uacsCode || '',
           projectTitle: item.accountingTitle || '',
@@ -149,7 +140,6 @@ const consolidatedCapitalOutlayController = {
         grouped[key].totalSubsidy += subsidy;
         grandTotal += cost;
       });
-
       // Prepare result for UI: array of { region, category, total, totalIncome, totalSubsidy, items }
       const result = Object.values(grouped).map(g => ({
         region: g.region,
@@ -159,7 +149,6 @@ const consolidatedCapitalOutlayController = {
         totalSubsidy: g.totalSubsidy || 0,
         items: Array.isArray(g.items) ? g.items : []
       })).sort((a, b) => a.region.localeCompare(b.region) || a.category.localeCompare(b.category));
-
       // Defensive: ensure every group has items as array and proper totals
       const safeResult = Array.isArray(result)
         ? result.map(g => ({ 
@@ -169,7 +158,6 @@ const consolidatedCapitalOutlayController = {
             totalSubsidy: g.totalSubsidy || 0
           }))
         : [];
-
       res.status(200).json({
         success: true,
         data: Array.isArray(safeResult) ? safeResult.map(g => ({ 
@@ -202,5 +190,4 @@ const consolidatedCapitalOutlayController = {
     }
   }
 };
-
-module.exports = consolidatedCapitalOutlayController;
+module.exports = consolidatedCapitalOutlayController;

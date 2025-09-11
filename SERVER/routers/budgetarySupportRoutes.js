@@ -10,28 +10,18 @@ const {
   deleteBudgetarySupport,
   calculateBudgetarySupport
 } = require('../controllers/budgetarySupportController');
-
 // Apply authentication middleware to all routes in this router
 router.use(checkToken);
-
 // Get all budgetary support entries
 router.get('/budgetary-support', hierarchicalAccessControl('read', { allowedFields: ['region'] }), getAllBudgetarySupport);
-
 // Calculate total budgetary support - ADD HIERARCHICAL ACCESS CONTROL
 router.get('/budgetary-support/calculate', hierarchicalAccessControl('read', { allowedFields: ['region'] }), calculateBudgetarySupport);
-
 // Get budgetary support by ID
 router.get('/budgetary-support/:id',  getBudgetarySupportById);
-
 // Create new budgetary support entry
 router.post('/budgetary-support', hierarchicalAccessControl('create', { strictMode: false, enableConsolidation: true }), createBudgetarySupport);
-
 // Update budgetary support entry
 router.put('/budgetary-support/:id', hierarchicalAccessControl('update', { strictMode: false, enableConsolidation: true }), updateBudgetarySupport);
-
 // Delete budgetary support entry
 router.delete('/budgetary-support/:id',  deleteBudgetarySupport);
-
-module.exports = router;
-
-
+module.exports = router;

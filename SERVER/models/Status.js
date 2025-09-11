@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-
 const StatusSchema = mongoose.Schema(
   {
     Status: {
@@ -12,7 +11,5 @@ const StatusSchema = mongoose.Schema(
     timestamps: true,
   }
 );
-
 const Status = mongoose.model("Status", StatusSchema);
-
 module.exports = Status;

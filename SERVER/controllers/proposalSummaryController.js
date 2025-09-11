@@ -1,7 +1,6 @@
 const CapitalOutlay = require("../models/CapitalOutlay");
 const MOOEProposal = require("../models/mooeProposals");
 const PersonnelServices = require("../models/personnelServices");
-
 // Kumuha ng combined proposal summary
 // Kumuha ng combined proposal summary
 exports.getProposalSummary = async (req, res) => {
@@ -11,11 +10,9 @@ exports.getProposalSummary = async (req, res) => {
     if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
       query.region = req.hierarchicalFilters.region;
     }
-
     const capitalOutlays = await CapitalOutlay.find(query).lean();
     const mooeProposals = await MOOEProposal.find(query).lean();
     const personnelServices = await PersonnelServices.find(query).lean();
-
     // I-format ang data para magkaroon ng property na 'type'
     const capitalOutlaysFormatted = capitalOutlays.map(item => ({
       type: "Capital Outlay",
@@ -28,7 +25,6 @@ exports.getProposalSummary = async (req, res) => {
       processBy: item.processBy,
       processDate: item.processDate,
     }));
-
     const mooeProposalsFormatted = mooeProposals.map(item => ({
       type: "MOOE Proposal",
       uacsCode: item.uacsCode,
@@ -40,7 +36,6 @@ exports.getProposalSummary = async (req, res) => {
       processBy: item.processBy,
       processDate: item.processDate,
     }));
-
     const personnelServicesFormatted = personnelServices.map(item => ({
       type: "Personnel Services",
       employeeFullName: item.employeeFullName,
@@ -53,16 +48,13 @@ exports.getProposalSummary = async (req, res) => {
       processDate: item.processDate,
       amount: item.Total,
     }));
-
     const allProposals = [
       ...capitalOutlaysFormatted,
       ...mooeProposalsFormatted,
       ...personnelServicesFormatted,
     ];
-
     // I-sort batay sa processDate (pinakabago muna)
     allProposals.sort((a, b) => new Date(b.processDate) - new Date(a.processDate));
-
     res.json({
       proposalsummary: allProposals,
       totalRecords: allProposals.length,
@@ -72,7 +64,6 @@ exports.getProposalSummary = async (req, res) => {
     res.status(500).json({ message: "Server Error" });
   }
 };
-
 // Kumuha ng aggregates para sa Personnel Services per employment status (PERMANENT vs CASUAL)
 exports.getPersonnelAggregates = async (req, res) => {
   try {
@@ -100,7 +91,6 @@ exports.getPersonnelAggregates = async (req, res) => {
         }
       }
     ]);
-
     res.json(personnelAggregates);
   } catch (error) {
     console.error(error);
@@ -115,11 +105,9 @@ exports.getAnalytics = async (req, res) => {
     if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
       query.region = req.hierarchicalFilters.region;
     }
-
     const capitalCount = await CapitalOutlay.countDocuments(query);
     const mooeCount = await MOOEProposal.countDocuments(query);
     const personnelCount = await PersonnelServices.countDocuments(query);
-
     const capitalAgg = await CapitalOutlay.aggregate([
       { $match: query },
       { $group: { _id: null, totalCost: { $sum: "$cost" } } }
@@ -132,7 +120,6 @@ exports.getAnalytics = async (req, res) => {
       { $match: query },
       { $group: { _id: null, total: { $sum: "$Total" } } }
     ]);
-
     res.json({
       counts: {
         capitalOutlay: capitalCount,
@@ -149,4 +136,4 @@ exports.getAnalytics = async (req, res) => {
     console.error(error);
     res.status(500).json({ message: "Server Error" });
   }
-};
+};

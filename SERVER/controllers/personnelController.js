@@ -1,5 +1,4 @@
 const Personnel = require('../models/Personnel');
-
 // Get all personnel
 const getAllPersonnel = async (req, res) => {
   try {
@@ -9,7 +8,6 @@ const getAllPersonnel = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-
 // Add new personnel
 const addPersonnel = async (req, res) => {
   const personnel = new Personnel({
@@ -17,7 +15,6 @@ const addPersonnel = async (req, res) => {
     position: req.body.position,
     salary: req.body.salary,
   });
-
   try {
     const newPersonnel = await personnel.save();
     res.status(201).json(newPersonnel);
@@ -25,7 +22,6 @@ const addPersonnel = async (req, res) => {
     res.status(400).json({ message: err.message });
   }
 };
-
 module.exports = {
   getAllPersonnel,
   addPersonnel,

@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-
 const RetireeSchema = mongoose.Schema(
   {
     employeeNumber: { type: String, required: true },
@@ -24,5 +23,4 @@ const RetireeSchema = mongoose.Schema(
   },
   { timestamps: true }
 );
-
 module.exports = mongoose.model("Retiree", RetireeSchema);

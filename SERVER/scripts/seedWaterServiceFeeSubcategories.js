@@ -1,15 +1,13 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 const IncomeSubcategory = require('../models/IncomeSubcategory');
-
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URL)
-  .then(() => console.log('Connected to MongoDB'))
+  .then(() => )
   .catch(err => {
     console.error('MongoDB connection error:', err);
     process.exit(1);
   });
-
 // Water Service Fee subcategories with proper region mapping
 const waterServiceFeeSubcategories = [
   {
@@ -40,11 +38,8 @@ const waterServiceFeeSubcategories = [
     isGlobal: false
   }
 ];
-
 async function seedWaterServiceFeeSubcategories() {
   try {
-    console.log(`Seeding ${waterServiceFeeSubcategories.length} Water Service Fee subcategories...`);
-    
     for (const subcatData of waterServiceFeeSubcategories) {
       try {
         // Check if this subcategory already exists
@@ -54,10 +49,7 @@ async function seedWaterServiceFeeSubcategories() {
             { name: subcatData.name }
           ]
         });
-        
         if (existingSubcat) {
-          console.log(`Subcategory "${subcatData.name}" already exists, updating...`);
-          
           // Update the existing subcategory
           await IncomeSubcategory.findByIdAndUpdate(
             existingSubcat._id,
@@ -68,8 +60,6 @@ async function seedWaterServiceFeeSubcategories() {
             }
           );
         } else {
-          console.log(`Creating new subcategory: ${subcatData.name}`);
-          
           // Create a new subcategory
           const newSubcat = new IncomeSubcategory({
             incomeSubcategoryName: subcatData.name,
@@ -78,21 +68,17 @@ async function seedWaterServiceFeeSubcategories() {
             specialRegions: subcatData.specialRegions || [],
             isGlobal: subcatData.isGlobal || false
           });
-          
           await newSubcat.save();
         }
       } catch (error) {
         console.error(`Error processing subcategory "${subcatData.name}":`, error);
       }
     }
-    
-    console.log('Water Service Fee subcategories seeded successfully');
     process.exit(0);
   } catch (error) {
     console.error('Error seeding Water Service Fee subcategories:', error);
     process.exit(1);
   }
 }
-
 // Run the seed function
 seedWaterServiceFeeSubcategories();

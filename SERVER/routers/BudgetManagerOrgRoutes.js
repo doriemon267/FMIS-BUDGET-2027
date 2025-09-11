@@ -4,53 +4,44 @@ const {
   getOrganizationalStats,
   testOrganizationalSegregation
 } = require('../controllers/BudgetManagerOrgController');
-
 const Router = require('express').Router;
 const { 
   authenticatedRoute, 
   adminRoute,
   PERMISSION_LEVELS 
 } = require('../middleware/securityMiddleware');
-
 const { 
   budgetManagerOrgSelection,
   getAvailableOrgUnits,
   logOrgSelection,
   validateOrgSelection
 } = require('../middleware/budgetManagerOrgSelection');
-
 const budgetManagerOrgRouter = Router();
-
 // 🔒 SECURED ROUTES FOR BUDGET MANAGER ORGANIZATIONAL SELECTION
-
 // Get all available organizational units for Budget Manager selection
 budgetManagerOrgRouter.get(
   '/budget-manager/organizational-units',
   ...adminRoute(),
   getAvailableOrganizationalUnits
 );
-
 // Validate organizational unit selection
 budgetManagerOrgRouter.post(
   '/budget-manager/validate-org-selection',
   ...adminRoute(),
   validateOrganizationalSelection
 );
-
 // Get organizational statistics for Budget Manager dashboard
 budgetManagerOrgRouter.get(
   '/budget-manager/organizational-stats',
   ...adminRoute(),
   getOrganizationalStats
 );
-
 // Test organizational segregation
 budgetManagerOrgRouter.get(
   '/budget-manager/test-segregation',
   ...adminRoute(),
   testOrganizationalSegregation
 );
-
 // Budget Manager creating REAL proposal with organizational selection
 budgetManagerOrgRouter.post(
   '/budget-manager/create-proposal',
@@ -68,15 +59,12 @@ budgetManagerOrgRouter.post(
         proposalData
       } = req.body;
       const budgetManagerContext = req.budgetManagerContext;
-
       if (!proposalType) {
         return res.status(400).json({
           message: 'proposalType is required (personnel, mooe, capitalOutlay, cos)'
         });
       }
-
       let createdProposal;
-
       // Create REAL proposal in database based on type
       switch (proposalType) {
         case 'personnel':
@@ -92,7 +80,6 @@ budgetManagerOrgRouter.post(
             status: 'Draft'
           });
           break;
-
         case 'mooe':
           const MooeProposal = require('../models/mooeProposals');
           createdProposal = await MooeProposal.create({
@@ -104,7 +91,6 @@ budgetManagerOrgRouter.post(
             status: 'Draft'
           });
           break;
-
         case 'capitalOutlay':
           const CapitalOutlay = require('../models/CapitalOutlay');
           createdProposal = await CapitalOutlay.create({
@@ -117,7 +103,6 @@ budgetManagerOrgRouter.post(
             status: 'Not Submitted'
           });
           break;
-
         case 'cos':
           const COSPersonnel = require('../models/COSPersonnel');
           createdProposal = await COSPersonnel.create({
@@ -130,13 +115,11 @@ budgetManagerOrgRouter.post(
             fiscalYear: proposalData.fiscalYear || '2024'
           });
           break;
-
         default:
           return res.status(400).json({
             message: 'Invalid proposalType. Use: personnel, mooe, capitalOutlay, or cos'
           });
       }
-
       res.status(201).json({
         message: 'REAL proposal created successfully in database with organizational context',
         dataSource: 'MongoDB Database',
@@ -174,7 +157,6 @@ budgetManagerOrgRouter.post(
     }
   }
 );
-
 // Example: Budget Manager viewing REAL proposals with organizational filtering
 budgetManagerOrgRouter.get(
   '/budget-manager/view-proposals',
@@ -185,23 +167,19 @@ budgetManagerOrgRouter.get(
     try {
       const { region, department, division, category } = req.query;
       const budgetManagerContext = req.budgetManagerContext;
-
       // Import real models
       const PersonnelServices = require('../models/PersonnelServices');
       const MooeProposal = require('../models/mooeProposals');
       const CapitalOutlay = require('../models/CapitalOutlay');
       const COSPersonnel = require('../models/COSPersonnel');
-
       // Build filters based on organizational selection
       const filters = {};
       if (region) filters.region = region;
       if (department) filters.department = department;
       if (division) filters.division = division;
-
       // Get REAL proposal data from database
       let proposals = [];
       let totalCount = 0;
-
       if (!category || category === 'all') {
         // Get all types of proposals
         const [personnel, mooe, capitalOutlay, cosPersonnel] = await Promise.all([
@@ -226,7 +204,6 @@ budgetManagerOrgRouter.get(
             .limit(20)
             .lean()
         ]);
-
         // Format and combine all proposals
         proposals = [
           ...personnel.map(p => ({
@@ -282,15 +259,12 @@ budgetManagerOrgRouter.get(
             processDate: cos.processDate
           }))
         ];
-
         // Sort by processDate descending
         proposals.sort((a, b) => new Date(b.processDate) - new Date(a.processDate));
         totalCount = proposals.length;
-
       } else {
         // Get specific category
         let Model, selectFields, typeLabel;
-
         switch (category) {
           case 'personnel':
             Model = PersonnelServices;
@@ -315,15 +289,12 @@ budgetManagerOrgRouter.get(
           default:
             return res.status(400).json({ message: 'Invalid category' });
         }
-
         const data = await Model.find(filters)
           .select(selectFields)
           .sort({ processDate: -1 })
           .limit(50)
           .lean();
-
         totalCount = await Model.countDocuments(filters);
-
         proposals = data.map(item => ({
           id: item._id,
           type: typeLabel,
@@ -338,7 +309,6 @@ budgetManagerOrgRouter.get(
           processDate: item.processDate
         }));
       }
-
       res.status(200).json({
         message: 'REAL proposals filtered by organizational unit from database',
         dataSource: 'MongoDB Database',
@@ -371,7 +341,6 @@ budgetManagerOrgRouter.get(
     }
   }
 );
-
 // Example: Budget Manager switching organizational context
 budgetManagerOrgRouter.post(
   '/budget-manager/switch-organization',
@@ -382,7 +351,6 @@ budgetManagerOrgRouter.post(
     try {
       const { newRegion, newDepartment, newDivision } = req.body;
       const budgetManagerContext = req.budgetManagerContext;
-      
       // Simulate switching organizational context
       const switchResult = {
         message: 'Organizational context switched successfully',
@@ -407,7 +375,6 @@ budgetManagerOrgRouter.post(
           dataSegregationActive: true
         }
       };
-      
       res.status(200).json(switchResult);
     } catch (error) {
       console.error('Error switching organization:', error);
@@ -415,7 +382,6 @@ budgetManagerOrgRouter.post(
     }
   }
 );
-
 // Get current database organizational distribution
 budgetManagerOrgRouter.get(
   '/budget-manager/database-overview',
@@ -427,7 +393,6 @@ budgetManagerOrgRouter.get(
       const MooeProposal = require('../models/mooeProposals');
       const CapitalOutlay = require('../models/CapitalOutlay');
       const COSPersonnel = require('../models/COSPersonnel');
-
       // Get organizational distribution from actual database
       const [
         personnelRegions,
@@ -446,13 +411,10 @@ budgetManagerOrgRouter.get(
         CapitalOutlay.distinct('department'),
         COSPersonnel.distinct('department')
       ]);
-
       // Get record counts per organizational unit
       const organizationalStats = {};
-
       // Combine all unique regions
       const allRegions = [...new Set([...personnelRegions, ...mooeRegions, ...capitalOutlayRegions, ...cosRegions])].filter(Boolean);
-
       for (const region of allRegions) {
         const [personnelCount, mooeCount, capitalCount, cosCount] = await Promise.all([
           PersonnelServices.countDocuments({ region }),
@@ -460,7 +422,6 @@ budgetManagerOrgRouter.get(
           CapitalOutlay.countDocuments({ region }),
           COSPersonnel.countDocuments({ region })
         ]);
-
         organizationalStats[region] = {
           personnel: personnelCount,
           mooe: mooeCount,
@@ -469,7 +430,6 @@ budgetManagerOrgRouter.get(
           total: personnelCount + mooeCount + capitalCount + cosCount
         };
       }
-
       // Get total counts
       const [totalPersonnel, totalMooe, totalCapital, totalCOS] = await Promise.all([
         PersonnelServices.countDocuments(),
@@ -477,7 +437,6 @@ budgetManagerOrgRouter.get(
         CapitalOutlay.countDocuments(),
         COSPersonnel.countDocuments()
       ]);
-
       res.status(200).json({
         message: 'Current database organizational distribution',
         dataSource: 'MongoDB Database',
@@ -513,5 +472,4 @@ budgetManagerOrgRouter.get(
     }
   }
 );
-
-module.exports = budgetManagerOrgRouter;
+module.exports = budgetManagerOrgRouter;

@@ -4,26 +4,22 @@
  * This script demonstrates the Division → Department → Region hierarchical consolidation system.
  * Run this script to see how user assignments and consolidation work.
  */
-
 const UserOrganizationalAssignment = require('../models/UserOrganizationalAssignment');
 const Region = require('../models/Region');
 const Department = require('../models/Department');
 const mongoose = require('mongoose');
-
 // Demo data setup
 const DEMO_REGIONS = [
   { Region: 'NCR', RegionCode: 'NCR' },
   { Region: 'Region IV-A', RegionCode: 'R4A' },
   { Region: 'Region VII', RegionCode: 'R7' }
 ];
-
 const DEMO_DEPARTMENTS = [
   { Department: 'Information Technology Department' },
   { Department: 'Finance Department' },
   { Department: 'Human Resources Department' },
   { Department: 'Operations Department' }
 ];
-
 const DEMO_DIVISIONS = [
   'Software Development Division',
   'Network Infrastructure Division', 
@@ -32,52 +28,40 @@ const DEMO_DIVISIONS = [
   'Recruitment Division',
   'Training and Development Division'
 ];
-
 /**
  * Initialize demo data
  */
 async function initializeDemoData() {
-  console.log('🔧 Initializing demo data...');
-
   try {
     // Create regions if they don't exist
     for (const regionData of DEMO_REGIONS) {
       const existingRegion = await Region.findOne({ Region: regionData.Region });
       if (!existingRegion) {
         await Region.create(regionData);
-        console.log(`✅ Created region: ${regionData.Region}`);
-      }
+        }
     }
-
     // Create departments if they don't exist
     for (const deptData of DEMO_DEPARTMENTS) {
       const existingDept = await Department.findOne({ Department: deptData.Department });
       if (!existingDept) {
         await Department.create(deptData);
-        console.log(`✅ Created department: ${deptData.Department}`);
-      }
+        }
     }
-
-    console.log('✅ Demo data initialization complete');
-  } catch (error) {
+    } catch (error) {
     console.error('❌ Error initializing demo data:', error);
     throw error;
   }
 }
-
 /**
  * Create demo user assignments for each hierarchical level
  */
 async function createDemoUserAssignments() {
-  console.log('\n🏢 Creating demo user assignments...');
-
   try {
     // Get created regions and departments
     const ncrRegion = await Region.findOne({ Region: 'NCR' });
     const region4a = await Region.findOne({ Region: 'Region IV-A' });
     const itDepartment = await Department.findOne({ Department: 'Information Technology Department' });
     const financeDepartment = await Department.findOne({ Department: 'Finance Department' });
-
     // Demo assignments for different hierarchical levels
     const demoAssignments = [
       {
@@ -157,40 +141,31 @@ async function createDemoUserAssignments() {
         }
       }
     ];
-
     // Create or update assignments
     for (const assignmentData of demoAssignments) {
       const existingAssignment = await UserOrganizationalAssignment.findOne({ 
         userId: assignmentData.userId 
       });
-
       if (existingAssignment) {
         Object.assign(existingAssignment, assignmentData);
         await existingAssignment.save();
-        console.log(`🔄 Updated assignment for: ${assignmentData.userName}`);
-      } else {
+        } else {
         await UserOrganizationalAssignment.create({
           ...assignmentData,
           createdBy: 'demo_admin',
           lastModifiedBy: 'demo_admin'
         });
-        console.log(`✅ Created assignment for: ${assignmentData.userName}`);
-      }
+        }
     }
-
-    console.log('✅ Demo user assignments created successfully');
-  } catch (error) {
+    } catch (error) {
     console.error('❌ Error creating demo user assignments:', error);
     throw error;
   }
 }
-
 /**
  * Demonstrate hierarchical consolidation for each user type
  */
 async function demonstrateHierarchicalConsolidation() {
-  console.log('\n🎯 Demonstrating hierarchical consolidation...');
-
   try {
     const userIds = [
       'division_user_001',
@@ -198,26 +173,16 @@ async function demonstrateHierarchicalConsolidation() {
       'region_user_001',
       'another_division_user'
     ];
-
     for (const userId of userIds) {
-      console.log(`\n👤 Testing consolidation for user: ${userId}`);
-      
       const assignment = await UserOrganizationalAssignment.findOne({ userId })
         .populate('regions', 'Region RegionCode')
         .populate('departments', 'Department');
-
       if (!assignment) {
-        console.log(`❌ No assignment found for ${userId}`);
         continue;
       }
-
-      console.log(`📋 User: ${assignment.userName}`);
-      console.log(`🎯 Access Scope: ${assignment.accessScope}`);
-      
       // Get consolidation information
       const consolidationInfo = assignment.getConsolidationTarget();
-      console.log(`🔄 Consolidation Info:`, JSON.stringify(consolidationInfo, null, 2));
-
+      );
       // Simulate a proposal submission
       const proposalData = {
         title: `${assignment.accessScope} Level Proposal`,
@@ -225,12 +190,8 @@ async function demonstrateHierarchicalConsolidation() {
         amount: 50000,
         fiscalYear: '2024'
       };
-
-      console.log(`📝 Original Proposal Data:`, proposalData);
-
       // Apply consolidation logic
       const consolidatedData = { ...proposalData };
-      
       switch (assignment.accessScope) {
         case 'DIVISION':
           consolidatedData.originalLevel = 'DIVISION';
@@ -239,95 +200,68 @@ async function demonstrateHierarchicalConsolidation() {
           consolidatedData.region = assignment.regions[0]?.Region;
           consolidatedData.consolidatedFrom = 'DIVISION';
           break;
-
         case 'DEPARTMENT':
           consolidatedData.originalLevel = 'DEPARTMENT';
           consolidatedData.originalDepartment = assignment.departments[0]?.Department;
           consolidatedData.region = assignment.regions[0]?.Region;
           consolidatedData.consolidatedFrom = 'DEPARTMENT';
           break;
-
         case 'REGION':
           consolidatedData.originalLevel = 'REGION';
           consolidatedData.region = assignment.regions[0]?.Region;
           break;
       }
-
-      console.log(`✅ Consolidated Proposal Data:`, consolidatedData);
-      
       // Show where this data would be saved/consolidated
-      console.log(`💾 Data will be saved to: ${getConsolidationTarget(assignment.accessScope)}`);
-      console.log(`📊 Will appear in ${getReportingLevel(assignment.accessScope)} reports`);
-      
-      console.log('─'.repeat(60));
+      }`);
+      } reports`);
+      );
     }
-
   } catch (error) {
     console.error('❌ Error demonstrating consolidation:', error);
     throw error;
   }
 }
-
 /**
  * Show hierarchical access patterns
  */
 async function demonstrateAccessPatterns() {
-  console.log('\n🔐 Demonstrating hierarchical access patterns...');
-
   try {
     const assignments = await UserOrganizationalAssignment.find({})
       .populate('regions', 'Region')
       .populate('departments', 'Department');
-
-    console.log('\n📊 Access Summary:');
-    console.log('═'.repeat(80));
-
+    );
     for (const assignment of assignments) {
-      console.log(`\n👤 ${assignment.userName} (${assignment.accessScope})`);
-      
+      `);
       switch (assignment.accessScope) {
         case 'DIVISION':
-          console.log(`   🏢 Division: ${assignment.divisions.join(', ')}`);
-          console.log(`   🏬 Department: ${assignment.departments.map(d => d.Department).join(', ')}`);
-          console.log(`   🌍 Region: ${assignment.regions.map(r => r.Region).join(', ')}`);
-          console.log(`   📝 Can create: Division-level proposals → Consolidate to Department`);
-          console.log(`   👀 Can view: Own division + consolidated department data`);
+          }`);
+          .join(', ')}`);
+          .join(', ')}`);
           break;
-
         case 'DEPARTMENT':
-          console.log(`   🏬 Department: ${assignment.departments.map(d => d.Department).join(', ')}`);
-          console.log(`   🌍 Region: ${assignment.regions.map(r => r.Region).join(', ')}`);
-          console.log(`   📝 Can create: Department-level proposals → Consolidate to Region`);
-          console.log(`   👀 Can view: Own department + consolidated region data`);
+          .join(', ')}`);
+          .join(', ')}`);
           break;
-
         case 'REGION':
-          console.log(`   🌍 Region: ${assignment.regions.map(r => r.Region).join(', ')}`);
-          console.log(`   📝 Can create: Region-level proposals (no consolidation)`);
-          console.log(`   👀 Can view: All data within assigned region`);
+          .join(', ')}`);
+          `);
           break;
       }
-
-      console.log(`   🔑 Permissions:`, Object.entries(assignment.rolePermissions)
-        .filter(([key, value]) => value === true)
+      .filter(([key, value]) => value === true)
         .map(([key]) => key)
         .join(', '));
     }
-
-    console.log('\n═'.repeat(80));
+    );
   } catch (error) {
     console.error('❌ Error demonstrating access patterns:', error);
     throw error;
   }
 }
-
 /**
  * Generate summary report
  */
 async function generateSummaryReport() {
-  console.log('\n📈 Hierarchical RBAC System Summary');
-  console.log('═'.repeat(50));
-
+  );
   try {
     const totalAssignments = await UserOrganizationalAssignment.countDocuments();
     const assignmentsByScope = await UserOrganizationalAssignment.aggregate([
@@ -339,40 +273,17 @@ async function generateSummaryReport() {
         }
       }
     ]);
-
-    console.log(`\n📊 Total User Assignments: ${totalAssignments}`);
-    console.log('\n📋 Breakdown by Access Scope:');
-
     for (const scope of assignmentsByScope) {
-      console.log(`   ${scope._id}: ${scope.count} users`);
-      scope.users.forEach(user => console.log(`     - ${user}`));
+      scope.users.forEach(user => );
     }
-
-    console.log('\n🏗️ Hierarchical Structure:');
-    console.log('   Division → Department → Region');
-    console.log('   │         │           │');
-    console.log('   │         │           └─ Regional reports (all data)');
-    console.log('   │         └─ Department reports (department + division data)');
-    console.log('   └─ Division reports (division data only)');
-
-    console.log('\n🔄 Consolidation Flow:');
-    console.log('   1. Division users submit → Data saved to Department level');
-    console.log('   2. Department users submit → Data saved to Region level');
-    console.log('   3. Region users submit → Data saved to Region level');
-
-    console.log('\n✅ System Benefits:');
-    console.log('   • Hierarchical data consolidation');
-    console.log('   • Automated organizational rollup');
-    console.log('   • Clear access boundaries');
-    console.log('   • Simplified regional reporting');
-    console.log('   • Audit trail with consolidation metadata');
-
-  } catch (error) {
+    ');
+    ');
+    ');
+    } catch (error) {
     console.error('❌ Error generating summary report:', error);
     throw error;
   }
 }
-
 /**
  * Helper functions
  */
@@ -388,7 +299,6 @@ function getConsolidationTarget(scope) {
       return 'Own records only';
   }
 }
-
 function getReportingLevel(scope) {
   switch (scope) {
     case 'DIVISION':
@@ -401,41 +311,26 @@ function getReportingLevel(scope) {
       return 'Individual';
   }
 }
-
 /**
  * Main demonstration function
  */
 async function runHierarchicalRBACDemo() {
-  console.log('🏢 Hierarchical RBAC Demonstration');
-  console.log('═'.repeat(50));
-  console.log('This demo shows Division → Department → Region consolidation');
-  
+  );
   try {
     await initializeDemoData();
     await createDemoUserAssignments();
     await demonstrateHierarchicalConsolidation();
     await demonstrateAccessPatterns();
     await generateSummaryReport();
-
-    console.log('\n🎉 Hierarchical RBAC demonstration completed successfully!');
-    console.log('\n📝 Next steps:');
-    console.log('   1. Review the hierarchical middleware implementation');
-    console.log('   2. Test with your application routes');
-    console.log('   3. Configure user assignments for your organization');
-    console.log('   4. Monitor consolidation behavior in production');
-
-  } catch (error) {
+    } catch (error) {
     console.error('\n❌ Demo failed with error:', error);
     throw error;
   }
 }
-
 /**
  * Cleanup demo data (optional)
  */
 async function cleanupDemoData() {
-  console.log('\n🧹 Cleaning up demo data...');
-  
   try {
     // Remove demo assignments
     const deletedAssignments = await UserOrganizationalAssignment.deleteMany({
@@ -446,16 +341,11 @@ async function cleanupDemoData() {
         'another_division_user'
       ]}
     });
-
-    console.log(`✅ Removed ${deletedAssignments.deletedCount} demo assignments`);
-    console.log('Note: Regions and Departments were left intact for system use');
-    
-  } catch (error) {
+    } catch (error) {
     console.error('❌ Error cleaning up demo data:', error);
     throw error;
   }
 }
-
 // Export functions for use in other scripts or tests
 module.exports = {
   runHierarchicalRBACDemo,
@@ -466,27 +356,22 @@ module.exports = {
   generateSummaryReport,
   cleanupDemoData
 };
-
 // Run demo if this script is executed directly
 if (require.main === module) {
   // Ensure MongoDB connection
   const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/fmis-budget';
-  
   mongoose.connect(mongoUri, {
     useNewUrlParser: true,
     useUnifiedTopology: true
   }).then(async () => {
-    console.log('📁 Connected to MongoDB');
-    
     try {
       await runHierarchicalRBACDemo();
     } catch (error) {
       console.error('Demo error:', error);
     } finally {
       await mongoose.connection.close();
-      console.log('📁 MongoDB connection closed');
-    }
+      }
   }).catch(error => {
     console.error('❌ MongoDB connection error:', error);
   });
-}
+}

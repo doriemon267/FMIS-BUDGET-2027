@@ -1,6 +1,5 @@
 // Rename this file to PersonnelServices.js (with capital P)
 const mongoose = require("mongoose");
-
 const personnelServicesSchema = new mongoose.Schema(
   {
     date_process: { type: Date, default: Date.now },
@@ -24,7 +23,6 @@ const personnelServicesSchema = new mongoose.Schema(
     },
     fiscalYear: {
       type: String,
-   
     },
     itemNumber: {
       type: String,
@@ -35,15 +33,12 @@ const personnelServicesSchema = new mongoose.Schema(
     },
     gradelevel_SG: {
       type: String,
-   
     },
     step: {
       type: String,
-      
     },
     gradelevel_JG: {
       type: String,
-     
     },
     employeeFullName: {
       type: String,
@@ -134,7 +129,6 @@ const personnelServicesSchema = new mongoose.Schema(
     },
     subsistenceAllowanceMDS: {
       type: Number, 
-      
     },
     subsistenceAllowanceST: {
       type: Number,
@@ -181,7 +175,6 @@ const personnelServicesSchema = new mongoose.Schema(
 courtAppearance: {
       type: Number,
     },
-
     Total: {
       type: Number,
       required: true,
@@ -206,20 +199,16 @@ courtAppearance: {
   },
   { timestamps: true }
 );
-
 // Add a pre-save hook to ensure meal is properly set
 personnelServicesSchema.pre('save', function(next) {
   // If meal is undefined or null, set it to 0
   if (this.meal === undefined || this.meal === null) {
     this.meal = 0;
   }
-  
   // Ensure meal is a number
   this.meal = Number(this.meal);
-  
   next();
 });
-
 // Add a static method to reset meal allowance
 personnelServicesSchema.statics.resetMealAllowance = async function(employeeNumber, fiscalYear) {
   try {
@@ -227,7 +216,6 @@ personnelServicesSchema.statics.resetMealAllowance = async function(employeeNumb
       { employeeNumber, fiscalYear },
       { $set: { meal: 0 } }
     );
-    
     // Recalculate total
     const doc = await this.findOne({ employeeNumber, fiscalYear });
     if (doc) {
@@ -240,23 +228,18 @@ personnelServicesSchema.statics.resetMealAllowance = async function(employeeNumb
         "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
         "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
       ];
-      
       // Calculate new total
       doc.Total = numericFields.reduce(
         (acc, field) => acc + (Number(doc[field]) || 0),
         0
       );
-      
       await doc.save();
     }
-    
     return { success: true, result };
   } catch (error) {
     console.error("Error resetting meal allowance:", error);
     return { success: false, error };
   }
 };
-
 const PersonnelServices = mongoose.models.PersonnelServices || mongoose.model("PersonnelServices", personnelServicesSchema);
-
-module.exports = PersonnelServices;
+module.exports = PersonnelServices;

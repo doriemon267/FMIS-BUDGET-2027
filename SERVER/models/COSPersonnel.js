@@ -1,14 +1,11 @@
 const mongoose = require("mongoose");
-
 const COSPersonnelSchema = new mongoose.Schema(
   {
     department: {
       type: String,
-
     },
     region: {
       type: String,
-     
     },
     budgetType: {
       type: String,
@@ -50,11 +47,9 @@ const COSPersonnelSchema = new mongoose.Schema(
     },
     employeeNumber: {
       type: String,
-     
     },
     division: {
       type: String,
-    
     },
     statusOfAppointment: {
       type: String,
@@ -77,8 +72,6 @@ const COSPersonnelSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
-
 // Optional: Gumawa ng composite index para siguraduhing walang duplicate record para sa parehong employee sa isang fiscalYear
 COSPersonnelSchema.index({ employeeNumber: 1, fiscalYear: 1 }, { unique: true });
-
-module.exports = mongoose.model("COSPersonnel", COSPersonnelSchema);
+module.exports = mongoose.model("COSPersonnel", COSPersonnelSchema);

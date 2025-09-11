@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-
 const setupSchema = new mongoose.Schema({
   deadlines: [
     {
@@ -31,5 +30,4 @@ const setupSchema = new mongoose.Schema({
     default: false
   }
 });
-
 module.exports = mongoose.model('Setup', setupSchema);

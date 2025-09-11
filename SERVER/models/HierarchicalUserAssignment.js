@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-
 const HierarchicalUserAssignmentSchema = new mongoose.Schema({
   userId: {
     type: String,
@@ -71,19 +70,16 @@ const HierarchicalUserAssignmentSchema = new mongoose.Schema({
     default: Date.now
   }
 });
-
 // Update the updatedAt field before saving
 HierarchicalUserAssignmentSchema.pre('save', function(next) {
   this.updatedAt = new Date();
   next();
 });
-
 // Static method to get user permissions for access control
 HierarchicalUserAssignmentSchema.statics.getUserPermissions = async function(userId) {
   let doc = await this.findOne({ userId, isActive: true })
     .populate('regionId', 'regionName Region RegionName')
     .populate('departmentId', 'Department departmentName DepartmentName');
-
   // Fallback: handle potential type/format mismatches of userId
   if (!doc) {
     try {
@@ -94,11 +90,9 @@ HierarchicalUserAssignmentSchema.statics.getUserPermissions = async function(use
       if (!Number.isNaN(asNum)) candidates.push(asNum);
       candidates.push(asStr);
       if (asStr.trim) candidates.push(asStr.trim());
-
       const raw = await mongoose.connection.db
         .collection('hierarchicaluserassignments')
         .findOne({ isActive: true, userId: { $in: candidates } });
-
       if (raw?._id) {
         doc = await this.findById(raw._id)
           .populate('regionId', 'regionName Region RegionName')
@@ -108,7 +102,6 @@ HierarchicalUserAssignmentSchema.statics.getUserPermissions = async function(use
       // ignore fallback errors; will return stub below
     }
   }
-
   if (!doc) {
     // Return a safe default object with stubbed access-check methods
     return {
@@ -134,13 +127,11 @@ HierarchicalUserAssignmentSchema.statics.getUserPermissions = async function(use
       hasDivisionAccess: () => false
     };
   }
-
   // Build name-based accessible snapshots
   const mongoose = require('mongoose');
   const accessibleRegions = [];
   const accessibleDepartments = [];
   const accessibleDivisions = [];
-
   if (doc.regionId) {
     const regionId = doc.regionId._id || doc.regionId;
     let regionName = doc.regionId.regionName || doc.regionId.Region || null;
@@ -150,18 +141,15 @@ HierarchicalUserAssignmentSchema.statics.getUserPermissions = async function(use
     }
     accessibleRegions.push({ _id: regionId, regionName: regionName || 'Central Office' });
   }
-
   if (doc.departmentId) {
     accessibleDepartments.push({
       _id: doc.departmentId._id || doc.departmentId,
       departmentName: doc.departmentId.Department || doc.departmentId.departmentName || doc.departmentId.DepartmentName || null
     });
   }
-
   if (doc.divisionName) {
     accessibleDivisions.push(doc.divisionName);
   }
-
   // Attach transient fields and return the Mongoose document so instance methods work
   doc.accessScope = doc.assignmentLevel;
   doc.regions = accessibleRegions;
@@ -170,7 +158,6 @@ HierarchicalUserAssignmentSchema.statics.getUserPermissions = async function(use
   doc.workflowRoles = Array.isArray(doc.workflowRoles) ? doc.workflowRoles : [];
   return doc;
 };
-
 // Method to check if user has access to specific region (accepts name or id)
 HierarchicalUserAssignmentSchema.methods.hasRegionAccess = function(regionOrId) {
   if (this.assignmentLevel === 'FULL') return true;
@@ -180,7 +167,6 @@ HierarchicalUserAssignmentSchema.methods.hasRegionAccess = function(regionOrId) 
   }
   return this.regionId && this.regionId.toString() === String(regionOrId);
 };
-
 // Method to check if user has access to specific department (accepts name or id)
 HierarchicalUserAssignmentSchema.methods.hasDepartmentAccess = function(deptOrId) {
   if (this.assignmentLevel === 'FULL') return true;
@@ -191,7 +177,6 @@ HierarchicalUserAssignmentSchema.methods.hasDepartmentAccess = function(deptOrId
   }
   return this.departmentId && this.departmentId.toString() === String(deptOrId);
 };
-
 // Method to check if user has access to specific division (by name)
 HierarchicalUserAssignmentSchema.methods.hasDivisionAccess = function(divisionName) {
   if (this.assignmentLevel === 'FULL') return true;
@@ -199,7 +184,6 @@ HierarchicalUserAssignmentSchema.methods.hasDivisionAccess = function(divisionNa
   if (this.assignmentLevel === 'DEPARTMENT') return true; // Department users can access all divisions in their department
   return (this.divisionName || this.accessibleDivisionNames?.[0]) === divisionName;
 };
-
 // Method to get consolidation target (where data should be saved)
 HierarchicalUserAssignmentSchema.methods.getConsolidationTarget = function() {
   switch (this.assignmentLevel) {
@@ -234,5 +218,4 @@ HierarchicalUserAssignmentSchema.methods.getConsolidationTarget = function() {
       return null;
   }
 };
-
-module.exports = mongoose.model('HierarchicalUserAssignment', HierarchicalUserAssignmentSchema);
+module.exports = mongoose.model('HierarchicalUserAssignment', HierarchicalUserAssignmentSchema);

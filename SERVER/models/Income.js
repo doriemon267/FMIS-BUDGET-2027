@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-
 const incomeSchema = new mongoose.Schema(
   {
     particulars: {
@@ -72,5 +71,4 @@ const incomeSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-
-module.exports = mongoose.model("Income", incomeSchema);
+module.exports = mongoose.model("Income", incomeSchema);

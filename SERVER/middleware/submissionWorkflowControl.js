@@ -8,10 +8,8 @@
  * 
  * Hierarchy: Division → Submit → Department → Submit → Region
  */
-
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const { hasFullAccess } = require('./securityMiddleware');
-
 /**
  * Enhanced hierarchical access control with submission workflow
  * @param {string} operation - The operation type: 'create', 'read', 'update', 'delete'
@@ -23,34 +21,24 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
     logAccess = true, 
     enforceSubmissionWorkflow = true 
   } = options;
-
   return async (req, res, next) => {
     try {
       const userId = req.user.id;
       const userRoles = req.user.Roles;
       const userName = req.user.FirstName + ' ' + req.user.LastName;
-
       // Full access roles bypass all restrictions
       if (hasFullAccess(userRoles)) {
-        if (logAccess) {
-          console.log(`✅ Submission Workflow: Full access granted to ${userName}`);
-        }
         return next();
       }
-
       // Get user's hierarchical assignment
       const assignment = await HierarchicalUserAssignment.getUserPermissions(userId);
       if (!assignment) {
-        if (logAccess) {
-          console.log(`❌ Submission Workflow: No hierarchical assignment found for ${userName}`);
-        }
         return res.status(403).json({
           success: false,
           message: 'No organizational assignment found. Please contact administrator.',
           code: 'NO_ORG_ASSIGNMENT'
         });
       }
-
       // Handle different operations
       if (operation === 'read') {
         await handleSubmissionWorkflowRead(req, res, next, assignment, { logAccess, userName, enforceSubmissionWorkflow });
@@ -59,7 +47,6 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
       } else {
         return next();
       }
-
     } catch (error) {
       console.error('🚨 Submission Workflow Control Error:', error);
       return res.status(500).json({
@@ -70,17 +57,14 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
     }
   };
 };
-
 /**
  * Handle read operations with submission workflow filtering
  */
 const handleSubmissionWorkflowRead = async (req, res, next, assignment, options) => {
   const { logAccess, userName, enforceSubmissionWorkflow } = options;
-
   // Build base hierarchical filters
   let hierarchicalFilters = {};
   let submissionFilters = {};
-
   switch (assignment.assignmentLevel) {
     case 'DIVISION':
       // Division users can only see their own division data (any status)
@@ -92,13 +76,11 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
           { division: assignment.divisions[0] }
         ]
       };
-      
       if (enforceSubmissionWorkflow) {
         // Division users see all their own data regardless of status
         submissionFilters = hierarchicalFilters;
       }
       break;
-
     case 'DEPARTMENT':
       // Department users can see:
       // 1. Their own department data (any status)
@@ -145,7 +127,6 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
         submissionFilters = hierarchicalFilters;
       }
       break;
-
     case 'REGION':
       // Region users can see:
       // 1. Their own region data (any status)
@@ -188,23 +169,17 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
         submissionFilters = hierarchicalFilters;
       }
       break;
-
     case 'FULL':
       // Full access users can see everything
       submissionFilters = {};
       break;
-
     default:
-      if (logAccess) {
-        console.log(`❌ Submission Workflow: Unknown assignment level ${assignment.assignmentLevel} for ${userName}`);
-      }
       return res.status(403).json({
         success: false,
         message: 'Invalid assignment level',
         code: 'INVALID_ASSIGNMENT_LEVEL'
       });
   }
-
   // Add filters to request for use in controllers
   req.submissionWorkflowFilters = submissionFilters;
   req.hierarchicalFilters = hierarchicalFilters;
@@ -217,26 +192,16 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
     rolePermissions: assignment.rolePermissions,
     submissionWorkflowEnabled: enforceSubmissionWorkflow
   };
-
-  if (logAccess) {
-    console.log(`✅ Submission Workflow Read: ${assignment.assignmentLevel} access granted to ${userName}`, {
-      filters: submissionFilters
-    });
-  }
-
   next();
 };
-
 /**
  * Handle write operations with submission workflow validation
  */
 const handleSubmissionWorkflowWrite = async (req, res, next, assignment, operation, options) => {
   const { logAccess, userName, strictMode } = options;
-
   // Check basic permissions
   const permissions = assignment.rolePermissions || {};
   let canPerformOperation = true;
-
   switch (operation) {
     case 'create':
       canPerformOperation = permissions.canCreateProposals !== false;
@@ -248,11 +213,7 @@ const handleSubmissionWorkflowWrite = async (req, res, next, assignment, operati
       canPerformOperation = permissions.canDeleteProposals === true;
       break;
   }
-
   if (!canPerformOperation) {
-    if (logAccess) {
-      console.log(`❌ Submission Workflow Write: ${operation} permission denied to ${userName}`);
-    }
     return res.status(403).json({
       success: false,
       message: `Access denied. You don't have permission to ${operation} data`,
@@ -261,15 +222,10 @@ const handleSubmissionWorkflowWrite = async (req, res, next, assignment, operati
       userLevel: assignment.assignmentLevel
     });
   }
-
   // Validate hierarchical access
   const isValidAccess = await validateHierarchicalAccess(req, assignment);
-  
   if (!isValidAccess) {
     if (strictMode) {
-      if (logAccess) {
-        console.log(`❌ Submission Workflow Write: ${operation} operation denied to ${userName} - invalid organizational access`);
-      }
       return res.status(403).json({
         message: `Access denied. You cannot ${operation} data outside your assigned organizational units`,
         code: 'INVALID_HIERARCHICAL_ACCESS',
@@ -279,23 +235,14 @@ const handleSubmissionWorkflowWrite = async (req, res, next, assignment, operati
         allowedDepartments: assignment.departments?.map(d => d.departmentName) || [],
         allowedDivisions: assignment.divisions || []
       });
-    } else if (logAccess) {
-      console.log(`⚠️ Submission Workflow Write: ${operation} operation proceeding with relaxed validation for ${userName}`);
     }
   }
-
   // Apply submission workflow consolidation for create operations
   if (operation === 'create') {
     applySubmissionWorkflowConsolidation(req, assignment);
   }
-
-  if (logAccess) {
-    console.log(`✅ Submission Workflow Write: ${operation} access granted to ${userName}`);
-  }
-
   next();
 };
-
 /**
  * Apply submission workflow consolidation logic
  */
@@ -303,14 +250,12 @@ const applySubmissionWorkflowConsolidation = (req, assignment) => {
   const regionName = assignment.regions[0]?.regionName;
   const departmentName = assignment.departments[0]?.departmentName;
   const divisionName = assignment.divisions?.[0] || null;
-
   // Store original organizational context
   req.originalOrgContext = {
     region: req.body.region,
     department: req.body.department,
     division: req.body.division
   };
-
   // Apply consolidation based on user's access scope
   switch (assignment.assignmentLevel) {
     case 'DIVISION':
@@ -322,7 +267,6 @@ const applySubmissionWorkflowConsolidation = (req, assignment) => {
       req.body.region = regionName;
       req.body.status = req.body.status || 'Draft'; // Default to Draft for new submissions
       break;
-
     case 'DEPARTMENT':
       // Department submissions stay at department level (not consolidated until submitted)
       req.body.originalLevel = 'DEPARTMENT';
@@ -331,7 +275,6 @@ const applySubmissionWorkflowConsolidation = (req, assignment) => {
       req.body.region = regionName;
       req.body.status = req.body.status || 'Draft'; // Default to Draft for new submissions
       break;
-
     case 'REGION':
       // Region submissions stay at region level
       req.body.originalLevel = 'REGION';
@@ -339,7 +282,6 @@ const applySubmissionWorkflowConsolidation = (req, assignment) => {
       req.body.status = req.body.status || 'Draft'; // Default to Draft for new submissions
       break;
   }
-
   // Add submission workflow metadata
   req.body.submissionWorkflowMetadata = {
     submittedBy: req.user.id,
@@ -354,13 +296,11 @@ const applySubmissionWorkflowConsolidation = (req, assignment) => {
     }
   };
 };
-
 /**
  * Validate hierarchical access permissions
  */
 const validateHierarchicalAccess = async (req, assignment) => {
   const { region, department, division } = req.body;
-
   // Check region access if region is specified
   if (region) {
     const hasRegionAccess = assignment.hasRegionAccess(region);
@@ -368,7 +308,6 @@ const validateHierarchicalAccess = async (req, assignment) => {
       return false;
     }
   }
-
   // Check department access if department is specified
   if (department) {
     const hasDepartmentAccess = assignment.hasDepartmentAccess(department);
@@ -376,7 +315,6 @@ const validateHierarchicalAccess = async (req, assignment) => {
       return false;
     }
   }
-
   // Check division access if division is specified
   if (division) {
     const hasDivisionAccess = assignment.hasDivisionAccess(division);
@@ -384,10 +322,8 @@ const validateHierarchicalAccess = async (req, assignment) => {
       return false;
     }
   }
-
   return true;
 };
-
 /**
  * Submission workflow transition controllers
  */
@@ -397,9 +333,7 @@ const submissionWorkflowTransitions = {
     try {
       const { ids = [], entity = 'personnel', submissionNote } = req.body;
       const userId = req.user?.id || 'system';
-      
       const Model = getModelByEntity(entity);
-      
       const result = await Model.updateMany(
         { 
           _id: { $in: ids },
@@ -416,7 +350,6 @@ const submissionWorkflowTransitions = {
           } 
         }
       );
-      
       return res.status(200).json({ 
         message: 'Successfully submitted to Department for review', 
         modified: result.modifiedCount 
@@ -429,15 +362,12 @@ const submissionWorkflowTransitions = {
       });
     }
   },
-
   // Department approves and submits to Region
   departmentSubmitToRegion: async (req, res) => {
     try {
       const { ids = [], entity = 'personnel', approvalNote } = req.body;
       const userId = req.user?.id || 'system';
-      
       const Model = getModelByEntity(entity);
-      
       const result = await Model.updateMany(
         { 
           _id: { $in: ids },
@@ -456,7 +386,6 @@ const submissionWorkflowTransitions = {
           } 
         }
       );
-      
       return res.status(200).json({ 
         message: 'Successfully approved and submitted to Region', 
         modified: result.modifiedCount 
@@ -469,15 +398,12 @@ const submissionWorkflowTransitions = {
       });
     }
   },
-
   // Region final approval
   regionFinalApproval: async (req, res) => {
     try {
       const { ids = [], entity = 'personnel', finalNote } = req.body;
       const userId = req.user?.id || 'system';
-      
       const Model = getModelByEntity(entity);
-      
       const result = await Model.updateMany(
         { 
           _id: { $in: ids },
@@ -493,7 +419,6 @@ const submissionWorkflowTransitions = {
           } 
         }
       );
-      
       return res.status(200).json({ 
         message: 'Successfully granted final approval', 
         modified: result.modifiedCount 
@@ -507,7 +432,6 @@ const submissionWorkflowTransitions = {
     }
   }
 };
-
 /**
  * Helper function to get model by entity type
  */
@@ -527,7 +451,6 @@ const getModelByEntity = (entity) => {
       return require('../models/personnelServices');
   }
 };
-
 module.exports = {
   submissionWorkflowControl,
   submissionWorkflowTransitions,
@@ -535,4 +458,4 @@ module.exports = {
   handleSubmissionWorkflowWrite,
   applySubmissionWorkflowConsolidation,
   validateHierarchicalAccess
-};
+};

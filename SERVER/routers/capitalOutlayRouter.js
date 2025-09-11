@@ -8,49 +8,39 @@ const {
   getAccountingTitles,
   deleteAllCapitalOutlays,
 } = require("../controllers/capitalOutlayController");
-
 // Import chart of accounts model for seeding
 const ChartOfAccounts = require("../models/chartOfAccounts");
-
 const Router = require("express").Router;
 const checkDueDate = require("../middleware/checkDueDate");
 const checkDueDateWithRoleBypass = require("../middleware/checkDueDateWithRoleBypass");
 const checkToken = require("../middleware/checkToken");
 const { strictHierarchicalControl, hierarchicalAccessControl } = require('../middleware/hierarchicalAccessControl');
 const CapitalOutlay = require("../models/CapitalOutlay"); // New model import
-
 const capitalOutlayRouter = Router();
-
 // Apply authentication to all capital outlay routes
 capitalOutlayRouter.use(checkToken);
-
 capitalOutlayRouter.get("/capital-outlays", hierarchicalAccessControl('read', { allowedFields: ['region'] }), getAllCapitalOutlays);
 capitalOutlayRouter.post("/capital-outlays", checkDueDate, hierarchicalAccessControl('create', { strictMode: false, enableConsolidation: true }), addCapitalOutlay);
 capitalOutlayRouter.put("/capital-outlays/:id", checkDueDate, hierarchicalAccessControl('update', { strictMode: false, enableConsolidation: true }), editCapitalOutlay);
 capitalOutlayRouter.delete("/capital-outlays/:id", checkDueDateWithRoleBypass, deleteCapitalOutlay);
-
 capitalOutlayRouter.get("/capital-outlay-list", getCapitalOutlayList);
 capitalOutlayRouter.get("/subline-items", getSublineItems);
 capitalOutlayRouter.get("/accounting-titles", getAccountingTitles);
 capitalOutlayRouter.delete("/deleteAllCapitalOutlays", deleteAllCapitalOutlays);
-
 // Check due date status
 capitalOutlayRouter.get("/due-date-status", async (req, res) => {
   try {
     const Settings = require("../models/Settings");
     const activeSettings = await Settings.findOne({ isActive: true });
-    
     if (!activeSettings) {
       return res.status(200).json({ 
         isPastDue: true, 
         message: "No active fiscal year found." 
       });
     }
-
     const now = new Date();
     const dueDate = new Date(activeSettings.dueDate);
     const isPastDue = now > dueDate;
-    
     // Check if user has admin privileges
     const userRoles = req.user?.Roles || [];
     const isAdmin = userRoles.some(role => 
@@ -58,7 +48,6 @@ capitalOutlayRouter.get("/due-date-status", async (req, res) => {
       role.toUpperCase().includes('SUPER') ||
       role.toUpperCase().includes('BUDGET ADMIN')
     );
-
     res.status(200).json({
       isPastDue,
       dueDate: dueDate.toISOString(),
@@ -72,24 +61,19 @@ capitalOutlayRouter.get("/due-date-status", async (req, res) => {
     res.status(500).json({ error: "Failed to check due date status" });
   }
 });
-
 // Route to manually seed Capital Outlay chart of accounts
 capitalOutlayRouter.post("/seed-chart-of-accounts", async (req, res) => {
   try {
-    console.log("Manual seeding of Capital Outlay chart of accounts requested");
-
     // Check if Capital Outlay entries already exist
     const existingEntries = await ChartOfAccounts.find({
       uacsCode: { $regex: /^5-01/ }
     });
-
     if (existingEntries.length > 0) {
       return res.status(200).json({
         message: "Capital Outlay chart of accounts entries already exist",
         count: existingEntries.length
       });
     }
-
     const capitalOutlayEntries = [
       // Infrastructure Outlay
       { sublineItem: "Infrastructure Outlay", accountingTitle: "Infrastructure Outlay - Roads and Bridges", uacsCode: "5-01-01-010" },
@@ -97,7 +81,6 @@ capitalOutlayRouter.post("/seed-chart-of-accounts", async (req, res) => {
       { sublineItem: "Infrastructure Outlay", accountingTitle: "Infrastructure Outlay - Water Supply Systems", uacsCode: "5-01-01-030" },
       { sublineItem: "Infrastructure Outlay", accountingTitle: "Infrastructure Outlay - Irrigation Systems", uacsCode: "5-01-01-040" },
       { sublineItem: "Infrastructure Outlay", accountingTitle: "Infrastructure Outlay - Other Infrastructure", uacsCode: "5-01-01-990" },
-
       // Building and Other Structures
       { sublineItem: "Building and Other Structures", accountingTitle: "Buildings", uacsCode: "5-01-02-010" },
       { sublineItem: "Building and Other Structures", accountingTitle: "School Buildings", uacsCode: "5-01-02-020" },
@@ -106,7 +89,6 @@ capitalOutlayRouter.post("/seed-chart-of-accounts", async (req, res) => {
       { sublineItem: "Building and Other Structures", accountingTitle: "Slaughterhouses", uacsCode: "5-01-02-050" },
       { sublineItem: "Building and Other Structures", accountingTitle: "Hostels and Dormitories", uacsCode: "5-01-02-060" },
       { sublineItem: "Building and Other Structures", accountingTitle: "Other Structures", uacsCode: "5-01-02-990" },
-
       // Machinery and Equipment Outlay
       { sublineItem: "Machinery and Equipment Outlay", accountingTitle: "Office Equipment", uacsCode: "5-01-03-010" },
       { sublineItem: "Machinery and Equipment Outlay", accountingTitle: "Information and Communications Technology Equipment", uacsCode: "5-01-03-020" },
@@ -117,20 +99,16 @@ capitalOutlayRouter.post("/seed-chart-of-accounts", async (req, res) => {
       { sublineItem: "Machinery and Equipment Outlay", accountingTitle: "Sports Equipment", uacsCode: "5-01-03-070" },
       { sublineItem: "Machinery and Equipment Outlay", accountingTitle: "Technical and Scientific Equipment", uacsCode: "5-01-03-080" },
       { sublineItem: "Machinery and Equipment Outlay", accountingTitle: "Other Machinery and Equipment", uacsCode: "5-01-03-990" },
-
       // Transportation Equipment Outlay
       { sublineItem: "Transportation Equipment Outlay", accountingTitle: "Motor Vehicles", uacsCode: "5-01-04-010" },
       { sublineItem: "Transportation Equipment Outlay", accountingTitle: "Aircraft", uacsCode: "5-01-04-020" },
       { sublineItem: "Transportation Equipment Outlay", accountingTitle: "Watercrafts", uacsCode: "5-01-04-030" },
       { sublineItem: "Transportation Equipment Outlay", accountingTitle: "Other Transportation Equipment", uacsCode: "5-01-04-990" },
-
       // Furniture, Fixtures and Books Outlay
       { sublineItem: "Furniture, Fixtures and Books Outlay", accountingTitle: "Furniture and Fixtures", uacsCode: "5-01-05-010" },
       { sublineItem: "Furniture, Fixtures and Books Outlay", accountingTitle: "Books", uacsCode: "5-01-05-020" }
     ];
-
     const result = await ChartOfAccounts.insertMany(capitalOutlayEntries);
-
     res.status(201).json({
       message: "Capital Outlay chart of accounts seeded successfully",
       count: result.length
@@ -144,24 +122,18 @@ capitalOutlayRouter.post("/seed-chart-of-accounts", async (req, res) => {
 capitalOutlayRouter.get("/capital-outlay/getByParams", hierarchicalAccessControl('read', { allowedFields: ['region'] }), async (req, res) => {
   try {
     const { fiscalYear, budgetType, processBy, region, status } = req.query;
-    
-    console.log("Fetching Capital Outlay with params:", { fiscalYear, budgetType, processBy, region, status });
-    
     const query = {};
     if (fiscalYear) query.fiscalYear = fiscalYear;
     if (budgetType) query.budgetType = budgetType;
     if (processBy) query.processBy = processBy;
     if (status) query.status = status;
-    
     // Apply sophisticated hierarchical filtering based on user access scope
     const accessScope = req.hierarchicalAccess?.scope;
     const accessibleRegionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
-
     // Add region filter based on access scope
     if (accessScope && accessScope !== 'FULL' && accessibleRegionName) {
       query.region = accessibleRegionName;
     }
-
     // Add finer filters based on access scope
     if (accessScope === 'DIVISION') {
       // Division users: only their division within their department and region
@@ -201,19 +173,15 @@ capitalOutlayRouter.get("/capital-outlay/getByParams", hierarchicalAccessControl
         ]
       };
     }
-    
     // Fallback region filter if provided and not already constrained
     if (region && !query.region && !query.$and) {
       query.region = region;
     }
-    
     const capitalOutlay = await CapitalOutlay.find(query).lean();
-    
-    console.log(`Found ${capitalOutlay.length} Capital Outlay records`);
     res.status(200).json(capitalOutlay);
   } catch (error) {
     console.error("Error fetching Capital Outlay by params:", error);
     res.status(500).json({ message: "Failed to fetch Capital Outlay data" });
   }
 });
-module.exports = capitalOutlayRouter;
+module.exports = capitalOutlayRouter;

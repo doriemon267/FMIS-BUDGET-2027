@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
-
 const mooeProposalSchema = new Schema({
   uacsCode: {
     type: String,
@@ -76,8 +75,6 @@ const mooeProposalSchema = new Schema({
     at: { type: Date }
   }
 }, { timestamps: true });
-
 // Create a compound index for upsert operations - includes region for proper isolation
 mooeProposalSchema.index({ uacsCode: 1, fiscalYear: 1, region: 1 }, { unique: true });
-
-module.exports = mongoose.model('MooeProposal', mooeProposalSchema);
+module.exports = mongoose.model('MooeProposal', mooeProposalSchema);

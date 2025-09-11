@@ -1,15 +1,12 @@
 // Seed script for income_subcategories table
 // Place this file in SERVER/SCRIPTS/ and run with: node seed_income_subcategories.js
 // Make sure to adjust DB connection as needed
-
 const { Sequelize, DataTypes } = require('sequelize');
-
 // Update these values according to your DB config
 const sequelize = new Sequelize('your_db_name', 'your_db_user', 'your_db_password', {
   host: 'localhost',
   dialect: 'mysql', // or 'postgres', 'sqlite', etc.
 });
-
 const IncomeSubcategory = sequelize.define('income_subcategories', {
   id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
   name: { type: DataTypes.STRING, allowNull: false },
@@ -18,7 +15,6 @@ const IncomeSubcategory = sequelize.define('income_subcategories', {
   timestamps: false,
   freezeTableName: true,
 });
-
 // Replace these with your actual subcategories and category_id values
 // Category IDs:
 // 1 - Irrigation Service Fees
@@ -26,15 +22,12 @@ const IncomeSubcategory = sequelize.define('income_subcategories', {
 // 3 - Water Service Fee
 // 4 - Miscellaneous Income
 // 5 - Others
-
 const subcategories = [
   // Irrigation Service Fees
   { name: 'Current Account', category_id: 1 },
   { name: 'Back Accounts', category_id: 1 },
-
   // Rent Income
   { name: 'Rent Income', category_id: 2 },
-
   // Water Service Fee
   { name: 'Aya PSP', category_id: 3 },
   { name: 'NPC Energy Delivery', category_id: 3 },
@@ -54,7 +47,6 @@ const subcategories = [
   { name: 'Eurohydro', category_id: 3 },
   { name: 'Global Banana Corp.', category_id: 3 },
   { name: 'Palm Oil', category_id: 3 },
-
   // Miscellaneous Income
   { name: 'Bid Forms', category_id: 4 },
   { name: 'Certification Fee/Verification Fee', category_id: 4 },
@@ -69,7 +61,6 @@ const subcategories = [
   { name: 'Pump Amortization & Equity', category_id: 4 },
   { name: 'Sales of Non Performing Assets', category_id: 4 },
   { name: 'Sales of Scrap', category_id: 4 },
-
   // Others
   { name: 'Balingasag - Crusher', category_id: 5 },
   { name: 'Drying Fee', category_id: 5 },
@@ -94,20 +85,15 @@ const subcategories = [
   { name: 'Water Service Fee', category_id: 5 },
   { name: 'Miscellaneous/Others', category_id: 5 },
 ];
-
 async function seed() {
   try {
     await sequelize.authenticate();
-    console.log('Connection established.');
     for (const subcat of subcategories) {
       await IncomeSubcategory.create(subcat);
-      console.log(`Inserted: ${subcat.name}`);
-    }
-    console.log('Seeding complete.');
+      }
     await sequelize.close();
   } catch (err) {
     console.error('Error:', err);
   }
 }
-
-seed();
+seed();

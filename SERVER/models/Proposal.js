@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-
 const proposalSchema = new mongoose.Schema({
   title: {
     type: String,
@@ -61,5 +60,4 @@ const proposalSchema = new mongoose.Schema({
     default: Date.now
   }
 }, { timestamps: true });
-
-module.exports = mongoose.model("Proposal", proposalSchema);
+module.exports = mongoose.model("Proposal", proposalSchema);

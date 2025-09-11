@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-
 const databaseBackupSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -82,29 +81,24 @@ const databaseBackupSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
-
 // Index for faster queries
 databaseBackupSchema.index({ createdAt: -1 });
 databaseBackupSchema.index({ status: 1 });
 databaseBackupSchema.index({ type: 1 });
 databaseBackupSchema.index({ schedule: 1, enabled: 1 });
-
 // Virtual for formatted file size
 databaseBackupSchema.virtual('formattedSize').get(function() {
   if (!this.size) return '0 B';
-  
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(this.size) / Math.log(1024));
   return Math.round(this.size / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
 });
-
 // Virtual for backup age
 databaseBackupSchema.virtual('age').get(function() {
   const now = new Date();
   const created = this.createdAt;
   const diffMs = now - created;
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  
   if (diffDays === 0) {
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
     if (diffHours === 0) {
@@ -124,18 +118,14 @@ databaseBackupSchema.virtual('age').get(function() {
     return `${months} month${months !== 1 ? 's' : ''} ago`;
   }
 });
-
 // Method to check if backup is expired
 databaseBackupSchema.methods.isExpired = function() {
   if (!this.retentionDays) return false;
-  
   const now = new Date();
   const expiryDate = new Date(this.createdAt);
   expiryDate.setDate(expiryDate.getDate() + this.retentionDays);
-  
   return now > expiryDate;
 };
-
 // Static method to clean up expired backups
 databaseBackupSchema.statics.cleanupExpired = async function() {
   const expiredBackups = await this.find({
@@ -146,17 +136,14 @@ databaseBackupSchema.statics.cleanupExpired = async function() {
       ]
     }
   });
-
   const fs = require('fs');
   let deletedCount = 0;
-
   for (const backup of expiredBackups) {
     try {
       // Delete backup file
       if (backup.filePath && fs.existsSync(backup.filePath)) {
         fs.unlinkSync(backup.filePath);
       }
-      
       // Delete database record
       await this.findByIdAndDelete(backup._id);
       deletedCount++;
@@ -164,10 +151,8 @@ databaseBackupSchema.statics.cleanupExpired = async function() {
       console.error(`Error deleting expired backup ${backup.name}:`, error);
     }
   }
-
   return deletedCount;
 };
-
 // Pre-save middleware to set default values
 databaseBackupSchema.pre('save', function(next) {
   if (this.isNew && !this.name) {
@@ -175,9 +160,7 @@ databaseBackupSchema.pre('save', function(next) {
   }
   next();
 });
-
 // Set transform to include virtuals in JSON
 databaseBackupSchema.set('toJSON', { virtuals: true });
 databaseBackupSchema.set('toObject', { virtuals: true });
-
 module.exports = mongoose.model('DatabaseBackup', databaseBackupSchema);

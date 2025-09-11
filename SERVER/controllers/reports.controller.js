@@ -8,7 +8,6 @@ const Region = require("../models/Region");
 const IncomeCategory = require("../models/IncomeCategory");
 const IncomeSubCategory = require("../models/IncomeSubcategory");
 const IAsOMCost = require("../models/IAsOMCost");
-
 const getConsolidatedSummary = async (req, res) => {
   try {
     let fiscalYear;
@@ -21,18 +20,15 @@ const getConsolidatedSummary = async (req, res) => {
         return res.status(404).json({ error: "No active settings found." });
       fiscalYear = activeSetting.fiscalYear;
     }
-
     // Build filter from query params
     const { region, department } = req.query;
     const filter = { fiscalYear };
     if (region && region.trim()) filter.region = region.trim();
     if (department && department.trim()) filter.department = department.trim();
-
     // Fetch data
     const psEntries = await PersonnelServices.find(filter);
     const mooeEntries = await MOOEProposal.find(filter)
       .populate({ path: "uacsCode", select: "uacsCode lineItem subLineItem accountingTitle" });
-    
     // Properly populate the category field
     const coEntries = await CapitalOutlay.find(filter)
       .populate({ 
@@ -40,7 +36,6 @@ const getConsolidatedSummary = async (req, res) => {
         select: "categoryName _id",
         model: Category
       });
-      
     // Fetch IAs O&M Cost data
     let iasOMCostData = await IAsOMCost.findOne(filter);
     if (!iasOMCostData) {
@@ -52,7 +47,6 @@ const getConsolidatedSummary = async (req, res) => {
         cisSubsidy: 0
       };
     }
-
     // Sum Personnel Services fields (excluding annualSalary)
     const psFieldsToSum = [
       "PERA", "RATA", "honoraria", "uniformALLOWANCE",
@@ -70,7 +64,6 @@ const getConsolidatedSummary = async (req, res) => {
         0
       );
     });
-
     // Compute annualSalary breakdown by appointment type
     const permAnnual = psEntries
       .filter(e => e.statusOfAppointment.toUpperCase() === "PERMANENT")
@@ -86,7 +79,6 @@ const getConsolidatedSummary = async (req, res) => {
                          (Number(entry.subsidy) || 0) + 
                          (entry.uacsCode === "5-02-99-990-NIS" ? (Number(entry.nis) || 0) : 0) +
                          (entry.uacsCode === "5-02-99-990-CIS" ? (Number(entry.cis) || 0) : 0);
-
       return {
         uacsCode: entry.uacsCode?.uacsCode || entry.uacsCode,
         lineItem: entry.uacsCode?.lineItem,
@@ -99,11 +91,9 @@ const getConsolidatedSummary = async (req, res) => {
         subsidy: Number(entry.subsidy) || 0
       };
     });
-
     // Map Capital Outlay entries with proper category handling
     const co = await Promise.all(coEntries.map(async (entry) => {
       let categoryName = 'Uncategorized';
-      
       // If category is populated, use its categoryName
       if (entry.category && typeof entry.category === 'object' && entry.category.categoryName) {
         categoryName = entry.category.categoryName;
@@ -119,7 +109,6 @@ const getConsolidatedSummary = async (req, res) => {
           console.error(`Error fetching category for ID ${entry.category}:`, err);
         }
       }
-      
       return {
         category: categoryName,
         particulars: entry.particulars || '',
@@ -132,22 +121,17 @@ const getConsolidatedSummary = async (req, res) => {
       };
     }));    // Calculate MOOE Regular total
     const mooeRegularTotal = mooe.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-    
     // Calculate IAs O&M Cost total
     const iasOMTotal = (Number(iasOMCostData?.nis || 0) + 
                        Number(iasOMCostData?.cis || 0) +
                        Number(iasOMCostData?.nisSubsidy || 0) + 
                        Number(iasOMCostData?.cisSubsidy || 0));
-
     // Calculate combined MOOE total (Regular + IAs O&M)
     const mooeTotal = mooeRegularTotal;
-
     // Calculate Capital Outlay total
     const coTotal = co.reduce((sum, e) => sum + (Number(e.cost) || 0), 0);
-
     // Add IAs O&M Cost to psSummary for the PDF report
     psSummary.iasOMCost = iasOMCostData;
-    
     // Return consolidated summary with detailed MOOE breakdown
     res.json({ 
       fiscalYear, 
@@ -167,14 +151,11 @@ const getConsolidatedSummary = async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
-
 /**
  * Get consolidated corporate income report by region
  */
 const getConsolidatedCorporateIncome = async (req, res) => {
   try {
-    console.log("Received request for consolidated corporate income with params:", req.query);
-    
     // Determine fiscal year
     let fiscalYear;
     if (req.query.fiscalYear) {
@@ -185,16 +166,11 @@ const getConsolidatedCorporateIncome = async (req, res) => {
         return res.status(404).json({ error: "No active settings found." });
       fiscalYear = activeSetting.fiscalYear;
     }
-    console.log(`Using fiscal year: ${fiscalYear}`);
-
     // Get budget type from query or default to "INITIAL"
     const budgetType = (req.query.budgetType || "INITIAL").toUpperCase();
-    console.log(`Using budget type: ${budgetType}`);
-
     // Optional region filter from query (set by region interceptor)
     const regionFilterRaw = (req.query.region || '').trim();
     const regionFilter = regionFilterRaw && regionFilterRaw.toLowerCase() !== 'all' ? regionFilterRaw : null;
-
     // Get regions: if region filter present, only include that; else include all
     let regions;
     if (regionFilter) {
@@ -202,12 +178,9 @@ const getConsolidatedCorporateIncome = async (req, res) => {
     } else {
       regions = await Region.find().sort({ Region: 1 });
     }
-    console.log(`Using ${regions.length} region(s) in report${regionFilter ? ` (filtered to: ${regionFilter})` : ''}`);
-    
+    in report${regionFilter ? ` (filtered to: ${regionFilter})` : ''}`);
     // Get all income categories and deduplicate by name
     const allIncomeCategories = await IncomeCategory.find().sort({ incomeCategoryName: 1 });
-    console.log(`Found ${allIncomeCategories.length} total income category records`);
-    
     // Deduplicate categories by name - consolidate all regions for same category name
     const categoryMap = new Map();
     allIncomeCategories.forEach(category => {
@@ -227,14 +200,9 @@ const getConsolidatedCorporateIncome = async (req, res) => {
         existing.isGlobal = existing.isGlobal || category.isGlobal;
       }
     });
-    
     const incomeCategories = Array.from(categoryMap.values());
-    console.log(`Deduplicated to ${incomeCategories.length} unique income categories`);
-    
     // Get all income subcategories and also extract subcategories from income entries
     const incomeSubCategories = await IncomeSubCategory.find().sort({ incomeSubcategoryName: 1 });
-    console.log(`Found ${incomeSubCategories.length} formal income subcategories`);
-    
     // Fetch all income entries first to extract subcategories
     const budgetTypeQuery = { $regex: new RegExp(budgetType, 'i') };
     const query = { fiscalYear };
@@ -245,25 +213,16 @@ const getConsolidatedCorporateIncome = async (req, res) => {
       // Case-insensitive exact match for region
       query.region = { $regex: new RegExp(`^${regionFilter}$`, 'i') };
     }
-
-    console.log("Income query:", JSON.stringify(query));
+    );
     const incomeEntries = await Income.find(query).populate('incomecategory');
-    console.log(`Found ${incomeEntries.length} income entries for FY ${fiscalYear} and budget type ${budgetType}`);
-    
     // Extract unique subcategories from income entries
     const subcategorySet = new Set();
     const subcategoryToCategoryMap = new Map(); // Track which category each subcategory belongs to
-    
-    console.log("Extracting subcategories from income entries...");
-    
     incomeEntries.forEach(entry => {
       const subcategoryName = entry.subcategory;
       const entryCategory = entry.incomecategory;
-      
       if (subcategoryName && subcategoryName !== 'Uncategorized' && subcategoryName.trim() !== '') {
         subcategorySet.add(subcategoryName);
-        console.log(`Found subcategory: "${subcategoryName}"`);
-        
         // Map subcategory to its parent category
         if (entryCategory) {
           let categoryName = 'Uncategorized';
@@ -273,13 +232,11 @@ const getConsolidatedCorporateIncome = async (req, res) => {
             categoryName = entryCategory.name;
           }
           subcategoryToCategoryMap.set(subcategoryName, categoryName);
-          console.log(`Mapping subcategory "${subcategoryName}" to category "${categoryName}"`);
-        }
+          }
       } else {
-        console.log(`Income entry "${entry.particulars}" has no valid subcategory (value: "${subcategoryName}")`);
+        `);
       }
     });
-    
     // Create dynamic subcategory objects from extracted data
     const dynamicSubcategories = Array.from(subcategorySet).map(subcategoryName => {
       const parentCategory = subcategoryToCategoryMap.get(subcategoryName) || 'Uncategorized';
@@ -290,11 +247,9 @@ const getConsolidatedCorporateIncome = async (req, res) => {
         parentCategory: parentCategory
       };
     });
-    
     // Combine formal subcategories with dynamic ones
     const allSubcategories = [...incomeSubCategories, ...dynamicSubcategories];
-    console.log(`Total subcategories (formal + dynamic): ${allSubcategories.length}`);
-
+    : ${allSubcategories.length}`);
     // Initialize result structure with hierarchical data
     const result = {
       fiscalYear,
@@ -307,7 +262,6 @@ const getConsolidatedCorporateIncome = async (req, res) => {
       categorySubcategoryMap: {}, // Map to track which subcategories belong to which category
       grandTotal: 0
     };
-
     // Initialize region data structure
     regions.forEach(region => {
       result.regionData[region.Region] = {
@@ -315,24 +269,20 @@ const getConsolidatedCorporateIncome = async (req, res) => {
         subcategoryAmounts: {},
         total: 0
       };
-      
       // Initialize category amounts for each region
       incomeCategories.forEach(category => {
         result.regionData[region.Region].categoryAmounts[category._id.toString()] = 0;
       });
-      
       // Initialize subcategory amounts for each region
       allSubcategories.forEach(subcategory => {
         const subcategoryId = subcategory._id.toString();
         result.regionData[region.Region].subcategoryAmounts[subcategoryId] = 0;
       });
     });
-
     // Initialize category totals and prepare hierarchical structure
     incomeCategories.forEach(category => {
       const categoryId = category._id.toString();
       result.categoryTotals[categoryId] = 0;
-      
       // Add category to hierarchical data
       result.hierarchicalData.push({
         id: categoryId,
@@ -341,63 +291,50 @@ const getConsolidatedCorporateIncome = async (req, res) => {
         subcategories: [],
         order: category.order || 0 // Use order if available
       });
-      
       // Initialize the subcategory map for this category
       result.categorySubcategoryMap[categoryId] = [];
     });
-    
     // Initialize subcategory totals
     allSubcategories.forEach(subcategory => {
       const subcategoryId = subcategory._id.toString();
       result.subcategoryTotals[subcategoryId] = 0;
     });
-
     // First pass: Process income entries and collect subcategory information
     const subcategoryByCategoryMap = new Map(); // Map to track which subcategories belong to which category
-    
     incomeEntries.forEach(entry => {
       const region = entry.region || 'Unspecified';
       const entryCategory = entry.incomecategory;
       const subcategoryName = entry.subcategory || 'Uncategorized';
       const amount = Number(entry.amount) || 0;
-      
       // Skip if region doesn't exist in our structure
       if (!result.regionData[region]) {
-        console.log(`Skipping entry with unknown region: ${region}`);
         return;
       }
-      
       // Find the matching category by name
       let categoryId = null;
       let categoryName = 'Uncategorized';
-      
       if (entryCategory) {
         if (typeof entryCategory === 'object' && entryCategory.incomeCategoryName) {
           categoryName = entryCategory.incomeCategoryName;
         } else if (typeof entryCategory === 'object' && entryCategory.name) {
           categoryName = entryCategory.name;
         }
-        
         // Find the category by name in our deduplicated list
         const matchingCategory = incomeCategories.find(cat => 
           cat.name === categoryName || 
           (cat.name && cat.name.toLowerCase() === categoryName.toLowerCase())
         );
-        
         if (matchingCategory) {
           categoryId = matchingCategory._id.toString();
         }
       }
-      
       // Skip if category doesn't exist in our structure
       if (!categoryId || result.categoryTotals[categoryId] === undefined) {
-        console.log(`Skipping entry with unknown category: ${categoryName} (${categoryId})`);
+        `);
         return;
       }
-      
       // Add to region's category amount
       result.regionData[region].categoryAmounts[categoryId] += amount;
-      
       // Track subcategory to category relationship
       if (subcategoryName && subcategoryName !== 'Uncategorized') {
         if (!subcategoryByCategoryMap.has(categoryId)) {
@@ -405,48 +342,38 @@ const getConsolidatedCorporateIncome = async (req, res) => {
         }
         subcategoryByCategoryMap.get(categoryId).add(subcategoryName);
       }
-      
       // Find matching subcategory
       const matchingSubcategory = allSubcategories.find(
         sc => (sc.incomeSubcategoryName || sc.name).toLowerCase() === subcategoryName.toLowerCase()
       );
-      
       // If we found a matching subcategory, update its amounts
       if (matchingSubcategory) {
         const subcategoryId = matchingSubcategory._id.toString();
-        
         // Add to region's subcategory amount
         if (result.regionData[region].subcategoryAmounts[subcategoryId] !== undefined) {
           result.regionData[region].subcategoryAmounts[subcategoryId] += amount;
         }
-        
         // Update subcategory total
         if (result.subcategoryTotals[subcategoryId] !== undefined) {
           result.subcategoryTotals[subcategoryId] += amount;
         }
-        
         // Add to category-subcategory map if not already there
         if (!result.categorySubcategoryMap[categoryId].includes(subcategoryId)) {
           result.categorySubcategoryMap[categoryId].push(subcategoryId);
         }
       }
-      
       // Update region total
       result.regionData[region].total += amount;
-      
       // Update category total
       result.categoryTotals[categoryId] += amount;
-      
       // Update grand total
       result.grandTotal += amount;
     });
-    
     // Second pass: Build the hierarchical structure
     // For each category, add its subcategories to the hierarchical data
     result.hierarchicalData.forEach(categoryItem => {
       const categoryId = categoryItem.id;
       const subcategoryIds = result.categorySubcategoryMap[categoryId] || [];
-      
       // Add subcategories to this category
       subcategoryIds.forEach(subcategoryId => {
         const subcategory = allSubcategories.find(sc => sc._id.toString() === subcategoryId);
@@ -460,28 +387,22 @@ const getConsolidatedCorporateIncome = async (req, res) => {
           });
         }
       });
-      
       // Sort subcategories by name
       categoryItem.subcategories.sort((a, b) => a.name.localeCompare(b.name));
     });
-    
     // Sort categories by name
     result.hierarchicalData.sort((a, b) => a.name.localeCompare(b.name));
-
     // If there's no data, still return the structure but with a message
     if (incomeEntries.length === 0) {
       result.message = "No income data found for the selected fiscal year and budget type.";
     }
-
-    console.log(`Returning result with grand total: ${result.grandTotal}`);
     res.json(result);
   } catch (err) {
     console.error("Error in getConsolidatedCorporateIncome:", err);
     res.status(500).json({ error: "Internal Server Error", details: err.message });
   }
 };
-
 module.exports = { 
   getConsolidatedSummary,
   getConsolidatedCorporateIncome
-};
+};

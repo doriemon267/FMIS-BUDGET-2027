@@ -2,7 +2,6 @@ const xlsx = require("xlsx");
 const Income = require("../models/Income");
 const IncomeCategory = require("../models/IncomeCategory");
 const Settings = require("../models/Settings");
-
 // Process Excel file for bulk corporate income upload
 exports.uploadCorporateIncome = async (req, res) => {
   try {
@@ -16,41 +15,32 @@ exports.uploadCorporateIncome = async (req, res) => {
     }    // Read the Excel file
     const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
-    
     // Get the raw worksheet to see exact headers
     const worksheet = workbook.Sheets[sheetName];
-    console.log('Raw Excel Headers:', worksheet['!ref']); // Shows the range being read
-    
+    // Shows the range being read
     // Convert to Array of Arrays first to see exact headers
     const rawData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
-    console.log('Excel Headers (raw):', rawData[0]); // First row contains headers
-    
+    :', rawData[0]); // First row contains headers
     // Now convert to objects
     const sheetData = xlsx.utils.sheet_to_json(worksheet, {
       raw: false, // This will preserve formatting
       defval: null // Use null for empty cells instead of skipping them
     });
-    
     // Log the first row of processed data to see what we actually got
     if (sheetData.length > 0) {
-      console.log('First row processed:', sheetData[0]);
-      console.log('Available columns:', Object.keys(sheetData[0]));
+      );
     }
-    
     if (sheetData.length === 0) {
       return res.status(400).json({ 
         error: "Empty file", 
         message: "The uploaded Excel file contains no data" 
       });
     }
-
     // Debug: Print the first row of data to see column names
-    console.log('First row headers:', Object.keys(sheetData[0]));
-    console.log('First row values:', Object.values(sheetData[0]));
-
+    );
+    );
     // Validate the tabular format (categories as rows, regions as columns)
     const headers = Object.keys(sheetData[0]);
-    
     // Must have at least Category column and one region column
     if (headers.length <= 1) {
       return res.status(400).json({
@@ -58,7 +48,6 @@ exports.uploadCorporateIncome = async (req, res) => {
         message: "Excel file must be in tabular format with Category column and at least one region column"
       });
     }
-
     // First column must be Category
     if (!headers[0].toLowerCase().includes('category')) {
       return res.status(400).json({
@@ -66,7 +55,6 @@ exports.uploadCorporateIncome = async (req, res) => {
         message: "First column must be 'Category'"
       });
     }
-
     // Validate that there is at least one region column (any column after Category)
     const regionColumns = headers.slice(1);
     if (regionColumns.length === 0) {
@@ -75,7 +63,6 @@ exports.uploadCorporateIncome = async (req, res) => {
         message: "Excel file must contain at least one region column"
       });
     }
-
     // Define region mappings (be more flexible with variations)
     const regionMappings = {
       'central office': 'Central Office',
@@ -89,9 +76,6 @@ exports.uploadCorporateIncome = async (req, res) => {
       'region 10': 'Region 10',
       'region 12': 'Region 12'
     };
-
-    console.log("Found region columns:", regionColumns);
-    
     const results = {
       success: 0,
       failed: 0,
@@ -99,14 +83,11 @@ exports.uploadCorporateIncome = async (req, res) => {
       regions: regionColumns,
       processedData: [] // Add this to track what's being processed
     };
-    
     // Fetch all income categories with their subcategories
     const allCategories = await IncomeCategory.find({}).lean();
-    
     // Create maps for categories and their subcategories
     const categoryMap = new Map();
     const subcategoryMap = new Map();
-
     allCategories.forEach(cat => {
       const mainCat = cat.incomeCategoryName.toLowerCase().trim();
       categoryMap.set(mainCat, {
@@ -114,7 +95,6 @@ exports.uploadCorporateIncome = async (req, res) => {
         name: cat.incomeCategoryName,
         subcategories: cat.incomeSubcategoryName || []
       });
-
       // Create normalized subcategory lookup for each category
       if (cat.incomeSubcategoryName) {
         const subMap = new Map();
@@ -129,22 +109,17 @@ exports.uploadCorporateIncome = async (req, res) => {
         subcategoryMap.set(mainCat, subMap);
       }
     });
-    
     // Process each row
     for (const record of sheetData) {
       try {
         // Debug: Print current record
-        console.log('Processing record:', record);
-
         // Split the category input into category and subcategory
         const categoryInput = record[headers[0]].trim();
         let [mainCategory, ...subcategoryParts] = categoryInput.split('-').map(part => part.trim());
         let subcategoryInput = subcategoryParts.join('-').trim();
-        
         // Try to find the main category
         const mainCatLower = mainCategory.toLowerCase();
         const categoryInfo = categoryMap.get(mainCatLower);
-        
         if (!categoryInfo) {
           results.failed++;
           results.errors.push({
@@ -153,7 +128,6 @@ exports.uploadCorporateIncome = async (req, res) => {
           });
           continue;
         }
-
         // Try to match subcategory if provided
         let matchedSubcategory = null;
         if (subcategoryInput) {
@@ -164,10 +138,8 @@ exports.uploadCorporateIncome = async (req, res) => {
               .replace(/\s*-\s*/g, '-')
               .replace(/\s+/g, ' ')
               .trim();
-            
             // Try to find a match
             matchedSubcategory = subMap.get(normalizedInput);
-            
             if (!matchedSubcategory) {
               results.failed++;
               results.errors.push({
@@ -178,40 +150,25 @@ exports.uploadCorporateIncome = async (req, res) => {
             }
           }
         }
-
         // Debug: Log which region columns we're about to process
-        console.log('About to process region columns:', regionColumns);
-
-    // Process each region column
+        // Process each region column
         for (const regionCol of regionColumns) {
           try {
             // Debug: Log EVERYTHING about this region column
-            console.log('Processing region column:', {
-              columnName: regionCol,
-              rawValue: record[regionCol],
-              hasProperty: regionCol in record,
-              recordKeys: Object.keys(record),
+            ,
               entireRecord: record
             });
-
             const amount = parseFloat(record[regionCol]);
-            
             // Skip if no amount for this region
             if (isNaN(amount) || amount === 0) {
-              console.log(`Skipping ${regionCol} - amount is ${record[regionCol]}`);
               continue;
             }
-            
             // Map the region name to standard format (be more flexible)
             const regionKey = regionCol.toLowerCase()
               .replace(/\s*-\s*/g, '-')
               .replace(/\s+/g, ' ')
               .trim();
-
-            console.log(`Looking up region key: "${regionKey}"`);
             const standardRegion = regionMappings[regionKey] || regionCol;
-            console.log(`Mapped to standard region: "${standardRegion}"`);
-
             // Generate particulars based on subcategory and region
             let particulars;
             if (matchedSubcategory) {
@@ -219,16 +176,7 @@ exports.uploadCorporateIncome = async (req, res) => {
             } else {
               particulars = `${categoryInfo.name} (${standardRegion})`;
             }
-
             // Debug: Log what we're about to save
-            console.log('Creating income record:', {
-              category: categoryInfo.name,
-              subcategory: matchedSubcategory,
-              amount,
-              region: standardRegion,
-              particulars
-            });
-
             // Create income record
             await Income.create({
               incomecategory: categoryInfo.id,
@@ -241,7 +189,6 @@ exports.uploadCorporateIncome = async (req, res) => {
               fiscalYear: activeSettings.fiscalYear,
               budgetType: activeSettings.budgetType
             });
-
             // Track what was processed
             results.processedData.push({
               category: categoryInput,
@@ -250,7 +197,6 @@ exports.uploadCorporateIncome = async (req, res) => {
               amount,
               particulars
             });
-
             results.success++;
           } catch (error) {
             console.error(`Error processing region ${regionCol}:`, error);
@@ -272,10 +218,7 @@ exports.uploadCorporateIncome = async (req, res) => {
         });
       }
     }
-
     // Debug: Show what was processed
-    console.log('Processed data:', results.processedData);
-
     return res.json({
       message: "File processed successfully",
       processedRecords: results.success,
@@ -284,7 +227,6 @@ exports.uploadCorporateIncome = async (req, res) => {
       regions: results.regions,
       processed: results.processedData // Include processed data in response
     });
-
   } catch (error) {
     console.error("Error processing file:", error);
     return res.status(500).json({ 
@@ -293,20 +235,17 @@ exports.uploadCorporateIncome = async (req, res) => {
     });
   }
 };
-
 // Generate sample template for corporate income upload
 exports.getSampleTemplate = async (req, res) => {
   try {
     // Get all available categories
     const categories = await IncomeCategory.find({}).lean();
-    
     if (!categories || categories.length === 0) {
       return res.status(400).json({
         error: "No categories available",
         message: "No income categories found in the system. Please set up categories first."
       });
     }
-
     // Define standard region names - order matters!
     const regions = [
       'Central Office',
@@ -317,13 +256,10 @@ exports.getSampleTemplate = async (req, res) => {
       'Region 10',
       'Region 12'
     ];
-    
     // Create workbook and worksheet
     const wb = xlsx.utils.book_new();
-    
     // Create header row with exact region names
     const headers = ['Category', ...regions];
-    
     // Create data rows with categories and subcategories
     const rows = [];
     categories.forEach(cat => {
@@ -341,20 +277,16 @@ exports.getSampleTemplate = async (req, res) => {
         rows.push(row);
       }
     });
-
     // Combine headers and data
     const data = [headers, ...rows];
-
     // Create worksheet
     const ws = xlsx.utils.aoa_to_sheet(data);
-    
     // Set column widths
     const colWidths = [
       { wch: 50 }, // Category column
       ...regions.map(() => ({ wch: 15 })) // Region columns
     ];
     ws['!cols'] = colWidths;
-
     // Style the headers
     const range = xlsx.utils.decode_range(ws['!ref']);
     for(let C = range.s.c; C <= range.e.c; ++C) {
@@ -365,18 +297,14 @@ exports.getSampleTemplate = async (req, res) => {
         alignment: { horizontal: 'center' }
       };
     }
-
     // Add the worksheet to the workbook
     xlsx.utils.book_append_sheet(wb, ws, 'Corporate Income');
-
     // Generate buffer
     const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
-
     // Send the file
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename=corporate_income_template.xlsx');
     res.send(buf);
-
   } catch (error) {
     console.error("Error generating template:", error);
     res.status(500).json({ 
@@ -385,25 +313,20 @@ exports.getSampleTemplate = async (req, res) => {
     });
   }
 };
-
 // Transform tabular Excel data (categories as rows, regions as columns) into standard format
 const transformTabularData = (sheetData) => {
   const result = [];
   const regionColumns = [];
-  
   // First row contains headers (Region names)
   const headers = Object.keys(sheetData[0]);
-  
   // First column is expected to be "Category" or "Particulars"
   const categoryColumn = headers[0];
-  
   // All other columns are region names
   regionColumns.push(...headers.slice(1));
     // Process each row (category)
   for (const row of sheetData) {
     const rawCategory = row[categoryColumn]?.trim();
     if (!rawCategory) continue;
-    
     // Check if category contains subcategory (format: "Category - Subcategory")
     let category, subcategory;
     if (rawCategory.includes(" - ")) {
@@ -418,7 +341,6 @@ const transformTabularData = (sheetData) => {
       if (!isNaN(amount)) {
         // Format particulars to only show subcategory and region
         const particulars = subcategory ? `${subcategory} (${region})` : region;
-        
         result.push({
           Particulars: particulars,
           Category: category,
@@ -430,12 +352,8 @@ const transformTabularData = (sheetData) => {
       }
     }
   }
-  
   return result;
 };
-
-
-
 // Create sample template in tabular format (categories as rows, regions as columns)
 const createTabularFormatTemplate = () => {
   const sampleData = [
@@ -458,9 +376,7 @@ const createTabularFormatTemplate = () => {
       "Region III": 200000
     }
   ];
-  
   const worksheet = xlsx.utils.json_to_sheet(sampleData);
-  
   // Set column widths for better readability
   const wscols = [
     { wch: 40 }, // Category
@@ -469,6 +385,5 @@ const createTabularFormatTemplate = () => {
     { wch: 15 }  // Region III
   ];
   worksheet['!cols'] = wscols;
-  
   return worksheet;
 };

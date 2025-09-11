@@ -1,44 +1,30 @@
-console.log('🚀 Starting populateFromExcel.js script...');
-
 const mongoose = require('mongoose');
 const XLSX = require('xlsx');
-
-console.log('📦 Loaded dependencies successfully');
-
 // Connect to MongoDB
 async function connectDB() {
   try {
     await mongoose.connect(process.env.MONGODB_URL || 'mongodb://172.16.4.98:27017/fmis_budget');
-    console.log('✅ Connected to MongoDB');
-  } catch (error) {
+    } catch (error) {
     console.error('❌ MongoDB connection error:', error);
     process.exit(1);
   }
 }
-
 // Models
 const Region = require('./models/Region');
 const Department = require('./models/Department');
 const DepartmentDivisionMapping = require('./models/OrganizationStructure');
-
 async function parseExcelData() {
-  console.log('📊 Parsing Excel data...');
   const workbook = XLSX.readFile('../../HIERAR.xlsx');
   const sheetName = workbook.SheetNames[0];
   const worksheet = workbook.Sheets[sheetName];
   const excelData = XLSX.utils.sheet_to_json(worksheet);
-
-  console.log(`📋 Found ${excelData.length} rows in Excel file`);
-
   const regions = new Map();
   const departments = new Map();
   const mappings = [];
-
   let currentRegion = null;
   let currentDepartment = null;
   let currentDivision = null; // Track the current division for sections
   let currentDivisions = new Map();
-
   for (const row of excelData) {
     if (row.REGION) {
       // Save previous department if exists
@@ -55,7 +41,6 @@ async function parseExcelData() {
       currentDivision = null;
       currentDivisions = new Map();
     }
-
     if (row.DEPARTMENT && row.DEPARTMENT.trim()) {
       // Save previous department if exists
       if (currentDepartment && currentRegion) {
@@ -70,14 +55,12 @@ async function parseExcelData() {
       currentDivision = null;
       currentDivisions = new Map();
     }
-
     if (row.DIVISION && row.DIVISION.trim()) {
       if (!currentDivisions.has(row.DIVISION)) {
         currentDivisions.set(row.DIVISION, new Set());
       }
       currentDivision = row.DIVISION; // Track current division for sections
     }
-
     // Handle sections
     if (row.SECTION && row.SECTION.trim() && currentDepartment) {
       // If we have a current division from the DIVISION column, use it
@@ -115,7 +98,6 @@ async function parseExcelData() {
       }
     }
   }
-
   // Save the last department
   if (currentDepartment && currentRegion) {
     mappings.push({
@@ -124,18 +106,13 @@ async function parseExcelData() {
       divisions: currentDivisions
     });
   }
-
-  console.log(`✅ Parsed ${regions.size} regions, ${departments.size} departments, ${mappings.length} mappings`);
   return { regions: Array.from(regions.keys()), departments: Array.from(departments.keys()), mappings };
 }
-
 async function insertData({ regions, departments, mappings }) {
   try {
-    console.log('🧹 Clearing existing data...');
     await DepartmentDivisionMapping.deleteMany({});
     await Department.deleteMany({});
     await Region.deleteMany({});
-
     // Insert Regions (normalize case)
     const regionDocs = [];
     const regionMap = new Map();
@@ -153,9 +130,7 @@ async function insertData({ regions, departments, mappings }) {
       insertedRegions.forEach(region => {
         regionMap.set(region.Region, region);
       });
-      console.log(`✅ Inserted ${regionDocs.length} regions`);
-    }
-
+      }
     // Insert Departments
     const departmentDocs = [];
     const departmentMap = new Map();
@@ -173,9 +148,7 @@ async function insertData({ regions, departments, mappings }) {
       insertedDepartments.forEach(dept => {
         departmentMap.set(dept.Department, dept);
       });
-      console.log(`✅ Inserted ${departmentDocs.length} departments`);
-    }
-
+      }
     // Insert Mappings with sections
     const mappingDocs = [];
     for (const mapping of mappings) {
@@ -196,7 +169,6 @@ async function insertData({ regions, departments, mappings }) {
             isActive: true
           });
         }
-
         mappingDocs.push({
           departmentId: dept._id,
           departmentName: mapping.departmentName,
@@ -205,45 +177,24 @@ async function insertData({ regions, departments, mappings }) {
           regionId: reg._id
         });
       } else {
-        console.log(`⚠️ Skipping mapping: dept=${mapping.departmentName}, region=${mapping.region}`);
-        console.log(`   Found dept: ${!!dept}, reg: ${!!reg}`);
-      }
+        }
     }
     if (mappingDocs.length > 0) {
       await DepartmentDivisionMapping.insertMany(mappingDocs);
-      console.log(`✅ Inserted ${mappingDocs.length} department-division mappings with sections`);
-    }
-
-    console.log('🎉 Data insertion complete!');
-  } catch (error) {
+      }
+    } catch (error) {
     console.error('❌ Error inserting data:', error);
   }
 }
-
 async function main() {
-  console.log('🔄 Starting main execution...');
   await connectDB();
   const data = await parseExcelData();
-  console.log('Parsed data:', {
-    regions: data.regions.length,
-    departments: data.departments.length,
-    mappings: data.mappings.length
-  });
-
   // Log sample mapping with sections
   if (data.mappings.length > 0) {
-    console.log('Sample mapping:', {
-      departmentName: data.mappings[0].departmentName,
-      region: data.mappings[0].region,
-      divisionsCount: data.mappings[0].divisions.size,
-      sampleDivisions: Array.from(data.mappings[0].divisions.keys()).slice(0, 2)
+    ).slice(0, 2)
     });
   }
-
   await insertData(data);
   await mongoose.disconnect();
-  console.log('✅ Script completed successfully!');
-}
-
-console.log('🎯 Calling main function...');
-main().catch(console.error);
+  }
+main().catch(console.error);

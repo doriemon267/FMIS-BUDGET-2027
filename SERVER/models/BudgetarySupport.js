@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-
 const BudgetarySupportSchema = new mongoose.Schema({
   amount: {
     type: Number,
@@ -49,6 +48,4 @@ const BudgetarySupportSchema = new mongoose.Schema({
   timestamps: true,
   strict: false
 });
-
-module.exports = mongoose.model('BudgetarySupport', BudgetarySupportSchema);
-
+module.exports = mongoose.model('BudgetarySupport', BudgetarySupportSchema);

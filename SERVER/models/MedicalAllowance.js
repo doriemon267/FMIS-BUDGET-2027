@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-
 const MedicalAllowanceSchema = mongoose.Schema(
   {
     employeeId: { 
@@ -48,6 +47,5 @@ const MedicalAllowanceSchema = mongoose.Schema(
   },
   { timestamps: true }
 );
-
 module.exports = mongoose.models.MedicalAllowance || 
   mongoose.model("MedicalAllowance", MedicalAllowanceSchema);

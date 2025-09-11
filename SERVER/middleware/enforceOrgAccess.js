@@ -1,5 +1,4 @@
 const UserOrganizationalAssignment = require('../models/UserOrganizationalAssignment');
-
 /**
  * Enforce organizational access for write operations (create/update/delete).
  * - Loads the user's hierarchical assignment
@@ -12,23 +11,18 @@ module.exports = async function enforceOrgAccess(req, res, next) {
   try {
     const userId = req.user?.id;
     const roles = req.user?.Roles || [];
-
     if (!userId) {
       return res.status(401).json({ message: 'Unauthorized: missing user' });
     }
-
     // Full access roles can transact anywhere
     const hasFullRole = roles.includes('SUPER ADMIN') || roles.includes('BUDGET MANAGER');
     if (hasFullRole) return next();
-
   // Get assignment
     const assignment = await UserOrganizationalAssignment.getUserPermissions(userId);
-
     // OWN_ONLY or missing assignment -> deny transactional access
     if (!assignment || assignment.accessScope === 'OWN_ONLY') {
       return res.status(403).json({ message: 'Access denied. No organizational assignment.' });
     }
-
     // Build allowed sets (names for Region/Department, raw for division)
     const allowedRegionNames = (assignment.regions || [])
       .map(r => r.Region || r.regionName || r.name)
@@ -37,7 +31,6 @@ module.exports = async function enforceOrgAccess(req, res, next) {
       .map(d => d.Department || d.departmentName || d.name)
       .filter(Boolean);
     const allowedDivisions = assignment.divisions || [];
-
     // Helper to enforce one field
     const enforceField = (fieldName, allowedValues) => {
       if (!allowedValues || allowedValues.length === 0) return { ok: true };
@@ -54,12 +47,10 @@ module.exports = async function enforceOrgAccess(req, res, next) {
       const match = allowedValues.some(v => String(v).trim().toUpperCase() === norm);
       return match ? { ok: true } : { ok: false, reason: `${fieldName} "${current}" not allowed` };
     };
-
     // Special-case: prevent destructive bulk deletes for non-admins
     if (req.method === 'POST' && /deleteAllPersonnels/i.test(req.originalUrl || '')) {
       return res.status(403).json({ message: 'Bulk delete is restricted to administrators.' });
     }
-
     // If updating a specific record and org fields are missing in body, try to validate against existing record
     if ((req.method === 'PUT' || req.method === 'PATCH') && req.params?.id) {
       try {
@@ -70,16 +61,13 @@ module.exports = async function enforceOrgAccess(req, res, next) {
           if (!existing) {
             return res.status(404).json({ message: 'Target record not found' });
           }
-
           // Ensure existing record falls within user's allowed scope
           const recRegion = existing.region;
           const recDept = existing.department;
           const recDiv = existing.division;
-
           const inAllowedRegion = !allowedRegionNames.length || (recRegion && allowedRegionNames.some(v => String(v).trim().toUpperCase() === String(recRegion).trim().toUpperCase()));
           const inAllowedDept = !allowedDeptNames.length || (recDept && allowedDeptNames.some(v => String(v).trim().toUpperCase() === String(recDept).trim().toUpperCase()));
           const inAllowedDiv = !allowedDivisions.length || (recDiv && allowedDivisions.some(v => String(v).trim().toUpperCase() === String(recDiv).trim().toUpperCase()));
-
           if (assignment.accessScope === 'REGION' && !inAllowedRegion) {
             return res.status(403).json({ message: 'You cannot modify records outside your Region.' });
           }
@@ -96,7 +84,6 @@ module.exports = async function enforceOrgAccess(req, res, next) {
         return res.status(500).json({ message: 'Error validating organizational access for update' });
       }
     }
-
     // Enforce based on scope (enforce only fields relevant to scope)
     if (assignment.accessScope === 'REGION') {
       const r = enforceField('region', allowedRegionNames);
@@ -115,10 +102,9 @@ module.exports = async function enforceOrgAccess(req, res, next) {
       const v = enforceField('division', allowedDivisions);
       if (!v.ok) return res.status(403).json({ message: v.reason });
     }
-
     return next();
   } catch (error) {
     console.error('🚨 enforceOrgAccess error:', error);
     return res.status(500).json({ message: 'Server error validating organizational access' });
   }
-};
+};

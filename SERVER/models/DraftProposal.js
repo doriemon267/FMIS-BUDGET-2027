@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-
 const DraftProposalSchema = new mongoose.Schema(
   {
     fiscalYear: { 
@@ -53,11 +52,9 @@ const DraftProposalSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-
 // Create compound index for uniqueness
 DraftProposalSchema.index(
   { fiscalYear: 1, budgetType: 1, processBy: 1, region: 1 },
   { unique: true }
 );
-
-module.exports = mongoose.model("DraftProposal", DraftProposalSchema);
+module.exports = mongoose.model("DraftProposal", DraftProposalSchema);

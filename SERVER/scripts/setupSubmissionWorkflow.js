@@ -6,75 +6,45 @@
  * 2. Creating demo workflow approvers
  * 3. Testing the submission workflow
  */
-
 const mongoose = require('mongoose');
 const { setupDefaultWorkflowRoles, getUserWorkflowPermissions } = require('../helpers/workflowRoleManager');
-
 // Load required models
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const Department = require('../models/Department');
 const Region = require('../models/Region');
 const OrganizationStructure = require('../models/OrganizationStructure');
-
 // Load environment variables from SERVER directory
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
-
 // Connect to database
 const connectDB = async () => {
   try {
     if (mongoose.connection.readyState === 0) {
       const mongoUrl = process.env.MONGODB_URL || 'mongodb://localhost:27017/fmis-budget';
-      console.log('📱 Connecting to MongoDB:', mongoUrl);
-      
       await mongoose.connect(mongoUrl);
-      console.log('✅ Connected to MongoDB successfully');
-    }
+      }
   } catch (error) {
     console.error('❌ MongoDB connection error:', error);
     process.exit(1);
   }
 };
-
 // Setup submission workflow system
 const setupSubmissionWorkflow = async () => {
   try {
-    console.log('🚀 Setting up Submission Workflow System...\n');
-
     // 1. Setup default workflow roles for existing users
-    console.log('Step 1: Setting up default workflow roles...');
     const roleSetupResult = await setupDefaultWorkflowRoles();
-    
     if (roleSetupResult.success) {
-      console.log(`✅ ${roleSetupResult.message}`);
-    } else {
-      console.log(`❌ ${roleSetupResult.message}`);
-    }
-
+      } else {
+      }
     // 2. Create workflow approvers if they don't exist
-    console.log('\nStep 2: Creating workflow approvers...');
     await createWorkflowApprovers();
-
     // 3. Display current workflow setup
-    console.log('\nStep 3: Current workflow setup...');
     await displayWorkflowSetup();
-
     // 4. Test submission workflow
-    console.log('\nStep 4: Testing submission workflow...');
     await testSubmissionWorkflow();
-
-    console.log('\n🎉 Submission Workflow System setup complete!');
-    console.log('\n📋 Next Steps:');
-    console.log('1. Users can now create data at their respective levels');
-    console.log('2. Division users must submit to Department for approval');
-    console.log('3. Department users can approve division submissions and submit to Region');
-    console.log('4. Region users provide final approval');
-    console.log('5. Higher levels only see submitted data from lower levels');
-
-  } catch (error) {
+    } catch (error) {
     console.error('❌ Error setting up submission workflow:', error);
   }
 };
-
 // Create workflow approvers
 const createWorkflowApprovers = async () => {
   try {
@@ -84,25 +54,16 @@ const createWorkflowApprovers = async () => {
       workflowRoles: 'departmentConsolidator',
       isActive: true
     });
-
     const existingRegionApprovers = await HierarchicalUserAssignment.find({
       assignmentLevel: 'REGION',
       workflowRoles: 'regionFinalVerifier',
       isActive: true
     });
-
-    console.log(`Found ${existingDepartmentApprovers.length} Department approvers`);
-    console.log(`Found ${existingRegionApprovers.length} Region approvers`);
-
     // If we don't have enough approvers, suggest creating them
     if (existingDepartmentApprovers.length === 0) {
-      console.log('⚠️  No Department approvers found. Consider creating Department-level users with departmentConsolidator role.');
-    }
-
+      }
     if (existingRegionApprovers.length === 0) {
-      console.log('⚠️  No Region approvers found. Consider creating Region-level users with regionFinalVerifier role.');
-    }
-
+      }
     // Example of how to create approvers programmatically
     // Note: In practice, these would be created through the admin interface
     const demoApprovers = [
@@ -121,21 +82,15 @@ const createWorkflowApprovers = async () => {
         workflowRoles: ['regionCreator', 'regionFinalVerifier']
       }
     ];
-
     // Only create demo approvers if we don't have any existing ones
     if (existingDepartmentApprovers.length === 0 && existingRegionApprovers.length === 0) {
-      console.log('💡 Creating demo approvers for testing...');
-      
       // Note: This would need actual region/department IDs in a real setup
       // For now, just show the concept
-      console.log('Demo approvers would be:', demoApprovers);
-    }
-
+      }
   } catch (error) {
     console.error('Error creating workflow approvers:', error);
   }
 };
-
 // Display current workflow setup
 const displayWorkflowSetup = async () => {
   try {
@@ -143,93 +98,63 @@ const displayWorkflowSetup = async () => {
       .populate('regionId', 'regionName Region')
       .populate('departmentId', 'Department departmentName')
       .sort({ assignmentLevel: 1, userName: 1 });
-
-    console.log('\n📊 Current Workflow Setup:');
-    console.log('═'.repeat(80));
-    
+    );
     const levelGroups = {
       DIVISION: [],
       DEPARTMENT: [],
       REGION: [],
       FULL: []
     };
-
     assignments.forEach(assignment => {
       levelGroups[assignment.assignmentLevel].push(assignment);
     });
-
     Object.keys(levelGroups).forEach(level => {
       const users = levelGroups[level];
       if (users.length > 0) {
-        console.log(`\n${level} Level (${users.length} users):`);
-        console.log('-'.repeat(40));
-        
+        :`);
+        );
         users.forEach(user => {
           const region = user.regionId?.regionName || user.regionId?.Region || 'N/A';
           const department = user.departmentId?.Department || user.departmentId?.departmentName || 'N/A';
           const division = user.divisionName || 'N/A';
           const roles = user.workflowRoles || [];
-          
-          console.log(`  👤 ${user.userName} (${user.userId})`);
-          console.log(`     📍 Region: ${region}`);
-          if (level !== 'REGION') console.log(`     🏢 Department: ${department}`);
-          if (level === 'DIVISION') console.log(`     📂 Division: ${division}`);
-          console.log(`     🎭 Workflow Roles: ${roles.join(', ') || 'None'}`);
-          console.log('');
-        });
+          `);
+          if (level !== 'REGION') if (level === 'DIVISION') || 'None'}`);
+          });
       }
     });
-
   } catch (error) {
     console.error('Error displaying workflow setup:', error);
   }
 };
-
 // Test submission workflow
 const testSubmissionWorkflow = async () => {
   try {
-    console.log('🧪 Testing workflow permissions...');
-    
     // Get a few sample users to test their permissions
     const sampleUsers = await HierarchicalUserAssignment.find({ isActive: true }).limit(3);
-    
     for (const user of sampleUsers) {
-      console.log(`\n👤 Testing permissions for ${user.userName}:`);
       const permissions = await getUserWorkflowPermissions(user.userId);
-      
       if (permissions.success) {
-        console.log(`   Level: ${permissions.assignmentLevel}`);
-        console.log(`   Can create division data: ${permissions.permissions.canCreateDivisionData}`);
-        console.log(`   Can approve division submissions: ${permissions.permissions.canApproveDivisionSubmissions}`);
-        console.log(`   Can provide final approval: ${permissions.permissions.canProvideRegionFinalApproval}`);
-      } else {
-        console.log(`   ❌ Error: ${permissions.message}`);
-      }
+        } else {
+        }
     }
-
   } catch (error) {
     console.error('Error testing submission workflow:', error);
   }
 };
-
 // Main execution
 const main = async () => {
   await connectDB();
   await setupSubmissionWorkflow();
-  
   // Keep connection open for a moment to see results
-  console.log('\n✅ Setup complete. You can now test the submission workflow system.');
-  console.log('💡 Press Ctrl+C to exit when ready.');
-};
-
+  };
 // Run the script
 if (require.main === module) {
   main().catch(console.error);
 }
-
 module.exports = {
   setupSubmissionWorkflow,
   createWorkflowApprovers,
   displayWorkflowSetup,
   testSubmissionWorkflow
-};
+};

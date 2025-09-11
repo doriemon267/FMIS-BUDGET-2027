@@ -2,7 +2,6 @@
  * File: models/overtimePay.js
  ************************************************************/
 const mongoose = require("mongoose");
-
 const overtimePaySchema = new mongoose.Schema(
   {
     employeeFullName: { type: String, required: true },
@@ -21,5 +20,4 @@ const overtimePaySchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-
-module.exports = mongoose.model("OvertimePay", overtimePaySchema);
+module.exports = mongoose.model("OvertimePay", overtimePaySchema);

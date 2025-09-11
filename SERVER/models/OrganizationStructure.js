@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-
 // Department-Division mapping schema
 const departmentDivisionMappingSchema = new mongoose.Schema({
   departmentId: {
@@ -44,28 +43,22 @@ const departmentDivisionMappingSchema = new mongoose.Schema({
     default: Date.now
   }
 });
-
 // Pre-save middleware to update timestamp
 departmentDivisionMappingSchema.pre('save', function(next) {
   this.updatedAt = Date.now();
   next();
 });
-
 // Static method to get organization structure with divisions
 departmentDivisionMappingSchema.statics.getCompleteOrganizationStructure = async function() {
   try {
     const Region = mongoose.model('region');
     const Department = mongoose.model('department');
-    
     // Get all regions
     const regions = await Region.find({ isActive: true }).sort({ Region: 1 });
-    
     // Get all departments
     const departments = await Department.find({ isActive: true }).sort({ Department: 1 });
-    
     // Get all department-division mappings
     const mappings = await this.find({}).populate('departmentId').populate('regionId');
-    
     // Build complete structure
     const structure = {
       regions: regions.map(region => ({
@@ -93,21 +86,18 @@ departmentDivisionMappingSchema.statics.getCompleteOrganizationStructure = async
         regionId: mapping.regionId?._id
       }))
     };
-    
     return structure;
   } catch (error) {
     console.error('Error getting complete organization structure:', error);
     throw error;
   }
 };
-
 // Static method to get departments with divisions only
 departmentDivisionMappingSchema.statics.getDepartmentsWithDivisions = async function() {
   try {
     const mappings = await this.find({ hasSubDivisions: true })
       .populate('departmentId')
       .populate('regionId');
-    
     return mappings.map(mapping => ({
       departmentId: mapping.departmentId._id,
       departmentName: mapping.departmentName,
@@ -119,7 +109,6 @@ departmentDivisionMappingSchema.statics.getDepartmentsWithDivisions = async func
     throw error;
   }
 };
-
 // Static method to get available divisions for a department
 departmentDivisionMappingSchema.statics.getDivisionsForDepartment = async function(departmentId) {
   try {
@@ -133,7 +122,6 @@ departmentDivisionMappingSchema.statics.getDivisionsForDepartment = async functi
     throw error;
   }
 };
-
 // Static method to validate department-division combination
 departmentDivisionMappingSchema.statics.validateDepartmentDivisionCombination = async function(departmentId, divisionName) {
   try {
@@ -141,18 +129,14 @@ departmentDivisionMappingSchema.statics.validateDepartmentDivisionCombination = 
     if (!mapping) {
       return false;
     }
-    
     if (!mapping.hasSubDivisions) {
       return divisionName === null || divisionName === '';
     }
-    
     return mapping.divisions.some(div => div.isActive && div.name === divisionName);
   } catch (error) {
     console.error('Error validating department-division combination:', error);
     return false;
   }
 };
-
 const DepartmentDivisionMapping = mongoose.model('DepartmentDivisionMapping', departmentDivisionMappingSchema);
-
-module.exports = DepartmentDivisionMapping;
+module.exports = DepartmentDivisionMapping;

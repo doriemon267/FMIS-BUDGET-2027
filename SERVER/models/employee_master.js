@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-
 const EmployeeMasterSchema = mongoose.Schema({
   Department: {
     type: String,
@@ -98,12 +97,10 @@ const EmployeeMasterSchema = mongoose.Schema({
     default: Date.now
   }
 });
-
 // Update the updatedAt field on save
 EmployeeMasterSchema.pre('save', function(next) {
   this.updatedAt = Date.now();
   next();
 });
-
 const EmployeeMaster = mongoose.model("employee_master", EmployeeMasterSchema);
 module.exports = EmployeeMaster;

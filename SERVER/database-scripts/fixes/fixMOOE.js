@@ -1,12 +1,9 @@
 // Quick fix for MOOE Chart of Accounts issue
 const mongoose = require('mongoose');
-
 // Load environment variables
 require('dotenv').config();
-
 // MongoDB connection string - update this with your actual connection string
 const MONGODB_URI = process.env.MONGODB_URL || 'mongodb://localhost:27017/budget-fmis';
-
 // Chart of Accounts schema (simplified)
 const chartOfAccountsSchema = new mongoose.Schema({
   accountClass: String,
@@ -16,31 +13,19 @@ const chartOfAccountsSchema = new mongoose.Schema({
   uacsCode: String,
   normalBalance: String
 });
-
 const ChartOfAccounts = mongoose.model('ChartOfAccounts', chartOfAccountsSchema);
-
 async function fixMOOEIssue() {
   try {
-    console.log('🔧 Fixing MOOE Chart of Accounts issue...\n');
-    
     // Connect to MongoDB
     await mongoose.connect(MONGODB_URI);
-    console.log('✅ Connected to MongoDB');
-    
     // Check existing Chart of Accounts
     const existingCount = await ChartOfAccounts.countDocuments();
-    console.log('📊 Existing Chart of Accounts records:', existingCount);
-    
     // Check MOOE specific records
     const mooeCount = await ChartOfAccounts.countDocuments({
       accountClass: "Expense",
       lineItem: "Maintenance and Other Operating Expenses"
     });
-    console.log('📊 Existing MOOE records:', mooeCount);
-    
     if (mooeCount === 0) {
-      console.log('\n📝 Adding MOOE Chart of Accounts...');
-      
       const mooeEntries = [
         {
           accountClass: "Expense",
@@ -171,32 +156,20 @@ async function fixMOOEIssue() {
           normalBalance: "Debit"
         }
       ];
-      
       // Insert the records
       const result = await ChartOfAccounts.insertMany(mooeEntries);
-      console.log('✅ Successfully added', result.length, 'MOOE Chart of Accounts records!');
-      
       // Verify insertion
       const newMooeCount = await ChartOfAccounts.countDocuments({
         accountClass: "Expense",
         lineItem: "Maintenance and Other Operating Expenses"
       });
-      console.log('📊 Total MOOE records now:', newMooeCount);
-      
-    } else {
-      console.log('✅ MOOE Chart of Accounts already exist!');
-    }
-    
-    console.log('\n🎉 MOOE fix complete!');
-    console.log('The MOOE table should now display data properly.');
-    
-  } catch (error) {
+      } else {
+      }
+    } catch (error) {
     console.error('❌ Error fixing MOOE:', error);
   } finally {
     await mongoose.disconnect();
-    console.log('\n✅ Disconnected from MongoDB');
-  }
+    }
 }
-
 // Run the fix
-fixMOOEIssue();
+fixMOOEIssue();

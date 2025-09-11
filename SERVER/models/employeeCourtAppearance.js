@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-
 const EmployeeCourtAppearanceSchema = mongoose.Schema(
   {
     employeeNumber: {
@@ -40,10 +39,8 @@ const EmployeeCourtAppearanceSchema = mongoose.Schema(
   },
   { timestamps: true }
 );
-
 const EmployeeCourtAppearance = mongoose.model(
   "EmployeeCourtAppearance",
   EmployeeCourtAppearanceSchema
 );
-
-module.exports = EmployeeCourtAppearance;
+module.exports = EmployeeCourtAppearance;

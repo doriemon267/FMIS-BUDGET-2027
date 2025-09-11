@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-
 const IAsOMCostSchema = new mongoose.Schema(
   {
     fiscalYear: {
@@ -40,8 +39,6 @@ const IAsOMCostSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-
 // Create a compound index for faster lookups
 IAsOMCostSchema.index({ fiscalYear: 1, budgetType: 1, region: 1 }, { unique: true });
-
 module.exports = mongoose.model("IAsOMCost", IAsOMCostSchema);

@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-
 const CapitalOutlayDetailsSchema = new mongoose.Schema(
   {
     capital_outlay_id: {
@@ -32,8 +31,6 @@ const CapitalOutlayDetailsSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-
 // Index for efficient queries
 CapitalOutlayDetailsSchema.index({ capital_outlay_id: 1 });
-
 module.exports = mongoose.model("CapitalOutlayDetails", CapitalOutlayDetailsSchema);

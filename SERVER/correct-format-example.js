@@ -18,8 +18,4 @@ const testData = {
     canManageSettings: false
   }
 };
-
-console.log('📋 Correct assignment data format:');
-console.log(JSON.stringify(testData, null, 2));
-console.log('\n✅ This format should work. Make sure frontend sends exactly this structure.');
-console.log('\n🔍 Check browser console for "🚀 Submitting assignment data:" log and compare with above format.');
+);

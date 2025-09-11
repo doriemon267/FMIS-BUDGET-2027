@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-
 const TestSchema = mongoose.Schema(
   {
     title: {
@@ -20,7 +19,5 @@ const TestSchema = mongoose.Schema(
     timestamps: true,
   }
 );
-
 const Test = mongoose.model("Test", TestSchema);
-
-module.exports = Test;
+module.exports = Test;

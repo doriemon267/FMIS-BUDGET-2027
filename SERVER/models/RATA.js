@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-
 const RATASchema = new mongoose.Schema(
   {
     SG:   { type: String, required: true },
@@ -9,5 +8,4 @@ const RATASchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-
 module.exports = mongoose.model("RATA", RATASchema);

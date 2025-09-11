@@ -11,32 +11,22 @@ const {
   getAvailableChartOfAccounts,
   syncFromChartOfAccounts
 } = require("../controllers/titleMappingController");
-
 // Apply authentication middleware to all routes in this router
 router.use(checkToken);
-
 // Get all title mappings
 router.get("/title-mappings", getAllTitleMappings);
-
 // Get capital outlay title mappings only
 router.get("/title-mappings/capital-outlay", getCapitalOutlayTitleMappings);
-
 // Get available chart of accounts for mapping
 router.get("/title-mappings/available-accounts", getAvailableChartOfAccounts);
-
 // Sync title mappings from chart of accounts
 router.post("/title-mappings/sync", syncFromChartOfAccounts);
-
 // Get a single title mapping by ID
 router.get("/title-mappings/:id", getTitleMappingById);
-
 // Create a new title mapping
 router.post("/title-mappings", createTitleMapping);
-
 // Update a title mapping
 router.put("/title-mappings/:id", updateTitleMapping);
-
 // Delete a title mapping
 router.delete("/title-mappings/:id", deleteTitleMapping);
-
-module.exports = router;
+module.exports = router;

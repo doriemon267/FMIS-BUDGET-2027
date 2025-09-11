@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-
 const EmployeeSchema = mongoose.Schema(
   {
     Department: {
@@ -26,7 +25,6 @@ const EmployeeSchema = mongoose.Schema(
     },
     SG: {
       type: Number,
-     
     },
     Step: {
       type: Number,
@@ -72,7 +70,5 @@ const EmployeeSchema = mongoose.Schema(
     timestamps: true,
   }
 );
-
 const Employee = mongoose.model("employee", EmployeeSchema);
-
-module.exports = Employee;
+module.exports = Employee;

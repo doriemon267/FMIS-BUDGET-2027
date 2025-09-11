@@ -1,7 +1,6 @@
 const ChildrenAllowance = require("../models/childrenAllowance");
 const Settings = require("../models/Settings");
 const PersonnelServices = require("../models/personnelServices");
-
 // Function to sync children allowance with personnel services
 async function syncWithPersonnelServices(employeeNumber, fiscalYear, amount, noOfDependents) {
   try {
@@ -9,7 +8,6 @@ async function syncWithPersonnelServices(employeeNumber, fiscalYear, amount, noO
       employeeNumber,
       fiscalYear,
     });
-
     if (personnelService) {
       personnelService.childrenAllowance = amount; // Update childrenAllowance field
       personnelService.noOfDependent = noOfDependents; // Update noOfDependent field
@@ -41,22 +39,13 @@ async function syncWithPersonnelServices(employeeNumber, fiscalYear, amount, noO
         "honoraria",
         "childrenAllowance",
       ];
-
       personnelService.Total = numericFields.reduce(
         (acc, field) => acc + (Number(personnelService[field]) || 0),
         0
       );
-
       await personnelService.save();
-      console.log(
-        `Synced children allowance for employee ${employeeNumber}: ${amount}, noOfDependent: ${noOfDependents}`
-      );
       return true;
     }
-
-    console.log(
-      `No personnel service found for employee ${employeeNumber}, fiscal year ${fiscalYear}`
-    );
     return false;
   } catch (error) {
     console.error(
@@ -66,7 +55,6 @@ async function syncWithPersonnelServices(employeeNumber, fiscalYear, amount, noO
     return false;
   }
 }
-
 // Get all children allowance records with pagination
 const getAllChildrenAllowances = async (req, res) => {
   try {
@@ -78,16 +66,13 @@ const getAllChildrenAllowances = async (req, res) => {
       order = "desc",
       fiscalYear,
     } = req.query;
-
     // Validate query parameters
     if (isNaN(page) || page < 1 || isNaN(limit) || limit < 1) {
       return res.status(400).json({
         error: "Invalid pagination parameters",
       });
     }
-
     const skip = (page - 1) * limit;
-
     // Build query
     let query = {};
     if (search) {
@@ -100,7 +85,6 @@ const getAllChildrenAllowances = async (req, res) => {
         { region: { $regex: search, $options: "i" } },
       ];
     }
-
     // Add fiscalYear to query if provided
     if (fiscalYear) {
       query.fiscalYear = fiscalYear;
@@ -114,10 +98,8 @@ const getAllChildrenAllowances = async (req, res) => {
       }
       query.fiscalYear = settings.fiscalYear;
     }
-
     // Count total records
     const totalRecords = await ChildrenAllowance.countDocuments(query);
-
     // Validate sort parameters
     const validSortFields = [
       "employeeNumber",
@@ -141,20 +123,15 @@ const getAllChildrenAllowances = async (req, res) => {
         error: "Invalid sort order. Must be 'asc' or 'desc'",
       });
     }
-
     // Build sort options
     const sortOptions = { [orderBy]: order === "asc" ? 1 : -1 };
-
     // Fetch records
     const records = await ChildrenAllowance.find(query)
       .sort(sortOptions)
       .skip(skip)
       .limit(parseInt(limit))
       .lean();
-
     // Log success
-    console.log(`✅ Fetched ${records.length} children allowance records`);
-
     return res.status(200).json({
       data: records,
       totalRecords,
@@ -169,16 +146,13 @@ const getAllChildrenAllowances = async (req, res) => {
     });
   }
 };
-
 // Get a single children allowance record
 const getChildrenAllowance = async (req, res) => {
   try {
     const record = await ChildrenAllowance.findById(req.params.id);
-
     if (!record) {
       return res.status(404).json({ error: "Children allowance record not found" });
     }
-
     return res.status(200).json(record);
   } catch (error) {
     console.error("Error fetching children allowance record:", error);
@@ -188,7 +162,6 @@ const getChildrenAllowance = async (req, res) => {
     });
   }
 };
-
 // Create a new children allowance record
 const createChildrenAllowance = async (req, res) => {
   try {
@@ -206,7 +179,6 @@ const createChildrenAllowance = async (req, res) => {
       fiscalYear,
       budgetType,
     } = req.body;
-
     // Validate required fields
     if (!employeeNumber) {
       return res.status(400).json({ error: "Employee number is required" });
@@ -229,7 +201,6 @@ const createChildrenAllowance = async (req, res) => {
     if (!processDate) {
       return res.status(400).json({ error: "Process date is required" });
     }
-
     // Validate number of dependents
     const validDependents = Math.min(4, Math.max(0, Number(noOfDependents) || 0));
     if (validDependents !== Number(noOfDependents)) {
@@ -237,12 +208,10 @@ const createChildrenAllowance = async (req, res) => {
         error: "Number of dependents must be between 0 and 4",
       });
     }
-
     // Validate processDate
     if (!isValidDate(processDate)) {
       return res.status(400).json({ error: "Invalid process date" });
     }
-
     // Fetch settings
     const settings = await Settings.findOne({ fiscalYear, isActive: true }).lean();
     if (!settings) {
@@ -251,7 +220,6 @@ const createChildrenAllowance = async (req, res) => {
     if (!settings.childrenAllowance) {
       return res.status(400).json({ error: "Children allowance rate not found in settings" });
     }
-
     // Validate amount (annual calculation: monthly rate * 12)
     const expectedAmount = validDependents * settings.childrenAllowance * 12;
     if (Number(amount) !== expectedAmount) {
@@ -259,7 +227,6 @@ const createChildrenAllowance = async (req, res) => {
         error: `Invalid amount. Expected ${expectedAmount} for ${validDependents} dependents`,
       });
     }
-
     // Check for existing record
     const existingRecord = await ChildrenAllowance.findOne({
       employeeNumber,
@@ -271,7 +238,6 @@ const createChildrenAllowance = async (req, res) => {
         error: `A children allowance record already exists for employee ${employeeFullName} (${employeeNumber}) in fiscal year ${fiscalYear} (${budgetType})`,
       });
     }
-
     const newRecord = new ChildrenAllowance({
       employeeNumber,
       employeeFullName,
@@ -286,12 +252,9 @@ const createChildrenAllowance = async (req, res) => {
       fiscalYear,
       budgetType,
     });
-
     await newRecord.save();
-
     // Sync with PersonnelServices, including noOfDependent
     await syncWithPersonnelServices(employeeNumber, fiscalYear, amount, validDependents);
-
     return res.status(201).json({
       message: "Children allowance record created successfully",
       data: newRecord,
@@ -304,7 +267,6 @@ const createChildrenAllowance = async (req, res) => {
     });
   }
 };
-
 // Update a children allowance record
 const updateChildrenAllowance = async (req, res) => {
   try {
@@ -322,7 +284,6 @@ const updateChildrenAllowance = async (req, res) => {
       fiscalYear,
       budgetType,
     } = req.body;
-
     // Validate required fields
     if (!employeeNumber) {
       return res.status(400).json({ error: "Employee number is required" });
@@ -345,7 +306,6 @@ const updateChildrenAllowance = async (req, res) => {
     if (!processDate) {
       return res.status(400).json({ error: "Process date is required" });
     }
-
     // Validate number of dependents
     const validDependents = Math.min(4, Math.max(0, Number(noOfDependents) || 0));
     if (validDependents !== Number(noOfDependents)) {
@@ -353,12 +313,10 @@ const updateChildrenAllowance = async (req, res) => {
         error: "Number of dependents must be between 0 and 4",
       });
     }
-
     // Validate processDate
     if (!isValidDate(processDate)) {
       return res.status(400).json({ error: "Invalid process date" });
     }
-
     // Fetch settings
     const settings = await Settings.findOne({ fiscalYear, isActive: true }).lean();
     if (!settings) {
@@ -367,7 +325,6 @@ const updateChildrenAllowance = async (req, res) => {
     if (!settings.childrenAllowance) {
       return res.status(400).json({ error: "Children allowance rate not found in settings" });
     }
-
     // Validate amount (annual calculation: monthly rate * 12)
     const expectedAmount = validDependents * settings.childrenAllowance * 12;
     if (Number(amount) !== expectedAmount) {
@@ -375,7 +332,6 @@ const updateChildrenAllowance = async (req, res) => {
         error: `Invalid amount. Expected ${expectedAmount} for ${validDependents} dependents`,
       });
     }
-
     const updatedRecord = await ChildrenAllowance.findByIdAndUpdate(
       req.params.id,
       {
@@ -394,14 +350,11 @@ const updateChildrenAllowance = async (req, res) => {
       },
       { new: true }
     );
-
     if (!updatedRecord) {
       return res.status(404).json({ error: "Children allowance record not found" });
     }
-
     // Sync with PersonnelServices, including noOfDependent
     await syncWithPersonnelServices(employeeNumber, fiscalYear, amount, validDependents);
-
     return res.status(200).json({
       message: "Children allowance record updated successfully",
       data: updatedRecord,
@@ -414,23 +367,17 @@ const updateChildrenAllowance = async (req, res) => {
     });
   }
 };
-
 // Delete a children allowance record
 const deleteChildrenAllowance = async (req, res) => {
   try {
     const deletedRecord = await ChildrenAllowance.findById(req.params.id);
-
     if (!deletedRecord) {
       return res.status(404).json({ error: "Children allowance record not found" });
     }
-
     const { employeeNumber, fiscalYear, noOfDependents } = deletedRecord;
-
     await ChildrenAllowance.findByIdAndDelete(req.params.id);
-
     // Sync with PersonnelServices, setting amount to 0 but keeping noOfDependent
     await syncWithPersonnelServices(employeeNumber, fiscalYear, 0, noOfDependents);
-
     return res.status(200).json({
       message: "Children allowance record deleted successfully",
     });
@@ -442,7 +389,6 @@ const deleteChildrenAllowance = async (req, res) => {
     });
   }
 };
-
 // Sync all children allowances
 const syncAllChildrenAllowances = async (req, res) => {
   try {
@@ -450,19 +396,14 @@ const syncAllChildrenAllowances = async (req, res) => {
     if (!activeSettings) {
       return res.status(400).json({ error: "Active settings not found" });
     }
-
     const fiscalYear = activeSettings.fiscalYear;
-
     const childrenAllowances = await ChildrenAllowance.find({ fiscalYear });
-
     if (childrenAllowances.length === 0) {
       return res.status(200).json({
         message: "No children allowances found for the current fiscal year",
       });
     }
-
     let syncCount = 0;
-
     for (const ca of childrenAllowances) {
       const success = await syncWithPersonnelServices(
         ca.employeeNumber,
@@ -474,7 +415,6 @@ const syncAllChildrenAllowances = async (req, res) => {
         syncCount++;
       }
     }
-
     return res.status(200).json({
       message: `Successfully synced ${syncCount} children allowance records`,
       fiscalYear,
@@ -487,13 +427,10 @@ const syncAllChildrenAllowances = async (req, res) => {
     });
   }
 };
-
 // Get children allowance statistics
 const getChildrenAllowanceStats = async (req, res) => {
   try {
-    console.log("📊 Children Allowance Stats API called");
     const { fiscalYear } = req.query;
-
     // Build query to filter by fiscal year (same logic as getAllChildrenAllowances)
     let query = {};
     if (fiscalYear) {
@@ -508,9 +445,7 @@ const getChildrenAllowanceStats = async (req, res) => {
       }
       query.fiscalYear = settings.fiscalYear;
     }
-
     const totalRecords = await ChildrenAllowance.countDocuments(query);
-
     // Get the sum of all amounts and total dependents with fiscal year filter
     const aggregationResult = await ChildrenAllowance.aggregate([
       {
@@ -524,36 +459,27 @@ const getChildrenAllowanceStats = async (req, res) => {
         }
       }
     ]);
-
     const totalAmount = aggregationResult.length > 0 ? aggregationResult[0].totalAmount : 0;
     const totalDependents = aggregationResult.length > 0 ? aggregationResult[0].totalDependents : 0;
-
     // Get unique employees count with fiscal year filter
     const uniqueEmployees = await ChildrenAllowance.distinct('employeeNumber', query);
-
     const result = {
       totalRecords,
       totalAmount,
       totalDependents,
       uniqueEmployees: uniqueEmployees.length
     };
-
-    console.log("📊 Children Allowance Stats Result:", result);
-    console.log("📊 Query used:", query);
-
     res.status(200).json(result);
   } catch (error) {
     console.error("Error fetching children allowance stats:", error);
     res.status(500).json({ message: "Failed to fetch children allowance statistics" });
   }
 };
-
 // Utility function to validate date
 function isValidDate(dateString) {
   const date = new Date(dateString);
   return date instanceof Date && !isNaN(date);
 }
-
 // Explicit exports
 module.exports = {
   getAllChildrenAllowances,
@@ -564,5 +490,4 @@ module.exports = {
   syncAllChildrenAllowances,
   getChildrenAllowanceStats,
 };
-
-// console.log("Exporting from childrenAllowanceController:", module.exports);
+// 

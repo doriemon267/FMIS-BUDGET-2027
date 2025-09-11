@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-
 const SubsistenceAllowanceMDSSchema = mongoose.Schema(
   {
     employeeNumber: {
@@ -14,7 +13,6 @@ const SubsistenceAllowanceMDSSchema = mongoose.Schema(
     department: String,
     division: String,
     region: String,
-   
     Amount: {
       type: Number,
       default: 0,
@@ -31,8 +29,6 @@ const SubsistenceAllowanceMDSSchema = mongoose.Schema(
   },
   { timestamps: true }
 );
-
 const SubsistenceAllowanceMDSS = mongoose.model(
   "SubsistenceAllowanceMDS", SubsistenceAllowanceMDSSchema);
-
-module.exports = SubsistenceAllowanceMDSS;
+module.exports = SubsistenceAllowanceMDSS;

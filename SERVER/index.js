@@ -1,5 +1,4 @@
 require("dotenv").config();
-
 const express = require("express");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
@@ -72,16 +71,12 @@ const { initializeCleanupScheduler } = require("./utils/backupCleanup");
 const { initializeBackupSystem } = require("./backup-scripts/initBackupSystem");
 const income_categories = require("./routers/income_categories");
 require("./config/mongo_db")();
-
 // Fix database index for region isolation
 const mongoose = require('mongoose');
 mongoose.connection.once('open', async () => {
   try {
-    // console.log('🔧 Checking database indexes for region isolation...');
-
-    const db = mongoose.connection.db;
+    // const db = mongoose.connection.db;
     const collection = db.collection('mooeproposals');
-
     // Check if old problematic index exists
     const indexes = await collection.indexes();
     const hasOldIndex = indexes.some(idx =>
@@ -90,28 +85,21 @@ mongoose.connection.once('open', async () => {
       idx.key.fiscalYear === 1 &&
       !idx.key.region
     );
-
     if (hasOldIndex) {
-      console.log('🗑️ Dropping old problematic index...');
       try {
         await collection.dropIndex({ uacsCode: 1, fiscalYear: 1 });
-        console.log('✅ Old index dropped successfully');
-      } catch (error) {
-        console.log('ℹ️ Could not drop old index:', error.message);
-      }
+        } catch (error) {
+        }
     }
-
     // Ensure new index with region exists
     try {
       await collection.createIndex(
         { uacsCode: 1, fiscalYear: 1, region: 1 },
         { unique: true, background: true }
       );
-      console.log('✅ Region isolation index created/verified successfully');
-    } catch (error) {
+      } catch (error) {
       if (error.code !== 85) { // 85 = index already exists
-        console.log('ℹ️ Index creation info:', error.message);
-      }
+        }
     }
   // Ensure Settings collection has compound unique index (fiscalYear, budgetType) and drop old unique FY index if present
   try {
@@ -121,31 +109,23 @@ mongoose.connection.once('open', async () => {
     if (hasUniqueFYOnly) {
       try {
         await settingsCol.dropIndex('fiscalYear_1');
-        console.log('✅ Dropped legacy unique index on settings.fiscalYear');
-      } catch (e) {
-        console.log('ℹ️ Could not drop legacy settings index:', e.message);
-      }
+        } catch (e) {
+        }
     }
     try {
       await settingsCol.createIndex({ fiscalYear: 1, budgetType: 1 }, { unique: true, background: true });
-      console.log('✅ Ensured compound unique index on settings(fiscalYear, budgetType)');
+      ');
     } catch (e) {
       if (e.code !== 85) {
-        console.log('ℹ️ Settings index creation info:', e.message);
-      }
+        }
     }
   } catch (e) {
-    console.log('ℹ️ Settings index verification skipped:', e.message);
-  }
-
-
+    }
   } catch (error) {
     console.error('⚠️ Database index check failed:', error.message);
   }
 });
-
 const app = express();
-
 // MIDDLEWARE
 app.use(
   cors({
@@ -162,9 +142,7 @@ app.use(
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser());
-
 app.get("/", (req, res) => res.json({ message: "server is UP!" }));
-
 // Test endpoint without MongoDB
 app.get('/test', (req, res) => {
   res.json({
@@ -174,22 +152,17 @@ app.get('/test', (req, res) => {
     note: 'MongoDB temporarily disabled due to authentication issues'
   });
 });
-
 // Removed mock stats endpoint - now using actual statsController
-
 app.use(testRouter);
-
 // Global organizational enforcement for all mutating routes (non-GET)
 app.use((req, res, next) => {
   try {
     if (req.method === 'GET') return next();
-
     // Skip enforcement for hierarchical assignment management endpoints
     const p = (req.path || '').toLowerCase();
     if (p.startsWith('/api/hierarchical-rbac/assignments')) {
       return next();
     }
-
     // Ensure user is authenticated before enforcing org access
     return checkToken(req, res, () => enforceOrgAccess(req, res, next));
   } catch (e) {
@@ -210,7 +183,6 @@ app.use(fiscalYearRoutes);
 app.use(departmentRouter);
 app.use(personnelServicesRouter);
 app.use("/api", excelUploadRouter); // Excel Upload Route
-
 app.use(capitalOutlayRouter);
 app.use("/api", capitalOutlayDetailsRouter);
 app.use(categoryRouter);
@@ -218,7 +190,6 @@ app.use(proposalRouter);
 app.use(proposalRBACRouter);
 // Workflow-specific endpoints
 app.use('/api/workflow', require('./routers/proposalWorkflowRoutes'));
-
 // 🔄 Submission Workflow Routes - Controls data visibility based on submission status
 const submissionWorkflowRoutes = require('./routers/submissionWorkflowRoutes');
 app.use('/api/submission-workflow', submissionWorkflowRoutes);
@@ -237,10 +208,7 @@ app.use(loyaltyPayRouter);
 app.use('/reports', reportsRouter); // Mount with /reports prefix
 app.use(cosPersonnelRouter);
 app.use('/', mooeRoutes);
-
 app.use(proposalSummaryRoutes);
-
-
 //para sa mga uploader
 app.use(chartOfAccountsRouter);
 app.use(uploadcategories);
@@ -270,7 +238,6 @@ app.use("/api/database-backup", databaseBackupRouter); // Mount database backup 
 // app.use("/api", overtimeRouter);
 // Add this line to use the new router
 app.use(require("./routers/personnelParamsRoutes"));
-
 // Keep the original routers
 app.use(require("./routers/personnelServicesRoutes"));
 // app.use(require("./routers/medicalAllowanceRoutes"));
@@ -288,32 +255,22 @@ const userProfileRouter = require('./routers/UserProfileRoutes');
 app.use("/api", userProfileRouter);
 const budgetManagerOrgRoutes = require('./routers/budgetManagerOrgRoutes');
 app.use(budgetManagerOrgRoutes);
-
 // 🏢 Hierarchical RBAC Routes - Enhanced organizational access control with Division → Department → Region consolidation
 const hierarchicalRBACRoutes = require('./routers/hierarchicalRBACRoutes');
 app.use("/api/hierarchical-rbac", hierarchicalRBACRoutes);
-
 // 🧪 Test route for organization structure (temporary)
 const testOrgStructureRoutes = require('./routers/testOrgStructure');
 app.use("/api/test", testOrgStructureRoutes);
-
 // Register employee master router
 app.use(employeeMasterRouter);
 const mooeExcelUploadRouter = require("./routers/mooeExcelUploadRoutes");
 app.use("/income", mooeExcelUploadRouter); // Mount under /income prefix for MOOE upload
-
-
 app.listen(process.env.APP_PORT, () => {
-  console.log(`🚀 Server running at: http://localhost:${process.env.APP_PORT}`);
-
   // Initialize backup system
   initializeBackupSystem();
-
   // Initialize backup cleanup scheduler
   setTimeout(() => {
     initializeCleanupScheduler();
-    console.log(`✅ Server fully initialized and ready!`);
-  }, 5000); // Wait 5 seconds for database connection to be established
-
+    }, 5000); // Wait 5 seconds for database connection to be established
   return null;
-});
+});

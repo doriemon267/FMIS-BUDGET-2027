@@ -1,7 +1,6 @@
 const xlsx = require("xlsx");
 const MooeProposal = require("../models/mooeProposals"); // Use correct model
 const Settings = require("../models/Settings");
-
 // Process Excel file for bulk MOOE upload (tabular: income/subsidy per region)
 exports.uploadMooe = async (req, res) => {
   try {
@@ -57,7 +56,6 @@ exports.uploadMooe = async (req, res) => {
     return res.status(500).json({ error: "Internal server error", message: error.message });
   }
 };
-
 // Generate sample template for MOOE upload in tabular format with Subline Item and Accounting Title
 exports.getSampleMooeTemplate = async (req, res) => {
   try {
@@ -90,4 +88,4 @@ exports.getSampleMooeTemplate = async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: "Internal server error", message: error.message });
   }
-};
+};

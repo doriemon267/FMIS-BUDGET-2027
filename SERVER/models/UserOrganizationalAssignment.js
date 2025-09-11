@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-
 const UserOrganizationalAssignmentSchema = new mongoose.Schema({
   userId: {
     type: String,
@@ -67,38 +66,32 @@ const UserOrganizationalAssignmentSchema = new mongoose.Schema({
     type: String
   }
 });
-
 // Pre-save middleware to update timestamps
 UserOrganizationalAssignmentSchema.pre('save', function(next) {
   this.updatedAt = Date.now();
   next();
 });
-
 // Instance methods
 UserOrganizationalAssignmentSchema.methods.hasRegionAccess = function(regionId) {
   if (this.accessScope === 'FULL') return true;
   return this.regions.some(r => r.toString() === regionId.toString());
 };
-
 UserOrganizationalAssignmentSchema.methods.hasDepartmentAccess = function(departmentId) {
   if (this.accessScope === 'FULL') return true;
   if (this.accessScope === 'OWN_ONLY') return false;
   return this.departments.some(d => d.toString() === departmentId.toString());
 };
-
 UserOrganizationalAssignmentSchema.methods.hasDivisionAccess = function(divisionName) {
   if (this.accessScope === 'FULL') return true;
   if (this.accessScope === 'OWN_ONLY') return false;
   return this.divisions.includes(divisionName);
 };
-
 // New method to get the consolidation target for hierarchical saving
 UserOrganizationalAssignmentSchema.methods.getConsolidationTarget = function() {
   const result = {
     primaryLevel: this.accessScope,
     consolidationData: {}
   };
-
   switch (this.accessScope) {
     case 'DIVISION':
       // Division users save to their Department's records
@@ -110,7 +103,6 @@ UserOrganizationalAssignmentSchema.methods.getConsolidationTarget = function() {
         region: this.regions[0] // Ultimate region for reporting
       };
       break;
-
     case 'DEPARTMENT':
       // Department users save to their Region's records
       result.consolidationData = {
@@ -121,7 +113,6 @@ UserOrganizationalAssignmentSchema.methods.getConsolidationTarget = function() {
         region: this.regions[0] // Same region
       };
       break;
-
     case 'REGION':
       // Region users save directly to their region
       result.consolidationData = {
@@ -132,7 +123,6 @@ UserOrganizationalAssignmentSchema.methods.getConsolidationTarget = function() {
         region: this.regions[0]
       };
       break;
-
     default:
       // FULL or OWN_ONLY access
       result.consolidationData = {
@@ -143,10 +133,8 @@ UserOrganizationalAssignmentSchema.methods.getConsolidationTarget = function() {
         region: null
       };
   }
-
   return result;
 };
-
 // Method to get effective region for data consolidation
 UserOrganizationalAssignmentSchema.methods.getEffectiveRegion = function() {
   // Always return the primary region for consolidation
@@ -155,12 +143,10 @@ UserOrganizationalAssignmentSchema.methods.getEffectiveRegion = function() {
   }
   return null;
 };
-
 // Static methods
 UserOrganizationalAssignmentSchema.statics.findByUserId = function(userId) {
   return this.findOne({ userId }).populate('regions departments');
 };
-
 UserOrganizationalAssignmentSchema.statics.getUserPermissions = async function(userId) {
   const assignment = await this.findByUserId(userId);
   if (!assignment) {
@@ -184,5 +170,4 @@ UserOrganizationalAssignmentSchema.statics.getUserPermissions = async function(u
   }
   return assignment;
 };
-
-module.exports = mongoose.model('UserOrganizationalAssignment', UserOrganizationalAssignmentSchema);
+module.exports = mongoose.model('UserOrganizationalAssignment', UserOrganizationalAssignmentSchema);

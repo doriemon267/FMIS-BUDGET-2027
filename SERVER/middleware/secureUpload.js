@@ -1,14 +1,7 @@
 const multer = require('multer');
 const path = require('path');
-
 // File type validation
 const fileFilter = (req, file, cb) => {
-  console.log('🔍 File upload attempt:', {
-    filename: file.originalname,
-    mimetype: file.mimetype,
-    size: file.size
-  });
-
   // Allowed MIME types
   const allowedMimeTypes = [
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
@@ -16,33 +9,26 @@ const fileFilter = (req, file, cb) => {
     'text/csv', // .csv
     'application/csv'
   ];
-  
   // Allowed file extensions
   const allowedExtensions = ['.xlsx', '.xls', '.csv'];
   const fileExtension = path.extname(file.originalname).toLowerCase();
-  
   // Check MIME type
   if (!allowedMimeTypes.includes(file.mimetype)) {
     console.error('❌ Invalid MIME type:', file.mimetype);
     return cb(new Error(`Invalid file type. Expected: ${allowedMimeTypes.join(', ')}`), false);
   }
-  
   // Check file extension
   if (!allowedExtensions.includes(fileExtension)) {
     console.error('❌ Invalid file extension:', fileExtension);
     return cb(new Error(`Invalid file extension. Expected: ${allowedExtensions.join(', ')}`), false);
   }
-  
   // Additional security checks
   if (file.originalname.includes('..') || file.originalname.includes('/') || file.originalname.includes('\\')) {
     console.error('❌ Suspicious filename:', file.originalname);
     return cb(new Error('Invalid filename. Path traversal detected.'), false);
   }
-  
-  console.log('✅ File validation passed:', file.originalname);
   cb(null, true);
 };
-
 // Configure multer with security options
 const createSecureUpload = (options = {}) => {
   const defaultOptions = {
@@ -56,7 +42,6 @@ const createSecureUpload = (options = {}) => {
     },
     fileFilter: fileFilter
   };
-  
   // Merge with custom options
   const config = {
     ...defaultOptions,
@@ -66,13 +51,10 @@ const createSecureUpload = (options = {}) => {
       ...options.limits
     }
   };
-  
   return multer(config);
 };
-
 // Standard upload middleware
 const upload = createSecureUpload();
-
 // Smaller file upload for specific use cases
 const smallUpload = createSecureUpload({
   limits: {
@@ -80,7 +62,6 @@ const smallUpload = createSecureUpload({
     files: 1
   }
 });
-
 // Large file upload for bulk operations
 const bulkUpload = createSecureUpload({
   limits: {
@@ -88,11 +69,9 @@ const bulkUpload = createSecureUpload({
     files: 1
   }
 });
-
 // Error handler for multer errors
 const handleUploadError = (error, req, res, next) => {
   console.error('📤 Upload error:', error);
-
   if (error instanceof multer.MulterError) {
     switch (error.code) {
       case 'LIMIT_FILE_SIZE':
@@ -100,37 +79,31 @@ const handleUploadError = (error, req, res, next) => {
           error: 'File too large', 
           message: `Maximum file size is ${Math.round(error.limit / 1024 / 1024)}MB` 
         });
-      
       case 'LIMIT_FILE_COUNT':
         return res.status(400).json({ 
           error: 'Too many files', 
           message: 'Only one file can be uploaded at a time' 
         });
-      
       case 'LIMIT_FIELD_COUNT':
         return res.status(400).json({ 
           error: 'Too many fields', 
           message: 'Form has too many fields' 
         });
-      
       case 'LIMIT_FIELD_KEY':
         return res.status(400).json({ 
           error: 'Field name too long', 
           message: 'Form field name is too long' 
         });
-      
       case 'LIMIT_FIELD_VALUE':
         return res.status(400).json({ 
           error: 'Field value too long', 
           message: 'Form field value is too long' 
         });
-      
       case 'LIMIT_UNEXPECTED_FILE':
         return res.status(400).json({ 
           error: 'Unexpected field', 
           message: 'Unexpected file field in form' 
         });
-      
       default:
         return res.status(400).json({ 
           error: 'Upload error', 
@@ -138,7 +111,6 @@ const handleUploadError = (error, req, res, next) => {
         });
     }
   }
-  
   // Custom file filter errors
   if (error.message.includes('Invalid file type') || 
       error.message.includes('Invalid file extension') ||
@@ -148,7 +120,6 @@ const handleUploadError = (error, req, res, next) => {
       message: error.message 
     });
   }
-  
   // Other errors
   console.error('Unexpected upload error:', error);
   return res.status(500).json({ 
@@ -156,16 +127,13 @@ const handleUploadError = (error, req, res, next) => {
     message: 'An unexpected error occurred during file upload' 
   });
 };
-
 // File content validation (additional security layer)
 const validateFileContent = async (req, res, next) => {
   if (!req.file) {
     return next();
   }
-  
   try {
     const buffer = req.file.buffer;
-    
     // Check for malicious content patterns
     const maliciousPatterns = [
       /<script/i,
@@ -177,9 +145,7 @@ const validateFileContent = async (req, res, next) => {
       /<object/i,
       /<embed/i
     ];
-    
     const contentString = buffer.toString('utf8', 0, Math.min(buffer.length, 1024));
-    
     for (const pattern of maliciousPatterns) {
       if (pattern.test(contentString)) {
         console.error('❌ Malicious content detected in file:', req.file.originalname);
@@ -189,12 +155,10 @@ const validateFileContent = async (req, res, next) => {
         });
       }
     }
-    
     // Validate file structure for Excel/CSV
     if (req.file.mimetype.includes('excel') || req.file.mimetype.includes('csv')) {
       // Basic validation - check if file starts with expected headers
       const firstBytes = buffer.slice(0, 100);
-      
       if (req.file.mimetype.includes('csv')) {
         // CSV should start with printable characters
         const csvStart = firstBytes.toString('utf8');
@@ -207,10 +171,7 @@ const validateFileContent = async (req, res, next) => {
         }
       }
     }
-    
-    console.log('✅ File content validation passed:', req.file.originalname);
     next();
-    
   } catch (error) {
     console.error('File content validation error:', error);
     return res.status(500).json({
@@ -219,22 +180,14 @@ const validateFileContent = async (req, res, next) => {
     });
   }
 };
-
 // Audit logging for file uploads
 const auditFileUpload = (req, res, next) => {
   if (req.file) {
-    console.log('📁 File upload audit:', {
-      user: req.user?.id || 'anonymous',
-      filename: req.file.originalname,
-      size: req.file.size,
-      mimetype: req.file.mimetype,
-      ip: req.ip,
-      timestamp: new Date().toISOString()
+    .toISOString()
     });
   }
   next();
 };
-
 module.exports = {
   upload,
   smallUpload,
@@ -243,4 +196,4 @@ module.exports = {
   handleUploadError,
   validateFileContent,
   auditFileUpload
-};
+};

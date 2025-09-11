@@ -1,25 +1,20 @@
 const Region = require('../models/Region');
 const Department = require('../models/Department');
 const { hasFullAccess } = require('../middleware/securityMiddleware');
-
 // Get all available organizational units for Budget Manager selection
 const getAvailableOrganizationalUnits = async (req, res) => {
   try {
     const userRoles = req.user.Roles;
-    
     // Only Budget Managers and Super Admins can access this
     if (!hasFullAccess(userRoles)) {
       return res.status(403).json({ 
         message: "Access denied. Budget Manager privileges required." 
       });
     }
-    
     // Get all regions
     const regions = await Region.find({}).select('Region _id').lean();
-    
     // Get all departments  
     const departments = await Department.find({}).select('Department _id').lean();
-    
     // Get divisions (placeholder - enhance based on your division model)
     const divisions = [
       { name: 'Administrative Division', id: 'admin' },
@@ -30,7 +25,6 @@ const getAvailableOrganizationalUnits = async (req, res) => {
       { name: 'Human Resources Division', id: 'hr' },
       { name: 'Information Technology Division', id: 'it' }
     ];
-    
     const organizationalUnits = {
       regions: regions.map(r => ({
         id: r._id,
@@ -55,26 +49,22 @@ const getAvailableOrganizationalUnits = async (req, res) => {
         message: "As a Budget Manager, you can select any organizational unit for transactions"
       }
     };
-    
     return res.status(200).json(organizationalUnits);
   } catch (error) {
     console.error('Error fetching organizational units:', error);
     return res.status(500).json({ message: 'Server error' });
   }
 };
-
 // Validate organizational unit selection
 const validateOrganizationalSelection = async (req, res) => {
   try {
     const { region, department, division } = req.body;
     const userRoles = req.user.Roles;
-    
     if (!hasFullAccess(userRoles)) {
       return res.status(403).json({ 
         message: "Access denied. Budget Manager privileges required." 
       });
     }
-    
     const validationResults = {
       region: null,
       department: null,
@@ -82,7 +72,6 @@ const validateOrganizationalSelection = async (req, res) => {
       isValid: true,
       errors: []
     };
-    
     // Validate region
     if (region) {
       const regionExists = await Region.findOne({ Region: region });
@@ -98,7 +87,6 @@ const validateOrganizationalSelection = async (req, res) => {
         validationResults.isValid = false;
       }
     }
-    
     // Validate department
     if (department) {
       const departmentExists = await Department.findOne({ Department: department });
@@ -114,7 +102,6 @@ const validateOrganizationalSelection = async (req, res) => {
         validationResults.isValid = false;
       }
     }
-    
     // Validate division (basic validation since it's string-based for now)
     if (division) {
       const validDivisions = [
@@ -126,7 +113,6 @@ const validateOrganizationalSelection = async (req, res) => {
         'Human Resources Division',
         'Information Technology Division'
       ];
-      
       if (validDivisions.includes(division)) {
         validationResults.division = {
           name: division,
@@ -138,29 +124,24 @@ const validateOrganizationalSelection = async (req, res) => {
         validationResults.isValid = false;
       }
     }
-    
     return res.status(200).json(validationResults);
   } catch (error) {
     console.error('Error validating organizational selection:', error);
     return res.status(500).json({ message: 'Server error' });
   }
 };
-
 // Get organizational unit statistics for Budget Manager dashboard
 const getOrganizationalStats = async (req, res) => {
   try {
     const userRoles = req.user.Roles;
-    
     if (!hasFullAccess(userRoles)) {
       return res.status(403).json({ 
         message: "Access denied. Budget Manager privileges required." 
       });
     }
-    
     // Get counts of organizational units
     const regionCount = await Region.countDocuments();
     const departmentCount = await Department.countDocuments();
-    
     // Get recent transactions by organizational unit (placeholder)
     // You can enhance this to get actual transaction data from your models
     const stats = {
@@ -195,38 +176,32 @@ const getOrganizationalStats = async (req, res) => {
         accessLevel: "FULL_ORGANIZATIONAL_ACCESS"
       }
     };
-    
     return res.status(200).json(stats);
   } catch (error) {
     console.error('Error fetching organizational stats:', error);
     return res.status(500).json({ message: 'Server error' });
   }
 };
-
 // Test organizational segregation with REAL database data
 const testOrganizationalSegregation = async (req, res) => {
   try {
     const { region, department, division } = req.query;
     const userRoles = req.user.Roles;
-
     if (!hasFullAccess(userRoles)) {
       return res.status(403).json({
         message: "Access denied. Budget Manager privileges required."
       });
     }
-
     // Import models for real data testing
     const PersonnelServices = require('../models/PersonnelServices');
     const MooeProposal = require('../models/mooeProposals');
     const CapitalOutlay = require('../models/CapitalOutlay');
     const COSPersonnel = require('../models/COSPersonnel');
-
     // Build filters based on selected organizational unit
     const filters = {};
     if (region) filters.region = region;
     if (department) filters.department = department;
     if (division) filters.division = division;
-
     // Get REAL data from database with organizational filtering
     const [
       personnelData,
@@ -250,7 +225,6 @@ const testOrganizationalSegregation = async (req, res) => {
       CapitalOutlay.countDocuments(),
       COSPersonnel.countDocuments()
     ]);
-
     // Calculate segregation statistics
     const segregationStats = {
       personnel: {
@@ -274,7 +248,6 @@ const testOrganizationalSegregation = async (req, res) => {
         percentage: totalCOSPersonnel > 0 ? ((cosPersonnelData.length / totalCOSPersonnel) * 100).toFixed(2) : 0
       }
     };
-
     const testResults = {
       selectedOrganization: {
         region: region || 'All regions',
@@ -308,17 +281,15 @@ const testOrganizationalSegregation = async (req, res) => {
       testPassed: true,
       timestamp: new Date()
     };
-
     return res.status(200).json(testResults);
   } catch (error) {
     console.error('Error testing organizational segregation:', error);
     return res.status(500).json({ message: 'Server error' });
   }
 };
-
 module.exports = {
   getAvailableOrganizationalUnits,
   validateOrganizationalSelection,
   getOrganizationalStats,
   testOrganizationalSegregation
-};
+};

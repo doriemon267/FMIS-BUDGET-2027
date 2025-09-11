@@ -1,28 +1,21 @@
 // Seed script to create sample Capital Outlay records for testing
 const mongoose = require('mongoose');
 require('dotenv').config();
-
 // Import models
 const CapitalOutlay = require('./models/CapitalOutlay');
 const Category = require('./models/Category');
-
 async function seedCapitalOutlay() {
   try {
     // Connect to MongoDB
     await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/fmis_budget');
-    console.log('✅ Connected to MongoDB');
-
     // Check if categories exist, if not create some
     let category = await Category.findOne({ categoryName: 'Capital Outlay' });
     if (!category) {
-      console.log('📁 Creating Capital Outlay category...');
       category = await Category.create({
         categoryName: 'Capital Outlay',
         description: 'Capital expenditures for infrastructure and equipment'
       });
-      console.log('✅ Created Capital Outlay category');
-    }
-
+      }
     // Sample capital outlay records
     const sampleCapitalOutlays = [
       {
@@ -90,29 +83,18 @@ async function seedCapitalOutlay() {
         processDate: new Date()
       }
     ];
-
     // Clean up existing records first
     await CapitalOutlay.deleteMany({ processBy: 'System Admin' });
-    console.log('🧹 Cleaned up existing sample records');
-
     // Insert sample records
     const createdRecords = await CapitalOutlay.insertMany(sampleCapitalOutlays);
-    console.log(`✅ Created ${createdRecords.length} sample capital outlay records:`);
-    
     createdRecords.forEach((record, index) => {
-      console.log(`   ${index + 1}. ${record.accountingTitle} (ID: ${record._id})`);
+      `);
     });
-
-    console.log('\n🎉 Sample data created successfully!');
-    console.log('You can now test the Capital Outlay Details modal functionality.');
-
-  } catch (error) {
+    } catch (error) {
     console.error('❌ Seeding failed:', error);
   } finally {
     await mongoose.disconnect();
-    console.log('🔌 Disconnected from MongoDB');
-  }
+    }
 }
-
 // Run the seed script
 seedCapitalOutlay();

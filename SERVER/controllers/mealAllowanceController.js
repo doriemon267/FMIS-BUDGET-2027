@@ -3,7 +3,6 @@ const Settings = require("../models/Settings");
 const PersonnelServices = require("../models/personnelServices");
 const { body, validationResult } = require("express-validator");
 const { calculateMealAllowance, calculateMonthlyMealAllowance, getAllowanceRates } = require("../utils/allowanceUtils");
-
 const validateMealAllowance = [
   body("employeeNumber")
     .trim()
@@ -26,7 +25,6 @@ const validateMealAllowance = [
     .isISO8601()
     .withMessage("Invalid process date"),
 ];
-
 async function syncPersonnelServicesMeal(employeeNumber, fiscalYear, mealAmount = 0) {
   try {
     // Update the personnel services record
@@ -34,13 +32,11 @@ async function syncPersonnelServicesMeal(employeeNumber, fiscalYear, mealAmount 
       { employeeNumber, fiscalYear },
       { meal: mealAmount }
     );
-    
     // Recalculate the Total field
     const updatedPersonnel = await PersonnelServices.findOne({
       employeeNumber,
       fiscalYear,
     });
-    
     if (updatedPersonnel) {
       const numericFields = [
         "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
@@ -50,25 +46,21 @@ async function syncPersonnelServicesMeal(employeeNumber, fiscalYear, mealAmount 
         "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
         "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
       ];
-      
       const newTotal = numericFields.reduce(
         (acc, field) => acc + (Number(updatedPersonnel[field]) || 0),
         0
       );
-      
       await PersonnelServices.updateOne(
         { employeeNumber, fiscalYear },
         { Total: newTotal }
       );
     }
-    
     return updateResult.modifiedCount > 0;
   } catch (error) {
     console.error("Error syncing meal allowance:", error);
     return false;
   }
 }
-
 exports.createMealAllowance = [
   ...validateMealAllowance,
   async (req, res) => {
@@ -77,7 +69,6 @@ exports.createMealAllowance = [
       if (!errors.isEmpty()) {
         return res.status(400).json({ errors: errors.array() });
       }
-
       const {
         employeeNumber,
         employeeFullName,
@@ -90,10 +81,8 @@ exports.createMealAllowance = [
         fiscalYear,
         budgetType,
       } = req.body;
-
       // Force actualDays to be 22
       const actualDays = 22;
-
       // Verify employee was hired before June 1988
       const personnel = await PersonnelServices.findOne({
         employeeNumber,
@@ -104,36 +93,29 @@ exports.createMealAllowance = [
           ).fiscalYear,
         DateOfAppointment: { $lt: new Date("1988-06-01") },
       });
-
       if (!personnel) {
         return res.status(400).json({
           message:
             "Employee is not eligible for meal allowance (must be hired before June 1988)",
         });
       }
-
       const settings = fiscalYear
         ? await Settings.findOne({ fiscalYear, isActive: true }).lean()
         : await Settings.findOne({ isActive: true }).lean();
-
       if (!settings) {
         return res
           .status(404)
           .json({ message: "Active settings not found" });
       }
-
       // Get meal allowance rate (use default 200 if not set)
       const rates = getAllowanceRates(settings);
       const mealAllowanceRate = rates.mealAllowance;
-
       // Calculate monthly amount: days × daily rate
       const monthlyAmount = calculateMonthlyMealAllowance(actualDays, mealAllowanceRate);
       // Calculate annual amount: monthly amount × 12 months
       const annualAmount = calculateMealAllowance(actualDays, mealAllowanceRate);
-      
       const usedFiscalYear = fiscalYear || settings.fiscalYear;
       const usedBudgetType = budgetType || settings.budgetType;
-
       const existing = await MealAllowance.findOne({
         employeeNumber,
         fiscalYear: usedFiscalYear,
@@ -145,7 +127,6 @@ exports.createMealAllowance = [
             "Meal allowance already exists for this employee, fiscal year, and budget type",
         });
       }
-
       const record = new MealAllowance({
         employeeNumber,
         employeeFullName,
@@ -161,19 +142,16 @@ exports.createMealAllowance = [
         budgetType: usedBudgetType,
       });
       await record.save();
-
       // Update the personnel services record with the annual amount
       await PersonnelServices.updateOne(
         { employeeNumber, fiscalYear: usedFiscalYear },
         { meal: annualAmount } // Store annual amount (792 in your example)
       );
-
       // Recalculate the Total field in PersonnelServices
       const updatedPersonnel = await PersonnelServices.findOne({
         employeeNumber,
         fiscalYear: usedFiscalYear,
       });
-      
       if (updatedPersonnel) {
         const numericFields = [
           "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
@@ -183,18 +161,15 @@ exports.createMealAllowance = [
           "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
           "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
         ];
-        
         const newTotal = numericFields.reduce(
           (acc, field) => acc + (Number(updatedPersonnel[field]) || 0),
           0
         );
-        
         await PersonnelServices.updateOne(
           { employeeNumber, fiscalYear: usedFiscalYear },
           { Total: newTotal }
         );
       }
-
       return res.status(201).json(record);
     } catch (err) {
       console.error("❌ Error in createMealAllowance:", err.stack);
@@ -204,7 +179,6 @@ exports.createMealAllowance = [
     }
   },
 ];
-
 exports.updateMealAllowance = [
   ...validateMealAllowance,
   async (req, res) => {
@@ -213,7 +187,6 @@ exports.updateMealAllowance = [
       if (!errors.isEmpty()) {
         return res.status(400).json({ errors: errors.array() });
       }
-
       const { id } = req.params;
       const {
         employeeNumber,
@@ -227,10 +200,8 @@ exports.updateMealAllowance = [
         fiscalYear,
         budgetType,
       } = req.body;
-
       // Force actualDays to be 22
       const actualDays = 22;
-
       // Verify employee was hired before June 1988
       const personnel = await PersonnelServices.findOne({
         employeeNumber,
@@ -241,14 +212,12 @@ exports.updateMealAllowance = [
           ).fiscalYear,
         DateOfAppointment: { $lt: new Date("1988-06-01") },
       });
-
       if (!personnel) {
         return res.status(400).json({
           message:
             "Employee is not eligible for meal allowance (must be hired before June 1988)",
         });
       }
-
       const settings = fiscalYear
         ? await Settings.findOne({ fiscalYear, isActive: true }).lean()
         : await Settings.findOne({ isActive: true }).lean();
@@ -257,19 +226,15 @@ exports.updateMealAllowance = [
           .status(404)
           .json({ message: "Active settings not found" });
       }
-
       // Get meal allowance rate (use default 200 if not set)
       const rates = getAllowanceRates(settings);
       const mealAllowanceRate = rates.mealAllowance;
-
       // Calculate monthly amount
       const monthlyAmount = calculateMonthlyMealAllowance(actualDays, mealAllowanceRate);
       // Calculate annual amount (monthly * 12)
       const annualAmount = calculateMealAllowance(actualDays, mealAllowanceRate);
-      
       const usedFiscalYear = fiscalYear || settings.fiscalYear;
       const usedBudgetType = budgetType || settings.budgetType;
-
       const updated = await MealAllowance.findByIdAndUpdate(
         id,
         {
@@ -290,19 +255,16 @@ exports.updateMealAllowance = [
       );
       if (!updated)
         return res.status(404).json({ message: "Record not found" });
-
       // Update the personnel services record with the annual amount
       await PersonnelServices.updateOne(
         { employeeNumber: updated.employeeNumber, fiscalYear: usedFiscalYear },
         { meal: annualAmount } // Store annual amount in PersonnelServices
       );
-      
       // Recalculate the Total field in PersonnelServices
       const updatedPersonnel = await PersonnelServices.findOne({
         employeeNumber: updated.employeeNumber,
         fiscalYear: usedFiscalYear,
       });
-      
       if (updatedPersonnel) {
         const numericFields = [
           "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
@@ -312,18 +274,15 @@ exports.updateMealAllowance = [
           "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
           "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
         ];
-        
         const newTotal = numericFields.reduce(
           (acc, field) => acc + (Number(updatedPersonnel[field]) || 0),
           0
         );
-        
         await PersonnelServices.updateOne(
           { employeeNumber: updated.employeeNumber, fiscalYear: usedFiscalYear },
           { Total: newTotal }
         );
       }
-
       return res.status(200).json(updated);
     } catch (err) {
       console.error("❌ Error in updateMealAllowance:", err.stack);
@@ -344,7 +303,6 @@ exports.getAllMealAllowances = async (req, res) => {
       order = "asc",
     } = req.query;
     let query = {};
-
     if (search) {
       query.$or = [
         { employeeFullName: { $regex: search, $options: "i" } },
@@ -354,7 +312,6 @@ exports.getAllMealAllowances = async (req, res) => {
         { region: { $regex: search, $options: "i" } },
       ];
     }
-
     let fy = fiscalYear;
     if (!fy) {
       const active = await Settings.findOne({ isActive: true }).lean();
@@ -363,10 +320,8 @@ exports.getAllMealAllowances = async (req, res) => {
       fy = active.fiscalYear;
     }
     query.fiscalYear = fy;
-
     const skip = (Number(page) - 1) * Number(limit);
     const sort = { [orderBy]: order === "desc" ? -1 : 1 };
-
     const [records, total] = await Promise.all([
       MealAllowance.find(query)
         .select("-__v")
@@ -376,7 +331,6 @@ exports.getAllMealAllowances = async (req, res) => {
         .sort(sort),
       MealAllowance.countDocuments(query),
     ]);
-
     return res.status(200).json({
       data: records,
       totalPages: Math.ceil(total / Number(limit)),
@@ -390,7 +344,6 @@ exports.getAllMealAllowances = async (req, res) => {
       .json({ message: "Server error", error: err.message });
   }
 };
-
 exports.updateMealAllowance = [
   ...validateMealAllowance,
   async (req, res) => {
@@ -399,7 +352,6 @@ exports.updateMealAllowance = [
       if (!errors.isEmpty()) {
         return res.status(400).json({ errors: errors.array() });
       }
-
       const { id } = req.params;
       const {
         employeeNumber,
@@ -413,7 +365,6 @@ exports.updateMealAllowance = [
         fiscalYear,
         budgetType,
       } = req.body;
-
       const settings = fiscalYear
         ? await Settings.findOne({ fiscalYear, isActive: true }).lean()
         : await Settings.findOne({ isActive: true }).lean();
@@ -422,11 +373,9 @@ exports.updateMealAllowance = [
           .status(404)
           .json({ message: "Active settings with meal rate not found" });
       }
-
       const amount = Number(actualDays) * Number(settings.meal);
       const usedFiscalYear = fiscalYear || settings.fiscalYear;
       const usedBudgetType = budgetType || settings.budgetType;
-
       const updated = await MealAllowance.findByIdAndUpdate(
         id,
         {
@@ -447,13 +396,11 @@ exports.updateMealAllowance = [
       );
       if (!updated)
         return res.status(404).json({ message: "Record not found" });
-
       await PersonnelServices.updateOne(
         { employeeNumber: updated.employeeNumber, fiscalYear: usedFiscalYear },
         { meal: amount },
         { upsert: true }
       );
-
       return res
         .status(200)
         .json({ message: "Record updated and synced", data: updated });
@@ -465,47 +412,32 @@ exports.updateMealAllowance = [
     }
   },
 ];
-
 // In mealAllowanceController.js
 exports.deleteMealAllowance = async (req, res) => {
   try {
     const { id } = req.params;
-    console.log(`Deleting meal allowance with ID: ${id}`);
-
     // Find the meal allowance record before deleting
     const toDelete = await MealAllowance.findById(id);
     if (!toDelete) {
-      console.log(`Meal allowance with ID ${id} not found`);
       return res.status(404).json({ message: "Record not found" });
     }
-    
     const { employeeNumber, fiscalYear } = toDelete;
-    console.log(`Found meal allowance for employee ${employeeNumber}, fiscal year ${fiscalYear}`);
-
     // Delete the meal allowance record
     await MealAllowance.findByIdAndDelete(id);
-    console.log(`Deleted meal allowance with ID ${id}`);
-
     // CRITICAL: Reset the meal value to 0 in PersonnelServices
     const updateResult = await PersonnelServices.updateOne(
       { employeeNumber, fiscalYear },
       { $set: { meal: 0 } }
     );
-    console.log(`Reset meal value to 0. Update result: ${JSON.stringify(updateResult)}`);
-
+    }`);
     // Verify the update worked
     const verifyDoc = await PersonnelServices.findOne({ employeeNumber, fiscalYear });
     if (verifyDoc) {
-      console.log(`Verification - meal value is now: ${verifyDoc.meal}`);
-      
       // If meal is still not 0, try direct document update
       if (verifyDoc.meal !== 0) {
-        console.log(`Meal value is still ${verifyDoc.meal}, trying direct document update`);
         verifyDoc.meal = 0;
         await verifyDoc.save();
-        console.log(`After direct update, meal value is: ${verifyDoc.meal}`);
-      }
-      
+        }
       // Recalculate Total field
       const numericFields = [
         "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
@@ -515,22 +447,17 @@ exports.deleteMealAllowance = async (req, res) => {
         "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
         "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
       ];
-
       const newTotal = numericFields.reduce(
         (acc, field) => acc + (Number(verifyDoc[field]) || 0),
         0
       );
-
       // Update the total
       await PersonnelServices.updateOne(
         { employeeNumber, fiscalYear },
         { $set: { Total: newTotal } }
       );
-      console.log(`Recalculated and updated Total to: ${newTotal}`);
-    } else {
-      console.log(`No personnel services record found for employee ${employeeNumber}, fiscal year ${fiscalYear}`);
-    }
-
+      } else {
+      }
     // Return success response
     return res.status(200).json({
       message: "Meal allowance deleted successfully",
@@ -544,12 +471,10 @@ exports.deleteMealAllowance = async (req, res) => {
     });
   }
 };
-
 // Add this new controller function
 exports.getMealAllowanceStats = async (req, res) => {
   try {
     const totalRecords = await MealAllowance.countDocuments();
-
     // Get the sum of all amounts (convert monthly to annual to match table display)
     const aggregationResult = await MealAllowance.aggregate([
       {
@@ -559,15 +484,12 @@ exports.getMealAllowanceStats = async (req, res) => {
         }
       }
     ]);
-
     // Convert to annual amounts to match what's displayed in the table (monthly × 12)
     const totalMonthlyAmount = aggregationResult.length > 0 ? aggregationResult[0].totalMonthlyAmount : 0;
     const totalAmount = totalMonthlyAmount * 12; // Convert to annual
     const averageAmount = totalRecords > 0 ? totalAmount / totalRecords : 0;
-
     // Get unique employees count
     const uniqueEmployees = await MealAllowance.distinct('employeeNumber');
-
     res.status(200).json({
       totalRecords,
       totalAmount,
@@ -578,4 +500,4 @@ exports.getMealAllowanceStats = async (req, res) => {
     console.error("Error fetching meal allowance stats:", error);
     res.status(500).json({ message: "Failed to fetch meal allowance statistics" });
   }
-};
+};

@@ -1,23 +1,17 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 require('./config/mongo_db')();
-
 async function addCentralOffice() {
   try {
     const Region = require('./models/Region');
     const Department = require('./models/Department');
     const DepartmentDivisionMapping = require('./models/OrganizationStructure');
-
-    console.log('Adding Central Office data...');
-
     // Create Central Office region
     let centralOfficeRegion = await Region.findOne({ Region: 'CENTRAL OFFICE' });
     if (!centralOfficeRegion) {
       centralOfficeRegion = new Region({ Region: 'CENTRAL OFFICE' });
       await centralOfficeRegion.save();
-      console.log('✅ Created Central Office region');
-    }
-
+      }
     // Define Central Office departments and divisions
     const centralOfficeData = [
       {
@@ -64,7 +58,6 @@ async function addCentralOffice() {
         ]
       }
     ];
-
     for (const deptData of centralOfficeData) {
       // Find or create department
       let department = await Department.findOne({ Department: deptData.department });
@@ -72,13 +65,11 @@ async function addCentralOffice() {
         department = new Department({ Department: deptData.department });
         await department.save();
       }
-
       // Create mapping
       const existingMapping = await DepartmentDivisionMapping.findOne({
         departmentId: department._id,
         regionId: centralOfficeRegion._id
       });
-
       if (!existingMapping) {
         const mapping = new DepartmentDivisionMapping({
           departmentId: department._id,
@@ -88,16 +79,12 @@ async function addCentralOffice() {
           regionId: centralOfficeRegion._id
         });
         await mapping.save();
-        console.log(`✅ Created mapping for ${deptData.department} with ${deptData.divisions.length} divisions`);
-      }
+        }
     }
-
-    console.log('🎉 Central Office data added successfully!');
     process.exit(0);
   } catch (error) {
     console.error('❌ Error adding Central Office data:', error);
     process.exit(1);
   }
 }
-
-addCentralOffice();
+addCentralOffice();

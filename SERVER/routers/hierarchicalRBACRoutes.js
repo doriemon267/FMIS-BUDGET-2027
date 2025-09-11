@@ -3,7 +3,6 @@
  * 
  * Routes for managing the hierarchical RBAC system with Division → Department → Region consolidation
  */
-
 const express = require('express');
 const router = express.Router();
 const { authenticatedRoute, adminRoute } = require('../middleware/securityMiddleware');
@@ -19,11 +18,9 @@ const {
   deleteHierarchicalAssignment,
   testHierarchicalConsolidation
 } = require('../controllers/HierarchicalUserAssignmentController');
-
 // =============================================================================
 // HIERARCHICAL USER ASSIGNMENT MANAGEMENT ROUTES (Admin Only)
 // =============================================================================
-
 /**
  * Create or update hierarchical user assignment
  * POST /api/hierarchical-rbac/assignments
@@ -33,7 +30,6 @@ router.post(
   ...adminRoute(),
   createOrUpdateHierarchicalAssignment
 );
-
 /**
  * Get hierarchical assignment for a specific user
  * GET /api/hierarchical-rbac/assignments/:userId
@@ -43,7 +39,6 @@ router.get(
   ...authenticatedRoute(),
   getHierarchicalAssignment
 );
-
 /**
  * Get all hierarchical assignments (Admin only)
  * GET /api/hierarchical-rbac/assignments
@@ -53,7 +48,6 @@ router.get(
   ...adminRoute(),
   getAllHierarchicalAssignments
 );
-
 /**
  * Delete hierarchical assignment
  * DELETE /api/hierarchical-rbac/assignments/:userId
@@ -63,7 +57,6 @@ router.delete(
   ...adminRoute(),
   deleteHierarchicalAssignment
 );
-
 /**
  * Test hierarchical consolidation
  * POST /api/hierarchical-rbac/test-consolidation
@@ -73,11 +66,9 @@ router.post(
   ...adminRoute(),
   testHierarchicalConsolidation
 );
-
 // =============================================================================
 // HIERARCHICAL ACCESS INFORMATION ROUTES
 // =============================================================================
-
 /**
  * Get current user's hierarchical access information
  * GET /api/hierarchical-rbac/my-access
@@ -89,7 +80,6 @@ router.get(
   async (req, res) => {
     try {
       const accessInfo = req.hierarchicalAccessInfo;
-      
       return res.status(200).json({
         success: true,
         message: 'Hierarchical access information retrieved successfully',
@@ -109,7 +99,6 @@ router.get(
     }
   }
 );
-
 /**
  * Validate hierarchical access for specific operation
  * POST /api/hierarchical-rbac/validate-access
@@ -122,7 +111,6 @@ router.post(
       const { operation, targetData } = req.body;
       const userId = req.user.id;
       const userRoles = req.user.Roles;
-
       if (!operation) {
         return res.status(400).json({
           success: false,
@@ -130,17 +118,14 @@ router.post(
           code: 'MISSING_OPERATION'
         });
       }
-
       // Create a mock request to test hierarchical access
       const mockReq = {
         user: req.user,
         body: targetData || {},
         method: operation.toUpperCase() === 'READ' ? 'GET' : 'POST'
       };
-
       // Test hierarchical access
       let validationResult = { hasAccess: false, reason: 'Unknown error' };
-
       try {
         await new Promise((resolve, reject) => {
           const mockRes = {
@@ -155,18 +140,15 @@ router.post(
               }
             })
           };
-
           const mockNext = () => {
             validationResult = { hasAccess: true, reason: 'Access granted' };
             resolve();
           };
-
           hierarchicalAccessControl(operation)(mockReq, mockRes, mockNext);
         });
       } catch (error) {
         // Access was denied, but we have the validation result
       }
-
       return res.status(200).json({
         success: true,
         message: 'Hierarchical access validation completed',
@@ -178,7 +160,6 @@ router.post(
           timestamp: new Date()
         }
       });
-
     } catch (error) {
       console.error('Error validating hierarchical access:', error);
       return res.status(500).json({
@@ -189,11 +170,9 @@ router.post(
     }
   }
 );
-
 // =============================================================================
 // EXAMPLE PROTECTED ROUTES WITH HIERARCHICAL ACCESS CONTROL
 // =============================================================================
-
 /**
  * Example: Get proposals with hierarchical filtering
  * GET /api/hierarchical-rbac/proposals
@@ -207,7 +186,6 @@ router.get(
       // The hierarchicalAccessControl middleware has already applied filters
       const filters = req.hierarchicalFilters || {};
       const accessInfo = req.hierarchicalAccess || {};
-
       // Mock proposal data for demonstration
       const mockProposals = [
         {
@@ -235,10 +213,8 @@ router.get(
           status: 'Under Review'
         }
       ];
-
       // Apply hierarchical filtering (in real implementation, this would be database queries)
       let filteredProposals = mockProposals;
-
       if (accessInfo.scope === 'DIVISION') {
         filteredProposals = mockProposals.filter(p => 
           accessInfo.accessibleDivisions.includes(p.division) ||
@@ -254,7 +230,6 @@ router.get(
           accessInfo.accessibleRegions.some(r => (r.Region || r) === p.region)
         );
       }
-
       return res.status(200).json({
         success: true,
         message: 'Proposals retrieved with hierarchical filtering',
@@ -269,7 +244,6 @@ router.get(
           }
         }
       });
-
     } catch (error) {
       console.error('Error getting hierarchical proposals:', error);
       return res.status(500).json({
@@ -280,7 +254,6 @@ router.get(
     }
   }
 );
-
 /**
  * Example: Create proposal with hierarchical consolidation
  * POST /api/hierarchical-rbac/proposals
@@ -295,7 +268,6 @@ router.post(
       const consolidatedData = req.body;
       const originalContext = req.originalOrgContext || {};
       const hierarchicalAccess = req.hierarchicalAccess || {};
-
       // Simulate saving to database with consolidated data
       const savedProposal = {
         id: `prop_${Date.now()}`,
@@ -304,7 +276,6 @@ router.post(
         createdAt: new Date(),
         status: 'Pending'
       };
-
       return res.status(201).json({
         success: true,
         message: 'Proposal created with hierarchical consolidation',
@@ -322,7 +293,6 @@ router.post(
           hierarchicalInfo: hierarchicalAccess
         }
       });
-
     } catch (error) {
       console.error('Error creating hierarchical proposal:', error);
       return res.status(500).json({
@@ -333,7 +303,6 @@ router.post(
     }
   }
 );
-
 /**
  * Example: Update proposal with hierarchical validation
  * PUT /api/hierarchical-rbac/proposals/:id
@@ -347,7 +316,6 @@ router.put(
       const { id } = req.params;
       const updatedData = req.body;
       const hierarchicalAccess = req.hierarchicalAccess || {};
-
       // Simulate database update
       const updatedProposal = {
         id,
@@ -355,7 +323,6 @@ router.put(
         updatedBy: req.user.id,
         updatedAt: new Date()
       };
-
       return res.status(200).json({
         success: true,
         message: 'Proposal updated with hierarchical validation',
@@ -364,7 +331,6 @@ router.put(
           hierarchicalInfo: hierarchicalAccess
         }
       });
-
     } catch (error) {
       console.error('Error updating hierarchical proposal:', error);
       return res.status(500).json({
@@ -375,11 +341,9 @@ router.put(
     }
   }
 );
-
 // =============================================================================
 // HIERARCHICAL REPORTING ROUTES
 // =============================================================================
-
 /**
  * Get hierarchical organization structure
  * GET /api/hierarchical-rbac/organization-structure
@@ -389,31 +353,23 @@ router.get(
   ...authenticatedRoute(),
   async (req, res) => {
     try {
-      console.log('🔍 Getting organization structure...');
-      
       const mongoose = require('mongoose');
-      
       // Get data directly from collections to avoid model issues
       const mappingsCollection = mongoose.connection.db.collection('departmentdivisionmappings');
       const regionsCollection = mongoose.connection.db.collection('regions');
       const departmentsCollection = mongoose.connection.db.collection('departments');
-      
       // Get all collections data
       const [mappings, regions, departments] = await Promise.all([
         mappingsCollection.find({}).toArray(),
         regionsCollection.find({}).toArray(),
         departmentsCollection.find({}).toArray()
       ]);
-      
-      console.log(`📊 Found: ${mappings.length} mappings, ${regions.length} regions, ${departments.length} departments`);
-      
       // Format the data
       const formattedRegions = regions.map(region => ({
         id: region._id,
         name: region.Region || region.name || region.regionName,
         code: region.RegionCode || region.code || region.regionCode
       }));
-      
       const formattedDepartments = departments.map(dept => {
         // Check if this department has subdivisions
         const hasSubDivisions = mappings.some(mapping => 
@@ -422,7 +378,6 @@ router.get(
           mapping.divisions && 
           mapping.divisions.length > 0
         );
-        
         return {
           id: dept._id,
           name: dept.Department || dept.name || dept.departmentName,
@@ -430,7 +385,6 @@ router.get(
           hasSubDivisions
         };
       });
-      
       const formattedMappings = mappings.map(mapping => ({
         departmentId: mapping.departmentId,
         departmentName: mapping.departmentName,
@@ -442,12 +396,10 @@ router.get(
         hasSubDivisions: mapping.hasSubDivisions || false,
         regionId: mapping.regionId
       }));
-      
       // Get departments with divisions
       const departmentsWithDivisions = formattedMappings.filter(mapping => 
         mapping.hasSubDivisions && mapping.divisions.length > 0
       );
-
       const response = {
         hierarchy: 'Division → Department → Region',
         consolidationFlow: {
@@ -481,20 +433,11 @@ router.get(
           divisionValidation: 'Division name must exist in selected Department'
         }
       };
-
-      console.log('✅ Returning organization structure with:', {
-        regions: formattedRegions.length,
-        departments: formattedDepartments.length,
-        departmentsWithDivisions: departmentsWithDivisions.length,
-        mappings: formattedMappings.length
-      });
-
       return res.status(200).json({
         success: true,
         message: 'Organization structure retrieved successfully',
         data: response
       });
-
     } catch (error) {
       console.error('Error getting organization structure:', error);
       return res.status(500).json({
@@ -505,11 +448,9 @@ router.get(
     }
   }
 );
-
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
-
 function getAccessExplanation(scope) {
   switch (scope) {
     case 'DIVISION':
@@ -526,7 +467,6 @@ function getAccessExplanation(scope) {
       return 'Your access level is not recognized. Please contact your administrator.';
   }
 }
-
 function getConsolidationExplanation(scope) {
   switch (scope) {
     case 'DIVISION':
@@ -543,5 +483,4 @@ function getConsolidationExplanation(scope) {
       return 'Consolidation behavior is not defined for your access level.';
   }
 }
-
-module.exports = router;
+module.exports = router;

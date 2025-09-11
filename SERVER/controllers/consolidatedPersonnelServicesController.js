@@ -1,5 +1,4 @@
 const PersonnelServices = require('../models/personnelServices');
-
 // Define the hierarchical structure mapping
 const PERSONNEL_SERVICES_STRUCTURE = {
   "B.1.1": {
@@ -69,29 +68,23 @@ const PERSONNEL_SERVICES_STRUCTURE = {
     }
   }
 };
-
 const getConsolidatedPersonnelServicesData = async (req, res) => {
   try {
     const { regions, fiscalYear, budgetType } = req.query;
-    
     // Build query
     const query = {};
     if (regions) {
       const regionList = Array.isArray(regions) ? regions : [regions];
       query.region = { $in: regionList };
     }
-    
     // Apply hierarchical filters if present
     if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
       query.region = req.hierarchicalFilters.region;
     }
-    
     if (fiscalYear) query.fiscalYear = fiscalYear;
     if (budgetType) query.budgetType = budgetType;
-
     // Fetch all PersonnelServices data
     const psData = await PersonnelServices.find(query).lean();
-    
     if (!Array.isArray(psData) || psData.length === 0) {
       return res.status(200).json({
         success: true,
@@ -103,18 +96,15 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
         }
       });
     }
-
     // Group by region
     const grouped = {};
     const regionSet = new Set();
     let grandTotal = 0;
     let totalEmployees = 0;
-
     psData.forEach((employee) => {
       const region = employee.region || 'Unspecified';
       regionSet.add(region);
       totalEmployees++;
-
       if (!grouped[region]) {
         grouped[region] = {
           region,
@@ -122,9 +112,7 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
           categories: {}
         };
       }
-
       grouped[region].totalEmployees++;
-
       // Process each category in the structure
       Object.entries(PERSONNEL_SERVICES_STRUCTURE["B.1.1"].categories).forEach(([categoryKey, categoryData]) => {
         if (!grouped[region].categories[categoryKey]) {
@@ -134,9 +122,7 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
             total: 0
           };
         }
-
         const category = grouped[region].categories[categoryKey];
-
         // Process each item in the category
         Object.entries(categoryData.items).forEach(([itemKey, itemData]) => {
           if (!category.items[itemKey]) {
@@ -145,7 +131,6 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
               amount: 0
             };
           }
-
           // Calculate amount based on field mapping
           let amount = 0;
           if (itemData.field) {
@@ -171,29 +156,23 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
               }
             }
           }
-
           category.items[itemKey].amount += amount;
           category.total += amount;
         });
       });
-
       // Calculate employee total
       const employeeTotal = Number(employee.Total) || 0;
       grandTotal += employeeTotal;
     });
-
     // Transform to array format
     let result;
-    
     // Check if we should aggregate all regions into one
     if (!regions || (regions && regions.length === 0)) {
       // All regions case - aggregate everything into one consolidated structure
       const consolidatedCategories = {};
       let consolidatedEmployees = 0;
-      
       Object.values(grouped).forEach(regionData => {
         consolidatedEmployees += regionData.totalEmployees;
-        
         Object.entries(regionData.categories).forEach(([categoryKey, categoryData]) => {
           if (!consolidatedCategories[categoryKey]) {
             consolidatedCategories[categoryKey] = {
@@ -203,9 +182,7 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
               items: {}
             };
           }
-          
           consolidatedCategories[categoryKey].total += categoryData.total;
-          
           Object.entries(categoryData.items).forEach(([itemKey, itemData]) => {
             if (!consolidatedCategories[categoryKey].items[itemKey]) {
               consolidatedCategories[categoryKey].items[itemKey] = {
@@ -218,7 +195,6 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
           });
         });
       });
-      
       result = [{
         id: 'ps-all-regions',
         region: 'ALL REGIONS',
@@ -256,7 +232,6 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
         }))
       })).sort((a, b) => a.region.localeCompare(b.region));
     }
-
     res.status(200).json({
       success: true,
       data: result,
@@ -266,7 +241,6 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
         grandTotal
       }
     });
-
   } catch (error) {
     console.error('Error fetching consolidated Personnel Services data:', error);
     res.status(500).json({
@@ -276,7 +250,6 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
     });
   }
 };
-
 // Get available regions with Personnel Services data
 const getAvailableRegions = async (req, res) => {
   try {
@@ -285,7 +258,6 @@ const getAvailableRegions = async (req, res) => {
     if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
       query.region = req.hierarchicalFilters.region;
     }
-    
     const regions = await PersonnelServices.distinct('region', query);
     res.status(200).json({
       success: true,
@@ -300,7 +272,6 @@ const getAvailableRegions = async (req, res) => {
     });
   }
 };
-
 // Debug endpoint to check statusOfAppointment values
 const getStatusOfAppointmentValues = async (req, res) => {
   try {
@@ -309,7 +280,6 @@ const getStatusOfAppointmentValues = async (req, res) => {
     if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
       query.region = req.hierarchicalFilters.region;
     }
-    
     const statuses = await PersonnelServices.distinct('statusOfAppointment', query);
     const sample = await PersonnelServices.findOne(query).select('statusOfAppointment annualSalary employeeFullName');
     res.status(200).json({
@@ -326,7 +296,6 @@ const getStatusOfAppointmentValues = async (req, res) => {
     });
   }
 };
-
 module.exports = {
   getConsolidatedPersonnelServicesData,
   getAvailableRegions,

@@ -1,8 +1,6 @@
 const jwt = require('jsonwebtoken');
-
 // Load environment variables
 require('dotenv').config();
-
 const payload = {
   userId: "909549",  // Your actual correct user ID
   name: "Reymund Edra",  
@@ -10,9 +8,5 @@ const payload = {
   roles: ["SUPER ADMIN"],
   accessToken: "mock-access-token"
 };
-
 const secret = process.env.JWT_SECRET_KEY;
-const token = jwt.sign(payload, secret, { expiresIn: '1h' });
-
-console.log("Test JWT Token:");
-console.log(token);
+const token = jwt.sign(payload, secret, { expiresIn: '1h' });

@@ -1,25 +1,19 @@
 const jwt = require("jsonwebtoken");
-
 module.exports = async (req, res, next) => {
   try {
     // Extract token from Authorization header
     const authHeader = req.headers.authorization;
-    
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(403).json({ error: "Access denied." });
     }
-
     const jwtToken = authHeader.split(" ")[1]; // Extract token from "Bearer <token>"
-
     // Verify token
     const payload = jwt.verify(jwtToken, process.env.JWT_SECRET_KEY);
     if (!payload) {
       return res.status(401).json({ error: "Access denied." });
     }
-
     // Extract access token (if needed)
     const accessToken = payload.accessToken;
-
     // Check if ACCOUNT_USER_API_URL is defined
     if (!process.env.ACCOUNT_USER_API_URL) {
       // DEVELOPMENT MODE: Allow overriding user via headers; otherwise extract from JWT
@@ -47,7 +41,6 @@ module.exports = async (req, res, next) => {
         };
         return next();
       }
-
       // 2) Extract from JWT payload
       // Robust extraction: try Username[0] if available, fallback to other fields
       let userId = null;
@@ -73,7 +66,6 @@ module.exports = async (req, res, next) => {
         console.warn('⚠️ No userId found in JWT payload. Falling back to default dev user.');
         userId = "909549"; // Default test user ID for development
       }
-
       req.user = {
         id: userId,
         name: payload.name || payload.username || `Test Budget Admin`,
@@ -81,19 +73,15 @@ module.exports = async (req, res, next) => {
         Roles: payload.roles || payload.role || ["BUDGET MANAGER"],
         Username: payload.Username || []
       };
-
       return next();
     }
-
     // Fetch user data from external API
     const userRes = await fetch(process.env.ACCOUNT_USER_API_URL, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-
     if (!userRes.ok) {
       return res.status(403).json({ error: "Access denied" });
     }
-
     const user = await userRes.json();
     req.user = user; // Attach user to request
     next();
@@ -101,4 +89,4 @@ module.exports = async (req, res, next) => {
     console.error("❌ Auth Middleware Error:", error.message);
     return res.status(401).json({ error: "Access denied" });
   }
-};
+};

@@ -4,13 +4,11 @@
  * This controller manages the hierarchical assignment of users to organizational units
  * with proper consolidation logic for Division → Department → Region hierarchy.
  */
-
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const DepartmentDivisionMapping = require('../models/OrganizationStructure');
 const Region = require('../models/Region');
 const Department = require('../models/Department');
 const { hasFullAccess } = require('../middleware/securityMiddleware');
-
 /**
  * Create or update hierarchical user assignment
  * This handles the complex logic of assigning users to Division/Department/Region
@@ -20,7 +18,6 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
   try {
     const adminUserRoles = req.user.Roles;
     const adminUserId = req.user.id;
-
     // Only admins can manage hierarchical assignments
     if (!hasFullAccess(adminUserRoles)) {
       return res.status(403).json({
@@ -29,7 +26,6 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
         code: 'ADMIN_REQUIRED'
       });
     }
-
     const {
       userId,
       userName,
@@ -41,7 +37,6 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       rolePermissions = {},
       restrictions = {}
     } = req.body;
-
     if (!userId || !userName || !email || !assignmentLevel) {
       return res.status(400).json({
         success: false,
@@ -49,7 +44,6 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
         code: 'MISSING_REQUIRED_FIELDS'
       });
     }
-
     // Validate assignment level
     const validLevels = ['DIVISION', 'DEPARTMENT', 'REGION', 'FULL', 'OWN_ONLY'];
     if (!validLevels.includes(assignmentLevel)) {
@@ -59,7 +53,6 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
         code: 'INVALID_ASSIGNMENT_LEVEL'
       });
     }
-
     // Build hierarchical assignment based on level
     const assignmentData = await buildHierarchicalAssignment({
       assignmentLevel,
@@ -67,14 +60,11 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       departmentId,
       divisionName
     });
-
     if (!assignmentData.success) {
       return res.status(400).json(assignmentData);
     }
-
     // Find existing assignment or create new one
     let assignment = await HierarchicalUserAssignment.findOne({ userId, isActive: true });
-
     const assignmentPayload = {
       userId,
       userName,
@@ -105,7 +95,6 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       isActive: true,
       lastModifiedBy: adminUserId
     };
-
     if (assignment) {
       // Update existing assignment
       Object.assign(assignment, assignmentPayload);
@@ -115,14 +104,12 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       assignmentPayload.createdBy = adminUserId;
       assignment = await HierarchicalUserAssignment.create(assignmentPayload);
     }
-
     // Populate the result for response
     const populatedAssignment = await HierarchicalUserAssignment
       .findById(assignment._id)
       .populate('regionId', 'Region regionName RegionName _id')
       .populate('departmentId', 'Department departmentName DepartmentName _id')
       .lean();
-
     return res.status(200).json({
       success: true,
       message: `Hierarchical assignment ${assignment.isNew ? 'created' : 'updated'} successfully`,
@@ -130,7 +117,6 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       consolidationInfo: assignment.getConsolidationTarget(),
       hierarchicalStructure: assignmentData.hierarchicalStructure
     });
-
   } catch (error) {
     console.error('🚨 Error managing hierarchical assignment:', error);
     return res.status(500).json({
@@ -140,7 +126,6 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
     });
   }
 };
-
 /**
  * Get hierarchical assignment details for a user
  */
@@ -148,7 +133,6 @@ const getHierarchicalAssignment = async (req, res) => {
   try {
     const { userId } = req.params;
     const currentUserRoles = req.user.Roles;
-
     // Check if user can view this assignment
     if (!hasFullAccess(currentUserRoles) && req.user.id !== userId) {
       return res.status(403).json({
@@ -157,13 +141,11 @@ const getHierarchicalAssignment = async (req, res) => {
         code: 'ACCESS_DENIED'
       });
     }
-
     const assignment = await HierarchicalUserAssignment
       .findOne({ userId, isActive: true })
       .populate('regionId', 'Region regionName RegionName _id')
       .populate('departmentId', 'Department departmentName DepartmentName _id')
       .lean();
-
     if (!assignment) {
       return res.status(200).json({
         success: true,
@@ -188,11 +170,9 @@ const getHierarchicalAssignment = async (req, res) => {
         }
       });
     }
-
     // Get consolidation information
     const assignmentDoc = await HierarchicalUserAssignment.findOne({ userId, isActive: true });
     const consolidationInfo = assignmentDoc.getConsolidationTarget();
-
     return res.status(200).json({
       success: true,
       message: 'Hierarchical assignment retrieved successfully',
@@ -201,7 +181,6 @@ const getHierarchicalAssignment = async (req, res) => {
         consolidationInfo
       }
     });
-
   } catch (error) {
     console.error('🚨 Error getting hierarchical assignment:', error);
     return res.status(500).json({
@@ -211,14 +190,12 @@ const getHierarchicalAssignment = async (req, res) => {
     });
   }
 };
-
 /**
  * Get all hierarchical assignments (Admin only)
  */
 const getAllHierarchicalAssignments = async (req, res) => {
   try {
     const userRoles = req.user.Roles;
-
     if (!hasFullAccess(userRoles)) {
       return res.status(403).json({
         success: false,
@@ -226,20 +203,17 @@ const getAllHierarchicalAssignments = async (req, res) => {
         code: 'ADMIN_REQUIRED'
       });
     }
-
     const assignments = await HierarchicalUserAssignment
       .find({ isActive: true })
       .populate('regionId', 'Region regionName RegionName RegionCode _id')
       .populate('departmentId', 'Department departmentName DepartmentName _id')
       .sort({ assignmentLevel: 1, userName: 1 })
       .lean();
-
     // Add consolidation info to each assignment
     const assignmentsWithConsolidation = await Promise.all(
       assignments.map(async (assignment) => {
         const assignmentDoc = await HierarchicalUserAssignment.findById(assignment._id);
         const consolidationInfo = assignmentDoc.getConsolidationTarget();
-
         // Shape to match UI expectations
         return {
           ...assignment,
@@ -251,7 +225,6 @@ const getAllHierarchicalAssignments = async (req, res) => {
         };
       })
     );
-
     // Group by access scope for better organization
     const groupedAssignments = assignmentsWithConsolidation.reduce((groups, assignment) => {
       const scope = assignment.accessScope;
@@ -261,7 +234,6 @@ const getAllHierarchicalAssignments = async (req, res) => {
       groups[scope].push(assignment);
       return groups;
     }, {});
-
     return res.status(200).json({
       success: true,
       message: 'All hierarchical assignments retrieved successfully',
@@ -275,7 +247,6 @@ const getAllHierarchicalAssignments = async (req, res) => {
         }, {})
       }
     });
-
   } catch (error) {
     console.error('🚨 Error getting all hierarchical assignments:', error);
     return res.status(500).json({
@@ -285,7 +256,6 @@ const getAllHierarchicalAssignments = async (req, res) => {
     });
   }
 };
-
 /**
  * Delete hierarchical assignment
  */
@@ -293,7 +263,6 @@ const deleteHierarchicalAssignment = async (req, res) => {
   try {
     const { userId } = req.params;
     const adminUserRoles = req.user.Roles;
-
     if (!hasFullAccess(adminUserRoles)) {
       return res.status(403).json({
         success: false,
@@ -301,9 +270,7 @@ const deleteHierarchicalAssignment = async (req, res) => {
         code: 'ADMIN_REQUIRED'
       });
     }
-
     const assignment = await HierarchicalUserAssignment.findOne({ userId, isActive: true });
-
     if (!assignment) {
       return res.status(404).json({
         success: false,
@@ -311,9 +278,7 @@ const deleteHierarchicalAssignment = async (req, res) => {
         code: 'ASSIGNMENT_NOT_FOUND'
       });
     }
-
     await HierarchicalUserAssignment.deleteOne({ userId, isActive: true });
-
     return res.status(200).json({
       success: true,
       message: 'Hierarchical assignment deleted successfully',
@@ -323,7 +288,6 @@ const deleteHierarchicalAssignment = async (req, res) => {
         assignmentLevel: assignment.assignmentLevel
       }
     });
-
   } catch (error) {
     console.error('🚨 Error deleting hierarchical assignment:', error);
     return res.status(500).json({
@@ -333,7 +297,6 @@ const deleteHierarchicalAssignment = async (req, res) => {
     });
   }
 };
-
 /**
  * Test hierarchical consolidation for a user
  */
@@ -341,7 +304,6 @@ const testHierarchicalConsolidation = async (req, res) => {
   try {
     const { userId, proposalData } = req.body;
     const userRoles = req.user.Roles;
-
     if (!hasFullAccess(userRoles)) {
       return res.status(403).json({
         success: false,
@@ -349,9 +311,7 @@ const testHierarchicalConsolidation = async (req, res) => {
         code: 'ADMIN_REQUIRED'
       });
     }
-
     const assignment = await HierarchicalUserAssignment.findOne({ userId, isActive: true });
-
     if (!assignment) {
       return res.status(404).json({
         success: false,
@@ -359,13 +319,10 @@ const testHierarchicalConsolidation = async (req, res) => {
         code: 'ASSIGNMENT_NOT_FOUND'
       });
     }
-
     const consolidationInfo = assignment.getConsolidationTarget();
-
     // Simulate consolidation application
     const originalData = { ...proposalData };
     const consolidatedData = { ...proposalData };
-
     // Apply consolidation logic
     switch (assignment.assignmentLevel) {
       case 'DIVISION':
@@ -375,20 +332,17 @@ const testHierarchicalConsolidation = async (req, res) => {
         consolidatedData.region = assignment.regionId;
         consolidatedData.consolidatedFrom = 'DIVISION';
         break;
-
       case 'DEPARTMENT':
         consolidatedData.originalLevel = 'DEPARTMENT';
         consolidatedData.originalDepartment = assignment.departmentId;
         consolidatedData.region = assignment.regionId;
         consolidatedData.consolidatedFrom = 'DEPARTMENT';
         break;
-
       case 'REGION':
         consolidatedData.originalLevel = 'REGION';
         consolidatedData.region = assignment.regionId;
         break;
     }
-
     return res.status(200).json({
       success: true,
       message: 'Hierarchical consolidation test completed',
@@ -402,7 +356,6 @@ const testHierarchicalConsolidation = async (req, res) => {
         explanation: getConsolidationExplanation(assignment.accessScope)
       }
     });
-
   } catch (error) {
     console.error('🚨 Error testing hierarchical consolidation:', error);
     return res.status(500).json({
@@ -412,7 +365,6 @@ const testHierarchicalConsolidation = async (req, res) => {
     });
   }
 };
-
 /**
  * Helper function to build hierarchical assignment
  */
@@ -422,7 +374,6 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
     let departments = [];
     let divisions = [];
     let hierarchicalStructure = {};
-
     switch (assignmentLevel) {
       case 'DIVISION':
         // Division assignment requires region, department, and division
@@ -433,11 +384,9 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
             code: 'MISSING_DIVISION_REQUIREMENTS'
           };
         }
-
         // Validate region and department exist
         const region = await Region.findById(regionId);
         const department = await Department.findById(departmentId);
-
         if (!region || !department) {
           return {
             success: false,
@@ -445,11 +394,9 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
             code: 'INVALID_REGION_DEPARTMENT'
           };
         }
-
         regions = [regionId];
         departments = [departmentId];
         divisions = [divisionName];
-
         hierarchicalStructure = {
           level: 'DIVISION',
           division: divisionName,
@@ -459,7 +406,6 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
           ultimateRegion: region.Region
         };
         break;
-
       case 'DEPARTMENT':
         // Department assignment requires region and department
         if (!regionId || !departmentId) {
@@ -469,10 +415,8 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
             code: 'MISSING_DEPARTMENT_REQUIREMENTS'
           };
         }
-
         const deptRegion = await Region.findById(regionId);
         const assignedDepartment = await Department.findById(departmentId);
-
         if (!deptRegion || !assignedDepartment) {
           return {
             success: false,
@@ -480,11 +424,9 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
             code: 'INVALID_REGION_DEPARTMENT'
           };
         }
-
         regions = [regionId];
         departments = [departmentId];
         divisions = [];
-
         hierarchicalStructure = {
           level: 'DEPARTMENT',
           department: assignedDepartment.Department,
@@ -493,7 +435,6 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
           ultimateRegion: deptRegion.Region
         };
         break;
-
       case 'REGION':
         // Region assignment requires only region
         if (!regionId) {
@@ -503,9 +444,7 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
             code: 'MISSING_REGION_REQUIREMENTS'
           };
         }
-
         const assignedRegion = await Region.findById(regionId);
-
         if (!assignedRegion) {
           return {
             success: false,
@@ -513,11 +452,9 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
             code: 'INVALID_REGION'
           };
         }
-
         regions = [regionId];
         departments = [];
         divisions = [];
-
         hierarchicalStructure = {
           level: 'REGION',
           region: assignedRegion.Region,
@@ -525,33 +462,28 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
           ultimateRegion: assignedRegion.Region
         };
         break;
-
       case 'FULL':
         // Full access - no specific assignments needed
         regions = [];
         departments = [];
         divisions = [];
-
         hierarchicalStructure = {
           level: 'FULL',
           consolidatesTo: 'FULL',
           hasFullAccess: true
         };
         break;
-
       case 'OWN_ONLY':
         // Own only access - no organizational assignments
         regions = [];
         departments = [];
         divisions = [];
-
         hierarchicalStructure = {
           level: 'OWN_ONLY',
           consolidatesTo: 'OWN_ONLY',
           restrictedToOwnRecords: true
         };
         break;
-
       default:
         return {
           success: false,
@@ -559,7 +491,6 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
           code: 'INVALID_ASSIGNMENT_LEVEL'
         };
     }
-
     return {
       success: true,
       regions,
@@ -567,7 +498,6 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
       divisions,
       hierarchicalStructure
     };
-
   } catch (error) {
     console.error('Error building hierarchical assignment:', error);
     return {
@@ -577,7 +507,6 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
     };
   }
 };
-
 /**
  * Helper function to get max proposal amount by level
  */
@@ -595,7 +524,6 @@ const getMaxProposalAmountByLevel = (level) => {
       return 50000; // 50K limit for own-only users
   }
 };
-
 /**
  * Helper function to explain consolidation
  */
@@ -613,7 +541,6 @@ const getConsolidationExplanation = (scope) => {
       return 'Own-only users can only create and edit their own records.';
   }
 };
-
 module.exports = {
   createOrUpdateHierarchicalAssignment,
   getHierarchicalAssignment,
@@ -621,4 +548,4 @@ module.exports = {
   deleteHierarchicalAssignment,
   testHierarchicalConsolidation,
   buildHierarchicalAssignment
-};
+};

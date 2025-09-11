@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-
 const titleMappingSchema = new mongoose.Schema(
   {
     sublineItem: {
@@ -48,16 +47,13 @@ const titleMappingSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
-
 // Index for better query performance
 titleMappingSchema.index({ sublineItem: 1, uacsCode: 1 });
 titleMappingSchema.index({ accountClass: 1, lineItem: 1 });
-
 // Virtual to get formatted display name
 titleMappingSchema.virtual("displayName").get(function () {
   return `${this.accountingTitle} (${this.uacsCode})`;
 });
-
 // Method to check if this mapping is for capital outlay
 titleMappingSchema.methods.isCapitalOutlay = function () {
   const capitalOutlayKeywords = [
@@ -71,11 +67,9 @@ titleMappingSchema.methods.isCapitalOutlay = function () {
     "furniture",
     "land",
   ];
-  
   const searchText = `${this.lineItem} ${this.sublineItem} ${this.accountingTitle}`.toLowerCase();
   return capitalOutlayKeywords.some(keyword => searchText.includes(keyword));
 };
-
 // Static method to get capital outlay mappings
 titleMappingSchema.statics.getCapitalOutlayMappings = function () {
   return this.find({
@@ -87,7 +81,6 @@ titleMappingSchema.statics.getCapitalOutlayMappings = function () {
     isActive: true
   }).sort({ sublineItem: 1, accountingTitle: 1 });
 };
-
 // Static method to get mappings by subline item
 titleMappingSchema.statics.getBySublineItem = function (sublineItem) {
   return this.find({ 
@@ -95,7 +88,6 @@ titleMappingSchema.statics.getBySublineItem = function (sublineItem) {
     isActive: true 
   }).sort({ accountingTitle: 1 });
 };
-
 // Pre-save middleware to ensure UACS code format
 titleMappingSchema.pre("save", function (next) {
   // Validate UACS code format (e.g., 5-01-01-010)
@@ -106,5 +98,4 @@ titleMappingSchema.pre("save", function (next) {
   }
   next();
 });
-
-module.exports = mongoose.model("TitleMapping", titleMappingSchema);
+module.exports = mongoose.model("TitleMapping", titleMappingSchema);

@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-
 const ChildrenAllowanceSchema = mongoose.Schema(
   {
     employeeNumber: { 
@@ -44,7 +43,5 @@ const ChildrenAllowanceSchema = mongoose.Schema(
   },
   { timestamps: true }
 );
-
 module.exports = mongoose.models.ChildrenAllowance || 
-  mongoose.model("ChildrenAllowance", ChildrenAllowanceSchema);
-
+  mongoose.model("ChildrenAllowance", ChildrenAllowanceSchema);

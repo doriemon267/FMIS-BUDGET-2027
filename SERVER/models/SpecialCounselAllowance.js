@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-
 const SpecialCounselAllowanceSchema = new mongoose.Schema({
   nameOfEmployee: {
     type: mongoose.Schema.Types.ObjectId,
@@ -16,5 +15,4 @@ const SpecialCounselAllowanceSchema = new mongoose.Schema({
     required: true,
   },
 });
-
 module.exports = mongoose.model('specialCounselAllowance', SpecialCounselAllowanceSchema);

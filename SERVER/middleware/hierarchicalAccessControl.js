@@ -8,13 +8,11 @@
  * 
  * Hierarchy: Division → Department → Region
  */
-
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const UserOrganizationalAssignment = require('../models/UserOrganizationalAssignment');
 const Region = require('../models/Region');
 const Department = require('../models/Department');
 const { hasFullAccess } = require('./securityMiddleware');
-
 /**
  * Main hierarchical access control middleware
  * @param {string} operation - The operation type: 'create', 'read', 'update', 'delete'
@@ -26,28 +24,23 @@ const hierarchicalAccessControl = (operation = 'read', options = {}) => {
     logAccess = true, 
     enableConsolidation = true 
   } = options;
-
   return async (req, res, next) => {
     try {
       const userId = req.user.id;
       const userRoles = req.user.Roles;
       const userName = req.user.username || req.user.name || `User-${userId}`;
-
       if (logAccess) {
-        console.log(`🏢 Hierarchical Access Check: User ${userName} (${userId}) attempting ${operation} operation`);
+        attempting ${operation} operation`);
       }
-
       // Full access users no longer bypass hierarchical restrictions; they still follow assigned scope
       if (hasFullAccess(userRoles)) {
         if (logAccess) {
-          console.log(`ℹ️ Full access role detected for ${userName} (Roles: ${userRoles}). Applying assigned hierarchical scope...`);
+          . Applying assigned hierarchical scope...`);
         }
         // Do not return here; continue to load assignment
       }
-
       // Get user's hierarchical assignments
       const assignment = await HierarchicalUserAssignment.getUserPermissions(userId);
-      
       if (!assignment || assignment.assignmentLevel === 'NONE') {
         if (strictMode) {
           return res.status(403).json({
@@ -63,16 +56,13 @@ const hierarchicalAccessControl = (operation = 'read', options = {}) => {
         };
         return next();
       }
-
       // Get consolidation information
       const consolidationInfo = assignment.getConsolidationTarget();
       // const effectiveRegion = assignment.getEffectiveRegion(); // Not implemented; avoid calling
-
       // Handle different operations
       switch (operation) {
         case 'read':
           return handleHierarchicalRead(req, res, next, assignment, consolidationInfo, { logAccess, userName });
-        
         case 'create':
         case 'update':
         case 'delete':
@@ -82,14 +72,12 @@ const hierarchicalAccessControl = (operation = 'read', options = {}) => {
             userName,
             enableConsolidation 
           });
-        
         default:
           return res.status(400).json({ 
             message: 'Invalid operation type for hierarchical access control',
             code: 'INVALID_OPERATION'
           });
       }
-
     } catch (error) {
       console.error('🚨 Hierarchical Access Control Error:', error);
       return res.status(500).json({ 
@@ -99,16 +87,13 @@ const hierarchicalAccessControl = (operation = 'read', options = {}) => {
     }
   };
 };
-
 /**
  * Handle read operations with hierarchical filtering
  */
 const handleHierarchicalRead = async (req, res, next, assignment, consolidationInfo, options) => {
   const { logAccess, userName } = options;
-
   // Build hierarchical filters based on user's assignment level
   let hierarchicalFilters = {};
-
   switch (assignment.assignmentLevel) {
     case 'DIVISION':
       // Division users can only access their specific division data
@@ -120,7 +105,6 @@ const handleHierarchicalRead = async (req, res, next, assignment, consolidationI
         ]
       };
       break;
-
     case 'DEPARTMENT':
       // Department users can access all divisions within their department
       hierarchicalFilters = {
@@ -130,14 +114,12 @@ const handleHierarchicalRead = async (req, res, next, assignment, consolidationI
         ]
       };
       break;
-
     case 'REGION':
       // Region users can access all departments and divisions within their region
       hierarchicalFilters = {
         region: assignment.regions[0]?.regionName
       };
       break;
-
     case 'FULL':
       // Full access users can access everything, but if they have specific region assignments,
       // they should still be filtered to those regions (for better data isolation)
@@ -149,14 +131,12 @@ const handleHierarchicalRead = async (req, res, next, assignment, consolidationI
         hierarchicalFilters = {};
       }
       break;
-
     default:
       // Default to own records only
       hierarchicalFilters = {
         userId: assignment.userId
       };
   }
-
   // Prune filters based on allowed fields (e.g., modules without department/division)
   const allowed = options?.allowedFields;
   if (Array.isArray(allowed) && allowed.length > 0) {
@@ -176,7 +156,6 @@ const handleHierarchicalRead = async (req, res, next, assignment, consolidationI
     };
     hierarchicalFilters = prune(hierarchicalFilters);
   }
-
   req.hierarchicalFilters = hierarchicalFilters;
   req.hierarchicalAccess = {
     scope: assignment.assignmentLevel,
@@ -186,21 +165,15 @@ const handleHierarchicalRead = async (req, res, next, assignment, consolidationI
     accessibleDivisions: assignment.divisions || [],
     rolePermissions: assignment.rolePermissions
   };
-
   if (logAccess) {
-    console.log(`📋 Hierarchical Read: ${userName} granted access with level ${assignment.assignmentLevel}`);
-    console.log(`🔍 Applied filters:`, hierarchicalFilters);
-  }
-
+    }
   next();
 };
-
 /**
  * Handle write operations with hierarchical consolidation
  */
 const handleHierarchicalWrite = async (req, res, next, assignment, consolidationInfo, operation, options) => {
   const { strictMode, logAccess, userName, enableConsolidation } = options;
-
   // Check operation permissions (relaxed when strictMode is false)
   let canPerformOperation = true;
   if (strictMode) {
@@ -216,12 +189,9 @@ const handleHierarchicalWrite = async (req, res, next, assignment, consolidation
         canPerformOperation = permissions.canDeleteProposals === true;
         break;
     }
-
     if (!canPerformOperation) {
       if (logAccess) {
-        console.log(`❌ Hierarchical Write: ${operation} operation denied to ${userName} - insufficient permissions`);
-      }
-      
+        }
       return res.status(403).json({
         message: `Access denied. You don't have permission to perform ${operation} operations`,
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -230,20 +200,16 @@ const handleHierarchicalWrite = async (req, res, next, assignment, consolidation
       });
     }
   }
-
   // Apply hierarchical consolidation for create/update operations
   if (enableConsolidation && (operation === 'create' || operation === 'update')) {
     applyHierarchicalConsolidation(req, assignment, consolidationInfo);
   }
-
   // Validate that user can access the target organizational units (relaxed when strictMode is false)
   const isValidAccess = await validateHierarchicalAccess(req, assignment);
-  
   if (!isValidAccess) {
     if (strictMode) {
       if (logAccess) {
-        console.log(`❌ Hierarchical Write: ${operation} operation denied to ${userName} - invalid organizational access`);
-      }
+        }
       return res.status(403).json({
         message: `Access denied. You cannot ${operation} data outside your assigned organizational units`,
         code: 'INVALID_HIERARCHICAL_ACCESS',
@@ -254,25 +220,19 @@ const handleHierarchicalWrite = async (req, res, next, assignment, consolidation
         allowedDivisions: assignment.divisions || []
       });
     } else if (logAccess) {
-      console.log(`⚠️ Hierarchical Write: proceeding in relaxed mode despite invalid org access for ${userName}`);
-    }
+      }
   }
-
   req.hierarchicalAccess = {
     scope: assignment.assignmentLevel,
     consolidationInfo,
     originalData: { ...req.body }, // Store original before consolidation
     rolePermissions: assignment.rolePermissions
   };
-
   if (logAccess) {
-    console.log(`✅ Hierarchical Write: ${operation} operation granted to ${userName}${strictMode ? '' : ' (relaxed mode)'}`);
-    console.log(`🔄 Consolidation applied:`, consolidationInfo);
-  }
-
+    '}`);
+    }
   next();
 };
-
 /**
  * Apply hierarchical consolidation to request data
  */
@@ -281,14 +241,12 @@ const applyHierarchicalConsolidation = (req, assignment, consolidationInfo) => {
   const regionName = assignment?.regions?.[0]?.regionName || req.body.region || null;
   const departmentName = assignment?.departments?.[0]?.departmentName || req.body.department || null;
   const divisionName = assignment?.divisions?.[0] || req.body.division || null;
-
   // Store original organizational context
   req.originalOrgContext = {
     region: req.body.region,
     department: req.body.department,
     division: req.body.division
   };
-
   // Apply consolidation based on user's access scope
   switch (assignment.accessScope) {
     case 'DIVISION':
@@ -300,7 +258,6 @@ const applyHierarchicalConsolidation = (req, assignment, consolidationInfo) => {
       req.body.region = regionName; // Ensure region name is set
       req.body.consolidatedFrom = 'DIVISION';
       break;
-
     case 'DEPARTMENT':
       // Department submissions consolidate to Region level (names)
       req.body.originalLevel = 'DEPARTMENT';
@@ -309,14 +266,12 @@ const applyHierarchicalConsolidation = (req, assignment, consolidationInfo) => {
       req.body.region = regionName; // Consolidate to region name
       req.body.consolidatedFrom = 'DEPARTMENT';
       break;
-
     case 'REGION':
       // Region submissions stay at region level (names)
       req.body.originalLevel = 'REGION';
       req.body.region = regionName || req.body.region || null;
       break;
   }
-
   // Add consolidation metadata
   req.body.consolidationMetadata = {
     submittedBy: req.user.id,
@@ -331,13 +286,11 @@ const applyHierarchicalConsolidation = (req, assignment, consolidationInfo) => {
     }
   };
 };
-
 /**
  * Validate hierarchical access permissions
  */
 const validateHierarchicalAccess = async (req, assignment) => {
   const { region, department, division } = req.body;
-
   // Check region access if region is specified
   if (region) {
     const hasRegionAccess = assignment.hasRegionAccess(region);
@@ -345,7 +298,6 @@ const validateHierarchicalAccess = async (req, assignment) => {
       return false;
     }
   }
-
   // Check department access if department is specified
   if (department) {
     const hasDepartmentAccess = assignment.hasDepartmentAccess(department);
@@ -353,7 +305,6 @@ const validateHierarchicalAccess = async (req, assignment) => {
       return false;
     }
   }
-
   // Check division access if division is specified
   if (division) {
     const hasDivisionAccess = assignment.hasDivisionAccess(division);
@@ -361,10 +312,8 @@ const validateHierarchicalAccess = async (req, assignment) => {
       return false;
     }
   }
-
   return true;
 };
-
 /**
  * Get required permissions for operation
  */
@@ -380,7 +329,6 @@ const getRequiredPermissionsForOperation = (operation) => {
       return [];
   }
 };
-
 /**
  * Convenience wrapper for strict hierarchical control
  */
@@ -392,7 +340,6 @@ const strictHierarchicalControl = (operation, options = {}) => {
     ...options 
   });
 };
-
 /**
  * Middleware to get user's hierarchical access information
  */
@@ -400,13 +347,11 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const userRoles = req.user.Roles;
-
     // Load the hierarchical assignment (single source of truth)
     let assignmentDoc = await HierarchicalUserAssignment
       .findOne({ userId, isActive: true })
       .populate('regionId', 'regionName RegionName Region')
       .populate('departmentId', 'Department departmentName DepartmentName');
-
     // Fallback: handle potential type mismatches (numeric vs string userId)
     if (!assignmentDoc) {
       try {
@@ -427,7 +372,6 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
         console.warn('⚠️ Hierarchical assignment fallback lookup failed:', e?.message);
       }
     }
-
     // If user has a full-access role, prefer returning concrete assignments when available
     if (hasFullAccess(userRoles)) {
       if (assignmentDoc) {
@@ -439,7 +383,6 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
           ? [{ _id: assignmentDoc.departmentId._id, departmentName: assignmentDoc.departmentId.Department || assignmentDoc.departmentId.departmentName || assignmentDoc.departmentId.DepartmentName || null }]
           : [];
         const accessibleDivisions = assignmentDoc.divisionName ? [assignmentDoc.divisionName] : [];
-
         req.hierarchicalAccessInfo = {
           scope: assignmentDoc.assignmentLevel,
           hasFullAccess: true, // indicate elevated capability
@@ -454,7 +397,6 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
         };
         return next();
       }
-
       // No assignment stored: do NOT default to FULL; show OWN_ONLY to avoid misleading UI
       req.hierarchicalAccessInfo = {
         scope: 'OWN_ONLY',
@@ -466,7 +408,6 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
       };
       return next();
     }
-
     // Non-full access users
     if (!assignmentDoc) {
       req.hierarchicalAccessInfo = {
@@ -479,7 +420,6 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
       };
       return next();
     }
-
     const consolidationInfo = assignmentDoc.getConsolidationTarget();
     const accessibleRegions = assignmentDoc.regionId
       ? [{ _id: assignmentDoc.regionId._id, regionName: assignmentDoc.regionId.regionName || assignmentDoc.regionId.RegionName || assignmentDoc.regionId.Region }]
@@ -488,7 +428,6 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
       ? [{ _id: assignmentDoc.departmentId._id, departmentName: assignmentDoc.departmentId.Department || assignmentDoc.departmentId.departmentName || assignmentDoc.departmentId.DepartmentName || null }]
       : [];
     const accessibleDivisions = assignmentDoc.divisionName ? [assignmentDoc.divisionName] : [];
-
     req.hierarchicalAccessInfo = {
       scope: assignmentDoc.assignmentLevel,
       hasFullAccess: false,
@@ -498,7 +437,6 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
       consolidationInfo,
       rolePermissions: assignmentDoc.rolePermissions
     };
-
     next();
   } catch (error) {
     console.error('🚨 Error getting hierarchical access info:', error);
@@ -509,7 +447,6 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
     });
   }
 };
-
 // Enforce workflow transitions based on assignment level and workflowRoles
 const enforceWorkflowTransition = (transition) => {
   const requiredRoleByTransition = {
@@ -518,14 +455,12 @@ const enforceWorkflowTransition = (transition) => {
     departmentSubmit: 'departmentSubmission',
     regionFinalVerify: 'regionFinalVerifier',
   };
-
   const requiredLevelByTransition = {
     divisionApprove: 'DIVISION',
     departmentConsolidate: 'DEPARTMENT',
     departmentSubmit: 'DEPARTMENT',
     regionFinalVerify: 'REGION',
   };
-
   return async (req, res, next) => {
     try {
       const userId = req.user.id;
@@ -534,14 +469,11 @@ const enforceWorkflowTransition = (transition) => {
       if (!assignment) {
         return res.status(403).json({ message: 'No organizational assignment', code: 'NO_ORG_ASSIGNMENT' });
       }
-
       const requiredRole = requiredRoleByTransition[transition];
       const requiredLevel = requiredLevelByTransition[transition];
       const roles = assignment.workflowRoles || [];
-
       const levelOk = assignment.assignmentLevel === requiredLevel || assignment.assignmentLevel === 'FULL';
       const roleOk = roles.includes(requiredRole);
-
       if (!levelOk || !roleOk) {
         return res.status(403).json({
           message: 'Insufficient workflow permissions',
@@ -551,7 +483,6 @@ const enforceWorkflowTransition = (transition) => {
           requiredLevel
         });
       }
-
       next();
     } catch (e) {
       console.error('Workflow enforcement error', e);
@@ -559,7 +490,6 @@ const enforceWorkflowTransition = (transition) => {
     }
   };
 };
-
 module.exports = {
   hierarchicalAccessControl,
   strictHierarchicalControl,
@@ -567,4 +497,4 @@ module.exports = {
   applyHierarchicalConsolidation,
   validateHierarchicalAccess,
   enforceWorkflowTransition
-};
+};

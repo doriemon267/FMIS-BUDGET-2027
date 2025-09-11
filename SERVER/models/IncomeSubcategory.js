@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-
 const incomeSubcategorySchema = new mongoose.Schema(
   {
     incomeSubcategoryName: { 
@@ -31,19 +30,16 @@ const incomeSubcategorySchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-
 // Pre-save middleware to ensure name field is set
 incomeSubcategorySchema.pre('save', function(next) {
   // Set the name field to match incomeSubcategoryName
   if (this.incomeSubcategoryName) {
     this.name = this.incomeSubcategoryName;
   }
-  
   // If no regions are specified but the subcategory name contains a region identifier,
   // automatically add that region to the regions array
   if (this.regions.length === 0 && this.incomeSubcategoryName) {
     const regionMatches = this.incomeSubcategoryName.match(/\b(REGION \d+[A-Z]?|CAR|CARAGA|BARMM|NCR|Central Office|MARIIS|UPRIIS)\b/g);
-    
     if (regionMatches) {
       regionMatches.forEach(region => {
         // Handle special cases
@@ -59,9 +55,7 @@ incomeSubcategorySchema.pre('save', function(next) {
       });
     }
   }
-  
   next();
 });
-
 module.exports = mongoose.models.IncomeSubcategory || 
-  mongoose.model("IncomeSubcategory", incomeSubcategorySchema);
+  mongoose.model("IncomeSubcategory", incomeSubcategorySchema);

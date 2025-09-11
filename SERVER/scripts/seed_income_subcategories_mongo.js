@@ -1,25 +1,19 @@
 // MongoDB seed script for income_subcategories
 // Place this file in SERVER/SCRIPTS/ and run with: node seed_income_subcategories_mongo.js
 // Make sure to adjust MongoDB URI and collection names as needed
-
 const mongoose = require('mongoose');
-
 // Update this to your actual MongoDB connection string
 const MONGO_URI = 'mongodb://172.16.4.98:27017/fmis_budget';
-
 // Define category and subcategory schemas
 const categorySchema = new mongoose.Schema({
   name: String,
 }, { collection: 'income_categories' });
-
 const subcategorySchema = new mongoose.Schema({
   name: String,
   category: { type: mongoose.Schema.Types.ObjectId, ref: 'income_categories' },
 }, { collection: 'income_subcategories' });
-
 const Category = mongoose.model('income_categories', categorySchema);
 const Subcategory = mongoose.model('income_subcategories', subcategorySchema);
-
 // Categories and subcategories mapping
 const categories = [
   { name: 'Irrigation Service Fees', subcategories: ['Current Account', 'Back Accounts'] },
@@ -43,32 +37,25 @@ const categories = [
     'Space Rental of Pavilion/Building', 'Use of Service Roads', 'Water/Electrical/Housing', 'Water Service Fee', 'Miscellaneous/Others'
   ] },
 ];
-
 async function seed() {
   await mongoose.connect(MONGO_URI);
-  console.log('Connected to MongoDB');
-
   for (const cat of categories) {
     // Find category by name
     let categoryDoc = await Category.findOne({ name: cat.name });
     if (!categoryDoc) {
       categoryDoc = await Category.create({ name: cat.name });
-      console.log(`Created category: ${cat.name}`);
-    }
+      }
     for (const subcatName of cat.subcategories) {
       // Check if subcategory already exists
       let exists = await Subcategory.findOne({ name: subcatName, category: categoryDoc._id });
       if (!exists) {
         await Subcategory.create({ name: subcatName, category: categoryDoc._id });
-        console.log(`Inserted subcategory: ${subcatName} under ${cat.name}`);
-      }
+        }
     }
   }
   await mongoose.disconnect();
-  console.log('Seeding complete.');
-}
-
+  }
 seed().catch(err => {
   console.error('Error:', err);
   mongoose.disconnect();
-});
+});

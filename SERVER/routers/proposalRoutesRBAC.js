@@ -18,11 +18,9 @@ const {
   saveDraftProposal,
   getDraftProposal
 } = require("../controllers/proposalController");
-
 const Router = require("express").Router;
 const Proposal = require("../models/Proposal");
 const DraftProposal = require("../models/DraftProposal");
-
 // Import enhanced RBAC middleware
 const { 
   authenticatedRoute, 
@@ -33,30 +31,24 @@ const {
   PERMISSION_LEVELS,
   ACCESS_SCOPE
 } = require('../middleware/securityMiddleware');
-
 const {
   proposalAccessControl,
   checkProposalOwnership,
   applyAccessFilters
 } = require('../middleware/proposalAccessControl');
-
 const {
   budgetManagerOrgSelection,
   logOrgSelection,
   validateOrgSelection
 } = require('../middleware/budgetManagerOrgSelection');
-
 const proposalRBACRouter = Router();
-
 // 🔒 SECURED ROUTES WITH RBAC
-
 // Get all proposals summary (Admin only with full access)
 proposalRBACRouter.get(
   "/summary", 
   ...adminRoute(),
   getAllProposals
 );
-
 // Get all proposals (Budget Officer+ with organizational filtering)
 proposalRBACRouter.get(
   "/proposals", 
@@ -65,21 +57,18 @@ proposalRBACRouter.get(
   applyAccessFilters(),
   getProposals
 );
-
 // Get my proposals (Authenticated users - own proposals only)
 proposalRBACRouter.get(
   "/myproposals", 
   ...ownerOnlyRoute(),
   getMyProposals
 );
-
 // Get all proposals for current user including drafts (Own proposals only)
 proposalRBACRouter.get(
   "/myproposals/all", 
   ...ownerOnlyRoute(),
   getAllUserProposals
 );
-
 // Get proposal details (Budget Officer+ with organizational access)
 if (typeof getProposalDetails === 'function') {
   proposalRBACRouter.get(
@@ -89,7 +78,6 @@ if (typeof getProposalDetails === 'function') {
     getProposalDetails
   );
 }
-
 // Get single proposal by ID (Budget Officer+ with ownership/organizational check)
 proposalRBACRouter.get(
   "/proposals/:id", 
@@ -97,7 +85,6 @@ proposalRBACRouter.get(
   proposalAccessControl('read'),
   getProposalById
 );
-
 // Create new proposal (Authenticated users with due date and organizational access)
 // Budget Managers can select any organizational unit
 proposalRBACRouter.post(
@@ -108,7 +95,6 @@ proposalRBACRouter.post(
   logOrgSelection(),
   createProposal
 );
-
 // Update proposal (Owner or Admin with due date protection)
 proposalRBACRouter.put(
   "/proposals/:id", 
@@ -117,7 +103,6 @@ proposalRBACRouter.put(
   checkProposalOwnership(Proposal),
   updateProposal
 );
-
 // Delete proposal (Owner or Admin with due date protection)
 proposalRBACRouter.delete(
   "/proposals/:id", 
@@ -126,7 +111,6 @@ proposalRBACRouter.delete(
   checkProposalOwnership(Proposal),
   deleteProposal
 );
-
 // Update proposal status (Budget Officer+ only)
 proposalRBACRouter.post(
   "/updateProposalStatus", 
@@ -134,7 +118,6 @@ proposalRBACRouter.post(
   proposalAccessControl('update'),
   updateProposalStatus
 );
-
 // Approve proposal (Budget Manager+ only)
 proposalRBACRouter.put(
   "/approveProposal", 
@@ -142,7 +125,6 @@ proposalRBACRouter.put(
   proposalAccessControl('update'),
   approveProposal
 );
-
 // Reject proposals (Budget Manager+ only)
 proposalRBACRouter.put(
   "/rejectAllProposals", 
@@ -150,14 +132,12 @@ proposalRBACRouter.put(
   proposalAccessControl('update'),
   rejectAllProposals
 );
-
 // Delete all proposals (Admin only)
 proposalRBACRouter.delete(
   "/deleteAllProposals", 
   ...dueDateProtectedRoute(PERMISSION_LEVELS.SUPER_ADMIN, ACCESS_SCOPE.FULL),
   deleteAllProposals
 );
-
 // Save as draft (Authenticated users with organizational access)
 proposalRBACRouter.post(
   "/saveAsDraft", 
@@ -165,14 +145,12 @@ proposalRBACRouter.post(
   proposalAccessControl('create'),
   saveAsDraft
 );
-
 // Update missing regions (Admin only)
 proposalRBACRouter.post(
   "/update-missing-regions", 
   ...adminRoute(),
   updateMissingRegions
 );
-
 // Return proposal (Budget Officer+ only)
 proposalRBACRouter.post(
   "/returnProposal", 
@@ -180,7 +158,6 @@ proposalRBACRouter.post(
   proposalAccessControl('update'),
   returnProposal
 );
-
 // Get draft proposal by ID (Owner or Admin)
 if (typeof getDraftProposal === 'function') {
   proposalRBACRouter.get(
@@ -190,7 +167,6 @@ if (typeof getDraftProposal === 'function') {
     getDraftProposal
   );
 }
-
 // Save draft proposal (Authenticated users with organizational access)
 if (typeof saveDraftProposal === 'function') {
   proposalRBACRouter.post(
@@ -200,7 +176,6 @@ if (typeof saveDraftProposal === 'function') {
     saveDraftProposal
   );
 }
-
 // Simplified proposal endpoint (Authenticated users with filtering)
 proposalRBACRouter.get('/proposal-simple', 
   ...authenticatedRoute(),
@@ -208,19 +183,15 @@ proposalRBACRouter.get('/proposal-simple',
   async (req, res) => {
     try {
       const { fiscalYear, budgetType, processBy, region } = req.query;
-      
       if (!fiscalYear || !budgetType || !processBy || !region) {
         return res.status(400).json({ message: "Missing required parameters" });
       }
-      
       // Apply access filters
       const accessFilters = req.accessFilters || {};
-      
       // Check if user has access to the requested region
       if (accessFilters.region && accessFilters.region.$in && accessFilters.region.$in.length === 0) {
         return res.status(403).json({ message: "Access denied to this region" });
       }
-      
       const basicProposal = {
         fiscalYear,
         budgetType,
@@ -230,7 +201,6 @@ proposalRBACRouter.get('/proposal-simple',
         status: "Unknown",
         submittedDate: null
       };
-      
       res.status(200).json(basicProposal);
     } catch (error) {
       console.error("Error in simplified endpoint:", error);
@@ -238,5 +208,4 @@ proposalRBACRouter.get('/proposal-simple',
     }
   }
 );
-
-module.exports = proposalRBACRouter;
+module.exports = proposalRBACRouter;

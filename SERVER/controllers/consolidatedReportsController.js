@@ -1,6 +1,5 @@
 const MooeProposal = require('../models/mooeProposals');
 const Region = require('../models/Region');
-
 const consolidatedReportsController = {
   // Get consolidated MOOE data for all or specific regions
   getConsolidatedData: async (req, res) => {
@@ -11,16 +10,13 @@ const consolidatedReportsController = {
         const regionList = Array.isArray(regions) ? regions : [regions];
         regionFilter = { region: { $in: regionList } };
       }
-      
       // Apply sophisticated hierarchical filtering based on user access scope
       const accessScope = req.hierarchicalAccess?.scope;
       const accessibleRegionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
-
       // Add region filter based on access scope
       if (accessScope && accessScope !== 'FULL' && accessibleRegionName) {
         regionFilter.region = accessibleRegionName;
       }
-
       // Add finer filters based on access scope
       if (accessScope === 'DIVISION') {
         // Division users: only their division within their department and region
@@ -56,17 +52,14 @@ const consolidatedReportsController = {
           }
         ];
       }
-
       // Override with explicit regions parameter if provided
       if (regions) {
         const regionList = Array.isArray(regions) ? regions : [regions];
         regionFilter.region = { $in: regionList };
       }
-      
       const mooeQuery = { ...regionFilter };
       if (fiscalYear) mooeQuery.fiscalYear = fiscalYear;
       if (budgetType) mooeQuery.budgetType = budgetType;
-
       // Fetch all MOOE proposals matching the query
       const mooeData = await MooeProposal.find(mooeQuery).lean();
       if (!Array.isArray(mooeData) || mooeData.length === 0) {
@@ -81,7 +74,6 @@ const consolidatedReportsController = {
           }
         });
       }
-
       // Group by region and category
       const grouped = {};
       let grandTotal = 0;
@@ -126,7 +118,6 @@ const consolidatedReportsController = {
         grouped[key].total += total;
         grandTotal += total;
       });
-
       // Prepare result for UI: array of { region, category, total, items }
       const result = Object.values(grouped).map(g => {
         // Sort items by uacsCode ascending (copy first to avoid in-place sort issues)
@@ -148,12 +139,10 @@ const consolidatedReportsController = {
           items: sortedItems
         };
       }).sort((a, b) => a.region.localeCompare(b.region) || a.category.localeCompare(b.category));
-
       // Defensive: ensure every group has items as array
       const safeResult = Array.isArray(result)
         ? result.map(g => ({ ...g, items: Array.isArray(g.items) ? g.items : [] }))
         : [];
-
       res.status(200).json({
         success: true,
         data: Array.isArray(safeResult) ? safeResult.map(g => ({ ...g, items: Array.isArray(g.items) ? g.items : [] })) : [],
@@ -180,34 +169,27 @@ const consolidatedReportsController = {
       });
     }
   },
-
   // Get consolidated MOOE summary statistics
   getConsolidatedSummary: async (req, res) => {
     try {
       const { regions, fiscalYear, budgetType } = req.query;
-      
       let regionFilter = {};
       if (regions) {
         const regionList = Array.isArray(regions) ? regions : [regions];
         regionFilter = { region: { $in: regionList } };
       }
-      
       // Apply hierarchical filters if present
       if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
         regionFilter.region = req.hierarchicalFilters.region;
       }
-
       // Build query filters for MOOE only
       const mooeQuery = { ...regionFilter };
-      
       if (fiscalYear) {
         mooeQuery.fiscalYear = fiscalYear;
       }
-      
       if (budgetType) {
         mooeQuery.budgetType = budgetType;
       }
-
       // Aggregate MOOE totals only
       const mooeAggregation = await MooeProposal.aggregate([
         { $match: mooeQuery },
@@ -220,9 +202,7 @@ const consolidatedReportsController = {
           }
         }
       ]);
-
       const mooeTotals = mooeAggregation[0] || { totalAmount: 0, entryCount: 0 };
-
       const summary = {
         mooe: {
           totalAmount: mooeTotals.totalAmount,
@@ -232,12 +212,10 @@ const consolidatedReportsController = {
           totalAmount: mooeTotals.totalAmount
         }
       };
-
       res.status(200).json({
         success: true,
         summary
       });
-
     } catch (error) {
       console.error('Error fetching consolidated summary:', error);
       res.status(500).json({
@@ -247,7 +225,6 @@ const consolidatedReportsController = {
       });
     }
   },
-
   // Get available regions for consolidation
   getAvailableRegions: async (req, res) => {
     try {
@@ -256,22 +233,17 @@ const consolidatedReportsController = {
       if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
         query.region = req.hierarchicalFilters.region;
       }
-      
       // Get regions that have MOOE data only
       const mooeRegions = await MooeProposal.distinct('region', query);
-      
       // Filter out null/undefined regions
       const allRegions = mooeRegions.filter(Boolean);
-      
       // Get region details
       const regionDetails = await Region.find({ name: { $in: allRegions } }).lean();
-      
       res.status(200).json({
         success: true,
         regions: regionDetails,
         availableRegions: allRegions
       });
-
     } catch (error) {
       console.error('Error fetching available regions:', error);
       res.status(500).json({
@@ -281,25 +253,20 @@ const consolidatedReportsController = {
       });
     }
   },
-
   // Export consolidated data (placeholder for future implementation)
   exportConsolidatedData: async (req, res) => {
     try {
       const { format = 'json', regions, fiscalYear, budgetType } = req.query;
-      
       // For now, just return the data - can be extended to generate Excel/PDF
       const consolidatedController = require('./consolidatedReportsController');
-      
       // Reuse the getConsolidatedData logic
       req.query = { regions, fiscalYear, budgetType };
-      
       // This is a simplified approach - in production, you'd want to generate actual files
       res.status(200).json({
         success: true,
         message: `Export functionality for ${format} format will be implemented`,
         note: 'Use the /consolidated-data endpoint to get the data for now'
       });
-
     } catch (error) {
       console.error('Error exporting consolidated data:', error);
       res.status(500).json({
@@ -310,5 +277,4 @@ const consolidatedReportsController = {
     }
   }
 };
-
 module.exports = consolidatedReportsController;

@@ -1,10 +1,8 @@
 // Test script to debug the export controller
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
-
 const mongoose = require('mongoose');
 const { exportBudgetSummaryPDF } = require('./controllers/exportController');
-
 // Mock request and response objects
 const mockReq = {
   body: {
@@ -31,41 +29,25 @@ const mockReq = {
   },
   query: {}
 };
-
 const mockRes = {
   setHeader: () => {},
   status: (code) => ({
     json: (data) => {
-      console.log('Response status:', code);
-      console.log('Response data:', data);
-    }
+      }
   }),
   end: () => {
-    console.log('Response ended');
-  }
+    }
 };
-
 async function testExport() {
   try {
-    console.log('Environment variables check:');
-    console.log('MONGODB_URL:', process.env.MONGODB_URL);
-    
     if (process.env.MONGODB_URL) {
-      console.log('Connecting to MongoDB...');
       await mongoose.connect(process.env.MONGODB_URL);
-      console.log('Connected to MongoDB');
-    } else {
-      console.log('No MongoDB URL found, skipping database connection');
-      console.log('Testing export function without database (will show debugging logs)...');
+      } else {
+      ...');
     }
-
-    console.log('Testing export function...');
     await exportBudgetSummaryPDF(mockReq, mockRes);
-    
   } catch (error) {
     console.error('Test error:', error.message);
-    console.log('Continuing test to see debugging logs...');
-    
     // Try to run export function anyway to see debugging
     try {
       await exportBudgetSummaryPDF(mockReq, mockRes);
@@ -75,9 +57,7 @@ async function testExport() {
   } finally {
     if (mongoose.connection.readyState === 1) {
       await mongoose.disconnect();
-      console.log('Disconnected from MongoDB');
-    }
+      }
   }
 }
-
-testExport();
+testExport();
