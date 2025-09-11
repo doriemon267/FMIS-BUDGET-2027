@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const checkToken = require('../middleware/checkToken');
+const { strictHierarchicalControl, hierarchicalAccessControl } = require('../middleware/hierarchicalAccessControl');
 
 // Import your controller (adjust the path as needed).
 const mooeController = require('../controllers/mooeController');
@@ -10,12 +11,12 @@ const MooeProposal = require('../models/mooeProposals');
 router.use(checkToken);
 
 // Define routes to match the front-end requests.
-router.get('/mooe-data', mooeController.getMOOEData);
-router.get('/mooe-entries', mooeController.getMOOEEntries);
-router.get('/mooe-status', mooeController.getMOOEStatus);
-router.post('/mooe-save', mooeController.bulkSaveMOOE);
-router.post('/mooe-data', mooeController.bulkSaveMOOE); // <-- Added for frontend compatibility
-router.get('/mooe-list', mooeController.getMooeList);
+router.get('/mooe-data', hierarchicalAccessControl('read', { allowedFields: ['region'] }), mooeController.getMOOEData);
+router.get('/mooe-entries', hierarchicalAccessControl('read', { allowedFields: ['region'] }), mooeController.getMOOEEntries);
+router.get('/mooe-status', hierarchicalAccessControl('read', { allowedFields: ['region'] }), mooeController.getMOOEStatus);
+router.post('/mooe-save', hierarchicalAccessControl('create', { strictMode: false, enableConsolidation: true }), mooeController.bulkSaveMOOE);
+router.post('/mooe-data', hierarchicalAccessControl('create', { strictMode: false, enableConsolidation: true }), mooeController.bulkSaveMOOE); // <-- Added for frontend compatibility
+router.get('/mooe-list', hierarchicalAccessControl('read', { allowedFields: ['region'] }), mooeController.getMooeList);
 router.delete('/mooe-delete', mooeController.deleteAllMooeProposals);
 // Optional: If your ProposalCustomPage is calling GET /MOOEProposal,
 // you can map that route to the appropriate controller function.

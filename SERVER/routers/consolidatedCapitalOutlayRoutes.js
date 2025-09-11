@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const consolidatedCapitalOutlayController = require('../controllers/consolidatedCapitalOutlayController');
 const checkToken = require('../middleware/checkToken');
+const { strictHierarchicalControl, hierarchicalAccessControl } = require('../middleware/hierarchicalAccessControl');
 
 // Apply authentication middleware to all routes in this router
 router.use(checkToken);
@@ -12,6 +13,6 @@ router.get('/test', (req, res) => {
 });
 
 // Get consolidated Capital Outlay data for reports
-router.get('/capital-outlay-data', consolidatedCapitalOutlayController.getConsolidatedCapitalOutlayData);
+router.get('/capital-outlay-data', hierarchicalAccessControl('read', { allowedFields: ['region'] }), consolidatedCapitalOutlayController.getConsolidatedCapitalOutlayData);
 
 module.exports = router;

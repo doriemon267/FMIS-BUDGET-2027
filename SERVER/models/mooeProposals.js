@@ -41,6 +41,12 @@ const mooeProposalSchema = new Schema({
   region: {
     type: String
   },
+  department: {
+    type: String
+  },
+  division: {
+    type: String
+  },
   status: {
     type: String,
     enum: ['Not Submitted', 'Draft', 'Submitted', 'Approved', 'Returned'],

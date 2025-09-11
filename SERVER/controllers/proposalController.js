@@ -38,7 +38,7 @@ exports.approveAtDivision = async (req, res) => {
   try {
     const { ids = [], entity = 'personnel' } = req.body; // entity: 'personnel' | 'mooe' | 'capital' | 'income'
     const userId = req.user?.id || 'system';
-    const Model = entity === 'personnel' ? require('../models/PersonnelServices')
+    const Model = entity === 'personnel' ? require('../models/personnelServices')
       : entity === 'mooe' ? require('../models/mooeProposals')
       : entity === 'capital' ? require('../models/CapitalOutlay')
       : require('../models/Income');
@@ -58,7 +58,7 @@ exports.consolidateAtDepartment = async (req, res) => {
   try {
     const { ids = [], entity = 'personnel' } = req.body;
     const userId = req.user?.id || 'system';
-    const Model = entity === 'personnel' ? require('../models/PersonnelServices')
+    const Model = entity === 'personnel' ? require('../models/personnelServices')
       : entity === 'mooe' ? require('../models/mooeProposals')
       : entity === 'capital' ? require('../models/CapitalOutlay')
       : require('../models/Income');
@@ -78,7 +78,7 @@ exports.submitToRegion = async (req, res) => {
   try {
     const { ids = [], entity = 'personnel' } = req.body;
     const userId = req.user?.id || 'system';
-    const Model = entity === 'personnel' ? require('../models/PersonnelServices')
+    const Model = entity === 'personnel' ? require('../models/personnelServices')
       : entity === 'mooe' ? require('../models/mooeProposals')
       : entity === 'capital' ? require('../models/CapitalOutlay')
       : require('../models/Income');
@@ -98,7 +98,7 @@ exports.finalVerifyAtRegion = async (req, res) => {
   try {
     const { ids = [], entity = 'personnel' } = req.body;
     const userId = req.user?.id || 'system';
-    const Model = entity === 'personnel' ? require('../models/PersonnelServices')
+    const Model = entity === 'personnel' ? require('../models/personnelServices')
       : entity === 'mooe' ? require('../models/mooeProposals')
       : entity === 'capital' ? require('../models/CapitalOutlay')
       : require('../models/Income');
@@ -138,6 +138,9 @@ exports.updateProposalStatus = async (req, res) => {
     
     fiscalYear = fiscalYear.toString();
     
+    // Build hierarchical scope from middleware (limits by division/department/region)
+    const accessScope = req.hierarchicalFilters || {};
+
     // Optimize: Run all database updates in parallel for better performance
     const updatePromises = [];
 
@@ -148,7 +151,7 @@ exports.updateProposalStatus = async (req, res) => {
 
       updatePromises.push(
         PersonnelService.updateMany(
-          { _id: { $in: validPersonnelIds } },
+          { _id: { $in: validPersonnelIds }, ...accessScope },
           { $set: { status: "Submitted", fiscalYear, budgetType, processBy, region } }
         )
       );
@@ -168,7 +171,7 @@ exports.updateProposalStatus = async (req, res) => {
 
       updatePromises.push(
         MooeProposal.updateMany(
-          { _id: { $in: validMooeIds } },
+          { _id: { $in: validMooeIds }, ...accessScope },
           { $set: { status: "Submitted", fiscalYear, budgetType, processBy, region } }
         )
       );
@@ -188,7 +191,7 @@ exports.updateProposalStatus = async (req, res) => {
 
       updatePromises.push(
         CapitalOutlay.updateMany(
-          { _id: { $in: validCapitalIds } },
+          { _id: { $in: validCapitalIds }, ...accessScope },
           { $set: { status: "Submitted", fiscalYear, budgetType, processBy, region } }
         )
       );
@@ -208,7 +211,7 @@ exports.updateProposalStatus = async (req, res) => {
 
       updatePromises.push(
         IncomeSubcategory.updateMany(
-          { _id: { $in: validIncomeIds } },
+          { _id: { $in: validIncomeIds }, ...accessScope },
           { $set: { status: "Submitted", fiscalYear, budgetType, processBy, region } }
         )
       );
@@ -229,7 +232,8 @@ exports.updateProposalStatus = async (req, res) => {
           fiscalYear, 
           budgetType, 
           processBy,
-          region
+          region,
+          ...accessScope
         } 
       },
       {
@@ -876,7 +880,7 @@ exports.getProposals = async (req, res) => {
     const limitNum = parseInt(limit);
     
     // Build the query
-    const query = {};
+    let query = {};
     
     console.log("🔍 getProposals called with query params:", req.query);
     console.log("👤 User info:", {
@@ -885,8 +889,13 @@ exports.getProposals = async (req, res) => {
       hierarchicalFlags: req.hierarchicalFlags
     });
     
-    // Apply hierarchical filters first
-    if (req.hierarchicalFilters) {
+    // Apply submission workflow filters first (these respect submission status)
+    if (req.submissionWorkflowFilters) {
+      Object.assign(query, req.submissionWorkflowFilters);
+      console.log("🔄 Applied submission workflow filters:", req.submissionWorkflowFilters);
+    }
+    // Fallback to hierarchical filters if submission workflow not available
+    else if (req.hierarchicalFilters) {
       Object.assign(query, req.hierarchicalFilters);
       console.log("🏢 Applied hierarchical filters:", req.hierarchicalFilters);
     }
@@ -902,14 +911,15 @@ exports.getProposals = async (req, res) => {
         { region: { $regex: search, $options: 'i' } }
       ];
       
-      // If hierarchical filters exist, combine with AND
+      // If filters exist, combine with AND
       if (Object.keys(query).length > 0) {
-        query.$and = [
-          query, // existing hierarchical filters
-          { $or: searchConditions }
-        ];
-        // Remove the original query properties since they're now in $and
-        Object.keys(req.hierarchicalFilters || {}).forEach(key => delete query[key]);
+        const originalFilters = { ...query };
+        query = {
+          $and: [
+            originalFilters,
+            { $or: searchConditions }
+          ]
+        };
       } else {
         query.$or = searchConditions;
       }
@@ -947,6 +957,7 @@ exports.getProposals = async (req, res) => {
         console.log(`     Region: "${proposal.region}"`);
         console.log(`     Status: "${proposal.status}"`);
         console.log(`     CobExpenditures: "${proposal.cobExpenditures}"`);
+        console.log(`     OriginalLevel: "${proposal.originalLevel}"`);
       });
     }
     
@@ -965,18 +976,27 @@ exports.getProposals = async (req, res) => {
         console.log(`     ProcessBy: "${proposal.processBy}"`);
         console.log(`     Region: "${proposal.region}"`);
         console.log(`     Status: "${proposal.status}"`);
+        console.log(`     OriginalLevel: "${proposal.originalLevel}"`);
       });
     }
     
     // Get total count for pagination
     const totalRecords = await Proposal.countDocuments(query);
     
+    // Include workflow information in response
+    const workflowInfo = req.hierarchicalAccessInfo ? {
+      userLevel: req.hierarchicalAccessInfo.scope,
+      submissionWorkflowEnabled: req.hierarchicalAccessInfo.submissionWorkflowEnabled,
+      canSeeSubmittedOnly: req.hierarchicalAccessInfo.scope !== 'DIVISION'
+    } : null;
+    
     // Return the response with the actual values from the database
     res.status(200).json({
       proposals: proposals,
       totalRecords,
       page: pageNum,
-      limit: limitNum
+      limit: limitNum,
+      workflowInfo
     });
     
   } catch (error) {
@@ -1772,12 +1792,18 @@ exports.consolidateProposals = async (req, res) => {
   try {
     console.log("🔄 Starting manual proposal consolidation...");
     
-    // Find all submitted items from individual collections
+    // Build query with hierarchical filters
+    const query = { status: "Submitted" };
+    if (req.hierarchicalFilters) {
+      Object.assign(query, req.hierarchicalFilters);
+    }
+    
+    // Find all submitted items from individual collections with hierarchical filtering
     const [submittedPersonnel, submittedMooe, submittedCapital, submittedIncome] = await Promise.all([
-      PersonnelService.find({ status: "Submitted" }),
-      MooeProposal.find({ status: "Submitted" }),
-      CapitalOutlay.find({ status: "Submitted" }),
-      IncomeSubcategory.find({ status: "Submitted" })
+      PersonnelService.find(query),
+      MooeProposal.find(query),
+      CapitalOutlay.find(query),
+      IncomeSubcategory.find(query)
     ]);
     
     console.log(`Found items to consolidate:

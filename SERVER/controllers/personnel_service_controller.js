@@ -207,8 +207,13 @@ exports.getAllPersonnelServices = async (req, res) => {
       query.statusOfAppointment = statusOfAppointment;
     }
 
-    // Add region filter if provided
-    if (region) {
+    // Apply hierarchical filters when present (Division/Department/Region scoping)
+    if (req.hierarchicalFilters && Object.keys(req.hierarchicalFilters).length > 0) {
+      Object.assign(query, req.hierarchicalFilters);
+    }
+
+    // Add region filter if provided (and not already constrained by hierarchy)
+    if (region && !query.region) {
       query.region = region;
     }
 
@@ -683,7 +688,77 @@ exports.updatePersonnelService = async (req, res) => {
 
 exports.getAllPerServices = async (req, res) => {
   try {
-    const personnelServices = await PersonnelServices.find();
+    const { fiscalYear, region } = req.query;
+    
+    // Get active settings to determine fiscal year if not provided
+    const activeSettings = await Settings.findOne({ isActive: true });
+    if (!activeSettings) {
+      return res.status(400).json({ 
+        message: "Active settings not found", 
+        details: "No active settings available" 
+      });
+    }
+    
+    // Build query based on hierarchical access
+    const query = {
+      fiscalYear: fiscalYear || activeSettings.fiscalYear
+    };
+    
+    // Apply sophisticated hierarchical filtering based on user access scope
+    const accessScope = req.hierarchicalAccess?.scope;
+    const accessibleRegionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
+
+    // Add region filter based on access scope
+    if (accessScope && accessScope !== 'FULL' && accessibleRegionName) {
+      query.region = accessibleRegionName;
+    }
+
+    // Add finer filters based on access scope
+    if (accessScope === 'DIVISION') {
+      // Division users: only their division within their department and region
+      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+      const divName = req.hierarchicalAccess?.accessibleDivisions?.[0];
+      if (deptName) query.department = deptName;
+      if (divName) query.division = divName;
+    } else if (accessScope === 'DEPARTMENT') {
+      // Department users: all divisions within their department in the region
+      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+      if (deptName) query.department = deptName;
+    } else if (accessScope === 'REGION') {
+      // Region-level users should ONLY see:
+      // 1. Records that don't have department field (already consolidated to region level)
+      // 2. Department records that are properly submitted/approved ONLY
+      // BUT NOT current working drafts of departments
+      const baseQuery = { ...query }; // Preserve existing query constraints
+      query = {
+        $and: [
+          baseQuery, // Keep fiscal year constraints
+          { region: accessibleRegionName }, // Must be in their region
+          {
+            $or: [
+              // Option 1: Consolidated records (no department info)
+              { department: { $exists: false } },
+              { department: null },
+              { department: "" },
+              // Option 2: Department records that are submitted/approved ONLY
+              { 
+                $and: [
+                  { department: { $exists: true, $ne: null, $ne: "" } },
+                  { status: { $in: ['Department Submitted', 'Region Verified', 'Approved', 'Finalized'] } }
+                ]
+              }
+            ]
+          }
+        ]
+      };
+    }
+    
+    // Fallback region filter if provided and not already constrained
+    if (region && !query.region && !query.$and) {
+      query.region = region;
+    }
+
+    const personnelServices = await PersonnelServices.find(query);
     res.status(200).json(personnelServices);
   } catch (error) {
     console.error("Error fetching personnel services:", error.stack);
@@ -711,7 +786,7 @@ exports.getGrandTotalPermanent = async (req, res) => {
     const { fiscalYear } = activeSettings;
 
     // Get region from query parameters
-    const { region } = req.query;
+    const { region, search, employeeFullName, orderBy, order = 'asc' } = req.query;
 
     // Build query criteria
     const query = {
@@ -719,8 +794,23 @@ exports.getGrandTotalPermanent = async (req, res) => {
       fiscalYear,
     };
 
-    // Add region filter if provided
-    if (region) {
+    // Align totals with table filters
+    if (search) {
+      searchFilter(query, search, [
+        "positionTitle",
+        "employeeFullName",
+        "department",
+      ]);
+    }
+    textFilter(query, { employeeFullName });
+
+    // Merge hierarchical read filters if present (ensure totals match visible table scope)
+    if (req.hierarchicalFilters && Object.keys(req.hierarchicalFilters).length > 0) {
+      Object.assign(query, req.hierarchicalFilters);
+    }
+
+    // Add region filter if provided and not already constrained
+    if (region && !query.region) {
       query.region = region;
     }
 
@@ -789,7 +879,7 @@ exports.getGrandTotalCasual = async (req, res) => {
     const { fiscalYear } = activeSettings;
 
     // Get region from query parameters
-    const { region } = req.query;
+    const { region, search, employeeFullName, orderBy, order = 'asc' } = req.query;
 
     // Build query criteria
     const query = {
@@ -797,8 +887,23 @@ exports.getGrandTotalCasual = async (req, res) => {
       fiscalYear,
     };
 
-    // Add region filter if provided
-    if (region) {
+    // Align totals with table filters
+    if (search) {
+      searchFilter(query, search, [
+        "positionTitle",
+        "employeeFullName",
+        "department",
+      ]);
+    }
+    textFilter(query, { employeeFullName });
+
+    // Merge hierarchical read filters if present (ensure totals match visible table scope)
+    if (req.hierarchicalFilters && Object.keys(req.hierarchicalFilters).length > 0) {
+      Object.assign(query, req.hierarchicalFilters);
+    }
+
+    // Add region filter if provided and not already constrained
+    if (region && !query.region) {
       query.region = region;
     }
 

@@ -23,10 +23,16 @@ const exportBudgetSummaryPDF = async (req, res) => {
       budgetSummary 
     } = req.body;
 
+    // Apply hierarchical filters
+    let queryRegion = region;
+    if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
+      queryRegion = req.hierarchicalFilters.region;
+    }
+
     console.log('Extracted parameters:', {
       fiscalYear,
       budgetType,
-      region,
+      region: queryRegion,
       dataCounts,
       budgetSummary: budgetSummary ? Object.keys(budgetSummary) : 'undefined'
     });
@@ -35,27 +41,27 @@ const exportBudgetSummaryPDF = async (req, res) => {
     const [personnelData, cosPersonnelData, mooeData, capitalOutlayData, incomeData] = await Promise.all([
       PersonnelServices.find({ 
         fiscalYear, 
-        region: { $regex: new RegExp(region, 'i') } 
+        region: { $regex: new RegExp(queryRegion, 'i') } 
       }).select('_id status Total category region fiscalYear employeeName positionTitle').lean(),
       
       COSPersonnel.find({ 
         fiscalYear, 
-        region: { $regex: new RegExp(region, 'i') } 
+        region: { $regex: new RegExp(queryRegion, 'i') } 
       }).select('_id status Total category region fiscalYear employeeName positionTitle').lean(),
       
       MooeProposal.find({ 
         fiscalYear, 
-        region: { $regex: new RegExp(region, 'i') } 
+        region: { $regex: new RegExp(queryRegion, 'i') } 
       }).select('_id status amount subsidy region fiscalYear itemName category').lean(),
       
       CapitalOutlay.find({ 
         fiscalYear, 
-        region: { $regex: new RegExp(region, 'i') } 
+        region: { $regex: new RegExp(queryRegion, 'i') } 
       }).select('_id status cost subsidy region fiscalYear itemDescription category').lean(),
       
       Income.find({ 
         fiscalYear, 
-        region: { $regex: new RegExp(region, 'i') } 
+        region: { $regex: new RegExp(queryRegion, 'i') } 
       }).select('_id status amount region fiscalYear category subcategory').lean()
     ]);
 
@@ -448,31 +454,37 @@ const exportBudgetSummaryExcel = async (req, res) => {
       budgetSummary 
     } = req.body;
 
+    // Apply hierarchical filters
+    let queryRegion = region;
+    if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
+      queryRegion = req.hierarchicalFilters.region;
+    }
+
     // Fetch actual data from database instead of receiving in payload
     const [personnelData, cosPersonnelData, mooeData, capitalOutlayData, incomeData] = await Promise.all([
       PersonnelServices.find({ 
         fiscalYear, 
-        region: { $regex: new RegExp(region, 'i') } 
+        region: { $regex: new RegExp(queryRegion, 'i') } 
       }).select('_id status Total category region fiscalYear employeeName positionTitle').lean(),
       
       COSPersonnel.find({ 
         fiscalYear, 
-        region: { $regex: new RegExp(region, 'i') } 
+        region: { $regex: new RegExp(queryRegion, 'i') } 
       }).select('_id status Total category region fiscalYear employeeName positionTitle').lean(),
       
       MooeProposal.find({ 
         fiscalYear, 
-        region: { $regex: new RegExp(region, 'i') } 
+        region: { $regex: new RegExp(queryRegion, 'i') } 
       }).select('_id status amount subsidy region fiscalYear itemName category').lean(),
       
       CapitalOutlay.find({ 
         fiscalYear, 
-        region: { $regex: new RegExp(region, 'i') } 
+        region: { $regex: new RegExp(queryRegion, 'i') } 
       }).select('_id status cost subsidy region fiscalYear itemDescription category').lean(),
       
       Income.find({ 
         fiscalYear, 
-        region: { $regex: new RegExp(region, 'i') } 
+        region: { $regex: new RegExp(queryRegion, 'i') } 
       }).select('_id status amount region fiscalYear category subcategory').lean()
     ]);
 

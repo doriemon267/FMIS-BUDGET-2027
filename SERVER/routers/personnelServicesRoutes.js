@@ -18,6 +18,7 @@ const checkDueDate = require("../middleware/checkDueDate");
 const checkToken = require('../middleware/checkToken');
 const enforceOrgAccess = require('../middleware/enforceOrgAccess');
 const Router = require("express").Router;
+const { strictHierarchicalControl, hierarchicalAccessControl } = require('../middleware/hierarchicalAccessControl');
 
 const personnelServicesRouter = Router();
 
@@ -31,7 +32,8 @@ personnelServicesRouter.use((req, res, next) => {
 personnelServicesRouter.post(
   "/personnelServices/bulk-add", 
   enforceOrgAccess,
-  checkDueDate, 
+  checkDueDate,
+  hierarchicalAccessControl('create', { strictMode: false, enableConsolidation: true }),
   bulkAddPersonnelServices || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
@@ -39,33 +41,42 @@ personnelServicesRouter.post(
 personnelServicesRouter.put(
   "/personnelServices/:id", 
   enforceOrgAccess,
-  checkDueDate, 
+  checkDueDate,
+  hierarchicalAccessControl('update', { strictMode: false, enableConsolidation: true }),
   updatePersonnelService || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
 
-// Unprotected GET routes
+// Protected GET routes with hierarchical read filtering
 personnelServicesRouter.get(
-  "/personnelServices", 
-  getAllPersonnelServices || 
+  "/personnelServices",
+  checkToken,
+  hierarchicalAccessControl('read'),
+  getAllPersonnelServices ||
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
 
 personnelServicesRouter.get(
-  "/getpersonnels", 
-  getAllPerServices || 
+  "/getpersonnels",
+  checkToken,
+  hierarchicalAccessControl('read'),
+  getAllPerServices ||
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
 
 personnelServicesRouter.get(
-  "/grandtotalPermanent", 
-  getGrandTotalPermanent || 
+  "/grandtotalPermanent",
+  checkToken,
+  hierarchicalAccessControl('read'),
+  getGrandTotalPermanent ||
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
 
 personnelServicesRouter.get(
-  "/grandtotalCasual", 
-  getGrandTotalCasual || 
+  "/grandtotalCasual",
+  checkToken,
+  hierarchicalAccessControl('read'),
+  getGrandTotalCasual ||
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
 
@@ -82,8 +93,8 @@ personnelServicesRouter.get(
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
 
-// Get personnel by parameters
-personnelServicesRouter.get("/getpersonnels/byParams", async (req, res) => {
+// Get personnel by parameters (protected + hierarchical filters)
+personnelServicesRouter.get("/getpersonnels/byParams", checkToken, hierarchicalAccessControl('read'), async (req, res) => {
   try {
     const { fiscalYear, budgetType, processBy, region, status } = req.query;
     
@@ -93,8 +104,15 @@ personnelServicesRouter.get("/getpersonnels/byParams", async (req, res) => {
     if (fiscalYear) query.fiscalYear = fiscalYear;
     if (budgetType) query.budgetType = budgetType;
     if (processBy) query.processBy = processBy;
-    if (region) query.region = region;
     if (status) query.status = status;
+
+    // Apply hierarchical filters
+    if (req.hierarchicalFilters && Object.keys(req.hierarchicalFilters).length > 0) {
+      Object.assign(query, req.hierarchicalFilters);
+    }
+
+    // Region filter only if not already constrained
+    if (region && !query.region) query.region = region;
     
     // Ensure we have a model to work with
     if (!PersonnelServicesModel) {
@@ -112,8 +130,8 @@ personnelServicesRouter.get("/getpersonnels/byParams", async (req, res) => {
   }
 });
 
-// Keep the original route for backward compatibility
-personnelServicesRouter.get("/api/personnel/getByParams", async (req, res) => {
+// Keep the original route for backward compatibility (protected + hierarchical filters)
+personnelServicesRouter.get("/api/personnel/getByParams", checkToken, hierarchicalAccessControl('read'), async (req, res) => {
   try {
     const { fiscalYear, budgetType, processBy, region, status } = req.query;
     
@@ -123,8 +141,15 @@ personnelServicesRouter.get("/api/personnel/getByParams", async (req, res) => {
     if (fiscalYear) query.fiscalYear = fiscalYear;
     if (budgetType) query.budgetType = budgetType;
     if (processBy) query.processBy = processBy;
-    if (region) query.region = region;
     if (status) query.status = status;
+
+    // Apply hierarchical filters
+    if (req.hierarchicalFilters && Object.keys(req.hierarchicalFilters).length > 0) {
+      Object.assign(query, req.hierarchicalFilters);
+    }
+
+    // Region filter only if not already constrained
+    if (region && !query.region) query.region = region;
     
     // Ensure we have a model to work with
     if (!PersonnelServicesModel) {

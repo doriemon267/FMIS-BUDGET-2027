@@ -29,6 +29,7 @@ const {
   requirePermission,
   applyHierarchicalFilters
 } = require('../middleware/hierarchicalAssignmentMiddleware');
+const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
 const { checkProposalOwnership } = require('../middleware/proposalAccessControl');
 const Proposal = require("../models/Proposal");
 const DraftProposal = require("../models/DraftProposal");
@@ -41,29 +42,48 @@ proposalRouter.use(checkToken);
 // Load hierarchical assignments for all routes
 proposalRouter.use(loadHierarchicalAssignment);
 
-// Get all proposals summary
-proposalRouter.get("/summary", applyHierarchicalFilters, getAllProposals);
+// Get all proposals summary (with submission workflow control)
+proposalRouter.get("/summary", 
+  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), 
+  getAllProposals
+);
 
-// Get all proposals with hierarchical filtering
-proposalRouter.get("/proposals", applyHierarchicalFilters, getProposals);
+// Get all proposals with submission workflow filtering
+proposalRouter.get("/proposals", 
+  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), 
+  getProposals
+);
 
-//Get all my proposals with hierarchical filtering
-proposalRouter.get("/myproposals", applyHierarchicalFilters, getMyProposals);
+//Get all my proposals with submission workflow filtering
+proposalRouter.get("/myproposals", 
+  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), 
+  getMyProposals
+);
 
 // Get all proposals for the current user including drafts
-proposalRouter.get("/myproposals/all", applyHierarchicalFilters, getAllUserProposals);
+proposalRouter.get("/myproposals/all", 
+  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), 
+  getAllUserProposals
+);
 
 // Get proposal details - IMPORTANT: Place this BEFORE the /:id route
 if (typeof getProposalDetails === 'function') {
-  proposalRouter.get('/proposals/details', applyHierarchicalFilters, getProposalDetails);
+  proposalRouter.get('/proposals/details', 
+    submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), 
+    getProposalDetails
+  );
 }
 
 // Get a single proposal by ID - This should come AFTER the /details route
-proposalRouter.get("/proposals/:id", applyHierarchicalFilters, getProposalById);
+proposalRouter.get("/proposals/:id", 
+  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), 
+  getProposalById
+);
 
-// Add a new proposal (requires create permission)
+// Add a new proposal (requires create permission, applies submission workflow)
 proposalRouter.post(
   "/proposals",
+  submissionWorkflowControl('create'),
   requirePermission('canCreateProposals'),
   createProposal
 );
@@ -71,6 +91,7 @@ proposalRouter.post(
 // Edit an existing proposal (requires edit permission and ownership unless canEditAllProposals)
 proposalRouter.put(
   "/proposals/:id",
+  submissionWorkflowControl('update'),
   requirePermission('canEditOwnProposals'),
   checkProposalOwnership(Proposal),
   updateProposal
@@ -79,14 +100,16 @@ proposalRouter.put(
 // Delete a proposal (requires delete permission and ownership unless admin)
 proposalRouter.delete(
   "/proposals/:id",
+  submissionWorkflowControl('delete'),
   requirePermission('canDeleteProposals'),
   checkProposalOwnership(Proposal),
   deleteProposal
 );
 
-// Update proposal status (requires update permission)
+// Update proposal status (requires update permission, applies submission workflow)
 proposalRouter.post(
   "/updateProposalStatus",
+  submissionWorkflowControl('update'),
   requirePermission('canEditOwnProposals'),
   updateProposalStatus
 );
@@ -151,7 +174,7 @@ if (typeof saveDraftProposal === 'function') {
 }
 
 // Manual consolidation route for fixing missing proposals
-proposalRouter.post('/consolidate-proposals', consolidateProposals);
+proposalRouter.post('/consolidate-proposals', applyHierarchicalFilters, consolidateProposals);
 
 // Debug route to check database content
 proposalRouter.get('/debug-proposals', debugProposals);

@@ -2,13 +2,14 @@ const { getIAsOMCost, saveIAsOMCost } = require("../controllers/iasOMCost.contro
 
 const Router = require("express").Router;
 const checkToken = require('../middleware/checkToken');
+const { strictHierarchicalControl, hierarchicalAccessControl } = require('../middleware/hierarchicalAccessControl');
 const iasOMCostRouter = Router();
 
 // Apply authentication to all IAs O&M Cost routes
 iasOMCostRouter.use(checkToken);
 
 // Get IAs O&M Cost data
-iasOMCostRouter.get("/ias-om-cost", getIAsOMCost);
+iasOMCostRouter.get("/ias-om-cost", hierarchicalAccessControl('read', { allowedFields: ['region'] }), getIAsOMCost);
 
 // Save IAs O&M Cost data
 iasOMCostRouter.post("/ias-om-cost", saveIAsOMCost);

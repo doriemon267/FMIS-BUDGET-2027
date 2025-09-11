@@ -118,15 +118,15 @@ const applyHierarchicalFilters = (req, res, next) => {
     case 'DIVISION':
       // Can only see data from their specific division
       if (assignment.regions.length > 0 && assignment.departments.length > 0 && assignment.divisions.length > 0) {
-        // Normalize values from populated docs to match Employee collection
+        // Normalize values from populated docs; use lowercase keys to match collections (e.g., Proposal)
         const regionName = assignment.regions[0].Region || assignment.regions[0].regionName;
         const departmentName = assignment.departments[0].Department || assignment.departments[0].departmentName || assignment.departments[0].DepartmentName;
         const divisionName = (assignment.divisions[0] || '').trim();
         filters = {
-          Region: regionName,
-          Department: departmentName,
-          // Only include Division filter if non-empty
-          ...(divisionName ? { Division: divisionName } : {})
+          region: regionName,
+          department: departmentName,
+          // Only include division filter if non-empty
+          ...(divisionName ? { division: divisionName } : {})
         };
       }
       break;
@@ -137,8 +137,8 @@ const applyHierarchicalFilters = (req, res, next) => {
         const regionName = assignment.regions[0].Region || assignment.regions[0].regionName;
         const departmentName = assignment.departments[0].Department || assignment.departments[0].departmentName || assignment.departments[0].DepartmentName;
         filters = {
-          Region: regionName,
-          Department: departmentName
+          region: regionName,
+          department: departmentName
         };
       }
       break;
@@ -148,7 +148,7 @@ const applyHierarchicalFilters = (req, res, next) => {
       if (assignment.regions.length > 0 && (assignment.regions[0].regionName || assignment.regions[0].Region)) {
         const regionName = assignment.regions[0].Region || assignment.regions[0].regionName;
         filters = {
-          Region: regionName
+          region: regionName
         };
       }
       break;

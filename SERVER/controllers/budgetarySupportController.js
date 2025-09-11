@@ -14,7 +14,51 @@ const getAllBudgetarySupport = async (req, res) => {
     const query = {};
     if (fiscalYear) query.fiscalYear = fiscalYear;
     if (budgetType) query.budgetType = budgetType;
-    if (region) query.region = region;
+    
+    // Apply sophisticated hierarchical filtering based on user access scope
+    const accessScope = req.hierarchicalAccess?.scope;
+    const accessibleRegionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
+
+    // Add region filter based on access scope
+    if (accessScope && accessScope !== 'FULL' && accessibleRegionName) {
+      query.region = accessibleRegionName;
+    }
+
+    // Add finer filters based on access scope
+    if (accessScope === 'DIVISION') {
+      // Division users: only their division within their department and region
+      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+      const divName = req.hierarchicalAccess?.accessibleDivisions?.[0];
+      if (deptName) query.department = deptName;
+      if (divName) query.division = divName;
+    } else if (accessScope === 'DEPARTMENT') {
+      // Department users: all divisions within their department in the region
+      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+      if (deptName) query.department = deptName;
+    } else if (accessScope === 'REGION') {
+      // Region-level users should ONLY see:
+      // 1. Records that don't have department field (already consolidated to region level)
+      // 2. Department records that are properly submitted/approved ONLY
+      // BUT NOT current working drafts of departments
+      query.$or = [
+        // Option 1: Consolidated records (no department info)
+        { 'department': { $exists: false } },
+        { 'department': null },
+        { 'department': '' },
+        // Option 2: Department records that are submitted/approved ONLY
+        { 
+          $and: [
+            { 'department': { $exists: true, $ne: null, $ne: '' } },
+            { 'status': { $in: ['Department Submitted', 'Region Verified', 'Approved', 'Finalized'] } }
+          ]
+        }
+      ];
+    }
+    
+    // Fallback region filter if provided and not already constrained
+    if (region && !query.region) {
+      query.region = region;
+    }
 
     const data = await BudgetarySupport.find(query);
     // console.log('Found data:', data);
@@ -132,16 +176,60 @@ const deleteBudgetarySupport = async (req, res) => {
 const calculateBudgetarySupport = async (req, res) => {
   try {
     const { fiscalYear, budgetType, region } = req.query;
-    console.log('Calculating budgetary support with params:', { fiscalYear, budgetType, region });
+    console.log('Calculating budgetary support with params:', { fiscalYear, budgetType });
+    console.log('User hierarchical access:', req.hierarchicalAccess);
 
     let totalSubsidy = 0;
     let breakdown = [];
 
-    // Query conditions
+    // Apply hierarchical filtering based on user access scope
+    const accessScope = req.hierarchicalAccess?.scope;
+    const accessibleRegionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
+
+    // Build query conditions with hierarchical filtering
     const queryConditions = {};
     if (fiscalYear) queryConditions.fiscalYear = fiscalYear;
     if (budgetType) queryConditions.budgetType = budgetType;
-    if (region) queryConditions.region = region;
+
+    // Add hierarchical filters based on access scope
+    if (accessScope === 'DIVISION') {
+      // Division users: only their division within their department and region
+      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+      const divName = req.hierarchicalAccess?.accessibleDivisions?.[0];
+      queryConditions.region = accessibleRegionName;
+      if (deptName) queryConditions.department = deptName;
+      if (divName) queryConditions.division = divName;
+    } else if (accessScope === 'DEPARTMENT') {
+      // Department users: all divisions within their department in the region (ALL STATUSES)
+      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+      queryConditions.region = accessibleRegionName;
+      if (deptName) queryConditions.department = deptName;
+      // Department users see ALL their data regardless of status (working data)
+    } else if (accessScope === 'REGION') {
+      // Region users: only properly submitted/approved data from departments
+      queryConditions.$and = [
+        { region: accessibleRegionName },
+        {
+          $or: [
+            // Option 1: Consolidated records (no department info)
+            { department: { $exists: false } },
+            { department: null },
+            { department: "" },
+            // Option 2: Department records that are submitted/approved ONLY
+            { 
+              $and: [
+                { department: { $exists: true, $ne: null, $ne: "" } },
+                { status: { $in: ['Department Submitted', 'Region Verified', 'Approved', 'Finalized'] } }
+              ]
+            }
+          ]
+        }
+      ];
+    } else if (accessScope && accessScope !== 'FULL' && accessibleRegionName) {
+      queryConditions.region = accessibleRegionName;
+    }
+
+    console.log('Applied query conditions:', JSON.stringify(queryConditions, null, 2));
 
     // For PersonnelServices, use fiscal_year field as well
     const personnelQueryConditions = { ...queryConditions };
@@ -189,9 +277,36 @@ const calculateBudgetarySupport = async (req, res) => {
       console.warn('Capital Outlay not available:', error.message);
     }
 
-    // 3. MOOE Data (B.1.2) - Use subsidy field
+    // 3. MOOE Data (B.1.2) - Use subsidy field with simplified hierarchical filtering
     try {
-      const mooeData = await mooeProposals.find(queryConditions);
+      // Build MOOE-specific query conditions
+      const mooeQueryConditions = {};
+      if (fiscalYear) mooeQueryConditions.fiscalYear = fiscalYear;
+      if (budgetType) mooeQueryConditions.budgetType = budgetType;
+
+      // Apply MOOE-specific hierarchical filters
+      if (accessScope === 'DIVISION') {
+        const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+        const divName = req.hierarchicalAccess?.accessibleDivisions?.[0];
+        mooeQueryConditions.region = accessibleRegionName;
+        if (deptName) mooeQueryConditions.department = deptName;
+        if (divName) mooeQueryConditions.division = divName;
+      } else if (accessScope === 'DEPARTMENT') {
+        const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+        mooeQueryConditions.region = accessibleRegionName;
+        if (deptName) mooeQueryConditions.department = deptName;
+        // Department users see ALL their MOOE data regardless of status
+      } else if (accessScope === 'REGION') {
+        mooeQueryConditions.region = accessibleRegionName;
+        // Region users only see submitted/approved MOOE data
+        mooeQueryConditions.status = { $in: ['Department Submitted', 'Region Verified', 'Approved', 'Finalized'] };
+      } else if (accessScope && accessScope !== 'FULL' && accessibleRegionName) {
+        mooeQueryConditions.region = accessibleRegionName;
+      }
+
+      console.log('MOOE query conditions:', JSON.stringify(mooeQueryConditions, null, 2));
+
+      const mooeData = await mooeProposals.find(mooeQueryConditions);
       const mooeTotal = mooeData.reduce((sum, item) => {
         return sum + (Number(item.subsidy) || Number(item.totalSubsidy) || 0);
       }, 0);
@@ -203,7 +318,9 @@ const calculateBudgetarySupport = async (req, res) => {
           amount: mooeTotal,
           description: 'Government subsidy for maintenance and operating expenses'
         });
-        console.log(`✅ MOOE subsidy: ₱${mooeTotal.toLocaleString()}`);
+        console.log(`✅ MOOE subsidy: ₱${mooeTotal.toLocaleString()} (${mooeData.length} records)`);
+      } else {
+        console.log(`❌ No MOOE subsidy found (${mooeData.length} records found but total=0)`);
       }
     } catch (error) {
       console.warn('MOOE Data not available:', error.message);

@@ -8,6 +8,11 @@ export const isBudgetAdmin = (currentUser) => {
     return false;
 }
 
+export const isBudgetAnalyst = (currentUser) => {
+    if (currentUser?.Roles && currentUser.Roles.length >= 1) return currentUser.Roles.includes('BUDGET ANALYST')
+    return false;
+}
+
 export const isAccountantAdmin = (currentUser) => {
     if (currentUser?.Roles && currentUser.Roles.length >= 1) return currentUser.Roles.includes('ACCOUNTANT ADMIN')
     return false;

@@ -66,24 +66,22 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
   const hasValidParams = !!fiscalYear && !!budgetType;
   // Fetch calculated budgetary support from the new endpoint
   const { data: calculatedBudgetarySupport } = useQuery({
-    queryKey: ['calculated-budgetary-support', fiscalYear, budgetType, regionName],
+    queryKey: ['calculated-budgetary-support', fiscalYear, budgetType], // Removed regionName from queryKey
     queryFn: async () => {
       if (!hasValidParams) return null;
       
-      // Prepare parameters
+      // Prepare parameters - let backend handle hierarchical filtering
       const params = { 
         fiscalYear: Number(fiscalYear), 
         budgetType: budgetType 
       };
       
-      // Add region in multiple formats if regionName exists
-      if (regionName) {
-        const cleanedRegion = regionName.trim();
-        params.region = cleanedRegion;
-        params.Region = cleanedRegion; // Try capital R version
-      }
+      // Don't send region manually - let hierarchical access control handle it
+      // The backend will automatically filter based on user's access scope (division/department/region)
 
+      console.log('🔍 Calling /budgetary-support/calculate with params:', params);
       const response = await api.get('/budgetary-support/calculate', { params });
+      console.log('✅ calculateBudgetarySupport response:', response.data);
 
       return response.data;
     },
@@ -92,91 +90,21 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
 
   // Fetch Capital Outlay data to calculate subsidy total
   const { data: capitalOutlayData } = useQuery({
-    queryKey: ['capital-outlays', fiscalYear, budgetType, regionName],
+    queryKey: ['capital-outlays', fiscalYear, budgetType], // Removed regionName from queryKey
     queryFn: async () => {
       if (!hasValidParams) return [];
       
-      // Prepare parameters with multiple region format attempts
+      // Prepare parameters - let backend handle hierarchical filtering
       const params = { 
         fiscalYear: Number(fiscalYear), 
         budgetType: budgetType 
       };
       
-      // Add region in multiple formats if regionName exists
-      if (regionName) {
-        const cleanedRegion = regionName.trim();
-        params.region = cleanedRegion;
-        params.Region = cleanedRegion; // Try capital R version
-      }
-
-      // First, try a simple API call without any filters to see if the endpoint works
-      try {
-        const basicTest = await api.get('/api/consolidated-reports/capital-outlay-data', { 
-          params: { 
-            limit: 5,
-            fiscalYear: Number(fiscalYear),
-            budgetType: budgetType
-          } 
-        });
-      } catch (basicError) {
-        console.error('❌ Basic Capital Outlay API test failed:', basicError);
-      }
-      
+      // Single canonical endpoint. No fallbacks or alternative probes.
       const response = await api.get('/api/consolidated-reports/capital-outlay-data', { params });
 
       // Capital Outlay data comes directly as array or with data property
       const data = response.data?.data || response.data || [];
-      
-      // Debug: Log the first few records to see field structure
-      if (data.length > 0) {
-      }
-      
-      // If no data returned, try alternative endpoint names
-      if (data.length === 0) {
-        
-        const alternativeEndpoints = [
-          '/capital-outlays',
-          '/capital-outlay',
-          '/capital_outlays',
-          '/capital_outlay',
-          '/capitalOutlays',
-          '/capitalOutlay'
-        ];
-        
-        for (const endpoint of alternativeEndpoints) {
-          try {
-            const testResponse = await api.get(endpoint, { params: { limit: 5 } });
-            
-            if (testResponse.data && (Array.isArray(testResponse.data) || testResponse.data.length > 0)) {
-              // Try with our actual parameters
-              const actualResponse = await api.get(endpoint, { params });
-              const actualData = actualResponse.data?.capitalOutlays || actualResponse.data?.data || actualResponse.data || [];
-              
-              if (actualData.length > 0) {
-                return actualData;
-              }
-            }
-          } catch (err) {
-          }
-        }
-      }
-      
-      // If no data returned with region filter, try without region filter
-      if (data.length === 0 && regionName) {
-        
-        const paramsWithoutRegion = { 
-          fiscalYear: Number(fiscalYear), 
-          budgetType: budgetType 
-        };
-        
-        const responseNoRegion = await api.get('/api/consolidated-reports/capital-outlay-data', { params: paramsWithoutRegion });
-        const dataNoRegion = responseNoRegion.data?.data || responseNoRegion.data || [];
-
-        if (dataNoRegion.length > 0) {
-          return dataNoRegion;
-        }
-      }
-      
       return data;
     },
     enabled: hasValidParams
@@ -184,22 +112,20 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
 
   // Fetch MOOE data to get actual income amounts
   const { data: mooeData } = useQuery({
-    queryKey: ['mooe-list', fiscalYear, budgetType, regionName],
+    queryKey: ['mooe-list', fiscalYear, budgetType], // Removed regionName from queryKey
     queryFn: async () => {
       if (!hasValidParams) return [];
       
       try {
-        // Build query string parameters like ProposalCustomPage does
+        // Build query string parameters - let backend handle hierarchical filtering
         const queryParams = [];
-        if (regionName) {
-          queryParams.push(`region=${encodeURIComponent(regionName)}`);
-        }
         if (fiscalYear) {
           queryParams.push(`fiscalYear=${encodeURIComponent(fiscalYear)}`);
         }
         if (budgetType) {
           queryParams.push(`budgetType=${encodeURIComponent(budgetType)}`);
         }
+        // Don't send region manually - let hierarchical access control handle it
         
         const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
         const response = await api.get(`/mooe-list${queryString}`);
@@ -217,7 +143,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
 
   // Fetch Personal Services data for Use of Funds breakdown (Combined Permanent + Casual)
   const { data: personalServicesData, error: personnelError } = useQuery({
-    queryKey: ['personnel-services-combined', fiscalYear, budgetType, regionName],
+    queryKey: ['personnel-services-combined', fiscalYear, budgetType], // Removed regionName from queryKey
     queryFn: async () => {
       if (!hasValidParams) return [];
       
@@ -229,13 +155,13 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
         page: 1
       };
 
-      // Clean and validate region parameter if present
+      // Clean and validate parameters - let backend handle hierarchical filtering
       if (regionName) {
         const cleanedRegion = regionName.trim().replace(/\s+/g, ' ');
         if (cleanedRegion) {
-          // Try different region parameter formats that the API might expect
-          baseParams.region = cleanedRegion; // Don't encode, send as plain string
-          baseParams.Region = cleanedRegion; // Try capital R version
+          // Don't send region parameters - let hierarchical access control handle filtering
+          // baseParams.region = cleanedRegion; // REMOVED
+          // baseParams.Region = cleanedRegion; // REMOVED
         }
       }
 
@@ -244,9 +170,8 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
         
         const response = await api.get('/getpersonnels', { 
           params: { 
-            ...baseParams,
-            region: regionName,
-            fiscalYear: Number(fiscalYear)
+            ...baseParams
+            // Don't send region manually - let hierarchical access control handle it
           } 
         });
 
@@ -293,8 +218,8 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
           }
         }
         
-        // If no data returned with region filter, try without region filter
-        if (personnelData.length === 0 && regionName) {
+        // If no data returned, try without explicit region filter (backend handles hierarchical filtering)
+        if (personnelData.length === 0) {
           
           const paramsWithoutRegion = {
             fiscalYear: Number(fiscalYear),
@@ -306,7 +231,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
           const responseNoRegion = await api.get('/getpersonnels', { params: paramsWithoutRegion });
           const dataNoRegion = responseNoRegion.data || [];
 
-          // Use the data without region filter and we'll filter it locally
+          // Backend hierarchical filtering will handle proper data isolation
           if (dataNoRegion.length > 0) {
             return dataNoRegion;
           }
@@ -378,9 +303,10 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
         return null;
       }
 
-      // Fetching budgetary support
+      // Fetching budgetary support - let backend handle hierarchical filtering
       const response = await api.get('/budgetary-support', {
-        params: { fiscalYear, budgetType, region: selectedRegion }
+        params: { fiscalYear, budgetType }
+        // Don't send region manually - hierarchical access control will handle filtering
       });
       // Budgetary support loaded
       return response.data && response.data.length > 0 ? response.data[0] : null;
@@ -419,14 +345,14 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
   // Refresh data
   const handleRefresh = useCallback(() => {
     queryClient.invalidateQueries(['budgetary-support', fiscalYear, budgetType]);
-    queryClient.invalidateQueries(['calculated-budgetary-support', fiscalYear, budgetType, regionName]);
-    queryClient.invalidateQueries(['capital-outlays', fiscalYear, budgetType]);
-    queryClient.invalidateQueries(['personnel-services-combined', fiscalYear, budgetType, regionName]);
+    queryClient.invalidateQueries(['calculated-budgetary-support', fiscalYear, budgetType]); // Removed regionName
+    queryClient.invalidateQueries(['capital-outlays', fiscalYear, budgetType]); // Removed regionName
+    queryClient.invalidateQueries(['personnel-services-combined', fiscalYear, budgetType]); // Removed regionName
     
     // Note: Corporate income will refresh automatically when IncomeTable refreshes
     
     toast.info("Data refreshed");
-  }, [queryClient, fiscalYear, budgetType, regionName]);
+  }, [queryClient, fiscalYear, budgetType]); // Removed regionName from dependencies
 
   // Helper function to get corporate income from actual data sources
   const getCorporateIncomeFromBreakdown = useCallback((category) => {
@@ -515,8 +441,12 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
 
     // Debug: Log calculatedBudgetarySupport structure
     if (calculatedBudgetarySupport?.breakdown) {
+      console.log('🔍 calculatedBudgetarySupport breakdown:', calculatedBudgetarySupport.breakdown);
       calculatedBudgetarySupport.breakdown.forEach((item, index) => {
+        console.log(`Breakdown ${index + 1}:`, item.source, '=', item.amount);
       });
+    } else {
+      console.log('❌ No calculatedBudgetarySupport.breakdown found:', calculatedBudgetarySupport);
     }
 
     // B.1.1 PERSONAL SERVICES - Use Total field approach like Budget Summary cards
@@ -570,8 +500,28 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
 
     // B.1.2 MOOE - Direct from server calculation
     const maintenanceAndOperating = calculatedBudgetarySupport?.breakdown?.find(item => 
-      item.source?.includes('MOOE') || item.source?.includes('IAs O&M')
+      item.source?.includes('MOOE') || 
+      item.source?.includes('IAs O&M') ||
+      item.source?.includes('B.1.2 - MOOE') ||
+      item.source?.includes('MAINTENANCE AND OTHER OPERATING')
     )?.amount || 0;
+
+    // Debug MOOE calculation
+    console.log('🔍 MOOE Debug:');
+    console.log('- calculatedBudgetarySupport exists:', !!calculatedBudgetarySupport);
+    console.log('- breakdown exists:', !!calculatedBudgetarySupport?.breakdown);
+    console.log('- breakdown length:', calculatedBudgetarySupport?.breakdown?.length || 0);
+    console.log('- maintenanceAndOperating value:', maintenanceAndOperating);
+    
+    if (calculatedBudgetarySupport?.breakdown) {
+      const mooeItem = calculatedBudgetarySupport.breakdown.find(item => 
+        item.source?.includes('MOOE') || 
+        item.source?.includes('IAs O&M') ||
+        item.source?.includes('B.1.2 - MOOE') ||
+        item.source?.includes('MAINTENANCE AND OTHER OPERATING')
+      );
+      console.log('- Found MOOE breakdown item:', mooeItem);
+    }
 
     // B.2 CAPITAL OUTLAYS - Get from server breakdown 
     let capitalOutlays = 0;

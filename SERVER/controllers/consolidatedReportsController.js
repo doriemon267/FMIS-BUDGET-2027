@@ -11,6 +11,58 @@ const consolidatedReportsController = {
         const regionList = Array.isArray(regions) ? regions : [regions];
         regionFilter = { region: { $in: regionList } };
       }
+      
+      // Apply sophisticated hierarchical filtering based on user access scope
+      const accessScope = req.hierarchicalAccess?.scope;
+      const accessibleRegionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
+
+      // Add region filter based on access scope
+      if (accessScope && accessScope !== 'FULL' && accessibleRegionName) {
+        regionFilter.region = accessibleRegionName;
+      }
+
+      // Add finer filters based on access scope
+      if (accessScope === 'DIVISION') {
+        // Division users: only their division within their department and region
+        const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+        const divName = req.hierarchicalAccess?.accessibleDivisions?.[0];
+        if (deptName) regionFilter.department = deptName;
+        if (divName) regionFilter.division = divName;
+      } else if (accessScope === 'DEPARTMENT') {
+        // Department users: all divisions within their department in the region
+        const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+        if (deptName) regionFilter.department = deptName;
+      } else if (accessScope === 'REGION') {
+        // Region-level users should ONLY see:
+        // 1. Records that don't have department field (already consolidated to region level)
+        // 2. Department records that are properly submitted/approved ONLY
+        // BUT NOT current working drafts of departments
+        regionFilter.$and = [
+          { region: accessibleRegionName }, // Must be in their region
+          {
+            $or: [
+              // Option 1: Consolidated records (no department info)
+              { department: { $exists: false } },
+              { department: null },
+              { department: "" },
+              // Option 2: Department records that are submitted/approved ONLY
+              { 
+                $and: [
+                  { department: { $exists: true, $ne: null, $ne: "" } },
+                  { status: { $in: ['Department Submitted', 'Region Verified', 'Approved', 'Finalized'] } }
+                ]
+              }
+            ]
+          }
+        ];
+      }
+
+      // Override with explicit regions parameter if provided
+      if (regions) {
+        const regionList = Array.isArray(regions) ? regions : [regions];
+        regionFilter.region = { $in: regionList };
+      }
+      
       const mooeQuery = { ...regionFilter };
       if (fiscalYear) mooeQuery.fiscalYear = fiscalYear;
       if (budgetType) mooeQuery.budgetType = budgetType;
@@ -139,6 +191,11 @@ const consolidatedReportsController = {
         const regionList = Array.isArray(regions) ? regions : [regions];
         regionFilter = { region: { $in: regionList } };
       }
+      
+      // Apply hierarchical filters if present
+      if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
+        regionFilter.region = req.hierarchicalFilters.region;
+      }
 
       // Build query filters for MOOE only
       const mooeQuery = { ...regionFilter };
@@ -194,8 +251,14 @@ const consolidatedReportsController = {
   // Get available regions for consolidation
   getAvailableRegions: async (req, res) => {
     try {
+      // Build query to filter regions based on hierarchical access
+      const query = {};
+      if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
+        query.region = req.hierarchicalFilters.region;
+      }
+      
       // Get regions that have MOOE data only
-      const mooeRegions = await MooeProposal.distinct('region');
+      const mooeRegions = await MooeProposal.distinct('region', query);
       
       // Filter out null/undefined regions
       const allRegions = mooeRegions.filter(Boolean);

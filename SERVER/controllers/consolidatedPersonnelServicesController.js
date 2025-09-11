@@ -80,6 +80,12 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
       const regionList = Array.isArray(regions) ? regions : [regions];
       query.region = { $in: regionList };
     }
+    
+    // Apply hierarchical filters if present
+    if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
+      query.region = req.hierarchicalFilters.region;
+    }
+    
     if (fiscalYear) query.fiscalYear = fiscalYear;
     if (budgetType) query.budgetType = budgetType;
 
@@ -274,7 +280,13 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
 // Get available regions with Personnel Services data
 const getAvailableRegions = async (req, res) => {
   try {
-    const regions = await PersonnelServices.distinct('region');
+    // Build query to filter regions based on hierarchical access
+    const query = {};
+    if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
+      query.region = req.hierarchicalFilters.region;
+    }
+    
+    const regions = await PersonnelServices.distinct('region', query);
     res.status(200).json({
       success: true,
       regions: regions.filter(region => region && region.trim() !== '')
@@ -292,8 +304,14 @@ const getAvailableRegions = async (req, res) => {
 // Debug endpoint to check statusOfAppointment values
 const getStatusOfAppointmentValues = async (req, res) => {
   try {
-    const statuses = await PersonnelServices.distinct('statusOfAppointment');
-    const sample = await PersonnelServices.findOne({}).select('statusOfAppointment annualSalary employeeFullName');
+    // Build query to filter data based on hierarchical access
+    const query = {};
+    if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
+      query.region = req.hierarchicalFilters.region;
+    }
+    
+    const statuses = await PersonnelServices.distinct('statusOfAppointment', query);
+    const sample = await PersonnelServices.findOne(query).select('statusOfAppointment annualSalary employeeFullName');
     res.status(200).json({
       success: true,
       distinctStatuses: statuses,

@@ -11,6 +11,81 @@ const consolidatedCapitalOutlayController = {
         const regionList = Array.isArray(regions) ? regions : [regions];
         regionFilter = { region: { $in: regionList } };
       }
+      
+      // Apply sophisticated hierarchical filtering based on user access scope
+      const accessScope = req.hierarchicalAccess?.scope;
+      const accessibleRegionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
+
+      // Add region filter based on access scope
+      if (accessScope && accessScope !== 'FULL' && accessibleRegionName) {
+        regionFilter.region = accessibleRegionName;
+      }
+
+      // Add finer filters based on access scope
+      if (accessScope === 'DIVISION') {
+        // Division users: only their division within their department and region
+        const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+        const divName = req.hierarchicalAccess?.accessibleDivisions?.[0];
+        if (deptName) regionFilter.department = deptName;
+        if (divName) regionFilter.division = divName;
+      } else if (accessScope === 'DEPARTMENT') {
+        // Department users: all divisions within their department in the region
+        const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+        if (deptName) regionFilter.department = deptName;
+      } else if (accessScope === 'REGION') {
+        // Region-level users should ONLY see:
+        // 1. Records that don't have department field (already consolidated to region level)
+        // 2. Department records that are properly submitted/approved ONLY  
+        // BUT NOT current working drafts of departments
+        regionFilter.$and = [
+          { region: accessibleRegionName }, // Must be in their region
+          {
+            $or: [
+              // Option 1: Consolidated records (no department info)
+              { department: { $exists: false } },
+              { department: null },
+              { department: "" },
+              // Option 2: Department records that are submitted/approved ONLY
+              { 
+                $and: [
+                  { department: { $exists: true, $ne: null, $ne: "" } },
+                  { status: { $in: ['Department Submitted', 'Region Verified', 'Approved', 'Finalized'] } }
+                ]
+              }
+            ]
+          }
+        ];
+      }
+
+      // Handle explicit regions parameter while preserving hierarchical filtering
+      if (regions) {
+        const regionList = Array.isArray(regions) ? regions : [regions];
+        if (accessScope === 'REGION' && regionFilter.$and) {
+          // For region users, preserve the hierarchical filtering but update the region constraint
+          regionFilter.$and[0] = { region: { $in: regionList } };
+        } else if (accessScope && accessScope !== 'FULL' && accessibleRegionName) {
+          // For other scoped users, intersect with their accessible region
+          const allowedRegions = regionList.includes(accessibleRegionName) ? [accessibleRegionName] : [];
+          if (allowedRegions.length > 0) {
+            regionFilter.region = allowedRegions[0];
+          } else {
+            // User requested regions they don't have access to - return empty
+            return res.status(200).json({
+              success: true,
+              data: [],
+              summary: {
+                totalRegions: 0,
+                totalCategories: 0,
+                totalEntries: 0,
+                grandTotal: 0
+              }
+            });
+          }
+        } else {
+          regionFilter.region = { $in: regionList };
+        }
+      }
+      
       const coQuery = { ...regionFilter };
       if (fiscalYear) coQuery.fiscalYear = fiscalYear;
       if (budgetType) coQuery.budgetType = budgetType;

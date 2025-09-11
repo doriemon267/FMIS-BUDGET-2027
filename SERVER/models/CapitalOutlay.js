@@ -14,6 +14,7 @@ const CapitalOutlaySchema = new mongoose.Schema(
     }, // Reference to Category model
     date_process: { type: Date, default: Date.now },
     department: String,
+    division: String, // added to store division-level ownership when applicable
     region: String,
     fiscal_year: Number,
     budgetType: String,

@@ -101,8 +101,57 @@ exports.getAllCapitalOutlays = async (req, res) => {
       query.category = { $ne: null };
     }
     
-    // Add region filter if provided
-    if (region) {
+    // Apply sophisticated hierarchical filtering based on user access scope
+    const accessScope = req.hierarchicalAccess?.scope;
+    const accessibleRegionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
+
+    // Add region filter based on access scope
+    if (accessScope && accessScope !== 'FULL' && accessibleRegionName) {
+      query.region = accessibleRegionName;
+    }
+
+    // Add finer filters based on access scope
+    if (accessScope === 'DIVISION') {
+      // Division users: only their division within their department and region
+      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+      const divName = req.hierarchicalAccess?.accessibleDivisions?.[0];
+      if (deptName) query.department = deptName;
+      if (divName) query.division = divName;
+    } else if (accessScope === 'DEPARTMENT') {
+      // Department users: all divisions within their department in the region
+      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+      if (deptName) query.department = deptName;
+    } else if (accessScope === 'REGION') {
+      // Region-level users should ONLY see:
+      // 1. Records that don't have department field (already consolidated to region level)  
+      // 2. Department records that are properly submitted/approved ONLY
+      // BUT NOT current working drafts of departments
+      const baseQuery = { ...query }; // Preserve existing query constraints
+      query = {
+        $and: [
+          baseQuery, // Keep fiscal year, category, search constraints
+          { region: accessibleRegionName }, // Must be in their region
+          {
+            $or: [
+              // Option 1: Consolidated records (no department info)
+              { department: { $exists: false } },
+              { department: null },
+              { department: "" },
+              // Option 2: Department records that are submitted/approved ONLY
+              { 
+                $and: [
+                  { department: { $exists: true, $ne: null, $ne: "" } },
+                  { status: { $in: ['Department Submitted', 'Region Verified', 'Approved', 'Finalized'] } }
+                ]
+              }
+            ]
+          }
+        ]
+      };
+    }
+
+    // Add region filter if provided and not already constrained
+    if (region && !query.region) {
       query.region = region;
       // console.log(`Filtering capital outlays by region: ${region}`);
     }
@@ -216,6 +265,11 @@ exports.addCapitalOutlay = async (req, res) => {
       return res.status(400).json({ error: "Duplicate entry: This Capital Outlay already exists for this region, year, and subline item." });
     }
 
+    // Pull organizational ownership from hierarchical consolidation (if present)
+    const ownerRegion = req.body.region || req.hierarchicalAccess?.originalData?.region || req.hierarchicalFilters?.region || region;
+    const ownerDepartment = req.body.department || req.hierarchicalAccess?.originalData?.department || null;
+    const ownerDivision = req.body.division || req.hierarchicalAccess?.originalData?.division || null;
+
     const newOutlay = new CapitalOutlay({
       particulars,
       cost,
@@ -223,7 +277,9 @@ exports.addCapitalOutlay = async (req, res) => {
       subsidy: subsidy || 0, // Added subsidy field with default value
       category,
       processBy,
-      region,
+      region: ownerRegion,
+      department: ownerDepartment || undefined,
+      division: ownerDivision || undefined,
       processDate,
       fiscalYear,
       budgetType: activeSettings.budgetType,
@@ -291,7 +347,10 @@ exports.editCapitalOutlay = async (req, res) => {
         subsidy: subsidy || 0, // Added subsidy field with default value
         category,
         processBy,
-        region,
+        // Respect any updated organizational ownership if provided
+        region: req.body.region || existingOutlay.region,
+        department: req.body.department ?? existingOutlay.department,
+        division: req.body.division ?? existingOutlay.division,
         processDate,
         fiscalYear,
         budgetType, // Include budgetType

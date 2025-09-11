@@ -21,8 +21,13 @@ const getIAsOMCost = async (req, res) => {
     // Get budget type from query or default to "INITIAL"
     const budgetType = (req.query.budgetType || "INITIAL").toUpperCase();
 
-    // Get region from query or user
-    const region = req.query.region || req.user?.Region || "Central Office";    // Log the search parameters
+    // Get region from query or user, but apply hierarchical filters
+    let region;
+    if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
+      region = req.hierarchicalFilters.region;
+    } else {
+      region = req.query.region || req.user?.Region || "Central Office";
+    }    // Log the search parameters
     // console.log('Searching for IAs O&M Cost data with:', { fiscalYear, budgetType, region });
 
     // Find existing data

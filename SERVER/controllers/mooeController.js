@@ -25,11 +25,59 @@ exports.getMOOEData = async (req, res) => {
     // 2. Fetch COA, MOOE proposals and COS personnel filtered by fiscal year and region
     // console.log('🔍 Fetching data for region:', region);
 
-    const filter = {
-      fiscalYear: activeFiscalYear
-    };
-    
-    if (region) {
+    // Build the complete filter by combining base filter with hierarchical access control
+    let filter = { fiscalYear: activeFiscalYear };
+
+    // Apply sophisticated hierarchical filtering based on user access scope
+    const accessScope = req.hierarchicalAccess?.scope;
+    const accessibleRegionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
+
+    // Add region filter based on access scope
+    if (!filter.region) {
+      if (accessScope && accessScope !== 'FULL' && accessibleRegionName) {
+        filter.region = accessibleRegionName;
+      }
+    }
+
+    // Add finer filters based on access scope
+    if (accessScope === 'DIVISION') {
+      // Division users: only their division within their department and region
+      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+      const divName = req.hierarchicalAccess?.accessibleDivisions?.[0];
+      if (deptName) filter.department = deptName;
+      if (divName) filter.division = divName;
+    } else if (accessScope === 'DEPARTMENT') {
+      // Department users: all divisions within their department in the region
+      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+      if (deptName) filter.department = deptName;
+    } else if (accessScope === 'REGION') {
+      // Region-level users should ONLY see:
+      // 1. Records that have been submitted by departments  
+      // 2. Records that don't have department field (already consolidated to region level)
+      // BUT NOT current working drafts of departments
+      filter.$and = [
+        { fiscalYear: activeFiscalYear }, // Keep fiscal year constraint
+        { region: accessibleRegionName }, // Must be in their region
+        {
+          $or: [
+            // Option 1: Consolidated records (no department info)
+            { department: { $exists: false } },
+            { department: null },
+            { department: "" },
+            // Option 2: Department records that are submitted/approved ONLY
+            { 
+              $and: [
+                { department: { $exists: true, $ne: null, $ne: "" } },
+                { status: { $in: ['Department Submitted', 'Region Verified', 'Approved', 'Finalized'] } }
+              ]
+            }
+          ]
+        }
+      ];
+    }
+
+    // Fallback to explicit region param if provided and no hierarchical filter applied
+    if (region && !filter.region) {
       filter.region = region;
     }
 
@@ -818,6 +866,11 @@ exports.bulkSaveMOOE = async (req, res) => {
 
     const { meta, entries } = req.body;
 
+    // Resolve organizational ownership (respect hierarchical consolidation if applied)
+    const ownerRegion = meta?.region || req.body.region || req.hierarchicalAccess?.originalData?.region || req.hierarchicalFilters?.region || req.user?.Region;
+    const ownerDepartment = meta?.department || req.body.department || req.hierarchicalAccess?.originalData?.department || null;
+    const ownerDivision = meta?.division || req.body.division || req.hierarchicalAccess?.originalData?.division || null;
+
     // console.log('📋 Meta:', meta);
     // console.log('📊 Entries count:', entries ? entries.length : 'No entries');
 
@@ -901,7 +954,9 @@ exports.bulkSaveMOOE = async (req, res) => {
         updateObj.processDate = meta?.processDate || item.processDate || new Date();
         updateObj.fiscalYear = meta?.fiscalYear || item.fiscalYear;
         updateObj.budgetType = meta?.budgetType || item.budgetType;
-        updateObj.region = meta?.region || item.region;
+        updateObj.region = ownerRegion || meta?.region || item.region;
+        updateObj.department = ownerDepartment || meta?.department || item.department;
+        updateObj.division = ownerDivision || meta?.division || item.division;
         updateObj.status = meta?.status || item.status;
 
         console.log(`Filter will use: uacsCode=${item.uacsCode}, fiscalYear=${updateObj.fiscalYear}, region=${updateObj.region}`);
@@ -1099,8 +1154,11 @@ exports.getMooeList = async (req, res) => {
     // Create filter object
     const filter = {};
     
-    // Add region filter if provided
-    if (region) {
+    // Apply hierarchical filters if present
+    if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
+      filter.region = req.hierarchicalFilters.region;
+    } else if (region) {
+      // Fallback to explicit region param if provided
       filter.region = region;
     }
     

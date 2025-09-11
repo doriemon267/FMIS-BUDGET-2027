@@ -1,14 +1,20 @@
 const CapitalOutlay = require("../models/CapitalOutlay");
 const MOOEProposal = require("../models/mooeProposals");
-const PersonnelServices = require("../models/PersonnelServices");
+const PersonnelServices = require("../models/personnelServices");
 
 // Kumuha ng combined proposal summary
 // Kumuha ng combined proposal summary
 exports.getProposalSummary = async (req, res) => {
   try {
-    const capitalOutlays = await CapitalOutlay.find().lean();
-    const mooeProposals = await MOOEProposal.find().lean();
-    const personnelServices = await PersonnelServices.find().lean();
+    // Build query with hierarchical filters
+    const query = {};
+    if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
+      query.region = req.hierarchicalFilters.region;
+    }
+
+    const capitalOutlays = await CapitalOutlay.find(query).lean();
+    const mooeProposals = await MOOEProposal.find(query).lean();
+    const personnelServices = await PersonnelServices.find(query).lean();
 
     // I-format ang data para magkaroon ng property na 'type'
     const capitalOutlaysFormatted = capitalOutlays.map(item => ({
@@ -104,17 +110,26 @@ exports.getPersonnelAggregates = async (req, res) => {
 // Kumuha ng analytics data (bilang at total amount)
 exports.getAnalytics = async (req, res) => {
   try {
-    const capitalCount = await CapitalOutlay.countDocuments();
-    const mooeCount = await MOOEProposal.countDocuments();
-    const personnelCount = await PersonnelServices.countDocuments();
+    // Build query with hierarchical filters
+    const query = {};
+    if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
+      query.region = req.hierarchicalFilters.region;
+    }
+
+    const capitalCount = await CapitalOutlay.countDocuments(query);
+    const mooeCount = await MOOEProposal.countDocuments(query);
+    const personnelCount = await PersonnelServices.countDocuments(query);
 
     const capitalAgg = await CapitalOutlay.aggregate([
+      { $match: query },
       { $group: { _id: null, totalCost: { $sum: "$cost" } } }
     ]);
     const mooeAgg = await MOOEProposal.aggregate([
+      { $match: query },
       { $group: { _id: null, totalAmount: { $sum: "$amount" } } }
     ]);
     const personnelAgg = await PersonnelServices.aggregate([
+      { $match: query },
       { $group: { _id: null, total: { $sum: "$Total" } } }
     ]);
 

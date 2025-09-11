@@ -63,7 +63,12 @@ const incomeSchema = new mongoose.Schema(
     regionFinalVerified: {
       by: { type: String },
       at: { type: Date }
-    }
+    },
+    // Organizational context (to support precise filtering)
+    department: { type: String },
+    division: { type: String },
+    originalLevel: { type: String },       // 'DIVISION' | 'DEPARTMENT' | 'REGION'
+    consolidatedFrom: { type: String },    // 'DIVISION' | 'DEPARTMENT' | 'REGION'
   },
   { timestamps: true }
 );

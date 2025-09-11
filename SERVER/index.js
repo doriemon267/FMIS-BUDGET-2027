@@ -218,6 +218,10 @@ app.use(proposalRouter);
 app.use(proposalRBACRouter);
 // Workflow-specific endpoints
 app.use('/api/workflow', require('./routers/proposalWorkflowRoutes'));
+
+// 🔄 Submission Workflow Routes - Controls data visibility based on submission status
+const submissionWorkflowRoutes = require('./routers/submissionWorkflowRoutes');
+app.use('/api/submission-workflow', submissionWorkflowRoutes);
 app.use(rataRoutes);
 app.use(settings);
 app.use("/api", regionRouter);

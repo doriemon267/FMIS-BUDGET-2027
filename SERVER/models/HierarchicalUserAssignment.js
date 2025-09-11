@@ -80,9 +80,34 @@ HierarchicalUserAssignmentSchema.pre('save', function(next) {
 
 // Static method to get user permissions for access control
 HierarchicalUserAssignmentSchema.statics.getUserPermissions = async function(userId) {
-  const doc = await this.findOne({ userId, isActive: true })
+  let doc = await this.findOne({ userId, isActive: true })
     .populate('regionId', 'regionName Region RegionName')
     .populate('departmentId', 'Department departmentName DepartmentName');
+
+  // Fallback: handle potential type/format mismatches of userId
+  if (!doc) {
+    try {
+      const mongoose = require('mongoose');
+      const candidates = [userId];
+      const asNum = Number(userId);
+      const asStr = String(userId);
+      if (!Number.isNaN(asNum)) candidates.push(asNum);
+      candidates.push(asStr);
+      if (asStr.trim) candidates.push(asStr.trim());
+
+      const raw = await mongoose.connection.db
+        .collection('hierarchicaluserassignments')
+        .findOne({ isActive: true, userId: { $in: candidates } });
+
+      if (raw?._id) {
+        doc = await this.findById(raw._id)
+          .populate('regionId', 'regionName Region RegionName')
+          .populate('departmentId', 'Department departmentName DepartmentName');
+      }
+    } catch (e) {
+      // ignore fallback errors; will return stub below
+    }
+  }
 
   if (!doc) {
     // Return a safe default object with stubbed access-check methods

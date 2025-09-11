@@ -68,22 +68,25 @@ const PermanentCustomTable = ({
   const [grandTotal, setGrandTotal] = useState(0);
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: [dataListName, page],
+    queryKey: [dataListName, page, rowsPerPage, orderBy, order, fieldAndValue, searchValue],
     queryFn: async () => {
-      const res = await api.get(apiPath, {
-        params: {
-          page: page + 1,
-          limit: rowsPerPage,
-          search: searchValue,
-          [fieldAndValue.field]: fieldAndValue.value,
-          orderBy,
-          order,
-          operator: fieldAndValue.operator,
-          statusOfAppointment: "PERMANENT",
-        },
-      });
+      const params = {
+        page: page + 1,
+        limit: rowsPerPage,
+        search: searchValue || undefined,
+        [fieldAndValue.field]: fieldAndValue.value || undefined,
+        orderBy,
+        order,
+        operator: fieldAndValue.operator,
+        statusOfAppointment: "PERMANENT",
+      };
+      // Clean undefined to avoid sending "undefined" strings
+      Object.keys(params).forEach(k => params[k] === undefined && delete params[k]);
+      const res = await api.get(apiPath, { params });
       return res.data;
     },
+    staleTime: 10000,
+    keepPreviousData: true,
   });
 
   useEffect(() => {
@@ -160,12 +163,17 @@ const PermanentCustomTable = ({
   useEffect(() => {
     const fetchGrandTotal = async () => {
       try {
-        // Include region filter in the API request
+        // Build params mirroring table filters to keep totals in sync
         const params = new URLSearchParams();
-        if (regionFilter) {
-          params.append('region', regionFilter);
+        if (regionFilter) params.append('region', regionFilter);
+        if (searchValue) params.append('search', searchValue);
+        if (fieldAndValue?.field && fieldAndValue?.value) {
+          params.append(fieldAndValue.field, fieldAndValue.value);
+          if (fieldAndValue.operator) params.append('operator', fieldAndValue.operator);
         }
-        
+        if (orderBy) params.append('orderBy', orderBy);
+        if (order) params.append('order', order);
+
         const response = await api.get(`/grandtotalPermanent?${params.toString()}`);
         setGrandTotal(response.data.grandTotal || 0);
       } catch (error) {
@@ -173,7 +181,7 @@ const PermanentCustomTable = ({
       }
     };
     fetchGrandTotal();
-  }, [data, regionFilter]); // Ensure this effect runs when personnel data or region changes
+  }, [page, rowsPerPage, orderBy, order, fieldAndValue, searchValue, regionFilter]);
 
   const handleRequestSort = (property) => {
     const isAsc = orderBy === property && order === "asc";

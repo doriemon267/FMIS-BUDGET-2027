@@ -66,7 +66,7 @@ const hierarchicalAccessControl = (operation = 'read', options = {}) => {
 
       // Get consolidation information
       const consolidationInfo = assignment.getConsolidationTarget();
-      const effectiveRegion = assignment.getEffectiveRegion();
+      // const effectiveRegion = assignment.getEffectiveRegion(); // Not implemented; avoid calling
 
       // Handle different operations
       switch (operation) {
@@ -139,8 +139,15 @@ const handleHierarchicalRead = async (req, res, next, assignment, consolidationI
       break;
 
     case 'FULL':
-      // Full access users can access everything
-      hierarchicalFilters = {};
+      // Full access users can access everything, but if they have specific region assignments,
+      // they should still be filtered to those regions (for better data isolation)
+      if (assignment.regions && assignment.regions.length > 0) {
+        hierarchicalFilters = {
+          region: { $in: assignment.regions.map(r => r.regionName) }
+        };
+      } else {
+        hierarchicalFilters = {};
+      }
       break;
 
     default:
@@ -148,6 +155,26 @@ const handleHierarchicalRead = async (req, res, next, assignment, consolidationI
       hierarchicalFilters = {
         userId: assignment.userId
       };
+  }
+
+  // Prune filters based on allowed fields (e.g., modules without department/division)
+  const allowed = options?.allowedFields;
+  if (Array.isArray(allowed) && allowed.length > 0) {
+    const prune = (obj) => {
+      const out = {};
+      for (const key of Object.keys(obj)) {
+        if (key === '$and' && Array.isArray(obj.$and)) {
+          const prunedArray = obj.$and
+            .map(cond => prune(cond))
+            .filter(cond => Object.keys(cond).length > 0);
+          if (prunedArray.length > 0) out.$and = prunedArray;
+        } else if (allowed.includes(key)) {
+          out[key] = obj[key];
+        }
+      }
+      return out;
+    };
+    hierarchicalFilters = prune(hierarchicalFilters);
   }
 
   req.hierarchicalFilters = hierarchicalFilters;
@@ -174,33 +201,34 @@ const handleHierarchicalRead = async (req, res, next, assignment, consolidationI
 const handleHierarchicalWrite = async (req, res, next, assignment, consolidationInfo, operation, options) => {
   const { strictMode, logAccess, userName, enableConsolidation } = options;
 
-  // Check operation permissions
-  const permissions = assignment.rolePermissions || {};
+  // Check operation permissions (relaxed when strictMode is false)
   let canPerformOperation = true;
-
-  switch (operation) {
-    case 'create':
-      canPerformOperation = permissions.canCreateProposals !== false;
-      break;
-    case 'update':
-      canPerformOperation = permissions.canEditOwnProposals !== false || permissions.canEditAllProposals === true;
-      break;
-    case 'delete':
-      canPerformOperation = permissions.canDeleteProposals === true;
-      break;
-  }
-
-  if (!canPerformOperation) {
-    if (logAccess) {
-      console.log(`❌ Hierarchical Write: ${operation} operation denied to ${userName} - insufficient permissions`);
+  if (strictMode) {
+    const permissions = assignment.rolePermissions || {};
+    switch (operation) {
+      case 'create':
+        canPerformOperation = permissions.canCreateProposals !== false;
+        break;
+      case 'update':
+        canPerformOperation = permissions.canEditOwnProposals !== false || permissions.canEditAllProposals === true;
+        break;
+      case 'delete':
+        canPerformOperation = permissions.canDeleteProposals === true;
+        break;
     }
-    
-    return res.status(403).json({
-      message: `Access denied. You don't have permission to perform ${operation} operations`,
-      code: 'INSUFFICIENT_PERMISSIONS',
-      operation,
-      requiredPermissions: getRequiredPermissionsForOperation(operation)
-    });
+
+    if (!canPerformOperation) {
+      if (logAccess) {
+        console.log(`❌ Hierarchical Write: ${operation} operation denied to ${userName} - insufficient permissions`);
+      }
+      
+      return res.status(403).json({
+        message: `Access denied. You don't have permission to perform ${operation} operations`,
+        code: 'INSUFFICIENT_PERMISSIONS',
+        operation,
+        requiredPermissions: getRequiredPermissionsForOperation(operation)
+      });
+    }
   }
 
   // Apply hierarchical consolidation for create/update operations
@@ -208,23 +236,26 @@ const handleHierarchicalWrite = async (req, res, next, assignment, consolidation
     applyHierarchicalConsolidation(req, assignment, consolidationInfo);
   }
 
-  // Validate that user can access the target organizational units
+  // Validate that user can access the target organizational units (relaxed when strictMode is false)
   const isValidAccess = await validateHierarchicalAccess(req, assignment);
   
   if (!isValidAccess) {
-    if (logAccess) {
-      console.log(`❌ Hierarchical Write: ${operation} operation denied to ${userName} - invalid organizational access`);
+    if (strictMode) {
+      if (logAccess) {
+        console.log(`❌ Hierarchical Write: ${operation} operation denied to ${userName} - invalid organizational access`);
+      }
+      return res.status(403).json({
+        message: `Access denied. You cannot ${operation} data outside your assigned organizational units`,
+        code: 'INVALID_HIERARCHICAL_ACCESS',
+        operation,
+        userLevel: assignment.assignmentLevel,
+        allowedRegions: assignment.regions?.map(r => r.regionName) || [],
+        allowedDepartments: assignment.departments?.map(d => d.departmentName) || [],
+        allowedDivisions: assignment.divisions || []
+      });
+    } else if (logAccess) {
+      console.log(`⚠️ Hierarchical Write: proceeding in relaxed mode despite invalid org access for ${userName}`);
     }
-    
-    return res.status(403).json({
-      message: `Access denied. You cannot ${operation} data outside your assigned organizational units`,
-      code: 'INVALID_HIERARCHICAL_ACCESS',
-      operation,
-      userLevel: assignment.assignmentLevel,
-      allowedRegions: assignment.regions?.map(r => r.regionName) || [],
-      allowedDepartments: assignment.departments?.map(d => d.departmentName) || [],
-      allowedDivisions: assignment.divisions || []
-    });
   }
 
   req.hierarchicalAccess = {
@@ -235,7 +266,7 @@ const handleHierarchicalWrite = async (req, res, next, assignment, consolidation
   };
 
   if (logAccess) {
-    console.log(`✅ Hierarchical Write: ${operation} operation granted to ${userName}`);
+    console.log(`✅ Hierarchical Write: ${operation} operation granted to ${userName}${strictMode ? '' : ' (relaxed mode)'}`);
     console.log(`🔄 Consolidation applied:`, consolidationInfo);
   }
 
@@ -264,6 +295,7 @@ const applyHierarchicalConsolidation = (req, assignment, consolidationInfo) => {
       // Division submissions consolidate to Department level (names)
       req.body.originalLevel = 'DIVISION';
       req.body.originalDivision = divisionName;
+      req.body.division = divisionName; // persist division for filtering
       req.body.department = departmentName; // Consolidate to department name
       req.body.region = regionName; // Ensure region name is set
       req.body.consolidatedFrom = 'DIVISION';
@@ -273,6 +305,7 @@ const applyHierarchicalConsolidation = (req, assignment, consolidationInfo) => {
       // Department submissions consolidate to Region level (names)
       req.body.originalLevel = 'DEPARTMENT';
       req.body.originalDepartment = departmentName;
+      req.body.department = departmentName; // persist department on record for filtering
       req.body.region = regionName; // Consolidate to region name
       req.body.consolidatedFrom = 'DEPARTMENT';
       break;

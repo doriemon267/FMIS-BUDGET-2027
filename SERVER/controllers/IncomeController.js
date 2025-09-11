@@ -17,6 +17,8 @@ exports.createIncome = async (req, res) => {
       fiscalYear,
       budgetType,
       region,
+      department,
+      division,
       processBy,
       processDate,
     } = req.body;
@@ -41,6 +43,8 @@ exports.createIncome = async (req, res) => {
       fiscalYear: fiscalYear || new Date().getFullYear().toString(),
       budgetType: budgetType || "REGULAR",
       region,
+      department,
+      division,
       processBy,
       processDate: processDate || new Date(),
       status: "Not Submitted"
@@ -68,16 +72,17 @@ exports.updateIncome = async (req, res) => {
       category,
       amount,
       region,
+      department,
+      division,
       processBy,
       processDate,
       status
     } = req.body;
     
-    // Get active settings for fiscalYear and budgetType
+    // Find active settings; if none, keep current record's FY/BT
     const activeSettings = await Settings.findOne({ isActive: true });
-    if (!activeSettings) {
-      return res.status(404).json({ message: "No active fiscal year settings found" });
-    }
+    const setFY = activeSettings?.fiscalYear;
+    const setBT = activeSettings?.budgetType;
     
     // Find and update the income entry
     const updatedIncome = await Income.findByIdAndUpdate(
@@ -89,9 +94,11 @@ exports.updateIncome = async (req, res) => {
         subcategory,
         category,
         amount,
-        fiscalYear: activeSettings.fiscalYear,
-        budgetType: activeSettings.budgetType,
+        ...(setFY ? { fiscalYear: setFY } : {}),
+        ...(setBT ? { budgetType: setBT } : {}),
         region,
+        department,
+        division,
         processBy,
         processDate: processDate || new Date(),
         status: status || "Not Submitted"
@@ -168,7 +175,7 @@ exports.calculateNetISF = async (req, res) => {
   }
 };
 
-// Get all income entries
+// Get all income entries (department/division aware)
 exports.getAllIncome = async (req, res) => {
   try {
     const { fiscalYear, budgetType, region } = req.query;
@@ -183,14 +190,41 @@ exports.getAllIncome = async (req, res) => {
     // Add region filter if provided
     if (region) {
       query.region = region;
-      // console.log(`Filtering income entries by region: ${region}`);
+    }
+
+    // For Income collection, only region-based hierarchical filtering is applicable.
+    // Ignore department/division filters to avoid excluding all documents (fields don't exist in Income model).
+    const accessScope = req.hierarchicalAccess?.scope;
+    const accessibleRegionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
+    if (!query.region) {
+      if (accessScope && accessScope !== 'FULL' && accessibleRegionName) {
+        query.region = accessibleRegionName;
+      }
+    }
+
+    // Add finer filters based on access scope
+    if (accessScope === 'DIVISION') {
+      // Division users: only their division within their department and region
+      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+      const divName = req.hierarchicalAccess?.accessibleDivisions?.[0];
+      if (deptName) query.department = deptName;
+      if (divName) query.division = divName;
+    } else if (accessScope === 'DEPARTMENT') {
+      // Department users: all divisions within their department in the region
+      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+      if (deptName) query.department = deptName;
+    } else if (accessScope === 'REGION') {
+      // Region-level visibility rule: show only when submitted or region-verified/approved
+      query.$or = [
+        { 'departmentSubmitted.at': { $exists: true, $ne: null } },
+        { status: { $in: ['Submitted', 'Region Verified', 'Approved'] } },
+      ];
     }
 
     const incomeEntries = await Income.find(query)
       .populate('incomecategory')
       .sort({ createdAt: -1 });
 
-    // console.log(`Found ${incomeEntries.length} income entries matching the criteria`);
     res.status(200).json(incomeEntries);
   } catch (error) {
     console.error("Error fetching income entries:", error);
@@ -225,41 +259,9 @@ exports.getIncomeById = async (req, res) => {
   }
 };
 
-// Create income entry
-exports.createIncome = async (req, res) => {
-  try {
-    const income = new Income(req.body);
-    await income.save();
-    return res.status(201).json(income);
-  } catch (error) {
-    console.error("Error creating income:", error);
-    return res.status(500).json({
-      message: "Failed to create income entry",
-      error: error.message
-    });
-  }
-};
+// Create income entry (simple variant) - removed; unified above handler handles creation with org fields
 
-// Update income entry
-exports.updateIncome = async (req, res) => {
-  try {
-    const income = await Income.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    );
-    if (!income) {
-      return res.status(404).json({ message: "Income entry not found" });
-    }
-    return res.status(200).json(income);
-  } catch (error) {
-    console.error("Error updating income:", error);
-    return res.status(500).json({
-      message: "Failed to update income entry",
-      error: error.message
-    });
-  }
-};
+// Update income entry (simple variant) - removed; unified above handler handles updates with org fields
 
 // Delete income entry
 exports.deleteIncome = async (req, res) => {
