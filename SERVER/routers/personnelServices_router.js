@@ -11,9 +11,10 @@ const {
   getPersonnelHiredBeforeJune1988
 } = require("../controllers/personnel_service_controller");
 // Import the model directly to ensure it's available
-const PersonnelServicesModel = require("../models/PersonnelServices");
+const PersonnelServicesModel = require("../models/personnelServices");
 const checkDueDate = require("../middleware/checkDueDate");
 const checkToken = require('../middleware/checkToken');
+const hierarchicalAccessControl = require('../middleware/hierarchicalAccessControl');
 const Router = require("express").Router;
 const personnelServicesRouter = Router();
 // Apply authentication to all personnel services routes
@@ -39,6 +40,7 @@ personnelServicesRouter.get(
 );
 personnelServicesRouter.get(
   "/getpersonnels", 
+  hierarchicalAccessControl('read'),
   getAllPerServices || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
@@ -88,7 +90,7 @@ personnelServicesRouter.get("/getpersonnels/byParams", async (req, res) => {
 personnelServicesRouter.get("/api/personnel/getByParams", async (req, res) => {
   try {
     const { fiscalYear, budgetType, processBy, region, status } = req.query;
-    :", { fiscalYear, budgetType, processBy, region, status });
+    console.log("Request query params:", { fiscalYear, budgetType, processBy, region, status });
     const query = {};
     if (fiscalYear) query.fiscalYear = fiscalYear;
     if (budgetType) query.budgetType = budgetType;
@@ -118,4 +120,4 @@ personnelServicesRouter.post(
   exports.syncAllMealAllowances || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
-module.exports = personnelServicesRouter;
+module.exports = personnelServicesRouter;

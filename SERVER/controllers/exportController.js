@@ -1,7 +1,7 @@
 const PDFDocument = require('pdfkit');
 const ExcelJS = require('exceljs');
 // Import models for data fetching
-const PersonnelServices = require('../models/PersonnelServices');
+const PersonnelServices = require('../models/personnelServices');
 const COSPersonnel = require('../models/COSPersonnel');
 const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
@@ -9,7 +9,6 @@ const Income = require('../models/Income');
 // Export Budget Summary as PDF
 const exportBudgetSummaryPDF = async (req, res) => {
   try {
-    );
     const { 
       fiscalYear, 
       budgetType, 
@@ -22,8 +21,6 @@ const exportBudgetSummaryPDF = async (req, res) => {
     if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
       queryRegion = req.hierarchicalFilters.region;
     }
-    : 'undefined'
-    });
     // Fetch actual data from database instead of receiving in payload
     const [personnelData, cosPersonnelData, mooeData, capitalOutlayData, incomeData] = await Promise.all([
       PersonnelServices.find({ 
@@ -559,4 +556,4 @@ const exportBudgetSummaryExcel = async (req, res) => {
 module.exports = {
   exportBudgetSummaryPDF,
   exportBudgetSummaryExcel
-};
+};

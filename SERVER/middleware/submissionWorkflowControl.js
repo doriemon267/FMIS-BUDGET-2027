@@ -458,4 +458,4 @@ module.exports = {
   handleSubmissionWorkflowWrite,
   applySubmissionWorkflowConsolidation,
   validateHierarchicalAccess
-};
+};

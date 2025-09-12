@@ -10,10 +10,10 @@ const cleanupExpiredBackups = async () => {
   try {
     // const deletedCount = await DatabaseBackup.cleanupExpired();
     // return {
-      success: true,
-      deletedCount,
-      message: `Successfully deleted ${deletedCount} expired backups`
-    };
+    //   success: true,
+    //   deletedCount,
+    //   message: `Successfully deleted ${deletedCount} expired backups`
+    // };
   } catch (error) {
     // console.error('❌ Backup cleanup failed:', error);
     return {
@@ -44,16 +44,16 @@ const cleanupOrphanedFiles = async () => {
         try {
           fs.unlinkSync(filePath);
           deletedCount++;
-          // } catch (error) {
-          // console.error(`❌ Failed to delete orphaned file ${file}:`, error.message);
+        } catch (error) {
+          console.error(`❌ Failed to delete orphaned file ${file}:`, error.message);
         }
       }
     }
     // return {
-      success: true,
-      deletedCount,
-      message: `Successfully deleted ${deletedCount} orphaned backup files`
-    };
+    //   success: true,
+    //   deletedCount,
+    //   message: `Successfully deleted ${deletedCount} orphaned backup files`
+    // };
   } catch (error) {
     // console.error('❌ Orphaned file cleanup failed:', error);
     return {
@@ -68,7 +68,7 @@ const cleanupOrphanedFiles = async () => {
  */
 const checkBackupHealth = async () => {
   try {
-    // const healthReport = {
+    const healthReport = {
       totalBackups: 0,
       completedBackups: 0,
       failedBackups: 0,
@@ -118,7 +118,8 @@ const checkBackupHealth = async () => {
     if (healthReport.issues.length > 0) {
       // healthReport.issues.forEach(issue => );
     } else {
-      // }
+      // No issues found
+    }
     return {
       success: true,
       healthReport,

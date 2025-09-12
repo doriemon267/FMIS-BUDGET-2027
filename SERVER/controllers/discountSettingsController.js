@@ -41,7 +41,7 @@ exports.getDiscountSettings = async (req, res) => {
         });
       }
     }
-    // res.status(200).json(settings);
+    return res.status(200).json(settings);
   } catch (error) {
     console.error("Error getting discount settings:", error);
     res.status(500).json({ 
@@ -90,4 +90,4 @@ exports.updateDiscountSettings = async (req, res) => {
       error: error.message
     });
   }
-};
+};

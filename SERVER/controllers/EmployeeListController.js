@@ -35,10 +35,19 @@ exports.getAllEmployees = async (req, res) => {
     } = req.query;
     // Get hierarchical filters from middleware
     const hierarchicalFilters = req.hierarchicalFilters || {};
+    // Map hierarchical filters to database field names
+    const mapFiltersToDb = (filters) => {
+      const mapped = {};
+      if (filters.region) mapped.Region = filters.region;
+      if (filters.department) mapped.Department = filters.department;
+      if (filters.division) mapped.Division = filters.division;
+      return mapped;
+    };
+    const dbHierarchicalFilters = mapFiltersToDb(hierarchicalFilters);
     // Start with hierarchical filters as base
-    let query = { ...hierarchicalFilters };
+    let query = { ...dbHierarchicalFilters };
     // If no hierarchical filters, require region parameter
-    if (!Object.keys(hierarchicalFilters).length && !region) {
+    if (!Object.keys(dbHierarchicalFilters).length && !region) {
       return res.status(400).json({
         error: "Region parameter is required",
         message: "Please specify a region to view employees"
@@ -52,10 +61,9 @@ exports.getAllEmployees = async (req, res) => {
       return rn && (rn.localeCompare(region.trim(), undefined, { sensitivity: 'accent' }) === 0 || new RegExp(`^${region.trim()}$`, 'i').test(rn));
     }) : false;
     if (region) {
-      if (!hierarchicalFilters.Region) {
+      if (!dbHierarchicalFilters.Region) {
         // No hierarchical region set, use requested region
         query.Region = region;
-        :', region);
       } else if (hasRequestedRegionAccess) {
         // User has access to requested region, override hierarchical Region to match UI selection
         query.Region = region;
@@ -77,10 +85,10 @@ exports.getAllEmployees = async (req, res) => {
         ]
       };
       // Combine hierarchical filters with search
-      if (Object.keys(hierarchicalFilters).length > 0) {
+      if (Object.keys(dbHierarchicalFilters).length > 0) {
         query = {
           $and: [
-            hierarchicalFilters,
+            dbHierarchicalFilters,
             searchConditions
           ]
         };
@@ -119,9 +127,9 @@ exports.getAllEmployees = async (req, res) => {
       if (Object.keys(textFilterQuery).length > 0) {
         if (query.$and) {
           query.$and.push(textFilterQuery);
-        } else if (Object.keys(hierarchicalFilters).length > 0) {
+        } else if (Object.keys(dbHierarchicalFilters).length > 0) {
           query = {
-            $and: [hierarchicalFilters, textFilterQuery]
+            $and: [dbHierarchicalFilters, textFilterQuery]
           };
         } else {
           query = {
@@ -143,9 +151,9 @@ exports.getAllEmployees = async (req, res) => {
       if (Object.keys(numberFilterQuery).length > 0) {
         if (query.$and) {
           query.$and.push(numberFilterQuery);
-        } else if (Object.keys(hierarchicalFilters).length > 0) {
+        } else if (Object.keys(dbHierarchicalFilters).length > 0) {
           query = {
-            $and: [hierarchicalFilters, numberFilterQuery]
+            $and: [dbHierarchicalFilters, numberFilterQuery]
           };
         } else {
           query = {
@@ -167,9 +175,9 @@ exports.getAllEmployees = async (req, res) => {
       if (Object.keys(dateFilterQuery).length > 0) {
         if (query.$and) {
           query.$and.push(dateFilterQuery);
-        } else if (Object.keys(hierarchicalFilters).length > 0) {
+        } else if (Object.keys(dbHierarchicalFilters).length > 0) {
           query = {
-            $and: [hierarchicalFilters, dateFilterQuery]
+            $and: [dbHierarchicalFilters, dateFilterQuery]
           };
         } else {
           query = {
@@ -188,7 +196,6 @@ exports.getAllEmployees = async (req, res) => {
     // DIRECT APPROACH: Use the raw MongoDB driver to ensure we're using the correct collection
     const db = mongoose.connection.db;
     const collection = db.collection('employees'); // This is the actual collection name
-    );
     // Normalize Region and Department filters for case-insensitive exact match
     const normalizeExact = (v) => {
       if (typeof v === 'string' && v.trim()) return { $regex: new RegExp(`^${v.trim()}$`, 'i') };
@@ -239,7 +246,7 @@ exports.getAllEmployees = async (req, res) => {
       debug: {
         originalEmployeeCount: employees.length,
         verifiedEmployeeCount: verifiedEmployees.length,
-        hierarchicalFilters,
+        hierarchicalFilters: dbHierarchicalFilters,
         requestedRegion: region,
         note: 'Region/Department/Division are matched case-insensitively and Division omitted when empty.'
       }
@@ -278,7 +285,7 @@ exports.addEmployee = async (req, res) => {
     }
     const newEmployee = new Employee(req.body);
     await newEmployee.save();
-    // return res.status(201).json({
+    return res.status(201).json({
       message: "Employee created successfully.",
       employee: newEmployee,
     });
@@ -362,6 +369,19 @@ exports.getEligibleForLoyaltyPay = async (req, res) => {
         message: "Please specify a region to view eligible employees" 
       });
     }
+    // Get hierarchical filters from middleware
+    const hierarchicalFilters = req.hierarchicalFilters || {};
+    // Map hierarchical filters to database field names
+    const mapFiltersToDb = (filters) => {
+      const mapped = {};
+      if (filters.region) mapped.Region = filters.region;
+      if (filters.department) mapped.Department = filters.department;
+      if (filters.division) mapped.Division = filters.division;
+      return mapped;
+    };
+    const dbHierarchicalFilters = mapFiltersToDb(hierarchicalFilters);
+    // Start with hierarchical filters as base
+    const baseFilters = { ...dbHierarchicalFilters };
     // // Get active settings to determine the fiscal year
     const Settings = require("../models/Settings");
     const {
@@ -427,7 +447,8 @@ exports.getEligibleForLoyaltyPay = async (req, res) => {
             actualYearsOfService: yearsOfService // Include actual years for reference
           });
         } else {
-          // }
+          // Employee already received loyalty pay for this milestone
+        }
       }
     }
     // // Format the response
@@ -474,12 +495,12 @@ exports.getEmployeeStats = async (req, res) => {
     const collection = db.collection('employees'); // This is the actual collection name
     // Normalize for case-insensitive exact matching and omit empty Division
     const norm = (v) => (typeof v === 'string' && v.trim()) ? { $regex: new RegExp(`^${v.trim()}$`, 'i') } : v;
-    const filtersCi = { ...baseFilters };
-    if (typeof filtersCi.Region === 'string') filtersCi.Region = norm(filtersCi.Region);
-    if (typeof filtersCi.Department === 'string') filtersCi.Department = norm(filtersCi.Department);
-    if (typeof filtersCi.Division === 'string') {
-      const d = filtersCi.Division.trim();
-      if (!d) delete filtersCi.Division; else filtersCi.Division = norm(d);
+    const filtersCi = {};
+    if (baseFilters.region) filtersCi.Region = norm(baseFilters.region);
+    if (baseFilters.department) filtersCi.Department = norm(baseFilters.department);
+    if (baseFilters.division) {
+      const d = baseFilters.division.trim();
+      if (d) filtersCi.Division = norm(d);
     }
     // Count total employees with hierarchical filters
     const total = await collection.countDocuments(filtersCi);
@@ -492,20 +513,20 @@ exports.getEmployeeStats = async (req, res) => {
       ...filtersCi,
       employeeStatus: "Inactive"
     });
-    // Log for debugging
-    // // Get all unique regions for debugging
-    const uniqueRegions = await collection.distinct('Region');
-    // // Get counts by region for debugging
-    // for (const r of uniqueRegions) {
+    // Get region counts
+    const uniqueRegions = await collection.distinct('Region', filtersCi);
+    const regionCounts = {};
+    for (const r of uniqueRegions) {
       if (r) {
-        const count = await collection.countDocuments({ Region: r });
-        // }
+        regionCounts[r] = await collection.countDocuments({ Region: r, ...filtersCi });
+      }
     }
     res.status(200).json({
       total,
       active,
       inactive,
-      region
+      region,
+      regionCounts
     });
   } catch (error) {
     console.error("Error in getEmployeeStats:", error);
@@ -516,6 +537,15 @@ exports.getEligibleForRetirement = async (req, res) => {
   try {
     // Get hierarchical filters from middleware
     const hierarchicalFilters = req.hierarchicalFilters || {};
+    // Map hierarchical filters to database field names
+    const mapFiltersToDb = (filters) => {
+      const mapped = {};
+      if (filters.region) mapped.Region = filters.region;
+      if (filters.department) mapped.Department = filters.department;
+      if (filters.division) mapped.Division = filters.division;
+      return mapped;
+    };
+    const dbHierarchicalFilters = mapFiltersToDb(hierarchicalFilters);
     // Get active settings to determine the fiscal year
     const Settings = require("../models/Settings");
     const activeSettings = await Settings.findOne({ isActive: true }).lean();
@@ -529,7 +559,7 @@ exports.getEligibleForRetirement = async (req, res) => {
       employeeStatus: "Active",
       DateOfAppointment: { $exists: true, $ne: null },
       DateOfBirth: { $exists: true, $ne: null },
-      ...hierarchicalFilters // Apply hierarchical filters
+      ...dbHierarchicalFilters // Apply hierarchical filters
     };
     const personnelServices = await PersonnelServices.find(personnelQuery).lean();
     // Filter employees based on age and years of service
@@ -580,6 +610,7 @@ exports.getEligibleForRetirement = async (req, res) => {
         employeeNum = emp.employeeID;
       }
       // return {
+      const employeeData = {
         _id: emp._id,
         employeeNumber: employeeNum, // This should be a string like "336155"
         employeeFullName: emp.employeeFullName || emp.EmployeeFullName || "",
@@ -592,12 +623,12 @@ exports.getEligibleForRetirement = async (req, res) => {
         retirementType: emp.retirementType,
         earnedLeaves: emp.earnedLeaves || 0 // Include earned leaves for terminal leave calculation
       };
+      return employeeData;
     });
     // Log the formatted employees to verify the employee number format
-    // ));
     return res.status(200).json(formattedEmployees);
   } catch (err) {
     console.error("Error getting eligible employees for retirement:", err);
     return res.status(500).json({ message: "Server error", error: err.message });
   }
-};
+};

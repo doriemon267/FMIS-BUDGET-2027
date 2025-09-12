@@ -178,8 +178,8 @@ const getConsolidatedCorporateIncome = async (req, res) => {
     } else {
       regions = await Region.find().sort({ Region: 1 });
     }
-    in report${regionFilter ? ` (filtered to: ${regionFilter})` : ''}`);
-    // Get all income categories and deduplicate by name
+    // console.log(`Generating report${regionFilter ? ` (filtered to: ${regionFilter})` : ''}`);
+    // // Get all income categories and deduplicate by name
     const allIncomeCategories = await IncomeCategory.find().sort({ incomeCategoryName: 1 });
     // Deduplicate categories by name - consolidate all regions for same category name
     const categoryMap = new Map();
@@ -213,7 +213,6 @@ const getConsolidatedCorporateIncome = async (req, res) => {
       // Case-insensitive exact match for region
       query.region = { $regex: new RegExp(`^${regionFilter}$`, 'i') };
     }
-    );
     const incomeEntries = await Income.find(query).populate('incomecategory');
     // Extract unique subcategories from income entries
     const subcategorySet = new Set();
@@ -232,9 +231,9 @@ const getConsolidatedCorporateIncome = async (req, res) => {
             categoryName = entryCategory.name;
           }
           subcategoryToCategoryMap.set(subcategoryName, categoryName);
-          }
+        }
       } else {
-        `);
+        // Skip entries without valid category
       }
     });
     // Create dynamic subcategory objects from extracted data
@@ -249,7 +248,7 @@ const getConsolidatedCorporateIncome = async (req, res) => {
     });
     // Combine formal subcategories with dynamic ones
     const allSubcategories = [...incomeSubCategories, ...dynamicSubcategories];
-    : ${allSubcategories.length}`);
+    //console.log(`Total subcategories: ${allSubcategories.length}`);
     // Initialize result structure with hierarchical data
     const result = {
       fiscalYear,
@@ -330,7 +329,6 @@ const getConsolidatedCorporateIncome = async (req, res) => {
       }
       // Skip if category doesn't exist in our structure
       if (!categoryId || result.categoryTotals[categoryId] === undefined) {
-        `);
         return;
       }
       // Add to region's category amount
@@ -405,4 +403,4 @@ const getConsolidatedCorporateIncome = async (req, res) => {
 module.exports = { 
   getConsolidatedSummary,
   getConsolidatedCorporateIncome
-};
+};

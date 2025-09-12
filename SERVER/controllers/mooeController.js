@@ -9,73 +9,105 @@ exports.getMOOEData = async (req, res) => {
     // 1. Load active settings
     const activeSettings = await Settings.findOne({ isActive: true });
     // if (!activeSettings || activeSettings.fiscalYear == null) {
-      // return res.status(404).json({ error: 'No active fiscal year found' });
-    }
+    //   return res.status(404).json({ error: 'No active fiscal year found' });
+    // }
     const activeFiscalYear = activeSettings.fiscalYear;
     // // 2. Get region from request or user
     const region = req.query.region || req.user?.Region || req.headers['x-region'];
     // // 2. Fetch COA, MOOE proposals and COS personnel filtered by fiscal year and region
     // // Build the complete filter by combining base filter with hierarchical access control
     let filter = { fiscalYear: activeFiscalYear };
-    // Apply sophisticated hierarchical filtering based on user access scope
-    const accessScope = req.hierarchicalAccess?.scope;
-    const accessibleRegionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
-    // Add region filter based on access scope
-    if (!filter.region) {
-      if (accessScope && accessScope !== 'FULL' && accessibleRegionName) {
-        filter.region = accessibleRegionName;
-      }
-    }
-    // Add finer filters based on access scope
-    if (accessScope === 'DIVISION') {
-      // Division users: only their division within their department and region
-      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-      const divName = req.hierarchicalAccess?.accessibleDivisions?.[0];
-      if (deptName) filter.department = deptName;
-      if (divName) filter.division = divName;
-    } else if (accessScope === 'DEPARTMENT') {
-      // Department users: all divisions within their department in the region
-      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-      if (deptName) filter.department = deptName;
-    } else if (accessScope === 'REGION') {
-      // Region-level users should ONLY see:
-      // 1. Records that have been submitted by departments  
-      // 2. Records that don't have department field (already consolidated to region level)
-      // BUT NOT current working drafts of departments
-      filter.$and = [
-        { fiscalYear: activeFiscalYear }, // Keep fiscal year constraint
-        { region: accessibleRegionName }, // Must be in their region
-        {
-          $or: [
-            // Option 1: Consolidated records (no department info)
-            { department: { $exists: false } },
-            { department: null },
-            { department: "" },
-            // Option 2: Department records that are submitted/approved ONLY
-            { 
+    // 🔄 DIRECT SUBMISSION WORKFLOW FIX - Copy exact logic from Personnel Services
+    // Check if user is authenticated and get user info
+    if (req.user && req.user.id) {
+      try {
+        const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+        const assignment = await HierarchicalUserAssignment.getUserPermissions(req.user.id);
+        
+        if (assignment && assignment.assignmentLevel === 'DEPARTMENT') {
+          // Get department name from assignment
+          const userDept = assignment.departments?.[0]?.departmentName;
+          const userRegion = assignment.regions?.[0]?.regionName;
+          
+          if (userDept) {
+            // Department users can only see:
+            // 1. Their own department MOOE (where division is null/empty)
+            // 2. Division MOOE that has been submitted/approved
+            filter = {
               $and: [
-                { department: { $exists: true, $ne: null, $ne: "" } },
-                { status: { $in: ['Department Submitted', 'Region Verified', 'Approved', 'Finalized'] } }
+                {
+                  department: userDept,
+                  fiscalYear: activeFiscalYear,
+                  region: userRegion || region
+                },
+                {
+                  $or: [
+                    // Department's own MOOE (no division specified)
+                    {
+                      $and: [
+                        {
+                          $or: [
+                            { division: { $exists: false } },
+                            { division: null },
+                            { division: "" }
+                          ]
+                        }
+                      ]
+                    },
+                    // Division MOOE that has been submitted
+                    {
+                      $and: [
+                        {
+                          division: { $exists: true, $ne: "" }
+                        },
+                        {
+                          status: { $in: ["Submitted", "Approved", "Completed"] }
+                        }
+                      ]
+                    }
+                  ]
+                }
               ]
-            }
-          ]
+            };
+          }
+        } else if (assignment && assignment.assignmentLevel === 'DIVISION') {
+          // Division users see only their own division data
+          const userDept = assignment.departments?.[0]?.departmentName;
+          const userDiv = assignment.divisions?.[0];
+          const userRegion = assignment.regions?.[0]?.regionName;
+          
+          if (userDept && userDiv) {
+            filter = {
+              department: userDept,
+              division: userDiv,
+              fiscalYear: activeFiscalYear,
+              region: userRegion || region
+            };
+          }
         }
-      ];
-    }
-    // Fallback to explicit region param if provided and no hierarchical filter applied
-    if (region && !filter.region) {
-      filter.region = region;
+      } catch (error) {
+        console.error('Error applying MOOE submission workflow:', error);
+        // Fallback to basic region filtering
+        if (region) {
+          filter.region = region;
+        }
+      }
+    } else {
+      // Fallback to basic region filtering if no user context
+      if (region) {
+        filter.region = region;
+      }
     }
     // First, let's check what Chart of Accounts data exists
     const totalCOA = await ChartOfAccounts.countDocuments();
     // if (totalCOA > 0) {
-      const sampleCOA = await ChartOfAccounts.findOne().lean();
-      // // Check different variations
-      const expenseCount = await ChartOfAccounts.countDocuments({ accountClass: "Expense" });
-      // const mooeCount = await ChartOfAccounts.countDocuments({
-        lineItem: { $regex: /maintenance.*operating/i }
-      });
-      // }
+    //   const sampleCOA = await ChartOfAccounts.findOne().lean();
+    //   // // Check different variations
+    //   const expenseCount = await ChartOfAccounts.countDocuments({ accountClass: "Expense" });
+    //   // const mooeCount = await ChartOfAccounts.countDocuments({
+    //     lineItem: { $regex: /maintenance.*operating/i }
+    //   });
+    // }
     // Try to fetch Chart of Accounts, but use fallback if none found
     let chartOfAccounts = [];
     let mooeProposals = [];
@@ -654,8 +686,8 @@ exports.getMOOEData = async (req, res) => {
         }
       ];
       // Debug: Check if Financial Expenses entries are included
-    const financialExpenses = chartOfAccounts.filter(item => item.sublineItem === 'Financial Expenses');
-    // }
+      const financialExpenses = chartOfAccounts.filter(item => item.sublineItem === 'Financial Expenses');
+    }
     // 3. Compute total COS personnel amount
     const totalPersonnelAmount = cosPersonnels
       .reduce((sum, p) => sum + (p.Total || 0), 0);
@@ -695,7 +727,8 @@ exports.getMOOEData = async (req, res) => {
     const financialExpensesInResponse = response.entries.filter(item => item.sublineItem === 'Financial Expenses');
     // // Debug: List all unique subline items in the response
     const uniqueSublineItems = [...new Set(response.entries.map(item => item.sublineItem))];
-    // res.status(200).json(response);
+    
+    res.status(200).json(response);
   } catch (error) {
     console.error('Error fetching MOOE data', error);
     res.status(500).json({ error: 'Internal Server Error' });
@@ -710,13 +743,92 @@ exports.getMOOEEntries = async (req, res) => {
       return res.status(404).json({ error: 'No active fiscal year found' });
     }
     const activeFiscalYear = activeSettings.fiscalYear;
-    // 2. Fetch COA, MOOE proposals and COS personnel
+    // 2. Apply hierarchical filtering with submission workflow
+    let filter = { fiscalYear: activeFiscalYear };
+    
+    // Apply sophisticated hierarchical filtering based on user access scope
+    const accessScope = req.hierarchicalAccess?.scope;
+    const accessibleRegionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
+    
+    // Add region filter based on access scope
+    if (!filter.region) {
+      if (accessScope && accessScope !== 'FULL' && accessibleRegionName) {
+        filter.region = accessibleRegionName;
+      }
+    }
+    
+    // Add finer filters based on access scope
+    if (accessScope === 'DIVISION') {
+      // Division users: only their division within their department and region
+      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+      const divName = req.hierarchicalAccess?.accessibleDivisions?.[0];
+      if (deptName) filter.department = deptName;
+      if (divName) filter.division = divName;
+    } else if (accessScope === 'DEPARTMENT') {
+      // Department users: can see their department data + SUBMITTED division data ONLY
+      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+      if (deptName) {
+        // CRITICAL SUBMISSION WORKFLOW LOGIC for MOOE
+        const baseFilter = {
+          department: deptName,
+          fiscalYear: activeFiscalYear
+        };
+        
+        // Apply region if available
+        if (filter.region) baseFilter.region = filter.region;
+        
+        filter = {
+          $and: [
+            baseFilter,
+            {
+              $or: [
+                // 1. Department-level data (no division or by department user)
+                {
+                  $and: [
+                    { $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] }
+                  ]
+                },
+                // 2. Division data that has been SUBMITTED only
+                {
+                  $and: [
+                    { division: { $exists: true, $ne: null, $ne: "" } },
+                    { status: { $in: ["Submitted", "Approved", "Completed", "Department Submitted", "Region Verified", "Finalized"] } }
+                  ]
+                }
+              ]
+            }
+          ]
+        };
+        console.log(`🔍 MOOE ENTRIES DEBUG: Department ${deptName} filtered query:`, JSON.stringify(filter, null, 2));
+      }
+    } else if (accessScope === 'REGION') {
+      // Region-level users should ONLY see submitted department data
+      filter.$and = [
+        { fiscalYear: activeFiscalYear },
+        { region: accessibleRegionName },
+        {
+          $or: [
+            { department: { $exists: false } },
+            { department: null },
+            { department: "" },
+            { 
+              $and: [
+                { department: { $exists: true, $ne: null, $ne: "" } },
+                { status: { $in: ['Department Submitted', 'Region Verified', 'Approved', 'Finalized'] } }
+              ]
+            }
+          ]
+        }
+      ];
+    }
+    
+    // 3. Fetch COA, MOOE proposals and COS personnel with proper filtering
     const [chartOfAccounts, mooeProposals, cosPersonnels] = await Promise.all([
       ChartOfAccounts.find({
         accountClass: "Expense",
         lineItem:    "Maintenance and Other Operating Expenses"
       }).lean(),
-      MooeProposal.find({ fiscalYear: activeFiscalYear }).lean(),
+      MooeProposal.find(filter).lean(), // Use filtered query with submission workflow
       COSPersonnel.find({
         statusOfAppointment: "COS",
         fiscalYear: activeFiscalYear
@@ -753,7 +865,6 @@ exports.getMOOEEntries = async (req, res) => {
 // Optimized bulk save for MOOE entries
 exports.bulkSaveMOOE = async (req, res) => {
   try {
-    // );
     const { meta, entries } = req.body;
     // Resolve organizational ownership (respect hierarchical consolidation if applied)
     const ownerRegion = meta?.region || req.body.region || req.hierarchicalAccess?.originalData?.region || req.hierarchicalFilters?.region || req.user?.Region;
@@ -766,9 +877,14 @@ exports.bulkSaveMOOE = async (req, res) => {
         const hasUacsCode = item.uacsCode;
         const incomeValue = Number(item.income) || 0;
         const subsidyValue = Number(item.subsidy) || 0;
-        const hasActualValues = incomeValue > 0 || subsidyValue > 0;
+        const nisValue = Number(item.nis) || 0;
+        const cisValue = Number(item.cis) || 0;
+        
+        // Check if ANY amount field has meaningful value
+        const hasActualValues = incomeValue > 0 || subsidyValue > 0 || nisValue > 0 || cisValue > 0;
         const hasExistingId = item.id && item.id !== "undefined" && item.id !== "";
         const isSystemEntry = item.isSystemEntry;
+        
         // Only save if it has actual values > 0 OR it's an existing record with ID OR it's a system entry
         return hasUacsCode && (hasActualValues || hasExistingId || isSystemEntry);
       });
@@ -785,8 +901,6 @@ exports.bulkSaveMOOE = async (req, res) => {
       );
     }
     if (!processedEntries.length) {
-      ');
-      : 'No entries');
       return res.status(200).json({ 
         message: 'No entries to save - this is normal if no values were entered',
         matchedCount: 0,
@@ -800,24 +914,35 @@ exports.bulkSaveMOOE = async (req, res) => {
     const bulkOps = processedEntries
       // Only save entries that have actual values, are system entries, or are existing entries (with id)
       .filter(item => {
-        const totalAmount = (Number(item.income) || 0) +
-                          (Number(item.subsidy) || 0) +
-                          (Number(item.nis) || 0) +
-                          (Number(item.cis) || 0);
+        const incomeAmount = Number(item.income) || 0;
+        const subsidyAmount = Number(item.subsidy) || 0;
+        const nisAmount = Number(item.nis) || 0;
+        const cisAmount = Number(item.cis) || 0;
+        
+        // Check if ANY field has meaningful value (> 0)
+        const hasAnyValue = incomeAmount > 0 || subsidyAmount > 0 || nisAmount > 0 || cisAmount > 0;
         const isSystemEntry = item.isSystemEntry;
         const hasExistingId = item.id && item.id !== "undefined" && item.id !== "";
-        // Keep if may value, system entry, or existing entry (kahit zero na)
-        return totalAmount > 0 || isSystemEntry || hasExistingId;
+        
+        // Only keep entries with actual values > 0, system entries, or existing entries
+        return hasAnyValue || isSystemEntry || hasExistingId;
       })
       .map(item => {
         // Create a filtered update object with only the fields that exist in the schema
         const updateObj = {};
-        // Always include these core fields
-        updateObj.income = Number(item.income) || 0;
-        updateObj.subsidy = Number(item.subsidy) || 0;
-        updateObj.amount = Number(item.amount) || (Number(item.income) || 0) + (Number(item.subsidy) || 0);
-        updateObj.nis = Number(item.nis) || 0;
-        updateObj.cis = Number(item.cis) || 0;
+        
+        // Parse amounts and ensure they're numbers
+        const incomeVal = Number(item.income) || 0;
+        const subsidyVal = Number(item.subsidy) || 0;
+        const nisVal = Number(item.nis) || 0;
+        const cisVal = Number(item.cis) || 0;
+        
+        // Only set fields if they have meaningful values
+        updateObj.income = incomeVal;
+        updateObj.subsidy = subsidyVal;
+        updateObj.amount = Number(item.amount) || (incomeVal + subsidyVal);
+        updateObj.nis = nisVal;
+        updateObj.cis = cisVal;
         updateObj.uacsCode = item.uacsCode;
         updateObj.sublineItem = item.sublineItem;
         updateObj.accountingTitle = item.accountingTitle;
@@ -847,12 +972,14 @@ exports.bulkSaveMOOE = async (req, res) => {
       item.sublineItem === 'Financial Expenses'
     );
     if (financialExpensesEntries.length > 0) {
-      // }
-    const result = await MooeProposal.bulkWrite(bulkOps);
-    res.status(200).json({
-      message: 'Bulk save successful'
-    });
-  } catch (err) {
+      // Log Financial Expenses entries
+    }
+    try {
+      const result = await MooeProposal.bulkWrite(bulkOps);
+      res.status(200).json({
+        message: 'Bulk save successful'
+      });
+    } catch (err) {
     console.error('❌ Bulk save failed:', err);
     console.error('❌ Error stack:', err.stack);
     console.error('❌ Error details:', {
@@ -874,6 +1001,10 @@ exports.bulkSaveMOOE = async (req, res) => {
       res.status(500).json({ error: 'Bulk save failed: ' + err.message });
     }
   }
+  } catch (error) {
+    console.error('Error in bulk save MOOE:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
 };
 exports.fixDatabaseIndex = async (req, res) => {
   try {
@@ -882,7 +1013,6 @@ exports.fixDatabaseIndex = async (req, res) => {
     const collection = db.collection('mooeproposals');
     // Get current indexes
     const indexes = await collection.indexes();
-    ));
     // Find ALL problematic indexes
     const problematicIndexes = indexes.filter(idx => {
       // Remove old compound index without region
@@ -899,13 +1029,13 @@ exports.fixDatabaseIndex = async (req, res) => {
     let result = { message: 'Database index fix completed' };
     result.droppedIndexes = [];
     if (problematicIndexes.length > 0) {
-      );
       for (const idx of problematicIndexes) {
         try {
           await collection.dropIndex(idx.name);
           result.droppedIndexes.push(idx.name);
         } catch (error) {
-          }
+          // Log error but continue
+        }
       }
     } else {
       result.message += ' (no problematic indexes found)';
@@ -980,20 +1110,67 @@ exports.getMooeList = async (req, res) => {
     // Get region and fiscal year from query parameters
     const region = req.query.region;
     const fiscalYear = req.query.fiscalYear;
-    // Create filter object
-    const filter = {};
-    // Apply hierarchical filters if present
-    if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
-      filter.region = req.hierarchicalFilters.region;
-    } else if (region) {
-      // Fallback to explicit region param if provided
-      filter.region = region;
+    
+    // Create filter object - start with submission workflow filters if available
+    let filter = {};
+    
+    // Use submission workflow filters if available (they already include hierarchical filtering)
+    if (req.submissionWorkflowFilters) {
+      filter = { ...req.submissionWorkflowFilters };
+      console.log('🔍 MOOE-LIST DEBUG: Using submission workflow filters');
+    } else {
+      // Fallback to manual hierarchical filtering
+      if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
+        filter.region = req.hierarchicalFilters.region;
+      } else if (region) {
+        filter.region = region;
+      }
+      
+      // Apply manual submission workflow logic if hierarchical info available
+      if (req.hierarchicalAccessInfo && req.hierarchicalAccessInfo.scope === 'DEPARTMENT') {
+        const deptFilters = req.hierarchicalFilters || {};
+        console.log('🔍 MOOE-LIST DEBUG: Applying manual submission workflow for department');
+        
+        filter.$and = [
+          deptFilters,
+          {
+            $or: [
+              // Department's own MOOE (no division specified)
+              {
+                $and: [
+                  {
+                    $or: [
+                      { division: { $exists: false } },
+                      { division: null },
+                      { division: "" }
+                    ]
+                  }
+                ]
+              },
+              // Division MOOE that has been submitted
+              {
+                $and: [
+                  {
+                    division: { $exists: true, $ne: "" }
+                  },
+                  {
+                    status: { $in: ["Submitted", "Approved", "Completed"] }
+                  }
+                ]
+              }
+            ]
+          }
+        ];
+      }
     }
-    // Add fiscal year filter if provided
-    if (fiscalYear) {
+    
+    // Add fiscal year filter if provided and not already in filters
+    if (fiscalYear && !filter.fiscalYear) {
       filter.fiscalYear = fiscalYear;
     }
+    
     const mooeProposals = await MooeProposal.find(filter);
+    
     res.status(200).json(mooeProposals);
   } catch (error) {
     console.error('Error fetching MOOE list:', error);
@@ -1023,4 +1200,4 @@ exports.deleteAllMooeProposals = async (req, res) => {
       .status(500)
       .json({ error: 'Internal Server Error' });
   }
-};
+};

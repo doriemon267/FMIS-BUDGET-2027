@@ -136,7 +136,6 @@ exports.getSublineItems = async (req, res) => {
     const allItems = [...new Set([...dbItems, ...capitalOutlaySublineItems])];
     // Sort alphabetically
     const sortedItems = allItems.filter(item => item && item.trim()).sort();
-    `);
     res.status(200).json({
       sublineItems: sortedItems,
       fromDatabase: dbItems.length,
@@ -209,4 +208,4 @@ exports.deleteCategory = async (req, res) => {
     console.error("Error deleting category:", error);
     res.status(500).json({ error: "Failed to delete category." });
   }
-};
+};

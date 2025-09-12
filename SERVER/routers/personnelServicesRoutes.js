@@ -17,6 +17,7 @@ const checkToken = require('../middleware/checkToken');
 const enforceOrgAccess = require('../middleware/enforceOrgAccess');
 const Router = require("express").Router;
 const { strictHierarchicalControl, hierarchicalAccessControl } = require('../middleware/hierarchicalAccessControl');
+const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
 const personnelServicesRouter = Router();
 // Apply authentication only to mutating routes; keep GETs open for status/lookup
 personnelServicesRouter.use((req, res, next) => {
@@ -111,7 +112,6 @@ personnelServicesRouter.get("/getpersonnels/byParams", checkToken, hierarchicalA
 personnelServicesRouter.get("/api/personnel/getByParams", checkToken, hierarchicalAccessControl('read'), async (req, res) => {
   try {
     const { fiscalYear, budgetType, processBy, region, status } = req.query;
-    :", { fiscalYear, budgetType, processBy, region, status });
     const query = {};
     if (fiscalYear) query.fiscalYear = fiscalYear;
     if (budgetType) query.budgetType = budgetType;
@@ -146,4 +146,4 @@ personnelServicesRouter.post(
   exports.syncAllMealAllowances || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
-module.exports = personnelServicesRouter;
+module.exports = personnelServicesRouter;

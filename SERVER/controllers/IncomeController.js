@@ -154,7 +154,7 @@ exports.getAllIncome = async (req, res) => {
   try {
     const { fiscalYear, budgetType, region } = req.query;
     // // Build query object
-    const query = {};
+    let query = {};
     if (fiscalYear) query.fiscalYear = fiscalYear;
     if (budgetType) query.budgetType = budgetType;
     // Add region filter if provided
@@ -176,11 +176,48 @@ exports.getAllIncome = async (req, res) => {
       const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
       const divName = req.hierarchicalAccess?.accessibleDivisions?.[0];
       if (deptName) query.department = deptName;
-      if (divName) query.division = divName;
+      if (divName) {
+        query.division = divName;
+        // console.log(`🔍 INCOME DEBUG: Division ${divName} query:`, JSON.stringify(query, null, 2));
+      }
     } else if (accessScope === 'DEPARTMENT') {
-      // Department users: all divisions within their department in the region
+      // Department users: can see their department data + SUBMITTED division data ONLY
       const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-      if (deptName) query.department = deptName;
+      if (deptName) {
+        // CRITICAL SUBMISSION WORKFLOW LOGIC for Income
+        const baseQuery = {
+          department: deptName
+        };
+        
+        // Apply region if available
+        if (query.region) baseQuery.region = query.region;
+        if (query.fiscalYear) baseQuery.fiscalYear = query.fiscalYear;
+        if (query.budgetType) baseQuery.budgetType = query.budgetType;
+        
+        query = {
+          $and: [
+            baseQuery,
+            {
+              $or: [
+                // 1. Department-level data (no division or by department user)
+                {
+                  $and: [
+                    { $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] }
+                  ]
+                },
+                // 2. Division data that has been SUBMITTED only
+                {
+                  $and: [
+                    { division: { $exists: true, $ne: null, $ne: "" } },
+                    { status: { $in: ["Submitted", "Approved", "Completed"] } }
+                  ]
+                }
+              ]
+            }
+          ]
+        };
+        // console.log(`🔍 INCOME DEBUG: Department ${deptName} filtered query:`, JSON.stringify(query, null, 2));
+      }
     } else if (accessScope === 'REGION') {
       // Region-level visibility rule: show only when submitted or region-verified/approved
       query.$or = [
@@ -191,6 +228,7 @@ exports.getAllIncome = async (req, res) => {
     const incomeEntries = await Income.find(query)
       .populate('incomecategory')
       .sort({ createdAt: -1 });
+    
     res.status(200).json(incomeEntries);
   } catch (error) {
     console.error("Error fetching income entries:", error);
@@ -238,4 +276,4 @@ exports.deleteIncome = async (req, res) => {
       error: error.message
     });
   }
-};
+};

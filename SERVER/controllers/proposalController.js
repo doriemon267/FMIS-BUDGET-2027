@@ -192,7 +192,6 @@ exports.updateProposalStatus = async (req, res) => {
     }
     // Execute all updates in parallel
     const updateResults = await Promise.all(updatePromises);
-    );
     const status = "Submitted";
     // Calculate personnel expenses
     const personnel = await PersonnelService.aggregate([
@@ -773,10 +772,9 @@ exports.getProposals = async (req, res) => {
         query[filterField] = { $lte: filterValue };
       }
     }
-    );
     // First, let's check how many total proposals exist in the database
     const totalProposalsInDB = await Proposal.countDocuments();
-    : ${totalProposalsInDB}`);
+    console.log(`Total proposals in DB: ${totalProposalsInDB}`);
     // Check what proposals exist for this user
     if (totalProposalsInDB > 0) {
       const sampleProposals = await Proposal.find().limit(3);
@@ -1655,4 +1653,4 @@ exports.debugProposals = async (req, res) => {
       error: error.message
     });
   }
-};
+};

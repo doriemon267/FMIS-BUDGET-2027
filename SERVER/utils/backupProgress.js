@@ -251,7 +251,7 @@ class BackupProgressTracker extends EventEmitter {
       completedArray.slice(0, 100).forEach(([id, backup]) => {
         this.completedBackups.set(id, backup);
       });
-      // }
+    }
   }
   /**
    * Export tracking data for persistence
@@ -273,7 +273,7 @@ class BackupProgressTracker extends EventEmitter {
     if (data.completedBackups) {
       this.completedBackups = new Map(data.completedBackups);
     }
-    // }
+  }
 }
 // Singleton instance
 const progressTracker = new BackupProgressTracker();

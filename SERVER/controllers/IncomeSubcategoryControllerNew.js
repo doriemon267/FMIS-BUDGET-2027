@@ -103,7 +103,6 @@ exports.getSubcategoriesByCategory = async (req, res) => {
         success: false
       });
     }
-    `);
     // Get the category to find its associated subcategories
     const IncomeCategory = require("../models/IncomeCategory");
     const category = await IncomeCategory.findById(categoryId);
@@ -365,10 +364,9 @@ exports.assignSubcategoryToRegion = async (req, res) => {
         { regions },
         { new: true }
       );
-      } else {
-      }
+    }
     return res.status(200).json({
-      message: `Subcategory "${subcategory.name}" assigned to region ${region}`,
+      message: "Subcategory \"" + subcategory.name + "\" assigned to region " + region,
       success: true
     });
   } catch (error) {
@@ -379,4 +377,3 @@ exports.assignSubcategoryToRegion = async (req, res) => {
     });
   }
 };
-// Removed all hardcoded functions - everything is now dynamic from database

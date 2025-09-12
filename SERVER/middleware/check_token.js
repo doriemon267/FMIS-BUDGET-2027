@@ -1,6 +1,9 @@
 const jwt = require("jsonwebtoken");
 module.exports = async (req, res, next) => {
   try {
+    // Allow CORS preflight to pass through
+    if (req.method === 'OPTIONS') return next();
+
     // Extract token from Authorization header
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -16,13 +19,12 @@ module.exports = async (req, res, next) => {
     const accessToken = payload.accessToken;
     // Check if ACCOUNT_USER_API_URL is defined
     if (!process.env.ACCOUNT_USER_API_URL) {
-      // Commented out to reduce console noise during development
-      // // // For development/testing, you can set a mock user
+      // For development/testing, set a mock user derived from payload
       req.user = {
-        id: payload.userId || "test-user-id",
-        name: payload.name || "Test Budget Admin",
+        id: payload.userId || payload.id || payload.sub || "test-user-id",
+        name: payload.name || payload.username || "Test Budget Admin",
         email: payload.email || "budgetadmin@example.com",
-        Roles: payload.roles || ["BUDGET ADMIN"] // Changed from USER to BUDGET ADMIN for testing
+        Roles: payload.roles || payload.role || ["BUDGET ADMIN"]
       };
       return next();
     }
@@ -40,4 +42,4 @@ module.exports = async (req, res, next) => {
     console.error("Auth Middleware Error:", error);
     return res.status(401).json({ error: "Access denied" });
   }
-};
+};

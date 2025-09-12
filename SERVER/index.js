@@ -75,7 +75,7 @@ require("./config/mongo_db")();
 const mongoose = require('mongoose');
 mongoose.connection.once('open', async () => {
   try {
-    // const db = mongoose.connection.db;
+    const db = mongoose.connection.db;
     const collection = db.collection('mooeproposals');
     // Check if old problematic index exists
     const indexes = await collection.indexes();
@@ -114,7 +114,6 @@ mongoose.connection.once('open', async () => {
     }
     try {
       await settingsCol.createIndex({ fiscalYear: 1, budgetType: 1 }, { unique: true, background: true });
-      ');
     } catch (e) {
       if (e.code !== 85) {
         }
@@ -272,5 +271,7 @@ app.listen(process.env.APP_PORT, () => {
   setTimeout(() => {
     initializeCleanupScheduler();
     }, 5000); // Wait 5 seconds for database connection to be established
+ console.log("🚀", "FMIS - BUDGET IS UP AND RUNNING :: 5005")
   return null;
-});
+});
+

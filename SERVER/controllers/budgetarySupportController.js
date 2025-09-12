@@ -8,52 +8,84 @@ const IAsOMCost = require('../models/IAsOMCost');
 const getAllBudgetarySupport = async (req, res) => {
   try {
     const { fiscalYear, budgetType, region } = req.query;
-    // const query = {};
+    const query = {};
     if (fiscalYear) query.fiscalYear = fiscalYear;
     if (budgetType) query.budgetType = budgetType;
-    // Apply sophisticated hierarchical filtering based on user access scope
-    const accessScope = req.hierarchicalAccess?.scope;
-    const accessibleRegionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
-    // Add region filter based on access scope
-    if (accessScope && accessScope !== 'FULL' && accessibleRegionName) {
-      query.region = accessibleRegionName;
-    }
-    // Add finer filters based on access scope
-    if (accessScope === 'DIVISION') {
-      // Division users: only their division within their department and region
-      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-      const divName = req.hierarchicalAccess?.accessibleDivisions?.[0];
-      if (deptName) query.department = deptName;
-      if (divName) query.division = divName;
-    } else if (accessScope === 'DEPARTMENT') {
-      // Department users: all divisions within their department in the region
-      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-      if (deptName) query.department = deptName;
-    } else if (accessScope === 'REGION') {
-      // Region-level users should ONLY see:
-      // 1. Records that don't have department field (already consolidated to region level)
-      // 2. Department records that are properly submitted/approved ONLY
-      // BUT NOT current working drafts of departments
-      query.$or = [
-        // Option 1: Consolidated records (no department info)
-        { 'department': { $exists: false } },
-        { 'department': null },
-        { 'department': '' },
-        // Option 2: Department records that are submitted/approved ONLY
-        { 
+    // Apply submission workflow filtering - this ensures proper data isolation
+    // Division users: only their own data
+    // Department users: only SUBMITTED division data + their own department data  
+    // Region users: only SUBMITTED department data + their own region data
+    
+    // Apply hierarchical filtering with basic department-division isolation
+    // For now, use simple hierarchical filtering until submission workflow is fully implemented
+    if (req.hierarchicalAccess) {
+      const accessInfo = req.hierarchicalAccess;
+      
+      if (accessInfo?.scope === 'DIVISION') {
+        // Division users: only their division data
+        if (accessInfo.accessibleRegions?.[0]?.regionName) query.region = accessInfo.accessibleRegions[0].regionName;
+        if (accessInfo.accessibleDepartments?.[0]?.departmentName) query.department = accessInfo.accessibleDepartments[0].departmentName;
+        if (accessInfo.accessibleDivisions?.[0]) query.division = accessInfo.accessibleDivisions[0];
+      } else if (accessInfo?.scope === 'DEPARTMENT') {
+        // Department users: can see their department data + SUBMITTED division data ONLY
+        if (accessInfo.accessibleRegions?.[0]?.regionName) query.region = accessInfo.accessibleRegions[0].regionName;
+        if (accessInfo.accessibleDepartments?.[0]?.departmentName) query.department = accessInfo.accessibleDepartments[0].departmentName;
+        
+        // CRITICAL SUBMISSION WORKFLOW LOGIC:
+        // Department users can only see division data that has been SUBMITTED
+        const baseQuery = {
+          region: accessInfo.accessibleRegions[0]?.regionName,
+          department: accessInfo.accessibleDepartments[0]?.departmentName
+        };
+        
+        query = {
           $and: [
-            { 'department': { $exists: true, $ne: null, $ne: '' } },
-            { 'status': { $in: ['Department Submitted', 'Region Verified', 'Approved', 'Finalized'] } }
+            baseQuery,
+            {
+              $or: [
+                // 1. Department-level data (no division or by department user)
+                {
+                  $and: [
+                    { $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] }
+                  ]
+                },
+                // 2. Division data that has been SUBMITTED only
+                {
+                  $and: [
+                    { division: { $exists: true, $ne: null, $ne: "" } },
+                    { status: { $in: ["Submitted", "Approved", "Completed"] } }
+                  ]
+                }
+              ]
+            }
           ]
-        }
-      ];
+        };
+      } else if (accessInfo?.scope === 'REGION') {
+        // Region users: only see department-level consolidated data (no division data)
+        if (accessInfo.accessibleRegions?.[0]?.regionName) query.region = accessInfo.accessibleRegions[0].regionName;
+        
+        // CRITICAL: Only show consolidated data without department/division details
+        query.$and = [
+          { region: accessInfo.accessibleRegions[0].regionName },
+          {
+            $or: [
+              { department: { $exists: false } },
+              { department: null },
+              { department: "" }
+            ]
+          }
+        ];
+      } else if (accessInfo?.accessibleRegions?.[0]?.regionName) {
+        query.region = accessInfo.accessibleRegions[0].regionName;
+      }
     }
+    
     // Fallback region filter if provided and not already constrained
     if (region && !query.region) {
       query.region = region;
     }
     const data = await BudgetarySupport.find(query);
-    // res.json(data);
+    return res.json(data);
   } catch (error) {
     console.error('Error in getAllBudgetarySupport:', error);
     res.status(500).json({ message: error.message });
@@ -141,51 +173,54 @@ const calculateBudgetarySupport = async (req, res) => {
     const { fiscalYear, budgetType, region } = req.query;
     let totalSubsidy = 0;
     let breakdown = [];
-    // Apply hierarchical filtering based on user access scope
-    const accessScope = req.hierarchicalAccess?.scope;
-    const accessibleRegionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
-    // Build query conditions with hierarchical filtering
+    // Build base query conditions
     const queryConditions = {};
     if (fiscalYear) queryConditions.fiscalYear = fiscalYear;
     if (budgetType) queryConditions.budgetType = budgetType;
-    // Add hierarchical filters based on access scope
-    if (accessScope === 'DIVISION') {
-      // Division users: only their division within their department and region
-      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-      const divName = req.hierarchicalAccess?.accessibleDivisions?.[0];
-      queryConditions.region = accessibleRegionName;
-      if (deptName) queryConditions.department = deptName;
-      if (divName) queryConditions.division = divName;
-    } else if (accessScope === 'DEPARTMENT') {
-      // Department users: all divisions within their department in the region (ALL STATUSES)
-      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-      queryConditions.region = accessibleRegionName;
-      if (deptName) queryConditions.department = deptName;
-      // Department users see ALL their data regardless of status (working data)
-    } else if (accessScope === 'REGION') {
-      // Region users: only properly submitted/approved data from departments
-      queryConditions.$and = [
-        { region: accessibleRegionName },
-        {
-          $or: [
-            // Option 1: Consolidated records (no department info)
-            { department: { $exists: false } },
-            { department: null },
-            { department: "" },
-            // Option 2: Department records that are submitted/approved ONLY
-            { 
-              $and: [
-                { department: { $exists: true, $ne: null, $ne: "" } },
-                { status: { $in: ['Department Submitted', 'Region Verified', 'Approved', 'Finalized'] } }
-              ]
-            }
-          ]
-        }
-      ];
-    } else if (accessScope && accessScope !== 'FULL' && accessibleRegionName) {
-      queryConditions.region = accessibleRegionName;
+    
+    // Apply submission workflow filtering for proper data isolation
+    // This ensures department users only see SUBMITTED division data, not draft data
+    if (req.submissionWorkflowFilters) {
+      // Use submission workflow filters (preferred approach)
+      Object.assign(queryConditions, req.submissionWorkflowFilters);
+    } else {
+      // Fallback to hierarchical access info with submission workflow logic
+      const accessInfo = req.hierarchicalAccessInfo;
+      if (accessInfo?.scope === 'DIVISION') {
+        // Division users: only their division data
+        if (accessInfo.accessibleRegions?.[0]?.regionName) queryConditions.region = accessInfo.accessibleRegions[0].regionName;
+        if (accessInfo.accessibleDepartments?.[0]?.departmentName) queryConditions.department = accessInfo.accessibleDepartments[0].departmentName;
+        if (accessInfo.accessibleDivisions?.[0]) queryConditions.division = accessInfo.accessibleDivisions[0];
+      } else if (accessInfo?.scope === 'DEPARTMENT') {
+        // Department users: ONLY submitted division data + own department data
+        if (accessInfo.accessibleRegions?.[0]?.regionName) queryConditions.region = accessInfo.accessibleRegions[0].regionName;
+        if (accessInfo.accessibleDepartments?.[0]?.departmentName) queryConditions.department = accessInfo.accessibleDepartments[0].departmentName;
+        // CRITICAL FIX: Add submission workflow filtering for department users
+        queryConditions.$or = [
+          { originalLevel: 'DEPARTMENT' }, // Own department-level data
+          { 
+            $and: [
+              { originalLevel: 'DIVISION' },
+              { status: { $in: ['Submitted', 'Approved'] } } // Only SUBMITTED division data
+            ]
+          }
+        ];
+      } else if (accessInfo?.scope === 'REGION') {
+        // Region users: only submitted department/division data + own region data
+        if (accessInfo.accessibleRegions?.[0]?.regionName) queryConditions.region = accessInfo.accessibleRegions[0].regionName;
+        queryConditions.$or = [
+          { originalLevel: 'REGION' }, // Own region-level data
+          { 
+            $and: [
+              { originalLevel: { $in: ['DEPARTMENT', 'DIVISION'] } },
+              { status: { $in: ['Submitted', 'Approved'] } } // Only submitted lower-level data
+            ]
+          }
+        ];
+      } else if (accessInfo?.accessibleRegions?.[0]?.regionName) {
+        queryConditions.region = accessInfo.accessibleRegions[0].regionName;
+      }
     }
-    );
     // For PersonnelServices, use fiscal_year field as well
     const personnelQueryConditions = { ...queryConditions };
     if (fiscalYear) {
@@ -204,7 +239,6 @@ const calculateBudgetarySupport = async (req, res) => {
           amount: personnelTotal,
           description: 'Government funding for all personnel services'
         });
-        }`);
       }
     } catch (error) {
       console.warn('Personnel Services not available:', error.message);
@@ -222,37 +256,57 @@ const calculateBudgetarySupport = async (req, res) => {
           amount: capitalTotal,
           description: 'Government funding for capital expenditures'
         });
-        }`);
       }
     } catch (error) {
       console.warn('Capital Outlay not available:', error.message);
     }
     // 3. MOOE Data (B.1.2) - Use subsidy field with simplified hierarchical filtering
     try {
-      // Build MOOE-specific query conditions
+      // Build MOOE-specific query conditions with submission workflow filtering
       const mooeQueryConditions = {};
       if (fiscalYear) mooeQueryConditions.fiscalYear = fiscalYear;
       if (budgetType) mooeQueryConditions.budgetType = budgetType;
-      // Apply MOOE-specific hierarchical filters
-      if (accessScope === 'DIVISION') {
-        const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-        const divName = req.hierarchicalAccess?.accessibleDivisions?.[0];
-        mooeQueryConditions.region = accessibleRegionName;
-        if (deptName) mooeQueryConditions.department = deptName;
-        if (divName) mooeQueryConditions.division = divName;
-      } else if (accessScope === 'DEPARTMENT') {
-        const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-        mooeQueryConditions.region = accessibleRegionName;
-        if (deptName) mooeQueryConditions.department = deptName;
-        // Department users see ALL their MOOE data regardless of status
-      } else if (accessScope === 'REGION') {
-        mooeQueryConditions.region = accessibleRegionName;
-        // Region users only see submitted/approved MOOE data
-        mooeQueryConditions.status = { $in: ['Department Submitted', 'Region Verified', 'Approved', 'Finalized'] };
-      } else if (accessScope && accessScope !== 'FULL' && accessibleRegionName) {
-        mooeQueryConditions.region = accessibleRegionName;
+      
+      // Apply same submission workflow filtering for MOOE data
+      if (req.submissionWorkflowFilters) {
+        Object.assign(mooeQueryConditions, req.submissionWorkflowFilters);
+      } else {
+        const accessInfo = req.hierarchicalAccessInfo;
+        if (accessInfo?.scope === 'DIVISION') {
+          // Division users: only their division MOOE data
+          if (accessInfo.accessibleRegions?.[0]?.regionName) mooeQueryConditions.region = accessInfo.accessibleRegions[0].regionName;
+          if (accessInfo.accessibleDepartments?.[0]?.departmentName) mooeQueryConditions.department = accessInfo.accessibleDepartments[0].departmentName;
+          if (accessInfo.accessibleDivisions?.[0]) mooeQueryConditions.division = accessInfo.accessibleDivisions[0];
+        } else if (accessInfo?.scope === 'DEPARTMENT') {
+          // Department users: ONLY submitted division MOOE data + own department MOOE data
+          if (accessInfo.accessibleRegions?.[0]?.regionName) mooeQueryConditions.region = accessInfo.accessibleRegions[0].regionName;
+          if (accessInfo.accessibleDepartments?.[0]?.departmentName) mooeQueryConditions.department = accessInfo.accessibleDepartments[0].departmentName;
+          // CRITICAL FIX: Apply submission workflow to MOOE as well
+          mooeQueryConditions.$or = [
+            { originalLevel: 'DEPARTMENT' }, // Own department MOOE data
+            { 
+              $and: [
+                { originalLevel: 'DIVISION' },
+                { status: { $in: ['Submitted', 'Approved'] } } // Only SUBMITTED division MOOE data
+              ]
+            }
+          ];
+        } else if (accessInfo?.scope === 'REGION') {
+          // Region users: only submitted MOOE data from departments/divisions
+          if (accessInfo.accessibleRegions?.[0]?.regionName) mooeQueryConditions.region = accessInfo.accessibleRegions[0].regionName;
+          mooeQueryConditions.$or = [
+            { originalLevel: 'REGION' }, // Own region MOOE data
+            { 
+              $and: [
+                { originalLevel: { $in: ['DEPARTMENT', 'DIVISION'] } },
+                { status: { $in: ['Submitted', 'Approved'] } } // Only submitted lower-level MOOE data
+              ]
+            }
+          ];
+        } else if (accessInfo?.accessibleRegions?.[0]?.regionName) {
+          mooeQueryConditions.region = accessInfo.accessibleRegions[0].regionName;
+        }
       }
-      );
       const mooeData = await mooeProposals.find(mooeQueryConditions);
       const mooeTotal = mooeData.reduce((sum, item) => {
         return sum + (Number(item.subsidy) || Number(item.totalSubsidy) || 0);
@@ -264,9 +318,8 @@ const calculateBudgetarySupport = async (req, res) => {
           amount: mooeTotal,
           description: 'Government subsidy for maintenance and operating expenses'
         });
-        } (${mooeData.length} records)`);
       } else {
-        `);
+        // No MOOE data available
       }
     } catch (error) {
       console.warn('MOOE Data not available:', error.message);
@@ -283,13 +336,11 @@ const calculateBudgetarySupport = async (req, res) => {
             amount: iasTotal,
             description: 'Government subsidy for Irrigation Associations O&M'
           });
-          }`);
         }
       }
     } catch (error) {
       console.warn('IAs O&M Cost not available:', error.message);
     }
-    }`);
     res.json({
       totalSubsidy,
       breakdown,
@@ -310,4 +361,4 @@ module.exports = {
   updateBudgetarySupport,
   deleteBudgetarySupport,
   calculateBudgetarySupport
-};
+};

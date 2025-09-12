@@ -51,7 +51,6 @@ const createBackup = async (req, res) => {
       // Fallback for simple connection strings
       dumpCommand = `mongodump --db ${dbName} --archive=${backupPath} --gzip`;
     }
-    );
     // Execute backup
     const childProcess = exec(dumpCommand, async (error, stdout, stderr) => {
       try {
@@ -189,7 +188,6 @@ const createScheduledBackup = async (scheduledBackupId) => {
       // Fallback for simple connection strings
       dumpCommand = `mongodump --db ${dbName} --archive=${backupPath} --gzip`;
     }
-    );
     exec(dumpCommand, async (error, stdout, stderr) => {
       try {
         if (error) {
@@ -411,7 +409,6 @@ const restoreBackup = async (req, res) => {
       // Fallback for simple connection strings
       restoreCommand = `mongorestore --db ${dbName} --archive=${backup.filePath} --gzip --drop`;
     }
-    );
     exec(restoreCommand, async (error, stdout, stderr) => {
       try {
         if (error) {

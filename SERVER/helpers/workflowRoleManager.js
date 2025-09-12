@@ -139,7 +139,7 @@ const setupDefaultWorkflowRoles = async () => {
         assignment.workflowRoles = defaultRoles;
         await assignment.save();
         updatedCount++;
-        :`, defaultRoles);
+        console.log(`Assigned default roles to user:`, defaultRoles);
       }
     }
     return {
@@ -220,4 +220,4 @@ module.exports = {
   setupDefaultWorkflowRoles,
   getUserWorkflowPermissions,
   WORKFLOW_ROLE_DESCRIPTIONS
-};
+};

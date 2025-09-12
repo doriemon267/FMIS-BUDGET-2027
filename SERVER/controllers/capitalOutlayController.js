@@ -13,7 +13,7 @@ const seedCapitalOutlayChartOfAccounts = async () => {
     if (existingEntries.length > 0) {
       // return;
     }
-    // const capitalOutlayEntries = [
+    const capitalOutlayEntries = [
       // Infrastructure Outlay
       { sublineItem: "Infrastructure Outlay", accountingTitle: "Infrastructure Outlay - Roads and Bridges", uacsCode: "5-01-01-010" },
       { sublineItem: "Infrastructure Outlay", accountingTitle: "Infrastructure Outlay - Flood Control Systems", uacsCode: "5-01-01-020" },
@@ -48,7 +48,7 @@ const seedCapitalOutlayChartOfAccounts = async () => {
       { sublineItem: "Furniture, Fixtures and Books Outlay", accountingTitle: "Books", uacsCode: "5-01-05-020" }
     ];
     await ChartOfAccounts.insertMany(capitalOutlayEntries);
-    // } catch (error) {
+  } catch (error) {
     console.error("Error seeding Capital Outlay chart of accounts:", error);
   }
 };
@@ -130,7 +130,7 @@ exports.getAllCapitalOutlays = async (req, res) => {
     // Add region filter if provided and not already constrained
     if (region && !query.region) {
       query.region = region;
-      // }
+    }
     const sortQuery = { [orderBy || "createdAt"]: order === "desc" ? -1 : 1 };
     const [capitalOutlays, totalRecords] = await Promise.all([
       CapitalOutlay.find(query)
@@ -314,7 +314,7 @@ exports.editCapitalOutlay = async (req, res) => {
       },
       { new: true, runValidators: true }
     ).populate("category"); // Ensure updated category details are returned
-    // return res.status(200).json({
+    return res.status(200).json({
       message: "Capital outlay updated successfully.",
       capitalOutlay: updatedCapitalOutlay,
     });
@@ -327,7 +327,7 @@ exports.editCapitalOutlay = async (req, res) => {
 exports.deleteCapitalOutlay = async (req, res) => {
   try {
     const { id } = req.params;
-    // if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
       console.error("[DELETE] Invalid ObjectId:", id);
       return res.status(400).json({ error: "Invalid capital outlay ID." });
     }
@@ -502,4 +502,4 @@ exports.deleteAllCapitalOutlays = async (req, res) => {
     console.error("Error deleting capital outlays:", error);  // Debugging
     res.status(500).json({ error: "Failed to delete capital outlays." });
   }
-};
+};

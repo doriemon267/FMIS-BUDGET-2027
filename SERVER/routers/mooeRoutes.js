@@ -2,37 +2,25 @@ const express = require('express');
 const router = express.Router();
 const checkToken = require('../middleware/checkToken');
 const { strictHierarchicalControl, hierarchicalAccessControl } = require('../middleware/hierarchicalAccessControl');
+const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
 // Import your controller (adjust the path as needed).
 const mooeController = require('../controllers/mooeController');
 const MooeProposal = require('../models/mooeProposals');
 // Apply authentication to all MOOE routes
 router.use(checkToken);
-// Define routes to match the front-end requests.
-router.get('/mooe-data', hierarchicalAccessControl('read', { allowedFields: ['region'] }), mooeController.getMOOEData);
-router.get('/mooe-entries', hierarchicalAccessControl('read', { allowedFields: ['region'] }), mooeController.getMOOEEntries);
-router.get('/mooe-status', hierarchicalAccessControl('read', { allowedFields: ['region'] }), mooeController.getMOOEStatus);
-router.post('/mooe-save', hierarchicalAccessControl('create', { strictMode: false, enableConsolidation: true }), mooeController.bulkSaveMOOE);
-router.post('/mooe-data', hierarchicalAccessControl('create', { strictMode: false, enableConsolidation: true }), mooeController.bulkSaveMOOE); // <-- Added for frontend compatibility
-router.get('/mooe-list', hierarchicalAccessControl('read', { allowedFields: ['region'] }), mooeController.getMooeList);
+// Define routes to match the front-end requests with SUBMISSION WORKFLOW CONTROL
+router.get('/mooe-data', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), mooeController.getMOOEData);
+router.get('/mooe-entries', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), mooeController.getMOOEEntries);
+router.get('/mooe-status', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), mooeController.getMOOEStatus);
+router.post('/mooe-save', submissionWorkflowControl('create', { strictMode: false }), mooeController.bulkSaveMOOE);
+router.post('/mooe-data', submissionWorkflowControl('create', { strictMode: false }), mooeController.bulkSaveMOOE); // <-- Added for frontend compatibility
+router.get('/mooe-list', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), mooeController.getMooeList);
+// Add /mooe route for SubsidyBalanceMonitor compatibility
+router.get('/mooe', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), mooeController.getMOOEData);
 router.delete('/mooe-delete', mooeController.deleteAllMooeProposals);
 // Optional: If your ProposalCustomPage is calling GET /MOOEProposal,
 // you can map that route to the appropriate controller function.
-router.get('/MOOEProposal', mooeController.getMOOEData);
-// Get MOOE by parameters
-router.get("/mooe/getByParams", async (req, res) => {
-  try {
-    const { fiscalYear, budgetType, processBy, region, status } = req.query;
-    const query = {};
-    if (fiscalYear) query.fiscalYear = fiscalYear;
-    if (budgetType) query.budgetType = budgetType;
-    if (processBy) query.processBy = processBy;
-    if (region) query.region = region;
-    if (status) query.status = status;
-    const mooe = await MooeProposal.find(query).lean();
-    res.status(200).json(mooe);
-  } catch (error) {
-    console.error("Error fetching MOOE by params:", error);
-    res.status(500).json({ message: "Failed to fetch MOOE data" });
-  }
-});
-module.exports = router;
+router.get('/MOOEProposal', hierarchicalAccessControl('read'), mooeController.getMOOEData);
+// Get MOOE by parameters - FIXED to use proper submission workflow filtering
+router.get("/mooe/getByParams", hierarchicalAccessControl('read'), mooeController.getMOOEData);
+module.exports = router;

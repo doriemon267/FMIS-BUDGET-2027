@@ -45,7 +45,6 @@ exports.getAllAppearances = async (req, res) => {
         { Department: { $regex: /^LEGAL SERVICES$/i } }
       ]
     };
-    );
     let personnelList = await PersonnelServices.find(legalServicesQuery);
     // Kumuha ng existing court appearances with region filter if provided
     const appearanceQuery = { fiscalYear };
@@ -223,4 +222,4 @@ exports.getSumOfCourtAppearanceAmount = async (req, res) => {
     console.error(err);
     res.status(500).json({ error: "Failed to calculate total amount." });
   }
-};
+};

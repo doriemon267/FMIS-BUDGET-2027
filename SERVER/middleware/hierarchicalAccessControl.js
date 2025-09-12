@@ -30,12 +30,12 @@ const hierarchicalAccessControl = (operation = 'read', options = {}) => {
       const userRoles = req.user.Roles;
       const userName = req.user.username || req.user.name || `User-${userId}`;
       if (logAccess) {
-        attempting ${operation} operation`);
+        // Logging removed as requested
       }
       // Full access users no longer bypass hierarchical restrictions; they still follow assigned scope
       if (hasFullAccess(userRoles)) {
         if (logAccess) {
-          . Applying assigned hierarchical scope...`);
+          // Logging removed as requested
         }
         // Do not return here; continue to load assignment
       }
@@ -191,7 +191,8 @@ const handleHierarchicalWrite = async (req, res, next, assignment, consolidation
     }
     if (!canPerformOperation) {
       if (logAccess) {
-        }
+        // Logging removed as requested
+      }
       return res.status(403).json({
         message: `Access denied. You don't have permission to perform ${operation} operations`,
         code: 'INSUFFICIENT_PERMISSIONS',
@@ -229,8 +230,8 @@ const handleHierarchicalWrite = async (req, res, next, assignment, consolidation
     rolePermissions: assignment.rolePermissions
   };
   if (logAccess) {
-    '}`);
-    }
+    // Logging removed as requested
+  }
   next();
 };
 /**
@@ -497,4 +498,4 @@ module.exports = {
   applyHierarchicalConsolidation,
   validateHierarchicalAccess,
   enforceWorkflowTransition
-};
+};

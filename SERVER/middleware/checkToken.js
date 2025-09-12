@@ -1,6 +1,9 @@
 const jwt = require("jsonwebtoken");
 module.exports = async (req, res, next) => {
   try {
+    // Allow CORS preflight to pass through
+    if (req.method === 'OPTIONS') return next();
+
     // Extract token from Authorization header
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -89,4 +92,4 @@ module.exports = async (req, res, next) => {
     console.error("❌ Auth Middleware Error:", error.message);
     return res.status(401).json({ error: "Access denied" });
   }
-};
+};

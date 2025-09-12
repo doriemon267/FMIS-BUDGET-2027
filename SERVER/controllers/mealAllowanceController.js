@@ -429,7 +429,6 @@ exports.deleteMealAllowance = async (req, res) => {
       { employeeNumber, fiscalYear },
       { $set: { meal: 0 } }
     );
-    }`);
     // Verify the update worked
     const verifyDoc = await PersonnelServices.findOne({ employeeNumber, fiscalYear });
     if (verifyDoc) {
@@ -500,4 +499,4 @@ exports.getMealAllowanceStats = async (req, res) => {
     console.error("Error fetching meal allowance stats:", error);
     res.status(500).json({ message: "Failed to fetch meal allowance statistics" });
   }
-};
+};
