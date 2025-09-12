@@ -48,7 +48,8 @@ const CustomTable = ({
   columns,
   searchQuery = "",
   tableContainerProps = {},
-  onDataChange = null
+  onDataChange = null,
+  refreshTrigger = 0
 }) => {
   const theme = useTheme();
   const { mode } = useThemeContext();
@@ -58,7 +59,7 @@ const CustomTable = ({
   const [totalRecords, setTotalRecords] = useState(0);
   const [loading, setLoading] = useState(false);
   const [selectedRows, setSelectedRows] = useState([]);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [refreshTriggerInternal, setRefreshTriggerInternal] = useState(0);
   const [filters, setFilters] = useState(
     columns.reduce((acc, col) => {
       acc[col.field] = "";
@@ -209,15 +210,23 @@ const CustomTable = ({
     }
   };
 
+  // Handle external refresh trigger
+  useEffect(() => {
+    if (onDataChange) {
+      // This effect will run when onDataChange changes, but we need to trigger refresh
+      // The parent component should call onDataChange when data needs to be refreshed
+    }
+  }, [onDataChange]);
+
   // Reset page when anything except page changes
   useEffect(() => {
     setPage(0);
-  }, [ROWS_PER_PAGE, apiPath, refreshTrigger, searchQuery, filters, sortConfig, activeRegion]);
+  }, [ROWS_PER_PAGE, apiPath, refreshTrigger, refreshTriggerInternal, searchQuery, filters, sortConfig, activeRegion]);
 
   // Fetch data when any dependency changes
   useEffect(() => {
     fetchData();
-  }, [page, ROWS_PER_PAGE, apiPath, refreshTrigger, searchQuery, filters, sortConfig, activeRegion]);
+  }, [page, ROWS_PER_PAGE, apiPath, refreshTrigger, refreshTriggerInternal, searchQuery, filters, sortConfig, activeRegion]);
 
   useEffect(() => {
     // Count active filters
@@ -281,7 +290,7 @@ const CustomTable = ({
   };
 
   const handleRefresh = () => {
-    setRefreshTrigger((prev) => prev + 1);
+    setRefreshTriggerInternal((prev) => prev + 1);
   };
 
   const handleStatusToggle = async (id, checked) => {
@@ -485,19 +494,24 @@ const CustomTable = ({
         </Alert>
       </Collapse>
 
-      {/* Table */}
-      <TableContainer 
-        component={Paper} 
+      {/* Table and Pagination Container */}
+      <Paper 
         sx={{ 
-          maxHeight: "60vh", 
-          overflow: "auto",
           borderRadius: '8px',
           boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
-          ...tableContainerProps.sx
+          overflow: 'hidden'
         }}
       >
-        <Table stickyHeader>
-          <TableHead>
+        {/* Table */}
+        <TableContainer 
+          sx={{ 
+            maxHeight: "60vh", 
+            overflow: "auto",
+            ...tableContainerProps.sx
+          }}
+        >
+          <Table stickyHeader>
+            <TableHead>
             <TableRow>
               {columns.map((column) => (
                 <TableCell 
@@ -743,22 +757,24 @@ const CustomTable = ({
           </Box>
         </Popover>
         
-        {/* Pagination */}
-        <TablePagination
-          rowsPerPageOptions={[ROWS_PER_PAGE]}
-          component="div"
-          count={totalRecords}
-          rowsPerPage={ROWS_PER_PAGE}
-          page={totalRecords === 0 ? 0 : Math.min(page, Math.ceil(totalRecords / ROWS_PER_PAGE) - 1)}
-          onPageChange={handleChangePage}
-          sx={{
-            borderTop: `1px solid ${theme.palette.mode === 'light' ? '#e0e0e0' : '#424242'}`,
-            '.MuiTablePagination-selectIcon': {
-              color: theme.palette.text.secondary
-            }
-          }}
-        />
       </TableContainer>
+      
+      {/* Pagination */}
+      <TablePagination
+        rowsPerPageOptions={[ROWS_PER_PAGE]}
+        component="div"
+        count={totalRecords}
+        rowsPerPage={ROWS_PER_PAGE}
+        page={totalRecords === 0 ? 0 : Math.min(page, Math.ceil(totalRecords / ROWS_PER_PAGE) - 1)}
+        onPageChange={handleChangePage}
+        sx={{
+          borderTop: `1px solid ${theme.palette.mode === 'light' ? '#e0e0e0' : '#424242'}`,
+          '.MuiTablePagination-selectIcon': {
+            color: theme.palette.text.secondary
+          }
+        }}
+      />
+      </Paper>
     </>
   );
 };
@@ -778,6 +794,8 @@ CustomTable.propTypes = {
   ).isRequired,
   searchQuery: PropTypes.string,
   tableContainerProps: PropTypes.object,
+  onDataChange: PropTypes.func,
+  refreshTrigger: PropTypes.number,
 };
 
 export default CustomTable;

@@ -546,6 +546,7 @@ const EmployeeList = () => {
             customAddElement={<EmployeeCustomAdd />}
             customEditElement={<EmployeeEditDialog dataListName="employees" />}
             onDataChange={refreshStats}
+            refreshTrigger={refreshTrigger}
             tableContainerProps={{
               sx: {
                 height: "calc(100vh - 320px)", // Adjusted since we're hiding the dashboard header

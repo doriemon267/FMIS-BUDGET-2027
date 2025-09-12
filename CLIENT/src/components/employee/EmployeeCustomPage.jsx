@@ -38,6 +38,7 @@ const EmployeeCustomPage = ({
   footerElement = null,
   headerContent = null,
   onDataChange = null,
+  refreshTrigger = 0,
 }) => {
   const theme = useTheme();
   const { mode } = useThemeContext();
@@ -190,6 +191,8 @@ const EmployeeCustomPage = ({
             dataListName={dataListName}
             apiPath={apiPath}
             tableContainerProps={tableContainerProps}
+            onDataChange={onDataChange}
+            refreshTrigger={refreshTrigger}
             columns={[
               {
                 field: "select",

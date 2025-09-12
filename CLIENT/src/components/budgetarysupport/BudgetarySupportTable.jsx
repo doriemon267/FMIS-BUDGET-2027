@@ -64,8 +64,11 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
 
   // Check if we have valid fiscalYear and budgetType
   const hasValidParams = !!fiscalYear && !!budgetType;
+  
+  // Debug props
+  console.log('📋 BudgetarySupportTable props:', { fiscalYear, budgetType, hasValidParams });
   // Fetch calculated budgetary support from the new endpoint
-  const { data: calculatedBudgetarySupport } = useQuery({
+  const { data: calculatedBudgetarySupport, isLoading: isLoadingCalculated, error: errorCalculated } = useQuery({
     queryKey: ['calculated-budgetary-support', fiscalYear, budgetType], // Removed regionName from queryKey
     queryFn: async () => {
       if (!hasValidParams) return null;
@@ -80,16 +83,31 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
       // The backend will automatically filter based on user's access scope (division/department/region)
 
       console.log('🔍 Calling /budgetary-support/calculate with params:', params);
-      const response = await api.get('/budgetary-support/calculate', { params });
+      const startTime = Date.now();
+      const response = await api.get('/budgetary-support/calculate', { params, timeout: 12000 });
+      const endTime = Date.now();
       console.log('✅ calculateBudgetarySupport response:', response.data);
-
+      console.log(`⏱️ /budgetary-support/calculate took ${endTime - startTime}ms`);
+      
       return response.data;
     },
-    enabled: hasValidParams
+    enabled: hasValidParams,
+    retry: 2,
+    retryDelay: 1000,
+    onError: (error) => {
+      console.error('❌ /budgetary-support/calculate failed:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        url: error.config?.url,
+        params: error.config?.params
+      });
+    }
   });
 
   // Fetch Capital Outlay data to calculate subsidy total
-  const { data: capitalOutlayData } = useQuery({
+  const { data: capitalOutlayData, isLoading: isLoadingCapitalOutlay, error: errorCapitalOutlay } = useQuery({
     queryKey: ['capital-outlays', fiscalYear, budgetType], // Removed regionName from queryKey
     queryFn: async () => {
       if (!hasValidParams) return [];
@@ -101,17 +119,34 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
       };
       
       // Single canonical endpoint. No fallbacks or alternative probes.
+      console.log('🔍 Calling /api/consolidated-reports/capital-outlay-data with params:', params);
+      const startTime = Date.now();
       const response = await api.get('/api/consolidated-reports/capital-outlay-data', { params });
-
+      const endTime = Date.now();
+      console.log('✅ capital-outlay-data response received');
+      console.log(`⏱️ /api/consolidated-reports/capital-outlay-data took ${endTime - startTime}ms`);
+      
       // Capital Outlay data comes directly as array or with data property
       const data = response.data?.data || response.data || [];
       return data;
     },
-    enabled: hasValidParams
+    enabled: hasValidParams,
+    retry: 2,
+    retryDelay: 1000,
+    onError: (error) => {
+      console.error('❌ /api/consolidated-reports/capital-outlay-data failed:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        url: error.config?.url,
+        params: error.config?.params
+      });
+    }
   });
 
   // Fetch MOOE data to get actual income amounts
-  const { data: mooeData } = useQuery({
+  const { data: mooeData, isLoading: isLoadingMOOE, error: errorMOOE } = useQuery({
     queryKey: ['mooe-list', fiscalYear, budgetType], // Removed regionName from queryKey
     queryFn: async () => {
       if (!hasValidParams) return [];
@@ -128,21 +163,35 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
         // Don't send region manually - let hierarchical access control handle it
         
         const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
+        console.log('🔍 Calling /mooe-list with query:', queryString);
+        const startTime = Date.now();
         const response = await api.get(`/mooe-list${queryString}`);
+        const endTime = Date.now();
+        console.log('✅ mooe-list response received');
+        console.log(`⏱️ /mooe-list took ${endTime - startTime}ms`);
         
         // Response is directly an array like in ProposalCustomPage
         const data = response.data || [];
         
         return data;
       } catch (error) {
+        console.error('❌ /mooe-list failed:', {
+          message: error.message,
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          url: error.config?.url
+        });
         return [];
       }
     },
-    enabled: hasValidParams
+    enabled: hasValidParams,
+    retry: 2,
+    retryDelay: 1000
   });
 
   // Fetch Personal Services data for Use of Funds breakdown (Combined Permanent + Casual)
-  const { data: personalServicesData, error: personnelError } = useQuery({
+  const { data: personalServicesData, error: personnelError, isLoading: isLoadingPersonnel } = useQuery({
     queryKey: ['personnel-services-combined', fiscalYear, budgetType], // Removed regionName from queryKey
     queryFn: async () => {
       if (!hasValidParams) return [];
@@ -168,12 +217,20 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
       try {
         // Fetch personnel data from all employment types in a single call
         
+        console.log('🔍 Calling /getpersonnels with params:', { 
+          ...baseParams
+          // Don't send region manually - let hierarchical access control handle it
+        });
+        const startTime = Date.now();
         const response = await api.get('/getpersonnels', { 
           params: { 
             ...baseParams
             // Don't send region manually - let hierarchical access control handle it
           } 
         });
+        const endTime = Date.now();
+        console.log('✅ /getpersonnels response received');
+        console.log(`⏱️ /getpersonnels took ${endTime - startTime}ms`);
 
         const personnelData = response.data || [];
 
@@ -282,7 +339,14 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
     retry: 2, // Increase retry attempts
     retryDelay: 2000, // Increase delay between retries to 2 seconds
     onError: (error) => {
-      console.error('Personnel services query error:', error);
+      console.error('❌ /getpersonnels failed:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        url: error.config?.url,
+        params: error.config?.params
+      });
       toast.error(`Error: ${error.message}`);
     }
   });
@@ -293,7 +357,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
   // Use React Query for existing budgetary support data (for reference only)
   const {
     data,
-    isLoading,
+    isLoading: isLoadingBudgetarySupport,
     error
   } = useQuery({
     queryKey: ['budgetary-support', fiscalYear, budgetType],
@@ -304,19 +368,35 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
       }
 
       // Fetching budgetary support - let backend handle hierarchical filtering
+      console.log('🔍 Calling /budgetary-support with params:', { fiscalYear, budgetType });
+      const startTime = Date.now();
       const response = await api.get('/budgetary-support', {
         params: { fiscalYear, budgetType }
         // Don't send region manually - hierarchical access control will handle filtering
       });
+      const endTime = Date.now();
+      console.log('✅ /budgetary-support response received');
+      console.log(`⏱️ /budgetary-support took ${endTime - startTime}ms`);
       // Budgetary support loaded
       return response.data && response.data.length > 0 ? response.data[0] : null;
     },
     enabled: hasValidParams, // Only run query if we have valid params
     onError: (err) => {
-      console.error('Error fetching budgetary support data:', err);
+      console.error('❌ /budgetary-support failed:', {
+        message: err.message,
+        status: err.response?.status,
+        statusText: err.response?.statusText,
+        data: err.response?.data,
+        url: err.config?.url,
+        params: err.config?.params
+      });
       toast.error(`Error loading budgetary support data: ${err.message}`);
     }
   });
+
+  // Combined loading state for all queries - MUST be defined after all useQuery hooks
+  const isLoading = isLoadingCalculated || isLoadingCapitalOutlay || isLoadingMOOE || isLoadingPersonnel || isLoadingBudgetarySupport;
+
   // Use calculated budgetary support amount with better validation
   useEffect(() => {
     let newAmount = 0;
@@ -678,19 +758,165 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
     );
   }
 
-  if (isLoading) {
+  // Simple connectivity test
+  const { data: connectivityTest, isLoading: isTestingConnectivity } = useQuery({
+    queryKey: ['connectivity-test'],
+    queryFn: async () => {
+      try {
+        console.log('🔍 Testing backend connectivity...');
+        const startTime = Date.now();
+        const response = await api.get('/test');
+        const endTime = Date.now();
+        console.log('✅ Backend connectivity test successful');
+        console.log(`⏱️ Connectivity test took ${endTime - startTime}ms`);
+        return { status: 'connected', response: response.data };
+      } catch (error) {
+        console.error('❌ Backend connectivity test failed:', {
+          message: error.message,
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          url: error.config?.url
+        });
+        return { status: 'disconnected', error: error.message };
+      }
+    },
+    enabled: hasValidParams, // Only test when we have valid params
+    retry: false,
+    staleTime: 30000
+  });
+
+  // Check authentication status
+  const { data: authTest, isLoading: isTestingAuth } = useQuery({
+    queryKey: ['auth-test'],
+    queryFn: async () => {
+      try {
+        console.log('🔍 Testing authentication...');
+        const startTime = Date.now();
+        // Try to access a protected endpoint that requires authentication
+        const response = await api.get('/budgetary-support/calculate', { 
+          params: { fiscalYear: Number(fiscalYear) || 2025, budgetType: budgetType || 'CURRENT' }
+        });
+        const endTime = Date.now();
+        console.log('✅ Authentication test successful');
+        console.log(`⏱️ Auth test took ${endTime - startTime}ms`);
+        return { status: 'authenticated', response: response.data };
+      } catch (error) {
+        if (error.response?.status === 401 || error.response?.status === 403) {
+          console.error('❌ Authentication failed - user not logged in or token expired');
+          return { status: 'unauthenticated', error: 'Please log in to access this data' };
+        } else {
+          console.error('❌ Authentication test failed with unexpected error:', {
+            message: error.message,
+            status: error.response?.status,
+            statusText: error.response?.statusText
+          });
+          return { status: 'error', error: error.message };
+        }
+      }
+    },
+    enabled: hasValidParams, // Only test when we have valid params
+    retry: false,
+    staleTime: 60000 // Cache for 1 minute
+  });
+
+  // Show authentication warning if user is not logged in
+  if (authTest?.status === 'unauthenticated') {
     return (
-      <Box sx={{ width: '100%', mb: 4, display: 'flex', justifyContent: 'center', p: 3 }}>
-        <CircularProgress />
+      <Box sx={{ width: '100%', mb: 4 }}>
+        <Alert severity="warning">
+          You need to be logged in to view budgetary support data. Please log in and try again.
+        </Alert>
       </Box>
     );
   }
 
-  if (error) {
+  // Show auth error if there's an unexpected authentication issue
+  if (authTest?.status === 'error') {
     return (
       <Box sx={{ width: '100%', mb: 4 }}>
         <Alert severity="error">
-          Error loading budgetary support data: {error.message}
+          Authentication check failed: {authTest.error}
+        </Alert>
+      </Box>
+    );
+  }
+
+  // Debug loading states
+  console.log('🔄 Loading states:', {
+    calculated: isLoadingCalculated,
+    capitalOutlay: isLoadingCapitalOutlay,
+    mooe: isLoadingMOOE,
+    personnel: isLoadingPersonnel,
+    budgetarySupport: isLoadingBudgetarySupport,
+    combined: isLoading
+  });
+
+  // Timeout mechanism to prevent infinite loading
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
+  
+  useEffect(() => {
+    if (isLoading) {
+      const timer = setTimeout(() => {
+        setLoadingTimeout(true);
+      }, 15000); // 15 seconds timeout to surface issues faster
+      
+      return () => clearTimeout(timer);
+    } else {
+      setLoadingTimeout(false);
+    }
+  }, [isLoading]);
+
+  if (loadingTimeout) {
+    return (
+      <Box sx={{ width: '100%', mb: 4 }}>
+        <Alert severity="warning">
+          Loading is taking longer than expected. Please check your connection and try refreshing the page.
+        </Alert>
+      </Box>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <Box sx={{ width: '100%', mb: 4, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', p: 3 }}>
+        <CircularProgress size={40} sx={{ mb: 2 }} />
+        <Typography variant="body1" color="textSecondary">
+          Loading budgetary support data...
+        </Typography>
+        <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          {isLoadingCalculated && <Typography variant="body2" color="textSecondary">• Calculating budgetary support...</Typography>}
+          {isLoadingCapitalOutlay && <Typography variant="body2" color="textSecondary">• Loading capital outlay data...</Typography>}
+          {isLoadingMOOE && <Typography variant="body2" color="textSecondary">• Loading MOOE data...</Typography>}
+          {isLoadingPersonnel && <Typography variant="body2" color="textSecondary">• Loading personnel data...</Typography>}
+          {isLoadingBudgetarySupport && <Typography variant="body2" color="textSecondary">• Loading existing budgetary support...</Typography>}
+        </Box>
+      </Box>
+    );
+  }
+
+  // Combined error state for all queries
+  const combinedError = errorCalculated || errorCapitalOutlay || errorMOOE || personnelError || error;
+
+  // Debug error states
+  console.log('❌ Error states:', {
+    calculated: errorCalculated?.message,
+    capitalOutlay: errorCapitalOutlay?.message,
+    mooe: errorMOOE?.message,
+    personnel: personnelError?.message,
+    budgetarySupport: error?.message,
+    combined: combinedError?.message
+  });
+
+  if (combinedError) {
+    return (
+      <Box sx={{ width: '100%', mb: 4 }}>
+        <Alert severity="error">
+          Failed to load budgetary support data. Please try again.
+          {errorCalculated && <div>Calculated data error: {errorCalculated.message}</div>}
+          {errorCapitalOutlay && <div>Capital outlay error: {errorCapitalOutlay.message}</div>}
+          {errorMOOE && <div>MOOE error: {errorMOOE.message}</div>}
+          {personnelError && <div>Personnel error: {personnelError.message}</div>}
+          {error && <div>Budgetary support error: {error.message}</div>}
         </Alert>
       </Box>
     );
@@ -722,6 +948,22 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
               <RefreshIcon />
             </IconButton>
           </Tooltip>
+
+          {/* Force refresh button for stuck loading */}
+          {isLoading && (
+            <Tooltip title="Force refresh (if stuck loading)">
+              <IconButton 
+                onClick={() => {
+                  // Force invalidate all queries
+                  queryClient.invalidateQueries();
+                  toast.info("Force refreshing all data...");
+                }} 
+                color="secondary"
+              >
+                <RefreshIcon />
+              </IconButton>
+            </Tooltip>
+          )}
 
           {/* View toggle */}
           <Tooltip title="Toggle compact view">

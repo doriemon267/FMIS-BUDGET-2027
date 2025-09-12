@@ -15,9 +15,12 @@ const getToken = () => {
   }
 };
 
+const REQUEST_TIMEOUT = Number(env("REQUEST_TIMEOUT_MS")) || 15000;
+
 const api = axios.create({
   baseURL: env("SERVER_URL"),
   withCredentials: true,
+  timeout: REQUEST_TIMEOUT,
 });
 
 // Attach token to requests
