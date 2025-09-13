@@ -32,22 +32,67 @@ exports.getAllEmployees = async (req, res) => {
       DateOfAppointment,
       DateOfBirth,
       Status,
+      processBy, // Add processBy parameter for additional access control
     } = req.query;
-    // Get hierarchical filters from middleware
+    // Get filters from middleware - prioritize submission workflow filters over hierarchical filters
+    const submissionWorkflowFilters = req.submissionWorkflowFilters || {};
     const hierarchicalFilters = req.hierarchicalFilters || {};
-    // Map hierarchical filters to database field names
+    
+    // Use submission workflow filters if available (they include status filtering), otherwise use hierarchical filters
+    const activeFilters = Object.keys(submissionWorkflowFilters).length > 0 ? submissionWorkflowFilters : hierarchicalFilters;
+    // Map filters to database field names
     const mapFiltersToDb = (filters) => {
       const mapped = {};
+
+      // Handle $and conditions from middleware
+      if (filters.$and && Array.isArray(filters.$and)) {
+        mapped.$and = filters.$and.map(condition => {
+          const conditionMapped = {};
+          if (condition.region) conditionMapped.Region = condition.region;
+          if (condition.department) conditionMapped.Department = condition.department;
+          if (condition.division) conditionMapped.Division = condition.division;
+          if (condition.status) conditionMapped.Status = condition.status;
+          return conditionMapped;
+        });
+        return mapped;
+      }
+
+      // Handle simple key-value filters
       if (filters.region) mapped.Region = filters.region;
       if (filters.department) mapped.Department = filters.department;
       if (filters.division) mapped.Division = filters.division;
+      if (filters.status) mapped.Status = filters.status;
       return mapped;
     };
-    const dbHierarchicalFilters = mapFiltersToDb(hierarchicalFilters);
-    // Start with hierarchical filters as base
-    let query = { ...dbHierarchicalFilters };
-    // If no hierarchical filters, require region parameter
-    if (!Object.keys(dbHierarchicalFilters).length && !region) {
+    const dbFilters = mapFiltersToDb(activeFilters);
+    // Start with active filters as base
+    let query = { ...dbFilters };
+
+    // Add processBy condition for additional access control within scope
+    if (processBy && Object.keys(dbFilters).length > 0) {
+      query = {
+        $and: [
+          dbFilters,
+          { $or: [{ processBy: processBy }, { createdBy: processBy }] }
+        ]
+      };
+    }
+
+    // Apply StatusOfAppointment filter early if provided
+    if (StatusOfAppointment) {
+      if (query.$and) {
+        query.$and.push({ StatusOfAppointment: StatusOfAppointment });
+      } else if (Object.keys(query).length > 0) {
+        query = {
+          $and: [query, { StatusOfAppointment: StatusOfAppointment }]
+        };
+      } else {
+        query.StatusOfAppointment = StatusOfAppointment;
+      }
+    }
+
+    // If no active filters and no processBy, require region parameter
+    if (!Object.keys(dbFilters).length && !processBy && !region) {
       return res.status(400).json({
         error: "Region parameter is required",
         message: "Please specify a region to view employees"
@@ -60,15 +105,21 @@ exports.getAllEmployees = async (req, res) => {
       const rn = (r.Region || r.regionName || r.name || '').trim();
       return rn && (rn.localeCompare(region.trim(), undefined, { sensitivity: 'accent' }) === 0 || new RegExp(`^${region.trim()}$`, 'i').test(rn));
     }) : false;
+
     if (region) {
-      if (!dbHierarchicalFilters.Region) {
+      // Add region filter to all access conditions
+      if (query.$or) {
+        query.$or = query.$or.map(condition => ({
+          ...condition,
+          Region: region
+        }));
+      } else if (!query.Region) {
         // No hierarchical region set, use requested region
         query.Region = region;
       } else if (hasRequestedRegionAccess) {
         // User has access to requested region, override hierarchical Region to match UI selection
         query.Region = region;
-        } else {
-        }
+      }
     }
     // Add search functionality if provided
     if (search) {
@@ -84,11 +135,19 @@ exports.getAllEmployees = async (req, res) => {
           { Status: { $regex: search, $options: "i" } },
         ]
       };
-      // Combine hierarchical filters with search
-      if (Object.keys(dbHierarchicalFilters).length > 0) {
+
+      // Combine access conditions with search
+      if (query.$or) {
         query = {
           $and: [
-            dbHierarchicalFilters,
+            { $or: query.$or },
+            searchConditions
+          ]
+        };
+      } else if (Object.keys(dbFilters).length > 0) {
+        query = {
+          $and: [
+            dbFilters,
             searchConditions
           ]
         };
@@ -104,7 +163,6 @@ exports.getAllEmployees = async (req, res) => {
     // Apply other filters while preserving hierarchical filters
     const filterParams = {
       positionTitle,
-      StatusOfAppointment,
       jg,
       charging,
       employeeID,
@@ -127,9 +185,16 @@ exports.getAllEmployees = async (req, res) => {
       if (Object.keys(textFilterQuery).length > 0) {
         if (query.$and) {
           query.$and.push(textFilterQuery);
-        } else if (Object.keys(dbHierarchicalFilters).length > 0) {
+        } else if (query.$or) {
           query = {
-            $and: [dbHierarchicalFilters, textFilterQuery]
+            $and: [
+              { $or: query.$or },
+              textFilterQuery
+            ]
+          };
+        } else if (Object.keys(dbFilters).length > 0) {
+          query = {
+            $and: [dbFilters, textFilterQuery]
           };
         } else {
           query = {
@@ -151,6 +216,13 @@ exports.getAllEmployees = async (req, res) => {
       if (Object.keys(numberFilterQuery).length > 0) {
         if (query.$and) {
           query.$and.push(numberFilterQuery);
+        } else if (query.$or) {
+          query = {
+            $and: [
+              { $or: query.$or },
+              numberFilterQuery
+            ]
+          };
         } else if (Object.keys(dbHierarchicalFilters).length > 0) {
           query = {
             $and: [dbHierarchicalFilters, numberFilterQuery]
@@ -175,6 +247,13 @@ exports.getAllEmployees = async (req, res) => {
       if (Object.keys(dateFilterQuery).length > 0) {
         if (query.$and) {
           query.$and.push(dateFilterQuery);
+        } else if (query.$or) {
+          query = {
+            $and: [
+              { $or: query.$or },
+              dateFilterQuery
+            ]
+          };
         } else if (Object.keys(dbHierarchicalFilters).length > 0) {
           query = {
             $and: [dbHierarchicalFilters, dateFilterQuery]
@@ -283,6 +362,10 @@ exports.addEmployee = async (req, res) => {
         message: "Please specify a region for the employee"
       });
     }
+
+    // Add processBy field to track who added the employee
+    req.body.processBy = req.user._id;
+
     const newEmployee = new Employee(req.body);
     await newEmployee.save();
     return res.status(201).json({
@@ -297,13 +380,23 @@ exports.addEmployee = async (req, res) => {
 exports.editEmployee = async (req, res) => {
   try {
     const { id } = req.params;
+
+    // Get the existing employee to preserve processBy if not set
+    const existingEmployee = await Employee.findById(id);
+    if (!existingEmployee) {
+      return res.status(404).json({ error: "Employee not found." });
+    }
+
+    // Preserve the original processBy if not provided in the update
+    if (!req.body.processBy) {
+      req.body.processBy = existingEmployee.processBy;
+    }
+
     const updatedEmployee = await Employee.findByIdAndUpdate(id, req.body, {
       new: true,
       runValidators: true,
     });
-    if (!updatedEmployee) {
-      return res.status(404).json({ error: "Employee not found." });
-    }
+
     return res.json({
       message: "Employee updated successfully.",
       employee: updatedEmployee,
@@ -374,6 +467,20 @@ exports.getEligibleForLoyaltyPay = async (req, res) => {
     // Map hierarchical filters to database field names
     const mapFiltersToDb = (filters) => {
       const mapped = {};
+
+      // Handle $and conditions from middleware
+      if (filters.$and && Array.isArray(filters.$and)) {
+        mapped.$and = filters.$and.map(condition => {
+          const conditionMapped = {};
+          if (condition.region) conditionMapped.Region = condition.region;
+          if (condition.department) conditionMapped.Department = condition.department;
+          if (condition.division) conditionMapped.Division = condition.division;
+          return conditionMapped;
+        });
+        return mapped;
+      }
+
+      // Handle simple key-value filters
       if (filters.region) mapped.Region = filters.region;
       if (filters.department) mapped.Department = filters.department;
       if (filters.division) mapped.Division = filters.division;
@@ -478,13 +585,29 @@ exports.getEmployeeStats = async (req, res) => {
   try {
     // Get hierarchical filters from middleware
     const hierarchicalFilters = req.hierarchicalFilters || {};
-    const { region } = req.query;
+    const { region, processBy } = req.query;
+
     // Use hierarchical filters as base, or fall back to region filter
     let baseFilters = { ...hierarchicalFilters };
     if (!Object.keys(hierarchicalFilters).length && region) {
       baseFilters.Region = region;
     }
-    if (!Object.keys(baseFilters).length) {
+
+    // Add processBy condition for additional access control
+    let accessConditions = [];
+    if (Object.keys(hierarchicalFilters).length > 0) {
+      accessConditions.push(hierarchicalFilters);
+    }
+    if (processBy) {
+      accessConditions.push({ processBy: processBy });
+    }
+
+    // If we have access conditions, use OR logic
+    if (accessConditions.length > 0) {
+      baseFilters = { $or: accessConditions };
+    }
+
+    if (!Object.keys(baseFilters).length && !processBy) {
       return res.status(400).json({
         error: "Region parameter is required",
         message: "Please specify a region to view employee statistics"
@@ -496,11 +619,70 @@ exports.getEmployeeStats = async (req, res) => {
     // Normalize for case-insensitive exact matching and omit empty Division
     const norm = (v) => (typeof v === 'string' && v.trim()) ? { $regex: new RegExp(`^${v.trim()}$`, 'i') } : v;
     const filtersCi = {};
-    if (baseFilters.region) filtersCi.Region = norm(baseFilters.region);
-    if (baseFilters.department) filtersCi.Department = norm(baseFilters.department);
-    if (baseFilters.division) {
-      const d = baseFilters.division.trim();
-      if (d) filtersCi.Division = norm(d);
+
+    // Handle OR-based filters for processBy access control
+    if (baseFilters.$or) {
+      filtersCi.$or = baseFilters.$or.map(condition => {
+        // Handle nested $and conditions from middleware
+        if (condition.$and && Array.isArray(condition.$and)) {
+          return {
+            $and: condition.$and.map(subCondition => {
+              const normalizedSubCondition = {};
+              if (subCondition.region) normalizedSubCondition.Region = norm(subCondition.region);
+              if (subCondition.department) normalizedSubCondition.Department = norm(subCondition.department);
+              if (subCondition.division) {
+                const d = subCondition.division.trim();
+                if (d) normalizedSubCondition.Division = norm(d);
+              }
+              return normalizedSubCondition;
+            })
+          };
+        }
+        // Handle simple conditions
+        const normalizedCondition = {};
+        if (condition.region) normalizedCondition.Region = norm(condition.region);
+        if (condition.department) normalizedCondition.Department = norm(condition.department);
+        if (condition.division) {
+          const d = condition.division.trim();
+          if (d) normalizedCondition.Division = norm(d);
+        }
+        if (condition.processBy) normalizedCondition.processBy = condition.processBy;
+        return normalizedCondition;
+      });
+    } else {
+      // Handle direct $and conditions from middleware (when no processBy)
+      if (baseFilters.$and && Array.isArray(baseFilters.$and)) {
+        filtersCi.$and = baseFilters.$and.map(condition => {
+          const normalizedCondition = {};
+          if (condition.region) normalizedCondition.Region = norm(condition.region);
+          if (condition.department) normalizedCondition.Department = norm(condition.department);
+          if (condition.division) {
+            const d = condition.division.trim();
+            if (d) normalizedCondition.Division = norm(d);
+          }
+          return normalizedCondition;
+        });
+      } else {
+        // Handle simple key-value filters
+        if (baseFilters.region) filtersCi.Region = norm(baseFilters.region);
+        if (baseFilters.department) filtersCi.Department = norm(baseFilters.department);
+        if (baseFilters.division) {
+          const d = baseFilters.division.trim();
+          if (d) filtersCi.Division = norm(d);
+        }
+      }
+    }
+
+    // Add region filter to all conditions if specified
+    if (region) {
+      if (filtersCi.$or) {
+        filtersCi.$or = filtersCi.$or.map(condition => ({
+          ...condition,
+          Region: norm(region)
+        }));
+      } else {
+        filtersCi.Region = norm(region);
+      }
     }
     // Count total employees with hierarchical filters
     const total = await collection.countDocuments(filtersCi);
@@ -540,6 +722,20 @@ exports.getEligibleForRetirement = async (req, res) => {
     // Map hierarchical filters to database field names
     const mapFiltersToDb = (filters) => {
       const mapped = {};
+
+      // Handle $and conditions from middleware
+      if (filters.$and && Array.isArray(filters.$and)) {
+        mapped.$and = filters.$and.map(condition => {
+          const conditionMapped = {};
+          if (condition.region) conditionMapped.Region = condition.region;
+          if (condition.department) conditionMapped.Department = condition.department;
+          if (condition.division) conditionMapped.Division = condition.division;
+          return conditionMapped;
+        });
+        return mapped;
+      }
+
+      // Handle simple key-value filters
       if (filters.region) mapped.Region = filters.region;
       if (filters.department) mapped.Department = filters.department;
       if (filters.division) mapped.Division = filters.division;

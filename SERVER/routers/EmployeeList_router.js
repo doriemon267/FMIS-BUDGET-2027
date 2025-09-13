@@ -9,9 +9,15 @@ const {
 } = require("../controllers/EmployeeListController");
 const Router = require("express").Router;
 const checkToken = require('../middleware/checkToken');
+const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
 const employeeRouter = Router();
 // Apply authentication middleware to all routes in this router
 employeeRouter.use(checkToken);
+// Apply submission workflow control middleware for read operations
+employeeRouter.use('/employees', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
+employeeRouter.use('/employees/stats', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
+employeeRouter.use('/employees/loyalty-pay', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
+employeeRouter.use('/eligible-for-retirement', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
 // Get all employees
 employeeRouter.get("/employees", getAllEmployees);
 // Add a new employee
@@ -26,4 +32,4 @@ employeeRouter.get("/employees/loyalty-pay", getEligibleForLoyaltyPay);
 employeeRouter.get("/eligible-for-retirement", getEligibleForRetirement);
 // Get employee statistics
 employeeRouter.get("/employees/stats", getEmployeeStats);
-module.exports = employeeRouter;
+module.exports = employeeRouter;

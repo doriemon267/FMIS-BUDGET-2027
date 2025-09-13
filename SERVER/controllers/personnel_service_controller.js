@@ -152,6 +152,39 @@ exports.getAllPersonnelServices = async (req, res) => {
       syncMealAllowances = false,
       region, // Add region parameter
     } = req.query;
+
+    // Get filters from middleware - prioritize submission workflow filters over hierarchical filters
+    const submissionWorkflowFilters = req.submissionWorkflowFilters || {};
+    const hierarchicalFilters = req.hierarchicalFilters || {};
+    
+    // Use submission workflow filters if available (they include status filtering), otherwise use hierarchical filters
+    const activeFilters = Object.keys(submissionWorkflowFilters).length > 0 ? submissionWorkflowFilters : hierarchicalFilters;
+
+    // Map hierarchical filters to database field names
+    const mapFiltersToDb = (filters) => {
+      const mapped = {};
+
+      // Handle $and conditions from middleware
+      if (filters.$and && Array.isArray(filters.$and)) {
+        mapped.$and = filters.$and.map(condition => {
+          const conditionMapped = {};
+          if (condition.region) conditionMapped.region = condition.region;
+          if (condition.department) conditionMapped.department = condition.department;
+          if (condition.division) conditionMapped.division = condition.division;
+          return conditionMapped;
+        });
+        return mapped;
+      }
+
+      // Handle simple key-value filters
+      if (filters.region) mapped.region = filters.region;
+      if (filters.department) mapped.department = filters.department;
+      if (filters.division) mapped.division = filters.division;
+      return mapped;
+    };
+
+    const dbFilters = mapFiltersToDb(activeFilters);
+
     const pageNum = Math.max(1, Number(page));
     const limitNum = Math.max(1, Number(limit));
     const skip = (pageNum - 1) * limitNum;
@@ -165,9 +198,27 @@ exports.getAllPersonnelServices = async (req, res) => {
         });
     }
     // Set strict fiscal year filter
-    const query = {
+    let query = {
       fiscalYear: activeSettings.fiscalYear, // Strict fiscal year filter
     };
+
+    // Apply active filters as base
+    if (Object.keys(dbFilters).length > 0) {
+      if (dbFilters.$and) {
+        query = {
+          $and: [
+            query,
+            ...dbFilters.$and
+          ]
+        };
+      } else {
+        query = {
+          ...query,
+          ...dbFilters
+        };
+      }
+    }
+
     // Only fetch personnel for active fiscal year
     if (search) {
       searchFilter(query, search, [
@@ -180,18 +231,15 @@ exports.getAllPersonnelServices = async (req, res) => {
     if (statusOfAppointment) {
       query.statusOfAppointment = statusOfAppointment;
     }
-    // Apply submission workflow filters from middleware
-    if (req.submissionWorkflowFilters) {
-      Object.assign(query, req.submissionWorkflowFilters);
-    }
-    
-    // Apply hierarchical filters  
-    if (req.hierarchicalFilters && Object.keys(req.hierarchicalFilters).length > 0) {
-      Object.assign(query, req.hierarchicalFilters);
-    }
+    // Note: Submission workflow filters are now included in activeFilters above
+
     // Add region filter if provided (and not already constrained by hierarchy)
-    if (region && !query.region) {
-      query.region = region;
+    if (region) {
+      if (query.$and) {
+        query.$and.push({ region: region });
+      } else if (!query.region) {
+        query.region = region;
+      }
     }
     const sortByField = orderBy || "createdAt";
     const sortOrder = order.toLowerCase() === "desc" ? -1 : 1;
@@ -335,7 +383,36 @@ exports.getPersonnelServices = async (req, res) => {
 };
 exports.bulkAddPersonnelServices = async (req, res) => {
   try {
-    const { statusOfAppointment, RATA } = req.body;
+    const { statusOfAppointment, RATA, region } = req.body;
+
+    // Get hierarchical filters from middleware
+    const hierarchicalFilters = req.hierarchicalFilters || {};
+
+    // Map hierarchical filters to database field names
+    const mapFiltersToDb = (filters) => {
+      const mapped = {};
+
+      // Handle $and conditions from middleware
+      if (filters.$and && Array.isArray(filters.$and)) {
+        mapped.$and = filters.$and.map(condition => {
+          const conditionMapped = {};
+          if (condition.region) conditionMapped.Region = condition.region;
+          if (condition.department) conditionMapped.Department = condition.department;
+          if (condition.division) conditionMapped.Division = condition.division;
+          return conditionMapped;
+        });
+        return mapped;
+      }
+
+      // Handle simple key-value filters
+      if (filters.region) mapped.Region = filters.region;
+      if (filters.department) mapped.Department = filters.department;
+      if (filters.division) mapped.Division = filters.division;
+      return mapped;
+    };
+
+    const dbHierarchicalFilters = mapFiltersToDb(hierarchicalFilters);
+
     if (!statusOfAppointment || !RATA) {
       return res
         .status(400)
@@ -355,18 +432,41 @@ exports.bulkAddPersonnelServices = async (req, res) => {
     }
     const fiscalYear = activeSettings.fiscalYear;
     const budgetType = activeSettings.budgetType;
-    // Get region from request body
-    const { region } = req.body; // Build query for employees with fiscal year
-    const employeeQuery = {
+
+    // Build query for employees with fiscal year and hierarchical filters
+    let employeeQuery = {
       StatusOfAppointment: statusOfAppointment,
       employeeStatus: "Active", // Only get active employees
       fiscalYear: fiscalYear, // Only get employees for the current fiscal year
     };
+
+    // Apply hierarchical filters to employee query
+    if (Object.keys(dbHierarchicalFilters).length > 0) {
+      if (dbHierarchicalFilters.$and) {
+        employeeQuery = {
+          $and: [
+            employeeQuery,
+            ...dbHierarchicalFilters.$and
+          ]
+        };
+      } else {
+        employeeQuery = {
+          ...employeeQuery,
+          ...dbHierarchicalFilters
+        };
+      }
+    }
+
     // Add region filter if provided
     if (region) {
-      employeeQuery.Region = region;
+      if (employeeQuery.$and) {
+        employeeQuery.$and.push({ Region: region });
+      } else {
+        employeeQuery.Region = region;
       }
-    // Fetch only Active employees with the specified StatusOfAppointment and region (if provided)
+    }
+
+    // Fetch only Active employees within user's hierarchical scope
     const employees = await EmployeeMaster.find(employeeQuery);
     // Check if no employees found
     if (employees.length === 0) {
@@ -525,6 +625,35 @@ exports.updatePersonnelService = async (req, res) => {
   try {
     const { id } = req.params;
     const updateFields = req.body;
+
+    // Get hierarchical filters from middleware
+    const hierarchicalFilters = req.hierarchicalFilters || {};
+
+    // Map hierarchical filters to database field names
+    const mapFiltersToDb = (filters) => {
+      const mapped = {};
+
+      // Handle $and conditions from middleware
+      if (filters.$and && Array.isArray(filters.$and)) {
+        mapped.$and = filters.$and.map(condition => {
+          const conditionMapped = {};
+          if (condition.region) conditionMapped.region = condition.region;
+          if (condition.department) conditionMapped.department = condition.department;
+          if (condition.division) conditionMapped.division = condition.division;
+          return conditionMapped;
+        });
+        return mapped;
+      }
+
+      // Handle simple key-value filters
+      if (filters.region) mapped.region = filters.region;
+      if (filters.department) mapped.department = filters.department;
+      if (filters.division) mapped.division = filters.division;
+      return mapped;
+    };
+
+    const dbHierarchicalFilters = mapFiltersToDb(hierarchicalFilters);
+
     const allowedFields = [
       "employeeFullName",
       "noOfDependent",
@@ -544,6 +673,8 @@ exports.updatePersonnelService = async (req, res) => {
       filteredUpdateFields.childrenAllowance =
         filteredUpdateFields.noOfDependent * 30 * 12;
     }
+
+    // First, find the personnel service record to check access
     const personnelServices = await PersonnelServices.findById(id);
     if (!personnelServices) {
       return res
@@ -553,6 +684,30 @@ exports.updatePersonnelService = async (req, res) => {
           details: "No record found for the given ID",
         });
     }
+
+    // Check if user has access to this record based on hierarchical filters
+    let hasAccess = true;
+    if (Object.keys(dbHierarchicalFilters).length > 0) {
+      if (dbHierarchicalFilters.$and) {
+        hasAccess = dbHierarchicalFilters.$and.every(condition => {
+          return Object.entries(condition).every(([key, value]) => {
+            return personnelServices[key] === value;
+          });
+        });
+      } else {
+        hasAccess = Object.entries(dbHierarchicalFilters).every(([key, value]) => {
+          return personnelServices[key] === value;
+        });
+      }
+    }
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "Access denied",
+        message: "You don't have permission to update this personnel service record"
+      });
+    }
+
     const updatedPersonnelService = await PersonnelServices.findByIdAndUpdate(
       id,
       { $set: filteredUpdateFields },

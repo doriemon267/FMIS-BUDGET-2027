@@ -14,21 +14,28 @@ const {
 const PersonnelServicesModel = require("../models/personnelServices");
 const checkDueDate = require("../middleware/checkDueDate");
 const checkToken = require('../middleware/checkToken');
-const hierarchicalAccessControl = require('../middleware/hierarchicalAccessControl');
+const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
 const Router = require("express").Router;
 const personnelServicesRouter = Router();
 // Apply authentication to all personnel services routes
 personnelServicesRouter.use(checkToken);
-// 🔒 Protect with due date check
+// Apply submission workflow control middleware for read operations
+personnelServicesRouter.use('/personnelServices', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
+personnelServicesRouter.use('/getpersonnels', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
+personnelServicesRouter.use('/grandtotalPermanent', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
+personnelServicesRouter.use('/grandtotalCasual', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
+// 🔒 Protect with due date check and submission workflow control
 personnelServicesRouter.post(
   "/personnelServices/bulk-add", 
-  checkDueDate, 
+  checkDueDate,
+  submissionWorkflowControl('create', { enforceSubmissionWorkflow: true }), 
   bulkAddPersonnelServices || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
 personnelServicesRouter.put(
   "/personnelServices/:id", 
-  checkDueDate, 
+  checkDueDate,
+  submissionWorkflowControl('update', { enforceSubmissionWorkflow: true }), 
   updatePersonnelService || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
@@ -40,7 +47,7 @@ personnelServicesRouter.get(
 );
 personnelServicesRouter.get(
   "/getpersonnels", 
-  hierarchicalAccessControl('read'),
+  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
   getAllPerServices || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );

@@ -39,6 +39,7 @@ import api from "../../config/api";
 import PropTypes from "prop-types";
 import { useThemeContext } from "../../context/ThemeContext";
 import { useRegion } from "../../context/RegionContext";
+import { useUser } from "../../context/UserContext";
 import { toast } from "react-hot-toast";
 
 const CustomTable = ({
@@ -75,6 +76,13 @@ const CustomTable = ({
 
   // Use the region context
   const { activeRegion } = useRegion();
+  const { currentUser } = useUser();
+
+  // Get user's hierarchical access information
+  const userAccessLevel = currentUser?.hierarchicalAccess?.scope || 'REGION';
+  const userDivision = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
+  const userDepartment = currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+  const userRegion = currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
 
   const fetchData = async () => {
     setLoading(true);
@@ -116,6 +124,24 @@ const CustomTable = ({
         // Add region parameter for security filtering - use exact name
         region: regionName,
       };
+
+      // Add hierarchical access parameters based on user access level
+      if (userAccessLevel === 'DIVISION' && userDivision) {
+        queryParams.division = userDivision;
+      } else if (userAccessLevel === 'DEPARTMENT' && userDepartment) {
+        queryParams.department = userDepartment;
+        if (userDivision) {
+          queryParams.division = userDivision;
+        }
+      } else if (userAccessLevel === 'REGION' && userRegion) {
+        queryParams.region = userRegion;
+      }
+
+      // Add processBy parameter for additional access control
+      // This allows users to see employees they processed, in addition to hierarchical access
+      if (currentUser?._id) {
+        queryParams.processBy = currentUser._id;
+      }
       
       // Add other filters
       Object.entries(filters).forEach(([key, value]) => {

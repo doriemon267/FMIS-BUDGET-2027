@@ -38,11 +38,13 @@ import GroupIcon from "@mui/icons-material/Group";
 import LocationIcon from "@mui/icons-material/LocationOn";
 import { useThemeContext } from "../context/ThemeContext";
 import { useRegion } from "../context/RegionContext";
+import { useUser } from "../context/UserContext";
 
 const EmployeeList = () => {
   const theme = useTheme();
   const { mode } = useThemeContext();
   const { activeRegion } = useRegion();
+  const { currentUser } = useUser();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const navigate = useNavigate();
   const [employeeStats, setEmployeeStats] = useState({
@@ -54,7 +56,54 @@ const EmployeeList = () => {
   // State to trigger refreshes
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // Fetch employee statistics based on active region
+  // Get user's hierarchical access information
+  const userAccessLevel = currentUser?.hierarchicalAccess?.scope || 'REGION';
+  const userDivision = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
+  const userDepartment = currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+  const userRegion = currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
+
+  // Get the active region name
+  const regionName = activeRegion?.name || activeRegion?.regionName;
+
+  // Determine display name and level based on user's access
+  const getDisplayInfo = () => {
+    switch (userAccessLevel) {
+      case 'DIVISION':
+        return {
+          level: 'Division',
+          name: userDivision || 'Your Division',
+          scope: `${userDivision || 'Division'} (${userDepartment || 'Department'}, ${regionName || 'Region'})`
+        };
+      case 'DEPARTMENT':
+        return {
+          level: 'Department',
+          name: userDepartment || 'Your Department',
+          scope: `${userDepartment || 'Department'} (${regionName || 'Region'})`
+        };
+      case 'REGION':
+        return {
+          level: 'Region',
+          name: regionName || 'Your Region',
+          scope: `${regionName || 'Region'}`
+        };
+      case 'FULL':
+        return {
+          level: 'System',
+          name: 'All Regions',
+          scope: 'Full System Access'
+        };
+      default:
+        return {
+          level: 'Region',
+          name: regionName || 'Your Region',
+          scope: `${regionName || 'Region'}`
+        };
+    }
+  };
+
+  const displayInfo = getDisplayInfo();
+
+  // Fetch employee statistics based on active region and hierarchical access
   useEffect(() => {
     const fetchEmployeeStats = async () => {
       if (!activeRegion) {
@@ -76,10 +125,31 @@ const EmployeeList = () => {
           return;
         }
 
-        // Include the active region in the request
+        // Build query parameters based on hierarchical access level
+        const queryParams = { region: regionName };
+
+        // Add hierarchical access parameters based on user level
+        if (userAccessLevel === 'DIVISION' && userDivision) {
+          queryParams.division = userDivision;
+        }
+        if (userAccessLevel === 'DEPARTMENT' && userDepartment) {
+          queryParams.department = userDepartment;
+        }
+        if (userAccessLevel === 'REGION' && userRegion) {
+          queryParams.region = userRegion;
+        }
+        // For FULL access, no additional filters needed
+
+        // Add processBy parameter for additional access control
+        // This allows users to see employees they processed, in addition to hierarchical access
+        if (currentUser?._id) {
+          queryParams.processBy = currentUser._id;
+        }
+
+        // Include the hierarchical access parameters in the request
         // Use the correct endpoint from EmployeeList_router.js
         const response = await api.get("/employees/stats", {
-          params: { region: regionName },
+          params: queryParams,
         });
 
         if (response.data) {
@@ -111,7 +181,7 @@ const EmployeeList = () => {
     };
 
     fetchEmployeeStats();
-  }, [activeRegion, theme.palette.mode, refreshTrigger]); // Re-fetch when active region changes or refresh is triggered
+  }, [activeRegion, theme.palette.mode, refreshTrigger, userAccessLevel, userDivision, userDepartment, userRegion]); // Include hierarchical access dependencies
 
   // Refresh stats when employee data changes
   const refreshStats = () => {
@@ -677,6 +747,17 @@ const EmployeeList = () => {
                               activeRegion.name || activeRegion.regionName || activeRegion.Region
                             } region`
                           : "Employee management dashboard"}
+                      </Typography>
+                      <Typography variant="body2" sx={{ opacity: 0.7, mt: 1 }}>
+                        Access Level: {displayInfo.level} - {displayInfo.scope}
+                      </Typography>
+                      <Typography variant="body2" sx={{ opacity: 0.6, mt: 0.5 }}>
+                        {userAccessLevel === 'DIVISION' 
+                          ? `You can view and manage employees in ${userDivision || 'your division'}. You can process COS personnel within your division scope only.`
+                          : userAccessLevel === 'DEPARTMENT'
+                          ? `You can view all employees in ${userDepartment || 'your department'} and oversee all divisions. You can process COS personnel across your entire department.`
+                          : `You have full access to view and manage employees within ${regionName || 'your region'}. You can process COS personnel across all departments and divisions.`
+                        }
                       </Typography>
                     </Box>
                     <Stack direction="row" spacing={1}>

@@ -14,81 +14,72 @@ const {
 const PersonnelServicesModel = require("../models/personnelServices");
 const checkDueDate = require("../middleware/checkDueDate");
 const checkToken = require('../middleware/checkToken');
-const enforceOrgAccess = require('../middleware/enforceOrgAccess');
-const Router = require("express").Router;
-const { strictHierarchicalControl, hierarchicalAccessControl } = require('../middleware/hierarchicalAccessControl');
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
+const Router = require("express").Router;
 const personnelServicesRouter = Router();
-// Apply authentication only to mutating routes; keep GETs open for status/lookup
-personnelServicesRouter.use((req, res, next) => {
-  if (req.method === "GET") return next();
-  return checkToken(req, res, next);
-});
-// 🔒 Protect with due date check
+// Apply authentication to all personnel services routes
+personnelServicesRouter.use(checkToken);
+// Apply submission workflow control middleware for read operations
+personnelServicesRouter.use('/personnelServices', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
+personnelServicesRouter.use('/personnel_services', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
+personnelServicesRouter.use('/personnel-service', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
+personnelServicesRouter.use('/getpersonnels', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
+personnelServicesRouter.use('/grandtotalPermanent', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
+personnelServicesRouter.use('/grandtotalCasual', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
+personnelServicesRouter.use('/getpersonnels/byParams', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
+personnelServicesRouter.use('/api/personnel/getByParams', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
+// 🔒 Protect with due date check and submission workflow control
 personnelServicesRouter.post(
   "/personnelServices/bulk-add", 
-  enforceOrgAccess,
   checkDueDate,
-  hierarchicalAccessControl('create', { strictMode: false, enableConsolidation: true }),
+  submissionWorkflowControl('create', { enforceSubmissionWorkflow: true }),
   bulkAddPersonnelServices || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
 personnelServicesRouter.put(
   "/personnelServices/:id", 
-  enforceOrgAccess,
   checkDueDate,
-  hierarchicalAccessControl('update', { strictMode: false, enableConsolidation: true }),
+  submissionWorkflowControl('update', { enforceSubmissionWorkflow: true }),
   updatePersonnelService || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
-// Protected GET routes with SUBMISSION WORKFLOW filtering
+// Protected GET routes with hierarchical access control
 personnelServicesRouter.get(
   "/personnelServices",
-  checkToken,
-  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
   getAllPersonnelServices ||
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
 // Alternative route with underscore (for compatibility)
 personnelServicesRouter.get(
   "/personnel_services",
-  checkToken,
-  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
   getAllPersonnelServices ||
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
 // Alternative route with dash singular (for compatibility)
 personnelServicesRouter.get(
   "/personnel-service",
-  checkToken,
-  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
   getAllPersonnelServices ||
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
 personnelServicesRouter.get(
   "/getpersonnels",
-  checkToken,
-  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
   getAllPerServices ||
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
 personnelServicesRouter.get(
   "/grandtotalPermanent",
-  checkToken,
-  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
   getGrandTotalPermanent ||
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
 personnelServicesRouter.get(
   "/grandtotalCasual",
-  checkToken,
-  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
   getGrandTotalCasual ||
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
 personnelServicesRouter.post(
   "/deleteAllPersonnels", 
-  enforceOrgAccess,
+  checkDueDate,
+  submissionWorkflowControl('delete', { enforceSubmissionWorkflow: true }),
   deleteAllPersonnelss || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
@@ -97,8 +88,8 @@ personnelServicesRouter.get(
   getGrandTotal || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
-// Get personnel by parameters (protected + submission workflow filters)
-personnelServicesRouter.get("/getpersonnels/byParams", checkToken, submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), async (req, res) => {
+// Get personnel by parameters (protected with hierarchical access control)
+personnelServicesRouter.get("/getpersonnels/byParams", async (req, res) => {
   try {
     const { fiscalYear, budgetType, processBy, region, status } = req.query;
     const query = {};
@@ -124,8 +115,8 @@ personnelServicesRouter.get("/getpersonnels/byParams", checkToken, submissionWor
     res.status(500).json({ message: "Failed to fetch personnel data" });
   }
 });
-// Keep the original route for backward compatibility (protected + submission workflow filters)
-personnelServicesRouter.get("/api/personnel/getByParams", checkToken, submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), async (req, res) => {
+// Keep the original route for backward compatibility (protected with hierarchical access control)
+personnelServicesRouter.get("/api/personnel/getByParams", async (req, res) => {
   try {
     const { fiscalYear, budgetType, processBy, region, status } = req.query;
     const query = {};
@@ -156,9 +147,11 @@ personnelServicesRouter.get(
   getPersonnelHiredBeforeJune1988 || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
-// Add the new route for syncing meal allowances
+// Add the new route for syncing meal allowances with submission workflow control
 personnelServicesRouter.post(
   "/personnelServices/sync-meal-allowances", 
+  checkDueDate,
+  submissionWorkflowControl('update', { enforceSubmissionWorkflow: true }),
   exports.syncAllMealAllowances || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );

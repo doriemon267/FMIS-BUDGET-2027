@@ -5,11 +5,40 @@ const { searchFilter, textFilter } = require("../utils/controller_get_process");
 exports.bulkAddCOSPersonnel = async (req, res) => {
   try {
     const { statusOfAppointment, region } = req.body;
+
+    // Get hierarchical filters from middleware (support both hierarchical and submission workflow)
+    const hierarchicalFilters = req.hierarchicalFilters || req.submissionWorkflowFilters || {};
+
+    // Map hierarchical filters to database field names
+    const mapFiltersToDb = (filters) => {
+      const mapped = {};
+
+      // Handle $and conditions from middleware
+      if (filters.$and && Array.isArray(filters.$and)) {
+        mapped.$and = filters.$and.map(condition => {
+          const conditionMapped = {};
+          if (condition.region) conditionMapped.Region = condition.region;
+          if (condition.department) conditionMapped.Department = condition.department;
+          if (condition.division) conditionMapped.Division = condition.division;
+          return conditionMapped;
+        });
+        return mapped;
+      }
+
+      // Handle simple key-value filters
+      if (filters.region) mapped.Region = filters.region;
+      if (filters.department) mapped.Department = filters.department;
+      if (filters.division) mapped.Division = filters.division;
+      return mapped;
+    };
+
+    const dbHierarchicalFilters = mapFiltersToDb(hierarchicalFilters);
+
     // CRITICAL SECURITY CHECK: Ensure region is provided
     if (!region) {
-      return res.status(400).json({ 
-        error: "Region parameter is required", 
-        message: "Please specify a region to add COS personnel" 
+      return res.status(400).json({
+        error: "Region parameter is required",
+        message: "Please specify a region to add COS personnel"
       });
     }
     if (!statusOfAppointment || statusOfAppointment !== "COS") {
@@ -21,14 +50,42 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
     }
     const fiscalYear = activeSettings.fiscalYear;
     const budgetType = activeSettings.budgetType;
-    // Only get employees from the specified region
-    const employees = await EmployeeMaster.find({ 
+
+    // Build employee query with hierarchical filters
+    let employeeQuery = {
       StatusOfAppointment: statusOfAppointment,
-      Region: region // Add region filter
-    });
+      Region: region
+    };
+
+    // Apply hierarchical filters to employee query
+    if (Object.keys(dbHierarchicalFilters).length > 0) {
+      if (dbHierarchicalFilters.$and) {
+        employeeQuery = {
+          $and: [
+            employeeQuery,
+            ...dbHierarchicalFilters.$and
+          ]
+        };
+      } else {
+        employeeQuery = {
+          ...employeeQuery,
+          ...dbHierarchicalFilters
+        };
+      }
+    }
+
+    // Log what employees the user can process for transparency
+    console.log(`User ${req.user.id} (${assignment?.assignmentLevel || 'UNKNOWN'}) attempting to process COS employees with filters:`, JSON.stringify(dbHierarchicalFilters, null, 2));
+
+    // Only get employees within user's hierarchical scope
+    const employees = await EmployeeMaster.find(employeeQuery);
+    console.log(`Found ${employees.length} COS employees within user's hierarchical scope`);
+
     if (employees.length === 0) {
-      return res.status(200).json({ 
-        message: `No COS employees found in region ${region}.` 
+      return res.status(200).json({
+        message: `No COS employees found within your access scope (Region: ${region}).`,
+        accessLevel: assignment?.assignmentLevel || 'UNKNOWN',
+        hierarchicalScope: dbHierarchicalFilters
       });
     }
     const checks = await Promise.all(
@@ -38,6 +95,12 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
           console.error(`SECURITY WARNING: Employee ${employee.EmployeeFullName} has region ${employee.Region} but requested region is ${region}`);
           return null;
         }
+
+        // Additional validation: Check if Division user is processing employee from their division
+        if (assignment?.assignmentLevel === 'DIVISION' && employee.Division !== assignment.divisions?.[0]) {
+          console.warn(`WORKFLOW WARNING: Division user ${req.user.id} processing employee ${employee.EmployeeFullName} from division ${employee.Division} (user's division: ${assignment.divisions?.[0]})`);
+        }
+
         const existingRecord = await COSPersonnel.findOne({
           employeeNumber: employee.EmployeeID,
           fiscalYear: fiscalYear,
@@ -79,12 +142,21 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
       return res.status(200).json({
         addedRecords,
         region,
-        count: addedRecords.length
+        count: addedRecords.length,
+        processedBy: {
+          userId: req.user.id,
+          userLevel: assignment?.assignmentLevel || 'UNKNOWN',
+          accessScope: dbHierarchicalFilters,
+          timestamp: new Date()
+        },
+        message: `${addedRecords.length} COS personnel records added successfully by ${assignment?.assignmentLevel || 'Unknown'} level user`
       });
     } else {
-      return res.status(200).json({ 
+      return res.status(200).json({
         message: "No new COS personnel to add.",
-        region
+        region,
+        accessLevel: assignment?.assignmentLevel || 'UNKNOWN',
+        hierarchicalScope: dbHierarchicalFilters
       });
     }
   } catch (error) {
@@ -104,20 +176,64 @@ exports.getAllCOSPersonnel = async (req, res) => {
       statusOfAppointment,
       region, // Add region parameter
     } = req.query;
+
+    // Get hierarchical filters from middleware (support both hierarchical and submission workflow)
+    const hierarchicalFilters = req.hierarchicalFilters || req.submissionWorkflowFilters || {};
+
+    // Map hierarchical filters to database field names
+    const mapFiltersToDb = (filters) => {
+      const mapped = {};
+
+      // Handle $and conditions from middleware
+      if (filters.$and && Array.isArray(filters.$and)) {
+        mapped.$and = filters.$and.map(condition => {
+          const conditionMapped = {};
+          if (condition.region) conditionMapped.region = condition.region;
+          if (condition.department) conditionMapped.department = condition.department;
+          if (condition.division) conditionMapped.division = condition.division;
+          return conditionMapped;
+        });
+        return mapped;
+      }
+
+      // Handle simple key-value filters
+      if (filters.region) mapped.region = filters.region;
+      if (filters.department) mapped.department = filters.department;
+      if (filters.division) mapped.division = filters.division;
+      return mapped;
+    };
+
+    const dbHierarchicalFilters = mapFiltersToDb(hierarchicalFilters);
     const pageNum = Math.max(1, Number(page));
     const limitNum = Math.max(1, Number(limit));
     const skip = (pageNum - 1) * limitNum;
     const activeSettings = await Settings.findOne({ isActive: true });
     let query = {};
+
+    // Apply hierarchical filters as base
+    if (Object.keys(dbHierarchicalFilters).length > 0) {
+      query = { ...dbHierarchicalFilters };
+    }
+
     // CRITICAL SECURITY CHECK: Ensure region is provided
     if (!region) {
-      return res.status(400).json({ 
-        error: "Region parameter is required", 
-        message: "Please specify a region to view COS personnel" 
+      return res.status(400).json({
+        error: "Region parameter is required",
+        message: "Please specify a region to view COS personnel"
       });
     }
-    // Add region to query with exact matching
-    query.region = region;
+
+    // Add region filter to hierarchical filters
+    if (query.$and) {
+      query.$and.push({ region: region });
+    } else if (Object.keys(query).length > 0) {
+      query = {
+        $and: [query, { region: region }]
+      };
+    } else {
+      query.region = region;
+    }
+
     if (activeSettings) {
       query.fiscalYear = activeSettings.fiscalYear;
     }
@@ -164,6 +280,64 @@ exports.updateCOSPersonnel = async (req, res) => {
   try {
     const { id } = req.params;
     const updateFields = req.body;
+
+    // Get hierarchical filters from middleware (support both hierarchical and submission workflow)
+    const hierarchicalFilters = req.hierarchicalFilters || req.submissionWorkflowFilters || {};
+
+    // Map hierarchical filters to database field names
+    const mapFiltersToDb = (filters) => {
+      const mapped = {};
+
+      // Handle $and conditions from middleware
+      if (filters.$and && Array.isArray(filters.$and)) {
+        mapped.$and = filters.$and.map(condition => {
+          const conditionMapped = {};
+          if (condition.region) conditionMapped.region = condition.region;
+          if (condition.department) conditionMapped.department = condition.department;
+          if (condition.division) conditionMapped.division = condition.division;
+          return conditionMapped;
+        });
+        return mapped;
+      }
+
+      // Handle simple key-value filters
+      if (filters.region) mapped.region = filters.region;
+      if (filters.department) mapped.department = filters.department;
+      if (filters.division) mapped.division = filters.division;
+      return mapped;
+    };
+
+    const dbHierarchicalFilters = mapFiltersToDb(hierarchicalFilters);
+
+    // First, find the COS personnel record to check access
+    const cosPersonnel = await COSPersonnel.findById(id);
+    if (!cosPersonnel) {
+      return res.status(404).json({ message: "COS personnel not found" });
+    }
+
+    // Check if user has access to this record based on hierarchical filters
+    let hasAccess = true;
+    if (Object.keys(dbHierarchicalFilters).length > 0) {
+      if (dbHierarchicalFilters.$and) {
+        hasAccess = dbHierarchicalFilters.$and.every(condition => {
+          return Object.entries(condition).every(([key, value]) => {
+            return cosPersonnel[key] === value;
+          });
+        });
+      } else {
+        hasAccess = Object.entries(dbHierarchicalFilters).every(([key, value]) => {
+          return cosPersonnel[key] === value;
+        });
+      }
+    }
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "Access denied",
+        message: "You don't have permission to update this COS personnel record"
+      });
+    }
+
     const allowedFields = [
       "employeeFullName",
       "monthlySalary",
@@ -193,6 +367,64 @@ exports.updateCOSPersonnel = async (req, res) => {
 exports.deleteCOSPersonnel = async (req, res) => {
   try {
     const { id } = req.params;
+
+    // Get hierarchical filters from middleware (support both hierarchical and submission workflow)
+    const hierarchicalFilters = req.hierarchicalFilters || req.submissionWorkflowFilters || {};
+
+    // Map hierarchical filters to database field names
+    const mapFiltersToDb = (filters) => {
+      const mapped = {};
+
+      // Handle $and conditions from middleware
+      if (filters.$and && Array.isArray(filters.$and)) {
+        mapped.$and = filters.$and.map(condition => {
+          const conditionMapped = {};
+          if (condition.region) conditionMapped.region = condition.region;
+          if (condition.department) conditionMapped.department = condition.department;
+          if (condition.division) conditionMapped.division = condition.division;
+          return conditionMapped;
+        });
+        return mapped;
+      }
+
+      // Handle simple key-value filters
+      if (filters.region) mapped.region = filters.region;
+      if (filters.department) mapped.department = filters.department;
+      if (filters.division) mapped.division = filters.division;
+      return mapped;
+    };
+
+    const dbHierarchicalFilters = mapFiltersToDb(hierarchicalFilters);
+
+    // First, find the COS personnel record to check access
+    const cosPersonnel = await COSPersonnel.findById(id);
+    if (!cosPersonnel) {
+      return res.status(404).json({ message: "COS personnel not found" });
+    }
+
+    // Check if user has access to this record based on hierarchical filters
+    let hasAccess = true;
+    if (Object.keys(dbHierarchicalFilters).length > 0) {
+      if (dbHierarchicalFilters.$and) {
+        hasAccess = dbHierarchicalFilters.$and.every(condition => {
+          return Object.entries(condition).every(([key, value]) => {
+            return cosPersonnel[key] === value;
+          });
+        });
+      } else {
+        hasAccess = Object.entries(dbHierarchicalFilters).every(([key, value]) => {
+          return cosPersonnel[key] === value;
+        });
+      }
+    }
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "Access denied",
+        message: "You don't have permission to delete this COS personnel record"
+      });
+    }
+
     const deletedCOSPersonnel = await COSPersonnel.findByIdAndDelete(id);
     if (!deletedCOSPersonnel) {
       return res.status(404).json({ message: "COS personnel not found" });
@@ -206,11 +438,40 @@ exports.deleteCOSPersonnel = async (req, res) => {
 exports.getGrandTotalCOS = async (req, res) => {
   try {
     const { region } = req.query;
+
+    // Get hierarchical filters from middleware (support both hierarchical and submission workflow)
+    const hierarchicalFilters = req.hierarchicalFilters || req.submissionWorkflowFilters || {};
+
+    // Map hierarchical filters to database field names
+    const mapFiltersToDb = (filters) => {
+      const mapped = {};
+
+      // Handle $and conditions from middleware
+      if (filters.$and && Array.isArray(filters.$and)) {
+        mapped.$and = filters.$and.map(condition => {
+          const conditionMapped = {};
+          if (condition.region) conditionMapped.region = condition.region;
+          if (condition.department) conditionMapped.department = condition.department;
+          if (condition.division) conditionMapped.division = condition.division;
+          return conditionMapped;
+        });
+        return mapped;
+      }
+
+      // Handle simple key-value filters
+      if (filters.region) mapped.region = filters.region;
+      if (filters.department) mapped.department = filters.department;
+      if (filters.division) mapped.division = filters.division;
+      return mapped;
+    };
+
+    const dbHierarchicalFilters = mapFiltersToDb(hierarchicalFilters);
+
     // CRITICAL SECURITY CHECK: Ensure region is provided
     if (!region) {
-      return res.status(400).json({ 
-        error: "Region parameter is required", 
-        message: "Please specify a region to view COS personnel totals" 
+      return res.status(400).json({
+        error: "Region parameter is required",
+        message: "Please specify a region to view COS personnel totals"
       });
     }
     // 1. Try to grab the explicitly active settings
@@ -229,12 +490,33 @@ exports.getGrandTotalCOS = async (req, res) => {
       });
     }
     const { fiscalYear } = activeSettings;
-    // 4. Fetch only COS personnel for that fiscal year AND region
-    const cosPersonnels = await COSPersonnel.find({
+
+    // Build query with hierarchical filters
+    let query = {
       statusOfAppointment: "COS",
       fiscalYear,
-      region, // Add region filter
-    }).lean();
+      region
+    };
+
+    // Apply hierarchical filters
+    if (Object.keys(dbHierarchicalFilters).length > 0) {
+      if (dbHierarchicalFilters.$and) {
+        query = {
+          $and: [
+            query,
+            ...dbHierarchicalFilters.$and
+          ]
+        };
+      } else {
+        query = {
+          ...query,
+          ...dbHierarchicalFilters
+        };
+      }
+    }
+
+    // 4. Fetch only COS personnel for that fiscal year AND region with hierarchical access
+    const cosPersonnels = await COSPersonnel.find(query).lean();
     // 5. Define exactly which fields to include in the total for COS
     const fieldsToSum = [
       "annualSalary",
@@ -255,4 +537,4 @@ exports.getGrandTotalCOS = async (req, res) => {
       .status(500)
       .json({ message: "Server error", error });
   }
-};
+};
