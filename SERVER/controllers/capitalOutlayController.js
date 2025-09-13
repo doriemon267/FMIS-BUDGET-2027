@@ -96,9 +96,35 @@ exports.getAllCapitalOutlays = async (req, res) => {
       if (deptName) query.department = deptName;
       if (divName) query.division = divName;
     } else if (accessScope === 'DEPARTMENT') {
-      // Department users: all divisions within their department in the region
+      // Department users: only own department data (any status) + SUBMITTED division data
       const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-      if (deptName) query.department = deptName;
+      const regionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
+      if (deptName && regionName) {
+        const baseQuery = { ...query };
+        query = {
+          $and: [
+            baseQuery,
+            { region: regionName },
+            {
+              $or: [
+                // Department-level (no division) data
+                { $and: [
+                  { department: deptName },
+                  { $or: [ { division: { $exists: false } }, { division: null }, { division: "" } ] }
+                ]},
+                // Division data that is SUBMITTED/APPROVED only
+                { $and: [
+                  { department: deptName },
+                  { division: { $exists: true, $ne: null, $ne: "" } },
+                  { status: { $in: ['Submitted', 'Approved'] } }
+                ]}
+              ]
+            }
+          ]
+        };
+      } else if (deptName) {
+        query.department = deptName;
+      }
     } else if (accessScope === 'REGION') {
       // Region-level users should ONLY see:
       // 1. Records that don't have department field (already consolidated to region level)  
@@ -231,9 +257,21 @@ exports.addCapitalOutlay = async (req, res) => {
       return res.status(400).json({ error: "Duplicate entry: This Capital Outlay already exists for this region, year, and subline item." });
     }
     // Pull organizational ownership from hierarchical consolidation (if present)
-    const ownerRegion = req.body.region || req.hierarchicalAccess?.originalData?.region || req.hierarchicalFilters?.region || region;
-    const ownerDepartment = req.body.department || req.hierarchicalAccess?.originalData?.department || null;
-    const ownerDivision = req.body.division || req.hierarchicalAccess?.originalData?.division || null;
+    let ownerRegion = req.body.region || req.hierarchicalAccess?.originalData?.region || req.hierarchicalFilters?.region || region;
+    let ownerDepartment = req.body.department || req.hierarchicalAccess?.originalData?.department || null;
+    let ownerDivision = req.body.division || req.hierarchicalAccess?.originalData?.division || null;
+    // Fallback to user's hierarchical assignment names if still missing
+    try {
+      if ((!ownerDepartment || !ownerRegion) && req.user?.id) {
+        const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+        const assignment = await HierarchicalUserAssignment.getUserPermissions(req.user.id);
+        ownerRegion = ownerRegion || assignment?.regions?.[0]?.regionName || ownerRegion;
+        ownerDepartment = ownerDepartment || assignment?.departments?.[0]?.departmentName || ownerDepartment;
+        ownerDivision = ownerDivision || assignment?.divisions?.[0] || ownerDivision;
+      }
+    } catch (e) {
+      // Non-fatal: proceed with whatever ownership data we have
+    }
     const newOutlay = new CapitalOutlay({
       particulars,
       cost,
@@ -252,9 +290,10 @@ exports.addCapitalOutlay = async (req, res) => {
       uacsCode,
     });
     await newOutlay.save();
-    return res
-      .status(201)
-      .json({ message: "Capital outlay added successfully" });
+    return res.status(201).json({
+      message: "Capital outlay added successfully",
+      capitalOutlay: newOutlay
+    });
   } catch (error) {
     console.error("Error adding capital outlay:", error);
     return res
@@ -290,6 +329,20 @@ exports.editCapitalOutlay = async (req, res) => {
       return res.status(404).json({ error: "Capital outlay not found." });
     }
     // Update capital outlay
+    // Resolve missing organizational ownership on update as well
+    let updRegion = req.body.region || existingOutlay.region;
+    let updDepartment = req.body.department ?? existingOutlay.department;
+    let updDivision = req.body.division ?? existingOutlay.division;
+    try {
+      if ((!updDepartment || !updRegion) && req.user?.id) {
+        const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+        const assignment = await HierarchicalUserAssignment.getUserPermissions(req.user.id);
+        updRegion = updRegion || assignment?.regions?.[0]?.regionName || updRegion;
+        updDepartment = updDepartment || assignment?.departments?.[0]?.departmentName || updDepartment;
+        updDivision = updDivision || assignment?.divisions?.[0] || updDivision;
+      }
+    } catch (e) {}
+
     const updatedCapitalOutlay = await CapitalOutlay.findByIdAndUpdate(
       id,
       {
@@ -301,9 +354,9 @@ exports.editCapitalOutlay = async (req, res) => {
         category,
         processBy,
         // Respect any updated organizational ownership if provided
-        region: req.body.region || existingOutlay.region,
-        department: req.body.department ?? existingOutlay.department,
-        division: req.body.division ?? existingOutlay.division,
+        region: updRegion,
+        department: updDepartment,
+        division: updDivision,
         processDate,
         fiscalYear,
         budgetType, // Include budgetType
@@ -362,7 +415,7 @@ exports.getCapitalOutlayList = async (req, res) => {
 exports.getSublineItems = async (req, res) => {
   try {
     const { category } = req.query;
-    // // Fetch the category document dynamically
+    // Fetch the category document dynamically
     const categoryDoc = await Category.findOne({ categoryName: category });
     if (!categoryDoc) {
       return res.status(404).json({ error: "Category not found." });
@@ -372,13 +425,13 @@ exports.getSublineItems = async (req, res) => {
     // If category has subline items, return them directly
     // This ensures Capital Outlay categories work even if chart of accounts is not populated
     if (sublineItemList.length > 0) {
-      // return res.status(200).json({ sublineItems: sublineItemList });
+      return res.status(200).json({ sublineItems: sublineItemList });
     }
     // Fallback: Fetch matching sublineItems from ChartOfAccounts
     const fetchedSublineItems = await ChartOfAccounts.find({
       sublineItem: { $in: sublineItemList },
     }).distinct("sublineItem");
-    // res.status(200).json({ sublineItems: fetchedSublineItems });
+    res.status(200).json({ sublineItems: fetchedSublineItems });
   } catch (error) {
     console.error("Error fetching subline items:", error);
     res.status(500).json({ error: "Failed to retrieve subline items." });

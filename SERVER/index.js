@@ -2,7 +2,6 @@ require("dotenv").config();
 const express = require("express");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
-const testRouter = require("./routers/testRoutes");
 const personnelRoutes = require("./routers/personnel");
 const positionTitleRoutes = require("./routers/PositionTitle");
 const departmentRouter = require("./routers/Department");
@@ -151,8 +150,7 @@ app.get('/test', (req, res) => {
     note: 'MongoDB temporarily disabled due to authentication issues'
   });
 });
-// Removed mock stats endpoint - now using actual statsController
-app.use(testRouter);
+// Test router removed for production security
 // Global organizational enforcement for all mutating routes (non-GET)
 app.use((req, res, next) => {
   try {
@@ -257,9 +255,7 @@ app.use(budgetManagerOrgRoutes);
 // 🏢 Hierarchical RBAC Routes - Enhanced organizational access control with Division → Department → Region consolidation
 const hierarchicalRBACRoutes = require('./routers/hierarchicalRBACRoutes');
 app.use("/api/hierarchical-rbac", hierarchicalRBACRoutes);
-// 🧪 Test route for organization structure (temporary)
-const testOrgStructureRoutes = require('./routers/testOrgStructure');
-app.use("/api/test", testOrgStructureRoutes);
+// Test routes removed for production security
 // Register employee master router
 app.use(employeeMasterRouter);
 const mooeExcelUploadRouter = require("./routers/mooeExcelUploadRoutes");
@@ -271,7 +267,7 @@ app.listen(process.env.APP_PORT, () => {
   setTimeout(() => {
     initializeCleanupScheduler();
     }, 5000); // Wait 5 seconds for database connection to be established
- console.log("🚀", "FMIS - BUDGET IS UP AND RUNNING :: 5005")
+     console.log("🚀", "FMIS - BUDGET IS UP AND RUNNING :: 5005")
   return null;
 });
 

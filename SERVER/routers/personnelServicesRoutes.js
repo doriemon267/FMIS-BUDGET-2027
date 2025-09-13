@@ -41,32 +41,48 @@ personnelServicesRouter.put(
   updatePersonnelService || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
-// Protected GET routes with hierarchical read filtering
+// Protected GET routes with SUBMISSION WORKFLOW filtering
 personnelServicesRouter.get(
   "/personnelServices",
   checkToken,
-  hierarchicalAccessControl('read'),
+  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
+  getAllPersonnelServices ||
+    ((req, res) => res.status(500).json({ message: "Function not available" }))
+);
+// Alternative route with underscore (for compatibility)
+personnelServicesRouter.get(
+  "/personnel_services",
+  checkToken,
+  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
+  getAllPersonnelServices ||
+    ((req, res) => res.status(500).json({ message: "Function not available" }))
+);
+// Alternative route with dash singular (for compatibility)
+personnelServicesRouter.get(
+  "/personnel-service",
+  checkToken,
+  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
   getAllPersonnelServices ||
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
 personnelServicesRouter.get(
   "/getpersonnels",
   checkToken,
-  hierarchicalAccessControl('read'),
+  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
   getAllPerServices ||
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
 personnelServicesRouter.get(
   "/grandtotalPermanent",
   checkToken,
-  hierarchicalAccessControl('read'),
+  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
   getGrandTotalPermanent ||
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
 personnelServicesRouter.get(
   "/grandtotalCasual",
   checkToken,
-  hierarchicalAccessControl('read'),
+  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
   getGrandTotalCasual ||
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
@@ -81,8 +97,8 @@ personnelServicesRouter.get(
   getGrandTotal || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
-// Get personnel by parameters (protected + hierarchical filters)
-personnelServicesRouter.get("/getpersonnels/byParams", checkToken, hierarchicalAccessControl('read'), async (req, res) => {
+// Get personnel by parameters (protected + submission workflow filters)
+personnelServicesRouter.get("/getpersonnels/byParams", checkToken, submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), async (req, res) => {
   try {
     const { fiscalYear, budgetType, processBy, region, status } = req.query;
     const query = {};
@@ -108,8 +124,8 @@ personnelServicesRouter.get("/getpersonnels/byParams", checkToken, hierarchicalA
     res.status(500).json({ message: "Failed to fetch personnel data" });
   }
 });
-// Keep the original route for backward compatibility (protected + hierarchical filters)
-personnelServicesRouter.get("/api/personnel/getByParams", checkToken, hierarchicalAccessControl('read'), async (req, res) => {
+// Keep the original route for backward compatibility (protected + submission workflow filters)
+personnelServicesRouter.get("/api/personnel/getByParams", checkToken, submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), async (req, res) => {
   try {
     const { fiscalYear, budgetType, processBy, region, status } = req.query;
     const query = {};

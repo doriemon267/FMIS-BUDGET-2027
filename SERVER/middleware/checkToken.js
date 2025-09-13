@@ -19,34 +19,14 @@ module.exports = async (req, res, next) => {
     const accessToken = payload.accessToken;
     // Check if ACCOUNT_USER_API_URL is defined
     if (!process.env.ACCOUNT_USER_API_URL) {
-      // DEVELOPMENT MODE: Allow overriding user via headers; otherwise extract from JWT
-      // 1) Dev override via headers
-      const devUserIdHeader = req.headers['x-dev-user-id'];
-      const devRolesHeader = req.headers['x-dev-roles'];
-      if (devUserIdHeader) {
-        const userId = String(devUserIdHeader).trim();
-        let roles = [];
-        if (devRolesHeader) {
-          roles = String(devRolesHeader)
-            .split(',')
-            .map(r => r.trim())
-            .filter(Boolean);
-        }
-        if (!roles.length) {
-          roles = payload.roles || payload.role || ["BUDGET MANAGER"];
-        }
-        req.user = {
-          id: userId,
-          name: payload.name || payload.username || `Dev User ${userId}`,
-          email: payload.email || `${userId}@example.com`,
-          Roles: roles,
-          Username: payload.Username || []
-        };
-        return next();
-      }
-      // 2) Extract from JWT payload
-      // Robust extraction: try Username[0] if available, fallback to other fields
+      // DEVELOPMENT MODE: Extract user info from JWT payload (using actual logged-in user data)
+      // Payload logging removed for cleaner output
+      
+      // For development mode, we'll use the actual logged in user's information
+      // The JWT might not contain userId directly, so we need to handle this case
       let userId = null;
+      
+      // First try to extract from various JWT fields
       if (payload.Username && Array.isArray(payload.Username) && payload.Username[0]) {
         userId = payload.Username[0];
       } else if (typeof payload.Username === 'string' && payload.Username) {
@@ -64,16 +44,41 @@ module.exports = async (req, res, next) => {
       } else if (payload.username) {
         userId = payload.username;
       }
-      // If no user ID found in JWT, use a default user ID for development, but warn
-      if (!userId) {
-        console.warn('⚠️ No userId found in JWT payload. Falling back to default dev user.');
-        userId = "909549"; // Default test user ID for development
+      
+      // If no user ID found in JWT, check for dev headers from frontend
+      if (!userId && payload.accessToken) {
+        // The frontend sends X-Dev-User-Id header for development authentication
+        const devUserId = req.headers['x-dev-user-id'];
+        if (devUserId) {
+          userId = String(devUserId).trim();
+        }
       }
+      
+      if (!userId) {
+        console.error('❌ Unable to determine user identity from JWT or headers');
+        console.error('Available headers:', Object.keys(req.headers));
+        return res.status(401).json({ error: "Authentication required: Unable to identify user" });
+      }
+      
+      // User authenticated successfully
+      // Extract roles from dev headers if available  
+      const devRoles = req.headers['x-dev-roles'];
+      let userRoles = payload.roles || payload.role;
+      if (devRoles) {
+        userRoles = devRoles.split(',').map(r => r.trim()).filter(Boolean);
+      }
+      
+      // Reject if no roles found - no fallback roles allowed
+      if (!userRoles || userRoles.length === 0) {
+        console.error('❌ No user roles found in JWT or headers');
+        return res.status(401).json({ error: "Authentication required: No user roles found" });
+      }
+      
       req.user = {
         id: userId,
-        name: payload.name || payload.username || `Test Budget Admin`,
-        email: payload.email || `${userId}@example.com`,
-        Roles: payload.roles || payload.role || ["BUDGET MANAGER"],
+        name: payload.name || payload.username,
+        email: payload.email,
+        Roles: userRoles,
         Username: payload.Username || []
       };
       return next();

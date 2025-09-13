@@ -93,10 +93,6 @@ const CustomTable = ({
       // Get the region name - include all known keys
       const regionName = activeRegion.name || activeRegion.regionName || activeRegion.Region;
       
-      // Log the active region object for debugging
-      console.log("🏢 Active region for employee fetch:", activeRegion);
-      console.log("📍 Region name used:", regionName);
-      
       // CRITICAL: Ensure we have a valid region name
       if (!regionName) {
         setError("Invalid region selected");
@@ -121,8 +117,6 @@ const CustomTable = ({
         region: regionName,
       };
       
-      console.log("📋 Query parameters for employee fetch:", queryParams);
-      
       // Add other filters
       Object.entries(filters).forEach(([key, value]) => {
         if (value && key !== "select" && key !== "action") {
@@ -136,13 +130,10 @@ const CustomTable = ({
         queryParams.sortDirection = sortConfig.direction;
       }
 
-      console.log("🔍 Making API call to:", apiPath, "with params:", queryParams);
       const response = await api.get(apiPath, { params: queryParams });
-      console.log("📥 API response received:", response.data);
-      
+
       // Check if response has employees
       if (!response.data.employees) {
-        console.warn("⚠️ No employees array in response:", response.data);
         setError("No employee data received from server");
         setEmployees([]);
         setTotalRecords(0);
@@ -164,15 +155,11 @@ const CustomTable = ({
         return matchesRegion;
       });
 
-      console.log(`✅ Verified employees count: ${verifiedEmployees.length} out of ${response.data.employees.length}`);
-      
       // Only use employees that match the current region
       setEmployees(verifiedEmployees);
-      
+
       // Use the total records from the server for pagination
-      setTotalRecords(response.data.totalRecords || 0);
-      
-      // If we filtered out any employees, show a warning
+      setTotalRecords(response.data.totalRecords || 0);      // If we filtered out any employees, show a warning
       if (verifiedEmployees.length < response.data.employees.length) {
         console.warn(`Filtered out ${response.data.employees.length - verifiedEmployees.length} employees with incorrect region`);
         toast.warning(`Some employees were filtered out due to region mismatch`, {

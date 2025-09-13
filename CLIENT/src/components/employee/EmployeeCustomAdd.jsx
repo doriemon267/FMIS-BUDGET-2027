@@ -91,15 +91,9 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
 
   // Debug user context
   useEffect(() => {
-    console.log("👤 Current user in EmployeeCustomAdd:", currentUser);
     if (currentUser) {
-      console.log("📝 User details:", {
-        FirstName: currentUser.FirstName,
-        LastName: currentUser.LastName,
-        fullName: `${currentUser.FirstName} ${currentUser.LastName}`
-      });
     } else {
-      console.log("❌ No current user found in context");
+      // No current user found in context
     }
   }, [currentUser]);
 
@@ -195,7 +189,6 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
     const fetchPositions = async () => {
       try {
         const response = await api.get("/positions");
-        console.log("📋 Fetched positions for dropdown:", response.data);
         setPositionOptions(response.data.positions || []);
       } catch (error) {
         console.error("Error fetching positions:", error);
@@ -210,14 +203,10 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
   useEffect(() => {
     const fetchActiveSettings = async () => {
       try {
-        console.log("🔄 Fetching active settings...");
         const response = await api.get("/settings/active");
-        console.log("⚙️ Fetched active settings:", response.data);
         if (response.data && response.data.fiscalYear) {
           setActiveSettings(response.data);
-          console.log("✅ Active fiscal year set:", response.data.fiscalYear);
         } else {
-          console.log("❌ No fiscal year in response:", response.data);
           setActiveSettings(null);
         }
       } catch (error) {
@@ -619,7 +608,6 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
 
     // Check for duplicate employee in the same fiscal year
     try {
-      console.log("🔍 Checking for duplicate employee...");
       const duplicateCheck = await api.get(`/employees/check-duplicate`, {
         params: {
           fullName: data.EmployeeFullName,
@@ -670,11 +658,6 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
       : "Admin";
     
     data.processBy = processBy;
-    
-    console.log("💾 Saving employee with processBy:", processBy);
-    console.log("👤 Current user context:", currentUser);
-    console.log("📄 Full employee data being sent:", data);
-    console.log("🎂 DateOfBirth in data:", data.DateOfBirth);
 
     setLoading(true);
     setShowConfirmDialog(false);
@@ -699,7 +682,6 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
         },
       });
       
-      console.log("✅ Employee saved successfully, refreshing table...");
       handleClose();
     } catch (error) {
       toast.error(error.response?.data?.error || "Failed to save employee", {
@@ -721,28 +703,21 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
   };
 
   const handleNext = async () => {
-    console.log("handleNext called, activeStep:", activeStep);
     const fieldsForStep = getFieldsForStep(activeStep);
-    console.log("Fields to validate:", fieldsForStep);
 
     // Log current form values for debugging
     const currentValues = watch();
-    console.log("Current form values:", currentValues);
 
     try {
       const isStepValid = await trigger(fieldsForStep);
-      console.log("Validation result:", isStepValid);
-      console.log("Current errors:", errors);
 
       if (isStepValid) {
-        console.log("Moving to next step");
         setActiveStep((prevActiveStep) => prevActiveStep + 1);
       } else {
-        console.log("Validation failed, staying on current step");
         // Show which specific fields are failing
         fieldsForStep.forEach((field) => {
           if (errors[field]) {
-            console.log(`Field ${field} has error:`, errors[field].message);
+            console.error(`Field ${field} has error:`, errors[field].message);
           }
         });
       }

@@ -80,12 +80,8 @@ const AllProposalsPage = () => {
   // Debug function to test API access
   const testAPIAccess = async () => {
     try {
-      console.log("🔍 Testing API access...");
-      console.log("👤 Current user:", currentUser);
-      
       // Test direct API call
       const response = await api.get("/proposals?limit=5");
-      console.log("✅ API Response:", response.data);
       alert(`API accessible! Found ${response.data.proposals?.length || 0} proposals. Check console for details.`);
     } catch (error) {
       console.error("❌ API Error:", error);

@@ -774,7 +774,6 @@ exports.getProposals = async (req, res) => {
     }
     // First, let's check how many total proposals exist in the database
     const totalProposalsInDB = await Proposal.countDocuments();
-    console.log(`Total proposals in DB: ${totalProposalsInDB}`);
     // Check what proposals exist for this user
     if (totalProposalsInDB > 0) {
       const sampleProposals = await Proposal.find().limit(3);

@@ -65,8 +65,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
   // Check if we have valid fiscalYear and budgetType
   const hasValidParams = !!fiscalYear && !!budgetType;
   
-  // Debug props
-  console.log('📋 BudgetarySupportTable props:', { fiscalYear, budgetType, hasValidParams });
+  // Debug props removed for cleaner console
   // Fetch calculated budgetary support from the new endpoint
   const { data: calculatedBudgetarySupport, isLoading: isLoadingCalculated, error: errorCalculated } = useQuery({
     queryKey: ['calculated-budgetary-support', fiscalYear, budgetType], // Removed regionName from queryKey
@@ -82,12 +81,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
       // Don't send region manually - let hierarchical access control handle it
       // The backend will automatically filter based on user's access scope (division/department/region)
 
-      console.log('🔍 Calling /budgetary-support/calculate with params:', params);
-      const startTime = Date.now();
       const response = await api.get('/budgetary-support/calculate', { params, timeout: 12000 });
-      const endTime = Date.now();
-      console.log('✅ calculateBudgetarySupport response:', response.data);
-      console.log(`⏱️ /budgetary-support/calculate took ${endTime - startTime}ms`);
       
       return response.data;
     },
@@ -119,12 +113,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
       };
       
       // Single canonical endpoint. No fallbacks or alternative probes.
-      console.log('🔍 Calling /api/consolidated-reports/capital-outlay-data with params:', params);
-      const startTime = Date.now();
       const response = await api.get('/api/consolidated-reports/capital-outlay-data', { params });
-      const endTime = Date.now();
-      console.log('✅ capital-outlay-data response received');
-      console.log(`⏱️ /api/consolidated-reports/capital-outlay-data took ${endTime - startTime}ms`);
       
       // Capital Outlay data comes directly as array or with data property
       const data = response.data?.data || response.data || [];
@@ -163,12 +152,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
         // Don't send region manually - let hierarchical access control handle it
         
         const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
-        console.log('🔍 Calling /mooe-list with query:', queryString);
-        const startTime = Date.now();
         const response = await api.get(`/mooe-list${queryString}`);
-        const endTime = Date.now();
-        console.log('✅ mooe-list response received');
-        console.log(`⏱️ /mooe-list took ${endTime - startTime}ms`);
         
         // Response is directly an array like in ProposalCustomPage
         const data = response.data || [];
@@ -217,20 +201,12 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
       try {
         // Fetch personnel data from all employment types in a single call
         
-        console.log('🔍 Calling /getpersonnels with params:', { 
-          ...baseParams
-          // Don't send region manually - let hierarchical access control handle it
-        });
-        const startTime = Date.now();
         const response = await api.get('/getpersonnels', { 
           params: { 
             ...baseParams
             // Don't send region manually - let hierarchical access control handle it
           } 
         });
-        const endTime = Date.now();
-        console.log('✅ /getpersonnels response received');
-        console.log(`⏱️ /getpersonnels took ${endTime - startTime}ms`);
 
         const personnelData = response.data || [];
 
@@ -245,35 +221,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
           });
         }
         
-        // If no data returned, try alternative endpoint names
-        if (personnelData.length === 0) {
-          
-          const alternativeEndpoints = [
-            '/personnelServices',
-            '/personnel-services',
-            '/personnel_services', 
-            '/personnel',
-            '/employees',
-            '/personnel-service'
-          ];
-          
-          for (const endpoint of alternativeEndpoints) {
-            try {
-              const testResponse = await api.get(endpoint, { params: { limit: 5 } });
-              
-              if (testResponse.data && (Array.isArray(testResponse.data) || testResponse.data.length > 0)) {
-                // Try with our actual parameters
-                const actualResponse = await api.get(endpoint, { params: baseParams });
-                const actualData = actualResponse.data?.personnelServices || actualResponse.data || [];
-                
-                if (actualData.length > 0) {
-                  return actualData;
-                }
-              }
-            } catch (err) {
-            }
-          }
-        }
+        // Note: Alternative endpoint fallback removed since all endpoints now properly implement submission workflow filtering
         
         // If no data returned, try without explicit region filter (backend handles hierarchical filtering)
         if (personnelData.length === 0) {
@@ -368,15 +316,10 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
       }
 
       // Fetching budgetary support - let backend handle hierarchical filtering
-      console.log('🔍 Calling /budgetary-support with params:', { fiscalYear, budgetType });
-      const startTime = Date.now();
       const response = await api.get('/budgetary-support', {
         params: { fiscalYear, budgetType }
         // Don't send region manually - hierarchical access control will handle filtering
       });
-      const endTime = Date.now();
-      console.log('✅ /budgetary-support response received');
-      console.log(`⏱️ /budgetary-support took ${endTime - startTime}ms`);
       // Budgetary support loaded
       return response.data && response.data.length > 0 ? response.data[0] : null;
     },
@@ -519,16 +462,6 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
     // A.1 CORPORATE INCOME - Direct copy from IncomeTable
     const corporateIncome = incomeGrandTotal || 0;
 
-    // Debug: Log calculatedBudgetarySupport structure
-    if (calculatedBudgetarySupport?.breakdown) {
-      console.log('🔍 calculatedBudgetarySupport breakdown:', calculatedBudgetarySupport.breakdown);
-      calculatedBudgetarySupport.breakdown.forEach((item, index) => {
-        console.log(`Breakdown ${index + 1}:`, item.source, '=', item.amount);
-      });
-    } else {
-      console.log('❌ No calculatedBudgetarySupport.breakdown found:', calculatedBudgetarySupport);
-    }
-
     // B.1.1 PERSONAL SERVICES - Use Total field approach like Budget Summary cards
     let personalServices = 0;
     if (personalServicesData && Array.isArray(personalServicesData)) {
@@ -587,11 +520,6 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
     )?.amount || 0;
 
     // Debug MOOE calculation
-    console.log('🔍 MOOE Debug:');
-    console.log('- calculatedBudgetarySupport exists:', !!calculatedBudgetarySupport);
-    console.log('- breakdown exists:', !!calculatedBudgetarySupport?.breakdown);
-    console.log('- breakdown length:', calculatedBudgetarySupport?.breakdown?.length || 0);
-    console.log('- maintenanceAndOperating value:', maintenanceAndOperating);
     
     if (calculatedBudgetarySupport?.breakdown) {
       const mooeItem = calculatedBudgetarySupport.breakdown.find(item => 
@@ -600,7 +528,6 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
         item.source?.includes('B.1.2 - MOOE') ||
         item.source?.includes('MAINTENANCE AND OTHER OPERATING')
       );
-      console.log('- Found MOOE breakdown item:', mooeItem);
     }
 
     // B.2 CAPITAL OUTLAYS - Get from server breakdown 
@@ -762,14 +689,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
   const { data: connectivityTest, isLoading: isTestingConnectivity } = useQuery({
     queryKey: ['connectivity-test'],
     queryFn: async () => {
-      try {
-        console.log('🔍 Testing backend connectivity...');
-        const startTime = Date.now();
-        const response = await api.get('/test');
-        const endTime = Date.now();
-        console.log('✅ Backend connectivity test successful');
-        console.log(`⏱️ Connectivity test took ${endTime - startTime}ms`);
-        return { status: 'connected', response: response.data };
+      try {const response = await api.get('/test');return { status: 'connected', response: response.data };
       } catch (error) {
         console.error('❌ Backend connectivity test failed:', {
           message: error.message,
@@ -789,17 +709,10 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
   const { data: authTest, isLoading: isTestingAuth } = useQuery({
     queryKey: ['auth-test'],
     queryFn: async () => {
-      try {
-        console.log('🔍 Testing authentication...');
-        const startTime = Date.now();
-        // Try to access a protected endpoint that requires authentication
+      try {// Try to access a protected endpoint that requires authentication
         const response = await api.get('/budgetary-support/calculate', { 
           params: { fiscalYear: Number(fiscalYear) || 2025, budgetType: budgetType || 'CURRENT' }
-        });
-        const endTime = Date.now();
-        console.log('✅ Authentication test successful');
-        console.log(`⏱️ Auth test took ${endTime - startTime}ms`);
-        return { status: 'authenticated', response: response.data };
+        });return { status: 'authenticated', response: response.data };
       } catch (error) {
         if (error.response?.status === 401 || error.response?.status === 403) {
           console.error('❌ Authentication failed - user not logged in or token expired');
@@ -842,14 +755,6 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
   }
 
   // Debug loading states
-  console.log('🔄 Loading states:', {
-    calculated: isLoadingCalculated,
-    capitalOutlay: isLoadingCapitalOutlay,
-    mooe: isLoadingMOOE,
-    personnel: isLoadingPersonnel,
-    budgetarySupport: isLoadingBudgetarySupport,
-    combined: isLoading
-  });
 
   // Timeout mechanism to prevent infinite loading
   const [loadingTimeout, setLoadingTimeout] = useState(false);
@@ -898,14 +803,6 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
   const combinedError = errorCalculated || errorCapitalOutlay || errorMOOE || personnelError || error;
 
   // Debug error states
-  console.log('❌ Error states:', {
-    calculated: errorCalculated?.message,
-    capitalOutlay: errorCapitalOutlay?.message,
-    mooe: errorMOOE?.message,
-    personnel: personnelError?.message,
-    budgetarySupport: error?.message,
-    combined: combinedError?.message
-  });
 
   if (combinedError) {
     return (

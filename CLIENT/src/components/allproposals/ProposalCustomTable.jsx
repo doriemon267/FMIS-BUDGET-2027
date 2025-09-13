@@ -45,9 +45,6 @@ const ProposalCustomTable = forwardRef(({
   const fetchData = async () => {
     setLoading(true);
     try {
-      console.log("🔍 Fetching proposals data from:", apiPath);
-      console.log("📋 Request params:", { page, limit: rowsPerPage, search: searchValue });
-      
       const response = await api.get(apiPath, {
         params: {
           page,
@@ -56,9 +53,6 @@ const ProposalCustomTable = forwardRef(({
         },
       });
       
-      console.log("📥 API Response:", response.data);
-      console.log("📊 Response status:", response.status);
-      
       // Handle different response formats based on the endpoint
       let extractedData = [];
       let totalRecords = 0;
@@ -66,25 +60,18 @@ const ProposalCustomTable = forwardRef(({
       if (response.data && response.data.proposals && Array.isArray(response.data.proposals)) {
         extractedData = response.data.proposals;
         totalRecords = response.data.totalRecords || 0;
-        console.log("✅ Found proposals array with", extractedData.length, "items");
       } else if (response.data && Array.isArray(response.data)) {
         extractedData = response.data;
         totalRecords = response.data.length;
-        console.log("✅ Found direct array with", extractedData.length, "items");
       } else if (response.data && response.data[dataListName] && Array.isArray(response.data[dataListName])) {
         extractedData = response.data[dataListName];
         totalRecords = response.data.totalRecords || response.data[dataListName].length;
-        console.log("✅ Found", dataListName, "array with", extractedData.length, "items");
       } else {
         // Fallback for other formats
-        console.warn("⚠️ Unexpected response format:", response.data);
         const extracted = extractDataFromResponse(response.data);
         extractedData = extracted.data;
         totalRecords = extracted.count;
       }
-      
-      console.log("📋 Final extracted data:", extractedData);
-      console.log("🔢 Total records:", totalRecords);
       
       setRows(extractedData);
       setTotalCount(totalRecords);

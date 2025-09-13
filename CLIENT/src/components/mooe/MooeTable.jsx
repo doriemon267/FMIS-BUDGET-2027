@@ -151,6 +151,13 @@ const Mooe = ({ onDataChange }) => {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
   const [autoSaveTimer, setAutoSaveTimer] = useState(null);
+  // Local draft inputs to prevent value resets while typing
+  const [draftInputs, setDraftInputs] = useState({}); // { [childId]: { income?: string, subsidy?: string } }
+  // Helper to read effective field value preferring draft while typing
+  const getEffectiveField = React.useCallback((child, field) => {
+    const v = draftInputs[child.id]?.[field];
+    return v !== undefined ? v : child[field];
+  }, [draftInputs]);
 
   // Fetch data using React Query
   const { data, isLoading, error } = useQuery({
@@ -490,6 +497,16 @@ const Mooe = ({ onDataChange }) => {
       };
     });
 
+    // Clear draft once debounced update is applied to data cache
+    setDraftInputs(prev => {
+      const next = { ...prev };
+      if (next[childId]) {
+        // if neither income nor subsidy draft remains, remove entry
+        if (!next[childId].income && !next[childId].subsidy) delete next[childId];
+      }
+      return next;
+    });
+
     trackChanges();
   }, [queryClient, trackChanges]);
 
@@ -585,6 +602,16 @@ const Mooe = ({ onDataChange }) => {
       };
 
       return updatedData;
+    });
+
+    // Clear draft once debounced update is applied to data cache
+    setDraftInputs(prev => {
+      const next = { ...prev };
+      if (next[childId]) {
+        next[childId] = { ...(next[childId]), income: undefined };
+        if (!next[childId].subsidy) delete next[childId];
+      }
+      return next;
     });
 
     trackChanges();
@@ -787,7 +814,7 @@ const Mooe = ({ onDataChange }) => {
     // If income inputs are disabled, preserve the original income values
     let entries;
     if (disableIncomeInputs && currentData?.formattedData) {
-      // Create a map of original income values
+      // Build from latest cache to preserve original income; apply draft subsidy while typing
       const originalIncomeMap = {};
       currentData.formattedData.forEach(row => {
         row.children.forEach(child => {
@@ -795,116 +822,116 @@ const Mooe = ({ onDataChange }) => {
           originalIncomeMap[key] = child.income;
         });
       });
-      
-      // Use original income values but updated subsidy values
-      entries = data.formattedData
+
+      const source = currentData.formattedData;
+      entries = source
         .flatMap(row =>
           row.children.map(child => {
             const key = `${row.id}-${child.id}`;
-            const originalIncome = originalIncomeMap[key] || child.income;
-
-            // Determine if this is a new entry (has values but no existing status)
-            const hasValues = parseFloat(child.income || 0) > 0 || parseFloat(child.subsidy || 0) > 0;
+            const originalIncome = originalIncomeMap[key] ?? child.income;
+            const draft = draftInputs[child.id] || {};
+            const rawSubsidy = draft.subsidy ?? child.subsidy;
+            const incomeNum = parseFloat(originalIncome || 0);
+            const subsidyNum = parseFloat(rawSubsidy || 0);
+            const hasValues = incomeNum > 0 || subsidyNum > 0;
             const isNewEntry = hasValues && (!child.status || child.status === "");
             const originalStatus = child.status;
 
-            // Enhanced status logic with better tracking
             let newStatus;
             if (isNewEntry) {
               newStatus = "Not Submitted";
             } else if (child.status) {
-              newStatus = child.status; // Keep existing status
+              newStatus = child.status;
             } else {
-              newStatus = data?.status || "Not Submitted"; // Fallback
+              newStatus = data?.status || "Not Submitted";
             }
 
             return {
               ...child,
               sublineItem: row.sublineItem,
               status: newStatus,
-              originalStatus: originalStatus, // Track original status for debugging
-              income: disableIncomeInputs ? parseFloat(originalIncome || 0) : parseFloat(child.income || 0),
-              subsidy: parseFloat(child.subsidy || 0),
-              amount: disableIncomeInputs
-                ? parseFloat(originalIncome || 0) + parseFloat(child.subsidy || 0)
-                : parseFloat(child.income || 0) + parseFloat(child.subsidy || 0),
-              // Ensure we have required fields for server validation
+              originalStatus: originalStatus,
+              income: incomeNum,
+              subsidy: subsidyNum,
+              amount: incomeNum + subsidyNum,
               uacsCode: child.uacsCode || "UNKNOWN",
               accountingTitle: child.accountingTitle || "Unknown Account",
-              // Preserve the ID if it exists (important for updates vs inserts)
               id: child.id || undefined
             };
           })
         )
         .filter(entry => {
-          // Include entries that have values, have been modified, or are system entries
+          // Save only rows that actually have values; drop blanks regardless of existingId
           const hasValues = parseFloat(entry.income || 0) !== 0 || parseFloat(entry.subsidy || 0) !== 0;
-          const hasExistingId = entry.id && entry.id !== 'undefined' && entry.id !== '';
-          const isSystemEntry = entry.isSystemEntry;
-
-          // Only include entries that have values, existing IDs (previously saved), or are system entries
-          const shouldInclude = hasValues || hasExistingId || isSystemEntry;
-
-          return shouldInclude;
+          return hasValues;
         });
     } else {
       // Normal processing if income inputs are not disabled
-      entries = data.formattedData
+      // Build from the latest cache (currentData) so we include all edits
+      const source = currentData?.formattedData || data.formattedData;
+      entries = source
         .flatMap(row =>
           row.children.map(child => {
-            const hasValues = parseFloat(child.income || 0) > 0 || parseFloat(child.subsidy || 0) > 0;
+            // Prefer draft values while building entry
+            const draft = draftInputs[child.id] || {};
+            const rawIncome = draft.income ?? child.income;
+            const rawSubsidy = draft.subsidy ?? child.subsidy;
+            const incomeNum = parseFloat(rawIncome || 0);
+            const subsidyNum = parseFloat(rawSubsidy || 0);
+            const hasValues = incomeNum > 0 || subsidyNum > 0;
             const isNewEntry = hasValues && (!child.status || child.status === "");
             const originalStatus = child.status;
 
-            // Enhanced status logic with better tracking
             let newStatus;
             if (isNewEntry) {
               newStatus = "Not Submitted";
             } else if (child.status) {
-              newStatus = child.status; // Keep existing status
+              newStatus = child.status;
             } else {
-              newStatus = data?.status || "Not Submitted"; // Fallback
+              newStatus = data?.status || "Not Submitted";
             }
 
             return {
               ...child,
               sublineItem: row.sublineItem,
               status: newStatus,
-              originalStatus: originalStatus, // Track original status for debugging
-              income: parseFloat(child.income || 0),
-              subsidy: parseFloat(child.subsidy || 0),
-              amount: parseFloat(child.income || 0) + parseFloat(child.subsidy || 0),
-              // Ensure we have required fields for server validation
+              originalStatus: originalStatus,
+              income: incomeNum,
+              subsidy: subsidyNum,
+              amount: incomeNum + subsidyNum,
               uacsCode: child.uacsCode || "UNKNOWN",
               accountingTitle: child.accountingTitle || "Unknown Account",
-              // Preserve the ID if it exists (important for updates vs inserts)
               id: child.id || undefined
             };
           })
         )
         .filter(entry => {
-          // Include entries that have values, have been modified, or are system entries
+          // Save only rows that actually have values; drop blanks regardless of existingId
           const hasValues = parseFloat(entry.income || 0) !== 0 || parseFloat(entry.subsidy || 0) !== 0;
-          const hasExistingId = entry.id && entry.id !== 'undefined' && entry.id !== '';
-          const isSystemEntry = entry.isSystemEntry;
-
-          // Only include entries that have values, existing IDs (previously saved), or are system entries
-          const shouldInclude = hasValues || hasExistingId || isSystemEntry;
-
-          return shouldInclude;
+          return hasValues;
         });
     }
+
+    // Merge any in-progress draft values into entries so save uses what user sees
+    const mergedEntries = entries.map(e => {
+      const draft = draftInputs[e.id] || {};
+      const income = draft.income !== undefined ? parseFloat(draft.income || 0) : e.income;
+      const subsidy = draft.subsidy !== undefined ? parseFloat(draft.subsidy || 0) : e.subsidy;
+      return { ...e, income, subsidy, amount: (parseFloat(income || 0) + parseFloat(subsidy || 0)) };
+    });
 
     const payload = {
       meta: {
         processBy: `${currentUser.FirstName} ${currentUser.LastName}`,
         processDate: new Date(),
-        region: activeRegion?.name || activeRegion.regionName, // Use the active region from context
+        region: activeRegion?.name || activeRegion.regionName,
+        department: currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName || undefined,
+        division: currentUser?.hierarchicalAccess?.accessibleDivisions?.[0] || undefined,
         fiscalYear: data?.fiscalYear,
         budgetType: data?.budgetType,
         status: data?.status,
       },
-      entries: entries,
+      entries: mergedEntries,
     };
 
     // Check if we have any entries to save
@@ -937,6 +964,9 @@ const Mooe = ({ onDataChange }) => {
         } else {
           toast.success("Data saved successfully!");
         }
+
+        // Clear any remaining drafts after successful save
+        setDraftInputs({});
 
         // Refresh the data after saving
         setTimeout(() => {
@@ -1584,14 +1614,21 @@ const Mooe = ({ onDataChange }) => {
                             fullWidth
                             size="small"
                             value={(() => {
-                              // More stable value handling - prevent unwanted resets
+                              // Prefer local draft value while typing
+                              const draft = draftInputs[child.id]?.income;
+                              if (draft !== undefined) return draft;
                               const val = child.income;
                               if (val === "0" || val === 0) return "";
                               if (val === null || val === undefined) return "";
                               return val.toString();
                             })()}
                             onChange={(e) => {
-                              handleIncomeChange(child.id, e.target.value);
+                              const v = e.target.value;
+                              setDraftInputs(prev => ({
+                                ...prev,
+                                [child.id]: { ...(prev[child.id]||{}), income: v }
+                              }));
+                              handleIncomeChange(child.id, v);
                             }}
                             disabled={!isEditable || disableIncomeInputs}
                             placeholder="0.00"
@@ -1619,14 +1656,21 @@ const Mooe = ({ onDataChange }) => {
                             fullWidth
                             size="small"
                             value={(() => {
-                              // More stable value handling - prevent unwanted resets
+                              // Prefer local draft value while typing
+                              const draft = draftInputs[child.id]?.subsidy;
+                              if (draft !== undefined) return draft;
                               const val = child.subsidy;
                               if (val === "0" || val === 0) return "";
                               if (val === null || val === undefined) return "";
                               return val.toString();
                             })()}
                             onChange={(e) => {
-                              handleSubsidyChange(child.id, e.target.value);
+                              const v = e.target.value;
+                              setDraftInputs(prev => ({
+                                ...prev,
+                                [child.id]: { ...(prev[child.id]||{}), subsidy: v }
+                              }));
+                              handleSubsidyChange(child.id, v);
                             }}
                             disabled={!isEditable}
                             placeholder="0.00"
@@ -1647,13 +1691,13 @@ const Mooe = ({ onDataChange }) => {
                       <TableCell>
                         <Typography variant="body2" align="right">
                           {(() => {
-                            const income = parseFloat(child.income || 0);
-                            const subsidy = parseFloat(child.subsidy || 0);
+                            // Prefer draft values while typing
+                            const income = parseFloat((draftInputs[child.id]?.income ?? child.income) || 0);
+                            const subsidy = parseFloat((draftInputs[child.id]?.subsidy ?? child.subsidy) || 0);
                             const total = income + subsidy;
                             
-                            // Only show amount if there are actual values
-                            if (total === 0 && !child.income && !child.subsidy) {
-                              return ""; // Show empty if no values
+                            if (total === 0 && !(draftInputs[child.id]?.income ?? child.income) && !(draftInputs[child.id]?.subsidy ?? child.subsidy)) {
+                              return "";
                             }
                             
                             return `₱${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;

@@ -395,7 +395,41 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
   }, [capitalOutlays, onDataChange]);
 
   const handleDetailsModalSave = async (totals) => {
-    if (selectedCapitalOutlay) {
+    if (totals.isNewItem && totals.newItem) {
+      // Handle newly created item
+      const newItem = {
+        ...totals.newItem,
+        status: "Not Submitted",
+      };
+      
+      const updatedData = [...capitalOutlays, newItem];
+      setCapitalOutlays(updatedData);
+      
+      // Initialize empty details for the new item
+      setCapitalOutlayDetails(prev => ({
+        ...prev,
+        [newItem._id]: []
+      }));
+      
+      // Clear the form for the category
+      if (selectedCapitalOutlay?.tempCategoryId) {
+        setNewOutlays((prev) => ({ ...prev, [selectedCapitalOutlay.tempCategoryId]: {} }));
+        setAddingCategoryId(null);
+      }
+      
+      setErrors({});
+      setHasUnsavedChanges(false);
+      setLastSaved(new Date());
+      
+      // Trigger parent data refresh
+      onDataChange?.(updatedData);
+      
+      // Set this as newly added for highlighting
+      setNewlyAddedItemId(newItem._id);
+      
+      toast.success("Capital outlay item created successfully with breakdown details!");
+    } else if (selectedCapitalOutlay && selectedCapitalOutlay._id) {
+      // Handle existing item update
       await handleDetailsSaved(selectedCapitalOutlay._id, totals);
       toast.success("Capital outlay details updated successfully");
     }
@@ -407,11 +441,16 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
 
     if (!data.sublineItem) newErrors.sublineItem = "Subline item is required";
     if (!data.accountingTitle) newErrors.accountingTitle = "Accounting title is required";
-    if (data.income == null || isNaN(data.income) || data.income < 0) {
-      newErrors.income = "Valid income (0 or more) is required";
-    }
-    if (data.subsidy == null || isNaN(data.subsidy) || data.subsidy < 0) {
-      newErrors.subsidy = "Valid subsidy (0 or more) is required";
+    
+    // For new items, income and subsidy can be empty (will be calculated from breakdown)
+    // For existing items, validate as before
+    if (!isNew) {
+      if (data.income == null || isNaN(data.income) || data.income < 0) {
+        newErrors.income = "Valid income (0 or more) is required";
+      }
+      if (data.subsidy == null || isNaN(data.subsidy) || data.subsidy < 0) {
+        newErrors.subsidy = "Valid subsidy (0 or more) is required";
+      }
     }
     // Note: isDuplicateOutlay will be defined later, so we'll handle this check in the calling functions
     if (isNew && capitalOutlays && data.category && data.accountingTitle) {
@@ -933,6 +972,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
           [newItem._id]: []
         }));
         
+        // Clear the form
         setNewOutlays((prev) => ({ ...prev, [categoryId]: {} }));
         setAddingCategoryId(null);
         setErrors({});
@@ -942,7 +982,29 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
         // Trigger parent data refresh for global save as draft functionality
         onDataChange?.(updatedData);
 
-        toast.success("Outlay added successfully.");
+        // Show success message
+        toast.success("Outlay added successfully! Now add the breakdown details.", {
+          autoClose: 3000,
+        });
+
+        // Automatically open the details modal for the new item
+        setNewlyAddedItemId(newItem._id);
+        setTimeout(() => {
+          handleOpenDetailsModal(newItem);
+        }, 300);
+
+        // Scroll to the newly added item if possible
+        setTimeout(() => {
+          const element = document.getElementById(`capital-outlay-row-${newItem._id}`);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Add a brief highlight effect
+            element.style.backgroundColor = '#e8f5e8';
+            setTimeout(() => {
+              element.style.backgroundColor = '';
+            }, 2000);
+          }
+        }, 100);
       } catch (error) {
         console.error("Error adding new outlay:", error);
         toast.error(`Error adding new outlay: ${error.response?.data?.error || error.message}`);
@@ -950,7 +1012,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
         setLoading(false);
       }
     },
-    [newOutlays, currentUser, fiscalYear, budgetType, onDataChange, validateInput, disableIncomeInputs]
+    [newOutlays, currentUser, fiscalYear, budgetType, onDataChange, validateInput, disableIncomeInputs, handleOpenDetailsModal, capitalOutlays, regionFilter, activeRegion]
   );
 
   const handleOutlayChange = useCallback(
@@ -981,91 +1043,6 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
     [disableIncomeInputs]
   );
 
-  // New function to handle accounting title selection with auto-save and modal opening
-  const handleAccountingTitleSelection = useCallback(
-    async (categoryId, selectedTitle, selectedTitleObj) => {
-      try {
-        // Update the accounting title and UACS code
-        handleOutlayChange(categoryId, "accountingTitle", selectedTitle);
-        if (selectedTitleObj?.uacsCode) {
-          handleOutlayChange(categoryId, "uacsCode", selectedTitleObj.uacsCode);
-        }
-
-        // Get the current new entry data
-        const currentEntry = newOutlays[categoryId] || {};
-        
-        // When accounting title is selected, create a draft item immediately and open modal
-        if (currentEntry.sublineItem && selectedTitle) {
-          // Create a draft item with minimal required data
-          setLoading(true);
-          
-          const draftEntry = {
-            sublineItem: currentEntry.sublineItem,
-            accountingTitle: selectedTitle,
-            uacsCode: selectedTitleObj?.uacsCode || "",
-            particulars: currentEntry.particulars || "",
-            income: parseFloat(currentEntry.income) || 0,
-            subsidy: parseFloat(currentEntry.subsidy) || 0,
-          };
-          
-          const cost = draftEntry.income + draftEntry.subsidy;
-
-          const response = await api.post("/capital-outlays", {
-            ...draftEntry,
-            cost,
-            category: categoryId,
-            processBy: `${currentUser.FirstName} ${currentUser.LastName}`,
-            region: regionFilter || activeRegion?.name || currentUser.Region,
-            processDate: new Date(),
-            fiscalYear,
-            budgetType,
-            status: "Not Submitted",
-          });
-
-          // Add the new item to existing state
-          const newItem = {
-            ...response.data.capitalOutlay,
-            status: "Not Submitted",
-            accountingTitle: selectedTitle, // Ensure accountingTitle is set for modal
-          };
-          
-          const updatedData = [...capitalOutlays, newItem];
-          setCapitalOutlays(updatedData);
-          
-          // Initialize empty details for the new item
-          setCapitalOutlayDetails(prev => ({
-            ...prev,
-            [newItem._id]: []
-          }));
-          
-          // Clear the form
-          setNewOutlays((prev) => ({ ...prev, [categoryId]: {} }));
-          setAddingCategoryId(null);
-          setErrors({});
-          setHasUnsavedChanges(false);
-          setLastSaved(new Date());
-
-          // Trigger parent data refresh
-          onDataChange?.(updatedData);
-
-          toast.success("Item created! Now add the breakdown details.");
-          
-          // Immediately open details modal
-          setNewlyAddedItemId(newItem._id);
-          setTimeout(() => {
-            handleOpenDetailsModal(newItem);
-          }, 100);
-          
-          setLoading(false);
-        }
-      } catch (error) {
-        console.error("Error auto-saving item:", error);
-        toast.error(`Error creating item: ${error.response?.data?.error || error.message}`);
-        setLoading(false);
-      }
-    },
-    [newOutlays, handleOutlayChange, validateInput, currentUser, regionFilter, activeRegion, fiscalYear, budgetType, capitalOutlays, onDataChange, handleOpenDetailsModal]
-  );
 
   const handleEditChange = useCallback(
     (field, value) => {
@@ -1096,16 +1073,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
       {/* Top Row - Main Controls */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
         <Box display="flex" alignItems="center" gap={2}>
-          {/* Save and Clear buttons */}
-          <Button
-            variant="contained"
-            startIcon={<Save />}
-            onClick={() => handleAutoSave()}
-            disabled={!hasUnsavedChanges}
-            sx={{ minWidth: 100 }}
-          >
-            {hasUnsavedChanges ? 'Save Changes' : 'Saved'}
-          </Button>
+          {/* Clear filters button */}
 
           <Button
             variant="outlined"
@@ -1744,42 +1712,17 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                         </TableCell>
                         <TableCell>
                           <Box sx={{ display: "flex", gap: 0.5 }}>
-                            {editingId === item._id ? (
-                              <>
-                                <Tooltip title="Save">
-                                  <IconButton color="success" onClick={() => handleSaveEdit(item._id)} size="small">
-                                    <Save fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-                                <Tooltip title="Cancel">
-                                  <IconButton color="error" onClick={handleCancelEdit} size="small">
-                                    <Close fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-                              </>
-                            ) : (
-                              <Tooltip title="Edit item">
-                                <IconButton
-                                  color="primary"
-                                  onClick={() => handleEditOutlay(item._id)}
-                                  disabled={item.status === "Submitted" || item.status === "Approved"}
-                                  size="small"
-                                >
-                                  <Edit fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                            )}
-                            
-                            {/* Always show Add Item Details button */}
-                            <Tooltip title="Add Item Details">
+                            <Tooltip title="Edit details and breakdown">
                               <IconButton
-                                color="info"
+                                color="primary"
                                 onClick={() => handleOpenDetailsModal(item)}
+                                disabled={item.status === "Submitted" || item.status === "Approved"}
                                 size="small"
                               >
-                                <List fontSize="small" />
+                                <Edit fontSize="small" />
                               </IconButton>
                             </Tooltip>
+
                             
                             <Tooltip 
                               title={
@@ -1856,9 +1799,13 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                             <TableCell>{item.accountingTitle}</TableCell>
                             <TableCell>{item.uacsCode}</TableCell>
                             <TableCell>
-                              {/* Show main particulars */}
+                              {/* Show main particulars with fallback if empty */}
                               <Typography variant="body2" sx={{ fontWeight: 'medium', mb: 0.5 }}>
-                                {item.particulars}
+                                {item.particulars && item.particulars.trim() !== "" 
+                                  ? item.particulars 
+                                  : (capitalOutlayDetails[item._id]?.length > 0 
+                                      ? capitalOutlayDetails[item._id].map(d => d.particulars).filter(Boolean).join('; ')
+                                      : '—')}
                               </Typography>
                               
                               {/* Show breakdown items if available */}
@@ -1919,13 +1866,8 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                           {/* Empty checkbox column for add row */}
                         </TableCell>
                         <TableCell>
-                          <Box sx={{ display: "flex", gap: 0.5 }}>
-                            <Tooltip title="Save item">
-                              <IconButton color="success" onClick={() => handleAddOutlay(group.categoryId)} size="small">
-                                <Save fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Cancel">
+                          <Box sx={{ display: "flex", gap: 0.5, justifyContent: "center", alignItems: "center" }}>
+                            <Tooltip title="Cancel adding new item">
                               <IconButton
                                 color="error"
                                 onClick={() => {
@@ -1938,6 +1880,13 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                                 <Close fontSize="small" />
                               </IconButton>
                             </Tooltip>
+                            <Typography variant="caption" color="text.secondary" sx={{ ml: 1, fontStyle: 'italic' }}>
+                              {!newOutlays[group.categoryId]?.sublineItem 
+                                ? "Select subline item"
+                                : !newOutlays[group.categoryId]?.accountingTitle
+                                ? "Select accounting title to continue"
+                                : "Form will auto-save"}
+                            </Typography>
                           </Box>
                         </TableCell>
                         <TableCell>
@@ -1980,8 +1929,39 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                                 (title) => title.accountingTitle === selectedTitle
                               );
                               
-                              // Use the new function that auto-saves and opens modal
-                              handleAccountingTitleSelection(group.categoryId, selectedTitle, selectedTitleObj);
+                              // Update the form first
+                              handleOutlayChange(group.categoryId, "accountingTitle", selectedTitle);
+                              if (selectedTitleObj?.uacsCode) {
+                                handleOutlayChange(group.categoryId, "uacsCode", selectedTitleObj.uacsCode);
+                              }
+
+                              // If both subline item and accounting title are selected, open modal for breakdown entry
+                              // Do NOT save to database yet - only save when user clicks save in modal with breakdown details
+                              if (selectedTitle && newOutlays[group.categoryId]?.sublineItem) {
+                                const currentEntry = newOutlays[group.categoryId] || {};
+                                
+                                // Create a temporary item object for the modal (not saved to database yet)
+                                const tempItemForModal = {
+                                  sublineItem: currentEntry.sublineItem,
+                                  accountingTitle: selectedTitle,
+                                  uacsCode: selectedTitleObj?.uacsCode || "",
+                                  particulars: currentEntry.particulars || "",
+                                  category: {
+                                    _id: group.categoryId,
+                                    categoryName: group.categoryName
+                                  },
+                                  isTemporary: true, // Flag to indicate this is not saved yet
+                                  tempCategoryId: group.categoryId // For saving later
+                                };
+
+                                toast.info("Add breakdown details and click Save to create the item.", {
+                                  autoClose: 3000,
+                                });
+
+                                // Open the modal immediately with the temporary item
+                                setSelectedCapitalOutlay(tempItemForModal);
+                                setDetailsModalOpen(true);
+                              }
                             }}
                             fullWidth
                             size={compactView ? "small" : "small"}
@@ -2044,7 +2024,6 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                             placeholder="0.00"
                             fullWidth
                             size="medium"
-                            error={!!errors.income}
                             InputProps={{
                               readOnly: true,
                               inputComponent: NumberFormatCustom,
@@ -2061,7 +2040,6 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                             }}
                             helperText="Calculated from breakdown"
                           />
-                          {errors.income && <FormHelperText error>{errors.income}</FormHelperText>}
                         </TableCell>
                         <TableCell sx={{ minWidth: '150px', width: '150px' }}>
                           <TextField
@@ -2069,7 +2047,6 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                             placeholder="0.00"
                             fullWidth
                             size="medium"
-                            error={!!errors.subsidy}
                             InputProps={{
                               readOnly: true,
                               inputComponent: NumberFormatCustom,
@@ -2086,7 +2063,6 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                             }}
                             helperText="Calculated from breakdown"
                           />
-                          {errors.subsidy && <FormHelperText error>{errors.subsidy}</FormHelperText>}
                         </TableCell>
                         <TableCell sx={{ minWidth: '150px', width: '150px' }}>
                           <TextField
@@ -2371,6 +2347,11 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
           capitalOutlayId={selectedCapitalOutlay?._id}
           accountingTitle={selectedCapitalOutlay?.accountingTitle}
           onSave={handleDetailsModalSave}
+          temporaryItem={selectedCapitalOutlay?.isTemporary ? {
+            ...selectedCapitalOutlay,
+            fiscalYear,
+            budgetType
+          } : null}
         />
       </Box>
     </ErrorBoundary>

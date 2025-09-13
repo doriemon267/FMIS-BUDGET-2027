@@ -26,19 +26,31 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
       const userId = req.user.id;
       const userRoles = req.user.Roles;
       const userName = req.user.FirstName + ' ' + req.user.LastName;
-      // Full access roles bypass all restrictions
-      if (hasFullAccess(userRoles)) {
+
+      // Debug logging disabled for cleaner output
+
+      // For submission workflow, DO NOT bypass based on roles alone
+      // Even BUDGET ADMIN/ANALYST users must follow submission workflow if they have hierarchical assignments
+      // Only bypass if user has SUPER_ADMIN role or no organizational constraints
+      const isSuperAdmin = userRoles && userRoles.includes('SUPER_ADMIN');
+      if (isSuperAdmin) {
         return next();
       }
       // Get user's hierarchical assignment
       const assignment = await HierarchicalUserAssignment.getUserPermissions(userId);
       if (!assignment) {
+        // If user has full access roles but no hierarchical assignment, allow full access
+        if (hasFullAccess(userRoles)) {
+          return next();
+        }
         return res.status(403).json({
           success: false,
           message: 'No organizational assignment found. Please contact administrator.',
           code: 'NO_ORG_ASSIGNMENT'
         });
       }
+
+      // User has hierarchical assignment, applying submission workflow control
       // Handle different operations
       if (operation === 'read') {
         await handleSubmissionWorkflowRead(req, res, next, assignment, { logAccess, userName, enforceSubmissionWorkflow });
@@ -62,6 +74,9 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
  */
 const handleSubmissionWorkflowRead = async (req, res, next, assignment, options) => {
   const { logAccess, userName, enforceSubmissionWorkflow } = options;
+
+
+
   // Build base hierarchical filters
   let hierarchicalFilters = {};
   let submissionFilters = {};
@@ -92,17 +107,17 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
             { department: assignment.departments[0]?.departmentName },
             {
               $or: [
-                // Own department-level data (any status)
+                // Own department-level data (no division specified, any status)
                 { 
                   $and: [
-                    { originalLevel: { $in: ['DEPARTMENT', null, undefined] } },
-                    { department: assignment.departments[0]?.departmentName }
+                    { department: assignment.departments[0]?.departmentName },
+                    { $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] }
                   ]
                 },
                 // Submitted division data within their department
                 { 
                   $and: [
-                    { originalLevel: 'DIVISION' },
+                    { division: { $exists: true, $ne: null, $ne: "" } },
                     { department: assignment.departments[0]?.departmentName },
                     { 
                       $or: [
@@ -116,6 +131,7 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
             }
           ]
         };
+
       } else {
         // Fallback to standard hierarchical filtering
         hierarchicalFilters = {
@@ -137,17 +153,20 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
             { region: assignment.regions[0]?.regionName },
             {
               $or: [
-                // Own region-level data (any status)
+                // Own region-level data (no department/division specified, any status)
                 { 
                   $and: [
-                    { originalLevel: { $in: ['REGION', null, undefined] } },
-                    { region: assignment.regions[0]?.regionName }
+                    { region: assignment.regions[0]?.regionName },
+                    { $or: [{ department: { $exists: false } }, { department: null }, { department: "" }] }
                   ]
                 },
-                // Submitted department data within their region
+                // Submitted department/division data within their region
                 { 
                   $and: [
-                    { originalLevel: { $in: ['DEPARTMENT', 'DIVISION'] } },
+                    { $or: [
+                      { department: { $exists: true, $ne: null, $ne: "" } },
+                      { division: { $exists: true, $ne: null, $ne: "" } }
+                    ] },
                     { region: assignment.regions[0]?.regionName },
                     { 
                       $or: [
@@ -173,6 +192,17 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
       // Full access users can see everything
       submissionFilters = {};
       break;
+    case 'NONE':
+      // Users with no assignment - restrict to department-level data only (no division data)
+      // This prevents NONE users from seeing unsubmitted division-level data
+      submissionFilters = {
+        $or: [
+          { division: { $exists: false } },
+          { division: null },
+          { division: "" }
+        ]
+      };
+      break;
     default:
       return res.status(403).json({
         success: false,
@@ -192,6 +222,9 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
     rolePermissions: assignment.rolePermissions,
     submissionWorkflowEnabled: enforceSubmissionWorkflow
   };
+
+
+  
   next();
 };
 /**

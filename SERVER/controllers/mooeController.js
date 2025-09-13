@@ -799,7 +799,6 @@ exports.getMOOEEntries = async (req, res) => {
             }
           ]
         };
-        console.log(`🔍 MOOE ENTRIES DEBUG: Department ${deptName} filtered query:`, JSON.stringify(filter, null, 2));
       }
     } else if (accessScope === 'REGION') {
       // Region-level users should ONLY see submitted department data
@@ -873,6 +872,7 @@ exports.bulkSaveMOOE = async (req, res) => {
     // // let processedEntries = [];
     if (entries && Array.isArray(entries)) {
       // Only include entries with a valid UACS code that have actual values > 0
+      const MINIMUM_VALUE = 1; // Require > 0 to save
       processedEntries = entries.filter(item => {
         const hasUacsCode = item.uacsCode;
         const incomeValue = Number(item.income) || 0;
@@ -881,7 +881,7 @@ exports.bulkSaveMOOE = async (req, res) => {
         const cisValue = Number(item.cis) || 0;
         
         // Check if ANY amount field has meaningful value
-        const hasActualValues = incomeValue > 0 || subsidyValue > 0 || nisValue > 0 || cisValue > 0;
+        const hasActualValues = incomeValue >= MINIMUM_VALUE || subsidyValue >= MINIMUM_VALUE || nisValue >= MINIMUM_VALUE || cisValue >= MINIMUM_VALUE;
         const hasExistingId = item.id && item.id !== "undefined" && item.id !== "";
         const isSystemEntry = item.isSystemEntry;
         
@@ -1117,7 +1117,6 @@ exports.getMooeList = async (req, res) => {
     // Use submission workflow filters if available (they already include hierarchical filtering)
     if (req.submissionWorkflowFilters) {
       filter = { ...req.submissionWorkflowFilters };
-      console.log('🔍 MOOE-LIST DEBUG: Using submission workflow filters');
     } else {
       // Fallback to manual hierarchical filtering
       if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
@@ -1129,7 +1128,6 @@ exports.getMooeList = async (req, res) => {
       // Apply manual submission workflow logic if hierarchical info available
       if (req.hierarchicalAccessInfo && req.hierarchicalAccessInfo.scope === 'DEPARTMENT') {
         const deptFilters = req.hierarchicalFilters || {};
-        console.log('🔍 MOOE-LIST DEBUG: Applying manual submission workflow for department');
         
         filter.$and = [
           deptFilters,

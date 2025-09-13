@@ -139,7 +139,6 @@ const setupDefaultWorkflowRoles = async () => {
         assignment.workflowRoles = defaultRoles;
         await assignment.save();
         updatedCount++;
-        console.log(`Assigned default roles to user:`, defaultRoles);
       }
     }
     return {

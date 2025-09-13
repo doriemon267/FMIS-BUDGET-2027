@@ -126,9 +126,7 @@ const HierarchicalUserAssignmentPage = () => {
     queryKey: ['hierarchical-organization-structure'],
     queryFn: async () => {
       try {
-        console.log('🔄 Fetching organization structure...');
         const res = await api.get('/api/hierarchical-rbac/organization-structure');
-        console.log('✅ Organization structure response:', res.data);
         let data = res.data?.data || { availableUnits: { regions: [], departments: [], departmentsWithDivisions: [], divisions: [] }, mappings: [] };
 
         const regionsCount = data?.availableUnits?.regions?.length || 0;
@@ -136,7 +134,6 @@ const HierarchicalUserAssignmentPage = () => {
 
         // Fallback load if empty: fetch plain regions and departments endpoints
         if (regionsCount === 0 || departmentsCount === 0) {
-          console.log('ℹ️ Organization structure incomplete. Loading fallback regions/departments...');
           const [regionsRes, departmentsRes] = await Promise.allSettled([
             api.get('/api/regions'),
             api.get('/departments')
@@ -294,7 +291,6 @@ const HierarchicalUserAssignmentPage = () => {
   // Get available divisions for selected department
   const getAvailableDivisions = () => {
     if (!formData.departmentId || !organizationStructure?.availableUnits?.departmentsWithDivisions) {
-      console.log('❌ No departmentId or departmentsWithDivisions');
       return [];
     }
     
@@ -308,17 +304,12 @@ const HierarchicalUserAssignmentPage = () => {
       dept => dept.departmentId === formData.departmentId
     );
     
-    console.log('🔍 Looking for divisions in department:', formData.departmentId);
-    console.log('📂 Found department:', department);
-    console.log('🏗️ Available divisions:', department ? department.divisions : 'None');
-    
     return department ? department.divisions : [];
   };
 
   // Get departments that have divisions (for Division level assignments)
   const getDepartmentsWithDivisions = () => {
     if (!organizationStructure?.availableUnits?.departmentsWithDivisions) {
-      console.log('❌ No departmentsWithDivisions found in organization structure');
       return [];
     }
     
@@ -327,18 +318,14 @@ const HierarchicalUserAssignmentPage = () => {
     // Filter by selected region if one is selected
     if (formData.regionId) {
       depts = depts.filter(dept => dept.regionId === formData.regionId);
-      console.log('🏢 Filtered departments with divisions by region:', formData.regionId, depts.length, depts);
-    } else {
-      console.log('🏢 Departments with divisions (no region filter):', depts.length, depts);
     }
-    
+
     return depts;
   };
 
   // Get departments filtered by selected region (for Department level assignments)
   const getFilteredDepartments = () => {
     if (!organizationStructure?.availableUnits?.departments) {
-      console.log('❌ No departments found in organization structure');
       return [];
     }
     
@@ -353,18 +340,14 @@ const HierarchicalUserAssignmentPage = () => {
       const departmentIds = regionMappings.map(mapping => mapping.departmentId);
       
       depts = depts.filter(dept => departmentIds.includes(dept.id));
-      console.log('🏢 Filtered departments by region:', formData.regionId, depts.length, depts);
-    } else {
-      console.log('🏢 Departments (no region filter):', depts.length, depts);
     }
-    
+
     return depts;
   };
 
   // Check if selected department has divisions
   const selectedDepartmentHasDivisions = () => {
     if (!formData.departmentId || !organizationStructure?.availableUnits?.departmentsWithDivisions) {
-      console.log('❌ selectedDepartmentHasDivisions: No departmentId or departmentsWithDivisions');
       return false;
     }
     
@@ -377,10 +360,6 @@ const HierarchicalUserAssignmentPage = () => {
     const department = deptsWithDivisions.find(
       dept => dept.departmentId === formData.departmentId
     );
-    
-    console.log('🔍 selectedDepartmentHasDivisions: Looking for department:', formData.departmentId);
-    console.log('📂 selectedDepartmentHasDivisions: Found department:', department);
-    console.log('🏗️ selectedDepartmentHasDivisions: Has divisions:', department ? department.divisions?.length > 0 : false);
     
     return department ? (department.divisions && department.divisions.length > 0) : false;
   };
@@ -477,8 +456,6 @@ const HierarchicalUserAssignmentPage = () => {
       });
       return;
     }
-
-    console.log('🚀 Submitting assignment data:', formData);
     createOrUpdateMutation.mutate(formData);
   };
 

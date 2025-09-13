@@ -8,17 +8,18 @@ const {
   } = require("../controllers/ps_annexes_controller");
   const Router = require("express").Router;
   const checkToken = require('../middleware/checkToken');
+  const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
   const psAnnexesRouter = Router();
   // Apply authentication middleware to all routes in this router
   psAnnexesRouter.use(checkToken);
-  // Get all PS_Annexes
-  psAnnexesRouter.get("/ps_annexes", getAllPersonnelServicesAnnexes);
-  // Add a new PS_Annex
-  psAnnexesRouter.post("/ps_annexes", addPersonnelServicesAnnex);
-  // Edit an existing PS_Annex
-  psAnnexesRouter.put("/ps_annexes/:id", editPersonnelServicesAnnex);
-  // Delete a PS_Annex
-  psAnnexesRouter.delete("/ps_annexes/:id", deletePersonnelServicesAnnex);
-  psAnnexesRouter.get("/ps_employeename", getPersonnelServices);
-  psAnnexesRouter.get("/ps_legal", getPersonnelServicesLegal);
+  // Get all PS_Annexes - with submission workflow control
+  psAnnexesRouter.get("/ps_annexes", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), getAllPersonnelServicesAnnexes);
+  // Add a new PS_Annex - with submission workflow control
+  psAnnexesRouter.post("/ps_annexes", submissionWorkflowControl('create', { enforceSubmissionWorkflow: true }), addPersonnelServicesAnnex);
+  // Edit an existing PS_Annex - with submission workflow control
+  psAnnexesRouter.put("/ps_annexes/:id", submissionWorkflowControl('update', { enforceSubmissionWorkflow: true }), editPersonnelServicesAnnex);
+  // Delete a PS_Annex - with submission workflow control
+  psAnnexesRouter.delete("/ps_annexes/:id", submissionWorkflowControl('delete', { enforceSubmissionWorkflow: true }), deletePersonnelServicesAnnex);
+  psAnnexesRouter.get("/ps_employeename", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), getPersonnelServices);
+  psAnnexesRouter.get("/ps_legal", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), getPersonnelServicesLegal);
   module.exports = psAnnexesRouter;

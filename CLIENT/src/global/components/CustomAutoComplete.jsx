@@ -54,15 +54,10 @@ const CustomAutoComplete = ({
   useEffect(() => {
     if (!apiList.api || !apiList.endpoint) return;
     
-    console.log('Fetching options from:', apiList.endpoint);
-    console.log('Search query:', searchQuery);
-    
     apiList.api
       .get(`${apiList.endpoint}${searchQuery ? `?search=${searchQuery}` : ""}`)
       .then((res) => {
-        console.log('API Response:', res.data);
         const options = res.data[apiList.listName] || [];
-        console.log('Extracted options:', options.slice(0, 5)); // Show first 5
         setOptions(options);
       })
       .catch((error) => {
@@ -72,15 +67,6 @@ const CustomAutoComplete = ({
   }, [apiList.api, apiList.endpoint, searchQuery]); // Include dependencies
 
   const currentOptions = optionsProp ?? options;
-  console.log('🔍 AUTOCOMPLETE DEBUG:', {
-    fieldName,
-    label,
-    optionsCount: currentOptions.length,
-    freeSolo,
-    firstFewOptions: currentOptions.slice(0, 3),
-    getOptionLabel,
-    getOptionColumn
-  });
 
   return (
     <Autocomplete
@@ -90,7 +76,6 @@ const CustomAutoComplete = ({
       open={undefined} // Let Material-UI handle the open state
       getOptionLabel={(option) => {
         if (!option) {
-          console.log('🏷️ getOptionLabel: option is null/undefined');
           return "";
         }
         
@@ -98,12 +83,6 @@ const CustomAutoComplete = ({
           ? option
           : option[getOptionColumn || getOptionLabel] || "";
         
-        console.log('🏷️ getOptionLabel called:', { 
-          option: typeof option === "object" ? { ...option, _id: option._id } : option, 
-          getOptionColumn, 
-          getOptionLabel, 
-          resultLabel: label 
-        });
         return String(label);
       }}
       isOptionEqualToValue={(option, value) => {
@@ -122,7 +101,6 @@ const CustomAutoComplete = ({
       value={field.value || null}
       inputValue={undefined} // Let autocomplete manage its own input value
       onChange={(_, value) => {
-        console.log('✅ Autocomplete onChange:', value);
         const newValue =
           typeof value === "string" || getObject
             ? value
@@ -134,40 +112,25 @@ const CustomAutoComplete = ({
         onChange && onChange(value);
       }}
       onInputChange={(_, inputValue, reason) => {
-        console.log('📝 Autocomplete onInputChange:', { inputValue, reason });
         // Don't override field value when input changes, let filterOptions handle it
         onInputChange && onInputChange(inputValue);
       }}
       filterOptions={(options, { inputValue }) => {
-        console.log('🔍 Filtering options:', { inputValue, totalOptions: options.length });
-        
         if (!inputValue || inputValue.trim() === '') {
-          console.log('📋 Returning all options:', options.length);
           return options;
         }
-        
+
         const filtered = options.filter((option) => {
-          const label = typeof option === "string" 
-            ? option 
+          const label = typeof option === "string"
+            ? option
             : option[getOptionColumn || getOptionLabel] || "";
           const matches = label.toLowerCase().includes(inputValue.toLowerCase());
           return matches;
         });
-        
-        console.log('✨ Filtered results:', { 
-          inputValue, 
-          filteredCount: filtered.length,
-          firstFew: filtered.slice(0, 3).map(opt => 
-            typeof opt === "string" ? opt : opt[getOptionColumn || getOptionLabel]
-          )
-        });
+
         return filtered;
       }}
       renderInput={(params) => {
-        console.log('🎨 renderInput called:', { 
-          optionsCount: currentOptions.length,
-          inputProps: params.inputProps
-        });
         return (
           <TextField
             {...params}
@@ -187,13 +150,7 @@ const CustomAutoComplete = ({
         const label = typeof option === "string"
           ? option
           : option[getOptionColumn || getOptionLabel] || "";
-        
-        console.log('🎯 renderOption called:', { 
-          option: typeof option === "object" ? { ...option, _id: option._id } : option,
-          label,
-          state
-        });
-        
+
         return (
           <li {...props} key={option._id || option}>
             {label}

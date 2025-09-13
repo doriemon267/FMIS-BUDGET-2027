@@ -63,6 +63,7 @@ const CapitalOutlayDetailsModal = ({
   capitalOutlayId,
   accountingTitle,
   onSave,
+  temporaryItem, // New prop for temporary items that aren't saved yet
 }) => {
   const [details, setDetails] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -81,13 +82,13 @@ const CapitalOutlayDetailsModal = ({
 
   // Load existing details when modal opens
   useEffect(() => {
-    if (open && capitalOutlayId) {
+    if (open && capitalOutlayId && !temporaryItem) {
       loadDetails();
-    } else if (open && !capitalOutlayId) {
-      // New capital outlay - start with one empty row
+    } else if (open && (temporaryItem || !capitalOutlayId)) {
+      // New capital outlay or temporary item - start with one empty row
       setDetails([initializeEmptyRow()]);
     }
-  }, [open, capitalOutlayId]);
+  }, [open, capitalOutlayId, temporaryItem]);
 
   const loadDetails = async () => {
     setLoading(true);
@@ -205,27 +206,105 @@ const CapitalOutlayDetailsModal = ({
 
     setSaving(true);
     try {
-      const processBy = `${currentUser.FirstName} ${currentUser.LastName}`;
+      // Debug logging
+      console.log("Current user:", currentUser);
+      console.log("Details to save:", details);
       
-      const response = await api.post(`/api/capital-outlay/${capitalOutlayId}/details`, {
-        details: details.map((detail) => ({
-          particulars: detail.particulars.trim(),
-          income_amount: parseFloat(detail.income_amount) || 0,
-          subsidy_amount: parseFloat(detail.subsidy_amount) || 0,
-        })),
-        processBy,
-      });
+      if (!currentUser) {
+        toast.error("User session expired. Please refresh and try again.");
+        return;
+      }
 
-      if (response.data.success) {
-        toast.success("Details saved successfully");
-        if (onSave) {
-          onSave(response.data.totals);
+      const processBy = `${currentUser.FirstName} ${currentUser.LastName}`;
+      console.log("Process by:", processBy);
+      
+      // If this is a temporary item, we need to create the capital outlay first
+      if (temporaryItem && temporaryItem.isTemporary) {
+        // Calculate totals from breakdown details
+        const totalIncome = details.reduce((sum, detail) => sum + (parseFloat(detail.income_amount) || 0), 0);
+        const totalSubsidy = details.reduce((sum, detail) => sum + (parseFloat(detail.subsidy_amount) || 0), 0);
+        
+        // Create the capital outlay item with calculated totals
+        const capitalOutlayResponse = await api.post("/capital-outlays", {
+          sublineItem: temporaryItem.sublineItem,
+          accountingTitle: temporaryItem.accountingTitle,
+          uacsCode: temporaryItem.uacsCode || "",
+          particulars: temporaryItem.particulars || "",
+          income: totalIncome,
+          subsidy: totalSubsidy,
+          cost: totalIncome + totalSubsidy,
+          category: temporaryItem.tempCategoryId,
+          processBy: processBy,
+          processDate: new Date(),
+          fiscalYear: temporaryItem.fiscalYear,
+          budgetType: temporaryItem.budgetType,
+          status: "Not Submitted",
+        });
+
+        const newCapitalOutlayId = capitalOutlayResponse.data.capitalOutlay._id;
+        
+        // Now save the breakdown details to the newly created capital outlay
+        const detailsPayload = {
+          details: details.map((detail) => ({
+            particulars: detail.particulars.trim(),
+            income_amount: parseFloat(detail.income_amount) || 0,
+            subsidy_amount: parseFloat(detail.subsidy_amount) || 0,
+          })),
+          processBy,
+        };
+        
+        console.log("Sending details payload for new item:", detailsPayload);
+        const detailsResponse = await api.post(`/api/capital-outlay/${newCapitalOutlayId}/details`, detailsPayload);
+
+        if (detailsResponse.data.success) {
+          toast.success("Capital outlay item and breakdown details saved successfully!");
+          if (onSave) {
+            onSave({
+              ...detailsResponse.data.totals,
+              newItem: capitalOutlayResponse.data.capitalOutlay,
+              isNewItem: true
+            });
+          }
+          onClose();
         }
-        onClose();
+      } else {
+        // Normal flow for existing capital outlay items
+        const detailsPayload = {
+          details: details.map((detail) => ({
+            particulars: detail.particulars.trim(),
+            income_amount: parseFloat(detail.income_amount) || 0,
+            subsidy_amount: parseFloat(detail.subsidy_amount) || 0,
+          })),
+          processBy,
+        };
+        
+        console.log("Sending details payload for existing item:", detailsPayload);
+        console.log("Capital outlay ID:", capitalOutlayId);
+        const response = await api.post(`/api/capital-outlay/${capitalOutlayId}/details`, detailsPayload);
+
+        if (response.data.success) {
+          toast.success("Details saved successfully");
+          if (onSave) {
+            onSave(response.data.totals);
+          }
+          onClose();
+        }
       }
     } catch (error) {
       console.error("Error saving details:", error);
-      toast.error(error.response?.data?.error || "Failed to save details");
+      console.error("Error response:", error.response?.data);
+      console.error("Error status:", error.response?.status);
+      
+      let errorMessage = "Failed to save details";
+      if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = `Network error: ${error.message}`;
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setSaving(false);
     }
@@ -269,7 +348,9 @@ const CapitalOutlayDetailsModal = ({
       <DialogTitle>
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography variant="h6">
-            Item Breakdown for: {accountingTitle || "New Capital Outlay"}
+            {temporaryItem && temporaryItem.isTemporary 
+              ? `Create New Item: ${temporaryItem.accountingTitle}`
+              : `Item Breakdown for: ${accountingTitle || "New Capital Outlay"}`}
           </Typography>
           <IconButton onClick={onClose} size="small">
             <CloseIcon />
@@ -441,7 +522,7 @@ const CapitalOutlayDetailsModal = ({
           onClick={handleSave}
           variant="contained"
           startIcon={saving ? <CircularProgress size={16} /> : <SaveIcon />}
-          disabled={saving || loading || !capitalOutlayId}
+          disabled={saving || loading}
         >
           {saving ? "Saving..." : "Save"}
         </Button>

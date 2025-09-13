@@ -180,60 +180,13 @@ exports.getAllPersonnelServices = async (req, res) => {
     if (statusOfAppointment) {
       query.statusOfAppointment = statusOfAppointment;
     }
-    // Apply hierarchical filters with SUBMISSION WORKFLOW ENFORCEMENT
-    if (req.hierarchicalAccess) {
-      const accessInfo = req.hierarchicalAccess;
-      
-      if (accessInfo?.scope === 'DIVISION') {
-        // Division users: only their division data
-        if (accessInfo.accessibleRegions?.[0]?.regionName) query.region = accessInfo.accessibleRegions[0].regionName;
-        if (accessInfo.accessibleDepartments?.[0]?.departmentName) query.department = accessInfo.accessibleDepartments[0].departmentName;
-        if (accessInfo.accessibleDivisions?.[0]) query.division = accessInfo.accessibleDivisions[0];
-      } else if (accessInfo?.scope === 'DEPARTMENT') {
-        // Department users: can see their department data + SUBMITTED division data ONLY
-        const deptName = accessInfo.accessibleDepartments?.[0]?.departmentName;
-        const regionName = accessInfo.accessibleRegions?.[0]?.regionName;
-        
-        if (deptName) {
-          // CRITICAL SUBMISSION WORKFLOW LOGIC for Personnel Services:
-          const baseQuery = {
-            department: deptName,
-            fiscalYear: activeSettings.fiscalYear
-          };
-          
-          if (regionName) baseQuery.region = regionName;
-          
-          // Override the query with submission workflow filtering
-          Object.assign(query, {
-            $and: [
-              baseQuery,
-              {
-                $or: [
-                  // 1. Department-level data (no division or by department user)
-                  {
-                    $and: [
-                      { $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] }
-                    ]
-                  },
-                  // 2. Division data that has been SUBMITTED only
-                  {
-                    $and: [
-                      { division: { $exists: true, $ne: null, $ne: "" } },
-                      { status: { $in: ["Submitted", "Approved", "Completed"] } }
-                    ]
-                  }
-                ]
-              }
-            ]
-          });
-
-        }
-      } else if (accessInfo?.scope === 'REGION') {
-        // Region users: only consolidated data
-        if (accessInfo.accessibleRegions?.[0]?.regionName) query.region = accessInfo.accessibleRegions[0].regionName;
-      }
-    } else if (req.hierarchicalFilters && Object.keys(req.hierarchicalFilters).length > 0) {
-      // Fallback to old filtering system
+    // Apply submission workflow filters from middleware
+    if (req.submissionWorkflowFilters) {
+      Object.assign(query, req.submissionWorkflowFilters);
+    }
+    
+    // Apply hierarchical filters  
+    if (req.hierarchicalFilters && Object.keys(req.hierarchicalFilters).length > 0) {
       Object.assign(query, req.hierarchicalFilters);
     }
     // Add region filter if provided (and not already constrained by hierarchy)
@@ -667,67 +620,14 @@ exports.getAllPerServices = async (req, res) => {
     let query = {
       fiscalYear: fiscalYear || activeSettings.fiscalYear
     };
-    // Apply hierarchical filtering with basic department-division isolation
-    // For now, use simple hierarchical filtering until submission workflow is fully implemented
-    if (req.hierarchicalAccess) {
-      const accessInfo = req.hierarchicalAccess;
-      if (accessInfo?.scope === 'DIVISION') {
-        // Division users: only their division data
-        if (accessInfo.accessibleRegions?.[0]?.regionName) query.region = accessInfo.accessibleRegions[0].regionName;
-        if (accessInfo.accessibleDepartments?.[0]?.departmentName) query.department = accessInfo.accessibleDepartments[0].departmentName;
-        if (accessInfo.accessibleDivisions?.[0]) query.division = accessInfo.accessibleDivisions[0];
-      } else if (accessInfo?.scope === 'DEPARTMENT') {
-        // Department users: can see their department data + SUBMITTED division data ONLY
-        if (accessInfo.accessibleRegions?.[0]?.regionName) query.region = accessInfo.accessibleRegions[0].regionName;
-        if (accessInfo.accessibleDepartments?.[0]?.departmentName) query.department = accessInfo.accessibleDepartments[0].departmentName;
-        
-        // CRITICAL SUBMISSION WORKFLOW LOGIC:
-        // Department users can only see division data that has been SUBMITTED
-        const baseQuery = {
-          region: accessInfo.accessibleRegions[0]?.regionName,
-          department: accessInfo.accessibleDepartments[0]?.departmentName
-        };
-        
-        query = {
-          $and: [
-            baseQuery,
-            {
-              $or: [
-                // 1. Department-level data (no division or by department user)
-                {
-                  $and: [
-                    { $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] }
-                  ]
-                },
-                // 2. Division data that has been SUBMITTED only
-                {
-                  $and: [
-                    { division: { $exists: true, $ne: null, $ne: "" } },
-                    { status: { $in: ["Submitted", "Approved", "Completed"] } }
-                  ]
-                }
-              ]
-            }
-          ]
-        };
-      } else if (accessInfo?.scope === 'REGION') {
-        // Region users: only see department-level consolidated data (no division data)
-        if (accessInfo.accessibleRegions?.[0]?.regionName) query.region = accessInfo.accessibleRegions[0].regionName;
-        
-        // CRITICAL: Only show consolidated data without department/division details
-        query.$and = [
-          { region: accessInfo.accessibleRegions[0].regionName },
-          {
-            $or: [
-              { department: { $exists: false } },
-              { department: null },
-              { department: "" }
-            ]
-          }
-        ];
-      } else if (accessInfo?.accessibleRegions?.[0]?.regionName) {
-        query.region = accessInfo.accessibleRegions[0].regionName;
-      }
+    // Apply submission workflow filters from middleware
+    if (req.submissionWorkflowFilters) {
+      Object.assign(query, req.submissionWorkflowFilters);
+    }
+    
+    // Apply hierarchical filters
+    if (req.hierarchicalFilters && Object.keys(req.hierarchicalFilters).length > 0) {
+      Object.assign(query, req.hierarchicalFilters);
     }
     
     // Fallback region filter if provided and not already constrained

@@ -142,9 +142,33 @@ capitalOutlayRouter.get("/capital-outlay/getByParams", hierarchicalAccessControl
       if (deptName) query.department = deptName;
       if (divName) query.division = divName;
     } else if (accessScope === 'DEPARTMENT') {
-      // Department users: all divisions within their department in the region
+      // Department users: only own department data (any status) + SUBMITTED division data
       const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-      if (deptName) query.department = deptName;
+      const regionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
+      if (deptName && regionName) {
+        const baseQuery = { ...query };
+        query.$and = [
+          baseQuery,
+          { region: regionName },
+          {
+            $or: [
+              // Department-level (no division) data
+              { $and: [
+                { department: deptName },
+                { $or: [ { division: { $exists: false } }, { division: null }, { division: "" } ] }
+              ]},
+              // Division data that is SUBMITTED/APPROVED only
+              { $and: [
+                { department: deptName },
+                { division: { $exists: true, $ne: null, $ne: "" } },
+                { status: { $in: ['Submitted', 'Approved'] } }
+              ]}
+            ]
+          }
+        ];
+      } else if (deptName) {
+        query.department = deptName;
+      }
     } else if (accessScope === 'REGION') {
       // Region-level users should ONLY see:
       // 1. Records that don't have department field (already consolidated to region level)
@@ -184,4 +208,4 @@ capitalOutlayRouter.get("/capital-outlay/getByParams", hierarchicalAccessControl
     res.status(500).json({ message: "Failed to fetch Capital Outlay data" });
   }
 });
-module.exports = capitalOutlayRouter;
+module.exports = capitalOutlayRouter;
