@@ -6,7 +6,7 @@ const {
   getEligibleForLoyaltyPay,
   getEligibleForRetirement,
   getEmployeeStats,
-} = require("../controllers/employeeListController");
+} = require("../controllers/employeelistController");
 const Router = require("express").Router;
 const checkToken = require('../middleware/checkToken');
 const {
@@ -32,4 +32,4 @@ employeeRouter.get("/employees/loyalty-pay", applyHierarchicalFilters, getEligib
 employeeRouter.get("/eligible-for-retirement", applyHierarchicalFilters, getEligibleForRetirement);
 // Get employee statistics with hierarchical filtering
 employeeRouter.get("/employees/stats", applyHierarchicalFilters, getEmployeeStats);
-module.exports = employeeRouter;
+module.exports = employeeRouter;

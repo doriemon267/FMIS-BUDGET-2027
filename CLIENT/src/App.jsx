@@ -34,7 +34,7 @@ import ChildrenAllowancePage from "./pages/ChildrenAllowancePage";
 import IncomeManagementPage from "./pages/IncomeManagementPage";
 import RetireePage from "./pages/RetireePage";
 
-import SubsidyMonitoringPage from './pages/SubsidyMonitoringPage';
+import SubsidyMonitoringPage from "./pages/SubsidyMonitoringPage";
 import CapitalOutlayTitleMappingPage from "./pages/CategoryPage";
 import RegionSelectionPage from "./pages/RegionSelectionPage";
 import CorporateIncomeUploadPage from "./pages/CorporateIncomeUploadPage";
@@ -65,41 +65,67 @@ const App = () => {
         }
       >
         <Route path="/dashboard" element={<DashBoardHome />} />
-        <Route 
-        path="/proposal" 
-        element={
-          <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER","BUDGET ANALYST"]}>  
-          <Proposals />
-          </ProtectedRoute>} 
+        <Route
+          path="/proposal"
+          element={
+            <ProtectedRoute
+              allowedRoles={[
+                "ADMIN",
+                "BUDGET ADMIN",
+                "BUDGET MANAGER",
+                "BUDGET OFFICER",
+                "BUDGET ANALYST",
+              ]}
+            >
+              <Proposals />
+            </ProtectedRoute>
+          }
         />
-        <Route 
-        path="/myProposals" 
-        element={
-          <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}> 
-          <ProposalPage />
-          </ProtectedRoute>
-       } />
-        <Route 
-        path="/employee" 
-        element={
-          <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER", "BUDGET ANALYST"]}> 
-           <EmployeeList />
-           </ProtectedRoute>
-       } />
+        <Route
+          path="/myProposals"
+          element={
+            <ProtectedRoute
+              allowedRoles={[
+                "ADMIN",
+                "BUDGET ADMIN",
+                "BUDGET MANAGER",
+                "BUDGET OFFICER",
+              ]}
+            >
+              <ProposalPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/employee"
+          element={
+            <ProtectedRoute
+              allowedRoles={[
+                "ADMIN",
+                "BUDGET ADMIN",
+                "BUDGET MANAGER",
+                "BUDGET OFFICER",
+                "BUDGET ANALYST",
+              ]}
+            >
+              <EmployeeList />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/fiscalYear" element={<FiscalYear />} />
-        <Route 
-        path="/retirees" 
-        element={
-        <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>
-        <EmployeeBenefitsPage />
-         </ProtectedRoute>
-       } />
 
         {/* Protected Routes */}
         <Route
           path="/categories"
           element={
-            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>
+            <ProtectedRoute
+              allowedRoles={[
+                "ADMIN",
+                "BUDGET ADMIN",
+                "BUDGET MANAGER",
+                "BUDGET OFFICER",
+              ]}
+            >
               <Categories />
             </ProtectedRoute>
           }
@@ -107,7 +133,14 @@ const App = () => {
         <Route
           path="/rata"
           element={
-            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>
+            <ProtectedRoute
+              allowedRoles={[
+                "ADMIN",
+                "BUDGET ADMIN",
+                "BUDGET MANAGER",
+                "BUDGET OFFICER",
+              ]}
+            >
               <RataPage />
             </ProtectedRoute>
           }
@@ -115,7 +148,14 @@ const App = () => {
         <Route
           path="/fysettings"
           element={
-            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
+            <ProtectedRoute
+              allowedRoles={[
+                "ADMIN",
+                "BUDGET ADMIN",
+                "BUDGET MANAGER",
+                "BUDGET OFFICER",
+              ]}
+            >
               <FiscalYearSettingsPage />
             </ProtectedRoute>
           }
@@ -124,7 +164,14 @@ const App = () => {
         <Route
           path="/compsettings"
           element={
-            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
+            <ProtectedRoute
+              allowedRoles={[
+                "ADMIN",
+                "BUDGET ADMIN",
+                "BUDGET MANAGER",
+                "BUDGET OFFICER",
+              ]}
+            >
               <CompensationSettingsPage />
             </ProtectedRoute>
           }
@@ -132,7 +179,14 @@ const App = () => {
         <Route
           path="/settings"
           element={
-            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>
+            <ProtectedRoute
+              allowedRoles={[
+                "ADMIN",
+                "BUDGET ADMIN",
+                "BUDGET MANAGER",
+                "BUDGET OFFICER",
+              ]}
+            >
               <SettingsManagement />
             </ProtectedRoute>
           }
@@ -140,7 +194,14 @@ const App = () => {
         <Route
           path="/AllProposals"
           element={
-            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>
+            <ProtectedRoute
+              allowedRoles={[
+                "ADMIN",
+                "BUDGET ADMIN",
+                "BUDGET MANAGER",
+                "BUDGET OFFICER",
+              ]}
+            >
               <AllProposalsPage />
             </ProtectedRoute>
           }
@@ -148,7 +209,9 @@ const App = () => {
         <Route
           path="/income-management"
           element={
-            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>
+            <ProtectedRoute
+              allowedRoles={["ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}
+            >
               <IncomeManagementPage />
             </ProtectedRoute>
           }
@@ -156,7 +219,9 @@ const App = () => {
         <Route
           path="/categories"
           element={
-            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>
+            <ProtectedRoute
+              allowedRoles={["ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}
+            >
               <CapitalOutlayTitleMappingPage />
             </ProtectedRoute>
           }
@@ -166,18 +231,33 @@ const App = () => {
 
         <Route path="/annexis" element={<AnnexPage />} />
         <Route
-         path="/employeeBenefits" 
-         element={
-          <ProtectedRoute allowedRoles={["SUPER ADMIN","ADMIN", "BUDGET MANAGER","BUDGET OFFICER"]}>  
-          <EmployeeBenefitsPage /> 
-          </ProtectedRoute>}
-         />
-        
+          path="/employeeBenefits"
+          element={
+            <ProtectedRoute
+              allowedRoles={[
+                "SUPER ADMIN",
+                "ADMIN",
+                "BUDGET MANAGER",
+                "BUDGET OFFICER",
+                "BUDGET ANALYST",
+              ]}
+            >
+              <EmployeeBenefitsPage />
+            </ProtectedRoute>
+          }
+        />
+
         {/* Keep these routes for backward compatibility but they will redirect in the future */}
         <Route path="/courtAppearance" element={<EmployeeBenefitsPage />} />
         <Route path="/overTime" element={<EmployeeBenefitsPage />} />
-        <Route path="/subsistenceAllowanceMDS" element={<EmployeeBenefitsPage />} />
-        <Route path="/subsistenceAllowanceST" element={<EmployeeBenefitsPage />} />
+        <Route
+          path="/subsistenceAllowanceMDS"
+          element={<EmployeeBenefitsPage />}
+        />
+        <Route
+          path="/subsistenceAllowanceST"
+          element={<EmployeeBenefitsPage />}
+        />
         <Route path="/loyaltyPay" element={<EmployeeBenefitsPage />} />
         <Route path="/Appearance" element={<AppearancePage />} />
         <Route path="/ProposalSummaryPage" element={<ProposalSummaryPage />} />
@@ -185,7 +265,7 @@ const App = () => {
         <Route path="/mealallowance" element={<EmployeeBenefitsPage />} />
         <Route path="/medicalAllowance" element={<EmployeeBenefitsPage />} />
         <Route path="/childrenAllowance" element={<EmployeeBenefitsPage />} />
-
+        <Route path="/retirees" element={<EmployeeBenefitsPage />} />
         <Route
           path="/hierarchical-user-assignments"
           element={
@@ -194,78 +274,129 @@ const App = () => {
             </ProtectedRoute>
           }
         />
-        <Route path="/subsidy-monitoring" element={
-          <ProtectedRoute>
-            <SubsidyMonitoringPage />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/region-selection" element={<RegionSelectionPage />} />
-        <Route 
-          path="/corporate-income-upload" 
+        <Route
+          path="/subsidy-monitoring"
           element={
-            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
+            <ProtectedRoute>
+              <SubsidyMonitoringPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route path="/region-selection" element={<RegionSelectionPage />} />
+        <Route
+          path="/corporate-income-upload"
+          element={
+            <ProtectedRoute
+              allowedRoles={[
+                "ADMIN",
+                "BUDGET ADMIN",
+                "BUDGET MANAGER",
+                "BUDGET OFFICER",
+              ]}
+            >
               <CorporateIncomeUploadPage />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/consolidated-corporate-income" 
+        <Route
+          path="/consolidated-corporate-income"
           element={
-            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
+            <ProtectedRoute
+              allowedRoles={[
+                "ADMIN",
+                "BUDGET ADMIN",
+                "BUDGET MANAGER",
+                "BUDGET OFFICER",
+              ]}
+            >
               <ConsolidatedCorporateIncomePage />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/mooe-upload" 
+        <Route
+          path="/mooe-upload"
           element={
-            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
+            <ProtectedRoute
+              allowedRoles={[
+                "ADMIN",
+                "BUDGET ADMIN",
+                "BUDGET MANAGER",
+                "BUDGET OFFICER",
+              ]}
+            >
               <MooeUploadPage />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/consolidated-reports" 
+        <Route
+          path="/consolidated-reports"
           element={
-            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
+            <ProtectedRoute
+              allowedRoles={[
+                "ADMIN",
+                "BUDGET ADMIN",
+                "BUDGET MANAGER",
+                "BUDGET OFFICER",
+              ]}
+            >
               <ConsolidatedReportsPage />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/consolidated-capital-outlay-reports" 
+        <Route
+          path="/consolidated-capital-outlay-reports"
           element={
-            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
+            <ProtectedRoute
+              allowedRoles={[
+                "ADMIN",
+                "BUDGET ADMIN",
+                "BUDGET MANAGER",
+                "BUDGET OFFICER",
+              ]}
+            >
               <ConsolidatedCapitalOutlayReportsPage />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/consolidated-personnel-services-reports" 
+        <Route
+          path="/consolidated-personnel-services-reports"
           element={
-            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
+            <ProtectedRoute
+              allowedRoles={[
+                "ADMIN",
+                "BUDGET ADMIN",
+                "BUDGET MANAGER",
+                "BUDGET OFFICER",
+              ]}
+            >
               <ConsolidatedPersonnelServicesReportsPage />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/comprehensive-reports" 
+        <Route
+          path="/comprehensive-reports"
           element={
             <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN"]}>
               <ComprehensiveReportsPage />
             </ProtectedRoute>
-          } 
+          }
         />
-        <Route 
-          path="/database-backup" 
+        <Route
+          path="/database-backup"
           element={
-            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}>
+            <ProtectedRoute
+              allowedRoles={[
+                "ADMIN",
+                "BUDGET ADMIN",
+                "BUDGET MANAGER",
+                "BUDGET OFFICER",
+              ]}
+            >
               <DatabaseBackupPage />
             </ProtectedRoute>
-          } 
+          }
         />
-
       </Route>
     </Routes>
   );

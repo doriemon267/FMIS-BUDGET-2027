@@ -1,4 +1,9 @@
 const mongoose = require('mongoose');
+
+// Import referenced models to ensure they're registered
+require('./Region');
+require('./Department');
+
 const HierarchicalUserAssignmentSchema = new mongoose.Schema({
   userId: {
     type: String,
@@ -218,4 +223,4 @@ HierarchicalUserAssignmentSchema.methods.getConsolidationTarget = function() {
       return null;
   }
 };
-module.exports = mongoose.model('HierarchicalUserAssignment', HierarchicalUserAssignmentSchema);
+module.exports = mongoose.model('HierarchicalUserAssignment', HierarchicalUserAssignmentSchema);

@@ -15,7 +15,10 @@ const SubsistenceAllowanceSTSchema = mongoose.Schema(
     processDate: { type: Date },
     fiscalYear: { type: String },
     budgetType: { type: String },
+    // Submission workflow fields
+    status: { type: String, default: 'Not Submitted' },
+    originalLevel: { type: String }, // DIVISION, DEPARTMENT, or REGION
   },
   { timestamps: true }
 );
-module.exports = mongoose.model("SubsistenceAllowanceST", SubsistenceAllowanceSTSchema);
+module.exports = mongoose.model("SubsistenceAllowanceST", SubsistenceAllowanceSTSchema);

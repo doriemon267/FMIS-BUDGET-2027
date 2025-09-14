@@ -27,7 +27,10 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
       const userRoles = req.user.Roles;
       const userName = req.user.FirstName + ' ' + req.user.LastName;
 
-      // Debug logging disabled for cleaner output
+      // Debug logging for overtime pay debugging
+      if (logAccess) {
+        console.log(`🔧 [SubmissionWorkflow] User: ${userName}, Operation: ${operation}, UserID: ${userId}`);
+      }
 
       // For submission workflow, DO NOT bypass based on roles alone
       // Even BUDGET ADMIN/ANALYST users must follow submission workflow if they have hierarchical assignments
@@ -86,9 +89,9 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
       // AND submitted data from their level (but not other divisions)
       hierarchicalFilters = {
         $and: [
-          { region: assignment.regions[0]?.regionName },
-          { department: assignment.departments[0]?.departmentName },
-          { division: assignment.divisions[0] }
+          { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
+          { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName },
+          { division: assignment.divisionName || assignment.divisions[0] }
         ]
       };
       if (enforceSubmissionWorkflow) {
@@ -100,17 +103,18 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
       // Department users can see:
       // 1. Their own department data (any status)
       // 2. SUBMITTED data from divisions within their department
+
       if (enforceSubmissionWorkflow) {
         submissionFilters = {
           $and: [
-            { region: assignment.regions[0]?.regionName },
-            { department: assignment.departments[0]?.departmentName },
+            { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
+            { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName },
             {
               $or: [
                 // Own department-level data (no division specified, any status)
                 { 
                   $and: [
-                    { department: assignment.departments[0]?.departmentName },
+                    { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName },
                     { $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] }
                   ]
                 },
@@ -118,7 +122,7 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                 { 
                   $and: [
                     { division: { $exists: true, $ne: null, $ne: "" } },
-                    { department: assignment.departments[0]?.departmentName },
+                    { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName },
                     { 
                       $or: [
                         { status: 'Submitted' },
@@ -136,12 +140,13 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
         // Fallback to standard hierarchical filtering
         hierarchicalFilters = {
           $and: [
-            { region: assignment.regions[0]?.regionName },
-            { department: assignment.departments[0]?.departmentName }
+            { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
+            { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName }
           ]
         };
         submissionFilters = hierarchicalFilters;
       }
+
       break;
     case 'REGION':
       // Region users can see:
@@ -150,13 +155,13 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
       if (enforceSubmissionWorkflow) {
         submissionFilters = {
           $and: [
-            { region: assignment.regions[0]?.regionName },
+            { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
             {
               $or: [
                 // Own region-level data (no department/division specified, any status)
                 { 
                   $and: [
-                    { region: assignment.regions[0]?.regionName },
+                    { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
                     { $or: [{ department: { $exists: false } }, { department: null }, { department: "" }] }
                   ]
                 },
@@ -167,7 +172,7 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                       { department: { $exists: true, $ne: null, $ne: "" } },
                       { division: { $exists: true, $ne: null, $ne: "" } }
                     ] },
-                    { region: assignment.regions[0]?.regionName },
+                    { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
                     { 
                       $or: [
                         { status: 'Submitted' },
@@ -183,7 +188,7 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
       } else {
         // Fallback to standard hierarchical filtering
         hierarchicalFilters = {
-          region: assignment.regions[0]?.regionName
+          region: assignment.regionId?.Region || assignment.regions[0]?.regionName
         };
         submissionFilters = hierarchicalFilters;
       }
@@ -211,6 +216,9 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
       });
   }
   // Add filters to request for use in controllers
+  if (logAccess) {
+    console.log(`🎯 [SubmissionWorkflow] Setting filters for ${assignment.assignmentLevel} user:`, JSON.stringify(submissionFilters, null, 2));
+  }
   req.submissionWorkflowFilters = submissionFilters;
   req.hierarchicalFilters = hierarchicalFilters;
   req.hierarchicalAccessInfo = {
@@ -280,8 +288,8 @@ const handleSubmissionWorkflowWrite = async (req, res, next, assignment, operati
  * Apply submission workflow consolidation logic
  */
 const applySubmissionWorkflowConsolidation = (req, assignment) => {
-  const regionName = assignment.regions[0]?.regionName;
-  const departmentName = assignment.departments[0]?.departmentName;
+  const regionName = assignment.regionId?.Region || assignment.regions[0]?.regionName;
+  const departmentName = assignment.departmentId?.Department || assignment.departments[0]?.departmentName;
   const divisionName = assignment.divisions?.[0] || null;
   // Store original organizational context
   req.originalOrgContext = {

@@ -162,21 +162,14 @@ exports.getAllPersonnelServices = async (req, res) => {
 
     // Map hierarchical filters to database field names
     const mapFiltersToDb = (filters) => {
-      const mapped = {};
-
-      // Handle $and conditions from middleware
-      if (filters.$and && Array.isArray(filters.$and)) {
-        mapped.$and = filters.$and.map(condition => {
-          const conditionMapped = {};
-          if (condition.region) conditionMapped.region = condition.region;
-          if (condition.department) conditionMapped.department = condition.department;
-          if (condition.division) conditionMapped.division = condition.division;
-          return conditionMapped;
-        });
-        return mapped;
+      // If filters contain complex $and/$or conditions, return them as-is
+      // This preserves the status filtering logic from the middleware
+      if (filters.$and || filters.$or) {
+        return filters;
       }
 
-      // Handle simple key-value filters
+      // Handle simple key-value filters for backward compatibility
+      const mapped = {};
       if (filters.region) mapped.region = filters.region;
       if (filters.department) mapped.department = filters.department;
       if (filters.division) mapped.division = filters.division;

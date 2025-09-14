@@ -9,15 +9,19 @@ const {
   const checkToken = require('../middleware/checkToken');
 // Import old middleware for consistency with other allowance routes
 const checkDueDate = require("../middleware/checkDueDate");
+const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
   const mealAllowanceRouter = Router();
 // Apply authentication middleware to all routes in this router
 mealAllowanceRouter.use(checkToken);
+// Apply submission workflow control middleware for read operations
+mealAllowanceRouter.use('/meal-allowance', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
+mealAllowanceRouter.use('/meal-allowance/stats', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
 // 🔓 ROUTES (Consistent with other allowance routes like medical-allowance, children-allowance)
   // GET routes without authentication (like other allowance routes)
   mealAllowanceRouter.get("/meal-allowance", getAllMealAllowances);
   mealAllowanceRouter.get("/meal-allowance/stats", getMealAllowanceStats);
   // POST/PUT/DELETE routes with due date protection only (like other allowance routes)
-  mealAllowanceRouter.post("/meal-allowance", checkDueDate, createMealAllowance);
-  mealAllowanceRouter.put("/meal-allowance/:id", checkDueDate, updateMealAllowance);
-  mealAllowanceRouter.delete("/meal-allowance/:id", checkDueDate, deleteMealAllowance);
-  module.exports = mealAllowanceRouter;
+  mealAllowanceRouter.post("/meal-allowance", checkDueDate, submissionWorkflowControl('create', { enforceSubmissionWorkflow: true }), createMealAllowance);
+  mealAllowanceRouter.put("/meal-allowance/:id", checkDueDate, submissionWorkflowControl('update', { enforceSubmissionWorkflow: true }), updateMealAllowance);
+  mealAllowanceRouter.delete("/meal-allowance/:id", checkDueDate, submissionWorkflowControl('delete', { enforceSubmissionWorkflow: true }), deleteMealAllowance);
+  module.exports = mealAllowanceRouter;

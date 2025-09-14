@@ -6,7 +6,15 @@ const Settings = require("../models/Settings");
  */
 exports.getAllRetirees = async (req, res) => {
   try {
-    const retirees = await Retiree.find().sort({ createdAt: -1 });
+    // Build query with hierarchical filters
+    const query = {};
+    
+    // Merge hierarchical read filters if present
+    if (req.hierarchicalFilters && Object.keys(req.hierarchicalFilters).length > 0) {
+      Object.assign(query, req.hierarchicalFilters);
+    }
+    
+    const retirees = await Retiree.find(query).sort({ createdAt: -1 });
     // Log a sample record if available
     if (retirees.length > 0) {
       }
@@ -321,8 +329,13 @@ exports.getEligibleForRetirement = async (req, res) => {
       DateOfAppointment: { $exists: true, $ne: null },
       DateOfBirth: { $exists: true, $ne: null }
     };
-    // Add region filter if provided
-    if (region) {
+    // Merge hierarchical read filters if present (ensure eligible employees match visible scope)
+    if (req.hierarchicalFilters && Object.keys(req.hierarchicalFilters).length > 0) {
+      Object.assign(query, req.hierarchicalFilters);
+    }
+
+    // Add region filter if provided and not already constrained
+    if (region && !query.region) {
       query.region = region;
     }
     // Get employees based on query

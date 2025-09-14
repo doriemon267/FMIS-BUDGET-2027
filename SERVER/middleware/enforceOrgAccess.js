@@ -1,4 +1,4 @@
-const UserOrganizationalAssignment = require('../models/UserOrganizationalAssignment');
+const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 /**
  * Enforce organizational access for write operations (create/update/delete).
  * - Loads the user's hierarchical assignment
@@ -18,7 +18,7 @@ module.exports = async function enforceOrgAccess(req, res, next) {
     const hasFullRole = roles.includes('SUPER ADMIN') || roles.includes('BUDGET MANAGER');
     if (hasFullRole) return next();
   // Get assignment
-    const assignment = await UserOrganizationalAssignment.getUserPermissions(userId);
+    const assignment = await HierarchicalUserAssignment.getUserPermissions(userId);
     // OWN_ONLY or missing assignment -> deny transactional access
     if (!assignment || assignment.accessScope === 'OWN_ONLY') {
       return res.status(403).json({ message: 'Access denied. No organizational assignment.' });
@@ -107,4 +107,4 @@ module.exports = async function enforceOrgAccess(req, res, next) {
     console.error('🚨 enforceOrgAccess error:', error);
     return res.status(500).json({ message: 'Server error validating organizational access' });
   }
-};
+};

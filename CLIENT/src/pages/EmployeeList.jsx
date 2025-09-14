@@ -755,8 +755,8 @@ const EmployeeList = () => {
                         {userAccessLevel === 'DIVISION' 
                           ? `You can view and manage employees in ${userDivision || 'your division'}. You can process COS personnel within your division scope only.`
                           : userAccessLevel === 'DEPARTMENT'
-                          ? `You can view all employees in ${userDepartment || 'your department'} and oversee all divisions. You can process COS personnel across your entire department.`
-                          : `You have full access to view and manage employees within ${regionName || 'your region'}. You can process COS personnel across all departments and divisions.`
+                          ? `You can view all employees in ${userDepartment || 'your department'} and oversee all divisions.`
+                          : `You have full access to view and manage employees within ${regionName || 'your region'}.`
                         }
                       </Typography>
                     </Box>

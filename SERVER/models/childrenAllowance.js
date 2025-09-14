@@ -40,8 +40,11 @@ const ChildrenAllowanceSchema = mongoose.Schema(
     budgetType: { 
       type: String 
     },
+    // Submission workflow fields
+    status: { type: String, default: 'Not Submitted' },
+    originalLevel: { type: String }, // DIVISION, DEPARTMENT, or REGION
   },
   { timestamps: true }
 );
 module.exports = mongoose.models.ChildrenAllowance || 
-  mongoose.model("ChildrenAllowance", ChildrenAllowanceSchema);
+  mongoose.model("ChildrenAllowance", ChildrenAllowanceSchema);

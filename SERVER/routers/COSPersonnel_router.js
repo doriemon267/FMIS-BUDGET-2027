@@ -4,7 +4,7 @@ const {
   updateCOSPersonnel,
   deleteCOSPersonnel,
   getGrandTotalCOS
-} = require("../controllers/COSPersonnelController");
+} = require("../controllers/cospersonnelController");
 const Router = require("express").Router;
 const checkDueDate = require("../middleware/checkDueDate");
 const checkToken = require("../middleware/checkToken");

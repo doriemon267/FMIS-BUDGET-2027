@@ -25,6 +25,9 @@ const MealAllowanceSchema = mongoose.Schema(
     processDate: { type: Date, default: Date.now },
     fiscalYear: { type: String, required: true, trim: true },
     budgetType: { type: String, trim: true },
+    // Submission workflow fields
+    status: { type: String, default: 'Not Submitted' },
+    originalLevel: { type: String }, // DIVISION, DEPARTMENT, or REGION
   },
   { 
     timestamps: true,
@@ -36,4 +39,4 @@ const MealAllowanceSchema = mongoose.Schema(
 MealAllowanceSchema.index({ employeeNumber: 1, fiscalYear: 1 });
 MealAllowanceSchema.index({ fiscalYear: 1 });
 // Check if the model already exists before creating it
-module.exports = mongoose.model("MealAllowance", MealAllowanceSchema);
+module.exports = mongoose.model("MealAllowance", MealAllowanceSchema);

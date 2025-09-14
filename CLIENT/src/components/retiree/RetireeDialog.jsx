@@ -45,6 +45,24 @@ const RetireeDialog = ({
   const { currentUser } = useUser();
   const { activeRegion } = useRegion();
   const queryClient = useQueryClient();
+
+  // Get organizational level display text based on user's hierarchical access
+  const getOrganizationalDisplay = () => {
+    const hierarchical = currentUser?.hierarchicalAccess || {};
+    const scope = hierarchical.scope || 'REGION';
+    
+    switch(scope) {
+      case 'DIVISION':
+        const divisionName = hierarchical.accessibleDivisions?.[0] || 'Division';
+        return `Division: ${divisionName}`;
+      case 'DEPARTMENT':
+        const departmentName = hierarchical.accessibleDepartments?.[0]?.departmentName || 'Department';
+        return `Department: ${departmentName}`;
+      case 'REGION':
+      default:
+        return activeRegion ? `Region: ${activeRegion.name}` : '';
+    }
+  };
   const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({});
   const [errors, setErrors] = useState({});
@@ -395,7 +413,7 @@ const RetireeDialog = ({
               </Typography>
               <Typography variant="body2" sx={{ opacity: 0.9 }}>
                 {isEditing ? "Update retiree information and benefits" : "Process employee retirement with automatic calculations"}
-                {activeRegion && ` - Region: ${activeRegion.name}`}
+                {getOrganizationalDisplay() && ` - ${getOrganizationalDisplay()}`}
               </Typography>
             </Box>
           </Box>

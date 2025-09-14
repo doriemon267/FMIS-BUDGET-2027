@@ -39,13 +39,14 @@ import {
   Schedule as ScheduleIcon,
   AttachMoney as MoneyIcon,
 } from "@mui/icons-material";
-import { grey, green, blue } from "@mui/material/colors";
+import { grey, green, blue, orange, red } from "@mui/material/colors";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
 import { TiFilter } from "react-icons/ti";
 import api from "../../config/api";
 import { useSearch } from "../../context/SearchContext";
 import { useRegion } from "../../context/RegionContext";
+import { useUser } from "../../context/UserContext";
 import TableBodyLoading from "./TableBodyLoading";
 import { isValidDate } from "../../utils/formatDate";
 import InlineOvertimeAddRow from "./InlineOvertimeAddRow";
@@ -64,6 +65,8 @@ const OvertimePayCustomTable = ({
   const queryClient = useQueryClient();
   // Use the region context - moved up before it's used
   const { activeRegion } = useRegion();
+  // Use the user context to get hierarchical assignment
+  const { currentUser, assignmentLevel } = useUser();
 
   // Enhanced UI state
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -88,6 +91,39 @@ const OvertimePayCustomTable = ({
     operator: "=",
   });
   const [employeeOptions, setEmployeeOptions] = useState([]);
+
+  // Function to get hierarchical display based on user assignment level
+  const getHierarchicalDisplay = () => {
+    const hierarchical = currentUser?.hierarchicalAccess || {};
+    
+    switch (assignmentLevel) {
+      case 'DIVISION':
+        return {
+          label: `Division: ${hierarchical.accessibleDivisions?.[0] || currentUser?.divisionName || 'N/A'}`,
+          color: 'warning'
+        };
+      case 'DEPARTMENT':
+        return {
+          label: `Department: ${hierarchical.accessibleDepartments?.[0]?.departmentName || 'N/A'}`,
+          color: 'success'
+        };
+      case 'REGION':
+        return {
+          label: `Region: ${hierarchical.accessibleRegions?.[0]?.regionName || activeRegion?.name || 'N/A'}`,
+          color: 'primary'
+        };
+      case 'FULL':
+        return {
+          label: 'Full Access: All Data',
+          color: 'error'
+        };
+      default:
+        return {
+          label: `Region: ${activeRegion?.name || 'N/A'}`,
+          color: 'primary'
+        };
+    }
+  };
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: [dataListName, page, rowsPerPage, searchValue, fieldAndValue, orderBy, order, activeRegion?.name],
@@ -445,16 +481,22 @@ const OvertimePayCustomTable = ({
               Overtime Pay Management
             </Typography>
             
-            {activeRegion && (
+            {(activeRegion || assignmentLevel) && (
               <Chip
-                label={`Region: ${activeRegion.name}`}
+                label={getHierarchicalDisplay().label}
                 size="small"
-                color="primary"
+                color={getHierarchicalDisplay().color}
                 sx={{
-                  backgroundColor: blue[100],
-                  color: blue[800],
+                  backgroundColor: getHierarchicalDisplay().color === 'success' ? green[100] : 
+                                   getHierarchicalDisplay().color === 'warning' ? '#fff3cd' :
+                                   getHierarchicalDisplay().color === 'error' ? '#f8d7da' : blue[100],
+                  color: getHierarchicalDisplay().color === 'success' ? green[800] : 
+                         getHierarchicalDisplay().color === 'warning' ? '#856404' :
+                         getHierarchicalDisplay().color === 'error' ? '#721c24' : blue[800],
                   fontWeight: 'bold',
-                  border: `1px solid ${blue[300]}`
+                  border: `1px solid ${getHierarchicalDisplay().color === 'success' ? green[300] : 
+                                       getHierarchicalDisplay().color === 'warning' ? '#ffeaa7' :
+                                       getHierarchicalDisplay().color === 'error' ? '#f5c6cb' : blue[300]}`
                 }}
               />
             )}

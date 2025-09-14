@@ -6,7 +6,7 @@ const {
   getEligibleForLoyaltyPay,
   getEligibleForRetirement,
   getEmployeeStats,
-} = require("../controllers/EmployeeListController");
+} = require("../controllers/employeelistController");
 const Router = require("express").Router;
 const checkToken = require('../middleware/checkToken');
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');

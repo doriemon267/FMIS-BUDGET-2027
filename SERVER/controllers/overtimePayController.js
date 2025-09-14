@@ -62,6 +62,10 @@ exports.createOvertimePay = async (req, res) => {
       monthlySalary,
       budgetType,
       region,
+      department, // Add department field from middleware
+      division,   // Add division field from middleware
+      status,     // Add status field from middleware
+      originalLevel, // Add originalLevel field from middleware
     } = req.body;
     // --- NEW: Prevent adding if personnel status is Submitted or Approved
     const existingPerson = await PersonnelServices.findOne({ employeeFullName, fiscalYear });
@@ -108,6 +112,10 @@ exports.createOvertimePay = async (req, res) => {
       processDate,
       budgetType,
       region, // Add region field
+      department, // Add department field from middleware
+      division,   // Add division field from middleware
+      status,     // Add status field from middleware
+      originalLevel, // Add originalLevel field from middleware
     });
     await overtime.save();
     // 4) Sync combined overtime to PersonnelServices
@@ -303,6 +311,45 @@ exports.getAllOvertimePays = async (req, res) => {
     if (region) {
       query.region = region;
     }
+    // Get filters from middleware - prioritize submission workflow filters over hardcoded logic
+    const submissionWorkflowFilters = req.submissionWorkflowFilters || {};
+    
+    // Apply middleware filters if available (they include proper status filtering)
+    if (Object.keys(submissionWorkflowFilters).length > 0) {
+      console.log('🔧 APPLYING MIDDLEWARE FILTERS:', JSON.stringify(submissionWorkflowFilters, null, 2));
+      // Use the filters from the submission workflow middleware
+      // These already include the proper status checks for Department/Region levels
+      if (submissionWorkflowFilters.$and || submissionWorkflowFilters.$or) {
+        query = { ...query, ...submissionWorkflowFilters };
+      } else {
+        // Simple key-value filters
+        Object.assign(query, submissionWorkflowFilters);
+      }
+      console.log('🎯 FINAL DATABASE QUERY:', JSON.stringify(query, null, 2));
+    } else {
+      // Fallback to hardcoded logic for backward compatibility
+      if (req.user && req.user.assignment) {
+        const userLevel = req.user.level;
+        const userRegion = req.user.region;
+        const userDepartment = req.user.department;
+        const userDivision = req.user.division;
+
+        let filterCriteria = {};
+
+        if (userLevel === "Division") {
+          filterCriteria.division = userDivision;
+          filterCriteria.department = userDepartment;
+          filterCriteria.region = userRegion;
+        } else if (userLevel === "Department") {
+          filterCriteria.department = userDepartment;
+          filterCriteria.region = userRegion;
+        } else if (userLevel === "Region") {
+          filterCriteria.region = userRegion;
+        }
+
+        Object.assign(query, filterCriteria);
+      }
+    }
     const sort = { [orderBy || "createdAt"]: order === "desc" ? -1 : 1 };
     const skip = (Number(page) - 1) * Number(limit);
     const [results, total] = await Promise.all([
@@ -335,6 +382,42 @@ exports.getSumOfOvertimeAmount = async (req, res) => {
     if (region) {
       matchCriteria.region = region;
     }
+    // Get filters from middleware - prioritize submission workflow filters over hardcoded logic
+    const submissionWorkflowFilters = req.submissionWorkflowFilters || {};
+    
+    // Apply middleware filters if available (they include proper status filtering)
+    if (Object.keys(submissionWorkflowFilters).length > 0) {
+      // Use the filters from the submission workflow middleware
+      if (submissionWorkflowFilters.$and || submissionWorkflowFilters.$or) {
+        Object.assign(matchCriteria, submissionWorkflowFilters);
+      } else {
+        // Simple key-value filters
+        Object.assign(matchCriteria, submissionWorkflowFilters);
+      }
+    } else {
+      // Fallback to hardcoded logic for backward compatibility
+      if (req.user && req.user.assignment) {
+        const userLevel = req.user.level;
+        const userRegion = req.user.region;
+        const userDepartment = req.user.department;
+        const userDivision = req.user.division;
+
+        let filterCriteria = {};
+
+        if (userLevel === "Division") {
+          filterCriteria.division = userDivision;
+          filterCriteria.department = userDepartment;
+          filterCriteria.region = userRegion;
+        } else if (userLevel === "Department") {
+          filterCriteria.department = userDepartment;
+          filterCriteria.region = userRegion;
+        } else if (userLevel === "Region") {
+          filterCriteria.region = userRegion;
+        }
+
+        Object.assign(matchCriteria, filterCriteria);
+      }
+    }
     const result = await OvertimePay.aggregate([
       { $match: matchCriteria },
       { $group: { _id: null, totalAmount: { $sum: "$amount" } } },
@@ -361,9 +444,47 @@ exports.getOvertimeByRegion = async (req, res) => {
       }
       activeFiscalYear = active.fiscalYear;
     }
+    // Build match criteria
+    const matchCriteria = { fiscalYear: activeFiscalYear };
+    // Get filters from middleware - prioritize submission workflow filters over hardcoded logic
+    const submissionWorkflowFilters = req.submissionWorkflowFilters || {};
+    
+    // Apply middleware filters if available (they include proper status filtering)
+    if (Object.keys(submissionWorkflowFilters).length > 0) {
+      // Use the filters from the submission workflow middleware
+      if (submissionWorkflowFilters.$and || submissionWorkflowFilters.$or) {
+        Object.assign(matchCriteria, submissionWorkflowFilters);
+      } else {
+        // Simple key-value filters
+        Object.assign(matchCriteria, submissionWorkflowFilters);
+      }
+    } else {
+      // Fallback to hardcoded logic for backward compatibility
+      if (req.user && req.user.assignment) {
+        const userLevel = req.user.level;
+        const userRegion = req.user.region;
+        const userDepartment = req.user.department;
+        const userDivision = req.user.division;
+
+        let filterCriteria = {};
+
+        if (userLevel === "Division") {
+          filterCriteria.division = userDivision;
+          filterCriteria.department = userDepartment;
+          filterCriteria.region = userRegion;
+        } else if (userLevel === "Department") {
+          filterCriteria.department = userDepartment;
+          filterCriteria.region = userRegion;
+        } else if (userLevel === "Region") {
+          filterCriteria.region = userRegion;
+        }
+
+        Object.assign(matchCriteria, filterCriteria);
+      }
+    }
     // Aggregate overtime data by region
     const result = await OvertimePay.aggregate([
-      { $match: { fiscalYear: activeFiscalYear } },
+      { $match: matchCriteria },
       { 
         $group: { 
           _id: "$region", 
@@ -397,4 +518,4 @@ exports.getOvertimeByRegion = async (req, res) => {
       .status(500)
       .json({ error: "Nabigo sa pag-retrieve ng overtime data by region." });
   }
-};
+};

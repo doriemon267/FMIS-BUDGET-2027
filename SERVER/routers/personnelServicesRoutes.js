@@ -144,6 +144,7 @@ personnelServicesRouter.get("/api/personnel/getByParams", async (req, res) => {
 });
 personnelServicesRouter.get(
   "/getpersonnels/hiredBeforeJune1988", 
+  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
   getPersonnelHiredBeforeJune1988 || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );

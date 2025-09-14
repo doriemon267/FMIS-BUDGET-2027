@@ -302,15 +302,86 @@ exports.getAllMealAllowances = async (req, res) => {
       orderBy = "createdAt",
       order = "asc",
     } = req.query;
+    
+    // Get filters from middleware - prioritize submission workflow filters over hierarchical filters
+    const submissionWorkflowFilters = req.submissionWorkflowFilters || {};
+    const hierarchicalFilters = req.hierarchicalFilters || {};
+    
+    // Use submission workflow filters if available (they include status filtering), otherwise use hierarchical filters
+    const activeFilters = Object.keys(submissionWorkflowFilters).length > 0 ? submissionWorkflowFilters : hierarchicalFilters;
+    
+    // Map filters to database field names
+    const mapFiltersToDb = (filters) => {
+      // If filters contain complex $and/$or conditions, return them as-is
+      // This preserves the status filtering logic from the middleware
+      if (filters.$and || filters.$or) {
+        return filters;
+      }
+
+      // Handle simple key-value filters for backward compatibility
+      const mapped = {};
+      if (filters.region) mapped.region = filters.region;
+      if (filters.department) mapped.department = filters.department;
+      if (filters.division) mapped.division = filters.division;
+      if (filters.status) mapped.status = filters.status;
+      return mapped;
+    };
+    
+    const dbFilters = mapFiltersToDb(activeFilters);
+    
     let query = {};
+    
+    // Apply active filters as base
+    if (Object.keys(dbFilters).length > 0) {
+      if (dbFilters.$and) {
+        query = {
+          $and: [
+            query,
+            ...dbFilters.$and
+          ]
+        };
+      } else {
+        query = {
+          ...query,
+          ...dbFilters
+        };
+      }
+    }
+    // Apply active filters as base
+    if (Object.keys(dbFilters).length > 0) {
+      if (dbFilters.$and) {
+        query = {
+          $and: [
+            query,
+            ...dbFilters.$and
+          ]
+        };
+      } else {
+        query = {
+          ...query,
+          ...dbFilters
+        };
+      }
+    }
+    
     if (search) {
-      query.$or = [
-        { employeeFullName: { $regex: search, $options: "i" } },
-        { positionTitle: { $regex: search, $options: "i" } },
-        { department: { $regex: search, $options: "i" } },
-        { division: { $regex: search, $options: "i" } },
-        { region: { $regex: search, $options: "i" } },
-      ];
+      const searchCondition = {
+        $or: [
+          { employeeFullName: { $regex: search, $options: "i" } },
+          { positionTitle: { $regex: search, $options: "i" } },
+          { department: { $regex: search, $options: "i" } },
+          { division: { $regex: search, $options: "i" } },
+          { region: { $regex: search, $options: "i" } },
+        ]
+      };
+      
+      if (query.$and) {
+        query.$and.push(searchCondition);
+      } else {
+        query = {
+          $and: [query, searchCondition]
+        };
+      }
     }
     let fy = fiscalYear;
     if (!fy) {
@@ -319,7 +390,12 @@ exports.getAllMealAllowances = async (req, res) => {
         return res.status(400).json({ message: "Active settings not found" });
       fy = active.fiscalYear;
     }
-    query.fiscalYear = fy;
+    
+    if (query.$and) {
+      query.$and.push({ fiscalYear: fy });
+    } else {
+      query.fiscalYear = fy;
+    }
     const skip = (Number(page) - 1) * Number(limit);
     const sort = { [orderBy]: order === "desc" ? -1 : 1 };
     const [records, total] = await Promise.all([

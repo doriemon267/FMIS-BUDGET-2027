@@ -25,6 +25,7 @@ import { toast } from "react-hot-toast";
 import CustomButton from "../../global/components/CustomButton";
 import api from "../../config/api";
 import { useUser } from "../../context/UserContext";
+import { useRegion } from "../../context/RegionContext";
 
 const validationSchema = yup.object({
   employee: yup
@@ -49,7 +50,26 @@ const ChildrenAllowanceDialog = ({ row, schema, endpoint, dataListName }) => {
   const [error, setError] = useState(null);
   const [personnelService, setPersonnelService] = useState(null);
   const { currentUser } = useUser();
+  const { activeRegion } = useRegion();
   const queryClient = useQueryClient();
+
+  // Get organizational level display text based on user's hierarchical access
+  const getOrganizationalDisplay = () => {
+    const hierarchical = currentUser?.hierarchicalAccess || {};
+    const scope = hierarchical.scope || 'REGION';
+    
+    switch(scope) {
+      case 'DIVISION':
+        const divisionName = hierarchical.accessibleDivisions?.[0] || 'Division';
+        return `Division: ${divisionName}`;
+      case 'DEPARTMENT':
+        const departmentName = hierarchical.accessibleDepartments?.[0]?.departmentName || 'Department';
+        return `Department: ${departmentName}`;
+      case 'REGION':
+      default:
+        return activeRegion ? `Region: ${activeRegion.name}` : '';
+    }
+  };
   const [employees, setEmployees] = useState([]);
 
   const { control, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm({
@@ -292,6 +312,7 @@ const ChildrenAllowanceDialog = ({ row, schema, endpoint, dataListName }) => {
               </Typography>
               <Typography variant="body2" sx={{ opacity: 0.9 }}>
                 {isEditing ? "Update employee children allowance details" : "Add new children allowance record"}
+                {getOrganizationalDisplay() && ` - ${getOrganizationalDisplay()}`}
               </Typography>
             </Box>
           </Box>

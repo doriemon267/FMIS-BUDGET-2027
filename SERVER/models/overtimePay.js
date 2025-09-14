@@ -15,9 +15,14 @@ const overtimePaySchema = new mongoose.Schema(
     processDate: { type: Date, default: Date.now },
     // Additional fields for policy checks
     monthlySalary: { type: Number, default: 0 },
-    // Region field for region-based filtering and access control
+    // Organizational hierarchy fields for access control and submission workflow
     region: { type: String },
+    department: { type: String },
+    division: { type: String },
+    // Submission workflow fields
+    status: { type: String, default: 'Not Submitted' },
+    originalLevel: { type: String }, // DIVISION, DEPARTMENT, or REGION
   },
   { timestamps: true }
 );
-module.exports = mongoose.model("OvertimePay", overtimePaySchema);
+module.exports = mongoose.model("OvertimePay", overtimePaySchema);

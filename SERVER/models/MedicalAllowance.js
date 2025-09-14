@@ -44,6 +44,9 @@ const MedicalAllowanceSchema = mongoose.Schema(
     budgetType: { 
       type: String 
     },
+    // Submission workflow fields
+    status: { type: String, default: 'Not Submitted' },
+    originalLevel: { type: String }, // DIVISION, DEPARTMENT, or REGION
   },
   { timestamps: true }
 );

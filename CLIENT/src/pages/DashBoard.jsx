@@ -333,9 +333,9 @@ const HomePage = () => {
                   </Typography>
                   <Typography variant="body1" sx={{ opacity: 0.8, maxWidth: '600px', mb: 3 }}>
                     {userAccessLevel === 'DIVISION' 
-                      ? `Manage budget proposals for your division. You can create proposals within your division scope and process COS personnel data within your access boundaries.`
+                      ? `Manage budget proposals for your division. You can create proposals within your division scope.`
                       : userAccessLevel === 'DEPARTMENT'
-                      ? `Manage budget proposals across your department. You have oversight of all divisions within your department and can process COS personnel accordingly.`
+                      ? `Manage budget proposals across your department. You have oversight of all divisions within your department.`
                       : `Manage and track all your budget proposals in one place. Create new proposals, monitor their status, and generate comprehensive reports for ${displayInfo.name}.`
                     }
                   </Typography>

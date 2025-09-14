@@ -21,8 +21,41 @@ import { useRegion } from "../../context/RegionContext";
 import { green, blue } from "@mui/material/colors";
 
 const InlineOvertimeAddRow = ({ refreshData, employeeOptions }) => {
-  const { currentUser } = useUser();
+  const { currentUser, assignmentLevel } = useUser();
   const { activeRegion } = useRegion();
+
+  // Function to get hierarchical display
+  const getHierarchicalDisplay = () => {
+    const hierarchical = currentUser?.hierarchicalAccess || {};
+    
+    switch (assignmentLevel) {
+      case 'DIVISION':
+        return {
+          label: `Division: ${hierarchical.accessibleDivisions?.[0] || currentUser?.divisionName || 'N/A'}`,
+          color: 'warning'
+        };
+      case 'DEPARTMENT':
+        return {
+          label: `Department: ${hierarchical.accessibleDepartments?.[0]?.departmentName || 'N/A'}`,
+          color: 'success'
+        };
+      case 'REGION':
+        return {
+          label: `Region: ${hierarchical.accessibleRegions?.[0]?.regionName || 'N/A'}`,
+          color: 'primary'
+        };
+      case 'FULL':
+        return {
+          label: 'Full Access: All Data',
+          color: 'error'
+        };
+      default:
+        return {
+          label: `Region: N/A`,
+          color: 'primary'
+        };
+    }
+  };
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [weekdayHours, setWeekdayHours] = useState("");
   const [weekendHours, setWeekendHours] = useState("");
@@ -135,6 +168,9 @@ const InlineOvertimeAddRow = ({ refreshData, employeeOptions }) => {
       toast.error("Settings not loaded. Please refresh.");
       return;
     }
+    // Get hierarchical data for saving
+    const hierarchical = currentUser?.hierarchicalAccess || {};
+    
     const payload = {
       employeeFullName: selectedEmployee.employeeFullName,
       positionTitle: selectedEmployee.positionTitle,
@@ -145,8 +181,10 @@ const InlineOvertimeAddRow = ({ refreshData, employeeOptions }) => {
       fiscalYear,
       budgetType,
       processDate: new Date(),
-      // Include region if available
-      region: activeRegion?.name || null,
+      // Include hierarchical organizational data
+      region: hierarchical.accessibleRegions?.[0]?.regionName || activeRegion?.name || null,
+      department: hierarchical.accessibleDepartments?.[0]?.departmentName || null,
+      division: hierarchical.accessibleDivisions?.[0] || currentUser?.divisionName || null,
     };
     mutation.mutate(payload);
   };
@@ -175,17 +213,19 @@ const InlineOvertimeAddRow = ({ refreshData, employeeOptions }) => {
                   fontWeight: 'bold'
                 }}
               />
-              {activeRegion && (
-                <Chip
-                  label={activeRegion.name}
-                  size="small"
-                  sx={{
-                    backgroundColor: blue[50],
-                    color: blue[700],
-                    fontWeight: 'bold'
-                  }}
-                />
-              )}
+              <Chip
+                label={getHierarchicalDisplay().label}
+                size="small"
+                sx={{
+                  backgroundColor: getHierarchicalDisplay().color === 'success' ? green[50] : 
+                                   getHierarchicalDisplay().color === 'warning' ? '#fff3cd' :
+                                   getHierarchicalDisplay().color === 'error' ? '#f8d7da' : blue[50],
+                  color: getHierarchicalDisplay().color === 'success' ? green[700] : 
+                         getHierarchicalDisplay().color === 'warning' ? '#856404' :
+                         getHierarchicalDisplay().color === 'error' ? '#721c24' : blue[700],
+                  fontWeight: 'bold'
+                }}
+              />
             </Box>
             <Autocomplete
               options={filteredEmployeeOptions}

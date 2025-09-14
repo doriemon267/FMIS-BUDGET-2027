@@ -30,8 +30,26 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
   const [employees, setEmployees] = useState([]);
-  const { currentUser } = useUser();
+  const { currentUser, assignmentLevel } = useUser();
   const { activeRegion } = useRegion();
+  
+  // Function to get hierarchical display
+  const getHierarchicalDisplay = () => {
+    const hierarchical = currentUser?.hierarchicalAccess || {};
+    
+    switch (assignmentLevel) {
+      case 'DIVISION':
+        return `Division: ${hierarchical.accessibleDivisions?.[0]?.divisionName || currentUser?.divisionName || 'N/A'}`;
+      case 'DEPARTMENT':
+        return `Department: ${hierarchical.accessibleDepartments?.[0]?.departmentName || 'N/A'}`;
+      case 'REGION':
+        return `Region: ${hierarchical.accessibleRegions?.[0]?.regionName || activeRegion?.name || 'N/A'}`;
+      case 'FULL':
+        return 'Full Access: All Data';
+      default:
+        return `Region: ${activeRegion?.name || 'N/A'}`;
+    }
+  };
   const [subsistenceRate, setSubsistenceRate] = useState(0);
   const [fiscalYearFromSettings, setFiscalYearFromSettings] = useState("");
   const [budgetTypeFromSettings, setBudgetTypeFromSettings] = useState("");
@@ -180,7 +198,7 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
               </Typography>
               <Typography variant="body2" sx={{ opacity: 0.9 }}>
                 {isEditing ? "Update employee subsistence allowance details" : "Add new subsistence allowance record"}
-                {activeRegion && ` - Region: ${activeRegion.name}`}
+                {(activeRegion || assignmentLevel) && ` - ${getHierarchicalDisplay()}`}
               </Typography>
             </Box>
           </Box>

@@ -1,7 +1,7 @@
 // controllers/subsistenceAllowanceMDSController.js
 const SubsistenceAllowanceMDS = require("../models/subsistenceAllowanceMDS");
 const Settings = require("../models/Settings");
-const PersonnelServices = require("../models/PersonnelServices");
+const PersonnelServices = require("../models/personnelServices");
 /**
  * Create a new Subsistence Allowance MDS record,
  * then immediately update the corresponding PersonnelServices entry.
@@ -92,6 +92,43 @@ exports.getAllSubsistenceAllowances = async (req, res) => {
       fy = active.fiscalYear;
     }
     query.fiscalYear = fy;
+    
+    // Get filters from middleware - prioritize submission workflow filters over hardcoded logic
+    const submissionWorkflowFilters = req.submissionWorkflowFilters || {};
+    
+    // Apply middleware filters if available (they include proper status filtering)
+    if (Object.keys(submissionWorkflowFilters).length > 0) {
+      // Use the filters from the submission workflow middleware
+      if (submissionWorkflowFilters.$and || submissionWorkflowFilters.$or) {
+        query = { ...query, ...submissionWorkflowFilters };
+      } else {
+        // Simple key-value filters
+        Object.assign(query, submissionWorkflowFilters);
+      }
+    } else {
+      // Fallback to hardcoded logic for backward compatibility
+      if (req.user && req.user.assignment) {
+        const userLevel = req.user.level;
+        const userRegion = req.user.region;
+        const userDepartment = req.user.department;
+        const userDivision = req.user.division;
+
+        let filterCriteria = {};
+
+        if (userLevel === "Division") {
+          filterCriteria.division = userDivision;
+          filterCriteria.department = userDepartment;
+          filterCriteria.region = userRegion;
+        } else if (userLevel === "Department") {
+          filterCriteria.department = userDepartment;
+          filterCriteria.region = userRegion;
+        } else if (userLevel === "Region") {
+          filterCriteria.region = userRegion;
+        }
+
+        Object.assign(query, filterCriteria);
+      }
+    }
     // Pagination & sorting
     const skip = (page - 1) * limit;
     const sort = { [orderBy || "createdAt"]: order === "desc" ? -1 : 1 };
@@ -233,13 +270,52 @@ exports.getAllPerServicesMDS = async (req, res) => {
     const activeFiscalYear = activeSettings.fiscalYear;
     // Only include records with these statuses
     const statuses = ["Not Submitted", "Returned", "Drafts"];
-    // Fetch personnel services for the active fiscal year and specified statuses
-    // Also filter by MEDICAL AND DENTAL SERVICES division
-    const personnelServices = await PersonnelServices.find({
+    // Build base query
+    let query = {
       fiscalYear: activeFiscalYear,
       status: { $in: statuses },
       division: "MEDICAL AND DENTAL SERVICES"
-    });
+    };
+    
+    // Get filters from middleware - prioritize submission workflow filters over hardcoded logic
+    const submissionWorkflowFilters = req.submissionWorkflowFilters || {};
+    
+    // Apply middleware filters if available (they include proper status filtering)
+    if (Object.keys(submissionWorkflowFilters).length > 0) {
+      // Use the filters from the submission workflow middleware
+      if (submissionWorkflowFilters.$and || submissionWorkflowFilters.$or) {
+        query = { ...query, ...submissionWorkflowFilters };
+      } else {
+        // Simple key-value filters
+        Object.assign(query, submissionWorkflowFilters);
+      }
+    } else {
+      // Fallback to hardcoded logic for backward compatibility
+      if (req.user && req.user.assignment) {
+        const userLevel = req.user.level;
+        const userRegion = req.user.region;
+        const userDepartment = req.user.department;
+        const userDivision = req.user.division;
+
+        let filterCriteria = {};
+
+        if (userLevel === "Division") {
+          filterCriteria.division = userDivision;
+          filterCriteria.department = userDepartment;
+          filterCriteria.region = userRegion;
+        } else if (userLevel === "Department") {
+          filterCriteria.department = userDepartment;
+          filterCriteria.region = userRegion;
+        } else if (userLevel === "Region") {
+          filterCriteria.region = userRegion;
+        }
+
+        Object.assign(query, filterCriteria);
+      }
+    }
+    // Fetch personnel services for the active fiscal year and specified statuses
+    // Also filter by MEDICAL AND DENTAL SERVICES division
+    const personnelServices = await PersonnelServices.find(query);
     res.status(200).json(personnelServices);
   } catch (error) {
     console.error("Error fetching personnel services:", error);
@@ -260,7 +336,7 @@ exports.getAllPerServicesMDSByParams = async (req, res) => {
       activeFiscalYear = activeSettings.fiscalYear;
     }
     // Build query
-    const query = { 
+    let query = { 
       fiscalYear: activeFiscalYear,
       // Always filter by MEDICAL AND DENTAL SERVICES division
       division: "MEDICAL AND DENTAL SERVICES"
@@ -275,6 +351,31 @@ exports.getAllPerServicesMDSByParams = async (req, res) => {
     } else {
       query.status = { $in: ["Not Submitted", "Returned", "Drafts"] };
     }
+    // Apply hierarchical filtering based on user assignment
+    if (req.user && req.user.assignment) {
+      const userAssignment = req.user.assignment;
+      const userLevel = req.user.level;
+      const userRegion = req.user.region;
+      const userDepartment = req.user.department;
+      const userDivision = req.user.division;
+
+      // Build filter based on user level
+      let filterCriteria = {};
+
+      if (userLevel === "Division") {
+        // Division level: Can see their own division data
+        filterCriteria.division = userDivision;
+        filterCriteria.department = userDepartment;
+        filterCriteria.region = userRegion;
+      } else if (userLevel === "Department") {
+        filterCriteria.department = userDepartment;
+        filterCriteria.region = userRegion;
+      } else if (userLevel === "Region") {
+        filterCriteria.region = userRegion;
+      }
+
+      Object.assign(query, filterCriteria);
+    }
     // Fetch personnel services with the constructed query
     const personnelServices = await PersonnelServices.find(query).lean();
     res.status(200).json(personnelServices);
@@ -282,4 +383,4 @@ exports.getAllPerServicesMDSByParams = async (req, res) => {
     console.error("Error fetching MDS personnel by params:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
-};
+};

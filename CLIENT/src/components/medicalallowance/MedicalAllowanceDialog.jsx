@@ -25,6 +25,7 @@ import { toast } from "react-hot-toast";
 import CustomButton from "../../global/components/CustomButton";
 import api from "../../config/api";
 import { useUser } from "../../context/UserContext";
+import { useRegion } from "../../context/RegionContext";
 
 const validationSchema = yup.object({
   employee: yup
@@ -51,7 +52,26 @@ const MedicalAllowanceDialog = ({ row, schema, endpoint, dataListName }) => {
   const [checkingDuplicate, setCheckingDuplicate] = useState(false);
   const [personnelService, setPersonnelService] = useState(null);
   const { currentUser } = useUser();
+  const { activeRegion } = useRegion();
   const queryClient = useQueryClient();
+
+  // Get organizational level display text based on user's hierarchical access
+  const getOrganizationalDisplay = () => {
+    const hierarchical = currentUser?.hierarchicalAccess || {};
+    const scope = hierarchical.scope || 'REGION';
+    
+    switch(scope) {
+      case 'DIVISION':
+        const divisionName = hierarchical.accessibleDivisions?.[0] || 'Division';
+        return `Division: ${divisionName}`;
+      case 'DEPARTMENT':
+        const departmentName = hierarchical.accessibleDepartments?.[0]?.departmentName || 'Department';
+        return `Department: ${departmentName}`;
+      case 'REGION':
+      default:
+        return activeRegion ? `Region: ${activeRegion.name}` : '';
+    }
+  };
   const [employees, setEmployees] = useState([]);
   // Add state for tracking children allowance record
   const [childrenAllowanceRecord, setChildrenAllowanceRecord] = useState(null);
@@ -410,6 +430,7 @@ const MedicalAllowanceDialog = ({ row, schema, endpoint, dataListName }) => {
               </Typography>
               <Typography variant="body2" sx={{ opacity: 0.9 }}>
                 {isEditing ? "Update employee medical allowance details" : "Add new medical allowance record"}
+                {getOrganizationalDisplay() && ` - ${getOrganizationalDisplay()}`}
               </Typography>
               {settings?.fiscalYear && (
                 <Typography variant="caption" sx={{ opacity: 0.8, display: 'block', mt: 0.5, fontWeight: 'bold', color: '#ffeb3b' }}>

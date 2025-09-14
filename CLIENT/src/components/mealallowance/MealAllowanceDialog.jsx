@@ -35,6 +35,24 @@ const MealAllowanceDialog = ({ row, endpoint, dataListName }) => {
   const { activeRegion } = useRegion();
   const queryClient = useQueryClient();
 
+  // Get organizational level display text based on user's hierarchical access
+  const getOrganizationalDisplay = () => {
+    const hierarchical = currentUser?.hierarchicalAccess || {};
+    const scope = hierarchical.scope || 'REGION';
+    
+    switch(scope) {
+      case 'DIVISION':
+        const divisionName = hierarchical.accessibleDivisions?.[0] || 'Division';
+        return `Division: ${divisionName}`;
+      case 'DEPARTMENT':
+        const departmentName = hierarchical.accessibleDepartments?.[0]?.departmentName || 'Department';
+        return `Department: ${departmentName}`;
+      case 'REGION':
+      default:
+        return activeRegion ? `Region: ${activeRegion.name}` : '';
+    }
+  };
+
   const { control, handleSubmit, reset, watch, setValue } = useForm({
     defaultValues: {
       employee: null,
@@ -241,7 +259,7 @@ const MealAllowanceDialog = ({ row, endpoint, dataListName }) => {
               </Typography>
               <Typography variant="body2" sx={{ opacity: 0.9 }}>
                 {isEditing ? "Update employee meal allowance details" : "Add new meal allowance record"}
-                {activeRegion && ` - Region: ${activeRegion.name}`}
+                {getOrganizationalDisplay() && ` - ${getOrganizationalDisplay()}`}
               </Typography>
             </Box>
           </Box>

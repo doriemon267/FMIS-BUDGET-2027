@@ -1,7 +1,45 @@
 const SpecialCounselAllowance = require('../models/SpecialCounselAllowance');
 exports.getAllSpecialCounselAllowances = async (req, res) => {
   try {
-    const specialCounselAllowances = await SpecialCounselAllowance.find().populate('nameOfEmployee positionTitle');
+    let query = {};
+    
+    // Get filters from middleware - prioritize submission workflow filters over hardcoded logic
+    const submissionWorkflowFilters = req.submissionWorkflowFilters || {};
+    
+    // Apply middleware filters if available (they include proper status filtering)
+    if (Object.keys(submissionWorkflowFilters).length > 0) {
+      // Use the filters from the submission workflow middleware
+      if (submissionWorkflowFilters.$and || submissionWorkflowFilters.$or) {
+        query = { ...query, ...submissionWorkflowFilters };
+      } else {
+        // Simple key-value filters
+        Object.assign(query, submissionWorkflowFilters);
+      }
+    } else {
+      // Fallback to hardcoded logic for backward compatibility
+      if (req.user && req.user.assignment) {
+        const userLevel = req.user.level;
+        const userRegion = req.user.region;
+        const userDepartment = req.user.department;
+        const userDivision = req.user.division;
+
+        let filterCriteria = {};
+
+        if (userLevel === "Division") {
+          filterCriteria.division = userDivision;
+          filterCriteria.department = userDepartment;
+          filterCriteria.region = userRegion;
+        } else if (userLevel === "Department") {
+          filterCriteria.department = userDepartment;
+          filterCriteria.region = userRegion;
+        } else if (userLevel === "Region") {
+          filterCriteria.region = userRegion;
+        }
+
+        Object.assign(query, filterCriteria);
+      }
+    }
+    const specialCounselAllowances = await SpecialCounselAllowance.find(query).populate('nameOfEmployee positionTitle');
     res.status(200).json({ specialCounselAllowances });
   } catch (error) {
     res.status(500).json({ error: 'An error occurred while fetching special counsel allowances.' });

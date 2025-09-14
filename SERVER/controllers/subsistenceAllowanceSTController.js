@@ -115,6 +115,48 @@ exports.getAllSubsistenceST = async (req, res) => {
       fy = activeSettings.fiscalYear;
     }
     query.fiscalYear = fy;
+    // Apply hierarchical filtering based on user assignment
+    if (req.user && req.user.assignment) {
+      const userAssignment = req.user.assignment;
+      const userLevel = req.user.level;
+      const userRegion = req.user.region;
+      const userDepartment = req.user.department;
+      const userDivision = req.user.division;
+
+      // Build filter based on user level
+      let filterCriteria = {};
+
+      if (userLevel === "Division") {
+        // Division level: Can see their own division data
+        filterCriteria.division = userDivision;
+        filterCriteria.department = userDepartment;
+        filterCriteria.region = userRegion;
+      } else if (userLevel === "Department") {
+        // Department level: Can see all divisions under their department
+        // But only if the data is submitted/approved
+        filterCriteria.department = userDepartment;
+        filterCriteria.region = userRegion;
+        // Add status filter for department level
+        filterCriteria.$or = [
+          { status: "Submitted" },
+          { status: "Approved" },
+          { status: { $exists: false } } // For backward compatibility
+        ];
+      } else if (userLevel === "Region") {
+        // Region level: Can see all departments under their region
+        // But only if the data is submitted/approved
+        filterCriteria.region = userRegion;
+        // Add status filter for region level
+        filterCriteria.$or = [
+          { status: "Submitted" },
+          { status: "Approved" },
+          { status: { $exists: false } } // For backward compatibility
+        ];
+      }
+
+      // Apply the hierarchical filter to the query
+      query = { ...query, ...filterCriteria };
+    }
     const sort = { [orderBy || "createdAt"]: order.toLowerCase() === "desc" ? -1 : 1 };
     const skip = (Number(page) - 1) * Number(limit);
     const [records, total] = await Promise.all([
@@ -247,4 +289,4 @@ exports.getSumOfSubsistenceST = async (req, res) => {
     console.error("❌ Error in getSumOfSubsistenceST:", err);
     return res.status(500).json({ message: "Failed to calculate total ST amount.", error: err.message });
   }
-};
+};

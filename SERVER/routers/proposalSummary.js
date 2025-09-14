@@ -14,5 +14,5 @@ const {
   // Get analytics data para sa proposal summary
   proposalSummaryRouter.get("/analytics", hierarchicalAccessControl('read', { allowedFields: ['region'] }), getAnalytics);
   // Get personnel aggregates
-  proposalSummaryRouter.get("/personnelAggregates", getPersonnelAggregates);
-  module.exports = proposalSummaryRouter;
+  proposalSummaryRouter.get("/personnelAggregates", hierarchicalAccessControl('read', { allowedFields: ['region'] }), getPersonnelAggregates);
+  module.exports = proposalSummaryRouter;

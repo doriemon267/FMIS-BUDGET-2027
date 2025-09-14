@@ -26,9 +26,12 @@ const SubsistenceAllowanceMDSSchema = mongoose.Schema(
     budgetType: {
       type: String,
     },
+    // Submission workflow fields
+    status: { type: String, default: 'Not Submitted' },
+    originalLevel: { type: String }, // DIVISION, DEPARTMENT, or REGION
   },
   { timestamps: true }
 );
 const SubsistenceAllowanceMDSS = mongoose.model(
   "SubsistenceAllowanceMDS", SubsistenceAllowanceMDSSchema);
-module.exports = SubsistenceAllowanceMDSS;
+module.exports = SubsistenceAllowanceMDSS;

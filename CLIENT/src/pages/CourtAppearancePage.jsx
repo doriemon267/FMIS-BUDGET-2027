@@ -35,7 +35,42 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import { alpha } from "@mui/material/styles";
 
 const EmployeeCourtAppearancePage = () => {
-  const { currentUser } = useUser();
+  const { currentUser, assignmentLevel } = useUser();
+  
+  // Function to get hierarchical display
+  const getHierarchicalDisplay = () => {
+    const hierarchical = currentUser?.hierarchicalAccess || {};
+    
+    switch (assignmentLevel) {
+      case 'DIVISION':
+        // Division names are stored as strings in accessibleDivisions array
+        return `Division: ${hierarchical.accessibleDivisions?.[0] || currentUser?.divisionName || 'N/A'}`;
+      case 'DEPARTMENT':
+        return `Department: ${hierarchical.accessibleDepartments?.[0]?.departmentName || 'N/A'}`;
+      case 'REGION':
+        return `Region: ${hierarchical.accessibleRegions?.[0]?.regionName || 'N/A'}`;
+      case 'FULL':
+        return 'Full Access: All Data';
+      default:
+        return `Region: N/A`;
+    }
+  };
+  
+  // Function to get hierarchical display color
+  const getHierarchicalColor = () => {
+    switch (assignmentLevel) {
+      case 'DIVISION':
+        return 'orange';
+      case 'DEPARTMENT':
+        return 'green';
+      case 'REGION':
+        return 'blue';
+      case 'FULL':
+        return 'purple';
+      default:
+        return 'gray';
+    }
+  };
 
   // Core data state
   const [settings, setSettings] = useState(null);
@@ -127,8 +162,9 @@ const EmployeeCourtAppearancePage = () => {
       return;
     }
     
-    // Get region name for filename
-    const regionName = activeRegion?.name || activeRegion?.regionName || 'All-Regions';
+    // Get hierarchical display for filename
+    const hierarchicalDisplay = getHierarchicalDisplay();
+    const filenameSafe = hierarchicalDisplay.replace(/[^a-zA-Z0-9-]/g, '-');
 
     const csvData = [
       ["Employee Number", "Full Name", "Position Title", "Department", "Division", "Region", "No. of Court Appearances", "Court Appearance Amount", "Fiscal Year", "Budget Type"],
@@ -151,11 +187,11 @@ const EmployeeCourtAppearancePage = () => {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `court-appearances-${regionName.replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `court-appearances-${filenameSafe}-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
 
-    toast.success(`Data exported successfully for ${regionName}!`);
+    toast.success(`Data exported successfully for ${hierarchicalDisplay}!`);
     setExportMenuAnchor(null);
   }, [tableData, activeRegion]);
 
@@ -172,15 +208,15 @@ const EmployeeCourtAppearancePage = () => {
       day: 'numeric'
     });
 
-    // Get region name for display
-    const regionName = activeRegion?.name || activeRegion?.regionName || 'All Regions';
+    // Get hierarchical display for PDF
+    const hierarchicalDisplay = getHierarchicalDisplay();
     
     const grandTotal = printData.reduce((sum, row) => sum + (row.courtAppearanceAmount || 0), 0);
 
     return `<!DOCTYPE html>
 <html>
 <head>
-  <title>Court Appearance Report - ${regionName}</title>
+  <title>Court Appearance Report - ${hierarchicalDisplay}</title>
   <style>
     @page {
       size: A4 landscape;
@@ -223,7 +259,7 @@ const EmployeeCourtAppearancePage = () => {
     <h1>NATIONAL IRRIGATION ADMINISTRATION</h1>
     <h2>COURT APPEARANCE REPORT</h2>
     <h3>As of ${currentDate}</h3>
-    <h4>Region: ${regionName}</h4>
+    <h4>${hierarchicalDisplay}</h4>
     <div class="department-note">LEGAL SERVICES PERSONNEL ONLY</div>
   </div>
   <table>
@@ -510,16 +546,18 @@ const EmployeeCourtAppearancePage = () => {
       {/* Save Status Indicator */}
       <SaveStatusIndicator />
 
-      {/* Region Indicator */}
-      {activeRegion && (
-        <Chip
-          label={`Region: ${activeRegion.name || activeRegion.regionName}`}
-          color="primary"
-          size="small"
-          variant="outlined"
-          sx={{ mr: 1 }}
-        />
-      )}
+      {/* Hierarchical Level Indicator */}
+      <Chip
+        label={getHierarchicalDisplay()}
+        size="small"
+        variant="outlined"
+        sx={{ 
+          mr: 1,
+          backgroundColor: getHierarchicalColor(),
+          color: 'white',
+          fontWeight: 'bold'
+        }}
+      />
 
       {/* Validation Errors Alert */}
       {Object.keys(validationErrors).length > 0 && (
@@ -681,8 +719,8 @@ const EmployeeCourtAppearancePage = () => {
     budgetType: { type: "text", label: "Budget Type" },
   };
 
-  // Get region name for display
-  const regionName = activeRegion?.name || activeRegion?.regionName;
+  // Get hierarchical display for page header
+  const hierarchicalDisplay = getHierarchicalDisplay();
   
   return (
     <>
@@ -692,8 +730,8 @@ const EmployeeCourtAppearancePage = () => {
         hasAdd={false}
         tableData={tableData}
         customAddElement={headerButtons}
-        title={`Court Appearance Management ${regionName ? `- ${regionName} Region` : ''}`}
-        description={`Manage court appearance records and allowances for LEGAL SERVICES personnel ${regionName ? `in ${regionName} region` : ''}`}
+        title={`Court Appearance Management - ${hierarchicalDisplay}`}
+        description={`Manage court appearance records and allowances for LEGAL SERVICES personnel`}
       />
 
       {/* Export Menu */}
@@ -732,11 +770,9 @@ const EmployeeCourtAppearancePage = () => {
           <Box display="flex" justifyContent="space-between" alignItems="center">
             <Typography variant="h6">
               Print Preview - Court Appearance Report
-              {activeRegion && (
-                <Typography variant="caption" display="block" color="text.secondary">
-                  Region: {activeRegion.name || activeRegion.regionName} | LEGAL SERVICES Personnel Only
-                </Typography>
-              )}
+              <Typography variant="caption" display="block" color="text.secondary">
+                {getHierarchicalDisplay()} | LEGAL SERVICES Personnel Only
+              </Typography>
             </Typography>
             <Box>
               <Button
