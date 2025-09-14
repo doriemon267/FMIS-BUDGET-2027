@@ -120,7 +120,7 @@ mongoose.connection.once('open', async () => {
   } catch (e) {
     }
   } catch (error) {
-    console.error('⚠️ Database index check failed:', error.message);
+    // Database index check failed
   }
 });
 const app = express();
@@ -163,7 +163,7 @@ app.use((req, res, next) => {
     // Ensure user is authenticated before enforcing org access
     return checkToken(req, res, () => enforceOrgAccess(req, res, next));
   } catch (e) {
-    console.error('Global org enforcement error:', e);
+    // Global org enforcement error
     return res.status(500).json({ message: 'Server error during access enforcement' });
   }
 });

@@ -125,7 +125,7 @@ exports.objectFilter = async (
     //   data: results,
     // };
   } catch (error) {
-    console.error("Error in objectFilter:", error);
+    // Error in objectFilter
     return { success: false, message: "Server error", error: error.message };
   }
-};
+};

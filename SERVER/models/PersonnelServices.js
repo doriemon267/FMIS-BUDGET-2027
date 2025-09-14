@@ -237,9 +237,9 @@ personnelServicesSchema.statics.resetMealAllowance = async function(employeeNumb
     }
     return { success: true, result };
   } catch (error) {
-    console.error("Error resetting meal allowance:", error);
+    // Error resetting meal allowance
     return { success: false, error };
   }
 };
 const PersonnelServices = mongoose.models.PersonnelServices || mongoose.model("PersonnelServices", personnelServicesSchema);
-module.exports = PersonnelServices;
+module.exports = PersonnelServices;

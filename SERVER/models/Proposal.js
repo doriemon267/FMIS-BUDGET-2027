@@ -19,6 +19,18 @@ const proposalSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  department: {
+    type: String
+  },
+  division: {
+    type: String
+  },
+  originalDepartment: {
+    type: String
+  },
+  originalDivision: {
+    type: String
+  },
   processBy: {
     type: String,
     required: true
@@ -51,6 +63,15 @@ const proposalSchema = new mongoose.Schema({
   rejectionReason: {
     type: String
   },
+  consolidationMetadata: {
+    type: mongoose.Schema.Types.Mixed
+  },
+  createdByAssignmentLevel: {
+    type: String
+  },
+  createdByUserId: {
+    type: String
+  },
   createdAt: {
     type: Date,
     default: Date.now
@@ -60,4 +81,4 @@ const proposalSchema = new mongoose.Schema({
     default: Date.now
   }
 }, { timestamps: true });
-module.exports = mongoose.model("Proposal", proposalSchema);
+module.exports = mongoose.model("Proposal", proposalSchema);

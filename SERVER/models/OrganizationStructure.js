@@ -88,7 +88,7 @@ departmentDivisionMappingSchema.statics.getCompleteOrganizationStructure = async
     };
     return structure;
   } catch (error) {
-    console.error('Error getting complete organization structure:', error);
+    // Error getting complete organization structure
     throw error;
   }
 };
@@ -105,7 +105,7 @@ departmentDivisionMappingSchema.statics.getDepartmentsWithDivisions = async func
       regionId: mapping.regionId?._id
     }));
   } catch (error) {
-    console.error('Error getting departments with divisions:', error);
+    // Error getting departments with divisions
     throw error;
   }
 };
@@ -118,7 +118,7 @@ departmentDivisionMappingSchema.statics.getDivisionsForDepartment = async functi
     }
     return mapping.divisions.filter(div => div.isActive);
   } catch (error) {
-    console.error('Error getting divisions for department:', error);
+    // Error getting divisions for department
     throw error;
   }
 };
@@ -134,9 +134,9 @@ departmentDivisionMappingSchema.statics.validateDepartmentDivisionCombination = 
     }
     return mapping.divisions.some(div => div.isActive && div.name === divisionName);
   } catch (error) {
-    console.error('Error validating department-division combination:', error);
+    // Error validating department-division combination
     return false;
   }
 };
 const DepartmentDivisionMapping = mongoose.model('DepartmentDivisionMapping', departmentDivisionMappingSchema);
-module.exports = DepartmentDivisionMapping;
+module.exports = DepartmentDivisionMapping;

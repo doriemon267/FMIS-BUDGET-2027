@@ -84,10 +84,9 @@ const verifyBackupIntegrity = async (filePath) => {
         verification.canExtract = false;
       }
     }
-    }`);
     return verification;
   } catch (error) {
-    console.error('❌ Backup verification failed:', error);
+    // Backup verification failed
     return {
       fileExists: false,
       fileSize: 0,
@@ -105,7 +104,6 @@ const verifyBackupIntegrity = async (filePath) => {
  */
 const compareBackups = async (backup1Path, backup2Path) => {
   try {
-    } vs ${path.basename(backup2Path)}`);
     const [verification1, verification2] = await Promise.all([
       verifyBackupIntegrity(backup1Path),
       verifyBackupIntegrity(backup2Path)
@@ -149,7 +147,7 @@ const compareBackups = async (backup1Path, backup2Path) => {
     }
     return comparison;
   } catch (error) {
-    console.error('❌ Backup comparison failed:', error);
+    // Backup comparison failed
     return {
       error: error.message,
       comparisonTime: new Date()
@@ -225,7 +223,6 @@ const batchVerifyBackups = async (backupPaths) => {
   let corruptedCount = 0;
   for (let i = 0; i < backupPaths.length; i++) {
     const backupPath = backupPaths[i];
-    }`);
     try {
       const report = await generateBackupReport(backupPath);
       results.push(report);

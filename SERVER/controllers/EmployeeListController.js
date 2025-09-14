@@ -223,9 +223,9 @@ exports.getAllEmployees = async (req, res) => {
               numberFilterQuery
             ]
           };
-        } else if (Object.keys(dbHierarchicalFilters).length > 0) {
+        } else if (Object.keys(dbFilters).length > 0) {
           query = {
-            $and: [dbHierarchicalFilters, numberFilterQuery]
+            $and: [dbFilters, numberFilterQuery]
           };
         } else {
           query = {
@@ -254,9 +254,9 @@ exports.getAllEmployees = async (req, res) => {
               dateFilterQuery
             ]
           };
-        } else if (Object.keys(dbHierarchicalFilters).length > 0) {
+        } else if (Object.keys(dbFilters).length > 0) {
           query = {
-            $and: [dbHierarchicalFilters, dateFilterQuery]
+            $and: [dbFilters, dateFilterQuery]
           };
         } else {
           query = {
@@ -311,7 +311,7 @@ exports.getAllEmployees = async (req, res) => {
         })
       : employees;
     if (employees.length !== verifiedEmployees.length) {
-      console.error(`SECURITY WARNING: Found ${employees.length - verifiedEmployees.length} employees with region mismatch relative to requested '${region}'`);
+      // SECURITY WARNING: Found employees with region mismatch
     }
     // Get total count for pagination
     const totalRecords = await collection.countDocuments(query);
@@ -325,15 +325,14 @@ exports.getAllEmployees = async (req, res) => {
       debug: {
         originalEmployeeCount: employees.length,
         verifiedEmployeeCount: verifiedEmployees.length,
-        hierarchicalFilters: dbHierarchicalFilters,
+        hierarchicalFilters: dbFilters,
         requestedRegion: region,
         note: 'Region/Department/Division are matched case-insensitively and Division omitted when empty.'
       }
     };
     return res.json(response);
   } catch (e) {
-    console.error('❌ Error in getAllEmployees:', e);
-    console.error('Error stack:', e.stack);
+    // Error in getAllEmployees
     return res.status(500).json({ 
       error: "Something went wrong.",
       message: e.message,
@@ -373,7 +372,7 @@ exports.addEmployee = async (req, res) => {
       employee: newEmployee,
     });
   } catch (error) {
-    console.error(error);
+    // Error creating employee
     return res.status(500).json({ error: "Failed to create employee." });
   }
 };
@@ -402,7 +401,7 @@ exports.editEmployee = async (req, res) => {
       employee: updatedEmployee,
     });
   } catch (error) {
-    console.error(error);
+    // Error updating employee
     return res.status(500).json({ error: "Failed to update employee." });
   }
 };
@@ -415,7 +414,7 @@ exports.deleteEmployee = async (req, res) => {
     }
     return res.json({ message: "Employee deleted successfully." });
   } catch (error) {
-    console.error(error);
+    // Error deleting employee
     return res.status(500).json({ error: "Failed to delete employee." });
   }
 };
@@ -447,7 +446,7 @@ exports.getPersonnels = async (req, res) => {
     }));
     return res.json(formattedEmployees);
   } catch (error) {
-    console.error("Error in getPersonnels:", error);
+    // Error in getPersonnels
     return res.status(500).json({ error: "Failed to fetch personnel data" });
   }
 };
@@ -575,7 +574,7 @@ exports.getEligibleForLoyaltyPay = async (req, res) => {
     }));
     return res.status(200).json(formattedEmployees);
   } catch (err) {
-    console.error("Error getting eligible employees for loyalty pay:", err);
+    // Error getting eligible employees for loyalty pay
     return res.status(500).json({ message: "Server error", error: err.message });
   }
 };
@@ -711,7 +710,7 @@ exports.getEmployeeStats = async (req, res) => {
       regionCounts
     });
   } catch (error) {
-    console.error("Error in getEmployeeStats:", error);
+    // Error in getEmployeeStats
     res.status(500).json({ error: error.message });
   }
 };
@@ -824,7 +823,7 @@ exports.getEligibleForRetirement = async (req, res) => {
     // Log the formatted employees to verify the employee number format
     return res.status(200).json(formattedEmployees);
   } catch (err) {
-    console.error("Error getting eligible employees for retirement:", err);
+    // Error getting eligible employees for retirement
     return res.status(500).json({ message: "Server error", error: err.message });
   }
 };

@@ -29,7 +29,7 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
 
       // Debug logging for overtime pay debugging
       if (logAccess) {
-        console.log(`🔧 [SubmissionWorkflow] User: ${userName}, Operation: ${operation}, UserID: ${userId}`);
+        // User access logging
       }
 
       // For submission workflow, DO NOT bypass based on roles alone
@@ -63,7 +63,7 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
         return next();
       }
     } catch (error) {
-      console.error('🚨 Submission Workflow Control Error:', error);
+      // Submission Workflow Control Error
       return res.status(500).json({
         success: false,
         message: 'Error in submission workflow control',
@@ -217,7 +217,7 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
   }
   // Add filters to request for use in controllers
   if (logAccess) {
-    console.log(`🎯 [SubmissionWorkflow] Setting filters for ${assignment.assignmentLevel} user:`, JSON.stringify(submissionFilters, null, 2));
+    // Setting filters for user
   }
   req.submissionWorkflowFilters = submissionFilters;
   req.hierarchicalFilters = hierarchicalFilters;
@@ -396,10 +396,10 @@ const submissionWorkflowTransitions = {
         modified: result.modifiedCount 
       });
     } catch (e) {
-      console.error('divisionSubmitToDepartment error:', e);
-      return res.status(500).json({ 
-        message: 'Division submission failed', 
-        error: e.message 
+      // divisionSubmitToDepartment error
+      return res.status(500).json({
+        message: 'Division submission failed',
+        error: e.message
       });
     }
   },
@@ -432,10 +432,10 @@ const submissionWorkflowTransitions = {
         modified: result.modifiedCount 
       });
     } catch (e) {
-      console.error('departmentSubmitToRegion error:', e);
-      return res.status(500).json({ 
-        message: 'Department submission failed', 
-        error: e.message 
+      // departmentSubmitToRegion error
+      return res.status(500).json({
+        message: 'Department submission failed',
+        error: e.message
       });
     }
   },
@@ -465,10 +465,10 @@ const submissionWorkflowTransitions = {
         modified: result.modifiedCount 
       });
     } catch (e) {
-      console.error('regionFinalApproval error:', e);
-      return res.status(500).json({ 
-        message: 'Region final approval failed', 
-        error: e.message 
+      // regionFinalApproval error
+      return res.status(500).json({
+        message: 'Region final approval failed',
+        error: e.message
       });
     }
   }

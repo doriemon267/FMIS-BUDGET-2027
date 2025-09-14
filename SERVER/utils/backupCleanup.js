@@ -45,7 +45,7 @@ const cleanupOrphanedFiles = async () => {
           fs.unlinkSync(filePath);
           deletedCount++;
         } catch (error) {
-          console.error(`❌ Failed to delete orphaned file ${file}:`, error.message);
+          // Failed to delete orphaned file
         }
       }
     }
@@ -126,7 +126,7 @@ const checkBackupHealth = async () => {
       message: 'Health check completed successfully'
     };
   } catch (error) {
-    console.error('❌ Backup health check failed:', error);
+    // Backup health check failed
     return {
       success: false,
       error: error.message,
@@ -174,7 +174,7 @@ const getStorageStats = async () => {
       formattedAverageSize: files.length > 0 ? formatBytes(totalSize / files.length) : '0 B'
     };
   } catch (error) {
-    console.error('Error getting storage stats:', error);
+    // Error getting storage stats
     return null;
   }
 };

@@ -252,8 +252,161 @@ exports.updateProposalStatus = async (req, res) => {
       }
     ]);
     // Log the result to see if it has values
+
+    // For Department level aggregation, also include Division-level submitted data
+    let departmentPersonnelAggregation = [];
+    if (req.hierarchicalAccess?.scope === 'DEPARTMENT') {
+      const deptRegion = req.hierarchicalAccess.accessibleRegions?.[0]?.regionName;
+      const deptName = req.hierarchicalAccess.accessibleDepartments?.[0]?.departmentName;
+
+      console.log(`🔄 DEPARTMENT AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
+
+      if (deptRegion && deptName) {
+        // Get Department-level Personnel data
+        const deptPersonnel = await PersonnelService.aggregate([
+          {
+            $match: {
+              status,
+              fiscalYear,
+              budgetType,
+              region: deptRegion,
+              department: deptName,
+              $or: [
+                { division: { $exists: false } },
+                { division: null },
+                { division: "" }
+              ]
+            }
+          },
+          {
+            $project: {
+              processBy: 1,
+              region: 1,
+              department: 1,
+              statusOfAppointment: 1,
+              computedTotal: {
+                $sum: [
+                  { $toDouble: { $ifNull: ["$annualSalary", 0] } },
+                  { $toDouble: { $ifNull: ["$RATA", 0] } },
+                  { $toDouble: { $ifNull: ["$PERA", 0] } },
+                  { $toDouble: { $ifNull: ["$uniformALLOWANCE", 0] } },
+                  { $toDouble: { $ifNull: ["$productivityIncentive", 0] } },
+                  { $toDouble: { $ifNull: ["$medical", 0] } },
+                  { $toDouble: { $ifNull: ["$childrenAllowance", 0] } },
+                  { $toDouble: { $ifNull: ["$meal", 0] } },
+                  { $toDouble: { $ifNull: ["$cashGift", 0] } },
+                  { $toDouble: { $ifNull: ["$subsistenceAllowanceMDS", 0] } },
+                  { $toDouble: { $ifNull: ["$subsistenceAllowanceST", 0] } },
+                  { $toDouble: { $ifNull: ["$midyearBonus", 0] } },
+                  { $toDouble: { $ifNull: ["$yearEndBonus", 0] } },
+                  { $toDouble: { $ifNull: ["$gsisPremium", 0] } },
+                  { $toDouble: { $ifNull: ["$philhealthPremium", 0] } },
+                  { $toDouble: { $ifNull: ["$pagibigPremium", 0] } },
+                  { $toDouble: { $ifNull: ["$employeeCompensation", 0] } },
+                  { $toDouble: { $ifNull: ["$loyaltyAward", 0] } },
+                  { $toDouble: { $ifNull: ["$overtimePay", 0] } },
+                  { $toDouble: { $ifNull: ["$earnedLeaves", 0] } },
+                  { $toDouble: { $ifNull: ["$retirementBenefits", 0] } },
+                  { $toDouble: { $ifNull: ["$terminalLeave", 0] } },
+                  { $toDouble: { $ifNull: ["$courtAppearance", 0] } }
+                ]
+              }
+            }
+          },
+          {
+            $group: {
+              _id: {
+                processBy: "$processBy",
+                region: "$region",
+                department: "$department",
+                statusOfAppointment: "$statusOfAppointment"
+              },
+              totalCost: { $sum: "$computedTotal" }
+            }
+          }
+        ]);
+
+        // Get Division-level submitted Personnel data for this department
+        const divisionPersonnel = await PersonnelService.aggregate([
+          {
+            $match: {
+              status: { $in: ["Submitted", "Approved", "Completed"] }, // Only submitted divisions
+              fiscalYear,
+              budgetType,
+              region: deptRegion,
+              department: deptName,
+              division: { $exists: true, $ne: null, $ne: "" }
+            }
+          },
+          {
+            $project: {
+              processBy: 1,
+              region: 1,
+              department: 1,
+              statusOfAppointment: 1,
+              computedTotal: {
+                $sum: [
+                  { $toDouble: { $ifNull: ["$annualSalary", 0] } },
+                  { $toDouble: { $ifNull: ["$RATA", 0] } },
+                  { $toDouble: { $ifNull: ["$PERA", 0] } },
+                  { $toDouble: { $ifNull: ["$uniformALLOWANCE", 0] } },
+                  { $toDouble: { $ifNull: ["$productivityIncentive", 0] } },
+                  { $toDouble: { $ifNull: ["$medical", 0] } },
+                  { $toDouble: { $ifNull: ["$childrenAllowance", 0] } },
+                  { $toDouble: { $ifNull: ["$meal", 0] } },
+                  { $toDouble: { $ifNull: ["$cashGift", 0] } },
+                  { $toDouble: { $ifNull: ["$subsistenceAllowanceMDS", 0] } },
+                  { $toDouble: { $ifNull: ["$subsistenceAllowanceST", 0] } },
+                  { $toDouble: { $ifNull: ["$midyearBonus", 0] } },
+                  { $toDouble: { $ifNull: ["$yearEndBonus", 0] } },
+                  { $toDouble: { $ifNull: ["$gsisPremium", 0] } },
+                  { $toDouble: { $ifNull: ["$philhealthPremium", 0] } },
+                  { $toDouble: { $ifNull: ["$pagibigPremium", 0] } },
+                  { $toDouble: { $ifNull: ["$employeeCompensation", 0] } },
+                  { $toDouble: { $ifNull: ["$loyaltyAward", 0] } },
+                  { $toDouble: { $ifNull: ["$overtimePay", 0] } },
+                  { $toDouble: { $ifNull: ["$earnedLeaves", 0] } },
+                  { $toDouble: { $ifNull: ["$retirementBenefits", 0] } },
+                  { $toDouble: { $ifNull: ["$terminalLeave", 0] } },
+                  { $toDouble: { $ifNull: ["$courtAppearance", 0] } }
+                ]
+              }
+            }
+          },
+          {
+            $group: {
+              _id: {
+                processBy: "$processBy",
+                region: "$region",
+                department: "$department",
+                statusOfAppointment: "$statusOfAppointment"
+              },
+              totalCost: { $sum: "$computedTotal" }
+            }
+          }
+        ]);
+
+        // Aggregate Department + Division data
+        const aggregatedPersonnel = [...deptPersonnel, ...divisionPersonnel].reduce((acc, item) => {
+          const key = `${item._id.processBy}_${item._id.region}_${item._id.statusOfAppointment}`;
+          if (!acc[key]) {
+            acc[key] = {
+              _id: item._id,
+              totalCost: 0
+            };
+          }
+          acc[key].totalCost += item.totalCost || 0;
+          return acc;
+        }, {});
+
+        departmentPersonnelAggregation = Object.values(aggregatedPersonnel);
+      }
+    }
+
     // Transform personnel data for proposal summary
-    const personnelTransformed = personnel.map((p) => ({
+    // Use hierarchical aggregation for Department users, otherwise use regular aggregation
+    const personnelDataToTransform = departmentPersonnelAggregation.length > 0 ? departmentPersonnelAggregation : personnel;
+    const personnelTransformed = personnelDataToTransform.map((p) => ({
       processBy: p._id.processBy,
       region: p._id.region,
       fiscalYear,
@@ -262,20 +415,98 @@ exports.updateProposalStatus = async (req, res) => {
       status,
       cobExpenditures: `Personnel Services - ${p._id.statusOfAppointment}`,
       totalExpenses: Number(p.totalCost) || 0,  // Ensure it's a number
-      totalIncome: 0
+      totalIncome: 0,
+      isHierarchicallyAggregated: departmentPersonnelAggregation.length > 0 // Flag for hierarchical aggregation
     }));
-    // Calculate MOOE expenses
+    // Calculate MOOE expenses and income with hierarchical aggregation
     const mooe = await MooeProposal.aggregate([
       { $match: { status, fiscalYear, budgetType, processBy, region } },
       {
         $group: {
           _id: { processBy: "$processBy", region: "$region" },
           totalCost: { $sum: { $toDouble: { $ifNull: ["$amount", 0] } } },
+          totalIncome: { $sum: { $toDouble: { $ifNull: ["$income", 0] } } },
         },
       },
     ]);
+
+    // For Department level aggregation, also include Division-level submitted data
+    let departmentMooeAggregation = [];
+    if (req.hierarchicalAccess?.scope === 'DEPARTMENT') {
+      const deptRegion = req.hierarchicalAccess.accessibleRegions?.[0]?.regionName;
+      const deptName = req.hierarchicalAccess.accessibleDepartments?.[0]?.departmentName;
+
+      console.log(`🔄 DEPARTMENT MOOE AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
+
+      if (deptRegion && deptName) {
+        // Get Department-level MOOE data
+        const deptMooe = await MooeProposal.aggregate([
+          {
+            $match: {
+              status,
+              fiscalYear,
+              budgetType,
+              region: deptRegion,
+              department: deptName,
+              $or: [
+                { division: { $exists: false } },
+                { division: null },
+                { division: "" }
+              ]
+            }
+          },
+          {
+            $group: {
+              _id: { processBy: "$processBy", region: "$region", department: "$department" },
+              totalCost: { $sum: { $toDouble: { $ifNull: ["$amount", 0] } } },
+              totalIncome: { $sum: { $toDouble: { $ifNull: ["$income", 0] } } },
+            },
+          },
+        ]);
+
+        // Get Division-level submitted MOOE data for this department
+        const divisionMooe = await MooeProposal.aggregate([
+          {
+            $match: {
+              status: { $in: ["Submitted", "Approved", "Completed"] }, // Only submitted divisions
+              fiscalYear,
+              budgetType,
+              region: deptRegion,
+              department: deptName,
+              division: { $exists: true, $ne: null, $ne: "" }
+            }
+          },
+          {
+            $group: {
+              _id: { processBy: "$processBy", region: "$region", department: "$department" },
+              totalCost: { $sum: { $toDouble: { $ifNull: ["$amount", 0] } } },
+              totalIncome: { $sum: { $toDouble: { $ifNull: ["$income", 0] } } },
+            },
+          },
+        ]);
+
+        // Aggregate Department + Division data
+        const aggregatedMooe = [...deptMooe, ...divisionMooe].reduce((acc, item) => {
+          const key = `${item._id.processBy}_${item._id.region}_${item._id.department || 'DEPT'}`;
+          if (!acc[key]) {
+            acc[key] = {
+              _id: item._id,
+              totalCost: 0,
+              totalIncome: 0
+            };
+          }
+          acc[key].totalCost += item.totalCost || 0;
+          acc[key].totalIncome += item.totalIncome || 0;
+          return acc;
+        }, {});
+
+        departmentMooeAggregation = Object.values(aggregatedMooe);
+      }
+    }
     // Transform MOOE data for proposal summary
-    const mooeTransformed = mooe.map((p) => ({
+    // Use hierarchical aggregation for Department users, otherwise use regular aggregation
+    const mooeDataToTransform = departmentMooeAggregation.length > 0 ? departmentMooeAggregation : mooe;
+    const mooeTransformed = mooeDataToTransform.map((p) => ({
       processBy: p._id.processBy,
       region: p._id.region,
       fiscalYear,
@@ -284,20 +515,98 @@ exports.updateProposalStatus = async (req, res) => {
       status,
       cobExpenditures: "MOOE",
       totalExpenses: Number(p.totalCost) || 0,  // Ensure it's a number
-      totalIncome: 0
+      totalIncome: Number(p.totalIncome) || 0,  // Use calculated income from MOOE records
+      isHierarchicallyAggregated: departmentMooeAggregation.length > 0 // Flag for hierarchical aggregation
     }));
-    // Calculate Capital Outlay expenses
+    // Calculate Capital Outlay expenses and income
     const capitalOutlays = await CapitalOutlay.aggregate([
       { $match: { status, fiscalYear, budgetType, processBy, region } },
       {
         $group: {
           _id: { processBy: "$processBy", region: "$region" },
           totalCost: { $sum: { $toDouble: { $ifNull: ["$cost", 0] } } },
+          totalIncome: { $sum: { $toDouble: { $ifNull: ["$income", 0] } } },
         },
       },
     ]);
+
+    // For Department level aggregation, also include Division-level submitted data
+    let departmentCapitalOutlayAggregation = [];
+    if (req.hierarchicalAccess?.scope === 'DEPARTMENT') {
+      const deptRegion = req.hierarchicalAccess.accessibleRegions?.[0]?.regionName;
+      const deptName = req.hierarchicalAccess.accessibleDepartments?.[0]?.departmentName;
+
+      console.log(`🔄 DEPARTMENT CAPITAL OUTLAY AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
+
+      if (deptRegion && deptName) {
+        // Get Department-level Capital Outlay data
+        const deptCapitalOutlay = await CapitalOutlay.aggregate([
+          {
+            $match: {
+              status,
+              fiscalYear,
+              budgetType,
+              region: deptRegion,
+              department: deptName,
+              $or: [
+                { division: { $exists: false } },
+                { division: null },
+                { division: "" }
+              ]
+            }
+          },
+          {
+            $group: {
+              _id: { processBy: "$processBy", region: "$region", department: "$department" },
+              totalCost: { $sum: { $toDouble: { $ifNull: ["$cost", 0] } } },
+              totalIncome: { $sum: { $toDouble: { $ifNull: ["$income", 0] } } },
+            },
+          },
+        ]);
+
+        // Get Division-level submitted Capital Outlay data for this department
+        const divisionCapitalOutlay = await CapitalOutlay.aggregate([
+          {
+            $match: {
+              status: { $in: ["Submitted", "Approved", "Completed"] }, // Only submitted divisions
+              fiscalYear,
+              budgetType,
+              region: deptRegion,
+              department: deptName,
+              division: { $exists: true, $ne: null, $ne: "" }
+            }
+          },
+          {
+            $group: {
+              _id: { processBy: "$processBy", region: "$region", department: "$department" },
+              totalCost: { $sum: { $toDouble: { $ifNull: ["$cost", 0] } } },
+              totalIncome: { $sum: { $toDouble: { $ifNull: ["$income", 0] } } },
+            },
+          },
+        ]);
+
+        // Aggregate Department + Division data
+        const aggregatedCapitalOutlay = [...deptCapitalOutlay, ...divisionCapitalOutlay].reduce((acc, item) => {
+          const key = `${item._id.processBy}_${item._id.region}_${item._id.department || 'DEPT'}`;
+          if (!acc[key]) {
+            acc[key] = {
+              _id: item._id,
+              totalCost: 0,
+              totalIncome: 0
+            };
+          }
+          acc[key].totalCost += item.totalCost || 0;
+          acc[key].totalIncome += item.totalIncome || 0;
+          return acc;
+        }, {});
+
+        departmentCapitalOutlayAggregation = Object.values(aggregatedCapitalOutlay);
+      }
+    }
     // Transform Capital Outlay data for proposal summary
-    const capitalOutlaysTransformed = capitalOutlays.map((p) => ({
+    // Use hierarchical aggregation for Department users, otherwise use regular aggregation
+    const capitalOutlayDataToTransform = departmentCapitalOutlayAggregation.length > 0 ? departmentCapitalOutlayAggregation : capitalOutlays;
+    const capitalOutlaysTransformed = capitalOutlayDataToTransform.map((p) => ({
       processBy: p._id.processBy,
       region: p._id.region,
       fiscalYear,
@@ -306,7 +615,8 @@ exports.updateProposalStatus = async (req, res) => {
       status,
       cobExpenditures: "Capital Outlay",
       totalExpenses: Number(p.totalCost) || 0,  // Ensure it's a number
-      totalIncome: 0
+      totalIncome: Number(p.totalIncome) || 0,  // Use calculated income from Capital Outlay records
+      isHierarchicallyAggregated: departmentCapitalOutlayAggregation.length > 0 // Flag for hierarchical aggregation
     }));
     // Calculate Income with consistent filtering
     const income = await IncomeSubcategory.aggregate([
@@ -703,7 +1013,25 @@ exports.createProposal = async (req, res) => {
       // Add audit fields
       proposalData.createdByAssignmentLevel = assignment.assignmentLevel;
       proposalData.createdByUserId = req.user.id;
-      }
+      
+      // Add consolidation metadata
+      proposalData.consolidationMetadata = {
+        submittedBy: req.user.id,
+        submittedByLevel: assignment.assignmentLevel,
+        submissionTimestamp: new Date(),
+        consolidationApplied: true,
+        originalContext: {
+          region: req.body.region,
+          department: req.body.department,
+          division: req.body.division
+        },
+        consolidatedContext: {
+          region: proposalData.region,
+          department: proposalData.department,
+          division: proposalData.division
+        }
+      };
+    }
     const newProposal = new Proposal(proposalData);
     const savedProposal = await newProposal.save();
     res.status(201).json(savedProposal);

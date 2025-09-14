@@ -248,8 +248,8 @@ const applyHierarchicalConsolidation = (req, assignment, consolidationInfo) => {
     department: req.body.department,
     division: req.body.division
   };
-  // Apply consolidation based on user's access scope
-  switch (assignment.accessScope) {
+  // Apply consolidation based on user's assignment level
+  switch (assignment.assignmentLevel) {
     case 'DIVISION':
       // Division submissions consolidate to Department level (names)
       req.body.originalLevel = 'DIVISION';
@@ -276,7 +276,7 @@ const applyHierarchicalConsolidation = (req, assignment, consolidationInfo) => {
   // Add consolidation metadata
   req.body.consolidationMetadata = {
     submittedBy: req.user.id,
-    submittedByScope: assignment.accessScope,
+    submittedByLevel: assignment.assignmentLevel,
     submissionTimestamp: new Date(),
     consolidationApplied: true, // Using name-based consolidation
     originalContext: req.originalOrgContext,
@@ -394,7 +394,8 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
           accessibleDepartments,
           accessibleDivisions,
           consolidationInfo,
-          rolePermissions: assignmentDoc.rolePermissions
+          rolePermissions: assignmentDoc.rolePermissions,
+          workflowRoles: assignmentDoc.workflowRoles
         };
         return next();
       }
@@ -436,7 +437,8 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
       accessibleDepartments,
       accessibleDivisions,
       consolidationInfo,
-      rolePermissions: assignmentDoc.rolePermissions
+      rolePermissions: assignmentDoc.rolePermissions,
+      workflowRoles: assignmentDoc.workflowRoles
     };
     next();
   } catch (error) {
