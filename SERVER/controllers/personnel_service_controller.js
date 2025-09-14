@@ -504,11 +504,11 @@ exports.bulkAddPersonnelServices = async (req, res) => {
         employeeNumber: employee.EmployeeID || "",
         DateOfAppointment: employee.DateOfAppointment || null,
         DateOfBirth: employee.DateOfBirth || null,
-        department: employee.Department || "",
-        division: employee.Division || "",
+        department: req.body.department || employee.Department || "",
+        division: req.body.division || employee.Division || "",
         section: employee.Section || "",
         unit: employee.Unit || "",
-        // Use the region from the request body if provided, otherwise use the employee's region
+        // Use the region from the request body (consolidated by middleware), otherwise use the employee's region
         region: req.body.region || employee.Region || "",
         statusOfAppointment: statusAppointment,
         employeeStatus: employee.employeeStatus,
