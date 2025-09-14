@@ -390,6 +390,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
           const incomeValue = Number(item.income) || 0;
           return sum + incomeValue;
         }, 0);
+        console.log(`🔍 MOOE: Found ${mooeData.length} records, total income: ₱${totalIncome.toLocaleString()}`);
       } else if (mooeData && mooeData.formattedData && Array.isArray(mooeData.formattedData)) {
         // If mooeData has nested structure with formattedData
         totalIncome = mooeData.formattedData.reduce((sum, row) => {
@@ -398,6 +399,9 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
             return childSum + incomeValue;
           }, 0);
         }, 0);
+        console.log(`🔍 MOOE (nested): Found formatted data, total income: ₱${totalIncome.toLocaleString()}`);
+      } else {
+        console.log(`⚠️ MOOE: No valid data structure found`, { mooeData });
       }
       
       // Fallback: Check breakdown data (unlikely to have income but check anyway)
@@ -417,27 +421,34 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
       
     } else if (category === 'CAPITAL_OUTLAY') {
       // Get Capital Outlay income from the actual Capital Outlay data
-      // The breakdown data doesn't have income - we need the actual data
+      // The data comes as array of regions with nested items
       if (capitalOutlayData && Array.isArray(capitalOutlayData)) {
-        // Filter by current region and sum totalIncome (not income)
-        const regionFilteredData = capitalOutlayData.filter(item => {
-          // Handle different region name formats
-          if (!regionName || regionName === 'All') return true;
-          
-          // Match region names (handle variations)
-          const itemRegion = item.region?.toLowerCase();
-          const currentRegion = regionName.toLowerCase();
-          
-          return itemRegion === currentRegion || 
-                 itemRegion === currentRegion.replace(' region', '') ||
-                 currentRegion === 'central office' && itemRegion === 'central region';
-        });
+        // Flatten all items from all regions
+        const allItems = capitalOutlayData.flatMap(regionData => regionData.items || []);
+        
+        // Filter by current region if specified
+        const regionFilteredData = regionName && regionName !== 'All' 
+          ? allItems.filter(item => {
+              // Handle different region name formats
+              const itemRegion = item.region?.toLowerCase();
+              const currentRegion = regionName.toLowerCase();
+              
+              return itemRegion === currentRegion || 
+                     itemRegion === currentRegion.replace(' region', '') ||
+                     currentRegion === 'central office' && itemRegion === 'central region';
+            })
+          : allItems; // If no region filter, use all items
         
         totalIncome = regionFilteredData.reduce((sum, item) => {
-          // Use totalIncome property instead of income
-          const incomeValue = Number(item.totalIncome) || Number(item.income) || 0;
+          // Use income field from the actual Capital Outlay records
+          const incomeValue = Number(item.income) || 0;
           return sum + incomeValue;
         }, 0);
+        
+        console.log(`🔍 CAPITAL OUTLAY: Found ${allItems.length} total items, ${regionFilteredData.length} after region filter, total income: ₱${totalIncome.toLocaleString()}`);
+        console.log(`🔍 CAPITAL OUTLAY: Sample items:`, allItems.slice(0, 2).map(item => ({ region: item.region, income: item.income })));
+      } else {
+        console.log(`⚠️ CAPITAL OUTLAY: No valid data structure found`, { capitalOutlayData });
       }
       
       // Fallback: Check if breakdown has income data (unlikely but check anyway)
@@ -456,8 +467,9 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
       }
     }
     
+    console.log(`✅ ${category}: Returning total income: ₱${totalIncome.toLocaleString()}`);
     return totalIncome;
-  }, [calculatedBudgetarySupport, capitalOutlayData, mooeData]);
+  }, [calculatedBudgetarySupport, capitalOutlayData, mooeData, regionName]);
   const useOfFundsBreakdown = useMemo(() => {
     // A.1 CORPORATE INCOME - Direct copy from IncomeTable
     const corporateIncome = incomeGrandTotal || 0;

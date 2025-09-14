@@ -34,6 +34,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import api from "../../config/api";
 import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { useUser } from "../../context/UserContext";
 
 // View Proposal Button
 export const ViewButton = ({ row }) => {
@@ -941,16 +942,27 @@ export const ApproveButton = ({ row, refreshData }) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const queryClient = useQueryClient();
+  const { currentUser } = useUser();
 
   // Only show for submitted proposals
   if (row.status !== "Submitted") {
     return null;
   }
 
+  // Check if user has appropriate workflow roles for approval
+  const userWorkflowRoles = currentUser?.hierarchicalAccess?.workflowRoles || [];
+  const canApprove = userWorkflowRoles.includes('departmentConsolidator') || 
+                    userWorkflowRoles.includes('regionFinalVerifier') ||
+                    userWorkflowRoles.includes('divisionApprover');
+
+  if (!canApprove) {
+    return null;
+  }
+
   const handleApprove = async () => {
     setLoading(true);
     try {
-      await api.put(`/approve`, {
+      await api.put(`/approveProposal`, {
         fiscalYear: row.fiscalYear,
         budgetType: row.budgetType,
         processBy: row.processBy,
@@ -1019,9 +1031,20 @@ export const ReturnButton = ({ row, refreshData }) => {
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
   const queryClient = useQueryClient();
+  const { currentUser } = useUser();
 
   // Only show for submitted proposals
   if (row.status !== "Submitted") {
+    return null;
+  }
+
+  // Check if user has appropriate workflow roles for returning
+  const userWorkflowRoles = currentUser?.hierarchicalAccess?.workflowRoles || [];
+  const canReturn = userWorkflowRoles.includes('departmentConsolidator') || 
+                   userWorkflowRoles.includes('regionFinalVerifier') ||
+                   userWorkflowRoles.includes('divisionApprover');
+
+  if (!canReturn) {
     return null;
   }
 

@@ -90,6 +90,7 @@ const App = () => {
                 "BUDGET ADMIN",
                 "BUDGET MANAGER",
                 "BUDGET OFFICER",
+                "BUDGET ANALYST"
               ]}
             >
               <ProposalPage />
@@ -200,6 +201,7 @@ const App = () => {
                 "BUDGET ADMIN",
                 "BUDGET MANAGER",
                 "BUDGET OFFICER",
+                "BUDGET ANALYST"
               ]}
             >
               <AllProposalsPage />

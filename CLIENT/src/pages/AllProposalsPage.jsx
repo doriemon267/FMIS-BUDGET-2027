@@ -111,6 +111,65 @@ const AllProposalsPage = () => {
       label: "BUDGET TYPE",
       show: true,
     },
+    workflowLevel: {
+      type: "text",
+      label: "WORKFLOW LEVEL",
+      show: true,
+      customRender: (row) => {
+        // Determine workflow level based on consolidation metadata and organizational fields
+        let level = "Unknown";
+        let levelColor = "default";
+        
+        // Check consolidation metadata first
+        if (row.consolidationMetadata) {
+          const { submittedByLevel } = row.consolidationMetadata;
+          switch (submittedByLevel) {
+            case 'DIVISION':
+              level = "Department"; // Division data consolidated to Department
+              levelColor = "secondary";
+              break;
+            case 'DEPARTMENT':
+              level = "Region"; // Department data consolidated to Region
+              levelColor = "success";
+              break;
+            case 'REGION':
+              level = "Region"; // Region data stays at Region
+              levelColor = "success";
+              break;
+          }
+        } else {
+          // Fallback to organizational field analysis
+          if (row.originalDivision) {
+            level = "Department"; // Has original division, so it's consolidated department data
+            levelColor = "secondary";
+          } else if (row.originalDepartment) {
+            level = "Region"; // Has original department, so it's consolidated region data
+            levelColor = "success";
+          } else if (row.division && row.division.trim() !== "") {
+            level = "Division";
+            levelColor = "primary";
+          } else if (row.department && row.department.trim() !== "") {
+            level = "Department";
+            levelColor = "secondary";
+          } else if (row.region && row.region.trim() !== "") {
+            level = "Region";
+            levelColor = "success";
+          }
+        }
+        
+        return (
+          <Typography 
+            variant="body2" 
+            sx={{ 
+              color: `${levelColor}.main`,
+              fontWeight: 'medium'
+            }}
+          >
+            {level}
+          </Typography>
+        );
+      }
+    },
     submittedDate: {
       type: "date",
       label: "SUBMITTED DATE",
@@ -151,11 +210,70 @@ const AllProposalsPage = () => {
       type: "text",
       label: "STATUS",
       show: true,
+      customRender: (row) => {
+        let statusColor = "default";
+        let statusText = row.status || "Unknown";
+        
+        switch (row.status) {
+          case "Draft":
+            statusColor = "warning";
+            statusText = "Draft";
+            break;
+          case "Submitted":
+            statusColor = "info";
+            statusText = "Submitted";
+            break;
+          case "Approved":
+            statusColor = "success";
+            statusText = "Approved";
+            break;
+          case "Returned":
+            statusColor = "error";
+            statusText = "Returned";
+            break;
+          default:
+            statusColor = "default";
+        }
+        
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography 
+              variant="body2" 
+              sx={{ 
+                color: `${statusColor}.main`,
+                fontWeight: 'bold',
+                textTransform: 'uppercase'
+              }}
+            >
+              {statusText}
+            </Typography>
+          </Box>
+        );
+      }
     },
     action: {
       type: "action",
       label: "ACTIONS",
       show: true,
+      customRender: (row) => {
+        const userWorkflowRoles = currentUser?.hierarchicalAccess?.workflowRoles || [];
+        const canApprove = userWorkflowRoles.includes('departmentConsolidator') || 
+                          userWorkflowRoles.includes('regionFinalVerifier') ||
+                          userWorkflowRoles.includes('divisionApprover');
+        const canReturn = canApprove; // Same roles can return
+        
+        return (
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            <ViewButton row={row} />
+            {row.status === "Submitted" && canApprove && (
+              <ApproveButton row={row} refreshData={refreshData} />
+            )}
+            {row.status === "Submitted" && canReturn && (
+              <ReturnButton row={row} refreshData={refreshData} />
+            )}
+          </Box>
+        );
+      }
     },
   };
 
@@ -225,6 +343,43 @@ const AllProposalsPage = () => {
             />
           </Grid>
         </Grid>
+      </Box>
+
+      {/* User Role Information */}
+      <Box sx={{ mb: 3, mx: 3 }}>
+        <Card sx={{ p: 2 }}>
+          <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
+            👤 Your Workflow Roles
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            {currentUser?.hierarchicalAccess?.workflowRoles?.length > 0 ? (
+              currentUser.hierarchicalAccess.workflowRoles.map((role, index) => (
+                <Typography
+                  key={index}
+                  variant="body2"
+                  sx={{
+                    bgcolor: 'primary.light',
+                    color: 'primary.contrastText',
+                    px: 1,
+                    py: 0.5,
+                    borderRadius: 1,
+                    fontSize: '0.75rem',
+                    fontWeight: 'medium'
+                  }}
+                >
+                  {role.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+                </Typography>
+              ))
+            ) : (
+              <Typography variant="body2" color="textSecondary">
+                No workflow roles assigned
+              </Typography>
+            )}
+          </Box>
+          <Typography variant="body2" sx={{ mt: 1, color: 'textSecondary' }}>
+            Your roles determine which actions you can perform on proposals.
+          </Typography>
+        </Card>
       </Box>
 
       {/* Debug Section */}
