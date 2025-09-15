@@ -3,6 +3,7 @@ import { Navigate } from "react-router-dom";
 import { useUser } from "../context/UserContext";
 
 const SYSTEM_ALLOWED_ROLES = [
+  "SUPER ADMIN",
   "BUDGET ADMIN",
   "BUDGET ANALYST",
   "BUDGET MANAGER",

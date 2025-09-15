@@ -70,7 +70,7 @@ const App = () => {
           element={
             <ProtectedRoute
               allowedRoles={[
-                "ADMIN",
+                "SUPER ADMIN",
                 "BUDGET ADMIN",
                 "BUDGET MANAGER",
                 "BUDGET OFFICER",
@@ -86,7 +86,7 @@ const App = () => {
           element={
             <ProtectedRoute
               allowedRoles={[
-                "ADMIN",
+                "SUPER ADMIN",
                 "BUDGET ADMIN",
                 "BUDGET MANAGER",
                 "BUDGET OFFICER",
@@ -102,7 +102,7 @@ const App = () => {
           element={
             <ProtectedRoute
               allowedRoles={[
-                "ADMIN",
+                "SUPER ADMIN",
                 "BUDGET ADMIN",
                 "BUDGET MANAGER",
                 "BUDGET OFFICER",
@@ -121,7 +121,7 @@ const App = () => {
           element={
             <ProtectedRoute
               allowedRoles={[
-                "ADMIN",
+                "SUPER ADMIN",
                 "BUDGET ADMIN",
                 "BUDGET MANAGER",
                 "BUDGET OFFICER",
@@ -136,7 +136,7 @@ const App = () => {
           element={
             <ProtectedRoute
               allowedRoles={[
-                "ADMIN",
+                "SUPER ADMIN",
                 "BUDGET ADMIN",
                 "BUDGET MANAGER",
                 "BUDGET OFFICER",
@@ -151,7 +151,7 @@ const App = () => {
           element={
             <ProtectedRoute
               allowedRoles={[
-                "ADMIN",
+                "SUPER ADMIN",
                 "BUDGET ADMIN",
                 "BUDGET MANAGER",
                 "BUDGET OFFICER",
@@ -167,7 +167,7 @@ const App = () => {
           element={
             <ProtectedRoute
               allowedRoles={[
-                "ADMIN",
+                "SUPER ADMIN",
                 "BUDGET ADMIN",
                 "BUDGET MANAGER",
                 "BUDGET OFFICER",
@@ -182,7 +182,7 @@ const App = () => {
           element={
             <ProtectedRoute
               allowedRoles={[
-                "ADMIN",
+                "SUPER ADMIN",
                 "BUDGET ADMIN",
                 "BUDGET MANAGER",
                 "BUDGET OFFICER",
@@ -197,7 +197,7 @@ const App = () => {
           element={
             <ProtectedRoute
               allowedRoles={[
-                "ADMIN",
+                "SUPER ADMIN",
                 "BUDGET ADMIN",
                 "BUDGET MANAGER",
                 "BUDGET OFFICER",
@@ -212,7 +212,7 @@ const App = () => {
           path="/income-management"
           element={
             <ProtectedRoute
-              allowedRoles={["ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}
+              allowedRoles={["SUPER ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}
             >
               <IncomeManagementPage />
             </ProtectedRoute>
@@ -222,7 +222,7 @@ const App = () => {
           path="/categories"
           element={
             <ProtectedRoute
-              allowedRoles={["ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}
+              allowedRoles={["SUPER ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}
             >
               <CapitalOutlayTitleMappingPage />
             </ProtectedRoute>
@@ -238,7 +238,6 @@ const App = () => {
             <ProtectedRoute
               allowedRoles={[
                 "SUPER ADMIN",
-                "ADMIN",
                 "BUDGET MANAGER",
                 "BUDGET OFFICER",
                 "BUDGET ANALYST",
@@ -271,7 +270,7 @@ const App = () => {
         <Route
           path="/hierarchical-user-assignments"
           element={
-            <ProtectedRoute allowedRoles={["BUDGET ADMIN"]}>
+            <ProtectedRoute allowedRoles={["SUPER ADMIN"]}>
               <HierarchicalUserAssignmentPage />
             </ProtectedRoute>
           }
@@ -291,7 +290,7 @@ const App = () => {
           element={
             <ProtectedRoute
               allowedRoles={[
-                "ADMIN",
+                "SUPER ADMIN",
                 "BUDGET ADMIN",
                 "BUDGET MANAGER",
                 "BUDGET OFFICER",
@@ -306,7 +305,7 @@ const App = () => {
           element={
             <ProtectedRoute
               allowedRoles={[
-                "ADMIN",
+                "SUPER ADMIN",
                 "BUDGET ADMIN",
                 "BUDGET MANAGER",
                 "BUDGET OFFICER",
@@ -321,7 +320,7 @@ const App = () => {
           element={
             <ProtectedRoute
               allowedRoles={[
-                "ADMIN",
+                "SUPER ADMIN",
                 "BUDGET ADMIN",
                 "BUDGET MANAGER",
                 "BUDGET OFFICER",
@@ -336,7 +335,7 @@ const App = () => {
           element={
             <ProtectedRoute
               allowedRoles={[
-                "ADMIN",
+                "SUPER ADMIN",
                 "BUDGET ADMIN",
                 "BUDGET MANAGER",
                 "BUDGET OFFICER",
@@ -351,7 +350,7 @@ const App = () => {
           element={
             <ProtectedRoute
               allowedRoles={[
-                "ADMIN",
+                "SUPER ADMIN",
                 "BUDGET ADMIN",
                 "BUDGET MANAGER",
                 "BUDGET OFFICER",
@@ -366,7 +365,7 @@ const App = () => {
           element={
             <ProtectedRoute
               allowedRoles={[
-                "ADMIN",
+                "SUPER ADMIN",
                 "BUDGET ADMIN",
                 "BUDGET MANAGER",
                 "BUDGET OFFICER",
@@ -379,7 +378,7 @@ const App = () => {
         <Route
           path="/comprehensive-reports"
           element={
-            <ProtectedRoute allowedRoles={["ADMIN", "BUDGET ADMIN"]}>
+            <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET ADMIN"]}>
               <ComprehensiveReportsPage />
             </ProtectedRoute>
           }
@@ -389,7 +388,7 @@ const App = () => {
           element={
             <ProtectedRoute
               allowedRoles={[
-                "ADMIN",
+                "SUPER ADMIN",
                 "BUDGET ADMIN",
                 "BUDGET MANAGER",
                 "BUDGET OFFICER",

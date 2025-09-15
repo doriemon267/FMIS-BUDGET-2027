@@ -32,6 +32,8 @@ const hasRequiredRole = (userRoles, requiredRoles) => {
 // Note: Full access does NOT imply "FULL" hierarchical scope in UI; it only bypasses certain checks
 const hasFullAccess = (userRoles) => {
   return hasRequiredRole(userRoles, [
+    PERMISSION_LEVELS.SUPER_ADMIN,
+    PERMISSION_LEVELS.ADMIN,
     PERMISSION_LEVELS.BUDGET_ADMIN,
     PERMISSION_LEVELS.BUDGET_ANALYST,
     PERMISSION_LEVELS.BUDGET_MANAGER
@@ -91,6 +93,7 @@ const adminRoute = () => {
     checkToken,
     (req, res, next) => {
       const adminRoles = [
+        PERMISSION_LEVELS.SUPER_ADMIN,
         PERMISSION_LEVELS.BUDGET_ADMIN,
         PERMISSION_LEVELS.BUDGET_ANALYST,
         PERMISSION_LEVELS.BUDGET_MANAGER
@@ -227,4 +230,4 @@ module.exports = {
   ACCESS_SCOPE,
   hasRequiredRole,
   hasFullAccess
-};
+};

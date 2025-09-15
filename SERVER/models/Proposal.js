@@ -37,9 +37,30 @@ const proposalSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Draft', 'Submitted', 'Approved', 'Rejected'],
-    default: 'Draft'
+    enum: [
+      "Draft",                    // Division working copy
+      "Division Submitted",       // Division → Department
+      "Department Verified",      // Department technical validation
+      "Department Submitted",     // Department → Region  
+      "Region Approved",         // Region administrative approval
+      "Finalized",               // Ready for execution
+      "Returned"                 // Rejected at any level
+    ],
+    default: "Draft"
   },
+  // Enhanced workflow tracking
+  workflowLevel: {
+    type: String,
+    enum: ["DIVISION", "DEPARTMENT", "REGION", "FINALIZED"],
+    default: "DIVISION"
+  },
+  lastActionBy: String,
+  lastActionDate: { type: Date, default: Date.now },
+  departmentVerifiedBy: String,
+  departmentVerifiedDate: Date,
+  regionApprovedBy: String,
+  regionApprovedDate: Date,
+  rejectionReason: String,
   cobExpenditures: {
     type: String
   },

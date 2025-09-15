@@ -6,6 +6,7 @@ const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const BudgetarySupport = require('../models/BudgetarySupport');
 const IncomeSubcategory = require('../models/IncomeSubcategory');
+const Income = require('../models/Income');
 // Remove the checkUserRegionAccess function
 // const checkUserRegionAccess = async (userId, region) => {
 //   try {
@@ -135,7 +136,7 @@ exports.updateProposalStatus = async (req, res) => {
       updatePromises.push(
         PersonnelService.updateMany(
           { _id: { $in: validPersonnelIds }, ...accessScope },
-          { $set: { status: "Submitted", fiscalYear, budgetType, processBy, region } }
+          { $set: { status: "Division Submitted", fiscalYear, budgetType, processBy, region, workflowLevel: "DEPARTMENT" } }
         )
       );
     }
@@ -152,7 +153,7 @@ exports.updateProposalStatus = async (req, res) => {
       updatePromises.push(
         MooeProposal.updateMany(
           { _id: { $in: validMooeIds }, ...accessScope },
-          { $set: { status: "Submitted", fiscalYear, budgetType, processBy, region } }
+          { $set: { status: "Division Submitted", fiscalYear, budgetType, processBy, region, workflowLevel: "DEPARTMENT" } }
         )
       );
     }
@@ -169,7 +170,7 @@ exports.updateProposalStatus = async (req, res) => {
       updatePromises.push(
         CapitalOutlay.updateMany(
           { _id: { $in: validCapitalIds }, ...accessScope },
-          { $set: { status: "Submitted", fiscalYear, budgetType, processBy, region } }
+          { $set: { status: "Division Submitted", fiscalYear, budgetType, processBy, region, workflowLevel: "DEPARTMENT" } }
         )
       );
     }
@@ -186,13 +187,13 @@ exports.updateProposalStatus = async (req, res) => {
       updatePromises.push(
         IncomeSubcategory.updateMany(
           { _id: { $in: validIncomeIds }, ...accessScope },
-          { $set: { status: "Submitted", fiscalYear, budgetType, processBy, region } }
+          { $set: { status: "Division Submitted", fiscalYear, budgetType, processBy, region, workflowLevel: "DEPARTMENT" } }
         )
       );
     }
     // Execute all updates in parallel
     const updateResults = await Promise.all(updatePromises);
-    const status = "Submitted";
+    const status = "Division Submitted";
     // Calculate personnel expenses
     const personnel = await PersonnelService.aggregate([
       { 
@@ -1108,17 +1109,136 @@ exports.getProposals = async (req, res) => {
       sampleProposals.forEach((proposal, index) => {
         });
     }
-    // Get proposals with pagination
-    const proposals = await Proposal.find(query)
-      .sort({ [sort]: order === "asc" ? 1 : -1 })
-      .skip(pageNum * limitNum)
-      .limit(limitNum);
+    // Get data from all proposal models
+    const sortOrder = order === "asc" ? 1 : -1;
+    const skipCount = pageNum * limitNum;
+
+    // Query all models in parallel
+    const [proposals, personnelData, mooeData, capitalData, incomeData] = await Promise.all([
+      Proposal.find(query).sort({ [sort]: sortOrder }).limit(limitNum),
+      PersonnelService.find(query).sort({ [sort]: sortOrder }).limit(limitNum),
+      MooeProposal.find(query).sort({ [sort]: sortOrder }).limit(limitNum), 
+      CapitalOutlay.find(query).sort({ [sort]: sortOrder }).limit(limitNum),
+      Income.find(query).sort({ [sort]: sortOrder }).limit(limitNum)
+    ]);
+
+    // Combine all data and add model type identifier + cobExpenditures for consistent display
+    const allProposals = [
+      ...proposals.map(p => ({ ...p.toObject(), modelType: 'proposal' })),
+      ...personnelData.map(p => ({ 
+        ...p.toObject(), 
+        modelType: 'personnel',
+        cobExpenditures: `Personnel Services - ${p.Employment || p.statusOfAppointment || 'PERMANENT'}` // Use Employment field, fallback to statusOfAppointment, default to PERMANENT
+      })),
+      // Aggregate MOOE records by region, fiscalYear, budgetType
+      ...(() => {
+        const mooeGroups = new Map();
+        
+        mooeData.forEach(p => {
+          const groupKey = `${p.region || 'Unknown'}-${p.fiscalYear || 'Unknown'}-${p.budgetType || 'Unknown'}-${p.status || 'Unknown'}`;
+          
+          if (mooeGroups.has(groupKey)) {
+            const existing = mooeGroups.get(groupKey);
+            // Aggregate amounts
+            existing.income = (existing.income || 0) + (p.income || 0);
+            existing.subsidy = (existing.subsidy || 0) + (p.subsidy || 0);
+            existing.amount = (existing.amount || 0) + (p.amount || 0);
+            // Keep track of aggregated records count
+            existing.recordCount = (existing.recordCount || 1) + 1;
+            existing.accountingTitles = existing.accountingTitles || [];
+            if (p.accountingTitle && !existing.accountingTitles.includes(p.accountingTitle)) {
+              existing.accountingTitles.push(p.accountingTitle);
+            }
+          } else {
+            const mooeRecord = {
+              ...p.toObject(),
+              modelType: 'mooe',
+              cobExpenditures: 'MOOE',
+              recordCount: 1,
+              accountingTitles: p.accountingTitle ? [p.accountingTitle] : []
+            };
+            mooeGroups.set(groupKey, mooeRecord);
+          }
+        });
+        
+        return Array.from(mooeGroups.values()).map(record => ({
+          ...record,
+          // Create a combined title if multiple records were aggregated
+          aggregatedTitle: record.recordCount > 1 
+            ? `MOOE (${record.recordCount} items: ${record.accountingTitles.join(', ')})`
+            : record.accountingTitle || 'MOOE'
+        }));
+      })(),
+      ...capitalData.map(p => ({ 
+        ...p.toObject(), 
+        modelType: 'capital',
+        cobExpenditures: 'Capital Outlay' // Format same as Proposal collection
+      })),
+      // Aggregate Income records by region, fiscalYear, budgetType, status
+      ...(() => {
+        const incomeGroups = new Map();
+        
+        incomeData.forEach(p => {
+          const groupKey = `${p.region || 'Unknown'}-${p.fiscalYear || 'Unknown'}-${p.budgetType || 'Unknown'}-${p.status || 'Unknown'}`;
+          
+          if (incomeGroups.has(groupKey)) {
+            const existing = incomeGroups.get(groupKey);
+            // Aggregate amounts
+            existing.amount = (existing.amount || 0) + (p.amount || 0);
+            // Keep track of aggregated records count
+            existing.recordCount = (existing.recordCount || 1) + 1;
+            existing.particularsArray = existing.particularsArray || [];
+            if (p.particulars && !existing.particularsArray.includes(p.particulars)) {
+              existing.particularsArray.push(p.particulars);
+            }
+          } else {
+            const incomeRecord = {
+              ...p.toObject(),
+              modelType: 'income',
+              cobExpenditures: 'Corporate Income',
+              recordCount: 1,
+              particularsArray: p.particulars ? [p.particulars] : []
+            };
+            incomeGroups.set(groupKey, incomeRecord);
+          }
+        });
+        
+        return Array.from(incomeGroups.values()).map(record => ({
+          ...record,
+          // Create a combined title if multiple records were aggregated
+          aggregatedTitle: record.recordCount > 1 
+            ? `Corporate Income (${record.recordCount} items: ${record.particularsArray.join(', ')})`
+            : record.particulars || 'Corporate Income',
+          // Set particulars to show aggregated info
+          particulars: record.recordCount > 1 
+            ? `Corporate Income (${record.recordCount} items)`
+            : record.particulars
+        }));
+      })()
+    ];
+
+    // Sort combined results and apply pagination
+    allProposals.sort((a, b) => {
+      const aValue = a[sort] || a.createdAt || new Date(0);
+      const bValue = b[sort] || b.createdAt || new Date(0);
+      return sortOrder * (aValue > bValue ? 1 : -1);
+    });
+
+    const paginatedProposals = allProposals.slice(skipCount, skipCount + limitNum);
     if (proposals.length > 0) {
       proposals.forEach((proposal, index) => {
         });
     }
-    // Get total count for pagination
-    const totalRecords = await Proposal.countDocuments(query);
+    // Get total count from all models for pagination
+    const [proposalCount, personnelCount, mooeCount, capitalCount, incomeCount] = await Promise.all([
+      Proposal.countDocuments(query),
+      PersonnelService.countDocuments(query),
+      MooeProposal.countDocuments(query),
+      CapitalOutlay.countDocuments(query),
+      Income.countDocuments(query)
+    ]);
+    
+    const totalRecords = proposalCount + personnelCount + mooeCount + capitalCount + incomeCount;
     // Include workflow information in response
     const workflowInfo = req.hierarchicalAccessInfo ? {
       userLevel: req.hierarchicalAccessInfo.scope,
@@ -1127,11 +1247,19 @@ exports.getProposals = async (req, res) => {
     } : null;
     // Return the response with the actual values from the database
     res.status(200).json({
-      proposals: proposals,
+      proposals: paginatedProposals,
       totalRecords,
       page: pageNum,
       limit: limitNum,
-      workflowInfo
+      workflowInfo,
+      // Debug info to show model distribution
+      modelCounts: {
+        proposal: proposalCount,
+        personnel: personnelCount,
+        mooe: mooeCount,
+        capital: capitalCount,
+        income: incomeCount
+      }
     });
   } catch (error) {
     console.error("Error in getProposals:", error);
@@ -1828,15 +1956,21 @@ exports.consolidateProposals = async (req, res) => {
         message: "No submitted proposals found to consolidate"
       });
     }
-    // Group by processBy, region, fiscalYear, budgetType
+    // Group by processBy, region, department, division, fiscalYear, budgetType to preserve hierarchy
     const grouped = {};
     const processItems = (items, category) => {
       items.forEach(item => {
-        const key = `${item.processBy}_${item.region}_${item.fiscalYear}_${item.budgetType}`;
+        // Create hierarchical key that includes department and division
+        const department = item.department || '';
+        const division = item.division || '';
+        const key = `${item.processBy}_${item.region}_${department}_${division}_${item.fiscalYear}_${item.budgetType}`;
+        
         if (!grouped[key]) {
           grouped[key] = {
             processBy: item.processBy,
             region: item.region,
+            department: item.department || null,
+            division: item.division || null,
             fiscalYear: item.fiscalYear,
             budgetType: item.budgetType,
             categories: {}
@@ -1888,22 +2022,44 @@ exports.consolidateProposals = async (req, res) => {
         } else if (category === 'income') {
           cobExpenditures = 'Income';
         }
+        // Build filter that includes hierarchical fields
+        const filter = {
+          processBy: group.processBy,
+          region: group.region,
+          fiscalYear: group.fiscalYear,
+          budgetType: group.budgetType,
+          cobExpenditures: cobExpenditures,
+        };
+
+        // Add department and division to filter if they exist
+        if (group.department) {
+          filter.department = group.department;
+        }
+        if (group.division) {
+          filter.division = group.division;
+        }
+
+        // Build update object that preserves hierarchy
+        const updateSet = {
+          submittedDate: new Date(),
+          status: 'Submitted',
+          totalExpenses: totalExpenses,
+          totalIncome: totalIncome,
+        };
+
+        // Add hierarchical fields to update
+        if (group.department) {
+          updateSet.department = group.department;
+        }
+        if (group.division) {
+          updateSet.division = group.division;
+        }
+
         bulkOps.push({
           updateOne: {
-            filter: {
-              processBy: group.processBy,
-              region: group.region,
-              fiscalYear: group.fiscalYear,
-              budgetType: group.budgetType,
-              cobExpenditures: cobExpenditures,
-            },
+            filter: filter,
             update: {
-              $set: {
-                submittedDate: new Date(),
-                status: 'Submitted',
-                totalExpenses: totalExpenses,
-                totalIncome: totalIncome,
-              },
+              $set: updateSet,
             },
             upsert: true
           }

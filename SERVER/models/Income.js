@@ -44,9 +44,42 @@ const incomeSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      default: "Not Submitted",
+      enum: [
+        'Draft',
+        'Submitted',           // Legacy status
+        'Division Submitted',  // New standardized status
+        'Department Verified',
+        'Department Submitted', 
+        'Region Approved',
+        'Finalized',
+        'Returned'
+      ],
+      default: "Draft",
     },
-    // Workflow audit fields
+    
+    // Modern workflow tracking fields
+    workflowLevel: {
+      type: String,
+      enum: ['DIVISION', 'DEPARTMENT', 'REGION', 'FINALIZED'],
+      default: 'DIVISION'
+    },
+    
+    // Department Level Actions
+    departmentVerifiedBy: { type: String },
+    departmentVerifiedDate: { type: Date },
+    
+    // Region Level Actions  
+    regionApprovedBy: { type: String },
+    regionApprovedDate: { type: Date },
+    
+    // General Workflow Audit
+    lastActionBy: { type: String },
+    lastActionDate: { type: Date },
+    lastWorkflowTransition: { type: String },
+    rejectionReason: { type: String },
+    submittedDate: { type: Date }, // Date when proposal was submitted
+    
+    // Legacy workflow audit fields (keep for backward compatibility)
     divisionApproved: {
       by: { type: String },
       at: { type: Date }
@@ -71,4 +104,4 @@ const incomeSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-module.exports = mongoose.model("Income", incomeSchema);
+module.exports = mongoose.model("Income", incomeSchema);
