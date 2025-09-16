@@ -1,0 +1,18 @@
+{
+  "files.exclude": {
+    "**/*.md": true,
+    "**/debug-client.html": true,
+    "**/bash.exe.stackdump": true,
+    "**/auto-sync.bat": true,
+    "**/deploy.bat": true,
+    "**/test-*.js": true
+  },
+  "search.exclude": {
+    "**/*.md": true,
+    "**/debug-client.html": true,
+    "**/bash.exe.stackdump": true,
+    "**/auto-sync.bat": true,
+    "**/deploy.bat": true,
+    "**/test-*.js": true
+  }
+}
