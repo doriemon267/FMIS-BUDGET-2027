@@ -18,7 +18,8 @@ import {
   Chip,
   IconButton,
   Tooltip,
-  Divider
+  Divider,
+  
 } from "@mui/material";
 import {
   Refresh as RefreshIcon,
@@ -43,6 +44,7 @@ const MyProposalPage = () => {
   const [selectedProposal, setSelectedProposal] = useState(null);
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  
   
   // Pagination states for each table
   const [paginationState, setPaginationState] = useState({
@@ -186,6 +188,21 @@ const MyProposalPage = () => {
     setViewModalOpen(true);
   };
 
+  // Open details for merged Personnel rows by constructing a pseudo proposal
+  const handleOpenMergedPersonnelDetails = (mergedRow) => {
+    const regionName = activeRegion ? (activeRegion.name || activeRegion.regionName) : mergedRow.region;
+    const pseudoProposal = {
+      cobExpenditures: 'Personnel Services',
+      fiscalYear: mergedRow.fiscalYear,
+      budgetType: mergedRow.budgetType,
+      region: regionName || mergedRow.region,
+      status: mergedRow.status,
+      processBy: `${currentUser.FirstName} ${currentUser.LastName}`,
+    };
+    setSelectedProposal(pseudoProposal);
+    setViewModalOpen(true);
+  };
+
   const handleRefresh = () => {
     setRefreshTrigger(prev => prev + 1);
   };
@@ -276,8 +293,38 @@ const MyProposalPage = () => {
       return true;
     });
 
+    // Always merge Personnel Services rows by FY/BudgetType/Region/Status (Option 2)
+    let workingProposals = filteredProposals;
+    const isPersonnelCategory = String(category).toLowerCase() === 'personnel';
+    if (isPersonnelCategory) {
+      const psFields = [
+        'annualSalary','RATA','PERA','uniformALLOWANCE','productivityIncentive','medical','childrenAllowance','meal','cashGift','subsistenceAllowanceMDS','subsistenceAllowanceST','midyearBonus','yearEndBonus','gsisPremium','philhealthPremium','pagibigPremium','employeeCompensation','loyaltyAward','overtimePay','earnedLeaves','retirementBenefits','terminalLeave','courtAppearance'
+      ];
+      const calcTotal = (item) => psFields.reduce((sum, f) => sum + (Number(item?.[f]) || 0), 0);
+      const groups = new Map();
+      filteredProposals.forEach(p => {
+        const key = `${p.fiscalYear || 'Unknown'}|${p.budgetType || 'Unknown'}|${p.region || 'Unknown'}|${p.status || 'Unknown'}`;
+        if (!groups.has(key)) {
+          groups.set(key, {
+            _id: key,
+            categoryLabel: 'Personnel Services',
+            fiscalYear: p.fiscalYear || 'Unknown',
+            budgetType: p.budgetType || 'Unknown',
+            region: p.region || 'Unknown',
+            status: p.status || 'Unknown',
+            mergedCount: 0,
+            totalAmount: 0,
+          });
+        }
+        const agg = groups.get(key);
+        agg.mergedCount += 1;
+        agg.totalAmount += calcTotal(p);
+      });
+      workingProposals = Array.from(groups.values());
+    }
+
     const { page, rowsPerPage } = paginationState[tableType];
-    const paginatedProposals = filteredProposals.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+    const paginatedProposals = workingProposals.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
     // Format category name for display
     const getCategoryDisplayName = (cat) => {
@@ -296,16 +343,13 @@ const MyProposalPage = () => {
       switch (category.toLowerCase()) {
         case 'personnel':
           return [
-            { key: 'employeeFullName', label: 'Employee Name', width: '200px' },
-            { key: 'positionTitle', label: 'Position', width: '180px' },
-            { key: 'statusOfAppointment', label: 'Status', width: '120px' },
-            { key: 'gradelevel_SG', label: 'SG', width: '60px' },
-            { key: 'step', label: 'Step', width: '60px' },
-            { key: 'monthlySalary', label: 'Monthly Salary', width: '120px', type: 'currency' },
-            { key: 'annualSalary', label: 'Annual Salary', width: '120px', type: 'currency' },
+            { key: 'categoryLabel', label: 'Expenditure', width: '160px' },
             { key: 'fiscalYear', label: 'FY', width: '80px' },
-            { key: 'region', label: 'Region', width: '100px' },
-            { key: 'status', label: 'Status', width: '100px', type: 'status' }
+            { key: 'budgetType', label: 'Budget Type', width: '120px' },
+            { key: 'region', label: 'Region', width: '120px' },
+            { key: 'mergedCount', label: 'Records', width: '100px' },
+            { key: 'totalAmount', label: 'Total Amount', width: '140px', type: 'currency' },
+            { key: 'status', label: 'Status', width: '110px', type: 'status' }
           ];
         case 'mooe':
           return [
@@ -353,7 +397,7 @@ const MyProposalPage = () => {
       }
     };
 
-    const columns = getTableColumns(category);
+  const columns = getTableColumns(category);
 
     const renderCellValue = (proposal, column) => {
       const value = proposal[column.key];
@@ -388,7 +432,7 @@ const MyProposalPage = () => {
         }}>
           {getCategoryDisplayName(category)}
           <Chip
-            label={`${proposals.length} record${proposals.length !== 1 ? 's' : ''}`}
+            label={`${workingProposals.length} record${workingProposals.length !== 1 ? 's' : ''}`}
             size="small"
             sx={{
               ml: 1,
@@ -459,27 +503,59 @@ const MyProposalPage = () => {
                         borderRight: '1px solid #e0e0e0'
                       }}
                     >
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => handleViewProposal(proposal)}
-                        sx={{
-                          minWidth: '60px',
-                          fontSize: '0.75rem',
-                          borderRadius: 1,
-                          textTransform: 'none',
-                          borderColor: '#375e38',
-                          color: '#375e38',
-                          fontWeight: 600,
-                          '&:hover': {
-                            backgroundColor: '#375e38',
-                            color: 'white',
-                            borderColor: '#375e38'
-                          }
-                        }}
-                      >
-                        View
-                      </Button>
+                      {isPersonnelCategory ? (
+                        <Tooltip title={`Show ${proposal.mergedCount || ''} personnel record(s)`}>
+                          <span>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => handleOpenMergedPersonnelDetails(proposal)}
+                              sx={{
+                                minWidth: '60px',
+                                fontSize: '0.75rem',
+                                borderRadius: 1,
+                                textTransform: 'none',
+                                borderColor: '#375e38',
+                                color: '#375e38',
+                                fontWeight: 600,
+                                '&:hover': {
+                                  backgroundColor: '#375e38',
+                                  color: 'white',
+                                  borderColor: '#375e38'
+                                }
+                              }}
+                            >
+                              Details
+                            </Button>
+                          </span>
+                        </Tooltip>
+                      ) : (
+                        <Tooltip title={'View proposal'}>
+                          <span>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => handleViewProposal(proposal)}
+                              sx={{
+                                minWidth: '60px',
+                                fontSize: '0.75rem',
+                                borderRadius: 1,
+                                textTransform: 'none',
+                                borderColor: '#375e38',
+                                color: '#375e38',
+                                fontWeight: 600,
+                                '&:hover': {
+                                  backgroundColor: '#375e38',
+                                  color: 'white',
+                                  borderColor: '#375e38'
+                                }
+                              }}
+                            >
+                              View
+                            </Button>
+                          </span>
+                        </Tooltip>
+                      )}
                     </TableCell>
                     {columns.map((column) => (
                       <TableCell
@@ -510,10 +586,10 @@ const MyProposalPage = () => {
         </TableContainer>
 
         {/* Add pagination control */}
-        {proposals.length > 0 && (
+        {workingProposals.length > 0 && (
           <TablePagination
             component="div"
-            count={proposals.length}
+            count={workingProposals.length}
             page={paginationState[tableType].page}
             onPageChange={(event, newPage) => handleChangePage(tableType, newPage)}
             rowsPerPage={paginationState[tableType].rowsPerPage}

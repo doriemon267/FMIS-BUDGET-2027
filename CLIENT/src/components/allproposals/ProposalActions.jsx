@@ -981,8 +981,23 @@ export const ApproveButton = ({ row, refreshData }) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState('');
+  const [idsPreviewLoading, setIdsPreviewLoading] = useState(false);
+  const [idsPreviewCount, setIdsPreviewCount] = useState(0);
   const queryClient = useQueryClient();
   const { currentUser } = useUser();
+  const handleOpen = async () => {
+    setOpen(true);
+    // Prefetch affected record count
+    setIdsPreviewLoading(true);
+    try {
+      const ids = await fetchIdsForRow(row, 'Department Submitted');
+      setIdsPreviewCount(ids.length || 0);
+    } catch (e) {
+      setIdsPreviewCount(0);
+    } finally {
+      setIdsPreviewLoading(false);
+    }
+  };
 
   const scope = currentUser?.hierarchicalAccess?.scope;
   const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
@@ -1015,7 +1030,7 @@ export const ApproveButton = ({ row, refreshData }) => {
   return (
     <>
       <Tooltip title="Approve">
-        <IconButton color="success" onClick={() => setOpen(true)} size="small" disabled={loading}>
+        <IconButton color="success" onClick={handleOpen} size="small" disabled={loading}>
           <CheckCircleIcon />
         </IconButton>
       </Tooltip>
@@ -1024,6 +1039,9 @@ export const ApproveButton = ({ row, refreshData }) => {
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 1 }}>
             This will move records to <strong>Region Approved</strong>.
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+            {idsPreviewLoading ? 'Checking affected records…' : `Affected records: ${idsPreviewCount}`}
           </Typography>
           <TextField
             fullWidth
@@ -1050,8 +1068,22 @@ export const SubmitToRegionButton = ({ row, refreshData }) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState('');
+  const [idsPreviewLoading, setIdsPreviewLoading] = useState(false);
+  const [idsPreviewCount, setIdsPreviewCount] = useState(0);
   const queryClient = useQueryClient();
   const { currentUser } = useUser();
+  const handleOpen = async () => {
+    setOpen(true);
+    setIdsPreviewLoading(true);
+    try {
+      const ids = await fetchIdsForRow(row, 'Department Verified');
+      setIdsPreviewCount(ids.length || 0);
+    } catch (e) {
+      setIdsPreviewCount(0);
+    } finally {
+      setIdsPreviewLoading(false);
+    }
+  };
 
   const scope = currentUser?.hierarchicalAccess?.scope;
   const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
@@ -1084,7 +1116,7 @@ export const SubmitToRegionButton = ({ row, refreshData }) => {
   return (
     <>
       <Tooltip title="Submit to Region">
-        <IconButton color="primary" onClick={() => setOpen(true)} size="small" disabled={loading}>
+        <IconButton color="primary" onClick={handleOpen} size="small" disabled={loading}>
           <KeyboardArrowRightIcon />
         </IconButton>
       </Tooltip>
@@ -1093,6 +1125,9 @@ export const SubmitToRegionButton = ({ row, refreshData }) => {
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 1 }}>
             This will move records to <strong>Department Submitted</strong>.
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+            {idsPreviewLoading ? 'Checking affected records…' : `Affected records: ${idsPreviewCount}`}
           </Typography>
           <TextField
             fullWidth
@@ -1119,6 +1154,8 @@ export const ReturnButton = ({ row, refreshData }) => {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
+  const [idsPreviewLoading, setIdsPreviewLoading] = useState(false);
+  const [idsPreviewCount, setIdsPreviewCount] = useState(0);
   const queryClient = useQueryClient();
   const { currentUser } = useUser();
 
@@ -1130,6 +1167,19 @@ export const ReturnButton = ({ row, refreshData }) => {
   ) && ['Division Submitted','Department Verified','Department Submitted','Region Approved','Submitted'].includes(row.status);
 
   if (!canReturn) return null;
+
+  const handleOpen = async () => {
+    setOpen(true);
+    setIdsPreviewLoading(true);
+    try {
+      const ids = await fetchIdsForRow(row, row.status || 'Submitted');
+      setIdsPreviewCount(ids.length || 0);
+    } catch (e) {
+      setIdsPreviewCount(0);
+    } finally {
+      setIdsPreviewLoading(false);
+    }
+  };
 
   const handleReturn = async () => {
     if (!reason.trim()) {
@@ -1162,7 +1212,7 @@ export const ReturnButton = ({ row, refreshData }) => {
   return (
     <>
       <Tooltip title="Return / Reject">
-        <IconButton color="error" onClick={() => setOpen(true)} size="small" disabled={loading}>
+        <IconButton color="error" onClick={handleOpen} size="small" disabled={loading}>
           <UndoIcon />
         </IconButton>
       </Tooltip>
@@ -1171,6 +1221,9 @@ export const ReturnButton = ({ row, refreshData }) => {
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 2 }}>
             This will mark the proposal as <strong>Returned</strong> with feedback.
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+            {idsPreviewLoading ? 'Checking affected records…' : `Affected records: ${idsPreviewCount}`}
           </Typography>
           <Typography variant="body2" sx={{ mb: 2 }}>
             <strong>Expenditure Type:</strong> {row.cobExpenditures}<br />
@@ -1208,6 +1261,8 @@ export const VerifyButton = ({ row, refreshData }) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState('');
+  const [idsPreviewLoading, setIdsPreviewLoading] = useState(false);
+  const [idsPreviewCount, setIdsPreviewCount] = useState(0);
   const queryClient = useQueryClient();
   const { currentUser } = useUser();
 
@@ -1215,6 +1270,19 @@ export const VerifyButton = ({ row, refreshData }) => {
   const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
   const canVerify = scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && row.status === 'Division Submitted';
   if (!canVerify) return null;
+
+  const handleOpen = async () => {
+    setOpen(true);
+    setIdsPreviewLoading(true);
+    try {
+      const ids = await fetchIdsForRow(row, 'Division Submitted');
+      setIdsPreviewCount(ids.length || 0);
+    } catch (e) {
+      setIdsPreviewCount(0);
+    } finally {
+      setIdsPreviewLoading(false);
+    }
+  };
 
   const handleVerify = async () => {
     setLoading(true);
@@ -1242,7 +1310,7 @@ export const VerifyButton = ({ row, refreshData }) => {
   return (
     <>
       <Tooltip title="Verify">
-        <IconButton color="success" onClick={() => setOpen(true)} size="small" disabled={loading}>
+        <IconButton color="success" onClick={handleOpen} size="small" disabled={loading}>
           <CheckCircleIcon />
         </IconButton>
       </Tooltip>
@@ -1251,6 +1319,9 @@ export const VerifyButton = ({ row, refreshData }) => {
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 1 }}>
             This will move records to <strong>Department Verified</strong>.
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+            {idsPreviewLoading ? 'Checking affected records…' : `Affected records: ${idsPreviewCount}`}
           </Typography>
           <TextField
             fullWidth
@@ -1277,6 +1348,8 @@ export const FinalizeButton = ({ row, refreshData }) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState('');
+  const [idsPreviewLoading, setIdsPreviewLoading] = useState(false);
+  const [idsPreviewCount, setIdsPreviewCount] = useState(0);
   const queryClient = useQueryClient();
   const { currentUser } = useUser();
 
@@ -1284,6 +1357,19 @@ export const FinalizeButton = ({ row, refreshData }) => {
   const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
   const canFinalize = (scope === 'REGION' || scope === 'FULL') && roles.includes('regionFinalVerifier') && row.status === 'Region Approved';
   if (!canFinalize) return null;
+
+  const handleOpen = async () => {
+    setOpen(true);
+    setIdsPreviewLoading(true);
+    try {
+      const ids = await fetchIdsForRow(row, 'Region Approved');
+      setIdsPreviewCount(ids.length || 0);
+    } catch (e) {
+      setIdsPreviewCount(0);
+    } finally {
+      setIdsPreviewLoading(false);
+    }
+  };
 
   const handleFinalize = async () => {
     setLoading(true);
@@ -1311,7 +1397,7 @@ export const FinalizeButton = ({ row, refreshData }) => {
   return (
     <>
       <Tooltip title="Finalize">
-        <IconButton color="primary" onClick={() => setOpen(true)} size="small" disabled={loading}>
+        <IconButton color="primary" onClick={handleOpen} size="small" disabled={loading}>
           <KeyboardArrowDownIcon />
         </IconButton>
       </Tooltip>
@@ -1320,6 +1406,9 @@ export const FinalizeButton = ({ row, refreshData }) => {
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 1 }}>
             This will move records to <strong>Finalized</strong>.
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+            {idsPreviewLoading ? 'Checking affected records…' : `Affected records: ${idsPreviewCount}`}
           </Typography>
           <TextField
             fullWidth
@@ -1346,6 +1435,8 @@ export const SubmitDraftButton = ({ row, refreshData }) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState('');
+  const [idsPreviewLoading, setIdsPreviewLoading] = useState(false);
+  const [idsPreviewCount, setIdsPreviewCount] = useState(0);
   const queryClient = useQueryClient();
   const { currentUser } = useUser();
 
@@ -1360,6 +1451,19 @@ export const SubmitDraftButton = ({ row, refreshData }) => {
   );
 
   if (!canSubmitDraft) return null;
+
+  const handleOpen = async () => {
+    setOpen(true);
+    setIdsPreviewLoading(true);
+    try {
+      const ids = await fetchIdsForRow(row, 'Draft');
+      setIdsPreviewCount(ids.length || 0);
+    } catch (e) {
+      setIdsPreviewCount(0);
+    } finally {
+      setIdsPreviewLoading(false);
+    }
+  };
 
   const handleSubmit = async () => {
     setLoading(true);
@@ -1407,7 +1511,7 @@ export const SubmitDraftButton = ({ row, refreshData }) => {
   return (
     <>
       <Tooltip title={`Submit ${row.status} to next level`}>
-        <IconButton color="primary" onClick={() => setOpen(true)} size="small" disabled={loading}>
+        <IconButton color="primary" onClick={handleOpen} size="small" disabled={loading}>
           <CheckCircleIcon />
         </IconButton>
       </Tooltip>
@@ -1416,6 +1520,9 @@ export const SubmitDraftButton = ({ row, refreshData }) => {
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 1 }}>
             This will submit the draft proposal to the next level for review.
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+            {idsPreviewLoading ? 'Checking affected records…' : `Affected records: ${idsPreviewCount}`}
           </Typography>
           <TextField
             fullWidth
