@@ -115,8 +115,12 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                 { 
                   $and: [
                     { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName },
-                    { $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] },
-                    { originalLevel: 'DEPARTMENT' }
+                    { 
+                      $or: [
+                        { originalLevel: 'DEPARTMENT' },
+                        { $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] }
+                      ]
+                    }
                   ]
                 },
                 // Division data that has been submitted to department (Division Submitted, Department Verified, or higher)
