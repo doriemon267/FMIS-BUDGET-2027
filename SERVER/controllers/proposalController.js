@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+  const mongoose = require('mongoose');
 const Proposal = require('../models/Proposal');
 const DraftProposal = require('../models/DraftProposal');
 const PersonnelService = require('../models/personnelServices');
@@ -1138,11 +1138,57 @@ exports.getProposals = async (req, res) => {
     // Combine all data and add model type identifier + cobExpenditures for consistent display
     const allProposals = [
       ...proposals.map(p => ({ ...p.toObject(), modelType: 'proposal' })),
-      ...personnelData.map(p => ({ 
-        ...p.toObject(), 
-        modelType: 'personnel',
-        cobExpenditures: `Personnel Services - ${p.Employment || p.statusOfAppointment || 'PERMANENT'}` // Use Employment field, fallback to statusOfAppointment, default to PERMANENT
-      })),
+      // Aggregate Personnel Services (merge CASUAL and PERMANENT into one)
+      ...(() => {
+        const psGroups = new Map();
+
+        // Fields contributing to Personnel Services totals
+        const psFields = [
+          'annualSalary','RATA','PERA','uniformALLOWANCE','productivityIncentive','medical','childrenAllowance','meal','cashGift','subsistenceAllowanceMDS','subsistenceAllowanceST','midyearBonus','yearEndBonus','gsisPremium','philhealthPremium','pagibigPremium','employeeCompensation','loyaltyAward','overtimePay','earnedLeaves','retirementBenefits','terminalLeave','courtAppearance'
+        ];
+
+        const calcPSTotal = (item) => {
+          return psFields.reduce((sum, f) => sum + (Number(item?.[f]) || 0), 0);
+        };
+
+        personnelData.forEach(p => {
+          const key = `${p.processBy || 'Unknown'}-${p.region || 'Unknown'}-${p.department || ''}-${p.division || ''}-${p.fiscalYear || 'Unknown'}-${p.budgetType || 'Unknown'}-${p.status || 'Unknown'}`;
+          if (psGroups.has(key)) {
+            const existing = psGroups.get(key);
+            // Accumulate only the total; keep breakdown fields zeroed to avoid UI double-summing
+            existing.Total = (Number(existing.Total) || 0) + calcPSTotal(p);
+            existing.recordCount = (existing.recordCount || 1) + 1;
+            if (p.Employment || p.statusOfAppointment) {
+              existing.statusTypes.add(p.Employment || p.statusOfAppointment);
+            }
+            existing.personnelIds = existing.personnelIds || [];
+            if (p._id) existing.personnelIds.push(String(p._id));
+          } else {
+            // Start a new aggregated record; copy some identifying fields from the first item
+            const base = {
+              ...p.toObject(),
+              modelType: 'personnel',
+              cobExpenditures: 'Personnel Services',
+              recordCount: 1,
+              statusTypes: new Set(),
+              personnelIds: p._id ? [String(p._id)] : [],
+            };
+            // Zero-out PS breakdown fields so the UI uses Total as fallback
+            psFields.forEach(f => { base[f] = 0; });
+            base.Total = calcPSTotal(p);
+            if (p.Employment || p.statusOfAppointment) {
+              base.statusTypes.add(p.Employment || p.statusOfAppointment);
+            }
+            psGroups.set(key, base);
+          }
+        });
+
+        // Convert Set to array for serialization and map to plain objects
+        return Array.from(psGroups.values()).map(rec => ({
+          ...rec,
+          statusTypes: Array.from(rec.statusTypes || [])
+        }));
+      })(),
       // Aggregate MOOE records by region, fiscalYear, budgetType
       ...(() => {
         const mooeGroups = new Map();
@@ -1696,7 +1742,7 @@ exports.returnProposal = async (req, res) => {
     let incomeResult = { modifiedCount: 0 };
     let proposalResult = { modifiedCount: 0 };
     // Update only the specific type of proposal
-    if (cobExpenditures === "Personnel" || cobExpenditures === "PS") {
+    if (cobExpenditures === "Personnel" || cobExpenditures === "PS" || cobExpenditures === "Personnel Services") {
       personnelResult = await PersonnelService.updateMany(
         { status: "Submitted", fiscalYear, budgetType, processBy, region },
         update

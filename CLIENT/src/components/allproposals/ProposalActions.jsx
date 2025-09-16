@@ -1364,8 +1364,11 @@ export const SubmitDraftButton = ({ row, refreshData }) => {
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      // Use the row's _id directly
-      const ids = [row._id];
+      // Collect all matching record IDs for the row's current status
+      const ids = await fetchIdsForRow(row, 'Draft');
+      if (!ids || ids.length === 0) {
+        throw new Error('No draft records found to submit');
+      }
       const entity = mapCobToEntity(row.cobExpenditures);
 
       let endpoint = '';

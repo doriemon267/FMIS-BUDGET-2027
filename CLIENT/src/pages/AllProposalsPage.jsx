@@ -69,8 +69,8 @@ const AllProposalsPage = () => {
         // Calculate Subsidy correctly - from expenses only (Personnel + MOOE + Capital costs)
         const totalProjectedSubsidy = proposals.reduce((sum, proposal) => {
           if (proposal.cobExpenditures && proposal.cobExpenditures.includes('Personnel Services')) {
-            // For personnel, calculate total from all allowance fields
-            const personnelTotal = (proposal.annualSalary || 0) + 
+            // For personnel, calculate total from all allowance fields, fallback to aggregated Total if present
+            const breakdownTotal = (proposal.annualSalary || 0) + 
                                    (proposal.RATA || 0) + 
                                    (proposal.PERA || 0) + 
                                    (proposal.uniformALLOWANCE || 0) + 
@@ -87,7 +87,8 @@ const AllProposalsPage = () => {
                                    (proposal.philhealthPremium || 0) + 
                                    (proposal.pagibigPremium || 0) + 
                                    (proposal.employeeCompensation || 0);
-            return sum + personnelTotal;
+            const personnelTotal = breakdownTotal > 0 ? breakdownTotal : (proposal.Total || 0);
+            return sum + (personnelTotal || 0);
           } else if (proposal.cobExpenditures === 'MOOE') {
             return sum + (proposal.subsidy || proposal.amount || 0);
           } else if (proposal.cobExpenditures === 'Capital Outlay') {
