@@ -937,45 +937,76 @@ export const ViewButton = ({ row }) => {
   );
 };
 
-// Approve Proposal Button
+// Helpers
+const mapCobToEntity = (cob) => {
+  if (!cob) return 'personnel';
+  const s = String(cob).toLowerCase();
+  if (s.includes('personnel')) return 'personnel';
+  if (s.includes('mooe')) return 'mooe';
+  if (s.includes('capital')) return 'capital';
+  if (s.includes('income') || s.includes('corporate')) return 'income';
+  return 'personnel';
+};
+
+const fetchIdsForRow = async (row, targetStatus) => {
+  const entity = mapCobToEntity(row.cobExpenditures);
+  const params = {
+    fiscalYear: row.fiscalYear,
+    budgetType: row.budgetType,
+    processBy: row.processBy,
+    region: row.region,
+  };
+  let url = '';
+  switch (entity) {
+    case 'personnel':
+      url = '/getpersonnels/byParams';
+      break;
+    case 'mooe':
+      url = '/mooe/getByParams';
+      break;
+    case 'capital':
+      url = '/capital-outlay/getByParams';
+      break;
+    case 'income':
+      url = '/income/getByParams';
+      break;
+  }
+  const resp = await api.get(url, { params });
+  const list = Array.isArray(resp.data) ? resp.data : (resp.data?.data || []);
+  return list.filter(i => (i.status || '').toLowerCase() === String(targetStatus).toLowerCase()).map(i => i._id).filter(Boolean);
+};
+
+// Approve (Region) Button
 export const ApproveButton = ({ row, refreshData }) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [note, setNote] = useState('');
   const queryClient = useQueryClient();
   const { currentUser } = useUser();
 
-  // Only show for submitted proposals
-  if (row.status !== "Submitted") {
-    return null;
-  }
-
-  // Check if user has appropriate workflow roles for approval
-  const userWorkflowRoles = currentUser?.hierarchicalAccess?.workflowRoles || [];
-  const canApprove = userWorkflowRoles.includes('departmentConsolidator') || 
-                    userWorkflowRoles.includes('regionFinalVerifier') ||
-                    userWorkflowRoles.includes('divisionApprover');
-
-  if (!canApprove) {
-    return null;
-  }
+  const scope = currentUser?.hierarchicalAccess?.scope;
+  const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
+  const canApprove = (scope === 'REGION' || scope === 'FULL') && roles.includes('regionFinalVerifier') && row.status === 'Department Submitted';
+  if (!canApprove) return null;
 
   const handleApprove = async () => {
     setLoading(true);
     try {
-      await api.put(`/approveProposal`, {
-        fiscalYear: row.fiscalYear,
-        budgetType: row.budgetType,
-        processBy: row.processBy,
-        region: row.region,
-        approvedDate: new Date(),
+      const ids = await fetchIdsForRow(row, 'Department Submitted');
+      if (ids.length === 0) throw new Error('No records to approve');
+      const entity = mapCobToEntity(row.cobExpenditures);
+      await api.post('/api/submission-workflow/region/approve-submission', {
+        ids,
+        entity,
+        regionApprovalNote: note || `Approved at Region on ${new Date().toLocaleString()}`
       });
-      toast.success("Proposal approved successfully");
-      await queryClient.invalidateQueries(["proposals"]);
+      toast.success('Region approval successful');
+      await queryClient.invalidateQueries(['proposals']);
       refreshData?.();
       setOpen(false);
-    } catch (err) {
-      console.error(err);
-      toast.error(err.response?.data?.message || "Failed to approve proposal");
+    } catch (e) {
+      console.error(e);
+      toast.error(e.response?.data?.message || e.message || 'Failed to approve');
     } finally {
       setLoading(false);
     }
@@ -984,40 +1015,29 @@ export const ApproveButton = ({ row, refreshData }) => {
   return (
     <>
       <Tooltip title="Approve">
-        <IconButton 
-          color="success" 
-          onClick={() => setOpen(true)} 
-          disabled={loading}
-          size="small"
-        >
+        <IconButton color="success" onClick={() => setOpen(true)} size="small" disabled={loading}>
           <CheckCircleIcon />
         </IconButton>
       </Tooltip>
-
       <Dialog open={open} onClose={() => !loading && setOpen(false)}>
-        <DialogTitle>Approve Proposal</DialogTitle>
+        <DialogTitle>Approve Submission</DialogTitle>
         <DialogContent>
-          <Typography>
-            Are you sure you want to approve this proposal?
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            This will move records to <strong>Region Approved</strong>.
           </Typography>
-          <Typography variant="body2" sx={{ mt: 2 }}>
-            <strong>Process By:</strong> {row.processBy}<br />
-            <strong>Region:</strong> {row.region}<br />
-            <strong>Fiscal Year:</strong> {row.fiscalYear}<br />
-            <strong>Budget Type:</strong> {row.budgetType}
-          </Typography>
+          <TextField
+            fullWidth
+            multiline
+            minRows={3}
+            label="Approval Note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpen(false)} disabled={loading}>
-            Cancel
-          </Button>
-          <Button 
-            onClick={handleApprove} 
-            color="success" 
-            variant="contained"
-            disabled={loading}
-          >
-            {loading ? <CircularProgress size={20} /> : "Approve"}
+          <Button onClick={() => setOpen(false)} disabled={loading}>Cancel</Button>
+          <Button onClick={handleApprove} disabled={loading} variant="contained" color="success">
+            {loading ? <CircularProgress size={20} /> : 'Approve'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1025,56 +1045,37 @@ export const ApproveButton = ({ row, refreshData }) => {
   );
 };
 
-// Return Proposal Button
-export const ReturnButton = ({ row, refreshData }) => {
+// Submit to Region (Department) Button
+export const SubmitToRegionButton = ({ row, refreshData }) => {
   const [open, setOpen] = useState(false);
-  const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
+  const [note, setNote] = useState('');
   const queryClient = useQueryClient();
   const { currentUser } = useUser();
 
-  // Only show for submitted proposals
-  if (row.status !== "Submitted") {
-    return null;
-  }
+  const scope = currentUser?.hierarchicalAccess?.scope;
+  const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
+  const canSubmit = scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && row.status === 'Department Verified';
+  if (!canSubmit) return null;
 
-  // Check if user has appropriate workflow roles for returning
-  const userWorkflowRoles = currentUser?.hierarchicalAccess?.workflowRoles || [];
-  const canReturn = userWorkflowRoles.includes('departmentConsolidator') || 
-                   userWorkflowRoles.includes('regionFinalVerifier') ||
-                   userWorkflowRoles.includes('divisionApprover');
-
-  if (!canReturn) {
-    return null;
-  }
-
-  const handleReturn = async () => {
-    if (!reason.trim()) {
-      toast.error("Please provide a reason for returning the proposal");
-      return;
-    }
-    
+  const handleSubmit = async () => {
     setLoading(true);
     try {
-      // Fix the endpoint URL - use POST instead of PUT
-      await api.post(`/returnProposal`, {
-        fiscalYear: row.fiscalYear,
-        budgetType: row.budgetType,
-        processBy: row.processBy,
-        region: row.region,
-        reason,
-        cobExpenditures: row.cobExpenditures
+      const ids = await fetchIdsForRow(row, 'Department Verified');
+      if (ids.length === 0) throw new Error('No verified records to submit');
+      const entity = mapCobToEntity(row.cobExpenditures);
+      await api.post('/api/submission-workflow/department/submit-to-region', {
+        ids,
+        entity,
+        approvalNote: note || `Submitted to Region on ${new Date().toLocaleString()}`
       });
-      
-      toast.success(`${row.cobExpenditures} proposal returned successfully`);
-      
-      await queryClient.invalidateQueries(["proposals"]);
+      toast.success('Submitted to Region');
+      await queryClient.invalidateQueries(['proposals']);
       refreshData?.();
       setOpen(false);
-      setReason("");
-    } catch (err) {
-      console.error(err);
-      toast.error(err.response?.data?.message || "Failed to return proposal");
+    } catch (e) {
+      console.error(e);
+      toast.error(e.response?.data?.message || e.message || 'Failed to submit');
     } finally {
       setLoading(false);
     }
@@ -1082,22 +1083,94 @@ export const ReturnButton = ({ row, refreshData }) => {
 
   return (
     <>
-      <Tooltip title="Return">
-        <IconButton 
-          color="error" 
-          onClick={() => setOpen(true)} 
-          disabled={loading}
-          size="small"
-        >
+      <Tooltip title="Submit to Region">
+        <IconButton color="primary" onClick={() => setOpen(true)} size="small" disabled={loading}>
+          <KeyboardArrowRightIcon />
+        </IconButton>
+      </Tooltip>
+      <Dialog open={open} onClose={() => !loading && setOpen(false)}>
+        <DialogTitle>Submit to Region</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            This will move records to <strong>Department Submitted</strong>.
+          </Typography>
+          <TextField
+            fullWidth
+            multiline
+            minRows={3}
+            label="Approval Note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpen(false)} disabled={loading}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={loading} variant="contained" color="primary">
+            {loading ? <CircularProgress size={20} /> : 'Submit'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+};
+
+// Return / Reject Button
+export const ReturnButton = ({ row, refreshData }) => {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
+  const { currentUser } = useUser();
+
+  const scope = currentUser?.hierarchicalAccess?.scope;
+  const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
+  const canReturn = (
+    (scope === 'DEPARTMENT' && roles.includes('departmentConsolidator')) ||
+    ((scope === 'REGION' || scope === 'FULL') && roles.includes('regionFinalVerifier'))
+  ) && ['Division Submitted','Department Verified','Department Submitted','Region Approved','Submitted'].includes(row.status);
+
+  if (!canReturn) return null;
+
+  const handleReturn = async () => {
+    if (!reason.trim()) {
+      toast.error('Please provide a reason for returning the proposal');
+      return;
+    }
+    setLoading(true);
+    try {
+      await api.post('/returnProposal', {
+        fiscalYear: row.fiscalYear,
+        budgetType: row.budgetType,
+        processBy: row.processBy,
+        region: row.region,
+        reason,
+        cobExpenditures: row.cobExpenditures,
+      });
+      toast.success(`${row.cobExpenditures} proposal returned successfully`);
+      await queryClient.invalidateQueries(['proposals']);
+      refreshData?.();
+      setOpen(false);
+      setReason('');
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.message || 'Failed to return proposal');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <Tooltip title="Return / Reject">
+        <IconButton color="error" onClick={() => setOpen(true)} size="small" disabled={loading}>
           <UndoIcon />
         </IconButton>
       </Tooltip>
-
       <Dialog open={open} onClose={() => !loading && setOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Return {row.cobExpenditures} Proposal</DialogTitle>
         <DialogContent>
-          <Typography variant="body1" gutterBottom>
-            Please state the reason for returning the {row.cobExpenditures} proposal:
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            This will mark the proposal as <strong>Returned</strong> with feedback.
           </Typography>
           <Typography variant="body2" sx={{ mb: 2 }}>
             <strong>Expenditure Type:</strong> {row.cobExpenditures}<br />
@@ -1120,16 +1193,147 @@ export const ReturnButton = ({ row, refreshData }) => {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpen(false)} disabled={loading}>
-            Cancel
+          <Button onClick={() => setOpen(false)} disabled={loading}>Cancel</Button>
+          <Button onClick={handleReturn} color="error" variant="contained" disabled={loading || !reason.trim()}>
+            {loading ? <CircularProgress size={20} /> : 'Return'}
           </Button>
-          <Button
-            onClick={handleReturn}
-            color="error"
-            variant="contained"
-            disabled={loading || !reason.trim()}
-          >
-            {loading ? <CircularProgress size={20} /> : "Return"}
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+};
+
+// Verify (Department) Button
+export const VerifyButton = ({ row, refreshData }) => {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [note, setNote] = useState('');
+  const queryClient = useQueryClient();
+  const { currentUser } = useUser();
+
+  const scope = currentUser?.hierarchicalAccess?.scope;
+  const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
+  const canVerify = scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && row.status === 'Division Submitted';
+  if (!canVerify) return null;
+
+  const handleVerify = async () => {
+    setLoading(true);
+    try {
+      const ids = await fetchIdsForRow(row, 'Division Submitted');
+      if (ids.length === 0) throw new Error('No matching records to verify');
+      const entity = mapCobToEntity(row.cobExpenditures);
+      await api.post('/api/submission-workflow/department/verify-submission', {
+        ids,
+        entity,
+        verificationNote: note || `Verified on ${new Date().toLocaleString()}`
+      });
+      toast.success('Division submission verified');
+      await queryClient.invalidateQueries(['proposals']);
+      refreshData?.();
+      setOpen(false);
+    } catch (e) {
+      console.error(e);
+      toast.error(e.response?.data?.message || e.message || 'Failed to verify');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <Tooltip title="Verify">
+        <IconButton color="success" onClick={() => setOpen(true)} size="small" disabled={loading}>
+          <CheckCircleIcon />
+        </IconButton>
+      </Tooltip>
+      <Dialog open={open} onClose={() => !loading && setOpen(false)}>
+        <DialogTitle>Verify Division Submission</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            This will move records to <strong>Department Verified</strong>.
+          </Typography>
+          <TextField
+            fullWidth
+            multiline
+            minRows={3}
+            label="Verification Note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpen(false)} disabled={loading}>Cancel</Button>
+          <Button onClick={handleVerify} disabled={loading} variant="contained" color="success">
+            {loading ? <CircularProgress size={20} /> : 'Verify'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+};
+
+// Finalize (Region) Button
+export const FinalizeButton = ({ row, refreshData }) => {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [note, setNote] = useState('');
+  const queryClient = useQueryClient();
+  const { currentUser } = useUser();
+
+  const scope = currentUser?.hierarchicalAccess?.scope;
+  const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
+  const canFinalize = (scope === 'REGION' || scope === 'FULL') && roles.includes('regionFinalVerifier') && row.status === 'Region Approved';
+  if (!canFinalize) return null;
+
+  const handleFinalize = async () => {
+    setLoading(true);
+    try {
+      const ids = await fetchIdsForRow(row, 'Region Approved');
+      if (ids.length === 0) throw new Error('No approved records to finalize');
+      const entity = mapCobToEntity(row.cobExpenditures);
+      await api.post('/api/submission-workflow/region/finalize-submission', {
+        ids,
+        entity,
+        finalizationNote: note || `Finalized on ${new Date().toLocaleString()}`
+      });
+      toast.success('Finalized successfully');
+      await queryClient.invalidateQueries(['proposals']);
+      refreshData?.();
+      setOpen(false);
+    } catch (e) {
+      console.error(e);
+      toast.error(e.response?.data?.message || e.message || 'Failed to finalize');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <Tooltip title="Finalize">
+        <IconButton color="primary" onClick={() => setOpen(true)} size="small" disabled={loading}>
+          <KeyboardArrowDownIcon />
+        </IconButton>
+      </Tooltip>
+      <Dialog open={open} onClose={() => !loading && setOpen(false)}>
+        <DialogTitle>Finalize Submission</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            This will move records to <strong>Finalized</strong>.
+          </Typography>
+          <TextField
+            fullWidth
+            multiline
+            minRows={3}
+            label="Finalization Note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpen(false)} disabled={loading}>Cancel</Button>
+          <Button onClick={handleFinalize} disabled={loading} variant="contained" color="primary">
+            {loading ? <CircularProgress size={20} /> : 'Finalize'}
           </Button>
         </DialogActions>
       </Dialog>

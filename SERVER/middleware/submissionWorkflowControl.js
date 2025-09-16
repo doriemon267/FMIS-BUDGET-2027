@@ -118,15 +118,18 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                     { $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] }
                   ]
                 },
-                // Submitted division data within their department
+                // Division data that has been submitted to department (Division Submitted, Department Verified, or higher)
                 { 
                   $and: [
                     { division: { $exists: true, $ne: null, $ne: "" } },
                     { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName },
                     { 
                       $or: [
-                        { status: 'Submitted' },
-                        { status: 'Approved' }
+                        { status: 'Division Submitted' },
+                        { status: 'Department Verified' },
+                        { status: 'Department Submitted' },
+                        { status: 'Region Approved' },
+                        { status: 'Finalized' }
                       ]
                     }
                   ]
@@ -165,7 +168,7 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                     { $or: [{ department: { $exists: false } }, { department: null }, { department: "" }] }
                   ]
                 },
-                // Submitted department/division data within their region
+                // Department/division data that has been submitted to region (Department Submitted, Region Approved, or Finalized)
                 { 
                   $and: [
                     { $or: [
@@ -175,8 +178,9 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                     { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
                     { 
                       $or: [
-                        { status: 'Submitted' },
-                        { status: 'Approved' }
+                        { status: 'Department Submitted' },
+                        { status: 'Region Approved' },
+                        { status: 'Finalized' }
                       ]
                     }
                   ]
@@ -366,10 +370,11 @@ const validateHierarchicalAccess = async (req, assignment) => {
   return true;
 };
 /**
- * Submission workflow transition controllers
+ * New 6-Step Submission Workflow:
+ * Draft → Division Submitted → Department Verified → Department Submitted → Region Approved → Finalized
  */
 const submissionWorkflowTransitions = {
-  // Division submits to Department for review
+  // Step 1→2: Division submits to Department (Draft → Division Submitted)
   divisionSubmitToDepartment: async (req, res) => {
     try {
       const { ids = [], entity = 'personnel', submissionNote } = req.body;
@@ -383,7 +388,7 @@ const submissionWorkflowTransitions = {
         },
         { 
           $set: { 
-            status: 'Submitted',
+            status: 'Division Submitted',
             submittedToDepartmentAt: new Date(),
             submittedToDepartmentBy: userId,
             submissionNote: submissionNote || '',
@@ -392,18 +397,52 @@ const submissionWorkflowTransitions = {
         }
       );
       return res.status(200).json({ 
-        message: 'Successfully submitted to Department for review', 
+        message: 'Successfully submitted to Department for verification', 
         modified: result.modifiedCount 
       });
     } catch (e) {
-      // divisionSubmitToDepartment error
       return res.status(500).json({
         message: 'Division submission failed',
         error: e.message
       });
     }
   },
-  // Department approves and submits to Region
+
+  // Step 2→3: Department verifies division submission (Division Submitted → Department Verified)
+  departmentVerifySubmission: async (req, res) => {
+    try {
+      const { ids = [], entity = 'personnel', verificationNote } = req.body;
+      const userId = req.user?.id || 'system';
+      const Model = getModelByEntity(entity);
+      const result = await Model.updateMany(
+        { 
+          _id: { $in: ids },
+          originalLevel: 'DIVISION',
+          status: 'Division Submitted'
+        },
+        { 
+          $set: { 
+            status: 'Department Verified',
+            verifiedByDepartmentAt: new Date(),
+            verifiedByDepartmentBy: userId,
+            verificationNote: verificationNote || '',
+            lastWorkflowTransition: 'DEPARTMENT_VERIFICATION'
+          } 
+        }
+      );
+      return res.status(200).json({ 
+        message: 'Successfully verified division submissions', 
+        modified: result.modifiedCount 
+      });
+    } catch (e) {
+      return res.status(500).json({
+        message: 'Department verification failed',
+        error: e.message
+      });
+    }
+  },
+
+  // Step 3→4: Department submits to Region (Department Verified → Department Submitted)
   departmentSubmitToRegion: async (req, res) => {
     try {
       const { ids = [], entity = 'personnel', approvalNote } = req.body;
@@ -413,11 +452,11 @@ const submissionWorkflowTransitions = {
         { 
           _id: { $in: ids },
           originalLevel: { $in: ['DIVISION', 'DEPARTMENT'] },
-          status: 'Submitted'
+          status: { $in: ['Department Verified', 'Draft'] } // Include department's own drafts
         },
         { 
           $set: { 
-            status: 'Submitted',
+            status: 'Department Submitted',
             approvedByDepartmentAt: new Date(),
             approvedByDepartmentBy: userId,
             submittedToRegionAt: new Date(),
@@ -428,46 +467,80 @@ const submissionWorkflowTransitions = {
         }
       );
       return res.status(200).json({ 
-        message: 'Successfully approved and submitted to Region', 
+        message: 'Successfully submitted to Region for approval', 
         modified: result.modifiedCount 
       });
     } catch (e) {
-      // departmentSubmitToRegion error
       return res.status(500).json({
         message: 'Department submission failed',
         error: e.message
       });
     }
   },
-  // Region final approval
-  regionFinalApproval: async (req, res) => {
+
+  // Step 4→5: Region approves submission (Department Submitted → Region Approved)
+  regionApproveSubmission: async (req, res) => {
     try {
-      const { ids = [], entity = 'personnel', finalNote } = req.body;
+      const { ids = [], entity = 'personnel', regionApprovalNote } = req.body;
       const userId = req.user?.id || 'system';
       const Model = getModelByEntity(entity);
       const result = await Model.updateMany(
         { 
           _id: { $in: ids },
-          status: 'Submitted'
+          originalLevel: { $in: ['DIVISION', 'DEPARTMENT'] },
+          status: 'Department Submitted'
         },
         { 
           $set: { 
-            status: 'Approved',
-            finalApprovedAt: new Date(),
-            finalApprovedBy: userId,
-            finalNote: finalNote || '',
-            lastWorkflowTransition: 'REGION_FINAL_APPROVAL'
+            status: 'Region Approved',
+            approvedByRegionAt: new Date(),
+            approvedByRegionBy: userId,
+            regionApprovalNote: regionApprovalNote || '',
+            lastWorkflowTransition: 'REGION_APPROVAL'
           } 
         }
       );
       return res.status(200).json({ 
-        message: 'Successfully granted final approval', 
+        message: 'Successfully approved submissions at Region level', 
         modified: result.modifiedCount 
       });
     } catch (e) {
-      // regionFinalApproval error
       return res.status(500).json({
-        message: 'Region final approval failed',
+        message: 'Region approval failed',
+        error: e.message
+      });
+    }
+  },
+
+  // Step 5→6: Final approval - Finalize submissions (Region Approved → Finalized)
+  regionFinalizeSubmission: async (req, res) => {
+    try {
+      const { ids = [], entity = 'personnel', finalizationNote } = req.body;
+      const userId = req.user?.id || 'system';
+      const Model = getModelByEntity(entity);
+      const result = await Model.updateMany(
+        { 
+          _id: { $in: ids },
+          originalLevel: { $in: ['DIVISION', 'DEPARTMENT', 'REGION'] },
+          status: 'Region Approved'
+        },
+        { 
+          $set: { 
+            status: 'Finalized',
+            finalizedAt: new Date(),
+            finalizedBy: userId,
+            finalizationNote: finalizationNote || '',
+            lastWorkflowTransition: 'FINALIZATION'
+          } 
+        }
+      );
+      return res.status(200).json({ 
+        message: 'Successfully finalized submissions', 
+        modified: result.modifiedCount 
+      });
+    } catch (e) {
+      return res.status(500).json({
+        message: 'Finalization failed',
         error: e.message
       });
     }

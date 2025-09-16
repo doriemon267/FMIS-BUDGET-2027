@@ -146,7 +146,8 @@ const ProposalCustomTable = forwardRef(({
     
     const groups = {};
     rows.forEach(row => {
-      const groupValue = row[groupBy] || 'Unknown';
+      const valueRaw = row[groupBy];
+      const groupValue = (typeof valueRaw === 'string' ? valueRaw.trim() : valueRaw) || 'CENTRAL OFFICE';
       if (!groups[groupValue]) {
         groups[groupValue] = [];
       }
@@ -209,8 +210,30 @@ const ProposalCustomTable = forwardRef(({
                         </IconButton>
                       </TableCell>
                       <TableCell colSpan={columns.length - 1}>
-                        <Typography variant="subtitle1" fontWeight="bold">
-                          Region: {group}
+                        <Typography variant="subtitle1" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '2px 8px',
+                              borderRadius: '9999px',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              background: '#f3f4f6',
+                              border: '1px solid #e5e7eb',
+                              color: '#374151'
+                            }}
+                          >
+                            {(() => {
+                              // Determine label by explicit groupBy field
+                              if (groupBy === 'division') return 'DIVISION';
+                              if (groupBy === 'department') return 'DEPARTMENT';
+                              return 'REGION';
+                            })()}
+                          </span>
+                          <span style={{ color: '#111827' }}>{group}</span>
+                          <span style={{ marginLeft: 8, color: '#6b7280', fontWeight: 500, fontSize: 12 }}>
+                            ({groupedData[group]?.length || 0})
+                          </span>
                         </Typography>
                       </TableCell>
                     </TableRow>

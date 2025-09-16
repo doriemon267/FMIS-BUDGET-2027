@@ -104,6 +104,15 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       assignmentPayload.createdBy = adminUserId;
       assignment = await HierarchicalUserAssignment.create(assignmentPayload);
     }
+
+    // Auto-assign workflow roles based on assignment level
+    const { assignWorkflowRoles } = require('../helpers/workflowRoleManager');
+    try {
+      await assignWorkflowRoles(userId, assignmentLevel);
+      console.log(`✅ Workflow roles automatically assigned for ${assignmentLevel} user: ${userName}`);
+    } catch (roleError) {
+      console.error(`⚠️ Failed to auto-assign workflow roles for ${userName}:`, roleError.message);
+    }
     // Populate the result for response
     const populatedAssignment = await HierarchicalUserAssignment
       .findById(assignment._id)
@@ -548,4 +557,4 @@ module.exports = {
   deleteHierarchicalAssignment,
   testHierarchicalConsolidation,
   buildHierarchicalAssignment
-};
+};

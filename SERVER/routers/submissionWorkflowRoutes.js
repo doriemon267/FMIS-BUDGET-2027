@@ -46,16 +46,24 @@ router.post(
 /**
  * Department Level Routes
  */
-// Department approves division submissions and submits to Region
+// Step 2→3: Department verifies division submissions (Division Submitted → Department Verified)
 router.post(
-  '/department/approve-and-submit',
+  '/department/verify-submission',
+  submissionWorkflowControl('update'),
+  requireWorkflowRole('departmentConsolidator'),
+  submissionWorkflowTransitions.departmentVerifySubmission
+);
+
+// Step 3→4: Department submits to Region (Department Verified → Department Submitted)
+router.post(
+  '/department/submit-to-region',
   submissionWorkflowControl('update'),
   requireWorkflowRole('departmentConsolidator'),
   submissionWorkflowTransitions.departmentSubmitToRegion
 );
-// Department creates own submissions
+// Department creates own submissions directly to region (for department-level proposals)
 router.post(
-  '/department/submit-to-region',
+  '/department/submit-own-to-region',
   submissionWorkflowControl('update'),
   requireWorkflowRole('departmentSubmission'),
   async (req, res) => {
@@ -71,7 +79,7 @@ router.post(
         },
         { 
           $set: { 
-            status: 'Submitted',
+            status: 'Department Submitted',
             submittedToRegionAt: new Date(),
             submittedToRegionBy: userId,
             submissionNote: submissionNote || '',
@@ -80,7 +88,7 @@ router.post(
         }
       );
       return res.status(200).json({ 
-        message: 'Successfully submitted to Region for review', 
+        message: 'Successfully submitted department proposals to Region for review', 
         modified: result.modifiedCount 
       });
     } catch (e) {
@@ -95,12 +103,20 @@ router.post(
 /**
  * Region Level Routes
  */
-// Region provides final approval
+// Step 4→5: Region approves submissions (Department Submitted → Region Approved)
 router.post(
-  '/region/final-approval',
+  '/region/approve-submission',
   submissionWorkflowControl('update'),
   requireWorkflowRole('regionFinalVerifier'),
-  submissionWorkflowTransitions.regionFinalApproval
+  submissionWorkflowTransitions.regionApproveSubmission
+);
+
+// Step 5→6: Region finalizes submissions (Region Approved → Finalized)
+router.post(
+  '/region/finalize-submission',
+  submissionWorkflowControl('update'),
+  requireWorkflowRole('regionFinalVerifier'),
+  submissionWorkflowTransitions.regionFinalizeSubmission
 );
 /**
  * Data Retrieval Routes with Submission Workflow Filtering
@@ -115,12 +131,12 @@ router.get(
       const userId = req.user.id;
       const { entity = 'personnel' } = req.query;
       const Model = getModelByEntity(entity);
-      // Get submissions from divisions in this department that are pending approval
+      // Get submissions from divisions in this department that need verification or further action
       const pendingSubmissions = await Model.find({
         ...req.submissionWorkflowFilters,
         originalLevel: 'DIVISION',
-        status: 'Submitted',
-        lastWorkflowTransition: 'DIVISION_TO_DEPARTMENT'
+        status: { $in: ['Division Submitted', 'Department Verified'] },
+        lastWorkflowTransition: { $in: ['DIVISION_TO_DEPARTMENT', 'DEPARTMENT_VERIFICATION'] }
       }).sort({ submittedToDepartmentAt: -1 });
       res.status(200).json({
         success: true,
@@ -148,13 +164,13 @@ router.get(
       const userId = req.user.id;
       const { entity = 'personnel' } = req.query;
       const Model = getModelByEntity(entity);
-      // Get submissions from departments in this region that are pending final approval
+      // Get submissions from departments in this region that are pending approval or finalization
       const pendingSubmissions = await Model.find({
         ...req.submissionWorkflowFilters,
         originalLevel: { $in: ['DIVISION', 'DEPARTMENT'] },
-        status: 'Submitted',
-        lastWorkflowTransition: { $in: ['DIVISION_TO_DEPARTMENT', 'DEPARTMENT_TO_REGION'] }
-      }).sort({ submittedToRegionAt: -1, submittedToDepartmentAt: -1 });
+        status: { $in: ['Department Submitted', 'Region Approved'] },
+        lastWorkflowTransition: { $in: ['DEPARTMENT_TO_REGION', 'REGION_APPROVAL'] }
+      }).sort({ submittedToRegionAt: -1, approvedByRegionAt: -1 });
       res.status(200).json({
         success: true,
         entity,
@@ -171,6 +187,145 @@ router.get(
     }
   }
 );
+
+// Additional routes for the new 6-step workflow
+
+// Get submissions pending verification at department level
+router.get(
+  '/department/pending-verification',
+  submissionWorkflowControl('read'),
+  requireWorkflowRole('departmentConsolidator'),
+  async (req, res) => {
+    try {
+      const { entity = 'personnel' } = req.query;
+      const Model = getModelByEntity(entity);
+      
+      const pendingVerification = await Model.find({
+        ...req.submissionWorkflowFilters,
+        originalLevel: 'DIVISION',
+        status: 'Division Submitted',
+        lastWorkflowTransition: 'DIVISION_TO_DEPARTMENT'
+      }).sort({ submittedToDepartmentAt: -1 });
+
+      res.status(200).json({
+        success: true,
+        entity,
+        pendingCount: pendingVerification.length,
+        submissions: pendingVerification
+      });
+    } catch (error) {
+      console.error('Error fetching pending verification:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error fetching pending verification',
+        error: error.message
+      });
+    }
+  }
+);
+
+// Get verified submissions ready to submit to region
+router.get(
+  '/department/ready-to-submit',
+  submissionWorkflowControl('read'),
+  requireWorkflowRole('departmentConsolidator'),
+  async (req, res) => {
+    try {
+      const { entity = 'personnel' } = req.query;
+      const Model = getModelByEntity(entity);
+      
+      const readyToSubmit = await Model.find({
+        ...req.submissionWorkflowFilters,
+        originalLevel: 'DIVISION',
+        status: 'Department Verified',
+        lastWorkflowTransition: 'DEPARTMENT_VERIFICATION'
+      }).sort({ verifiedByDepartmentAt: -1 });
+
+      res.status(200).json({
+        success: true,
+        entity,
+        readyCount: readyToSubmit.length,
+        submissions: readyToSubmit
+      });
+    } catch (error) {
+      console.error('Error fetching ready to submit:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error fetching ready to submit',
+        error: error.message
+      });
+    }
+  }
+);
+
+// Get submissions ready for approval at region level
+router.get(
+  '/region/pending-approval',
+  submissionWorkflowControl('read'),
+  requireWorkflowRole('regionFinalVerifier'),
+  async (req, res) => {
+    try {
+      const { entity = 'personnel' } = req.query;
+      const Model = getModelByEntity(entity);
+      
+      const pendingApproval = await Model.find({
+        ...req.submissionWorkflowFilters,
+        originalLevel: { $in: ['DIVISION', 'DEPARTMENT'] },
+        status: 'Department Submitted',
+        lastWorkflowTransition: 'DEPARTMENT_TO_REGION'
+      }).sort({ submittedToRegionAt: -1 });
+
+      res.status(200).json({
+        success: true,
+        entity,
+        pendingCount: pendingApproval.length,
+        submissions: pendingApproval
+      });
+    } catch (error) {
+      console.error('Error fetching pending approval:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error fetching pending approval',
+        error: error.message
+      });
+    }
+  }
+);
+
+// Get approved submissions ready for finalization
+router.get(
+  '/region/ready-to-finalize',
+  submissionWorkflowControl('read'),
+  requireWorkflowRole('regionFinalVerifier'),
+  async (req, res) => {
+    try {
+      const { entity = 'personnel' } = req.query;
+      const Model = getModelByEntity(entity);
+      
+      const readyToFinalize = await Model.find({
+        ...req.submissionWorkflowFilters,
+        originalLevel: { $in: ['DIVISION', 'DEPARTMENT', 'REGION'] },
+        status: 'Region Approved',
+        lastWorkflowTransition: 'REGION_APPROVAL'
+      }).sort({ approvedByRegionAt: -1 });
+
+      res.status(200).json({
+        success: true,
+        entity,
+        readyCount: readyToFinalize.length,
+        submissions: readyToFinalize
+      });
+    } catch (error) {
+      console.error('Error fetching ready to finalize:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error fetching ready to finalize',
+        error: error.message
+      });
+    }
+  }
+);
+
 // Get submission status summary
 router.get(
   '/submission-status-summary',
@@ -233,4 +388,4 @@ const getModelByEntity = (entity) => {
       return require('../models/personnelServices');
   }
 };
-module.exports = router;
+module.exports = router;

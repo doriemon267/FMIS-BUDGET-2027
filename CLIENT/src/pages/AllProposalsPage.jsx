@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from "react";
 import ProposalCustomPage from "../components/allproposals/ProposalCustomPage";
 import TextSearchable from "../global/components/TextSearchable";
-import { ViewButton, ApproveButton, ReturnButton } from "../components/allproposals/ProposalActions";
+import { ViewButton, ApproveButton, ReturnButton, VerifyButton, SubmitToRegionButton, FinalizeButton } from "../components/allproposals/ProposalActions";
 import { useUser } from "../context/UserContext";
 import { 
   Box, 
@@ -52,10 +52,50 @@ const AllProposalsPage = () => {
         const proposals = response.data.proposals;
         
         const totalProposals = proposals.length;
-        const totalProjectedCorporateIncome = proposals.reduce((sum, proposal) => 
-          sum + (proposal.totalIncome || 0), 0);
-        const totalProjectedSubsidy = proposals.reduce((sum, proposal) => 
-          sum + (proposal.totalExpenses || 0), 0);
+        
+        // Calculate Corporate Income correctly - from Income entries and MOOE/Capital income
+        const totalProjectedCorporateIncome = proposals.reduce((sum, proposal) => {
+          // Corporate Income from Income entries
+          if (proposal.cobExpenditures === 'Corporate Income') {
+            return sum + (proposal.amount || 0);
+          }
+          // Income from MOOE and Capital Outlay
+          if (proposal.cobExpenditures === 'MOOE' || proposal.cobExpenditures === 'Capital Outlay') {
+            return sum + (proposal.income || 0);
+          }
+          return sum;
+        }, 0);
+        
+        // Calculate Subsidy correctly - from expenses only (Personnel + MOOE + Capital costs)
+        const totalProjectedSubsidy = proposals.reduce((sum, proposal) => {
+          if (proposal.cobExpenditures && proposal.cobExpenditures.includes('Personnel Services')) {
+            // For personnel, calculate total from all allowance fields
+            const personnelTotal = (proposal.annualSalary || 0) + 
+                                   (proposal.RATA || 0) + 
+                                   (proposal.PERA || 0) + 
+                                   (proposal.uniformALLOWANCE || 0) + 
+                                   (proposal.productivityIncentive || 0) + 
+                                   (proposal.medical || 0) + 
+                                   (proposal.childrenAllowance || 0) + 
+                                   (proposal.meal || 0) + 
+                                   (proposal.cashGift || 0) + 
+                                   (proposal.subsistenceAllowanceMDS || 0) + 
+                                   (proposal.subsistenceAllowanceST || 0) + 
+                                   (proposal.midyearBonus || 0) + 
+                                   (proposal.yearEndBonus || 0) + 
+                                   (proposal.gsisPremium || 0) + 
+                                   (proposal.philhealthPremium || 0) + 
+                                   (proposal.pagibigPremium || 0) + 
+                                   (proposal.employeeCompensation || 0);
+            return sum + personnelTotal;
+          } else if (proposal.cobExpenditures === 'MOOE') {
+            return sum + (proposal.subsidy || proposal.amount || 0);
+          } else if (proposal.cobExpenditures === 'Capital Outlay') {
+            return sum + (proposal.subsidy || proposal.cost || 0);
+          }
+          return sum;
+        }, 0);
+        
         const totalProposedBudget = totalProjectedCorporateIncome + totalProjectedSubsidy;
         
         setStats({
@@ -98,8 +138,23 @@ const AllProposalsPage = () => {
     },
     region: {
       type: "text",
-      label: "REGION",
+      label: (() => {
+        const scope = currentUser?.hierarchicalAccess?.scope;
+        if (scope === 'DIVISION') return 'DIVISION';
+        if (scope === 'DEPARTMENT') return 'DEPARTMENT';
+        return 'REGION';
+      })(),
       show: true,
+      customRender: (row) => {
+        // Show the most specific organizational level available
+        if (row.division && String(row.division).trim() !== "") {
+          return `Division: ${row.division}`;
+        } else if (row.department && String(row.department).trim() !== "") {
+          return `Department: ${row.department}`;
+        } else {
+          return row.region ? `Region: ${row.region}` : "CENTRAL OFFICE";
+        }
+      }
     },
     fiscalYear: {
       type: "text",
@@ -175,35 +230,161 @@ const AllProposalsPage = () => {
       label: "SUBMITTED DATE",
       show: true,
       customRender: (row) => {
-        if (!row.submittedDate) return "N/A";
-        return new Date(row.submittedDate).toLocaleDateString();
+        // Check for various date fields that indicate submission
+        const submissionDate = row.submittedDate || 
+                               row.processDate || 
+                               row.createdAt || 
+                               (row.divisionApproved?.at) ||
+                               (row.departmentSubmitted?.at) ||
+                               (row.updatedAt);
+        
+        if (!submissionDate) return "N/A";
+        
+        try {
+          return new Date(submissionDate).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+          });
+        } catch (error) {
+          return "Invalid Date";
+        }
       }
     },
     totalIncome: {
       type: "number",
       label: "PROJECTED CORPORATE INCOME",
       show: true,
-      customRender: (row) => (
-        <TextSearchable columnName={`₱${(row.totalIncome || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
-      ),
+      customRender: (row) => {
+        let incomeAmount = 0;
+        
+        // Corporate Income entries
+        if (row.cobExpenditures === 'Corporate Income') {
+          incomeAmount = row.amount || 0;
+        }
+        // Income from MOOE and Capital Outlay
+        else if (row.cobExpenditures === 'MOOE' || row.cobExpenditures === 'Capital Outlay') {
+          incomeAmount = row.income || 0;
+        }
+        // Fallback to totalIncome field
+        else {
+          incomeAmount = row.totalIncome || 0;
+        }
+        
+        return (
+          <TextSearchable 
+            columnName={`₱${incomeAmount.toLocaleString('en-US', { 
+              minimumFractionDigits: 2, 
+              maximumFractionDigits: 2 
+            })}`} 
+          />
+        );
+      },
     },
     totalExpenses: {
       type: "number",
       label: "PROJECTED SUBSIDY",
       show: true,
-      customRender: (row) => (
-        <TextSearchable columnName={`₱${(row.totalExpenses || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
-      ),
+      customRender: (row) => {
+        let subsidyAmount = 0;
+        
+        // Personnel Services - calculate total from individual fields
+        if (row.cobExpenditures && row.cobExpenditures.includes('Personnel Services')) {
+          subsidyAmount = (row.annualSalary || 0) + 
+                          (row.RATA || 0) + 
+                          (row.PERA || 0) + 
+                          (row.uniformALLOWANCE || 0) + 
+                          (row.productivityIncentive || 0) + 
+                          (row.medical || 0) + 
+                          (row.childrenAllowance || 0) + 
+                          (row.meal || 0) + 
+                          (row.cashGift || 0) + 
+                          (row.subsistenceAllowanceMDS || 0) + 
+                          (row.subsistenceAllowanceST || 0) + 
+                          (row.midyearBonus || 0) + 
+                          (row.yearEndBonus || 0) + 
+                          (row.gsisPremium || 0) + 
+                          (row.philhealthPremium || 0) + 
+                          (row.pagibigPremium || 0) + 
+                          (row.employeeCompensation || 0) ||
+                          row.Total || 0; // Fallback to Total field if individual fields not available
+        }
+        // MOOE - use subsidy or amount field
+        else if (row.cobExpenditures === 'MOOE') {
+          subsidyAmount = row.subsidy || row.amount || 0;
+        }
+        // Capital Outlay - use subsidy or cost field
+        else if (row.cobExpenditures === 'Capital Outlay') {
+          subsidyAmount = row.subsidy || row.cost || 0;
+        }
+        // Fallback to totalExpenses field
+        else {
+          subsidyAmount = row.totalExpenses || 0;
+        }
+        
+        return (
+          <TextSearchable 
+            columnName={`₱${subsidyAmount.toLocaleString('en-US', { 
+              minimumFractionDigits: 2, 
+              maximumFractionDigits: 2 
+            })}`} 
+          />
+        );
+      },
     },
     proposedBudget: {
       type: "number",
       label: "PROPOSED BUDGET",
       show: true,
       customRender: (row) => {
-        const corporateIncome = row.totalIncome || 0;
-        const subsidy = row.totalExpenses || 0;
-        const total = corporateIncome + subsidy;
-        return <TextSearchable columnName={`₱${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />;
+        // Compute corporate income like in totalIncome column
+        let incomeAmount = 0;
+        if (row.cobExpenditures === 'Corporate Income') {
+          incomeAmount = row.amount || row.totalIncome || 0;
+        } else if (row.cobExpenditures === 'MOOE' || row.cobExpenditures === 'Capital Outlay') {
+          incomeAmount = row.income || 0;
+        } else {
+          incomeAmount = row.totalIncome || 0; // fallback if provided
+        }
+
+        // Compute subsidy like in totalExpenses column
+        let subsidyAmount = 0;
+        if (row.cobExpenditures && row.cobExpenditures.includes('Personnel Services')) {
+          subsidyAmount = (row.annualSalary || 0) + 
+                          (row.RATA || 0) + 
+                          (row.PERA || 0) + 
+                          (row.uniformALLOWANCE || 0) + 
+                          (row.productivityIncentive || 0) + 
+                          (row.medical || 0) + 
+                          (row.childrenAllowance || 0) + 
+                          (row.meal || 0) + 
+                          (row.cashGift || 0) + 
+                          (row.subsistenceAllowanceMDS || 0) + 
+                          (row.subsistenceAllowanceST || 0) + 
+                          (row.midyearBonus || 0) + 
+                          (row.yearEndBonus || 0) + 
+                          (row.gsisPremium || 0) + 
+                          (row.philhealthPremium || 0) + 
+                          (row.pagibigPremium || 0) + 
+                          (row.employeeCompensation || 0) ||
+                          row.Total || row.totalExpenses || 0;
+        } else if (row.cobExpenditures === 'MOOE') {
+          subsidyAmount = row.subsidy || row.amount || 0;
+        } else if (row.cobExpenditures === 'Capital Outlay') {
+          subsidyAmount = row.subsidy || row.cost || 0;
+        } else {
+          subsidyAmount = row.totalExpenses || 0; // fallback if provided
+        }
+
+        const total = Number(incomeAmount) + Number(subsidyAmount);
+        return (
+          <TextSearchable 
+            columnName={`₱${(isFinite(total) ? total : 0).toLocaleString('en-US', { 
+              minimumFractionDigits: 2, 
+              maximumFractionDigits: 2 
+            })}`} 
+          />
+        );
       },
     },
     status: {
@@ -211,41 +392,30 @@ const AllProposalsPage = () => {
       label: "STATUS",
       show: true,
       customRender: (row) => {
-        let statusColor = "default";
-        let statusText = row.status || "Unknown";
-        
-        switch (row.status) {
-          case "Draft":
-            statusColor = "warning";
-            statusText = "Draft";
-            break;
-          case "Submitted":
-            statusColor = "info";
-            statusText = "Submitted";
-            break;
-          case "Approved":
-            statusColor = "success";
-            statusText = "Approved";
-            break;
-          case "Returned":
-            statusColor = "error";
-            statusText = "Returned";
-            break;
-          default:
-            statusColor = "default";
-        }
-        
+        // Normalize status to new 6-step workflow
+        const map = {
+          'Draft': { color: 'warning', text: 'Draft' },
+          'Division Submitted': { color: 'info', text: 'Division Submitted' },
+          'Department Verified': { color: 'secondary', text: 'Department Verified' },
+          'Department Submitted': { color: 'info', text: 'Department Submitted' },
+          'Region Approved': { color: 'success', text: 'Region Approved' },
+          'Finalized': { color: 'success', text: 'Finalized' },
+          'Submitted': { color: 'info', text: 'Submitted' }, // legacy
+          'Approved': { color: 'success', text: 'Approved' }, // legacy
+          'Returned': { color: 'error', text: 'Returned' },
+        };
+        const { color = 'default', text = (row.status || 'Unknown') } = map[row.status] || {};
         return (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Typography 
               variant="body2" 
               sx={{ 
-                color: `${statusColor}.main`,
+                color: `${color}.main`,
                 fontWeight: 'bold',
                 textTransform: 'uppercase'
               }}
             >
-              {statusText}
+              {text}
             </Typography>
           </Box>
         );
@@ -256,21 +426,28 @@ const AllProposalsPage = () => {
       label: "ACTIONS",
       show: true,
       customRender: (row) => {
-        const userWorkflowRoles = currentUser?.hierarchicalAccess?.workflowRoles || [];
-        const canApprove = userWorkflowRoles.includes('departmentConsolidator') || 
-                          userWorkflowRoles.includes('regionFinalVerifier') ||
-                          userWorkflowRoles.includes('divisionApprover');
-        const canReturn = canApprove; // Same roles can return
-        
+        const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
+        const scope = currentUser?.hierarchicalAccess?.scope;
+        const isDivision = scope === 'DIVISION';
+        const isDepartment = scope === 'DEPARTMENT';
+        const isRegion = scope === 'REGION' || scope === 'FULL';
+        const canVerify = isDepartment && roles.includes('departmentConsolidator');
+        const canSubmitToRegion = isDepartment && roles.includes('departmentConsolidator');
+        const canApproveRegion = isRegion && roles.includes('regionFinalVerifier');
+        const canFinalize = isRegion && roles.includes('regionFinalVerifier');
+        const showVerify = row.status === 'Division Submitted' && canVerify;
+        const showSubmitToRegion = row.status === 'Department Verified' && canSubmitToRegion;
+        const showApprove = row.status === 'Department Submitted' && canApproveRegion;
+        const showFinalize = row.status === 'Region Approved' && canFinalize;
+        const showReturn = ['Division Submitted','Department Verified','Department Submitted','Region Approved'].includes(row.status) && (canVerify || canApproveRegion);
         return (
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
             <ViewButton row={row} />
-            {row.status === "Submitted" && canApprove && (
-              <ApproveButton row={row} refreshData={refreshData} />
-            )}
-            {row.status === "Submitted" && canReturn && (
-              <ReturnButton row={row} refreshData={refreshData} />
-            )}
+            {showVerify && (<VerifyButton row={row} refreshData={refreshData} />)}
+            {showSubmitToRegion && (<SubmitToRegionButton row={row} refreshData={refreshData} />)}
+            {showApprove && (<ApproveButton row={row} refreshData={refreshData} />)}
+            {showFinalize && (<FinalizeButton row={row} refreshData={refreshData} />)}
+            {showReturn && (<ReturnButton row={row} refreshData={refreshData} />)}
           </Box>
         );
       }
@@ -412,20 +589,26 @@ const AllProposalsPage = () => {
         </Accordion>
       </Box> */}
 
-      <ProposalCustomPage
-        tableRef={tableRef}
-        dataListName="proposals"
-        schema={proposalSchema}
-        hasEdit={false}
-        hasDelete={false}
-        hasAdd={false}
-        additionalMenuOptions={[ViewButton, ApproveButton, ReturnButton]}
-        refreshData={refreshData}
-        title="All Proposals"
-        description="View and manage all submitted proposals"
-        apiPath="/proposals"
-        groupBy="region" // Make sure this is being passed
-      />
+      {(() => {
+        const scope = currentUser?.hierarchicalAccess?.scope;
+        const groupByField = scope === 'DIVISION' ? 'division' : (scope === 'DEPARTMENT' ? 'department' : 'region');
+        return (
+          <ProposalCustomPage
+            tableRef={tableRef}
+            dataListName="proposals"
+            schema={proposalSchema}
+            hasEdit={false}
+            hasDelete={false}
+            hasAdd={false}
+            additionalMenuOptions={[ViewButton, ApproveButton, ReturnButton]}
+            refreshData={refreshData}
+            title="All Proposals"
+            description="View and manage all submitted proposals"
+            apiPath="/proposals"
+            groupBy={groupByField}
+          />
+        );
+      })()}
     </>
   );
 };

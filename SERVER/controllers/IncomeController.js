@@ -26,7 +26,10 @@ exports.createIncome = async (req, res) => {
         details: "particulars, incomecategory, and amount are required" 
       });
     }
-    // Create new income entry
+    // Get submission workflow data from middleware
+    const workflowData = req.submissionWorkflowData || {};
+    
+    // Create new income entry with workflow data
     const newIncome = new Income({
       particulars,
       cost: cost || amount,
@@ -36,12 +39,13 @@ exports.createIncome = async (req, res) => {
       amount: Number(amount),
       fiscalYear: fiscalYear || new Date().getFullYear().toString(),
       budgetType: budgetType || "REGULAR",
-      region,
-      department,
-      division,
-      processBy,
+      region: workflowData.region || region,
+      department: workflowData.department || department,
+      division: workflowData.division || division,
+      originalLevel: workflowData.originalLevel || 'DEPARTMENT', // Default for income
+      processBy: processBy || req.user?.userName || req.user?.id,
       processDate: processDate || new Date(),
-      status: "Not Submitted"
+      status: workflowData.status || "Draft" // Use new workflow status
     });
     await newIncome.save();
     res.status(201).json(newIncome);
@@ -71,6 +75,10 @@ exports.updateIncome = async (req, res) => {
     const activeSettings = await Settings.findOne({ isActive: true });
     const setFY = activeSettings?.fiscalYear;
     const setBT = activeSettings?.budgetType;
+    
+    // Get submission workflow data from middleware
+    const workflowData = req.submissionWorkflowData || {};
+    
     // Find and update the income entry
     const updatedIncome = await Income.findByIdAndUpdate(
       req.params.id,
@@ -83,12 +91,12 @@ exports.updateIncome = async (req, res) => {
         amount,
         ...(setFY ? { fiscalYear: setFY } : {}),
         ...(setBT ? { budgetType: setBT } : {}),
-        region,
-        department,
-        division,
-        processBy,
+        region: workflowData.region || region,
+        department: workflowData.department || department,
+        division: workflowData.division || division,
+        processBy: processBy || req.user?.userName || req.user?.id,
         processDate: processDate || new Date(),
-        status: status || "Not Submitted"
+        status: status || workflowData.status || "Not Submitted"
       },
       { new: true }
     );
@@ -161,32 +169,25 @@ exports.getAllIncome = async (req, res) => {
     if (region) {
       query.region = region;
     }
-    // For Income collection, only region-based hierarchical filtering is applicable.
-    // Ignore department/division filters to avoid excluding all documents (fields don't exist in Income model).
-    const accessScope = req.hierarchicalAccess?.scope;
-    const accessibleRegionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
-    if (!query.region) {
-      if (accessScope && accessScope !== 'FULL' && accessibleRegionName) {
-        query.region = accessibleRegionName;
-      }
+    // Use submission workflow data for filtering
+    const workflowData = req.submissionWorkflowData || {};
+    const userLevel = workflowData.userLevel;
+    
+    // Apply region filter if not specified but user has workflow data
+    if (!query.region && workflowData.region) {
+      query.region = workflowData.region;
     }
-    // Add finer filters based on access scope
-    if (accessScope === 'DIVISION') {
+    
+    // Apply workflow-based filtering based on user level
+    if (userLevel === 'DIVISION') {
       // Division users: only their division within their department and region
-      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-      const divName = req.hierarchicalAccess?.accessibleDivisions?.[0];
-      if (deptName) query.department = deptName;
-      if (divName) {
-        query.division = divName;
-        // console.log(`🔍 INCOME DEBUG: Division ${divName} query:`, JSON.stringify(query, null, 2));
-      }
-    } else if (accessScope === 'DEPARTMENT') {
+      if (workflowData.department) query.department = workflowData.department;
+      if (workflowData.division) query.division = workflowData.division;
+    } else if (userLevel === 'DEPARTMENT') {
       // Department users: can see their department data + SUBMITTED division data ONLY
-      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-      if (deptName) {
-        // CRITICAL SUBMISSION WORKFLOW LOGIC for Income
+      if (workflowData.department) {
         const baseQuery = {
-          department: deptName
+          department: workflowData.department
         };
         
         // Apply region if available
@@ -205,25 +206,23 @@ exports.getAllIncome = async (req, res) => {
                     { $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] }
                   ]
                 },
-                // 2. Division data that has been SUBMITTED only
+                // 2. Division data that has been SUBMITTED only (using new workflow statuses)
                 {
                   $and: [
                     { division: { $exists: true, $ne: null, $ne: "" } },
-                    { status: { $in: ["Submitted", "Approved", "Completed"] } }
+                    { status: { $in: ["Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"] } }
                   ]
                 }
               ]
             }
           ]
         };
-        // console.log(`🔍 INCOME DEBUG: Department ${deptName} filtered query:`, JSON.stringify(query, null, 2));
       }
-    } else if (accessScope === 'REGION') {
-      // Region-level visibility rule: show only when submitted or region-verified/approved
-      query.$or = [
-        { 'departmentSubmitted.at': { $exists: true, $ne: null } },
-        { status: { $in: ['Submitted', 'Region Verified', 'Approved'] } },
-      ];
+    } else if (userLevel === 'REGION') {
+      // Region users: see Department Submitted and above statuses
+      query.status = { 
+        $in: ["Department Submitted", "Region Approved", "Finalized"] 
+      };
     }
     const incomeEntries = await Income.find(query)
       .populate('incomecategory')
