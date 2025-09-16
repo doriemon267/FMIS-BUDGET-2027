@@ -115,7 +115,8 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                 { 
                   $and: [
                     { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName },
-                    { $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] }
+                    { $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] },
+                    { originalLevel: 'DEPARTMENT' }
                   ]
                 },
                 // Division data that has been submitted to department (Division Submitted, Department Verified, or higher)
@@ -123,12 +124,13 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                   $and: [
                     { division: { $exists: true, $ne: null, $ne: "" } },
                     { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName },
+                    { originalLevel: 'DIVISION' },
                     { 
                       $or: [
-                        { status: 'Division Submitted' },
-                        { status: 'Department Verified' },
-                        { status: 'Department Submitted' },
-                        { status: 'Region Approved' },
+                        { status: { $in: ['Division Submitted', 'DIVISION SUBMITTED'] } },
+                        { status: { $in: ['Department Verified', 'DEPARTMENT VERIFIED'] } },
+                        { status: { $in: ['Department Submitted', 'DEPARTMENT SUBMITTED'] } },
+                        { status: { $in: ['Region Approved', 'REGION APPROVED'] } },
                         { status: 'Finalized' }
                       ]
                     }
@@ -165,7 +167,8 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                 { 
                   $and: [
                     { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
-                    { $or: [{ department: { $exists: false } }, { department: null }, { department: "" }] }
+                    { $or: [{ department: { $exists: false } }, { department: null }, { department: "" }] },
+                    { originalLevel: 'REGION' }
                   ]
                 },
                 // Department/division data that has been submitted to region (Department Submitted, Region Approved, or Finalized)
