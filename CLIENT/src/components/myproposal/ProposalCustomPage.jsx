@@ -18,8 +18,9 @@ const CustomPage = ({
   customEditElement = null,
   additionalMenuOptions = [],
   ROWS_PER_PAGE = 20,
-  refreshData, // new prop for refreshing data after actions
-  tableRef, // new prop for table reference
+  refreshData,
+  tableRef,
+  extraParams = {},
 }) => {
   const pageTitle =
     title || dataListName.charAt(0).toUpperCase() + dataListName.slice(1);
@@ -72,8 +73,7 @@ const CustomPage = ({
 
             return column;
           })}
-        // Pass through extraParams when provided by parent
-        extraParams={arguments?.[0]?.extraParams || {}}
+        extraParams={extraParams}
       />
     </>
   );
@@ -100,7 +100,9 @@ CustomPage.propTypes = {
   customAddElement: PropTypes.element,
   customEditElement: PropTypes.element,
   additionalMenuOptions: PropTypes.arrayOf(PropTypes.elementType),
-  refreshData: PropTypes.func, // new prop type
+  refreshData: PropTypes.func,
+  tableRef: PropTypes.any,
+  extraParams: PropTypes.object,
 };
 
 export default CustomPage;
