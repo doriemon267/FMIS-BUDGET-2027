@@ -81,7 +81,9 @@ exports.getMOOEData = async (req, res) => {
               department: userDept,
               division: userDiv,
               fiscalYear: activeFiscalYear,
-              region: userRegion || region
+              region: userRegion || region,
+              // IMPORTANT: Division reads must only include division-origin records
+              originalLevel: 'DIVISION'
             };
           }
         }
@@ -865,10 +867,22 @@ exports.getMOOEEntries = async (req, res) => {
 exports.bulkSaveMOOE = async (req, res) => {
   try {
     const { meta, entries } = req.body;
-    // Resolve organizational ownership (respect hierarchical consolidation if applied)
-    const ownerRegion = meta?.region || req.body.region || req.hierarchicalAccess?.originalData?.region || req.hierarchicalFilters?.region || req.user?.Region;
-    const ownerDepartment = meta?.department || req.body.department || req.hierarchicalAccess?.originalData?.department || null;
-    const ownerDivision = meta?.division || req.body.division || req.hierarchicalAccess?.originalData?.division || null;
+    // Resolve organizational ownership using submission workflow data (preferred)
+    const workflowData = req.submissionWorkflowData || {};
+    const ownerRegion = meta?.region ?? workflowData.region ?? req.body.region ?? req.user?.Region;
+    const ownerDepartment = meta?.department ?? workflowData.department ?? req.body.department ?? null;
+    // Division should be cleared for Department-origin records to avoid leaking into division scope
+    let ownerDivision = meta?.division ?? workflowData.division ?? req.body.division ?? null;
+    if (workflowData.userLevel === 'DEPARTMENT') {
+      ownerDivision = null;
+    }
+    // Determine level tagging
+    const recordOriginalLevel = workflowData.originalLevel
+      || req.body.originalLevel
+      || (workflowData.userLevel === 'DIVISION' ? 'DIVISION'
+          : workflowData.userLevel === 'DEPARTMENT' ? 'DEPARTMENT'
+          : workflowData.userLevel === 'REGION' ? 'REGION' : undefined);
+    const recordWorkflowLevel = workflowData.workflowLevel || req.body.workflowLevel || recordOriginalLevel;
     // // let processedEntries = [];
     if (entries && Array.isArray(entries)) {
       // Only include entries with a valid UACS code that have actual values > 0
@@ -954,6 +968,9 @@ exports.bulkSaveMOOE = async (req, res) => {
         updateObj.region = ownerRegion || meta?.region || item.region;
         updateObj.department = ownerDepartment || meta?.department || item.department;
         updateObj.division = ownerDivision || meta?.division || item.division;
+        // Tag records with origin/workflow levels for consistent visibility rules
+        if (recordOriginalLevel) updateObj.originalLevel = recordOriginalLevel;
+        if (recordWorkflowLevel) updateObj.workflowLevel = recordWorkflowLevel;
         updateObj.status = meta?.status || item.status || "Draft";
         return {
         updateOne: {

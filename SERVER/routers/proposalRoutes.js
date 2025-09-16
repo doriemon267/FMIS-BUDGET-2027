@@ -110,7 +110,12 @@ proposalRouter.put("/rejectAllProposals", rejectAllProposals);
 // Delete all proposals
 proposalRouter.delete("/deleteAllProposals", deleteAllProposals);
 // Save as Draft
-proposalRouter.post("/saveAsDraft", saveAsDraft);
+proposalRouter.post(
+  "/saveAsDraft",
+  submissionWorkflowControl('update'),
+  requirePermission('canEditOwnProposals'),
+  saveAsDraft
+);
 // Add this new route
 proposalRouter.post("/update-missing-regions", updateMissingRegions);
 // Return a proposal
@@ -150,4 +155,4 @@ if (typeof saveDraftProposal === 'function') {
 proposalRouter.post('/consolidate-proposals', applyHierarchicalFilters, consolidateProposals);
 // Debug route to check database content
 proposalRouter.get('/debug-proposals', debugProposals);
-module.exports = proposalRouter;
+module.exports = proposalRouter;

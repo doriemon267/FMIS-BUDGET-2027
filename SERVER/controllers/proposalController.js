@@ -6,6 +6,7 @@ const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const BudgetarySupport = require('../models/BudgetarySupport');
 const Income = require('../models/Income');
+const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 // Remove the checkUserRegionAccess function
 // const checkUserRegionAccess = async (userId, region) => {
 //   try {
@@ -1442,6 +1443,26 @@ exports.getProposalById = async (req, res) => {
 };
 exports.updateProposal = async (req, res) => {
   try {
+    // Guard: Prevent elevating status to Approved without proper permission
+    if (req.body && typeof req.body.status === 'string') {
+      const desiredStatus = req.body.status.trim();
+      const approvingStatuses = ['Approved', 'Region Approved', 'Finalized'];
+      if (approvingStatuses.includes(desiredStatus)) {
+        try {
+          const assignment = await HierarchicalUserAssignment.getUserPermissions(req.user?.id);
+          const canApprove = assignment?.rolePermissions?.canApproveProposals === true;
+          if (!canApprove) {
+            return res.status(403).json({
+              success: false,
+              message: 'Permission denied: Can Approve Proposals is required to set status to an approved state',
+              code: 'INSUFFICIENT_PERMISSIONS'
+            });
+          }
+        } catch (e) {
+          return res.status(500).json({ success: false, message: 'Error validating approval permission', error: e.message });
+        }
+      }
+    }
     const updatedProposal = await Proposal.findByIdAndUpdate(
       req.params.id,
       req.body,

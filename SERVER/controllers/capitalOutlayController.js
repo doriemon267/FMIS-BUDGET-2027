@@ -81,77 +81,17 @@ exports.getAllCapitalOutlays = async (req, res) => {
     } else {
       query.category = { $ne: null };
     }
-    // Apply sophisticated hierarchical filtering based on user access scope
-    const accessScope = req.hierarchicalAccess?.scope;
-    const accessibleRegionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
-    // Add region filter based on access scope
-    if (accessScope && accessScope !== 'FULL' && accessibleRegionName) {
-      query.region = accessibleRegionName;
-    }
-    // Add finer filters based on access scope
-    if (accessScope === 'DIVISION') {
-      // Division users: only their division within their department and region
-      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-      const divName = req.hierarchicalAccess?.accessibleDivisions?.[0];
-      if (deptName) query.department = deptName;
-      if (divName) query.division = divName;
-    } else if (accessScope === 'DEPARTMENT') {
-      // Department users: only own department data (any status) + SUBMITTED division data
-      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-      const regionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
-      if (deptName && regionName) {
+    // Apply submission workflow filters when available; fallback to hierarchical filters
+    const submissionFilters = req.submissionWorkflowFilters || {};
+    const hierarchicalFilters = req.hierarchicalFilters || {};
+    const activeFilters = Object.keys(submissionFilters).length > 0 ? submissionFilters : hierarchicalFilters;
+    if (activeFilters && Object.keys(activeFilters).length > 0) {
+      if (activeFilters.$and) {
         const baseQuery = { ...query };
-        query = {
-          $and: [
-            baseQuery,
-            { region: regionName },
-            {
-              $or: [
-                // Department-level (no division) data
-                { $and: [
-                  { department: deptName },
-                  { $or: [ { division: { $exists: false } }, { division: null }, { division: "" } ] }
-                ]},
-                // Division data that is SUBMITTED/APPROVED only
-                { $and: [
-                  { department: deptName },
-                  { division: { $exists: true, $ne: null, $ne: "" } },
-                  { status: { $in: ['Submitted', 'Approved'] } }
-                ]}
-              ]
-            }
-          ]
-        };
-      } else if (deptName) {
-        query.department = deptName;
+        query = { $and: [ baseQuery, ...activeFilters.$and ] };
+      } else {
+        query = { ...query, ...activeFilters };
       }
-    } else if (accessScope === 'REGION') {
-      // Region-level users should ONLY see:
-      // 1. Records that don't have department field (already consolidated to region level)  
-      // 2. Department records that are properly submitted/approved ONLY
-      // BUT NOT current working drafts of departments
-      const baseQuery = { ...query }; // Preserve existing query constraints
-      query = {
-        $and: [
-          baseQuery, // Keep fiscal year, category, search constraints
-          { region: accessibleRegionName }, // Must be in their region
-          {
-            $or: [
-              // Option 1: Consolidated records (no department info)
-              { department: { $exists: false } },
-              { department: null },
-              { department: "" },
-              // Option 2: Department records that are submitted/approved ONLY
-              { 
-                $and: [
-                  { department: { $exists: true, $ne: null, $ne: "" } },
-                  { status: { $in: ['Department Submitted', 'Region Verified', 'Approved', 'Finalized'] } }
-                ]
-              }
-            ]
-          }
-        ]
-      };
     }
     // Add region filter if provided and not already constrained
     if (region && !query.region) {
@@ -256,22 +196,13 @@ exports.addCapitalOutlay = async (req, res) => {
     if (duplicate) {
       return res.status(400).json({ error: "Duplicate entry: This Capital Outlay already exists for this region, year, and subline item." });
     }
-    // Pull organizational ownership from hierarchical consolidation (if present)
-    let ownerRegion = req.body.region || req.hierarchicalAccess?.originalData?.region || req.hierarchicalFilters?.region || region;
-    let ownerDepartment = req.body.department || req.hierarchicalAccess?.originalData?.department || null;
-    let ownerDivision = req.body.division || req.hierarchicalAccess?.originalData?.division || null;
-    // Fallback to user's hierarchical assignment names if still missing
-    try {
-      if ((!ownerDepartment || !ownerRegion) && req.user?.id) {
-        const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
-        const assignment = await HierarchicalUserAssignment.getUserPermissions(req.user.id);
-        ownerRegion = ownerRegion || assignment?.regions?.[0]?.regionName || ownerRegion;
-        ownerDepartment = ownerDepartment || assignment?.departments?.[0]?.departmentName || ownerDepartment;
-        ownerDivision = ownerDivision || assignment?.divisions?.[0] || ownerDivision;
-      }
-    } catch (e) {
-      // Non-fatal: proceed with whatever ownership data we have
-    }
+    // Normalize organizational ownership using submission workflow data
+    const workflowData = req.submissionWorkflowData || {};
+    const userLevel = workflowData.userLevel;
+    const ownerRegion = workflowData.region ?? req.body.region ?? region;
+    const ownerDepartment = workflowData.department ?? req.body.department ?? null;
+    // Clear division for department-origin records to avoid leaking into division scope
+    const ownerDivision = userLevel === 'DEPARTMENT' ? null : (workflowData.division ?? req.body.division ?? null);
     const newOutlay = new CapitalOutlay({
       particulars,
       cost,
@@ -282,12 +213,16 @@ exports.addCapitalOutlay = async (req, res) => {
       region: ownerRegion,
       department: ownerDepartment || undefined,
       division: ownerDivision || undefined,
-      processDate,
+      processDate: new Date(),
       fiscalYear,
       budgetType: activeSettings.budgetType,
       sublineItem,
       accountingTitle,
       uacsCode,
+      // Tagging for submission workflow
+      originalLevel: workflowData.originalLevel || (userLevel === 'DIVISION' ? 'DIVISION' : userLevel === 'DEPARTMENT' ? 'DEPARTMENT' : userLevel === 'REGION' ? 'REGION' : null),
+      workflowLevel: workflowData.workflowLevel || (userLevel === 'DIVISION' ? 'DIVISION' : userLevel === 'DEPARTMENT' ? 'DEPARTMENT' : userLevel === 'REGION' ? 'REGION' : null),
+      status: req.body.status || 'Draft'
     });
     await newOutlay.save();
     return res.status(201).json({
@@ -329,19 +264,12 @@ exports.editCapitalOutlay = async (req, res) => {
       return res.status(404).json({ error: "Capital outlay not found." });
     }
     // Update capital outlay
-    // Resolve missing organizational ownership on update as well
-    let updRegion = req.body.region || existingOutlay.region;
-    let updDepartment = req.body.department ?? existingOutlay.department;
-    let updDivision = req.body.division ?? existingOutlay.division;
-    try {
-      if ((!updDepartment || !updRegion) && req.user?.id) {
-        const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
-        const assignment = await HierarchicalUserAssignment.getUserPermissions(req.user.id);
-        updRegion = updRegion || assignment?.regions?.[0]?.regionName || updRegion;
-        updDepartment = updDepartment || assignment?.departments?.[0]?.departmentName || updDepartment;
-        updDivision = updDivision || assignment?.divisions?.[0] || updDivision;
-      }
-    } catch (e) {}
+    // Use submission workflow data for ownership normalization
+    const workflowData = req.submissionWorkflowData || {};
+    const userLevel = workflowData.userLevel;
+    const updRegion = workflowData.region ?? req.body.region ?? existingOutlay.region;
+    const updDepartment = workflowData.department ?? req.body.department ?? existingOutlay.department;
+    const updDivision = userLevel === 'DEPARTMENT' ? null : (workflowData.division ?? req.body.division ?? existingOutlay.division);
 
     const updatedCapitalOutlay = await CapitalOutlay.findByIdAndUpdate(
       id,
@@ -364,6 +292,9 @@ exports.editCapitalOutlay = async (req, res) => {
         sublineItem,
         accountingTitle,
         uacsCode,
+        // Preserve/Apply submission workflow tagging when available
+        ...(workflowData.originalLevel ? { originalLevel: workflowData.originalLevel } : {}),
+        ...(workflowData.workflowLevel ? { workflowLevel: workflowData.workflowLevel } : {}),
       },
       { new: true, runValidators: true }
     ).populate("category"); // Ensure updated category details are returned

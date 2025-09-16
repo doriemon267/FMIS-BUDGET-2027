@@ -26,8 +26,8 @@ exports.createIncome = async (req, res) => {
         details: "particulars, incomecategory, and amount are required" 
       });
     }
-    // Get submission workflow data from middleware
-    const workflowData = req.submissionWorkflowData || {};
+  // Get submission workflow data from middleware
+  const workflowData = req.submissionWorkflowData || {};
     
     // Create new income entry with workflow data
     const newIncome = new Income({
@@ -42,7 +42,9 @@ exports.createIncome = async (req, res) => {
       region: workflowData.region || region,
       department: workflowData.department || department,
       division: workflowData.division || division,
-      originalLevel: workflowData.originalLevel || 'DIVISION', // Default for income
+  // Respect middleware-determined levels to avoid mislabeling department as division
+  originalLevel: workflowData.originalLevel || 'DIVISION',
+  workflowLevel: workflowData.workflowLevel || workflowData.originalLevel || 'DIVISION',
       processBy: processBy || req.user?.userName || req.user?.id,
       processDate: processDate || new Date(),
       status: workflowData.status || "Draft" // Use new workflow status
@@ -96,7 +98,9 @@ exports.updateIncome = async (req, res) => {
         division: workflowData.division || division,
         processBy: processBy || req.user?.userName || req.user?.id,
         processDate: processDate || new Date(),
-        status: status || workflowData.status || "Draft"
+        status: status || workflowData.status || "Draft",
+        ...(workflowData.originalLevel ? { originalLevel: workflowData.originalLevel } : {}),
+        ...(workflowData.workflowLevel ? { workflowLevel: workflowData.workflowLevel } : {}),
       },
       { new: true }
     );
@@ -169,60 +173,23 @@ exports.getAllIncome = async (req, res) => {
     if (region) {
       query.region = region;
     }
-    // Use submission workflow data for filtering
-    const workflowData = req.submissionWorkflowData || {};
-    const userLevel = workflowData.userLevel;
-    
-    // Apply region filter if not specified but user has workflow data
-    if (!query.region && workflowData.region) {
-      query.region = workflowData.region;
-    }
-    
-    // Apply workflow-based filtering based on user level
-    if (userLevel === 'DIVISION') {
-      // Division users: only their division within their department and region
-      if (workflowData.department) query.department = workflowData.department;
-      if (workflowData.division) query.division = workflowData.division;
-    } else if (userLevel === 'DEPARTMENT') {
-      // Department users: can see their department data + SUBMITTED division data ONLY
-      if (workflowData.department) {
-        const baseQuery = {
-          department: workflowData.department
-        };
-        
-        // Apply region if available
-        if (query.region) baseQuery.region = query.region;
-        if (query.fiscalYear) baseQuery.fiscalYear = query.fiscalYear;
-        if (query.budgetType) baseQuery.budgetType = query.budgetType;
-        
-        query = {
-          $and: [
-            baseQuery,
-            {
-              $or: [
-                // 1. Department-level data (no division or by department user)
-                {
-                  $and: [
-                    { $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] }
-                  ]
-                },
-                // 2. Division data that has been SUBMITTED only (using new workflow statuses)
-                {
-                  $and: [
-                    { division: { $exists: true, $ne: null, $ne: "" } },
-                    { status: { $in: ["Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"] } }
-                  ]
-                }
-              ]
-            }
-          ]
-        };
+    // Apply submission workflow filters when available; fallback to hierarchical filters
+    const submissionFilters = req.submissionWorkflowFilters || {};
+    const hierarchicalFilters = req.hierarchicalFilters || {};
+    if (submissionFilters && Object.keys(submissionFilters).length > 0) {
+      if (submissionFilters.$and) {
+        const baseConditions = Object.entries(query).map(([k,v]) => ({ [k]: v }));
+        query = { $and: [ ...baseConditions, ...submissionFilters.$and ] };
+      } else {
+        query = { ...query, ...submissionFilters };
       }
-    } else if (userLevel === 'REGION') {
-      // Region users: see Department Submitted and above statuses
-      query.status = { 
-        $in: ["Department Submitted", "Region Approved", "Finalized"] 
-      };
+    } else if (hierarchicalFilters && Object.keys(hierarchicalFilters).length > 0) {
+      if (hierarchicalFilters.$and) {
+        const baseConditions = Object.entries(query).map(([k,v]) => ({ [k]: v }));
+        query = { $and: [ ...baseConditions, ...hierarchicalFilters.$and ] };
+      } else {
+        query = { ...query, ...hierarchicalFilters };
+      }
     }
     const incomeEntries = await Income.find(query)
       .populate('incomecategory')
@@ -262,15 +229,39 @@ exports.getIncomeById = async (req, res) => {
 exports.getIncomeByParams = async (req, res) => {
   try {
     const { fiscalYear, budgetType, processBy, region, status, department, division } = req.query;
-    const query = {};
-    if (fiscalYear) query.fiscalYear = fiscalYear;
-    if (budgetType) query.budgetType = budgetType;
-    if (processBy) query.processBy = processBy;
-    if (region) query.region = region;
-    if (status) query.status = status;
-    if (department) query.department = department;
-    if (division) query.division = division;
-    
+    // Base query from parameters
+    const baseQuery = {};
+    if (fiscalYear) baseQuery.fiscalYear = fiscalYear;
+    if (budgetType) baseQuery.budgetType = budgetType;
+    if (processBy) baseQuery.processBy = processBy;
+    if (region) baseQuery.region = region;
+    if (status) baseQuery.status = status;
+    if (department) baseQuery.department = department;
+    if (division) baseQuery.division = division;
+
+    // Merge submission workflow filters when available; fallback to hierarchical filters
+    const submissionFilters = req.submissionWorkflowFilters || {};
+    const hierarchicalFilters = req.hierarchicalFilters || {};
+    let query = { ...baseQuery };
+    if (submissionFilters && Object.keys(submissionFilters).length > 0) {
+      if (submissionFilters.$and) {
+        const conditions = [];
+        // expand baseQuery into individual conditions
+        Object.entries(baseQuery).forEach(([k, v]) => conditions.push({ [k]: v }));
+        query = { $and: [ ...conditions, ...submissionFilters.$and ] };
+      } else {
+        query = { ...baseQuery, ...submissionFilters };
+      }
+    } else if (hierarchicalFilters && Object.keys(hierarchicalFilters).length > 0) {
+      if (hierarchicalFilters.$and) {
+        const conditions = [];
+        Object.entries(baseQuery).forEach(([k, v]) => conditions.push({ [k]: v }));
+        query = { $and: [ ...conditions, ...hierarchicalFilters.$and ] };
+      } else {
+        query = { ...baseQuery, ...hierarchicalFilters };
+      }
+    }
+
     const income = await Income.find(query).lean();
     res.status(200).json(income);
   } catch (error) {

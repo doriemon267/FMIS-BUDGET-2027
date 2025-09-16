@@ -75,8 +75,15 @@ router.post(
       const result = await Model.updateMany(
         { 
           _id: { $in: ids },
-          originalLevel: 'DEPARTMENT',
-          status: { $in: ['Draft', 'Not Submitted'] }
+          // Accept records created at Department level; some legacy records may not have originalLevel set
+          $or: [
+            { originalLevel: 'DEPARTMENT' },
+            { originalLevel: { $exists: false } },
+            { originalLevel: null },
+            { originalLevel: '' }
+          ],
+          // Handle status case variations
+          status: { $in: ['Draft', 'Not Submitted', 'DRAFT', 'NOT SUBMITTED'] }
         },
         { 
           $set: { 
@@ -84,11 +91,23 @@ router.post(
             submittedToRegionAt: new Date(),
             submittedToRegionBy: userId,
             submissionNote: submissionNote || '',
-            lastWorkflowTransition: 'DEPARTMENT_TO_REGION'
+            lastWorkflowTransition: 'DEPARTMENT_TO_REGION',
+            // Normalize originalLevel going forward
+            originalLevel: 'DEPARTMENT',
+            // Ensure department-origin records do not carry a division value
+            division: null
           } 
         }
       );
+      if (!result.modifiedCount) {
+        return res.status(404).json({
+          success: false,
+          message: 'No matching department-owned draft to submit. Ensure items are Draft at Department level.',
+          code: 'NO_MATCH_DEPT_SUBMIT_OWN',
+        });
+      }
       return res.status(200).json({ 
+        success: true,
         message: 'Successfully submitted department proposals to Region for review', 
         modified: result.modifiedCount 
       });

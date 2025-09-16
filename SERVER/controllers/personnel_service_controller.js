@@ -380,6 +380,12 @@ exports.bulkAddPersonnelServices = async (req, res) => {
 
     // Get hierarchical filters from middleware
     const hierarchicalFilters = req.hierarchicalFilters || {};
+    // Get submission workflow data for correct org attribution
+    const workflowData = req.submissionWorkflowData || {};
+    const userLevel = workflowData.userLevel;
+    const ownerRegion = workflowData.region ?? req.body.region;
+    const ownerDepartment = workflowData.department ?? req.body.department;
+    const ownerDivision = userLevel === 'DEPARTMENT' ? null : (workflowData.division ?? req.body.division ?? null);
 
     // Map hierarchical filters to database field names
     const mapFiltersToDb = (filters) => {
@@ -459,14 +465,14 @@ exports.bulkAddPersonnelServices = async (req, res) => {
       }
     }
 
-    // Fetch only Active employees within user's hierarchical scope
+  // Fetch only Active employees within user's hierarchical scope
     const employees = await EmployeeMaster.find(employeeQuery);
     // Check if no employees found
     if (employees.length === 0) {
       return res.status(200).json([]);
     }
     const personnelServicesData = [];
-    for (const employee of employees) {
+  for (const employee of employees) {
       // Check if employee already exists in PersonnelServices for current fiscal year
       const existingPersonnelService = await PersonnelServices.findOne({
         employeeNumber: employee.EmployeeID,
@@ -504,12 +510,12 @@ exports.bulkAddPersonnelServices = async (req, res) => {
         employeeNumber: employee.EmployeeID || "",
         DateOfAppointment: employee.DateOfAppointment || null,
         DateOfBirth: employee.DateOfBirth || null,
-        department: req.body.department || employee.Department || "",
-        division: req.body.division || employee.Division || "",
+        department: ownerDepartment || employee.Department || "",
+        division: ownerDivision || "",
         section: employee.Section || "",
         unit: employee.Unit || "",
-        // Use the region from the request body (consolidated by middleware), otherwise use the employee's region
-        region: req.body.region || employee.Region || "",
+        // Use region/department/division from submission workflow data
+        region: ownerRegion || employee.Region || "",
         statusOfAppointment: statusAppointment,
         employeeStatus: employee.employeeStatus,
         monthlySalary: monthlySalary,
@@ -542,6 +548,10 @@ exports.bulkAddPersonnelServices = async (req, res) => {
         terminalLeave: 0,
         courtAppearance: 0,
         Total: 0,
+        // Submission workflow tagging
+        originalLevel: workflowData.originalLevel || (userLevel === 'DIVISION' ? 'DIVISION' : userLevel === 'DEPARTMENT' ? 'DEPARTMENT' : userLevel === 'REGION' ? 'REGION' : null),
+        workflowLevel: workflowData.workflowLevel || (userLevel === 'DIVISION' ? 'DIVISION' : userLevel === 'DEPARTMENT' ? 'DEPARTMENT' : userLevel === 'REGION' ? 'REGION' : null),
+        status: req.body.status || 'Draft'
       };
       if (statusAppointment === "COS") {
         personnelService = {

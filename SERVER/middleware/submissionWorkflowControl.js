@@ -97,7 +97,13 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
       };
       if (enforceSubmissionWorkflow) {
         // Division users see all their own data regardless of status
-        submissionFilters = hierarchicalFilters;
+        // BUT only for records that originated at DIVISION level
+        submissionFilters = {
+          $and: [
+            ...hierarchicalFilters.$and,
+            { originalLevel: 'DIVISION' }
+          ]
+        };
       }
       break;
     case 'DEPARTMENT':
@@ -294,6 +300,22 @@ const handleSubmissionWorkflowWrite = async (req, res, next, assignment, operati
   if (operation === 'create') {
     applySubmissionWorkflowConsolidation(req, assignment);
   }
+  // Provide submission workflow data to controllers that expect it
+  try {
+    const regionName = assignment.regionId?.Region || assignment.regions[0]?.regionName || req.body.region;
+    const departmentName = assignment.departmentId?.Department || assignment.departments[0]?.departmentName || req.body.department;
+    const divisionName = assignment.divisions?.[0] || req.body.division || null;
+    req.submissionWorkflowData = {
+      region: req.body.region ?? regionName,
+      department: req.body.department ?? departmentName,
+      division: req.body.division ?? divisionName,
+      originalLevel: req.body.originalLevel,
+      workflowLevel: req.body.workflowLevel,
+      userLevel: assignment.assignmentLevel
+    };
+  } catch (_) {
+    // no-op
+  }
   next();
 };
 /**
@@ -318,6 +340,7 @@ const applySubmissionWorkflowConsolidation = (req, assignment) => {
       req.body.division = divisionName;
       req.body.department = departmentName;
       req.body.region = regionName;
+      req.body.workflowLevel = 'DIVISION';
       req.body.status = req.body.status || 'Draft'; // Default to Draft for new submissions
       break;
     case 'DEPARTMENT':
@@ -326,12 +349,16 @@ const applySubmissionWorkflowConsolidation = (req, assignment) => {
       req.body.originalDepartment = departmentName;
       req.body.department = departmentName;
       req.body.region = regionName;
+      // Clear division for department-origin records to avoid leaking to division scope filters
+      req.body.division = null;
+      req.body.workflowLevel = 'DEPARTMENT';
       req.body.status = req.body.status || 'Draft'; // Default to Draft for new submissions
       break;
     case 'REGION':
       // Region submissions stay at region level
       req.body.originalLevel = 'REGION';
       req.body.region = regionName || req.body.region || null;
+      req.body.workflowLevel = 'REGION';
       req.body.status = req.body.status || 'Draft'; // Default to Draft for new submissions
       break;
   }

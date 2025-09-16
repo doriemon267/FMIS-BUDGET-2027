@@ -20,9 +20,9 @@ const CapitalOutlay = require("../models/CapitalOutlay"); // New model import
 const capitalOutlayRouter = Router();
 // Apply authentication to all capital outlay routes
 capitalOutlayRouter.use(checkToken);
-capitalOutlayRouter.get("/capital-outlays", hierarchicalAccessControl('read', { allowedFields: ['region'] }), getAllCapitalOutlays);
-capitalOutlayRouter.post("/capital-outlays", checkDueDate, hierarchicalAccessControl('create', { strictMode: false, enableConsolidation: true }), addCapitalOutlay);
-capitalOutlayRouter.put("/capital-outlays/:id", checkDueDate, hierarchicalAccessControl('update', { strictMode: false, enableConsolidation: true }), editCapitalOutlay);
+capitalOutlayRouter.get("/capital-outlays", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), getAllCapitalOutlays);
+capitalOutlayRouter.post("/capital-outlays", checkDueDate, submissionWorkflowControl('create', { strictMode: false, enforceSubmissionWorkflow: true, enableConsolidation: true }), addCapitalOutlay);
+capitalOutlayRouter.put("/capital-outlays/:id", checkDueDate, submissionWorkflowControl('update', { strictMode: false, enforceSubmissionWorkflow: true, enableConsolidation: true }), editCapitalOutlay);
 capitalOutlayRouter.delete("/capital-outlays/:id", checkDueDateWithRoleBypass, deleteCapitalOutlay);
 capitalOutlayRouter.get("/capital-outlay-list", getCapitalOutlayList);
 capitalOutlayRouter.get("/subline-items", getSublineItems);

@@ -193,11 +193,26 @@ const getBudgetarySupportById = async (req, res) => {
 // Create new budgetary support entry
 const createBudgetarySupport = async (req, res) => {
   try {
+    // Use submission workflow data if present
+    const workflowData = req.submissionWorkflowData || {};
+    const userLevel = workflowData.userLevel;
+    // Normalize org fields; clear division for department-origin
+    const region = workflowData.region ?? req.body.region;
+    const department = workflowData.department ?? req.body.department;
+    const division = userLevel === 'DEPARTMENT' ? null : (workflowData.division ?? req.body.division ?? null);
+    // Determine level tagging
+    const originalLevel = workflowData.originalLevel || (userLevel === 'DIVISION' ? 'DIVISION' : userLevel === 'DEPARTMENT' ? 'DEPARTMENT' : userLevel === 'REGION' ? 'REGION' : undefined);
+    const workflowLevel = workflowData.workflowLevel || originalLevel;
     // Create entry data with required fields
     const entryData = { 
       ...req.body,
+      region,
+      department,
+      division,
+      originalLevel,
+      workflowLevel,
       processDate: new Date(),
-      status: req.body.status || "Not Submitted"
+      status: req.body.status || "Draft"
     };
     // Only add createdBy if req.user exists and has a valid id
     if (req.user && req.user.id && mongoose.Types.ObjectId.isValid(req.user.id)) {
@@ -216,8 +231,18 @@ const updateBudgetarySupport = async (req, res) => {
   try {
     const { id } = req.params;
     // Create update data
+    const workflowData = req.submissionWorkflowData || {};
+    const userLevel = workflowData.userLevel;
+    const region = workflowData.region ?? req.body.region;
+    const department = workflowData.department ?? req.body.department;
+    const division = userLevel === 'DEPARTMENT' ? null : (workflowData.division ?? req.body.division ?? null);
     const updateData = { 
       ...req.body,
+      region,
+      department,
+      division,
+      ...(workflowData.originalLevel ? { originalLevel: workflowData.originalLevel } : {}),
+      ...(workflowData.workflowLevel ? { workflowLevel: workflowData.workflowLevel } : {}),
       processDate: req.body.processDate || new Date()
     };
     // Only add updatedBy if req.user exists and has a valid id

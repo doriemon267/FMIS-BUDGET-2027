@@ -20,9 +20,9 @@ router.get('/budgetary-support/calculate', submissionWorkflowControl('read', { e
 // Get budgetary support by ID
 router.get('/budgetary-support/:id',  getBudgetarySupportById);
 // Create new budgetary support entry
-router.post('/budgetary-support', hierarchicalAccessControl('create', { strictMode: false, enableConsolidation: true }), createBudgetarySupport);
+router.post('/budgetary-support', submissionWorkflowControl('create', { strictMode: false, enforceSubmissionWorkflow: true, enableConsolidation: true }), createBudgetarySupport);
 // Update budgetary support entry
-router.put('/budgetary-support/:id', hierarchicalAccessControl('update', { strictMode: false, enableConsolidation: true }), updateBudgetarySupport);
+router.put('/budgetary-support/:id', submissionWorkflowControl('update', { strictMode: false, enforceSubmissionWorkflow: true, enableConsolidation: true }), updateBudgetarySupport);
 // Delete budgetary support entry
 router.delete('/budgetary-support/:id',  deleteBudgetarySupport);
 module.exports = router;

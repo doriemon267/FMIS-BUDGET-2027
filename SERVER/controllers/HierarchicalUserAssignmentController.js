@@ -35,7 +35,8 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       departmentId,
       divisionName,
       rolePermissions = {},
-      restrictions = {}
+      restrictions = {},
+      workflowRoles: requestedWorkflowRoles
     } = req.body;
     if (!userId || !userName || !email || !assignmentLevel) {
       return res.status(400).json({
@@ -65,6 +66,26 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
     }
     // Find existing assignment or create new one
     let assignment = await HierarchicalUserAssignment.findOne({ userId, isActive: true });
+    // Validate custom workflow roles if provided
+    const ALLOWED_WORKFLOW_ROLES = [
+      'divisionCreator', 'divisionApprover',
+      'departmentCreator', 'departmentConsolidator', 'departmentSubmission',
+      'regionCreator', 'regionFinalVerifier'
+    ];
+    let workflowRolesToAssign = undefined;
+    if (Array.isArray(requestedWorkflowRoles)) {
+      const invalid = requestedWorkflowRoles.filter(r => !ALLOWED_WORKFLOW_ROLES.includes(r));
+      if (invalid.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid workflowRoles: ${invalid.join(', ')}`,
+          code: 'INVALID_WORKFLOW_ROLES',
+          allowed: ALLOWED_WORKFLOW_ROLES
+        });
+      }
+      workflowRolesToAssign = requestedWorkflowRoles;
+    }
+
     const assignmentPayload = {
       userId,
       userName,
@@ -92,6 +113,8 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
         readOnlyMode: false,
         ...restrictions
       },
+      // Persist workflowRoles immediately if explicitly provided; else keep existing/defaults
+      ...(workflowRolesToAssign ? { workflowRoles: workflowRolesToAssign } : {}),
       isActive: true,
       lastModifiedBy: adminUserId
     };
@@ -105,11 +128,16 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       assignment = await HierarchicalUserAssignment.create(assignmentPayload);
     }
 
-    // Auto-assign workflow roles based on assignment level
+    // Auto-assign or apply custom workflow roles
     const { assignWorkflowRoles } = require('../helpers/workflowRoleManager');
     try {
-      await assignWorkflowRoles(userId, assignmentLevel);
-      console.log(`✅ Workflow roles automatically assigned for ${assignmentLevel} user: ${userName}`);
+      if (workflowRolesToAssign) {
+        await assignWorkflowRoles(userId, assignmentLevel, workflowRolesToAssign);
+        console.log(`✅ Custom workflow roles assigned for ${userName}: ${workflowRolesToAssign.join(', ')}`);
+      } else {
+        await assignWorkflowRoles(userId, assignmentLevel);
+        console.log(`✅ Workflow roles automatically assigned for ${assignmentLevel} user: ${userName}`);
+      }
     } catch (roleError) {
       console.error(`⚠️ Failed to auto-assign workflow roles for ${userName}:`, roleError.message);
     }
@@ -263,6 +291,51 @@ const getAllHierarchicalAssignments = async (req, res) => {
       message: 'Error retrieving hierarchical assignments',
       error: error.message
     });
+  }
+};
+
+/**
+ * Explicitly update workflow roles for a user (Admin only)
+ */
+const updateWorkflowRoles = async (req, res) => {
+  try {
+    const adminUserRoles = req.user.Roles;
+    if (!hasFullAccess(adminUserRoles)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Admin privileges required to update workflow roles.',
+        code: 'ADMIN_REQUIRED'
+      });
+    }
+    const { userId } = req.params;
+    const { workflowRoles = [] } = req.body;
+    const ALLOWED_WORKFLOW_ROLES = [
+      'divisionCreator', 'divisionApprover',
+      'departmentCreator', 'departmentConsolidator', 'departmentSubmission',
+      'regionCreator', 'regionFinalVerifier'
+    ];
+    if (!Array.isArray(workflowRoles)) {
+      return res.status(400).json({ success: false, message: 'workflowRoles must be an array', code: 'INVALID_PAYLOAD' });
+    }
+    const invalid = workflowRoles.filter(r => !ALLOWED_WORKFLOW_ROLES.includes(r));
+    if (invalid.length > 0) {
+      return res.status(400).json({ success: false, message: `Invalid workflowRoles: ${invalid.join(', ')}`, allowed: ALLOWED_WORKFLOW_ROLES, code: 'INVALID_WORKFLOW_ROLES' });
+    }
+    const assignment = await HierarchicalUserAssignment.findOne({ userId, isActive: true });
+    if (!assignment) {
+      return res.status(404).json({ success: false, message: 'User assignment not found', code: 'NOT_FOUND' });
+    }
+    assignment.workflowRoles = workflowRoles;
+    await assignment.save();
+    // If final verifier is set, consider ensuring canApproveProposals is enabled
+    if (workflowRoles.includes('regionFinalVerifier') && assignment.rolePermissions && !assignment.rolePermissions.canApproveProposals) {
+      assignment.rolePermissions.canApproveProposals = true;
+      await assignment.save();
+    }
+    return res.status(200).json({ success: true, message: 'Workflow roles updated', userId, workflowRoles });
+  } catch (error) {
+    console.error('Error updating workflow roles:', error);
+    return res.status(500).json({ success: false, message: 'Failed to update workflow roles', error: error.message });
   }
 };
 /**
@@ -554,6 +627,7 @@ module.exports = {
   createOrUpdateHierarchicalAssignment,
   getHierarchicalAssignment,
   getAllHierarchicalAssignments,
+  updateWorkflowRoles,
   deleteHierarchicalAssignment,
   testHierarchicalConsolidation,
   buildHierarchicalAssignment

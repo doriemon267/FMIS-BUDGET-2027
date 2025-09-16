@@ -15,6 +15,7 @@ const {
   createOrUpdateHierarchicalAssignment,
   getHierarchicalAssignment,
   getAllHierarchicalAssignments,
+  updateWorkflowRoles,
   deleteHierarchicalAssignment,
   testHierarchicalConsolidation
 } = require('../controllers/HierarchicalUserAssignmentController');
@@ -56,6 +57,16 @@ router.delete(
   '/assignments/:userId',
   ...adminRoute(),
   deleteHierarchicalAssignment
+);
+
+/**
+ * Update workflow roles for a user (Admin only)
+ * POST /api/hierarchical-rbac/assignments/:userId/workflow-roles
+ */
+router.post(
+  '/assignments/:userId/workflow-roles',
+  ...adminRoute(),
+  updateWorkflowRoles
 );
 /**
  * Test hierarchical consolidation
@@ -483,4 +494,4 @@ function getConsolidationExplanation(scope) {
       return 'Consolidation behavior is not defined for your access level.';
   }
 }
-module.exports = router;
+module.exports = router;
