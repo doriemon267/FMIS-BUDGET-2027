@@ -1483,7 +1483,8 @@ export const SubmitDraftButton = ({ row, refreshData }) => {
         endpoint = '/api/submission-workflow/division/submit-to-department';
         successMessage = 'Submitted to Department';
       } else if (scope === 'DEPARTMENT') {
-        endpoint = '/api/submission-workflow/department/submit-to-region';
+        // Use the endpoint dedicated for department-owned drafts
+        endpoint = '/api/submission-workflow/department/submit-own-to-region';
         successMessage = 'Submitted to Region';
       } else if (scope === 'REGION') {
         // For region, use the new submit-own endpoint that finalizes directly

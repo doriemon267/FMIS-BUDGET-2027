@@ -93,6 +93,7 @@ import CheckIcon from "@mui/icons-material/Check";
 import DraftsIcon from "@mui/icons-material/Drafts";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import BudgetSummary from "./BudgetSummary";
+import { hasPermission, PERMISSIONS } from "../../utils/permissions";
 
 const CustomPage = ({
   dataListName,
@@ -140,6 +141,9 @@ const CustomPage = ({
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [speedDialOpen, setSpeedDialOpen] = useState(false);
+
+  const canCreate = hasPermission(currentUser, PERMISSIONS.CREATE);
+  const canEditOwn = hasPermission(currentUser, PERMISSIONS.EDIT_OWN);
   // Initialize budgetSummary with default values
   const [budgetSummary, setBudgetSummary] = useState({
     personnelTotal: 0,
@@ -3083,11 +3087,13 @@ const CustomPage = ({
             </Button>
 
             {/* TEMP: Hide Submit All Proposals and Save as Draft buttons */}
-            {false && (
+            {(canCreate || canEditOwn) && (
               <>
                 <Tooltip
                   title={
-                    !budgetSummary.isIncomeBalanced
+                    !canEditOwn
+                      ? "You don't have permission to submit proposals. Please contact your administrator."
+                      : !budgetSummary.isIncomeBalanced
                       ? "Combined Income Total must equal Corporate Income before submission"
                       : ""
                   }
@@ -3098,6 +3104,7 @@ const CustomPage = ({
                       color="primary"
                       onClick={handleOpenDialog}
                       disabled={
+                        !canEditOwn ||
                         !anyNotSubmitted ||
                         isSubmitting ||
                         !budgetSummary.isIncomeBalanced
@@ -3135,7 +3142,7 @@ const CustomPage = ({
                       variant="outlined"
                       color="success"
                       onClick={() => handleSaveAsDraft()}
-                      disabled={!anyNotSubmitted || isSubmitting || Object.keys(validationErrors).length > 0}
+                      disabled={!canEditOwn || !anyNotSubmitted || isSubmitting || Object.keys(validationErrors).length > 0}
                       startIcon={
                         saveStatus === "saving" ? (
                           <CircularProgress size={16} />

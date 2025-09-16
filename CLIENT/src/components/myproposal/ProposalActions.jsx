@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { useUser } from "../../context/UserContext";
+import { hasPermission, PERMISSIONS } from "../../utils/permissions";
 import {
   IconButton,
   Menu,
@@ -71,6 +73,9 @@ export function ViewMenuItem({ row, parentClose }) {
 
 export function ApproveMenuItem({ row, parentClose, refreshData }) {
   const [open, setOpen] = useState(false);
+  const { currentUser } = useUser();
+  const canApprove = hasPermission(currentUser, PERMISSIONS.APPROVE);
+  if (!canApprove) return null;
 
   const handleApprove = async () => {
     try {

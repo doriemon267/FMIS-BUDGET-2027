@@ -33,7 +33,11 @@ import {
   Badge,
   Accordion,
   AccordionSummary,
-  AccordionDetails
+  AccordionDetails,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../config/api';
@@ -73,6 +77,20 @@ const ACCESS_LEVELS = [
   { value: 'OWN_ONLY', label: 'Own Records Only', icon: <PersonIcon />, color: '#757575' }
 ];
 
+// Workflow roles available for assignment
+const WORKFLOW_ROLES = [
+  { key: 'divisionCreator', label: 'Division Creator', description: 'Create proposals at division level' },
+  { key: 'divisionApprover', label: 'Division Approver', description: 'Approve division proposals' },
+  { key: 'departmentCreator', label: 'Department Creator', description: 'Create proposals at department level' },
+  { key: 'departmentConsolidator', label: 'Department Consolidator', description: 'Consolidate division to department' },
+  { key: 'departmentSubmission', label: 'Department Submission', description: 'Submit department proposals to region' },
+  { key: 'regionCreator', label: 'Region Creator', description: 'Create proposals at region level' },
+  { key: 'regionFinalVerifier', label: 'Region Final Verifier', description: 'Final verification/approval at region' }
+];
+
+const getDefaultWorkflowRolesMap = () =>
+  WORKFLOW_ROLES.reduce((acc, r) => ({ ...acc, [r.key]: false }), {});
+
 const HierarchicalUserAssignmentPage = () => {
   const { currentUser, jwtToken } = useUser();
   const queryClient = useQueryClient();
@@ -91,6 +109,7 @@ const HierarchicalUserAssignmentPage = () => {
     regionId: '',
     departmentId: '',
     divisionName: '',
+    workflowRoles: getDefaultWorkflowRolesMap(),
     rolePermissions: {
       canCreateProposals: true,
       canEditOwnProposals: true,
@@ -111,6 +130,10 @@ const HierarchicalUserAssignmentPage = () => {
   });
   const [editingAssignment, setEditingAssignment] = useState(null);
   const [showPermissions, setShowPermissions] = useState(false);
+  // Inline roles dialog state
+  const [rolesDialogOpen, setRolesDialogOpen] = useState(false);
+  const [rolesDialogUser, setRolesDialogUser] = useState(null);
+  const [rolesDialogMap, setRolesDialogMap] = useState(getDefaultWorkflowRolesMap());
   
   // Check if user is admin (align with server adminRoute allowed roles)
   const isAdmin = currentUser?.Roles && (
@@ -263,6 +286,22 @@ const HierarchicalUserAssignmentPage = () => {
     }
   });
 
+  // Mutation for updating workflow roles inline
+  const updateWorkflowRolesMutation = useMutation({
+    mutationFn: async ({ userId, workflowRoles }) => {
+      return api.post(`/api/hierarchical-rbac/assignments/${userId}/workflow-roles`, { workflowRoles });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['hierarchical-assignments']);
+      setSnackbar({ open: true, message: 'Workflow roles updated', severity: 'success' });
+      closeRolesDialog();
+    },
+    onError: (error) => {
+      console.error('Error updating workflow roles:', error);
+      setSnackbar({ open: true, message: error.response?.data?.message || 'Failed to update workflow roles', severity: 'error' });
+    }
+  });
+
   // Helper functions
   const resetForm = () => {
     setFormData({
@@ -273,6 +312,7 @@ const HierarchicalUserAssignmentPage = () => {
       regionId: '',
       departmentId: '',
       divisionName: '',
+      workflowRoles: getDefaultWorkflowRolesMap(),
       rolePermissions: {
         canCreateProposals: true,
         canEditOwnProposals: true,
@@ -286,6 +326,23 @@ const HierarchicalUserAssignmentPage = () => {
     });
     setEditingAssignment(null);
     setSelectedUser('');
+  };
+
+  // Helper: filter visible workflow roles by assignment level
+  const getVisibleWorkflowRoles = (level) => {
+    switch (level) {
+      case 'DIVISION':
+        return WORKFLOW_ROLES.filter(r => ['divisionCreator'].includes(r.key));
+      case 'DEPARTMENT':
+        return WORKFLOW_ROLES.filter(r => ['divisionApprover','departmentCreator','departmentConsolidator','departmentSubmission'].includes(r.key));
+      case 'REGION':
+        return WORKFLOW_ROLES.filter(r => ['regionCreator','regionFinalVerifier'].includes(r.key));
+      case 'FULL':
+        return WORKFLOW_ROLES;
+      case 'OWN_ONLY':
+      default:
+        return [];
+    }
   };
 
   // Get available divisions for selected department
@@ -381,8 +438,38 @@ const HierarchicalUserAssignmentPage = () => {
     }));
   };
 
+  const handleWorkflowRoleChange = (roleKey, value) => {
+    setFormData(prev => ({
+      ...prev,
+      workflowRoles: {
+        ...prev.workflowRoles,
+        [roleKey]: value
+      },
+      // If regionFinalVerifier is selected, ensure canApproveProposals is enabled for smoother UX
+      rolePermissions: roleKey === 'regionFinalVerifier' && value
+        ? { ...prev.rolePermissions, canApproveProposals: true }
+        : prev.rolePermissions
+    }));
+  };
+
   const handleEditAssignment = (assignment) => {
     setEditingAssignment(assignment);
+    // Map existing workflowRoles (array) to checkbox map
+    const roleMap = getDefaultWorkflowRolesMap();
+    if (Array.isArray(assignment.workflowRoles)) {
+      assignment.workflowRoles.forEach(r => { if (r in roleMap) roleMap[r] = true; });
+    }
+    // Merge role permissions with defaults to ensure all keys exist
+    const defaultPerms = {
+      canCreateProposals: true,
+      canEditOwnProposals: true,
+      canEditAllProposals: false,
+      canDeleteProposals: false,
+      canApproveProposals: false,
+      canViewReports: true,
+      canManageUsers: false,
+      canManageSettings: false
+    };
     setFormData({
       userId: assignment.userId,
       userName: assignment.userName,
@@ -391,9 +478,28 @@ const HierarchicalUserAssignmentPage = () => {
       regionId: assignment.regions?.[0]?._id || '',
       departmentId: assignment.departments?.[0]?._id || '',
       divisionName: assignment.divisions?.[0] || '',
-      rolePermissions: assignment.rolePermissions || {}
+      workflowRoles: roleMap,
+      rolePermissions: { ...defaultPerms, ...(assignment.rolePermissions || {}) }
     });
     setSelectedUser(assignment.userId);
+  };
+
+  // Inline roles dialog handlers
+  const openRolesDialog = (assignment) => {
+    const map = getDefaultWorkflowRolesMap();
+    if (Array.isArray(assignment.workflowRoles)) {
+      assignment.workflowRoles.forEach(r => { if (r in map) map[r] = true; });
+    }
+    setRolesDialogMap(map);
+    setRolesDialogUser(assignment);
+    setRolesDialogOpen(true);
+  };
+  const closeRolesDialog = () => {
+    setRolesDialogOpen(false);
+    setRolesDialogUser(null);
+  };
+  const toggleDialogRole = (roleKey, checked) => {
+    setRolesDialogMap(prev => ({ ...prev, [roleKey]: checked }));
   };
 
   const handleSubmit = () => {
@@ -456,7 +562,28 @@ const HierarchicalUserAssignmentPage = () => {
       });
       return;
     }
-    createOrUpdateMutation.mutate(formData);
+    // Prepare payload: convert workflowRoles map to array of selected keys
+    const selectedWorkflowRoles = Object.entries(formData.workflowRoles || {})
+      .filter(([, v]) => v)
+      .map(([k]) => k);
+
+    // Build payload; omit workflowRoles if none selected to allow server defaults
+    const payload = {
+      ...formData,
+      rolePermissions: {
+        ...formData.rolePermissions,
+        // Auto-enable approval if final verifier is selected to avoid server 403s
+        canApproveProposals: selectedWorkflowRoles.includes('regionFinalVerifier')
+          ? true
+          : formData.rolePermissions.canApproveProposals
+      }
+    };
+    delete payload.workflowRoles;
+    if (selectedWorkflowRoles.length > 0) {
+      payload.workflowRoles = selectedWorkflowRoles;
+    }
+
+    createOrUpdateMutation.mutate(payload);
   };
 
   const getAccessLevelInfo = (level) => {
@@ -822,6 +949,40 @@ const HierarchicalUserAssignmentPage = () => {
                 </Accordion>
               </Grid>
 
+              {/* Workflow Roles */}
+              <Grid item xs={12}>
+                <Accordion>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <Typography>Workflow Roles</Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Alert severity="info" sx={{ mb: 2 }}>
+                      Region Final Verifier typically requires approval permission. Selecting it will auto-enable approval.
+                    </Alert>
+                    <Grid container spacing={1}>
+                      {getVisibleWorkflowRoles(formData.assignmentLevel).map(role => (
+                        <Grid item xs={12} sm={6} key={role.key}>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Tooltip title={role.description} arrow>
+                              <Checkbox
+                                checked={!!formData.workflowRoles?.[role.key]}
+                                onChange={(e) => handleWorkflowRoleChange(role.key, e.target.checked)}
+                              />
+                            </Tooltip>
+                            <Tooltip title={role.description} arrow>
+                              <Box>
+                                <Typography variant="body2" fontWeight={600}>{role.label}</Typography>
+                                <Typography variant="caption" color="text.secondary">{role.description}</Typography>
+                              </Box>
+                            </Tooltip>
+                          </Box>
+                        </Grid>
+                      ))}
+                    </Grid>
+                  </AccordionDetails>
+                </Accordion>
+              </Grid>
+
               {/* Action Buttons */}
               <Grid item xs={12}>
                 <Stack direction="row" spacing={2}>
@@ -898,6 +1059,19 @@ const HierarchicalUserAssignmentPage = () => {
                                 {assignment.divisions?.map((div) => (
                                   <Chip key={div} label={`Div: ${div}`} size="small" variant="outlined" />
                                 ))}
+                                {Array.isArray(assignment.workflowRoles) && assignment.workflowRoles.length > 0 && (
+                                  <Box sx={{ mt: 0.5 }}>
+                                    {assignment.workflowRoles.map((r) => {
+                                      const friendly = WORKFLOW_ROLES.find(w => w.key === r)?.label || r;
+                                      const desc = WORKFLOW_ROLES.find(w => w.key === r)?.description || '';
+                                      return (
+                                        <Tooltip key={r} title={desc} arrow>
+                                          <Chip label={friendly} size="small" color="success" sx={{ mr: 0.5, mb: 0.5 }} />
+                                        </Tooltip>
+                                      );
+                                    })}
+                                  </Box>
+                                )}
                               </Stack>
                             </TableCell>
                             <TableCell>
@@ -908,6 +1082,14 @@ const HierarchicalUserAssignmentPage = () => {
                                     onClick={() => handleEditAssignment(assignment)}
                                   >
                                     <EditIcon />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Manage Workflow Roles">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => openRolesDialog(assignment)}
+                                  >
+                                    <AssignmentIcon />
                                   </IconButton>
                                 </Tooltip>
                                 <Tooltip title="Delete Assignment">
@@ -947,6 +1129,54 @@ const HierarchicalUserAssignmentPage = () => {
         message={snackbar.message}
         severity={snackbar.severity}
       />
+
+      {/* Manage Workflow Roles Dialog */}
+      <Dialog open={rolesDialogOpen} onClose={closeRolesDialog} fullWidth maxWidth="sm">
+        <DialogTitle>Manage Workflow Roles{rolesDialogUser ? ` — ${rolesDialogUser.userName}` : ''}</DialogTitle>
+        <DialogContent dividers>
+          {rolesDialogUser ? (
+            <Grid container spacing={1}>
+              {getVisibleWorkflowRoles(rolesDialogUser.accessScope).map(role => (
+                <Grid item xs={12} sm={6} key={role.key}>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Tooltip title={role.description} arrow>
+                      <Checkbox
+                        checked={!!rolesDialogMap[role.key]}
+                        onChange={(e) => toggleDialogRole(role.key, e.target.checked)}
+                      />
+                    </Tooltip>
+                    <Tooltip title={role.description} arrow>
+                      <Box>
+                        <Typography variant="body2" fontWeight={600}>{role.label}</Typography>
+                        <Typography variant="caption" color="text.secondary">{role.description}</Typography>
+                      </Box>
+                    </Tooltip>
+                  </Box>
+                </Grid>
+              ))}
+            </Grid>
+          ) : (
+            <Typography variant="body2">No user selected.</Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeRolesDialog}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              if (!rolesDialogUser) return;
+              const selected = Object.entries(rolesDialogMap)
+                .filter(([, v]) => v)
+                .map(([k]) => k);
+              updateWorkflowRolesMutation.mutate({ userId: rolesDialogUser.userId, workflowRoles: selected });
+            }}
+            disabled={updateWorkflowRolesMutation.isLoading}
+            startIcon={updateWorkflowRolesMutation.isLoading ? <CircularProgress size={18} /> : <AssignmentIcon />}
+          >
+            Save Roles
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
