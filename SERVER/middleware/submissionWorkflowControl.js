@@ -418,7 +418,7 @@ const submissionWorkflowTransitions = {
         { 
           _id: { $in: ids },
           originalLevel: 'DIVISION',
-          status: 'Division Submitted'
+          status: { $in: ['Division Submitted', 'DIVISION SUBMITTED'] }
         },
         { 
           $set: { 
@@ -430,7 +430,15 @@ const submissionWorkflowTransitions = {
           } 
         }
       );
+      if (!result.modifiedCount) {
+        return res.status(404).json({
+          success: false,
+          message: 'No matching record to verify. Ensure items are Division level and status is Division Submitted.',
+          code: 'NO_MATCH_VERIFY',
+        });
+      }
       return res.status(200).json({ 
+        success: true,
         message: 'Successfully verified division submissions', 
         modified: result.modifiedCount 
       });
@@ -452,7 +460,7 @@ const submissionWorkflowTransitions = {
         { 
           _id: { $in: ids },
           originalLevel: { $in: ['DIVISION', 'DEPARTMENT'] },
-          status: { $in: ['Department Verified', 'Draft'] } // Include department's own drafts
+          status: { $in: ['Department Verified', 'DEPARTMENT VERIFIED', 'Draft', 'DRAFT'] }
         },
         { 
           $set: { 
@@ -466,7 +474,15 @@ const submissionWorkflowTransitions = {
           } 
         }
       );
+      if (!result.modifiedCount) {
+        return res.status(404).json({
+          success: false,
+          message: 'No matching record to submit. Ensure items are verified or drafts at Department level.',
+          code: 'NO_MATCH_SUBMIT',
+        });
+      }
       return res.status(200).json({ 
+        success: true,
         message: 'Successfully submitted to Region for approval', 
         modified: result.modifiedCount 
       });
@@ -488,7 +504,7 @@ const submissionWorkflowTransitions = {
         { 
           _id: { $in: ids },
           originalLevel: { $in: ['DIVISION', 'DEPARTMENT'] },
-          status: 'Department Submitted'
+          status: { $in: ['Department Submitted', 'DEPARTMENT SUBMITTED'] }
         },
         { 
           $set: { 
@@ -500,7 +516,15 @@ const submissionWorkflowTransitions = {
           } 
         }
       );
+      if (!result.modifiedCount) {
+        return res.status(404).json({
+          success: false,
+          message: 'No matching record to approve. Ensure items are Department Submitted.',
+          code: 'NO_MATCH_APPROVE',
+        });
+      }
       return res.status(200).json({ 
+        success: true,
         message: 'Successfully approved submissions at Region level', 
         modified: result.modifiedCount 
       });
@@ -522,7 +546,7 @@ const submissionWorkflowTransitions = {
         { 
           _id: { $in: ids },
           originalLevel: { $in: ['DIVISION', 'DEPARTMENT', 'REGION'] },
-          status: 'Region Approved'
+          status: { $in: ['Region Approved', 'REGION APPROVED'] }
         },
         { 
           $set: { 
@@ -534,7 +558,15 @@ const submissionWorkflowTransitions = {
           } 
         }
       );
+      if (!result.modifiedCount) {
+        return res.status(404).json({
+          success: false,
+          message: 'No matching record to finalize. Ensure items are Region Approved.',
+          code: 'NO_MATCH_FINALIZE',
+        });
+      }
       return res.status(200).json({ 
+        success: true,
         message: 'Successfully finalized submissions', 
         modified: result.modifiedCount 
       });
