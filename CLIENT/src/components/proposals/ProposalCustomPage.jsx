@@ -3082,92 +3082,97 @@ const CustomPage = ({
               Activity
             </Button>
 
-            <Tooltip
-              title={
-                !budgetSummary.isIncomeBalanced
-                  ? "Combined Income Total must equal Corporate Income before submission"
-                  : ""
-              }
-            >
-              <span style={{ display: "inline-block" }}>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={handleOpenDialog}
-                  disabled={
-                    !anyNotSubmitted ||
-                    isSubmitting ||
+            {/* TEMP: Hide Submit All Proposals and Save as Draft buttons */}
+            {false && (
+              <>
+                <Tooltip
+                  title={
                     !budgetSummary.isIncomeBalanced
+                      ? "Combined Income Total must equal Corporate Income before submission"
+                      : ""
                   }
-                  startIcon={<BalanceIcon />}
-                  sx={{
-                    mr: 1,
-                    py: 1,
-                    px: { xs: 2, sm: 3 },
-                    fontSize: { xs: "0.8rem", sm: "0.9rem" },
-                    backgroundColor: "#375e38",
-                    "&:hover": {
-                      backgroundColor: "#2e4e2f",
-                    },
-                  }}
                 >
-                  Submit All Proposals
-                </Button>
-              </span>
-            </Tooltip>
-            <Tooltip
-              title={
-                Object.keys(validationErrors).length > 0
-                  ? "Please fix validation errors before saving"
-                  : !anyNotSubmitted
-                  ? "No eligible proposals to save as draft. All proposals may already be submitted or there are no proposals to save."
-                  : isSubmitting
-                  ? "Currently processing. Please wait..."
-                  : "Save all eligible proposals as draft"
-              }
-              arrow
-            >
-              <span style={{ display: "inline-block" }}>
-                <Button
-                  variant="outlined"
-                  color="success"
-                  onClick={() => handleSaveAsDraft()}
-                  disabled={!anyNotSubmitted || isSubmitting || Object.keys(validationErrors).length > 0}
-                  startIcon={
-                    saveStatus === "saving" ? (
-                      <CircularProgress size={16} />
-                    ) : (
-                      <SaveIcon />
-                    )
+                  <span style={{ display: "inline-block" }}>
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      onClick={handleOpenDialog}
+                      disabled={
+                        !anyNotSubmitted ||
+                        isSubmitting ||
+                        !budgetSummary.isIncomeBalanced
+                      }
+                      startIcon={<BalanceIcon />}
+                      sx={{
+                        mr: 1,
+                        py: 1,
+                        px: { xs: 2, sm: 3 },
+                        fontSize: { xs: "0.8rem", sm: "0.9rem" },
+                        backgroundColor: "#375e38",
+                        "&:hover": {
+                          backgroundColor: "#2e4e2f",
+                        },
+                      }}
+                    >
+                      Submit All Proposals
+                    </Button>
+                  </span>
+                </Tooltip>
+                <Tooltip
+                  title={
+                    Object.keys(validationErrors).length > 0
+                      ? "Please fix validation errors before saving"
+                      : !anyNotSubmitted
+                      ? "No eligible proposals to save as draft. All proposals may already be submitted or there are no proposals to save."
+                      : isSubmitting
+                      ? "Currently processing. Please wait..."
+                      : "Save all eligible proposals as draft"
                   }
-                  sx={{
-                    py: 1,
-                    px: { xs: 2, sm: 3 },
-                    fontSize: { xs: "0.8rem", sm: "0.9rem" },
-                    borderColor:
-                      Object.keys(validationErrors).length > 0
-                        ? "#f44336"
-                        : "#375e38",
-                    color:
-                      Object.keys(validationErrors).length > 0
-                        ? "#f44336"
-                        : "#375e38",
-                    "&:hover": {
-                      borderColor:
-                        Object.keys(validationErrors).length > 0
-                          ? "#d32f2f"
-                          : "#2e4e2f",
-                      backgroundColor:
-                        Object.keys(validationErrors).length > 0
-                          ? "rgba(244, 67, 54, 0.04)"
-                          : "rgba(55, 94, 56, 0.04)",
-                    },
-                  }}
+                  arrow
                 >
-                  {saveStatus === "saving" ? "Saving..." : "Save as Draft"}
-                </Button>
-              </span>
-            </Tooltip>
+                  <span style={{ display: "inline-block" }}>
+                    <Button
+                      variant="outlined"
+                      color="success"
+                      onClick={() => handleSaveAsDraft()}
+                      disabled={!anyNotSubmitted || isSubmitting || Object.keys(validationErrors).length > 0}
+                      startIcon={
+                        saveStatus === "saving" ? (
+                          <CircularProgress size={16} />
+                        ) : (
+                          <SaveIcon />
+                        )
+                      }
+                      sx={{
+                        py: 1,
+                        px: { xs: 2, sm: 3 },
+                        fontSize: { xs: "0.8rem", sm: "0.9rem" },
+                        borderColor:
+                          Object.keys(validationErrors).length > 0
+                            ? "#f44336"
+                            : "#375e38",
+                        color:
+                          Object.keys(validationErrors).length > 0
+                            ? "#f44336"
+                            : "#375e38",
+                        "&:hover": {
+                          borderColor:
+                            Object.keys(validationErrors).length > 0
+                              ? "#d32f2f"
+                              : "#2e4e2f",
+                          backgroundColor:
+                            Object.keys(validationErrors).length > 0
+                              ? "rgba(244, 67, 54, 0.04)"
+                              : "rgba(55, 94, 56, 0.04)",
+                        },
+                      }}
+                    >
+                      {saveStatus === "saving" ? "Saving..." : "Save as Draft"}
+                    </Button>
+                  </span>
+                </Tooltip>
+              </>
+            )}
           </div>
         </div>
 
