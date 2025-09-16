@@ -35,6 +35,7 @@ const CustomTable = React.forwardRef(({
   apiPath,
   dataListName = "",
   orderByDefault = "updatedAt",
+  extraParams = {},
 }, ref) => {
   const { searchValue, setSearchValue } = useSearch();
   const TEN_SECONDS_AGO = dayjs().subtract(10, "second");
@@ -64,6 +65,7 @@ const CustomTable = React.forwardRef(({
           orderBy,
           order,
           operator: fieldAndValue.operator,
+          ...extraParams,
         },
       });
       return res.data;

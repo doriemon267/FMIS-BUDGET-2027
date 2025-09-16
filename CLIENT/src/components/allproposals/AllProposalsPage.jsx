@@ -381,8 +381,13 @@ const AllProposalsPage = () => {
             hasEdit={false}
             hasDelete={false}
             additionalMenuOptions={[ViewMenuItem, ApproveMenuItem, RejectMenuItem]}
-            refreshData={refreshData} // Pass the refreshData function
-            tableRef={tableRef} // Pass the tableRef to CustomPage
+            refreshData={refreshData}
+            tableRef={tableRef}
+            extraParams={
+              (userInfo?.assignmentLevel || '').toUpperCase() === 'DEPARTMENT'
+                ? { submittedOnly: true }
+                : {}
+            }
           />
         </div>
       </div>

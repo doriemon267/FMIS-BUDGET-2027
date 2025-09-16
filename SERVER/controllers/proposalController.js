@@ -1101,6 +1101,19 @@ exports.getProposals = async (req, res) => {
         query[filterField] = { $lte: filterValue };
       }
     }
+    // Submitted-only view for Department-level All Proposals
+    if (String(req.query.submittedOnly) === 'true' && req.hierarchicalAccessInfo?.scope === 'DEPARTMENT') {
+      // Show only division submissions that have been submitted/verified/submitted to region/approved/finalized
+      const submittedStatuses = ['Division Submitted','DIVISION SUBMITTED','Department Verified','DEPARTMENT VERIFIED','Department Submitted','DEPARTMENT SUBMITTED','Region Approved','REGION APPROVED','Finalized'];
+      query = {
+        $and: [
+          query,
+          { division: { $exists: true, $ne: null, $ne: '' } },
+          { originalLevel: 'DIVISION' },
+          { status: { $in: submittedStatuses } }
+        ]
+      };
+    }
     // First, let's check how many total proposals exist in the database
     const totalProposalsInDB = await Proposal.countDocuments();
     // Check what proposals exist for this user

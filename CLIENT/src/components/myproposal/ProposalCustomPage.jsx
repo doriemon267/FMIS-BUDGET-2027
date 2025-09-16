@@ -35,12 +35,12 @@ const CustomPage = ({
       />
 
       <CustomTable
-        ref={tableRef} // Pass the tableRef to CustomTable
+        ref={tableRef}
         dataListName={dataListName}
         apiPath={apiPath}
         ROWS_PER_PAGE={ROWS_PER_PAGE}
         columns={Object.keys(schema)
-          .filter((key) => schema[key].show === true || key === "action") // Always include "action"
+          .filter((key) => schema[key].show === true || key === "action")
           .map((key) => {
             const fieldSchema = schema[key];
             const column = {
@@ -61,7 +61,7 @@ const CustomPage = ({
                   schema={schema}
                   endpoint={apiPath}
                   dataListName={dataListName}
-                  refreshData={refreshData} // pass refreshData down to the menu items
+                  refreshData={refreshData}
                 />
               );
             }
@@ -72,6 +72,8 @@ const CustomPage = ({
 
             return column;
           })}
+        // Pass through extraParams when provided by parent
+        extraParams={arguments?.[0]?.extraParams || {}}
       />
     </>
   );
