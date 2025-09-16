@@ -113,6 +113,8 @@ exports.uploadCorporateIncome = async (req, res) => {
           continue;
         }
         // Create the income record
+        // Normalize via submission workflow: corporate income is region-level
+        const workflowData = req.submissionWorkflowData || {};
         const income = new Income({
           particulars: row.Particulars || row.Category,
           incomecategory: category._id,
@@ -121,10 +123,11 @@ exports.uploadCorporateIncome = async (req, res) => {
           amount: parseFloat(row.Amount),
           fiscalYear,
           budgetType,
-          region: row.Region,
+          region: workflowData.region || row.Region,
           department: null, // Corporate income doesn't belong to a specific department
           division: null,   // Corporate income doesn't belong to a specific division
           originalLevel: 'REGION', // Corporate income starts at region level
+          workflowLevel: 'REGION',
           processBy: req.user ? req.user.username : 'System',
           processDate: new Date(),
           status: 'Draft' // Changed from 'Submitted' to 'Draft' for consistency
@@ -197,10 +200,28 @@ exports.getCorporateIncome = async (req, res) => {
   try {
     const { fiscalYear, budgetType, region } = req.query;
     // Build query
-    const query = {};
+    let query = {};
     if (fiscalYear) query.fiscalYear = fiscalYear;
     if (budgetType) query.budgetType = budgetType;
     if (region) query.region = region;
+    // Apply submission workflow filters if present (region-level corporate income should be visible only per workflow rules)
+    const submissionFilters = req.submissionWorkflowFilters || {};
+    const hierarchicalFilters = req.hierarchicalFilters || {};
+    if (submissionFilters && Object.keys(submissionFilters).length > 0) {
+      if (submissionFilters.$and) {
+        const baseConditions = Object.entries(query).map(([k,v]) => ({ [k]: v }));
+        query = { $and: [ ...baseConditions, ...submissionFilters.$and ] };
+      } else {
+        query = { ...query, ...submissionFilters };
+      }
+    } else if (hierarchicalFilters && Object.keys(hierarchicalFilters).length > 0) {
+      if (hierarchicalFilters.$and) {
+        const baseConditions = Object.entries(query).map(([k,v]) => ({ [k]: v }));
+        query = { $and: [ ...baseConditions, ...hierarchicalFilters.$and ] };
+      } else {
+        query = { ...query, ...hierarchicalFilters };
+      }
+    }
     // Get income data
     const incomeData = await Income.find(query)
       .populate('incomecategory')
@@ -221,10 +242,26 @@ exports.getConsolidatedCorporateIncome = async (req, res) => {
     // Get all income categories
     const categories = await IncomeCategory.find().sort({ incomeCategoryName: 1 });
     // Get all regions with income data
-    const regionsResult = await Income.distinct('region', { 
-      fiscalYear, 
-      budgetType 
-    });
+    // Build base filter and apply submission workflow filters
+    let baseFilter = { fiscalYear, budgetType };
+    const submissionFilters = req.submissionWorkflowFilters || {};
+    const hierarchicalFilters = req.hierarchicalFilters || {};
+    if (submissionFilters && Object.keys(submissionFilters).length > 0) {
+      if (submissionFilters.$and) {
+        const conditions = Object.entries(baseFilter).map(([k,v]) => ({ [k]: v }));
+        baseFilter = { $and: [ ...conditions, ...submissionFilters.$and ] };
+      } else {
+        baseFilter = { ...baseFilter, ...submissionFilters };
+      }
+    } else if (hierarchicalFilters && Object.keys(hierarchicalFilters).length > 0) {
+      if (hierarchicalFilters.$and) {
+        const conditions = Object.entries(baseFilter).map(([k,v]) => ({ [k]: v }));
+        baseFilter = { $and: [ ...conditions, ...hierarchicalFilters.$and ] };
+      } else {
+        baseFilter = { ...baseFilter, ...hierarchicalFilters };
+      }
+    }
+    const regionsResult = await Income.distinct('region', baseFilter);
     const regions = regionsResult.sort();
     // Initialize result structure
     const result = {
@@ -259,11 +296,12 @@ exports.getConsolidatedCorporateIncome = async (req, res) => {
         });
         // Get income data for this subcategory
         const incomeData = await Income.find({
+          ...(baseFilter.$and ? {} : baseFilter),
           fiscalYear,
           budgetType,
           incomecategory: category._id,
           subcategory
-        });
+        }).and(baseFilter.$and || []);
         // Aggregate by region
         for (const income of incomeData) {
           if (income.region && subcategoryData.regionValues[income.region] !== undefined) {
@@ -275,6 +313,7 @@ exports.getConsolidatedCorporateIncome = async (req, res) => {
       }
       // Get income data without subcategory
       const incomeWithoutSubcategory = await Income.find({
+        ...(baseFilter.$and ? {} : baseFilter),
         fiscalYear,
         budgetType,
         incomecategory: category._id,
@@ -282,7 +321,7 @@ exports.getConsolidatedCorporateIncome = async (req, res) => {
           { subcategory: null },
           { subcategory: '' }
         ]
-      });
+      }).and(baseFilter.$and || []);
       // If there's income without subcategory, add a "General" subcategory
       if (incomeWithoutSubcategory.length > 0) {
         const generalSubcategory = {
