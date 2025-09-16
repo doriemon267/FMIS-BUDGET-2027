@@ -10,6 +10,7 @@ import ToastWrapper from "./global/components/ToastWrapper.jsx";
 import ErrorBoundary from "./global/components/ErrorBoundary.jsx";
 import setupRegionInterceptor from "./middleware/regionMiddleware.jsx";
 import "./index.css";
+import "./global/silenceConsole";
 
 // Setup the region interceptor
 setupRegionInterceptor();

@@ -1,4 +1,20 @@
 require("dotenv").config();
+// Silence noisy console output in production; keep errors unless explicitly disabled
+(() => {
+  try {
+    const env = process.env.NODE_ENV || process.env.APP_ENV || 'development';
+    const silence = process.env.SILENCE_CONSOLE === 'true' || env === 'production';
+    if (!silence) return;
+    const noop = () => {};
+    console.log = noop;
+    console.debug = noop;
+    console.info = noop;
+    console.warn = noop;
+    if (process.env.SILENCE_ERRORS === 'true') {
+      console.error = noop;
+    }
+  } catch (_) {}
+})();
 const express = require("express");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
