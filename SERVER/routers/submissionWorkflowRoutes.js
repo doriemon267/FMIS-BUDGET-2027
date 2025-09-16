@@ -1,6 +1,7 @@
 const Router = require('express').Router;
 const { submissionWorkflowTransitions } = require('../middleware/submissionWorkflowControl');
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
+const { requirePermission } = require('../middleware/hierarchicalAssignmentMiddleware');
 const { hasWorkflowRole } = require('../helpers/workflowRoleManager');
 const checkToken = require('../middleware/checkToken');
 const router = Router();
@@ -108,6 +109,7 @@ router.post(
   '/region/approve-submission',
   submissionWorkflowControl('update'),
   requireWorkflowRole('regionFinalVerifier'),
+  requirePermission('canApproveProposals', 'Permission denied: Can Approve Proposals is required'),
   submissionWorkflowTransitions.regionApproveSubmission
 );
 
@@ -116,6 +118,7 @@ router.post(
   '/region/finalize-submission',
   submissionWorkflowControl('update'),
   requireWorkflowRole('regionFinalVerifier'),
+  requirePermission('canApproveProposals', 'Permission denied: Can Approve Proposals is required'),
   submissionWorkflowTransitions.regionFinalizeSubmission
 );
 // Region creates own submissions and finalizes directly (for region-level proposals)

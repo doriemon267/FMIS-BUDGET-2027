@@ -1001,7 +1001,8 @@ export const ApproveButton = ({ row, refreshData }) => {
 
   const scope = currentUser?.hierarchicalAccess?.scope;
   const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
-  const canApprove = (scope === 'REGION' || scope === 'FULL') && roles.includes('regionFinalVerifier') && row.status === 'Department Submitted';
+  const canApprovePermission = currentUser?.hierarchicalFlags?.canApproveProposals === true || currentUser?.hierarchicalAccess?.rolePermissions?.canApproveProposals === true;
+  const canApprove = (scope === 'REGION' || scope === 'FULL') && roles.includes('regionFinalVerifier') && canApprovePermission && row.status === 'Department Submitted';
   if (!canApprove) return null;
 
   const handleApprove = async () => {
@@ -1355,7 +1356,7 @@ export const FinalizeButton = ({ row, refreshData }) => {
 
   const scope = currentUser?.hierarchicalAccess?.scope;
   const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
-  const canFinalize = (scope === 'REGION' || scope === 'FULL') && roles.includes('regionFinalVerifier') && row.status === 'Region Approved';
+  const canFinalize = (scope === 'REGION' || scope === 'FULL') && roles.includes('regionFinalVerifier') && (currentUser?.hierarchicalFlags?.canApproveProposals || currentUser?.hierarchicalAccess?.rolePermissions?.canApproveProposals) && row.status === 'Region Approved';
   if (!canFinalize) return null;
 
   const handleOpen = async () => {
