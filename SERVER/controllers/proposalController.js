@@ -5,7 +5,6 @@ const PersonnelService = require('../models/personnelServices');
 const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const BudgetarySupport = require('../models/BudgetarySupport');
-const IncomeSubcategory = require('../models/IncomeSubcategory');
 const Income = require('../models/Income');
 // Remove the checkUserRegionAccess function
 // const checkUserRegionAccess = async (userId, region) => {
@@ -185,7 +184,7 @@ exports.updateProposalStatus = async (req, res) => {
         })
         .map((id) => new mongoose.Types.ObjectId(id));
       updatePromises.push(
-        IncomeSubcategory.updateMany(
+        Income.updateMany(
           { _id: { $in: validIncomeIds }, ...accessScope },
           { $set: { status: "Division Submitted", fiscalYear, budgetType, processBy, region, workflowLevel: "DEPARTMENT" } }
         )
@@ -620,7 +619,7 @@ exports.updateProposalStatus = async (req, res) => {
       isHierarchicallyAggregated: departmentCapitalOutlayAggregation.length > 0 // Flag for hierarchical aggregation
     }));
     // Calculate Income with consistent filtering
-    const income = await IncomeSubcategory.aggregate([
+    const income = await Income.aggregate([
       { 
         $match: { 
           status, 
@@ -894,6 +893,34 @@ exports.saveAsDraft = async (req, res) => {
         }
       );
       }
+    // Update Income proposals to Draft status
+    if (incomeIds && Array.isArray(incomeIds) && incomeIds.length > 0) {
+      const validIncomeIds = incomeIds
+        .filter((id) => {
+          const isValid = mongoose.Types.ObjectId.isValid(id);
+          if (!isValid) {
+            console.error("Invalid Income id encountered:", id);
+          }
+          return isValid;
+        })
+        .map((id) => new mongoose.Types.ObjectId(id));
+      // CRITICAL: Only update items that already belong to this region
+      const incomeResult = await Income.updateMany(
+        { 
+          _id: { $in: validIncomeIds },
+          region: region  // Only update items that already belong to this region
+        },
+        { 
+          $set: { 
+            status: "Draft", 
+            fiscalYear, 
+            budgetType, 
+            processBy
+            // Don't set region here as we're only updating items that already have this region
+          } 
+        }
+      );
+      }
     // Create default result objects for categories that weren't processed
     let personnelResultObj = { modifiedCount: 0 };
     let mooeResultObj = { modifiedCount: 0 };
@@ -913,34 +940,7 @@ exports.saveAsDraft = async (req, res) => {
     if (budgetarySupportIds && Array.isArray(budgetarySupportIds) && budgetarySupportIds.length > 0 && typeof budgetaryResult !== 'undefined') {
       budgetaryResultObj = budgetaryResult;
     }
-    // Handle Income items
-    if (incomeIds && Array.isArray(incomeIds) && incomeIds.length > 0) {
-      const validIncomeIds = incomeIds
-        .filter((id) => {
-          const isValid = mongoose.Types.ObjectId.isValid(id);
-          if (!isValid) {
-            console.error("Invalid Income id encountered:", id);
-          }
-          return isValid;
-        })
-        .map((id) => new mongoose.Types.ObjectId(id));
-      // CRITICAL: Only update items that already belong to this region
-      const incomeResult = await IncomeSubcategory.updateMany(
-        { 
-          _id: { $in: validIncomeIds },
-          region: region  // Only update items that already belong to this region
-        },
-        { 
-          $set: { 
-            status: "Draft", 
-            fiscalYear, 
-            budgetType, 
-            processBy
-            // Don't set region here as we're only updating items that already have this region
-          } 
-        }
-      );
-      // Store the result
+    if (incomeIds && Array.isArray(incomeIds) && incomeIds.length > 0 && typeof incomeResult !== 'undefined') {
       incomeResultObj = incomeResult;
     }
     // Count how many items were actually updated
@@ -1627,7 +1627,7 @@ exports.updateMissingRegions = async (req, res) => {
         );
         break;
       case "income":
-        result = await IncomeSubcategory.updateMany(
+        result = await Income.updateMany(
           { _id: { $in: validIds } },
           { $set: { region, processBy } }
         );
@@ -1712,7 +1712,7 @@ exports.returnProposal = async (req, res) => {
         update
       );
     } else if (cobExpenditures === "Income") {
-      incomeResult = await IncomeSubcategory.updateMany(
+      incomeResult = await Income.updateMany(
         { status: "Submitted", fiscalYear, budgetType, processBy, region },
         update
       );
@@ -1817,7 +1817,7 @@ exports.getProposalDetails = async (req, res) => {
             proposal.cobExpenditures = "Capital Outlay";
           } else {
             // Check if there are any income items
-            const incomeCount = await IncomeSubcategory.countDocuments({
+            const incomeCount = await Income.countDocuments({
               fiscalYear,
               budgetType,
               processBy,
@@ -1926,7 +1926,7 @@ exports.getAllUserProposals = async (req, res) => {
       processBy: processBy
     }).sort({ updatedAt: -1 });
     // Get all income proposals including drafts
-    const income = await IncomeSubcategory.find({ 
+    const income = await Income.find({ 
       processBy: processBy
     }).sort({ updatedAt: -1 });
     // Get all draft proposals
@@ -1961,7 +1961,7 @@ exports.consolidateProposals = async (req, res) => {
       PersonnelService.find(query),
       MooeProposal.find(query),
       CapitalOutlay.find(query),
-      IncomeSubcategory.find(query)
+      Income.find(query)
     ]);
     if (submittedPersonnel.length === 0 && submittedMooe.length === 0 && 
         submittedCapital.length === 0 && submittedIncome.length === 0) {

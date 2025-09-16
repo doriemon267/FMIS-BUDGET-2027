@@ -22,5 +22,5 @@ router.delete('/mooe-delete', mooeController.deleteAllMooeProposals);
 // you can map that route to the appropriate controller function.
 router.get('/MOOEProposal', hierarchicalAccessControl('read'), mooeController.getMOOEData);
 // Get MOOE by parameters - FIXED to use proper submission workflow filtering
-router.get("/mooe/getByParams", hierarchicalAccessControl('read'), mooeController.getMOOEData);
+router.get("/mooe/getByParams", submissionWorkflowControl('read'), mooeController.getMOOEByParams);
 module.exports = router;

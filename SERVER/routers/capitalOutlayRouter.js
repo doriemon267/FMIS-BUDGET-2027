@@ -15,6 +15,7 @@ const checkDueDate = require("../middleware/checkDueDate");
 const checkDueDateWithRoleBypass = require("../middleware/checkDueDateWithRoleBypass");
 const checkToken = require("../middleware/checkToken");
 const { strictHierarchicalControl, hierarchicalAccessControl } = require('../middleware/hierarchicalAccessControl');
+const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
 const CapitalOutlay = require("../models/CapitalOutlay"); // New model import
 const capitalOutlayRouter = Router();
 // Apply authentication to all capital outlay routes
@@ -119,88 +120,18 @@ capitalOutlayRouter.post("/seed-chart-of-accounts", async (req, res) => {
   }
 });
 // Get Capital Outlay by parameters
-capitalOutlayRouter.get("/capital-outlay/getByParams", hierarchicalAccessControl('read', { allowedFields: ['region'] }), async (req, res) => {
+capitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl('read'), async (req, res) => {
   try {
-    const { fiscalYear, budgetType, processBy, region, status } = req.query;
+    const { fiscalYear, budgetType, processBy, region, status, department, division } = req.query;
     const query = {};
     if (fiscalYear) query.fiscalYear = fiscalYear;
     if (budgetType) query.budgetType = budgetType;
     if (processBy) query.processBy = processBy;
+    if (region) query.region = region;
     if (status) query.status = status;
-    // Apply sophisticated hierarchical filtering based on user access scope
-    const accessScope = req.hierarchicalAccess?.scope;
-    const accessibleRegionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
-    // Add region filter based on access scope
-    if (accessScope && accessScope !== 'FULL' && accessibleRegionName) {
-      query.region = accessibleRegionName;
-    }
-    // Add finer filters based on access scope
-    if (accessScope === 'DIVISION') {
-      // Division users: only their division within their department and region
-      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-      const divName = req.hierarchicalAccess?.accessibleDivisions?.[0];
-      if (deptName) query.department = deptName;
-      if (divName) query.division = divName;
-    } else if (accessScope === 'DEPARTMENT') {
-      // Department users: only own department data (any status) + SUBMITTED division data
-      const deptName = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-      const regionName = req.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
-      if (deptName && regionName) {
-        const baseQuery = { ...query };
-        query.$and = [
-          baseQuery,
-          { region: regionName },
-          {
-            $or: [
-              // Department-level (no division) data
-              { $and: [
-                { department: deptName },
-                { $or: [ { division: { $exists: false } }, { division: null }, { division: "" } ] }
-              ]},
-              // Division data that is SUBMITTED/APPROVED only
-              { $and: [
-                { department: deptName },
-                { division: { $exists: true, $ne: null, $ne: "" } },
-                { status: { $in: ['Submitted', 'Approved'] } }
-              ]}
-            ]
-          }
-        ];
-      } else if (deptName) {
-        query.department = deptName;
-      }
-    } else if (accessScope === 'REGION') {
-      // Region-level users should ONLY see:
-      // 1. Records that don't have department field (already consolidated to region level)
-      // 2. Department records that are properly submitted/approved ONLY
-      // BUT NOT current working drafts of departments
-      const baseQuery = { ...query }; // Preserve existing query constraints
-      query = {
-        $and: [
-          baseQuery, // Keep fiscal year, status, etc constraints
-          { region: accessibleRegionName }, // Must be in their region
-          {
-            $or: [
-              // Option 1: Consolidated records (no department info)
-              { department: { $exists: false } },
-              { department: null },
-              { department: "" },
-              // Option 2: Department records that are submitted/approved ONLY
-              { 
-                $and: [
-                  { department: { $exists: true, $ne: null, $ne: "" } },
-                  { status: { $in: ['Department Submitted', 'Region Verified', 'Approved', 'Finalized'] } }
-                ]
-              }
-            ]
-          }
-        ]
-      };
-    }
-    // Fallback region filter if provided and not already constrained
-    if (region && !query.region && !query.$and) {
-      query.region = region;
-    }
+    if (department) query.department = department;
+    if (division) query.division = division;
+    
     const capitalOutlay = await CapitalOutlay.find(query).lean();
     res.status(200).json(capitalOutlay);
   } catch (error) {

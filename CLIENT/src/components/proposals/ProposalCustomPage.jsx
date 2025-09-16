@@ -858,8 +858,8 @@ const CustomPage = ({
     queryFn: async () => {
       const region = activeRegion?.name || activeRegion?.regionName;
       const fiscalYear = selectedFiscalYear || activeFiscalYear;
-      const response = await api.get("/income-subcategories", {
-        params: { fiscalYear }
+      const response = await api.get("/income", {
+        params: { fiscalYear, region }
       });
       // console.log(
       //   `Fetched Income data for region: ${region}, fiscal year: ${fiscalYear}`

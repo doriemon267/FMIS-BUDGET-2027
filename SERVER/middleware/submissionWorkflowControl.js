@@ -10,6 +10,7 @@
  */
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const { hasFullAccess } = require('./securityMiddleware');
+const mongoose = require('mongoose');
 /**
  * Enhanced hierarchical access control with submission workflow
  * @param {string} operation - The operation type: 'create', 'read', 'update', 'delete'
@@ -387,27 +388,61 @@ const submissionWorkflowTransitions = {
       const { ids = [], entity = 'personnel', submissionNote } = req.body;
       const userId = req.user?.id || 'system';
       const Model = getModelByEntity(entity);
+
+      // Convert string IDs to ObjectId if needed
+      const objectIds = ids.map(id => {
+        if (typeof id === 'string') {
+          try {
+            return mongoose.Types.ObjectId(id);
+          } catch (e) {
+            console.log('Invalid ObjectId format:', id);
+            return id;
+          }
+        }
+        return id;
+      });
+
+      console.log('Converted IDs:', objectIds);
+
+      // More flexible query - allow various status values and originalLevel conditions
       const result = await Model.updateMany(
-        { 
-          _id: { $in: ids },
-          originalLevel: 'DIVISION',
-          status: { $in: ['Draft', 'Not Submitted'] }
+        {
+          _id: { $in: objectIds },
+          $or: [
+            { originalLevel: 'DIVISION' },
+            { originalLevel: { $exists: false } },
+            { originalLevel: null },
+            { originalLevel: '' }
+          ],
+          status: {
+            $in: ['Draft', 'Not Submitted', 'DRAFT', 'NOT SUBMITTED', 'Division Submitted', 'DIVISION SUBMITTED']
+          }
         },
-        { 
-          $set: { 
+        {
+          $set: {
             status: 'Division Submitted',
+            originalLevel: 'DIVISION', // Ensure originalLevel is set
             submittedToDepartmentAt: new Date(),
             submittedToDepartmentBy: userId,
             submissionNote: submissionNote || '',
             lastWorkflowTransition: 'DIVISION_TO_DEPARTMENT'
-          } 
+          }
         }
       );
-      return res.status(200).json({ 
-        message: 'Successfully submitted to Department for verification', 
-        modified: result.modifiedCount 
+
+      console.log('Division Submit Result:', {
+        matchedCount: result.matchedCount,
+        modifiedCount: result.modifiedCount,
+        acknowledged: result.acknowledged
+      });
+
+      return res.status(200).json({
+        message: 'Successfully submitted to Department for verification',
+        modified: result.modifiedCount,
+        matched: result.matchedCount
       });
     } catch (e) {
+      console.error('Division submission error:', e);
       return res.status(500).json({
         message: 'Division submission failed',
         error: e.message
@@ -421,15 +456,44 @@ const submissionWorkflowTransitions = {
       const { ids = [], entity = 'personnel', verificationNote } = req.body;
       const userId = req.user?.id || 'system';
       const Model = getModelByEntity(entity);
+
+      console.log('Department Verify Debug:', {
+        ids,
+        entity,
+        userId,
+        verificationNote
+      });
+
+      // Convert string IDs to ObjectId if needed
+      const objectIds = ids.map(id => {
+        if (typeof id === 'string') {
+          try {
+            return mongoose.Types.ObjectId(id);
+          } catch (e) {
+            console.log('Invalid ObjectId format:', id);
+            return id;
+          }
+        }
+        return id;
+      });
+
       const result = await Model.updateMany(
-        { 
-          _id: { $in: ids },
-          originalLevel: 'DIVISION',
-          status: { $in: ['Division Submitted', 'DIVISION SUBMITTED'] }
+        {
+          _id: { $in: objectIds },
+          $or: [
+            { originalLevel: 'DIVISION' },
+            { originalLevel: { $exists: false } },
+            { originalLevel: null },
+            { originalLevel: '' }
+          ],
+          status: {
+            $in: ['Division Submitted', 'DIVISION SUBMITTED', 'Department Verified', 'DEPARTMENT VERIFIED']
+          }
         },
-        { 
-          $set: { 
+        {
+          $set: {
             status: 'Department Verified',
+            originalLevel: 'DIVISION', // Ensure originalLevel is set
             verifiedByDepartmentAt: new Date(),
             verifiedByDepartmentBy: userId,
             verificationNote: verificationNote || '',
@@ -437,6 +501,12 @@ const submissionWorkflowTransitions = {
           } 
         }
       );
+      console.log('Department Verify Result:', {
+        matchedCount: result.matchedCount,
+        modifiedCount: result.modifiedCount,
+        acknowledged: result.acknowledged
+      });
+
       if (!result.modifiedCount) {
         return res.status(404).json({
           success: false,
@@ -444,10 +514,11 @@ const submissionWorkflowTransitions = {
           code: 'NO_MATCH_VERIFY',
         });
       }
-      return res.status(200).json({ 
+      return res.status(200).json({
         success: true,
-        message: 'Successfully verified division submissions', 
-        modified: result.modifiedCount 
+        message: 'Successfully verified division submissions',
+        modified: result.modifiedCount,
+        matched: result.matchedCount
       });
     } catch (e) {
       return res.status(500).json({

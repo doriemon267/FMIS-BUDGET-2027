@@ -11,6 +11,22 @@ import api from "../../config/api";
 const WorkflowActions = ({ proposal, userInfo, onRefresh }) => {
   const [loading, setLoading] = useState(false);
 
+  // Helper function to determine entity type based on proposal modelType
+  const getEntityType = (proposal) => {
+    switch (proposal.modelType) {
+      case 'mooe':
+        return 'mooe';
+      case 'capital':
+        return 'capital';
+      case 'income':
+        return 'income';
+      case 'personnel':
+        return 'personnel';
+      default:
+        return 'personnel'; // fallback
+    }
+  };
+
   // Determine what actions are available based on user role and proposal status
   const getAvailableActions = () => {
     const actions = [];
@@ -140,11 +156,33 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh }) => {
 
       const response = await api.post(endpoint, {
         ids: [proposal._id],
-        entity: "personnel", // You might want to make this dynamic based on proposal type
+        entity: getEntityType(proposal), // Dynamic entity type based on proposal
         [noteField]: `Workflow action performed on ${new Date().toLocaleString()}`
       });
 
-      if (response.data.success !== false) {
+      console.log('Workflow API Call Debug:', {
+        endpoint,
+        requestData: {
+          ids: [proposal._id],
+          entity: getEntityType(proposal),
+          [noteField]: `Workflow action performed on ${new Date().toLocaleString()}`
+        },
+        proposal: {
+          _id: proposal._id,
+          modelType: proposal.modelType,
+          status: proposal.status,
+          originalLevel: proposal.originalLevel
+        }
+      });
+
+      console.log('Workflow API Response:', response.data);
+
+      // Check for success - be flexible with response format
+      const isSuccess = response.data.success !== false && 
+                       (response.data.modified > 0 || response.data.modifiedCount > 0 || 
+                        response.data.message?.includes('Successfully'));
+
+      if (isSuccess) {
         toast.success(successMessage);
         onRefresh(); // Refresh the proposals list
       } else {
@@ -152,7 +190,25 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh }) => {
       }
     } catch (error) {
       console.error("Workflow action error:", error);
-      toast.error(error.response?.data?.message || error.message || "Failed to execute workflow action");
+      console.error("Error details:", {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        endpoint: endpoint,
+        proposalId: proposal._id
+      });
+
+      // Show more specific error messages
+      let errorMessage = "Failed to execute workflow action";
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }

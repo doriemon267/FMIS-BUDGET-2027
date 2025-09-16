@@ -697,8 +697,8 @@ exports.getMOOEData = async (req, res) => {
     );
     // 5. Determine submission status
     const status = mooeProposals.length > 0
-      ? mooeProposals[0].status
-      : "Not Submitted";
+      ? mooeProposals[0].status || "Draft"
+      : "Draft";
     // 6. Assemble entries array, including each proposal's _id as `id`
     const entries = chartOfAccounts.map(row => {
       const proposal = mooeMap[row.uacsCode];
@@ -954,7 +954,7 @@ exports.bulkSaveMOOE = async (req, res) => {
         updateObj.region = ownerRegion || meta?.region || item.region;
         updateObj.department = ownerDepartment || meta?.department || item.department;
         updateObj.division = ownerDivision || meta?.division || item.division;
-        updateObj.status = meta?.status || item.status;
+        updateObj.status = meta?.status || item.status || "Draft";
         return {
         updateOne: {
           filter: { 
@@ -1082,9 +1082,9 @@ exports.getMOOEStatus = async (req, res) => {
     const activeFiscalYear = activeSettings.fiscalYear;
     const mooeProposal     = await MooeProposal.findOne({ fiscalYear: activeFiscalYear });
     if (mooeProposal) {
-      return res.status(200).json({ status: mooeProposal.status });
+      return res.status(200).json({ status: mooeProposal.status || "Draft" });
     } else {
-      return res.status(200).json({ status: "Not Submitted" });
+      return res.status(200).json({ status: "Draft" });
     }
   } catch (error) {
     console.error('Error fetching MOOE Status:', error);
@@ -1197,5 +1197,25 @@ exports.deleteAllMooeProposals = async (req, res) => {
     return res
       .status(500)
       .json({ error: 'Internal Server Error' });
+  }
+};
+// Get MOOE by parameters
+exports.getMOOEByParams = async (req, res) => {
+  try {
+    const { fiscalYear, budgetType, processBy, region, status, department, division } = req.query;
+    const query = {};
+    if (fiscalYear) query.fiscalYear = fiscalYear;
+    if (budgetType) query.budgetType = budgetType;
+    if (processBy) query.processBy = processBy;
+    if (region) query.region = region;
+    if (status) query.status = status;
+    if (department) query.department = department;
+    if (division) query.division = division;
+    
+    const mooe = await MooeProposal.find(query).lean();
+    res.status(200).json(mooe);
+  } catch (error) {
+    console.error("Error fetching MOOE by params:", error);
+    res.status(500).json({ message: "Failed to fetch MOOE data" });
   }
 };

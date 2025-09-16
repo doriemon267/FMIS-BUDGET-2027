@@ -11,6 +11,8 @@ router.post("/income", submissionWorkflowControl('create', { strictMode: false, 
 router.put("/income/:id", submissionWorkflowControl('update', { strictMode: false, enableConsolidation: true }), incomeController.updateIncome);
 // Get all income entries (apply hierarchical read control)
 router.get("/income", submissionWorkflowControl('read'), incomeController.getAllIncome);
+// Get income by parameters
+router.get("/income/getByParams", submissionWorkflowControl('read'), incomeController.getIncomeByParams);
 // Get income by ID
 router.get("/income/:id", incomeController.getIncomeById);
 // Delete income

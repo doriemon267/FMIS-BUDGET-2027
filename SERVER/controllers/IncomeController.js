@@ -42,7 +42,7 @@ exports.createIncome = async (req, res) => {
       region: workflowData.region || region,
       department: workflowData.department || department,
       division: workflowData.division || division,
-      originalLevel: workflowData.originalLevel || 'DEPARTMENT', // Default for income
+      originalLevel: workflowData.originalLevel || 'DIVISION', // Default for income
       processBy: processBy || req.user?.userName || req.user?.id,
       processDate: processDate || new Date(),
       status: workflowData.status || "Draft" // Use new workflow status
@@ -96,7 +96,7 @@ exports.updateIncome = async (req, res) => {
         division: workflowData.division || division,
         processBy: processBy || req.user?.userName || req.user?.id,
         processDate: processDate || new Date(),
-        status: status || workflowData.status || "Not Submitted"
+        status: status || workflowData.status || "Draft"
       },
       { new: true }
     );
@@ -258,21 +258,23 @@ exports.getIncomeById = async (req, res) => {
     });
   }
 };
-// Create income entry (simple variant) - removed; unified above handler handles creation with org fields
-// Update income entry (simple variant) - removed; unified above handler handles updates with org fields
-// Delete income entry
-exports.deleteIncome = async (req, res) => {
+// Get income by parameters
+exports.getIncomeByParams = async (req, res) => {
   try {
-    const income = await Income.findByIdAndDelete(req.params.id);
-    if (!income) {
-      return res.status(404).json({ message: "Income entry not found" });
-    }
-    return res.status(200).json({ message: "Income entry deleted successfully" });
+    const { fiscalYear, budgetType, processBy, region, status, department, division } = req.query;
+    const query = {};
+    if (fiscalYear) query.fiscalYear = fiscalYear;
+    if (budgetType) query.budgetType = budgetType;
+    if (processBy) query.processBy = processBy;
+    if (region) query.region = region;
+    if (status) query.status = status;
+    if (department) query.department = department;
+    if (division) query.division = division;
+    
+    const income = await Income.find(query).lean();
+    res.status(200).json(income);
   } catch (error) {
-    console.error("Error deleting income:", error);
-    return res.status(500).json({
-      message: "Failed to delete income entry",
-      error: error.message
-    });
+    console.error("Error fetching income by params:", error);
+    res.status(500).json({ message: "Failed to fetch income data" });
   }
 };

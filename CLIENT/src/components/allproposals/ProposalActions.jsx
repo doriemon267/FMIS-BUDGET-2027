@@ -1340,3 +1340,96 @@ export const FinalizeButton = ({ row, refreshData }) => {
     </>
   );
 };
+
+// Submit Draft Button
+export const SubmitDraftButton = ({ row, refreshData }) => {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [note, setNote] = useState('');
+  const queryClient = useQueryClient();
+  const { currentUser } = useUser();
+
+  const scope = currentUser?.hierarchicalAccess?.scope;
+  const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
+
+  // Determine if user can submit draft based on their level and roles
+  const canSubmitDraft = (
+    (scope === 'DIVISION' && roles.includes('divisionCreator') && row.status === 'Draft') ||
+    (scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && row.status === 'Draft') ||
+    (scope === 'REGION' && roles.includes('regionFinalVerifier') && row.status === 'Draft')
+  );
+
+  if (!canSubmitDraft) return null;
+
+  const handleSubmit = async () => {
+    setLoading(true);
+    try {
+      // Use the row's _id directly
+      const ids = [row._id];
+      const entity = mapCobToEntity(row.cobExpenditures);
+
+      let endpoint = '';
+      let successMessage = '';
+
+      if (scope === 'DIVISION') {
+        endpoint = '/api/submission-workflow/division/submit-to-department';
+        successMessage = 'Submitted to Department';
+      } else if (scope === 'DEPARTMENT') {
+        endpoint = '/api/submission-workflow/department/submit-to-region';
+        successMessage = 'Submitted to Region';
+      } else if (scope === 'REGION') {
+        // For region, use the new submit-own endpoint that finalizes directly
+        endpoint = '/api/submission-workflow/region/submit-own';
+        successMessage = 'Finalized';
+      }
+
+      await api.post(endpoint, {
+        ids,
+        entity,
+        submissionNote: note || `Submitted from ${scope} level on ${new Date().toLocaleString()}`
+      });
+
+      toast.success(successMessage);
+      await queryClient.invalidateQueries(['proposals']);
+      refreshData?.();
+      setOpen(false);
+    } catch (e) {
+      console.error(e);
+      toast.error(e.response?.data?.message || e.message || 'Failed to submit');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <Tooltip title={`Submit ${row.status} to next level`}>
+        <IconButton color="primary" onClick={() => setOpen(true)} size="small" disabled={loading}>
+          <CheckCircleIcon />
+        </IconButton>
+      </Tooltip>
+      <Dialog open={open} onClose={() => !loading && setOpen(false)}>
+        <DialogTitle>Submit Draft Proposal</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            This will submit the draft proposal to the next level for review.
+          </Typography>
+          <TextField
+            fullWidth
+            multiline
+            minRows={3}
+            label="Submission Note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpen(false)} disabled={loading}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={loading} variant="contained" color="primary">
+            {loading ? <CircularProgress size={20} /> : 'Submit'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+};

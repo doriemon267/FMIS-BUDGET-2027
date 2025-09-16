@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from "react";
 import ProposalCustomPage from "../components/allproposals/ProposalCustomPage";
 import TextSearchable from "../global/components/TextSearchable";
-import { ViewButton, ApproveButton, ReturnButton, VerifyButton, SubmitToRegionButton, FinalizeButton } from "../components/allproposals/ProposalActions";
+import { ViewButton, ApproveButton, ReturnButton, VerifyButton, SubmitToRegionButton, FinalizeButton, SubmitDraftButton } from "../components/allproposals/ProposalActions";
 import { useUser } from "../context/UserContext";
 import { 
   Box, 
@@ -435,14 +435,20 @@ const AllProposalsPage = () => {
         const canSubmitToRegion = isDepartment && roles.includes('departmentConsolidator');
         const canApproveRegion = isRegion && roles.includes('regionFinalVerifier');
         const canFinalize = isRegion && roles.includes('regionFinalVerifier');
+        const canSubmitDraft = (isDivision && roles.includes('divisionCreator')) || 
+                               (isDepartment && roles.includes('departmentConsolidator')) || 
+                               (isRegion && roles.includes('regionFinalVerifier'));
+        
         const showVerify = row.status === 'Division Submitted' && canVerify;
         const showSubmitToRegion = row.status === 'Department Verified' && canSubmitToRegion;
         const showApprove = row.status === 'Department Submitted' && canApproveRegion;
         const showFinalize = row.status === 'Region Approved' && canFinalize;
+        const showSubmitDraft = row.status === 'Draft' && canSubmitDraft;
         const showReturn = ['Division Submitted','Department Verified','Department Submitted','Region Approved'].includes(row.status) && (canVerify || canApproveRegion);
         return (
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
             <ViewButton row={row} />
+            {showSubmitDraft && (<SubmitDraftButton row={row} refreshData={refreshData} />)}
             {showVerify && (<VerifyButton row={row} refreshData={refreshData} />)}
             {showSubmitToRegion && (<SubmitToRegionButton row={row} refreshData={refreshData} />)}
             {showApprove && (<ApproveButton row={row} refreshData={refreshData} />)}

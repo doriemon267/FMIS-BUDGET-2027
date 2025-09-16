@@ -122,9 +122,12 @@ exports.uploadCorporateIncome = async (req, res) => {
           fiscalYear,
           budgetType,
           region: row.Region,
+          department: null, // Corporate income doesn't belong to a specific department
+          division: null,   // Corporate income doesn't belong to a specific division
+          originalLevel: 'REGION', // Corporate income starts at region level
           processBy: req.user ? req.user.username : 'System',
           processDate: new Date(),
-          status: 'Submitted'
+          status: 'Draft' // Changed from 'Submitted' to 'Draft' for consistency
         });
         await income.save();
         results.successfullyProcessed++;

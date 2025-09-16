@@ -118,6 +118,45 @@ router.post(
   requireWorkflowRole('regionFinalVerifier'),
   submissionWorkflowTransitions.regionFinalizeSubmission
 );
+// Region creates own submissions and finalizes directly (for region-level proposals)
+router.post(
+  '/region/submit-own',
+  submissionWorkflowControl('update'),
+  requireWorkflowRole('regionFinalVerifier'),
+  async (req, res) => {
+    try {
+      const { ids = [], entity = 'personnel', submissionNote } = req.body;
+      const userId = req.user?.id || 'system';
+      const Model = getModelByEntity(entity);
+      const result = await Model.updateMany(
+        { 
+          _id: { $in: ids },
+          originalLevel: 'REGION',
+          status: { $in: ['Draft', 'Not Submitted'] }
+        },
+        { 
+          $set: { 
+            status: 'Finalized',
+            finalizedAt: new Date(),
+            finalizedBy: userId,
+            submissionNote: submissionNote || '',
+            lastWorkflowTransition: 'REGION_FINALIZATION'
+          } 
+        }
+      );
+      return res.status(200).json({ 
+        message: 'Successfully finalized region proposals', 
+        modified: result.modifiedCount 
+      });
+    } catch (e) {
+      console.error('region submit own error:', e);
+      return res.status(500).json({ 
+        message: 'Region submission failed', 
+        error: e.message 
+      });
+    }
+  }
+);
 /**
  * Data Retrieval Routes with Submission Workflow Filtering
  */

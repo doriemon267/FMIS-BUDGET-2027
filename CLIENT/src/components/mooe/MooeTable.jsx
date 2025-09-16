@@ -183,7 +183,7 @@ const Mooe = ({ onDataChange }) => {
           console.warn("Entries is not an array, using empty array");
           return {
             formattedData: [],
-            status: status || "Not Submitted",
+            status: status || "Draft",
             fiscalYear: settings?.fiscalYear || "",
             budgetType: settings?.budgetType || "",
           };
@@ -193,7 +193,7 @@ const Mooe = ({ onDataChange }) => {
 
         return {
           formattedData: formatted,
-          status: status || "Not Submitted",
+          status: status || "Draft",
           fiscalYear: settings?.fiscalYear || "",
           budgetType: settings?.budgetType || "",
         };
@@ -947,7 +947,7 @@ const Mooe = ({ onDataChange }) => {
         income: 0,
         subsidy: 0,
         amount: 0,
-        status: data?.status || "Not Submitted",
+        status: data?.status || "Draft",
         isSystemEntry: true // Flag to identify this as a system-generated entry
       }];
 
@@ -1096,7 +1096,7 @@ const Mooe = ({ onDataChange }) => {
           'Income': parseFloat(child.income || 0),
           'Subsidy': parseFloat(child.subsidy || 0),
           'Amount': parseFloat(child.income || 0) + parseFloat(child.subsidy || 0),
-          'Status': child.status || 'Not Submitted',
+          'Status': child.status || 'Draft',
           'Region': activeRegion?.name || activeRegion.regionName,
           'Fiscal Year': data?.fiscalYear || '',
           'Budget Type': data?.budgetType || '',
