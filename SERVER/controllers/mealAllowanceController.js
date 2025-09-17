@@ -27,6 +27,21 @@ const validateMealAllowance = [
 ];
 async function syncPersonnelServicesMeal(employeeNumber, fiscalYear, mealAmount = 0) {
   try {
+    // First check if the personnel record has been submitted
+    const personnelRecord = await PersonnelServices.findOne({
+      employeeNumber,
+      fiscalYear,
+    });
+    
+    if (personnelRecord) {
+      // Check if the record has been submitted and prevent updating
+      const submittedStatuses = ["Submitted", "Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"];
+      if (submittedStatuses.includes(personnelRecord.status)) {
+        console.log(`Cannot update meal allowance for submitted personnel record: ${employeeNumber}`);
+        return false;
+      }
+    }
+
     // Update the personnel services record
     const updateResult = await PersonnelServices.updateOne(
       { employeeNumber, fiscalYear },
@@ -256,6 +271,23 @@ exports.updateMealAllowance = [
       if (!updated)
         return res.status(404).json({ message: "Record not found" });
       // Update the personnel services record with the annual amount
+      // First check if the personnel record has been submitted
+      const personnelRecord = await PersonnelServices.findOne({
+        employeeNumber: updated.employeeNumber,
+        fiscalYear: usedFiscalYear,
+      });
+      
+      if (personnelRecord) {
+        // Check if the record has been submitted and prevent updating
+        const submittedStatuses = ["Submitted", "Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"];
+        if (submittedStatuses.includes(personnelRecord.status)) {
+          return res.status(403).json({
+            error: "Update not allowed",
+            message: "Cannot update meal allowance for personnel service record that has been submitted or approved"
+          });
+        }
+      }
+
       await PersonnelServices.updateOne(
         { employeeNumber: updated.employeeNumber, fiscalYear: usedFiscalYear },
         { meal: annualAmount } // Store annual amount in PersonnelServices
@@ -498,6 +530,24 @@ exports.deleteMealAllowance = async (req, res) => {
       return res.status(404).json({ message: "Record not found" });
     }
     const { employeeNumber, fiscalYear } = toDelete;
+    
+    // Check if the personnel record has been submitted before allowing deletion
+    const personnelRecord = await PersonnelServices.findOne({
+      employeeNumber,
+      fiscalYear,
+    });
+    
+    if (personnelRecord) {
+      // Check if the record has been submitted and prevent deletion
+      const submittedStatuses = ["Submitted", "Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"];
+      if (submittedStatuses.includes(personnelRecord.status)) {
+        return res.status(403).json({
+          error: "Delete not allowed",
+          message: "Cannot delete meal allowance for personnel service record that has been submitted or approved"
+        });
+      }
+    }
+
     // Delete the meal allowance record
     await MealAllowance.findByIdAndDelete(id);
     // CRITICAL: Reset the meal value to 0 in PersonnelServices

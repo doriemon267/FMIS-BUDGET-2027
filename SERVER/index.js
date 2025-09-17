@@ -15,6 +15,8 @@ require("dotenv").config();
 const express = require("express");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
+const http = require("http");
+const socketIo = require("socket.io");
 const personnelRoutes = require("./routers/personnel");
 const positionTitleRoutes = require("./routers/PositionTitle");
 const departmentRouter = require("./routers/Department");
@@ -137,6 +139,14 @@ mongoose.connection.once('open', async () => {
   }
 });
 const app = express();
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: {
+    origin: process.env.CLIENT_URL || "http://localhost:3000",
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+});
 // MIDDLEWARE
 app.use(
   cors({
@@ -273,7 +283,49 @@ app.use("/api/hierarchical-rbac", hierarchicalRBACRoutes);
 app.use(employeeMasterRouter);
 const mooeExcelUploadRouter = require("./routers/mooeExcelUploadRoutes");
 app.use("/income", mooeExcelUploadRouter); // Mount under /income prefix for MOOE upload
-app.listen(process.env.APP_PORT, () => {
+
+// WebSocket connection handling
+io.on('connection', (socket) => {
+  console.log('User connected:', socket.id);
+
+  // Join user-specific room for targeted updates
+  socket.on('join-user-room', (userId) => {
+    socket.join(`user_${userId}`);
+    console.log(`User ${userId} joined room user_${userId}`);
+  });
+
+  // Join admin room for broadcasting permission updates
+  socket.on('join-admin-room', () => {
+    socket.join('admin_room');
+    console.log('User joined admin room');
+  });
+
+  // Handle permission updates
+  socket.on('permission-updated', (data) => {
+    console.log('Permission update received:', data);
+    
+    // Broadcast to all connected clients except sender
+    socket.broadcast.emit('permission-changed', {
+      userId: data.userId,
+      updatedBy: data.updatedBy,
+      timestamp: new Date(),
+      changes: data.changes
+    });
+
+    // Also broadcast to admin room for admin dashboard updates
+    io.to('admin_room').emit('admin-permission-updated', data);
+  });
+
+  // Handle disconnect
+  socket.on('disconnect', () => {
+    console.log('User disconnected:', socket.id);
+  });
+});
+
+// Export io for use in other modules
+global.io = io;
+
+server.listen(process.env.APP_PORT, () => {
   // Initialize backup system
   initializeBackupSystem();
   // Initialize backup cleanup scheduler

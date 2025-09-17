@@ -179,7 +179,7 @@ const LinkTo = ({
         </Box>
       </Box>
       <List sx={{ py: 0 }}>
-        {subLinks?.map((subLink) => (
+        {subLinks?.filter(subLink => subLink.isAllow !== false).map((subLink) => (
           <ListItem
             key={subLink.link}
             component={Link}
@@ -287,7 +287,7 @@ const LinkTo = ({
           }}
         >
           <List component="div" disablePadding>
-            {subLinks.map((subLink) =>
+            {subLinks.filter(subLink => subLink.isAllow !== false).map((subLink) =>
               isAllow || subLink.isAllow ? (
                 <ListItem
                   key={subLink.link}

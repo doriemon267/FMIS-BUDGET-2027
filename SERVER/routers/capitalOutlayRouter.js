@@ -22,7 +22,7 @@ const capitalOutlayRouter = Router();
 capitalOutlayRouter.use(checkToken);
 capitalOutlayRouter.get("/capital-outlays", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), getAllCapitalOutlays);
 capitalOutlayRouter.post("/capital-outlays", checkDueDate, submissionWorkflowControl('create', { strictMode: false, enforceSubmissionWorkflow: true, enableConsolidation: true }), addCapitalOutlay);
-capitalOutlayRouter.put("/capital-outlays/:id", checkDueDate, submissionWorkflowControl('update', { strictMode: false, enforceSubmissionWorkflow: true, enableConsolidation: true }), editCapitalOutlay);
+capitalOutlayRouter.put("/capital-outlays/:id", checkDueDate, submissionWorkflowControl('update', { strictMode: true, enforceSubmissionWorkflow: true, enableConsolidation: true }), editCapitalOutlay);
 capitalOutlayRouter.delete("/capital-outlays/:id", checkDueDateWithRoleBypass, deleteCapitalOutlay);
 capitalOutlayRouter.get("/capital-outlay-list", getCapitalOutlayList);
 capitalOutlayRouter.get("/subline-items", getSublineItems);

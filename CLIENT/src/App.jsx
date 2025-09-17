@@ -69,13 +69,8 @@ const App = () => {
           path="/proposal"
           element={
             <ProtectedRoute
-              allowedRoles={[
-                "SUPER ADMIN",
-                "BUDGET ADMIN",
-                "BUDGET MANAGER",
-                "BUDGET OFFICER",
-                "BUDGET ANALYST",
-              ]}
+              requiredPermissions={["canCreateProposals", "canEditOwnProposals"]}
+              requiredWorkflowRoles={["divisionCreator", "departmentCreator", "regionCreator"]}
             >
               <Proposals />
             </ProtectedRoute>
@@ -85,13 +80,8 @@ const App = () => {
           path="/myProposals"
           element={
             <ProtectedRoute
-              allowedRoles={[
-                "SUPER ADMIN",
-                "BUDGET ADMIN",
-                "BUDGET MANAGER",
-                "BUDGET OFFICER",
-                "BUDGET ANALYST"
-              ]}
+              requiredPermissions={["canEditOwnProposals"]}
+              requiredWorkflowRoles={["divisionCreator", "departmentCreator", "regionCreator"]}
             >
               <ProposalPage />
             </ProtectedRoute>
@@ -101,13 +91,7 @@ const App = () => {
           path="/employee"
           element={
             <ProtectedRoute
-              allowedRoles={[
-                "SUPER ADMIN",
-                "BUDGET ADMIN",
-                "BUDGET MANAGER",
-                "BUDGET OFFICER",
-                "BUDGET ANALYST",
-              ]}
+              requiredPermissions={["canEditAllProposals"]}
             >
               <EmployeeList />
             </ProtectedRoute>
@@ -120,12 +104,8 @@ const App = () => {
           path="/categories"
           element={
             <ProtectedRoute
-              allowedRoles={[
-                "SUPER ADMIN",
-                "BUDGET ADMIN",
-                "BUDGET MANAGER",
-                "BUDGET OFFICER",
-              ]}
+              requiredPermissions={["canManageSettings"]}
+              requiredWorkflowRoles={["regionCreator"]}
             >
               <Categories />
             </ProtectedRoute>
@@ -135,12 +115,8 @@ const App = () => {
           path="/rata"
           element={
             <ProtectedRoute
-              allowedRoles={[
-                "SUPER ADMIN",
-                "BUDGET ADMIN",
-                "BUDGET MANAGER",
-                "BUDGET OFFICER",
-              ]}
+              requiredPermissions={["canManageSettings"]}
+              requiredWorkflowRoles={["regionCreator"]}
             >
               <RataPage />
             </ProtectedRoute>
@@ -150,12 +126,8 @@ const App = () => {
           path="/fysettings"
           element={
             <ProtectedRoute
-              allowedRoles={[
-                "SUPER ADMIN",
-                "BUDGET ADMIN",
-                "BUDGET MANAGER",
-                "BUDGET OFFICER",
-              ]}
+              requiredPermissions={["canManageSettings"]}
+              requiredWorkflowRoles={["regionCreator"]}
             >
               <FiscalYearSettingsPage />
             </ProtectedRoute>
@@ -166,12 +138,7 @@ const App = () => {
           path="/compsettings"
           element={
             <ProtectedRoute
-              allowedRoles={[
-                "SUPER ADMIN",
-                "BUDGET ADMIN",
-                "BUDGET MANAGER",
-                "BUDGET OFFICER",
-              ]}
+              requiredPermissions={["canManageSettings"]}
             >
               <CompensationSettingsPage />
             </ProtectedRoute>
@@ -181,12 +148,7 @@ const App = () => {
           path="/settings"
           element={
             <ProtectedRoute
-              allowedRoles={[
-                "SUPER ADMIN",
-                "BUDGET ADMIN",
-                "BUDGET MANAGER",
-                "BUDGET OFFICER",
-              ]}
+              requiredPermissions={["canManageSettings"]}
             >
               <SettingsManagement />
             </ProtectedRoute>
@@ -196,13 +158,7 @@ const App = () => {
           path="/AllProposals"
           element={
             <ProtectedRoute
-              allowedRoles={[
-                "SUPER ADMIN",
-                "BUDGET ADMIN",
-                "BUDGET MANAGER",
-                "BUDGET OFFICER",
-                "BUDGET ANALYST"
-              ]}
+              requiredPermissions={["canViewReports"]}
             >
               <AllProposalsPage />
             </ProtectedRoute>
@@ -212,7 +168,7 @@ const App = () => {
           path="/income-management"
           element={
             <ProtectedRoute
-              allowedRoles={["SUPER ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}
+              requiredPermissions={["canEditAllProposals"]}
             >
               <IncomeManagementPage />
             </ProtectedRoute>
@@ -222,7 +178,7 @@ const App = () => {
           path="/categories"
           element={
             <ProtectedRoute
-              allowedRoles={["SUPER ADMIN", "BUDGET MANAGER", "BUDGET OFFICER"]}
+              requiredPermissions={["canManageSettings"]}
             >
               <CapitalOutlayTitleMappingPage />
             </ProtectedRoute>
@@ -236,12 +192,7 @@ const App = () => {
           path="/employeeBenefits"
           element={
             <ProtectedRoute
-              allowedRoles={[
-                "SUPER ADMIN",
-                "BUDGET MANAGER",
-                "BUDGET OFFICER",
-                "BUDGET ANALYST",
-              ]}
+              requiredPermissions={["canEditAllProposals"]}
             >
               <EmployeeBenefitsPage />
             </ProtectedRoute>
@@ -270,7 +221,7 @@ const App = () => {
         <Route
           path="/hierarchical-user-assignments"
           element={
-            <ProtectedRoute allowedRoles={["SUPER ADMIN"]}>
+            <ProtectedRoute requiredPermissions={["canManageUsers"]}>
               <HierarchicalUserAssignmentPage />
             </ProtectedRoute>
           }
@@ -289,12 +240,7 @@ const App = () => {
           path="/corporate-income-upload"
           element={
             <ProtectedRoute
-              allowedRoles={[
-                "SUPER ADMIN",
-                "BUDGET ADMIN",
-                "BUDGET MANAGER",
-                "BUDGET OFFICER",
-              ]}
+              requiredPermissions={["canEditAllProposals"]}
             >
               <CorporateIncomeUploadPage />
             </ProtectedRoute>
@@ -304,12 +250,7 @@ const App = () => {
           path="/consolidated-corporate-income"
           element={
             <ProtectedRoute
-              allowedRoles={[
-                "SUPER ADMIN",
-                "BUDGET ADMIN",
-                "BUDGET MANAGER",
-                "BUDGET OFFICER",
-              ]}
+              requiredPermissions={["canViewReports"]}
             >
               <ConsolidatedCorporateIncomePage />
             </ProtectedRoute>
@@ -319,12 +260,7 @@ const App = () => {
           path="/mooe-upload"
           element={
             <ProtectedRoute
-              allowedRoles={[
-                "SUPER ADMIN",
-                "BUDGET ADMIN",
-                "BUDGET MANAGER",
-                "BUDGET OFFICER",
-              ]}
+              requiredPermissions={["canEditAllProposals"]}
             >
               <MooeUploadPage />
             </ProtectedRoute>
@@ -334,12 +270,7 @@ const App = () => {
           path="/consolidated-reports"
           element={
             <ProtectedRoute
-              allowedRoles={[
-                "SUPER ADMIN",
-                "BUDGET ADMIN",
-                "BUDGET MANAGER",
-                "BUDGET OFFICER",
-              ]}
+              requiredPermissions={["canViewReports"]}
             >
               <ConsolidatedReportsPage />
             </ProtectedRoute>
@@ -349,12 +280,7 @@ const App = () => {
           path="/consolidated-capital-outlay-reports"
           element={
             <ProtectedRoute
-              allowedRoles={[
-                "SUPER ADMIN",
-                "BUDGET ADMIN",
-                "BUDGET MANAGER",
-                "BUDGET OFFICER",
-              ]}
+              requiredPermissions={["canViewReports"]}
             >
               <ConsolidatedCapitalOutlayReportsPage />
             </ProtectedRoute>
@@ -364,12 +290,7 @@ const App = () => {
           path="/consolidated-personnel-services-reports"
           element={
             <ProtectedRoute
-              allowedRoles={[
-                "SUPER ADMIN",
-                "BUDGET ADMIN",
-                "BUDGET MANAGER",
-                "BUDGET OFFICER",
-              ]}
+              requiredPermissions={["canViewReports"]}
             >
               <ConsolidatedPersonnelServicesReportsPage />
             </ProtectedRoute>
@@ -378,7 +299,7 @@ const App = () => {
         <Route
           path="/comprehensive-reports"
           element={
-            <ProtectedRoute allowedRoles={["SUPER ADMIN", "BUDGET ADMIN"]}>
+            <ProtectedRoute requiredPermissions={["canViewReports"]}>
               <ComprehensiveReportsPage />
             </ProtectedRoute>
           }
@@ -387,12 +308,7 @@ const App = () => {
           path="/database-backup"
           element={
             <ProtectedRoute
-              allowedRoles={[
-                "SUPER ADMIN",
-                "BUDGET ADMIN",
-                "BUDGET MANAGER",
-                "BUDGET OFFICER",
-              ]}
+              requiredPermissions={["canManageSettings"]}
             >
               <DatabaseBackupPage />
             </ProtectedRoute>

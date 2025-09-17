@@ -22,6 +22,6 @@ mealAllowanceRouter.use('/meal-allowance/stats', submissionWorkflowControl('read
   mealAllowanceRouter.get("/meal-allowance/stats", getMealAllowanceStats);
   // POST/PUT/DELETE routes with due date protection only (like other allowance routes)
   mealAllowanceRouter.post("/meal-allowance", checkDueDate, submissionWorkflowControl('create', { enforceSubmissionWorkflow: true }), createMealAllowance);
-  mealAllowanceRouter.put("/meal-allowance/:id", checkDueDate, submissionWorkflowControl('update', { enforceSubmissionWorkflow: true }), updateMealAllowance);
+  mealAllowanceRouter.put("/meal-allowance/:id", checkDueDate, submissionWorkflowControl('update', { strictMode: true, enforceSubmissionWorkflow: true }), updateMealAllowance);
   mealAllowanceRouter.delete("/meal-allowance/:id", checkDueDate, submissionWorkflowControl('delete', { enforceSubmissionWorkflow: true }), deleteMealAllowance);
   module.exports = mealAllowanceRouter;

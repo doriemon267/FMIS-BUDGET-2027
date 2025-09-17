@@ -162,12 +162,21 @@ exports.updateSettings = async (req, res) => {
           employeeNumber: personnel.employeeNumber,
         });
         if (mealAllowance) {
-          const updatedMonthlyAmount = mealAllowance.actualDays * meal;
-          const updatedAnnualAmount = updatedMonthlyAmount * 12; // Calculate annual amount
-          await PersonnelServices.updateOne(
-            { _id: personnel._id },
-            { $set: { meal: updatedAnnualAmount } }
-          );
+          // Check if the personnel record has been submitted before updating
+          const personnelRecord = await PersonnelServices.findById(personnel._id);
+          if (personnelRecord) {
+            const submittedStatuses = ["Submitted", "Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"];
+            if (!submittedStatuses.includes(personnelRecord.status)) {
+              const updatedMonthlyAmount = mealAllowance.actualDays * meal;
+              const updatedAnnualAmount = updatedMonthlyAmount * 12; // Calculate annual amount
+              await PersonnelServices.updateOne(
+                { _id: personnel._id },
+                { $set: { meal: updatedAnnualAmount } }
+              );
+            } else {
+              console.log(`Skipping meal update for submitted personnel record: ${personnel.employeeNumber}`);
+            }
+          }
         }
       }
       // Only update meal allowances for employees who already have a meal allowance record
@@ -347,4 +356,4 @@ exports.updateAdvancedSettings = async (req, res) => {
     console.error("Error updating advanced settings:", error.stack);
     res.status(500).json({ message: "Server error", error });
   }
-};
+};

@@ -7,8 +7,8 @@ const { submissionWorkflowControl } = require("../middleware/submissionWorkflowC
 router.use(checkToken);
 // Create a new income entry (apply hierarchical create control, relaxed to avoid 403 during transition)
 router.post("/income", submissionWorkflowControl('create', { strictMode: false, enableConsolidation: true }), incomeController.createIncome);
-// Update an income entry (apply hierarchical update control, relaxed)
-router.put("/income/:id", submissionWorkflowControl('update', { strictMode: false, enableConsolidation: true }), incomeController.updateIncome);
+// Update an income entry (apply hierarchical update control, strict mode for security)
+router.put("/income/:id", submissionWorkflowControl('update', { strictMode: true, enableConsolidation: true }), incomeController.updateIncome);
 // Get all income entries (apply hierarchical read control)
 router.get("/income", submissionWorkflowControl('read'), incomeController.getAllIncome);
 // Get income by parameters

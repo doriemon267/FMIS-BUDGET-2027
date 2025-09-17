@@ -977,7 +977,11 @@ exports.bulkSaveMOOE = async (req, res) => {
           filter: { 
             uacsCode: item.uacsCode,
             fiscalYear: updateObj.fiscalYear,
-            region: updateObj.region  // Add region to filter for proper isolation
+            region: updateObj.region,  // Add region to filter for proper isolation
+            $or: [
+              { status: { $exists: false } },  // New records
+              { status: "Draft" }  // Only update draft records
+            ]
           },
           update: { $set: updateObj },
           upsert: true

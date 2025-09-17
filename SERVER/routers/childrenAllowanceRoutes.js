@@ -34,7 +34,7 @@ childrenAllowanceRouter.post(
 childrenAllowanceRouter.put(
   "/children-allowance/:id",
   checkDueDate,
-  submissionWorkflowControl('update', { enforceSubmissionWorkflow: true }),
+  submissionWorkflowControl('update', { strictMode: true, enforceSubmissionWorkflow: true }),
   updateChildrenAllowance
 );
 // Delete a children allowance record

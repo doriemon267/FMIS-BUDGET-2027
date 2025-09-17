@@ -169,7 +169,15 @@ const CustomCreateUpdateDialog = ({
         <CustomButton onClick={handleOpen}>Add {label}</CustomButton>
       ) : (
         <MenuItem
-          onClick={handleOpen}
+          onClick={() => {
+            // Check if the record has been submitted
+            const submittedStatuses = ["Submitted", "Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"];
+            if (submittedStatuses.includes(row.status)) {
+              toast.error("Cannot edit record that has been submitted or approved");
+              return;
+            }
+            handleOpen();
+          }}
           disableRipple
           sx={{ display: "flex", gap: 1 }}
         >

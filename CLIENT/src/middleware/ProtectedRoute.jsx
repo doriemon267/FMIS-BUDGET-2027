@@ -2,35 +2,57 @@ import React from "react";
 import { Navigate } from "react-router-dom";
 import { useUser } from "../context/UserContext";
 
-const SYSTEM_ALLOWED_ROLES = [
-  "SUPER ADMIN",
-  "BUDGET ADMIN",
-  "BUDGET ANALYST",
-  "BUDGET MANAGER",
-];
-
-const ProtectedRoute = ({ allowedRoles = SYSTEM_ALLOWED_ROLES, children }) => {
+const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], children }) => {
   const { currentUser } = useUser();
 
-  const roles = Array.isArray(currentUser?.Roles)
-    ? currentUser.Roles
-    : currentUser?.Roles
-    ? [currentUser.Roles]
-    : [];
+  // If no user, redirect to login
+  if (!currentUser) {
+    return <Navigate to="/login" />;
+  }
 
-  // Block explicit USER role or if user has no permitted system roles
-  const isUserRoleOnly = roles.length === 1 && roles[0] === "USER";
-  const hasAnySystemRole = roles.some((r) => SYSTEM_ALLOWED_ROLES.includes(r));
-  if (isUserRoleOnly || !hasAnySystemRole) {
+  // Get hierarchical access info
+  const hierarchicalAccess = currentUser.hierarchicalAccess;
+
+  // If no hierarchical access (user not properly configured), deny access
+  if (!hierarchicalAccess) {
     return <Navigate to="/not-authorized" />;
   }
 
-  // Must be in both system-allowed set and the route's allowedRoles
-  const intersectionAllowed = roles.some(
-    (r) => SYSTEM_ALLOWED_ROLES.includes(r) && allowedRoles.includes(r)
-  );
+  // Check role permissions
+  const userPermissions = hierarchicalAccess.rolePermissions || {};
+  console.log('🔍 ProtectedRoute Debug:', {
+    requiredPermissions,
+    userPermissions,
+    hierarchicalAccess: {
+      scope: hierarchicalAccess.scope,
+      workflowRoles: hierarchicalAccess.workflowRoles
+    }
+  });
 
-  return intersectionAllowed ? children : <Navigate to="/not-authorized" />;
+  const hasRequiredPermissions = requiredPermissions.length === 0 ||
+    requiredPermissions.every(permission => {
+      // If permission is explicitly set to false, deny access
+      if (userPermissions[permission] === false) {
+        console.log(`❌ Permission ${permission} is explicitly set to false`);
+        return false;
+      }
+      // If permission is true or undefined (default), allow access
+      const hasPermission = userPermissions[permission] === true || userPermissions[permission] === undefined;
+      console.log(`✅ Permission ${permission}: ${hasPermission ? 'ALLOWED' : 'DENIED'} (value: ${userPermissions[permission]})`);
+      return hasPermission;
+    });
+
+  // Check workflow roles
+  const userWorkflowRoles = hierarchicalAccess.workflowRoles || [];
+  const hasRequiredWorkflowRoles = requiredWorkflowRoles.length === 0 ||
+    requiredWorkflowRoles.some(role => userWorkflowRoles.includes(role));
+
+  // User must have both required permissions AND required workflow roles
+  if (!hasRequiredPermissions || !hasRequiredWorkflowRoles) {
+    return <Navigate to="/not-authorized" />;
+  }
+
+  return children;
 };
 
 export default ProtectedRoute;

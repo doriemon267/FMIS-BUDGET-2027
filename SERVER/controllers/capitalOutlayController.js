@@ -263,6 +263,16 @@ exports.editCapitalOutlay = async (req, res) => {
       console.error("Capital outlay not found for ID:", id);
       return res.status(404).json({ error: "Capital outlay not found." });
     }
+
+    // Check if the record has been submitted and prevent editing
+    const submittedStatuses = ["Submitted", "Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"];
+    if (submittedStatuses.includes(existingOutlay.status)) {
+      return res.status(403).json({
+        error: "Update not allowed",
+        message: "Cannot edit capital outlay record that has been submitted or approved"
+      });
+    }
+
     // Update capital outlay
     // Use submission workflow data for ownership normalization
     const workflowData = req.submissionWorkflowData || {};

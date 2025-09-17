@@ -11,6 +11,7 @@ import ErrorBoundary from "./global/components/ErrorBoundary.jsx";
 import setupRegionInterceptor from "./middleware/regionMiddleware.jsx";
 import "./index.css";
 import "./global/silenceConsole";
+import "./global/components/GlobalNotifications"; // Initialize global notifications
 
 // Setup the region interceptor
 setupRegionInterceptor();

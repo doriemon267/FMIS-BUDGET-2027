@@ -39,7 +39,7 @@ personnelServicesRouter.post(
 personnelServicesRouter.put(
   "/personnelServices/:id", 
   checkDueDate,
-  submissionWorkflowControl('update', { enforceSubmissionWorkflow: true }),
+  submissionWorkflowControl('update', { strictMode: true, enforceSubmissionWorkflow: true }),
   updatePersonnelService || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );

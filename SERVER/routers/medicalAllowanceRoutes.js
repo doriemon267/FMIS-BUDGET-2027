@@ -35,7 +35,7 @@ medicalAllowanceRouter.post(
 medicalAllowanceRouter.put(
   "/medical-allowance/:id",
   checkDueDate,
-  submissionWorkflowControl('update', { enforceSubmissionWorkflow: true }),
+  submissionWorkflowControl('update', { strictMode: true, enforceSubmissionWorkflow: true }),
   updateMedicalAllowance
 );
 // Delete a medical allowance record

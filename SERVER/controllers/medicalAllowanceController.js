@@ -338,6 +338,22 @@ const updateMedicalAllowance = async (req, res) => {
         error: `Invalid amount. Expected ${expectedAmount} for ${validDependents} dependents`,
       });
     }
+
+    // First, find the medical allowance record to check its status
+    const existingRecord = await MedicalAllowance.findById(req.params.id);
+    if (!existingRecord) {
+      return res.status(404).json({ error: "Medical allowance record not found" });
+    }
+
+    // Check if the record has been submitted and prevent editing
+    const submittedStatuses = ["Submitted", "Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"];
+    if (submittedStatuses.includes(existingRecord.status)) {
+      return res.status(403).json({
+        error: "Update not allowed",
+        message: "Cannot edit medical allowance record that has been submitted or approved"
+      });
+    }
+
     const updatedRecord = await MedicalAllowance.findByIdAndUpdate(
       req.params.id,
       {

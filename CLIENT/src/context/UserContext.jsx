@@ -5,6 +5,7 @@ import api from "../config/api";
 import Loading from "../global/components/Loading";
 import env from "../utils/env";
 import CryptoJS from "crypto-js"; // Import CryptoJS for encryption
+import io from "socket.io-client"; // Import Socket.io client
 
 const UserContext = createContext({
   currentUser: null,
@@ -18,6 +19,7 @@ const UserProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefetching, setIsRefetching] = useState(false);
+  const [socket, setSocket] = useState(null);
   const nav = useNavigate();
 
   // Function to encrypt and store token
@@ -52,6 +54,18 @@ const UserProvider = ({ children }) => {
   };
 
   const handleLogout = async () => {
+    // Disconnect WebSocket before logout
+    if (socket) {
+      socket.disconnect();
+      setSocket(null);
+    }
+
+    // Clear polling interval
+    if (window.permissionPollingInterval) {
+      clearInterval(window.permissionPollingInterval);
+      window.permissionPollingInterval = null;
+    }
+
     await authApi.get("/logout");
     setCurrentUser(null);
     localStorage.removeItem("token"); // Remove token on logout
@@ -108,6 +122,111 @@ const UserProvider = ({ children }) => {
     }
   };
 
+  // Initialize WebSocket connection for real-time permission updates
+  const initializeWebSocket = (user) => {
+    if (!user) return;
+
+    const serverUrl = env("API_BASE_URL") || "http://localhost:5005";
+    const newSocket = io(serverUrl, {
+      transports: ['websocket', 'polling'],
+      upgrade: true,
+      rememberUpgrade: true,
+      timeout: 20000,
+    });
+
+    newSocket.on('connect', () => {
+      console.log('🔌 Connected to WebSocket server');
+      
+      // Join user-specific room for targeted updates
+      const userId = user.Id || user.id || user.userId || user.Username;
+      if (userId) {
+        newSocket.emit('join-user-room', userId);
+      }
+
+      // Join admin room if user is admin
+      const isAdmin = user.Roles?.includes('SUPER ADMIN') || user.Roles?.includes('BUDGET ADMIN');
+      if (isAdmin) {
+        newSocket.emit('join-admin-room');
+      }
+    });
+
+    // Listen for permission updates
+    newSocket.on('permission-updated', async (data) => {
+      console.log('🔄 Permission update received:', data);
+      
+      // If this update affects the current user, refresh their permissions
+      const currentUserId = user.Id || user.id || user.userId || user.Username;
+      if (data.userId === currentUserId) {
+        console.log('📋 Refreshing permissions for current user...');
+        await refetchUserProfile();
+        
+        // Show notification to user
+        if (window.showSnackbar) {
+          window.showSnackbar('Your permissions have been updated by an administrator.', 'info');
+        }
+      }
+    });
+
+    // Listen for admin permission updates
+    newSocket.on('admin-permission-updated', (data) => {
+      console.log('👑 Admin permission update:', data);
+      // Admin users can refresh their view or show notification
+      if (window.showSnackbar) {
+        window.showSnackbar(`Permissions updated for user: ${data.userId}`, 'info');
+      }
+    });
+
+    newSocket.on('disconnect', () => {
+      console.log('🔌 Disconnected from WebSocket server');
+      // Start fallback polling when WebSocket disconnects
+      startFallbackPolling(user);
+    });
+
+    newSocket.on('connect_error', (error) => {
+      console.error('❌ WebSocket connection error:', error);
+      // Start fallback polling on connection error
+      startFallbackPolling(user);
+    });
+
+    setSocket(newSocket);
+  };
+
+  // Fallback polling mechanism for permission updates
+  const startFallbackPolling = (user) => {
+    if (!user) return;
+
+    console.log('🔄 Starting fallback polling for permission updates');
+
+    // Clear any existing polling interval
+    if (window.permissionPollingInterval) {
+      clearInterval(window.permissionPollingInterval);
+    }
+
+    // Poll every 30 seconds for permission updates
+    window.permissionPollingInterval = setInterval(async () => {
+      try {
+        const lastCheck = localStorage.getItem('lastPermissionCheck');
+        const currentTime = Date.now();
+        
+        // Only check if it's been more than 30 seconds since last check
+        if (!lastCheck || (currentTime - parseInt(lastCheck)) > 30000) {
+          const hasUpdates = await refetchUserProfile();
+          
+          if (hasUpdates) {
+            console.log('🔄 Permission updates detected via polling');
+            if (window.showSnackbar) {
+              window.showSnackbar('Your permissions have been updated.', 'info');
+            }
+          }
+          
+          localStorage.setItem('lastPermissionCheck', currentTime.toString());
+        }
+      } catch (error) {
+        console.error('❌ Error during permission polling:', error);
+      }
+    }, 30000); // Check every 30 seconds
+  };
+
   useEffect(() => {
     const fetchUser = async () => {
       try {
@@ -153,6 +272,9 @@ const UserProvider = ({ children }) => {
           // Store user in localStorage for RegionContext
           localStorage.setItem('currentUser', JSON.stringify(user));
           
+          // Initialize WebSocket connection for real-time updates
+          initializeWebSocket(user);
+          
           if (res.data.jwtToken) {
             storeToken(res.data.jwtToken);
           }
@@ -170,6 +292,16 @@ const UserProvider = ({ children }) => {
     };
     fetchUser();
   }, [nav]);
+
+  // Cleanup WebSocket connection on unmount
+  useEffect(() => {
+    return () => {
+      if (socket) {
+        console.log('🧹 Cleaning up WebSocket connection');
+        socket.disconnect();
+      }
+    };
+  }, [socket]);
 
   // Convenience: derive workflow roles and assignment
   const hierarchical = currentUser?.hierarchicalAccess || {};

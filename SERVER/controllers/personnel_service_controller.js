@@ -688,6 +688,15 @@ exports.updatePersonnelService = async (req, res) => {
         });
     }
 
+    // Check if the record has been submitted and prevent editing
+    const submittedStatuses = ["Submitted", "Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"];
+    if (submittedStatuses.includes(personnelServices.status)) {
+      return res.status(403).json({
+        error: "Update not allowed",
+        message: "Cannot edit personnel service record that has been submitted or approved"
+      });
+    }
+
     // Check if user has access to this record based on hierarchical filters
     let hasAccess = true;
     if (Object.keys(dbHierarchicalFilters).length > 0) {

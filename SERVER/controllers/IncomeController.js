@@ -81,6 +81,21 @@ exports.updateIncome = async (req, res) => {
     // Get submission workflow data from middleware
     const workflowData = req.submissionWorkflowData || {};
     
+    // First, find the income entry to check its status
+    const existingIncome = await Income.findById(req.params.id);
+    if (!existingIncome) {
+      return res.status(404).json({ message: "Income entry not found" });
+    }
+
+    // Check if the record has been submitted and prevent editing
+    const submittedStatuses = ["Submitted", "Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"];
+    if (submittedStatuses.includes(existingIncome.status)) {
+      return res.status(403).json({
+        error: "Update not allowed",
+        message: "Cannot edit income record that has been submitted or approved"
+      });
+    }
+
     // Find and update the income entry
     const updatedIncome = await Income.findByIdAndUpdate(
       req.params.id,
