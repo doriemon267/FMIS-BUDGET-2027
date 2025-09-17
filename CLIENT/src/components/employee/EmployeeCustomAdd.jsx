@@ -1929,9 +1929,12 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                   <li>Excel file format (.xlsx, .xls)</li>
                   <li>First row must contain column headers</li>
                   <li>
-                    Required columns: EmployeeID, EmployeeFullName, Region
+                    Required columns: EmployeeID*, EmployeeFullName*, Region*, Department*, PositionTitle*, StatusOfAppointment*, DateOfAppointment*, Status*, SG*, JG*, Step*
                   </li>
+                  <li>Optional columns: DateOfBirth, Division, Section</li>
+                  <li>Rate column will be auto-computed based on SG, JG, and Step</li>
                   <li>Region must match the currently selected region</li>
+                  <li>Use the template download button to get the correct format</li>
                 </Typography>
               </Paper>
 
@@ -1969,16 +1972,102 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                     justifyContent: "flex-start",
                     pl: 0,
                   }}
-                  onClick={() => {
-                    // You can add a help function here
-                    toast.success("Download template feature coming soon!", {
-                      style: {
-                        borderRadius: "10px",
-                        background:
-                          theme.palette.mode === "dark" ? "#333" : "#fff",
-                        color: theme.palette.mode === "dark" ? "#fff" : "#333",
-                      },
-                    });
+                  onClick={async () => {
+                    if (!activeRegion) {
+                      toast.error("Please select a region first", {
+                        style: {
+                          borderRadius: "10px",
+                          background: theme.palette.mode === "dark" ? "#333" : "#fff",
+                          color: theme.palette.mode === "dark" ? "#fff" : "#333",
+                        },
+                      });
+                      return;
+                    }
+
+                    try {
+                      const regionName = activeRegion.name || activeRegion.regionName;
+                      console.log('Attempting to download template for region:', regionName);
+                      console.log('Active region object:', activeRegion);
+                      console.log('User access level:', userAccessLevel);
+                      console.log('User department:', userDepartment);
+                      console.log('User division:', userDivision);
+
+                      // Prepare hierarchical access parameters
+                      const params = {
+                        region: regionName,
+                        scope: userAccessLevel
+                      };
+
+                      // Add accessible departments if user has department-level access
+                      if (userAccessLevel === 'DEPARTMENT' && currentUser?.hierarchicalAccess?.accessibleDepartments) {
+                        const deptNames = currentUser.hierarchicalAccess.accessibleDepartments
+                          .filter(d => d && (d.departmentName || d.name || d))
+                          .map(d => d.departmentName || d.name || d);
+                        if (deptNames.length > 0) {
+                          params.accessibleDepartments = JSON.stringify(deptNames);
+                        }
+                      }
+
+                      // Add accessible divisions if user has division-level access
+                      if (userAccessLevel === 'DIVISION' && currentUser?.hierarchicalAccess?.accessibleDivisions) {
+                        const divNames = currentUser.hierarchicalAccess.accessibleDivisions
+                          .filter(d => d && (d.divisionName || d.name || d))
+                          .map(d => d.divisionName || d.name || d);
+                        if (divNames.length > 0) {
+                          params.accessibleDivisions = JSON.stringify(divNames);
+                        }
+                      }
+
+                      // Add accessible sections if user has section-level access
+                      if (userAccessLevel === 'SECTION' && currentUser?.hierarchicalAccess?.accessibleSections) {
+                        const sectNames = currentUser.hierarchicalAccess.accessibleSections
+                          .filter(s => s && (s.sectionName || s.name || s))
+                          .map(s => s.sectionName || s.name || s);
+                        if (sectNames.length > 0) {
+                          params.accessibleSections = JSON.stringify(sectNames);
+                        }
+                      }
+
+                      console.log('Template download params:', params);
+
+                      const response = await api.get("/api/excel-upload/template", {
+                        params,
+                        responseType: 'blob'
+                      });
+
+                      console.log('Template download response received');
+
+                      // Create download link
+                      const url = window.URL.createObjectURL(new Blob([response.data]));
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.setAttribute('download', `employee_import_template_${regionName}.xlsx`);
+                      document.body.appendChild(link);
+                      link.click();
+                      link.remove();
+                      window.URL.revokeObjectURL(url);
+
+                      toast.success("Template downloaded successfully!", {
+                        style: {
+                          borderRadius: "10px",
+                          background: theme.palette.mode === "dark" ? "#333" : "#fff",
+                          color: theme.palette.mode === "dark" ? "#fff" : "#333",
+                        },
+                      });
+                    } catch (error) {
+                      console.error("Error downloading template:", error);
+                      console.error("Error details:", error.response?.data || error.message);
+
+                      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || "Failed to download template";
+
+                      toast.error(errorMessage, {
+                        style: {
+                          borderRadius: "10px",
+                          background: theme.palette.mode === "dark" ? "#333" : "#fff",
+                          color: theme.palette.mode === "dark" ? "#fff" : "#333",
+                        },
+                      });
+                    }
                   }}
                 >
                   Download template file

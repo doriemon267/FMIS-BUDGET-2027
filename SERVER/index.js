@@ -164,6 +164,70 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser());
 app.get("/", (req, res) => res.json({ message: "server is UP!" }));
+
+// Temporary public template download endpoint (for testing)
+app.get("/api/excel-upload/template", async (req, res) => {
+  try {
+    console.log('TEMP: Template download requested');
+    console.log('Query params:', req.query);
+
+    const {
+      region,
+      scope = 'REGION',
+      accessibleDepartments,
+      accessibleDivisions,
+      accessibleSections
+    } = req.query;
+
+    console.log('Region from query:', region);
+    console.log('Access scope:', scope);
+    console.log('Accessible departments:', accessibleDepartments);
+    console.log('Accessible divisions:', accessibleDivisions);
+    console.log('Accessible sections:', accessibleSections);
+
+    // Parse JSON arrays if provided
+    let departments = [];
+    let divisions = [];
+    let sections = [];
+
+    try {
+      departments = accessibleDepartments ? JSON.parse(accessibleDepartments) : [];
+      divisions = accessibleDivisions ? JSON.parse(accessibleDivisions) : [];
+      sections = accessibleSections ? JSON.parse(accessibleSections) : [];
+    } catch (parseError) {
+      console.warn('Error parsing access parameters:', parseError.message);
+    }
+
+    // Generate the template with hierarchical access filtering
+    const { generateEmployeeTemplate } = require('./utils/employeeTemplateGenerator');
+    const templateBuffer = generateEmployeeTemplate({
+      region: region || '',
+      fiscalYear: '',
+      scope,
+      accessibleDepartments: departments,
+      accessibleDivisions: divisions,
+      accessibleSections: sections
+    });
+
+    console.log('Template generated successfully, size:', templateBuffer.length);
+
+    // Set headers for file download
+    const fileName = `employee_import_template_${region || 'sample'}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+    // Send the file
+    res.send(templateBuffer);
+
+  } catch (error) {
+    console.error("Error generating template:", error);
+    res.status(500).json({
+      error: "Error generating template",
+      details: error.message
+    });
+  }
+});
+
 // Test endpoint without MongoDB
 app.get('/test', (req, res) => {
   res.json({
