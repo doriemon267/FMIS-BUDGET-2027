@@ -192,7 +192,7 @@ const ProposalDetails = ({ proposal }) => {
           </TableHead>
           <TableBody>
             {detailedData.map((item, index) => (
-              <React.Fragment key={index}>
+              <React.Fragment key={item._id || item.employeeNumber || index}>
                 <TableRow>
                   <TableCell>{item.employeeFullName}</TableCell>
                   <TableCell>{item.positionTitle}</TableCell>
@@ -265,7 +265,7 @@ const ProposalDetails = ({ proposal }) => {
           </TableHead>
           <TableBody>
             {detailedData.map((item, index) => (
-              <TableRow key={index}>
+              <TableRow key={item._id || item.uacsCode || index}>
                 <TableCell>{item.uacsCode}</TableCell>
                 <TableCell>{item.description}</TableCell>
                 <TableCell>{formatCurrency(item.amount)}</TableCell>
@@ -298,7 +298,7 @@ const ProposalDetails = ({ proposal }) => {
           </TableHead>
           <TableBody>
             {detailedData.map((item, index) => (
-              <TableRow key={index}>
+              <TableRow key={item._id || item.particulars || index}>
                 <TableCell>{item.particulars}</TableCell>
                 <TableCell>{item.quantity}</TableCell>
                 <TableCell>{formatCurrency(item.unitCost)}</TableCell>
@@ -331,7 +331,7 @@ const ProposalDetails = ({ proposal }) => {
           </TableHead>
           <TableBody>
             {detailedData.map((item, index) => (
-              <TableRow key={index}>
+              <TableRow key={item._id || item.source || index}>
                 <TableCell>{item.source}</TableCell>
                 <TableCell>{item.description}</TableCell>
                 <TableCell>{formatCurrency(item.amount)}</TableCell>

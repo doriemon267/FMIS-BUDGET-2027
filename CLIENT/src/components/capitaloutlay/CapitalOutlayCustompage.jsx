@@ -66,7 +66,7 @@ const CustomPage = ({ dataListName, schema }) => {
         <tbody>
           {data.length > 0 ? (
             data.map((item, index) => (
-              <tr key={index}>
+              <tr key={item._id || item.id || index}>
                 {Object.keys(schema).map((key) => (
                   <td key={key}>
                     {editIndex === index ? (

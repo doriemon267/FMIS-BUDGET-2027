@@ -563,7 +563,7 @@ const PermanentCustomTable = ({
 
                       return (
                         <TableRow
-                          key={rowIndex}
+                          key={row._id || row.employeeNumber || rowIndex}
                           hover
                           onClick={(event) => handleRowClick(event, row._id)}
                           role="checkbox"

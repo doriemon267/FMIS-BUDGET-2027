@@ -481,7 +481,7 @@ const CasualCustomTable = ({
                         dayjs(row.updatedAt).isAfter(TEN_SECONDS_AGO);
                       return (
                         <TableRow
-                          key={rowIndex}
+                          key={row._id || row.employeeNumber || rowIndex}
                           hover
                           sx={{
                             backgroundColor: isRecentlyUpdated

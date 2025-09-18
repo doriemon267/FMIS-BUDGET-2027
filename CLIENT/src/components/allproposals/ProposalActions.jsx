@@ -360,7 +360,7 @@ export const ViewButton = ({ row }) => {
                 {sortedData.length > 0 ? (
                   sortedData.map((personnel, index) => (
                     <TableRow 
-                      key={index}
+                      key={personnel._id || personnel.employeeNumber || index}
                       sx={{ 
                         '&:nth-of-type(odd)': { backgroundColor: '#f9f9f9' },
                         '&:hover': { backgroundColor: '#f0f0f0' }
@@ -496,7 +496,7 @@ export const ViewButton = ({ row }) => {
                 {filteredData.length > 0 ? (
                   filteredData.map((item, index) => (
                     <TableRow 
-                      key={index}
+                      key={item._id || item.employeeNumber || index}
                       sx={{ 
                         '&:nth-of-type(odd)': { backgroundColor: '#f9f9f9' },
                         '&:hover': { backgroundColor: '#f0f0f0' }
@@ -777,7 +777,7 @@ export const ViewButton = ({ row }) => {
                   </TableHead>
                   <TableBody>
                     {category.items.map((item, index) => (
-                      <TableRow key={index}>
+                      <TableRow key={item._id || item.uacsCode || index}>
                         <TableCell>{item.sublineItem || ""}</TableCell>
                         <TableCell>{item.accountingTitle || ""}</TableCell>
                         <TableCell>{item.uacsCode || ""}</TableCell>
@@ -829,7 +829,7 @@ export const ViewButton = ({ row }) => {
             <TableBody>
               {detailedData.length > 0 ? (
                 detailedData.map((item, index) => (
-                  <TableRow key={index}>
+                  <TableRow key={item._id || item.source || index}>
                     <TableCell>{item.source || "N/A"}</TableCell>
                     <TableCell>{item.category?.name || item.category || "N/A"}</TableCell>
                     <TableCell>{item.description || item.name || "N/A"}</TableCell>

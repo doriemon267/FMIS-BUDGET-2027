@@ -460,7 +460,7 @@ const EnhancedTitleMappingDialog = ({ open, onClose, editData = null }) => {
                     <Box sx={{ mt: 0.5 }}>
                       {watchedValues.selectedCategory?.sublineItems?.map((item, index) => (
                         <Chip
-                          key={index}
+                          key={item}
                           label={item}
                           color="primary"
                           variant="outlined"

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Button,
   Dialog,
@@ -93,6 +93,27 @@ const RetireeDialog = ({
     },
     enabled: open && !isEditing,
   });
+
+  // Build a unique, de-duplicated options list for Autocomplete
+  const retireeOptions = useMemo(() => {
+    const list = Array.isArray(eligibleEmployees)
+      ? eligibleEmployees.filter(e => e.eligibleType === "Compulsory" || e.eligibleType === "Optional")
+      : [];
+
+    // Deduplicate by a stable composite id (prefer employeeNumber or _id)
+    const seen = new Set();
+    const unique = [];
+    for (const e of list) {
+      const stableId = String(
+        e.employeeNumber ?? e.employeeID ?? e.EmployeeID ?? e._id ?? `${e.employeeFullName}-${e.dateOfBirth}`
+      );
+      if (!seen.has(stableId)) {
+        seen.add(stableId);
+        unique.push({ ...e, __stableId: stableId });
+      }
+    }
+    return unique;
+  }, [eligibleEmployees]);
 
   useEffect(() => {
     if (open) {
@@ -443,10 +464,9 @@ const RetireeDialog = ({
                     />
                   )}
                   renderOption={(props, option) => {
-                    // Extract key from props to avoid React warning
-                    const { key, ...otherProps } = props;
+                    const uniqueKey = String(option.employeeNumber ?? option.employeeID ?? option.EmployeeID ?? option._id ?? `${option.employeeFullName}-${option.dateOfBirth || option.DateOfBirth || ''}`);
                     return (
-                      <Box component="li" key={key} {...otherProps}>
+                      <Box component="li" key={uniqueKey} {...props}>
                         <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
                           <Typography variant="body1">
                             {option.employeeNumber} - {option.employeeFullName}

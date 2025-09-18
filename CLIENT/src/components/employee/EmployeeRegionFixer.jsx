@@ -189,7 +189,7 @@ const EmployeeRegionFixer = ({ onFixComplete }) => {
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
                   {checkResults.uniqueRegions && checkResults.uniqueRegions.map((region, index) => (
                     <Chip 
-                      key={index} 
+                      key={region || index} 
                       label={region || 'null/undefined'} 
                       size="small"
                       color={region === checkResults.region ? "primary" : "default"}
@@ -203,7 +203,7 @@ const EmployeeRegionFixer = ({ onFixComplete }) => {
                 </Typography>
                 <Box sx={{ mb: 2 }}>
                   {checkResults.regionCounts && checkResults.regionCounts.map((item, index) => (
-                    <Typography key={index} variant="body2">
+                    <Typography key={item.region || index} variant="body2">
                       • {item.region}: <strong>{item.count}</strong> employees
                     </Typography>
                   ))}
@@ -228,7 +228,7 @@ const EmployeeRegionFixer = ({ onFixComplete }) => {
                     {checkResults.uniqueRegions && checkResults.uniqueRegions
                       .filter(r => r && r !== checkResults.region) // Filter out null and current region
                       .map((region, index) => (
-                        <MenuItem key={index} value={region}>
+                        <MenuItem key={region} value={region}>
                           {region}
                         </MenuItem>
                       ))

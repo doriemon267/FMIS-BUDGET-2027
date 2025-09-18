@@ -1820,7 +1820,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                                   </Typography>
                                   {capitalOutlayDetails[item._id].map((detail, index) => (
                                     <Typography 
-                                      key={index} 
+                                      key={detail._id || detail.particulars || index} 
                                       variant="caption" 
                                       display="block" 
                                       color="text.secondary"

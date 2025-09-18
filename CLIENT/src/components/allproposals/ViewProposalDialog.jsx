@@ -120,7 +120,7 @@ const ViewProposalDialog = ({ row, parentClose }) => {
                   </TableHead>
                   <TableBody>
                     {reportData.breakdown?.map((item, index) => (
-                      <TableRow key={index}>
+                      <TableRow key={item.category || index}>
                         <TableCell>{item.category}</TableCell>
                         <TableCell align="right">
                           {Number(item.amount).toLocaleString()}

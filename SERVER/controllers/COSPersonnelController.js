@@ -9,6 +9,10 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
     // Get hierarchical filters from middleware (support both hierarchical and submission workflow)
     const hierarchicalFilters = req.hierarchicalFilters || req.submissionWorkflowFilters || {};
 
+    // Get user's assignment level to determine access restrictions
+    const assignment = req.userHierarchicalAssignment || {};
+    const userLevel = assignment.assignmentLevel || 'NONE';
+
     // Map hierarchical filters to database field names
     const mapFiltersToDb = (filters) => {
       const mapped = {};

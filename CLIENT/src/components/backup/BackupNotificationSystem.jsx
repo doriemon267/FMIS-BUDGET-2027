@@ -255,7 +255,7 @@ const BackupNotificationSystem = ({
               <Stack direction="row" spacing={1}>
                 {notification.actions.map((action, index) => (
                   <Button
-                    key={index}
+                    key={action.label || index}
                     color="inherit"
                     size="small"
                     onClick={() => action.onClick(notification)}
@@ -350,7 +350,7 @@ const BackupNotificationSystem = ({
                 </Typography>
                 <List dense sx={{ maxHeight: 200, overflow: 'auto' }}>
                   {notification.logs.map((log, index) => (
-                    <ListItem key={index}>
+                    <ListItem key={log.timestamp || index}>
                       <ListItemIcon>
                         <Timeline fontSize="small" />
                       </ListItemIcon>
@@ -368,7 +368,7 @@ const BackupNotificationSystem = ({
         <DialogActions>
           {notification.actions && notification.actions.map((action, index) => (
             <Button
-              key={index}
+              key={action.label || index}
               onClick={() => action.onClick(notification)}
               startIcon={action.icon}
               variant={index === 0 ? 'contained' : 'outlined'}
