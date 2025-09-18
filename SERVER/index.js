@@ -140,9 +140,20 @@ mongoose.connection.once('open', async () => {
 });
 const app = express();
 const server = http.createServer(app);
+// Socket.IO setup with explicit allowed origins (separate from Express CORS)
+const allowedSocketOrigins = [
+  process.env.CLIENT1,
+  process.env.CLIENT2,
+  process.env.CLIENT3,
+  'http://localhost:3005',
+  'https://localhost:3005',
+  'http://localhost:3006',
+  'https://localhost:3006'
+].filter(Boolean);
+
 const io = socketIo(server, {
   cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:3000",
+    origin: allowedSocketOrigins,
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -166,53 +177,43 @@ app.use(cookieParser());
 app.get("/", (req, res) => res.json({ message: "server is UP!" }));
 
 // Temporary public template download endpoint (for testing)
-app.get("/api/excel-upload/template", async (req, res) => {
+app.get("/api/excel-upload/template", checkToken, async (req, res) => {
   try {
-    console.log('TEMP: Template download requested');
-    console.log('Query params:', req.query);
+    console.log('TEMP: Template download requested by authenticated user');
 
+    // Get user's actual access information from JWT
+    const userAccess = req.user?.hierarchicalAccess || {};
     const {
-      region,
       scope = 'REGION',
+      accessibleDepartments = [],
+      accessibleDivisions = [],
+      accessibleSections = []
+    } = userAccess;
+
+    // Get active region from user or query params
+    const region = req.query.region || req.user?.region || '';
+
+    console.log('User access scope:', scope);
+    console.log('User accessible departments:', accessibleDepartments);
+    console.log('User accessible divisions:', accessibleDivisions);
+    console.log('User accessible sections:', accessibleSections);
+    console.log('Region:', region);
+
+    // Generate the template with user's actual hierarchical access
+    const { generateEmployeeTemplate } = require('./utils/employeeTemplateGenerator');
+    const templateBuffer = generateEmployeeTemplate({
+      region: region,
+      fiscalYear: '',
+      scope,
       accessibleDepartments,
       accessibleDivisions,
       accessibleSections
-    } = req.query;
-
-    console.log('Region from query:', region);
-    console.log('Access scope:', scope);
-    console.log('Accessible departments:', accessibleDepartments);
-    console.log('Accessible divisions:', accessibleDivisions);
-    console.log('Accessible sections:', accessibleSections);
-
-    // Parse JSON arrays if provided
-    let departments = [];
-    let divisions = [];
-    let sections = [];
-
-    try {
-      departments = accessibleDepartments ? JSON.parse(accessibleDepartments) : [];
-      divisions = accessibleDivisions ? JSON.parse(accessibleDivisions) : [];
-      sections = accessibleSections ? JSON.parse(accessibleSections) : [];
-    } catch (parseError) {
-      console.warn('Error parsing access parameters:', parseError.message);
-    }
-
-    // Generate the template with hierarchical access filtering
-    const { generateEmployeeTemplate } = require('./utils/employeeTemplateGenerator');
-    const templateBuffer = generateEmployeeTemplate({
-      region: region || '',
-      fiscalYear: '',
-      scope,
-      accessibleDepartments: departments,
-      accessibleDivisions: divisions,
-      accessibleSections: sections
     });
 
     console.log('Template generated successfully, size:', templateBuffer.length);
 
     // Set headers for file download
-    const fileName = `employee_import_template_${region || 'sample'}.xlsx`;
+    const fileName = `employee_import_template_${region || 'authenticated'}.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
 
@@ -369,15 +370,15 @@ io.on('connection', (socket) => {
     console.log('Permission update received:', data);
     
     // Broadcast to all connected clients except sender
-    socket.broadcast.emit('permission-changed', {
-      userId: data.userId,
-      updatedBy: data.updatedBy,
-      timestamp: new Date(),
-      changes: data.changes
-    });
+    // socket.broadcast.emit('permission-changed', {
+    //   userId: data.userId,
+    //   updatedBy: data.updatedBy,
+    //   timestamp: new Date(),
+    //   changes: data.changes
+    // });
 
     // Also broadcast to admin room for admin dashboard updates
-    io.to('admin_room').emit('admin-permission-updated', data);
+    // io.to('admin_room').emit('admin-permission-updated', data);
   });
 
   // Handle disconnect

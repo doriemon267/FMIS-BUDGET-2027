@@ -1976,36 +1976,62 @@ exports.getDraftProposal = async (req, res) => {
 // Add this function to get all user proposals including drafts
 exports.getAllUserProposals = async (req, res) => {
   try {
-    const { processBy } = req.query;
+    const { processBy, region } = req.query;
     if (!processBy) {
       return res.status(400).json({ message: "processBy parameter is required" });
     }
-    // Get all personnel services including drafts
-    const personnel = await PersonnelService.find({ 
-      processBy: processBy
-    }).sort({ updatedAt: -1 });
-    // Get all MOOE proposals including drafts
-    const mooe = await MooeProposal.find({ 
-      processBy: processBy
-    }).sort({ updatedAt: -1 });
-    // Get all capital outlay proposals including drafts
-    const capitalOutlay = await CapitalOutlay.find({ 
-      processBy: processBy
-    }).sort({ updatedAt: -1 });
-    // Get all income proposals including drafts
-    const income = await Income.find({ 
-      processBy: processBy
-    }).sort({ updatedAt: -1 });
-    // Get all draft proposals
-    const drafts = await DraftProposal.find({
-      processBy: processBy
-    }).sort({ updatedAt: -1 });
+    if (!region) {
+      return res.status(400).json({ message: "Region parameter is required" });
+    }
+
+    // Build base query with processBy and region
+    const baseQuery = { 
+      processBy: processBy,
+      region: region
+    };
+
+    // Apply hierarchical filters from middleware if available
+    let hierarchicalQuery = { ...baseQuery };
+    if (req.submissionWorkflowFilters) {
+      // Merge hierarchical filters with base query
+      hierarchicalQuery = {
+        $and: [
+          baseQuery,
+          req.submissionWorkflowFilters
+        ]
+      };
+    }
+
+    // Get all personnel services with hierarchical filtering
+    const personnel = await PersonnelService.find(hierarchicalQuery).sort({ updatedAt: -1 });
+    
+    // Get all MOOE proposals with hierarchical filtering
+    const mooe = await MooeProposal.find(hierarchicalQuery).sort({ updatedAt: -1 });
+    
+    // Get all capital outlay proposals with hierarchical filtering
+    const capitalOutlay = await CapitalOutlay.find(hierarchicalQuery).sort({ updatedAt: -1 });
+    
+    // Get all income proposals with hierarchical filtering
+    const income = await Income.find(hierarchicalQuery).sort({ updatedAt: -1 });
+
+    // Get all budgetary support proposals with hierarchical filtering
+    const budgetarySupport = await BudgetarySupport.find(hierarchicalQuery).sort({ updatedAt: -1 });
+
+    // Get all draft proposals (drafts might have different filtering)
+    const draftQuery = { ...baseQuery };
+    if (req.submissionWorkflowFilters) {
+      draftQuery.$and = [baseQuery, req.submissionWorkflowFilters];
+    }
+    const drafts = await DraftProposal.find(draftQuery).sort({ updatedAt: -1 });
+
     return res.status(200).json({
       personnel,
       mooe,
       capitalOutlay,
       income,
-      drafts
+      budgetarySupport,
+      drafts,
+      filters: { region, processBy } // Include the filters used in the response
     });
   } catch (error) {
     console.error("Error getting all user proposals:", error);

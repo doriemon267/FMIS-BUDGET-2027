@@ -59,9 +59,13 @@ router.post("/upload", upload.single("file"), async (req, res) => {
         message: "Please set an active fiscal year in settings before uploading employees"
       });
     }
-    const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
+    const workbook = xlsx.read(req.file.buffer, { type: "buffer", cellDates: true, cellNF: false, cellText: false });
     const sheetName = workbook.SheetNames[0];
-    const sheetData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+    const sheetData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { 
+      raw: false, 
+      dateNF: 'yyyy-mm-dd',
+      defval: null
+    });
 
     // Validate all records first
     const validationResults = [];
@@ -83,6 +87,15 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     // Check for validation errors
     const errorRecords = validationResults.filter(r => !r.isValid);
     if (errorRecords.length > 0) {
+      console.log('Validation errors found:', errorRecords.length);
+      errorRecords.slice(0, 3).forEach((record, index) => {
+        console.log(`Record ${index + 1} (Row ${record.row}):`, {
+          employeeId: record.record.EmployeeID,
+          employeeName: record.record.EmployeeFullName,
+          errors: record.errors
+        });
+      });
+
       return res.status(400).json({
         error: "Validation failed",
         message: `${errorRecords.length} record(s) have validation errors`,

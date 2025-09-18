@@ -30,6 +30,12 @@ export const setupRegionInterceptor = () => {
         return config;
       }
 
+      // Only append region for GET requests; avoid for POST/PUT/PATCH/DELETE
+      const method = (config.method || '').toUpperCase();
+      if (method && method !== 'GET') {
+        return config;
+      }
+
       // Get the active region from localStorage
       const activeRegionStr = localStorage.getItem('activeRegion');
 

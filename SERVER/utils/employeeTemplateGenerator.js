@@ -157,6 +157,23 @@ const generateFilteredSampleData = (region, scope, accessibleDepartments, access
           'JG*': 'JG-15',
           'Step*': 3,
           'Rate': ''
+        },
+        {
+          'EmployeeID*': 'COS001',
+          'EmployeeFullName*': 'Juan dela Cruz',
+          'DateOfBirth': '1990-05-10',
+          'Region*': region || 'REGION_NAME',
+          'Department*': 'HR Department',
+          'Division': 'Recruitment',
+          'Section': 'Talent Acquisition',
+          'PositionTitle*': 'Consultant',
+          'StatusOfAppointment*': 'COS',
+          'DateOfAppointment*': '2024-01-15',
+          'Status*': 'Active',
+          'SG': '',
+          'JG': '',
+          'Step': '',
+          'Rate': '30000'
         }
       );
   }
@@ -294,10 +311,28 @@ const generateEmployeeTemplate = (options = {}) => {
       'StatusOfAppointment*': 'Permanent',
       'DateOfAppointment*': '2024-01-15',
       'Status*': 'Active',
-      'SG*': 10, // Salary Grade - will auto-compute Rate
-      'JG*': 'JG-10', // Job Grade - will auto-compute Rate
-      'Step*': 1, // Step - will auto-compute Rate
-      'Rate': '', // Will be auto-computed based on SG/JG/Step
+      'SG': 10, // Salary Grade - required for Permanent/Contractual, optional for COS
+      'JG': 'JG-10', // Job Grade - required for Permanent/Contractual, optional for COS
+      'Step': 1, // Step - required for Permanent/Contractual, optional for COS
+      'Rate': '', // Will be auto-computed for Permanent/Contractual, manual entry for COS
+    },
+    {
+      // COS (Contract of Service) example - no SG/JG/Step required
+      'EmployeeID*': 'COS001',
+      'EmployeeFullName*': 'Maria Santos',
+      'DateOfBirth': '1985-03-20',
+      'Region*': region || 'REGION_NAME',
+      'Department*': 'IT Department',
+      'Division': 'Software Development',
+      'Section': 'Frontend Team',
+      'PositionTitle*': 'Consultant',
+      'StatusOfAppointment*': 'COS',
+      'DateOfAppointment*': '2024-06-01',
+      'Status*': 'Active',
+      'SG': '', // Not required for COS
+      'JG': '', // Not required for COS
+      'Step': '', // Not required for COS
+      'Rate': '25000', // Manual rate entry for COS
     },
     // Add filtered sample data based on access level
     ...generateFilteredSampleData(region, scope, accessibleDepartments, accessibleDivisions, accessibleSections)
@@ -363,8 +398,14 @@ const generateEmployeeTemplate = (options = {}) => {
     { 'Instructions': '- Rate: Will be auto-computed based on SG, JG, and Step' },
     { 'Instructions': '' },
     { 'Instructions': 'AUTO-COMPUTATION:' },
-    { 'Instructions': '- Rate will be automatically calculated based on SG, JG, and Step' },
-    { 'Instructions': '- If Rate is provided, it will be validated against computed value' },
+    { 'Instructions': '- For Permanent/Contractual: Rate is auto-calculated from SG, JG, Step' },
+    { 'Instructions': '- For COS: Rate must be manually entered, SG/JG/Step are optional' },
+    { 'Instructions': '- If Rate is provided for Permanent/Contractual, it will be validated' },
+    { 'Instructions': '' },
+    { 'Instructions': 'SALARY GRADE FIELDS:' },
+    { 'Instructions': '- SG, JG, Step: Required for Permanent/Contractual employees' },
+    { 'Instructions': '- SG, JG, Step: Optional for COS employees' },
+    { 'Instructions': '- COS employees use manual Rate entry instead of auto-computation' },
     { 'Instructions': '' },
     { 'Instructions': 'DATE FORMATS:' },
     { 'Instructions': '- Use YYYY-MM-DD format for dates (e.g., 1990-01-15)' },

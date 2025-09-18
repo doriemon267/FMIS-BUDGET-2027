@@ -15,7 +15,8 @@ const getToken = () => {
   }
 };
 
-const REQUEST_TIMEOUT = Number(env("REQUEST_TIMEOUT_MS")) || 15000;
+// Increase default timeout and allow override via env
+const REQUEST_TIMEOUT = Number(env("REQUEST_TIMEOUT_MS")) || 30000; // default 30s
 
 const api = axios.create({
   baseURL: env("SERVER_URL"),
@@ -52,8 +53,22 @@ api.interceptors.request.use(
 
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
+  (error) => Promise.reject(error)
+);
+
+// Retry on transient timeouts with exponential backoff (max 2 retries)
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const config = error?.config;
+    const isTimeout = error?.code === 'ECONNABORTED' || /timeout/i.test(error?.message || '');
+    if (!config || !isTimeout) return Promise.reject(error);
+    config.__retryCount = config.__retryCount || 0;
+    if (config.__retryCount >= 2) return Promise.reject(error);
+    config.__retryCount += 1;
+    const delay = Math.min(1000 * 2 ** (config.__retryCount - 1), 5000);
+    await new Promise((res) => setTimeout(res, delay));
+    return api.request(config);
   }
 );
 

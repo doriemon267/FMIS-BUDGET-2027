@@ -48,13 +48,13 @@ proposalRouter.get("/proposals",
   getProposals
 );
 //Get all my proposals with submission workflow filtering
-proposalRouter.get("/myproposals", 
-  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), 
-  getMyProposals
-);
+// proposalRouter.get("/myproposals", 
+//   submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }), 
+//   getMyProposals
+// );
 // Get all proposals for the current user including drafts
 proposalRouter.get("/myproposals/all", 
-  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), 
+  submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }), 
   getAllUserProposals
 );
 // Get proposal details - IMPORTANT: Place this BEFORE the /:id route

@@ -20,17 +20,9 @@ import {
   ListItem,
   ListItemText,
   ListItemIcon,
-  Divider
+  Divider,
+  Avatar
 } from '@mui/material';
-import {
-  Timeline,
-  TimelineItem,
-  TimelineSeparator,
-  TimelineConnector,
-  TimelineContent,
-  TimelineDot,
-  TimelineOppositeContent,
-} from '@mui/lab';
 import {
   CheckCircle,
   Error,
@@ -273,10 +265,10 @@ const BackupTimelineChart = ({ backups = [], onSelectBackup, onDownload, onDelet
       <Card>
         <CardContent>
           <Typography variant="h6" gutterBottom display="flex" alignItems="center" gap={1}>
-            <Timeline />
+            <Storage />
             Backup Timeline
           </Typography>
-          
+
           {filteredBackups.length === 0 ? (
             <Box textAlign="center" py={4}>
               <Typography variant="body1" color="text.secondary">
@@ -284,127 +276,158 @@ const BackupTimelineChart = ({ backups = [], onSelectBackup, onDownload, onDelet
               </Typography>
             </Box>
           ) : (
-            <Timeline position="alternate">
-              {filteredBackups.map((backup, index) => (
-                <TimelineItem key={backup._id}>
-                  <TimelineOppositeContent
-                    sx={{ m: 'auto 0' }}
-                    align={index % 2 === 0 ? 'right' : 'left'}
-                    variant="body2"
-                    color="text.secondary"
-                  >
-                    {formatDate(backup.createdAt)}
-                  </TimelineOppositeContent>
-                  
-                  <TimelineSeparator>
-                    <TimelineDot 
-                      color={getStatusColor(backup.status)}
-                      sx={{ 
-                        border: `3px solid ${getTypeColor(backup.type)}`,
-                        cursor: 'pointer'
-                      }}
-                      onClick={() => handleBackupClick(backup)}
-                    >
-                      {getStatusIcon(backup.status)}
-                    </TimelineDot>
-                    {index < filteredBackups.length - 1 && <TimelineConnector />}
-                  </TimelineSeparator>
-                  
-                  <TimelineContent sx={{ py: '12px', px: 2 }}>
-                    <Card 
-                      variant="outlined" 
-                      sx={{ 
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        '&:hover': {
-                          boxShadow: 2,
-                          backgroundColor: alpha(theme.palette.primary.main, 0.05)
-                        },
-                        border: selectedBackup?._id === backup._id ? 
-                          `2px solid ${theme.palette.primary.main}` : undefined
-                      }}
-                      onClick={() => handleBackupClick(backup)}
-                    >
-                      <CardContent sx={{ pb: '16px !important' }}>
-                        <Box display="flex" justifyContent="space-between" alignItems="start" mb={1}>
-                          <Typography variant="h6" component="h3">
-                            {backup.name}
+            <Box sx={{ position: 'relative' }}>
+              {/* Timeline line */}
+              <Box
+                sx={{
+                  position: 'absolute',
+                  left: '50%',
+                  top: 0,
+                  bottom: 0,
+                  width: 2,
+                  backgroundColor: theme.palette.divider,
+                  transform: 'translateX(-50%)',
+                  zIndex: 1
+                }}
+              />
+
+              <Stack spacing={3}>
+                {filteredBackups.map((backup, index) => {
+                  const isLeft = index % 2 === 0;
+                  return (
+                    <Box key={backup._id} sx={{ position: 'relative' }}>
+                      {/* Timeline dot */}
+                      <Avatar
+                        sx={{
+                          position: 'absolute',
+                          left: '50%',
+                          top: '50%',
+                          transform: 'translate(-50%, -50%)',
+                          width: 24,
+                          height: 24,
+                          backgroundColor: theme.palette[getStatusColor(backup.status)].main,
+                          border: `3px solid ${getTypeColor(backup.type)}`,
+                          cursor: 'pointer',
+                          zIndex: 2,
+                          '&:hover': {
+                            transform: 'translate(-50%, -50%) scale(1.1)'
+                          }
+                        }}
+                        onClick={() => handleBackupClick(backup)}
+                      >
+                        {getStatusIcon(backup.status)}
+                      </Avatar>
+
+                      {/* Content */}
+                      <Box
+                        sx={{
+                          width: '45%',
+                          [isLeft ? 'marginRight' : 'marginLeft']: '55%',
+                          [isLeft ? 'textAlign' : 'textAlign']: isLeft ? 'right' : 'left'
+                        }}
+                      >
+                        <Box sx={{ mb: 1 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            {formatDate(backup.createdAt)}
                           </Typography>
-                          <Stack direction="row" spacing={0.5}>
-                            <Chip
-                              label={backup.type}
-                              size="small"
-                              sx={{ backgroundColor: getTypeColor(backup.type), color: 'white' }}
-                            />
-                            <Chip
-                              label={backup.status}
-                              size="small"
-                              color={getStatusColor(backup.status)}
-                            />
-                          </Stack>
                         </Box>
-                        
-                        <Typography variant="body2" color="text.secondary" mb={1}>
-                          {backup.description}
-                        </Typography>
-                        
-                        <Stack direction="row" spacing={1} flexWrap="wrap" mb={1}>
-                          {backup.size && (
-                            <Chip label={`Size: ${formatBytes(backup.size)}`} size="small" variant="outlined" />
-                          )}
-                          <Chip 
-                            label={`Duration: ${formatDuration(backup.createdAt, backup.updatedAt)}`} 
-                            size="small" 
-                            variant="outlined" 
-                          />
-                          {backup.schedule && (
-                            <Chip label={`Schedule: ${backup.schedule}`} size="small" variant="outlined" />
-                          )}
-                        </Stack>
-                        
-                        <Stack direction="row" spacing={1} justifyContent="flex-end">
-                          <Tooltip title="View Details">
-                            <IconButton size="small" onClick={(e) => {
-                              e.stopPropagation();
-                              handleBackupClick(backup);
-                            }}>
-                              <Visibility />
-                            </IconButton>
-                          </Tooltip>
-                          
-                          {backup.status === 'completed' && (
-                            <Tooltip title="Download">
-                              <IconButton 
+
+                        <Card
+                          variant="outlined"
+                          sx={{
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            '&:hover': {
+                              boxShadow: 2,
+                              backgroundColor: alpha(theme.palette.primary.main, 0.05)
+                            },
+                            border: selectedBackup?._id === backup._id ?
+                              `2px solid ${theme.palette.primary.main}` : undefined
+                          }}
+                          onClick={() => handleBackupClick(backup)}
+                        >
+                          <CardContent sx={{ pb: '16px !important' }}>
+                            <Box display="flex" justifyContent="space-between" alignItems="start" mb={1}>
+                              <Typography variant="h6" component="h3">
+                                {backup.name}
+                              </Typography>
+                              <Stack direction="row" spacing={0.5}>
+                                <Chip
+                                  label={backup.type}
+                                  size="small"
+                                  sx={{ backgroundColor: getTypeColor(backup.type), color: 'white' }}
+                                />
+                                <Chip
+                                  label={backup.status}
+                                  size="small"
+                                  color={getStatusColor(backup.status)}
+                                />
+                              </Stack>
+                            </Box>
+
+                            <Typography variant="body2" color="text.secondary" mb={1}>
+                              {backup.description}
+                            </Typography>
+
+                            <Stack direction="row" spacing={1} flexWrap="wrap" mb={1}>
+                              {backup.size && (
+                                <Chip label={`Size: ${formatBytes(backup.size)}`} size="small" variant="outlined" />
+                              )}
+                              <Chip
+                                label={`Duration: ${formatDuration(backup.createdAt, backup.updatedAt)}`}
                                 size="small"
-                                onClick={(e) => {
+                                variant="outlined"
+                              />
+                              {backup.schedule && (
+                                <Chip label={`Schedule: ${backup.schedule}`} size="small" variant="outlined" />
+                              )}
+                            </Stack>
+
+                            <Stack direction="row" spacing={1} justifyContent="flex-end">
+                              <Tooltip title="View Details">
+                                <IconButton size="small" onClick={(e) => {
                                   e.stopPropagation();
-                                  if (onDownload) onDownload(backup);
-                                }}
-                              >
-                                <CloudDownload />
-                              </IconButton>
-                            </Tooltip>
-                          )}
-                          
-                          <Tooltip title="Delete">
-                            <IconButton 
-                              size="small" 
-                              color="error"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (onDelete) onDelete(backup);
-                              }}
-                            >
-                              <Delete />
-                            </IconButton>
-                          </Tooltip>
-                        </Stack>
-                      </CardContent>
-                    </Card>
-                  </TimelineContent>
-                </TimelineItem>
-              ))}
-            </Timeline>
+                                  handleBackupClick(backup);
+                                }}>
+                                  <Visibility />
+                                </IconButton>
+                              </Tooltip>
+
+                              {backup.status === 'completed' && (
+                                <Tooltip title="Download">
+                                  <IconButton
+                                    size="small"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (onDownload) onDownload(backup);
+                                    }}
+                                  >
+                                    <CloudDownload />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+
+                              <Tooltip title="Delete">
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (onDelete) onDelete(backup);
+                                  }}
+                                >
+                                  <Delete />
+                                </IconButton>
+                              </Tooltip>
+                            </Stack>
+                          </CardContent>
+                        </Card>
+                      </Box>
+                    </Box>
+                  );
+                })}
+              </Stack>
+            </Box>
           )}
         </CardContent>
       </Card>

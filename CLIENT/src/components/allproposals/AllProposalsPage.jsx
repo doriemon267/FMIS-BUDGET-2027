@@ -354,6 +354,15 @@ const AllProposalsPage = () => {
                     </div>
                   </div>
                 )}
+                {/* Submit All Drafts button (uses current user scope) */}
+                <button
+                  className={`px-3 py-2 rounded-md text-white text-sm font-medium ${submittingAll ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}
+                  disabled={submittingAll}
+                  onClick={handleSubmitAllDrafts}
+                  title="Submit all Draft proposals shown in the table to the next level"
+                >
+                  {submittingAll ? 'Submitting…' : 'Submit All Drafts'}
+                </button>
               </div>
             </div>
           </div>

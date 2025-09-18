@@ -124,7 +124,7 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                     { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName },
                     { 
                       $or: [
-                        { originalLevel: 'DEPARTMENT' },
+                        { workflowLevel: 'DEPARTMENT' },
                         { $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] }
                       ]
                     }
@@ -135,7 +135,7 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                   $and: [
                     { division: { $exists: true, $ne: null, $ne: "" } },
                     { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName },
-                    { originalLevel: 'DIVISION' },
+                    { workflowLevel: 'DIVISION' },
                     { 
                       $or: [
                         { status: { $in: ['Division Submitted', 'DIVISION SUBMITTED'] } },
@@ -179,7 +179,7 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                   $and: [
                     { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
                     { $or: [{ department: { $exists: false } }, { department: null }, { department: "" }] },
-                    { originalLevel: 'REGION' }
+                    { workflowLevel: 'REGION' }
                   ]
                 },
                 // Department/division data that has been submitted to region (Department Submitted, Region Approved, or Finalized)

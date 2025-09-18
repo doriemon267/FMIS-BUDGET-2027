@@ -64,25 +64,32 @@ exports.getRate = async (req, res) => {
   }
 };
 // Create Rate based on Job Grade
-// Get Rate based on Job Grade and Step
+// Get Rate based on Job Grade and Step for CASUAL employees (Nationwide Standard)
 exports.getRateByJobGradeAndStep = async (req, res) => {
   try {
     const { job_grade, step } = req.params;
-    // Logging
-    const grade = await SalaryGrade.findOne({ job_grade });
-    if (!grade) {
-      console.error(`Job Grade not found: ${job_grade}`); // Logging
-      return res.status(404).json({ error: 'Job Grade not found' });
+
+    // Find the document with the matching job_grade
+    const casualSalaryInfo = await SalaryGrade.findOne({
+      job_grade: job_grade,
+    });
+
+    if (!casualSalaryInfo) {
+      console.error(`Job Grade not found: ${job_grade}`);
+      return res.status(404).json({ error: `Job Grade ${job_grade} not found.` });
     }
-    const rate = grade.rates.get(step);
-    if (!rate) {
-      console.error(`Rate not found for job grade: ${job_grade}, step: ${step}`); // Logging
-      return res.status(404).json({ error: 'Rate not found for this step' });
+
+    // The rates map is keyed by step (e.g., "1", "2", etc.)
+    const rate = casualSalaryInfo.rates.get(step);
+
+    if (rate === undefined || rate === null) {
+      console.error(`Rate not found for job grade: ${job_grade}, step: ${step}`);
+      return res.status(404).json({ error: 'Rate not found for this job grade and step combination.' });
     }
-    // Logging
+
     res.json({ rate });
   } catch (err) {
-    console.error(`Error fetching rate: ${err.message}`); // Logging
+    console.error(`Error fetching casual rate: ${err.message}`);
     res.status(500).json({ error: err.message });
   }
-};
+};

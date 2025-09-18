@@ -31,6 +31,7 @@ import { NumericFormat } from "react-number-format";
 import api from "../../config/api";
 import { toast } from "react-toastify";
 import { useUser } from "../../context/UserContext";
+import { useRegion } from "../../context/RegionContext";
 
 // Custom number format component for currency inputs
 const NumberFormatCustom = React.forwardRef(function NumberFormatCustom(props, ref) {
@@ -70,6 +71,7 @@ const CapitalOutlayDetailsModal = ({
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
   const { currentUser } = useUser();
+  const { activeRegion } = useRegion();
 
   // Initialize with one empty row
   const initializeEmptyRow = () => ({
@@ -224,24 +226,61 @@ const CapitalOutlayDetailsModal = ({
         const totalIncome = details.reduce((sum, detail) => sum + (parseFloat(detail.income_amount) || 0), 0);
         const totalSubsidy = details.reduce((sum, detail) => sum + (parseFloat(detail.subsidy_amount) || 0), 0);
         
-        // Create the capital outlay item with calculated totals
-        const capitalOutlayResponse = await api.post("/capital-outlays", {
-          sublineItem: temporaryItem.sublineItem,
-          accountingTitle: temporaryItem.accountingTitle,
-          uacsCode: temporaryItem.uacsCode || "",
-          particulars: temporaryItem.particulars || "",
-          income: totalIncome,
-          subsidy: totalSubsidy,
-          cost: totalIncome + totalSubsidy,
-          category: temporaryItem.tempCategoryId,
-          processBy: processBy,
-          processDate: new Date(),
-          fiscalYear: temporaryItem.fiscalYear,
-          budgetType: temporaryItem.budgetType,
-          status: "Not Submitted",
-        });
-
-        const newCapitalOutlayId = capitalOutlayResponse.data.capitalOutlay._id;
+        // Try to create the capital outlay item with calculated totals
+        let newCapitalOutlayId = null;
+        let createdCapitalOutlay = null;
+        try {
+          const capitalOutlayResponse = await api.post("/capital-outlays", {
+            sublineItem: temporaryItem.sublineItem,
+            accountingTitle: temporaryItem.accountingTitle,
+            uacsCode: temporaryItem.uacsCode || "",
+            particulars: temporaryItem.particulars || "",
+            income: totalIncome,
+            subsidy: totalSubsidy,
+            cost: totalIncome + totalSubsidy,
+            category: temporaryItem.tempCategoryId,
+            processBy: processBy,
+            // Ensure organizational context is provided for server-side enforcement
+            region: activeRegion?.name || activeRegion?.Region || currentUser?.Region || "",
+            department: currentUser?.Department || currentUser?.department || "",
+            division: currentUser?.Division || currentUser?.division || "",
+            processDate: new Date(),
+            fiscalYear: temporaryItem.fiscalYear,
+            budgetType: temporaryItem.budgetType,
+            status: "Draft",
+          });
+          createdCapitalOutlay = capitalOutlayResponse?.data?.capitalOutlay || null;
+          newCapitalOutlayId = createdCapitalOutlay?._id;
+        } catch (createErr) {
+          console.warn("Create capital outlay failed, attempting to attach to existing:", createErr?.response?.data || createErr?.message);
+          // If duplicate or server-side error, try to find an existing outlay with the same keys
+          try {
+            const params = new URLSearchParams();
+            if (temporaryItem.fiscalYear) params.append('fiscalYear', temporaryItem.fiscalYear);
+            if (temporaryItem.budgetType) params.append('budgetType', temporaryItem.budgetType);
+            if (activeRegion?.name || activeRegion?.Region || currentUser?.Region) {
+              params.append('region', activeRegion?.name || activeRegion?.Region || currentUser?.Region);
+            }
+            // Narrow list then match client-side on uacsCode + sublineItem
+            const listRes = await api.get(`/capital-outlays?${params.toString()}`);
+            const candidates = Array.isArray(listRes?.data?.capitalOutlays) ? listRes.data.capitalOutlays : [];
+            const matched = candidates.find((c) =>
+              String(c?.uacsCode || '').trim().toUpperCase() === String(temporaryItem.uacsCode || '').trim().toUpperCase() &&
+              String(c?.sublineItem || '').trim().toUpperCase() === String(temporaryItem.sublineItem || '').trim().toUpperCase()
+            );
+            if (matched?._id) {
+              newCapitalOutlayId = matched._id;
+              console.info("Found existing capital outlay to attach details to:", newCapitalOutlayId);
+            } else {
+              // Re-throw original error if none found
+              throw createErr;
+            }
+          } catch (fallbackErr) {
+            // Surface the most informative error
+            const msg = fallbackErr?.response?.data?.error || fallbackErr?.response?.data?.message || fallbackErr?.message || 'Unable to create or find capital outlay record';
+            throw new Error(msg);
+          }
+        }
         
         // Now save the breakdown details to the newly created capital outlay
         const detailsPayload = {
@@ -259,11 +298,20 @@ const CapitalOutlayDetailsModal = ({
         if (detailsResponse.data.success) {
           toast.success("Capital outlay item and breakdown details saved successfully!");
           if (onSave) {
-            onSave({
-              ...detailsResponse.data.totals,
-              newItem: capitalOutlayResponse.data.capitalOutlay,
-              isNewItem: true
-            });
+            // If createdCapitalOutlay exists, inform parent to add it; otherwise, update existing by ID
+            if (createdCapitalOutlay) {
+              onSave({
+                ...detailsResponse.data.totals,
+                newItem: createdCapitalOutlay,
+                isNewItem: true,
+              });
+            } else {
+              onSave({
+                ...detailsResponse.data.totals,
+                capitalOutlayId: newCapitalOutlayId,
+                isNewItem: false,
+              });
+            }
           }
           onClose();
         }

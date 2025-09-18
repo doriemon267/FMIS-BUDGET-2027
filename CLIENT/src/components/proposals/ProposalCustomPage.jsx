@@ -791,7 +791,7 @@ const CustomPage = ({
     onSuccess: (data) => {
       setMooeData(data);
     },
-    refetchInterval: 5000,
+    refetchInterval: 15000,
     refetchIntervalInBackground: true,
   });
 
@@ -820,7 +820,7 @@ const CustomPage = ({
         return { nis: 0, cis: 0, nisSubsidy: 0, cisSubsidy: 0 };
       }
     },
-    refetchInterval: 5000,
+    refetchInterval: 15000,
     refetchIntervalInBackground: true,
   });
 
@@ -849,7 +849,7 @@ const CustomPage = ({
     onSuccess: (data) => {
       setCapitalOutlayData(data);
     },
-    refetchInterval: 5000,
+    refetchInterval: 15000,
     refetchIntervalInBackground: true,
   });
 
@@ -876,7 +876,7 @@ const CustomPage = ({
     onSuccess: (data) => {
       setIncomeData(data);
     },
-    refetchInterval: 5000,
+    refetchInterval: 15000,
     refetchIntervalInBackground: true,
   });
 
@@ -1043,15 +1043,15 @@ const CustomPage = ({
       });
       return;
     }
-    // Check if income is balanced before submission
+    // If income is not balanced, allow submission but warn the user
     if (!budgetSummary.isIncomeBalanced) {
       setSnackbar({
         open: true,
         message:
-          "Combined Income Total must equal Corporate Income before submission.",
-        severity: "error",
+          "Warning: Income is not balanced. Submission will proceed, but may be returned by reviewers.",
+        severity: "warning",
       });
-      return;
+      // Continue without blocking
     }
 
     // Get all eligible proposals for submission
@@ -1394,10 +1394,10 @@ const CustomPage = ({
       setSnackbar({
         open: true,
         message:
-          "Combined Income Total must equal Corporate Income before submission.",
-        severity: "error",
+          "Income is not balanced. You can still submit, but reviewers may return it.",
+        severity: "warning",
       });
-      return;
+      // Do not block dialog; allow user to proceed with a warning
     }
     setOpenDialog(true);
   };
@@ -2433,75 +2433,20 @@ const CustomPage = ({
                   sx={{ fontWeight: "bold", color: "#666" }}
                 >
                   📊 Status Overview{" "}
-                  {activeRegion
-                    ? `(${activeRegion.name || activeRegion.regionName})`
-                    : ""}
+                  {(() => {
+                    const scope = currentUser?.hierarchicalAccess?.scope;
+                    if (scope === 'DIVISION') {
+                      const divisionName = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
+                      return divisionName ? `(${divisionName})` : '';
+                    }
+                    if (scope === 'DEPARTMENT') {
+                      const deptName = currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+                      return deptName ? `(${deptName})` : '';
+                    }
+                    return activeRegion ? `(${activeRegion.name || activeRegion.regionName})` : '';
+                  })()}
                   :
                 </Typography>
-
-                {selectedFiscalYear &&
-                  selectedFiscalYear !== activeFiscalYear && (
-                    <Chip
-                      label={`Viewing FY: ${selectedFiscalYear}`}
-                      color="secondary"
-                      size="small"
-                      sx={{ fontSize: "0.7rem", height: "20px" }}
-                    />
-                  )}
-
-                {/* Fiscal Year Selector */}
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                  <Typography variant="caption" sx={{ color: "#666" }}>
-                    Fiscal Year:
-                  </Typography>
-                  <select
-                    value={selectedFiscalYear}
-                    onChange={(e) => {
-                      const newFiscalYear = e.target.value;
-                      // console.log(
-                      //   `Fiscal year selector changed from ${selectedFiscalYear} to ${newFiscalYear}`
-                      // );
-                      setSelectedFiscalYear(newFiscalYear);
-                    }}
-                    style={{
-                      padding: "4px 8px",
-                      borderRadius: "4px",
-                      border: "1px solid #ccc",
-                      fontSize: "0.75rem",
-                      backgroundColor: "#fff",
-                    }}
-                  >
-                    {availableFiscalYears.length > 0 ? (
-                      // Use index in combination with year to ensure unique keys
-                      availableFiscalYears.map((year, index) => (
-                        <option key={`${year}-${index}`} value={year}>
-                          {year}
-                        </option>
-                      ))
-                    ) : (
-                      <option key="default" value={activeFiscalYear}>
-                        {activeFiscalYear || "No fiscal years available"}
-                      </option>
-                    )}
-                  </select>
-                </Box>
-
-                {selectedFiscalYear !== activeFiscalYear && (
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="secondary"
-                    onClick={() => {
-                      // console.log(
-                      //   `Resetting to active fiscal year: ${activeFiscalYear}`
-                      // );
-                      setSelectedFiscalYear(activeFiscalYear);
-                    }}
-                    sx={{ fontSize: "0.7rem", py: 0.5, px: 1, mr: 1 }}
-                  >
-                    Reset to Active FY
-                  </Button>
-                )}
 
                 <Button
                   size="small"
@@ -2551,6 +2496,7 @@ const CustomPage = ({
         </Paper>
 
         {/* Collapsible Budget Summary */}
+        {import.meta.env.VITE_HIDE_BUDGET_SUMMARY !== 'true' && (
         <Accordion
           expanded={summaryExpanded}
           onChange={() => setSummaryExpanded(!summaryExpanded)}
@@ -2990,7 +2936,8 @@ const CustomPage = ({
               )}
             </Box>
           </AccordionDetails>
-        </Accordion>
+  </Accordion>
+  )}
 
         {/* Mobile Navigation */}
         <MobileTabNavigation />
@@ -3106,8 +3053,7 @@ const CustomPage = ({
                       disabled={
                         !canEditOwn ||
                         !anyNotSubmitted ||
-                        isSubmitting ||
-                        !budgetSummary.isIncomeBalanced
+                        isSubmitting
                       }
                       startIcon={<BalanceIcon />}
                       sx={{
@@ -3309,7 +3255,7 @@ const CustomPage = ({
           )}
           {activeTab === "MOOE" && (
             <Suspense fallback={<CircularProgress />}>
-              <IncomeLockedBanner />
+              {import.meta.env.VITE_HIDE_INCOME_LOCK_BANNER === 'true' ? null : <IncomeLockedBanner />}
               <MooeTable
                 data={mooeData}
                 disableIncomeInputs={disableIncomeInputs}
@@ -3321,7 +3267,7 @@ const CustomPage = ({
           )}
           {activeTab === "Capital Outlay" && (
             <Suspense fallback={<CircularProgress />}>
-              <IncomeLockedBanner />
+              {import.meta.env.VITE_HIDE_INCOME_LOCK_BANNER === 'true' ? null : <IncomeLockedBanner />}
               <CapitalOutlayTable
                 data={capitalOutlayData}
                 disableIncomeInputs={disableIncomeInputs}

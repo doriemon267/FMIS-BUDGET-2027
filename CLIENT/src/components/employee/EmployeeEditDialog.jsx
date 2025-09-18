@@ -49,7 +49,7 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
-  const [stepOptions, setStepOptions] = useState([]);
+  const [stepOptions, setStepOptions] = useState(["1", "2", "3", "4", "5", "6", "7", "8"]);
   const [salaryData, setSalaryData] = useState(null);
   const [activeStep, setActiveStep] = useState(0);
   const [activeSettings, setActiveSettings] = useState(null);
@@ -72,6 +72,33 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
   const [positionOptions, setPositionOptions] = useState([]);
   const [organizationStructure, setOrganizationStructure] = useState(null);
 
+  // Utility function to format dates for HTML date inputs
+  const formatDateForInput = (dateValue) => {
+    if (!dateValue) return "";
+
+    try {
+      let date;
+      if (dateValue instanceof Date) {
+        date = dateValue;
+      } else if (typeof dateValue === 'string') {
+        // Handle ISO string or other date formats
+        date = new Date(dateValue);
+      } else {
+        return "";
+      }
+
+      if (isNaN(date.getTime())) {
+        return "";
+      }
+
+      // Return in YYYY-MM-DD format for HTML date input
+      return date.toISOString().split('T')[0];
+    } catch (error) {
+      console.warn("Error formatting date:", dateValue, error);
+      return "";
+    }
+  };
+
   // Initialize react-hook-form with existing employee data
   const methods = useForm({
     defaultValues: {
@@ -83,8 +110,8 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
       Section: row?.Section || "",
       PositionTitle: row?.PositionTitle || "",
       StatusOfAppointment: row?.StatusOfAppointment || "",
-      DateOfAppointment: row?.DateOfAppointment || "",
-      DateOfBirth: row?.DateOfBirth || "",
+      DateOfAppointment: formatDateForInput(row?.DateOfAppointment),
+      DateOfBirth: formatDateForInput(row?.DateOfBirth),
       Status: row?.Status || "Active",
       SG: row?.SG || "",
       JG: row?.JG || "",
@@ -100,16 +127,22 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
     control,
     formState: { errors },
     trigger,
+    getValues,
   } = methods;
 
   // Watch all form values for the review step
   const watchedValues = watch();
 
+  // Debug watchedValues.StatusOfAppointment
+  useEffect(() => {
+    console.log("🔍 watchedValues.StatusOfAppointment:", watchedValues.StatusOfAppointment);
+    console.log("🔍 watchedValues.StatusOfAppointment type:", typeof watchedValues.StatusOfAppointment);
+    console.log("🔍 watchedValues.StatusOfAppointment upper:", watchedValues.StatusOfAppointment?.toString().toUpperCase());
+  }, [watchedValues.StatusOfAppointment]);
+
   // Debug activeStep changes
   useEffect(() => {
     console.log("🔄 activeStep changed to:", activeStep);
-    console.log("📋 Total steps:", steps.length);
-    console.log("🎯 Is final step?", activeStep === steps.length - 1);
   }, [activeStep]);
 
   // Debug user context
@@ -276,6 +309,39 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
     }
   }, [currentUser, userAccessLevel, userDivision, userDepartment, userRegion, activeRegion, setValue, isOpen]);
 
+  // Initialize salary data when editing existing employee
+  useEffect(() => {
+    const initializeSalaryData = async () => {
+      if (!isOpen || !row) return;
+
+      const status = row.StatusOfAppointment?.toString().toUpperCase();
+      const sg = row.SG;
+      const jg = row.JG;
+
+      // For PERMANENT/CONTRACTUAL employees with SG
+      if ((status === 'PERMANENT' || status === 'CONTRACTUAL') && sg) {
+        try {
+          const response = await api.get(`salary-grades?salary_grade=${sg}`);
+          const salaryGrades = response.data.grades?.[0];
+
+          if (salaryGrades) {
+            const steps = salaryGrades.steps.map((aw) => aw + "");
+            setStepOptions(steps);
+            setSalaryData(salaryGrades);
+          }
+        } catch (error) {
+          console.error("Error initializing salary data:", error);
+        }
+      }
+      // For CASUAL employees, just ensure step options are set
+      else if (status === 'CASUAL') {
+        setStepOptions(["1", "2", "3", "4", "5", "6", "7", "8"]);
+      }
+    };
+
+    initializeSalaryData();
+  }, [isOpen, row]);
+
   // When Department/Division changes, fetch divisions based on selected Department
   useEffect(() => {
     const subscription = watch((values, { name }) => {
@@ -434,6 +500,89 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
     }
   }, [watch("Division"), organizationStructure]);
 
+  // Initialize salary data when dialog opens with existing employee data
+  useEffect(() => {
+    const initializeSalaryData = async () => {
+      console.log("🔄 Initializing salary data - isOpen:", isOpen, "row:", row);
+      console.log("🔄 Row SG:", row?.SG, "StatusOfAppointment:", row?.StatusOfAppointment);
+
+      if (isOpen && row?.SG && row.StatusOfAppointment?.toString().toUpperCase() !== 'COS') {
+        try {
+          console.log("🔄 Fetching salary data for SG:", row.SG);
+          const response = await api.get(`salary-grades?salary_grade=${row.SG}`);
+          const salaryGrades = response.data.grades?.[0];
+
+          if (salaryGrades) {
+            console.log("✅ Salary data loaded:", salaryGrades);
+            const steps = salaryGrades.steps.map((aw) => aw + "");
+            console.log("✅ Setting stepOptions:", steps);
+            setStepOptions(steps);
+            setSalaryData(salaryGrades);
+
+            // Also ensure the form values are set
+            setValue("JG", salaryGrades.job_grade || row.JG || "");
+            setValue("Step", row.Step || steps[0] || "1");
+            // Always recompute the rate based on salary grade data, don't use stored value
+            const correctRate = salaryGrades.rates[row.Step || steps[0]];
+            setValue("Rate", correctRate || "");
+          } else {
+            console.log("❌ No salary data found for SG:", row.SG);
+            setStepOptions(["1", "2", "3", "4", "5", "6", "7", "8"]);
+            setSalaryData(null);
+          }
+        } catch (error) {
+          console.error("❌ Error initializing salary data:", error);
+          setStepOptions(["1", "2", "3", "4", "5", "6", "7", "8"]);
+          setSalaryData(null);
+        }
+      } else if (isOpen && row?.StatusOfAppointment?.toString().toUpperCase() !== 'COS') {
+        // If no SG but it's not COS, set default step options
+        console.log("🔄 Setting default step options for non-COS employee");
+        setStepOptions(["1", "2", "3", "4", "5", "6", "7", "8"]);
+      }
+    };
+
+    if (isOpen) {
+      initializeSalaryData();
+    }
+  }, [isOpen, row, setValue]);
+
+  // Handle row data changes (in case row is loaded asynchronously)
+  useEffect(() => {
+    if (row && isOpen) {
+      console.log("🔄 Row data changed, updating form values:", row);
+      // Update form values when row data becomes available
+      setValue("EmployeeID", row.EmployeeID || "");
+      setValue("EmployeeFullName", row.EmployeeFullName || "");
+      setValue("Region", row.Region || "");
+      setValue("Department", row.Department || "");
+      setValue("Division", row.Division || "");
+      setValue("Section", row.Section || "");
+      setValue("PositionTitle", row.PositionTitle || "");
+      setValue("StatusOfAppointment", row.StatusOfAppointment || "");
+      setValue("DateOfAppointment", formatDateForInput(row.DateOfAppointment));
+      setValue("DateOfBirth", formatDateForInput(row.DateOfBirth));
+      setValue("Status", row.Status || "Active");
+      setValue("SG", row.SG || "");
+
+      // Only set JG, Step, and Rate if they haven't been computed yet
+      // This prevents overriding correct computed values with potentially incorrect stored values
+      const currentJG = getValues("JG");
+      const currentStep = getValues("Step");
+      const currentRate = getValues("Rate");
+
+      if (!currentJG) {
+        setValue("JG", row.JG || "");
+      }
+      if (!currentStep) {
+        setValue("Step", row.Step || "");
+      }
+      if (!currentRate) {
+        setValue("Rate", row.Rate || "");
+      }
+    }
+  }, [row, isOpen, setValue, getValues]);
+
   const handleSave = async (data) => {
     // Store the form data and show confirmation dialog
     setFormDataToSave(data);
@@ -559,6 +708,10 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
   };
 
   const handleOpen = () => {
+    console.log("🚪 Opening edit dialog with row data:", row);
+    console.log("🚪 Row Step value:", row?.Step);
+    console.log("🚪 Row JG value:", row?.JG);
+    console.log("🚪 Row SG value:", row?.SG);
     setIsOpen(true);
   };
 
@@ -585,7 +738,21 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
           "StatusOfAppointment",
         ];
       case 2: // Salary Information
-        return ["SG", "JG", "Step", "Rate"];
+        // Field requirements depend on StatusOfAppointment
+        const status = watchedValues.StatusOfAppointment?.toString().toUpperCase();
+        const isCOS = status === 'COS';
+        const isPermanentOrContractual = status === 'PERMANENT' || status === 'CONTRACTUAL';
+        const isCasual = status === 'CASUAL';
+        
+        if (isCOS) {
+          return ["Rate"]; // Only Rate is required for COS
+        } else if (isPermanentOrContractual) {
+          return ["SG", "Step", "Rate"]; // SG, Step, Rate required for Permanent/Contractual
+        } else if (isCasual) {
+          return ["JG", "Step", "Rate"]; // JG, Step, Rate required for Casual
+        } else {
+          return ["Step", "Rate"]; // Default fallback
+        }
       default:
         return [];
     }
@@ -942,64 +1109,191 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
               {activeStep === 2 && (
                 <Box>
                   <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                    Salary Information
+                    {watchedValues.StatusOfAppointment && 
+                     watchedValues.StatusOfAppointment.toString().toUpperCase() === 'COS' 
+                      ? "Contract Information"
+                      : "Salary Information"}
                   </Typography>
                   <Typography
                     variant="body2"
                     color="text.secondary"
                     sx={{ mb: 3 }}
                   >
-                    Update the salary grade and rate details.
+                    {watchedValues.StatusOfAppointment && 
+                     watchedValues.StatusOfAppointment.toString().toUpperCase() === 'COS' 
+                      ? "Update the contract rate for this COS employee."
+                      : "Enter the salary grade and rate details for permanent/contractual employees."}
                   </Typography>
 
                   <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6}>
-                      <CustomTextField
-                        fieldName="SG"
-                        control={control}
-                        label="Salary Grade"
-                        type="number"
-                        required
-                        rules={{
-                          required: "Salary grade is required",
-                          min: {
-                            value: 1,
-                            message: "Salary grade must be at least 1",
-                          },
-                        }}
-                        InputProps={{
-                          startAdornment: (
-                            <InputAdornment position="start">
-                              <AttachMoneyIcon color="action" />
-                            </InputAdornment>
-                          ),
-                        }}
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <CustomTextField
-                        fieldName="JG"
-                        control={control}
-                        label="Job Grade"
-                        type="number"
-                        required
-                        rules={{ required: "Job grade is required" }}
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <CustomAutoComplete
-                        fieldName="Step"
-                        options={
-                          stepOptions.length > 0
-                            ? stepOptions
-                            : ["1", "2", "3", "4", "5", "6", "7", "8"]
-                        }
-                        label="Step"
-                        control={control}
-                        required
-                        rules={{ required: "Step is required" }}
-                      />
-                    </Grid>
+                    {/* Show SG for Permanent/Contractual employees only */}
+                    {watchedValues.StatusOfAppointment &&
+                     (watchedValues.StatusOfAppointment.toString().toUpperCase() === 'PERMANENT' ||
+                      watchedValues.StatusOfAppointment.toString().toUpperCase() === 'CONTRACTUAL') && (
+                      <Grid item xs={12} sm={6}>
+                        <CustomTextField
+                          fieldName="SG"
+                          control={control}
+                          label="Salary Grade"
+                          type="number"
+                          required
+                          rules={{
+                            required: "Salary grade is required",
+                            min: {
+                              value: 1,
+                              message: "Salary grade must be at least 1",
+                            },
+                          }}
+                          InputProps={{
+                            startAdornment: (
+                              <InputAdornment position="start">
+                                <AttachMoneyIcon color="action" />
+                              </InputAdornment>
+                            ),
+                          }}
+                          onChange={async (e) => {
+                            const sgValue = e.target.value;
+                            setValue("SG", sgValue);
+
+                            if (sgValue) {
+                              try {
+                                const response = await api.get(
+                                  `salary-grades?salary_grade=${sgValue}`
+                                );
+                                const salaryGrades = response.data.grades?.[0];
+
+                                if (salaryGrades) {
+                                  setValue("JG", salaryGrades.job_grade);
+                                  const steps = salaryGrades.steps.map(
+                                    (aw) => aw + ""
+                                  );
+                                  setStepOptions(steps);
+                                  setSalaryData(salaryGrades);
+                                  const defaultStep = steps[0];
+                                  setValue("Step", defaultStep);
+                                  const rate = salaryGrades.rates[defaultStep];
+                                  setValue("Rate", rate);
+
+                                  // Trigger validation
+                                  trigger(["JG", "Step", "Rate"]);
+                                } else {
+                                  setValue("JG", "");
+                                  setStepOptions([]);
+                                  setSalaryData(null);
+                                  setValue("Step", "");
+                                  setValue("Rate", "");
+                                }
+                              } catch (error) {
+                                console.error(
+                                  "Error fetching salary grades:",
+                                  error
+                                );
+                              }
+                            }
+                          }}
+                        />
+                      </Grid>
+                    )}
+                    {/* Show JG for Casual employees, hide for others */}
+                    {watchedValues.StatusOfAppointment &&
+                     watchedValues.StatusOfAppointment.toString().toUpperCase() === 'CASUAL' && (
+                      <Grid item xs={12} sm={6}>
+                        <CustomTextField
+                          fieldName="JG"
+                          control={control}
+                          label="Job Grade"
+                          type="number"
+                          required
+                          rules={{ required: "Job grade is required" }}
+                          onChange={async (e) => {
+                            const jgValue = e.target.value;
+                            setValue("JG", jgValue);
+
+                            const status = watchedValues.StatusOfAppointment?.toString().toUpperCase();
+                            if (status !== 'CASUAL') return;
+
+                            if (jgValue) {
+                              // Set default step to 1 if not already set
+                              const currentStep = getValues("Step");
+                              const stepValue = currentStep || "1";
+                              if (!currentStep) {
+                                setValue("Step", stepValue);
+                              }
+
+                              try {
+                                const response = await api.get(
+                                  `/rate-by-job-grade-and-step/${jgValue}/${stepValue}`
+                                );
+                                const rateData = response.data;
+
+                                if (rateData && rateData.rate) {
+                                  setValue("Rate", rateData.rate);
+                                  trigger("Rate");
+                                } else {
+                                  setValue("Rate", "");
+                                }
+                              } catch (error) {
+                                console.error(
+                                  "Error fetching rate by job grade and step:",
+                                  error
+                                );
+                                setValue("Rate", "");
+                              }
+                            } else {
+                              setValue("Rate", "");
+                            }
+                          }}
+                        />
+                      </Grid>
+                    )}
+                    {/* Step field - show for Permanent, Contractual, and Casual employees */}
+                    {watchedValues.StatusOfAppointment &&
+                     watchedValues.StatusOfAppointment.toString().toUpperCase() !== 'COS' && (
+                      <Grid item xs={12} sm={6}>
+                        <CustomAutoComplete
+                          fieldName="Step"
+                          options={
+                            stepOptions.length > 0
+                              ? stepOptions
+                              : ["1", "2", "3", "4", "5", "6", "7", "8"]
+                          }
+                          label="Step"
+                          control={control}
+                          required
+                          rules={{ required: "Step is required" }}
+                          onChange={async (value) => {
+                            setValue("Step", value);
+                            const status = watchedValues.StatusOfAppointment?.toString().toUpperCase();
+
+                            if (status === 'PERMANENT' || status === 'CONTRACTUAL') {
+                                if (salaryData && value) {
+                                    const rate = salaryData.rates[value] || "";
+                                    setValue("Rate", rate);
+                                }
+                            } else if (status === 'CASUAL') {
+                                const jgValue = getValues("JG");
+                                if (jgValue && value) {
+                                    try {
+                                        const response = await api.get(
+                                            `/rate-by-job-grade-and-step/${jgValue}/${value}`
+                                        );
+                                        const rateData = response.data;
+                                        if (rateData && rateData.rate) {
+                                            setValue("Rate", rateData.rate);
+                                        } else {
+                                            setValue("Rate", "");
+                                        }
+                                    } catch (error) {
+                                        console.error("Error fetching rate by job grade and step:", error);
+                                        setValue("Rate", "");
+                                    }
+                                }
+                            }
+                            trigger("Rate");
+                          }}
+                        />
+                      </Grid>
+                    )}
                     <Grid item xs={12} sm={6}>
                       <CustomTextField
                         fieldName="Rate"
@@ -1194,21 +1488,30 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                             <Typography variant="body2" color="text.secondary">
                               Salary Details
                             </Typography>
-                            <Typography variant="body1">
-                              SG: {watchedValues.SG || "N/A"} | JG:{" "}
-                              {watchedValues.JG || "N/A"} | Step:{" "}
-                              {watchedValues.Step || "N/A"}
-                            </Typography>
-                            <Typography
-                              variant="h6"
-                              color="primary"
-                              fontWeight="bold"
-                            >
-                              ₱
-                              {watchedValues.Rate
-                                ? Number(watchedValues.Rate).toLocaleString()
-                                : "N/A"}
-                            </Typography>
+                            {watchedValues.StatusOfAppointment && 
+                             watchedValues.StatusOfAppointment.toString().toUpperCase() === 'COS' ? (
+                              <Typography variant="body1">
+                                Contract Rate: ₱{watchedValues.Rate ? Number(watchedValues.Rate).toLocaleString() : "N/A"}
+                              </Typography>
+                            ) : (
+                              <>
+                                <Typography variant="body1">
+                                  SG: {watchedValues.SG || "N/A"} | JG:{" "}
+                                  {watchedValues.JG ? watchedValues.JG.toString().replace(/^JG-?/, '') : "N/A"} | Step:{" "}
+                                  {watchedValues.Step || "N/A"}
+                                </Typography>
+                                <Typography
+                                  variant="h6"
+                                  color="primary"
+                                  fontWeight="bold"
+                                >
+                                  ₱
+                                  {watchedValues.Rate
+                                    ? Number(watchedValues.Rate).toLocaleString()
+                                    : "N/A"}
+                                </Typography>
+                              </>
+                            )}
                           </Box>
                         </Grid>
                       </Grid>

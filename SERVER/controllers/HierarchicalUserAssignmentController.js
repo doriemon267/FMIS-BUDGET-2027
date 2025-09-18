@@ -149,22 +149,22 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       .lean();
 
     // Emit WebSocket event for real-time permission updates
-    if (global.io) {
-      global.io.emit('permission-updated', {
-        userId: userId,
-        updatedBy: adminUserId,
-        timestamp: new Date(),
-        changes: {
-          assignmentLevel,
-          rolePermissions,
-          workflowRoles: requestedWorkflowRoles,
-          regionId,
-          departmentId,
-          divisionName
-        },
-        action: assignment.isNew ? 'created' : 'updated'
-      });
-    }
+    // if (global.io) {
+    //   global.io.emit('permission-updated', {
+    //     userId: userId,
+    //     updatedBy: adminUserId,
+    //     timestamp: new Date(),
+    //     changes: {
+    //       assignmentLevel,
+    //       rolePermissions,
+    //       workflowRoles: requestedWorkflowRoles,
+    //       regionId,
+    //       departmentId,
+    //       divisionName
+    //     },
+    //     action: assignment.isNew ? 'created' : 'updated'
+    //   });
+    // }
 
     return res.status(200).json({
       success: true,
@@ -353,18 +353,18 @@ const updateWorkflowRoles = async (req, res) => {
     }
 
     // Emit WebSocket event for real-time workflow role updates
-    if (global.io) {
-      global.io.emit('permission-updated', {
-        userId: userId,
-        updatedBy: req.user.id,
-        timestamp: new Date(),
-        changes: {
-          workflowRoles: workflowRoles,
-          rolePermissions: assignment.rolePermissions
-        },
-        action: 'workflow-roles-updated'
-      });
-    }
+    // if (global.io) {
+    //   global.io.emit('permission-updated', {
+    //     userId: userId,
+    //     updatedBy: req.user.id,
+    //     timestamp: new Date(),
+    //     changes: {
+    //       workflowRoles: workflowRoles,
+    //       rolePermissions: assignment.rolePermissions
+    //     },
+    //     action: 'workflow-roles-updated'
+    //   });
+    // }
 
     return res.status(200).json({ success: true, message: 'Workflow roles updated', userId, workflowRoles });
   } catch (error) {

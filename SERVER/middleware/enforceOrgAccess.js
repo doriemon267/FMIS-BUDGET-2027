@@ -51,6 +51,49 @@ module.exports = async function enforceOrgAccess(req, res, next) {
     if (req.method === 'POST' && /deleteAllPersonnels/i.test(req.originalUrl || '')) {
       return res.status(403).json({ message: 'Bulk delete is restricted to administrators.' });
     }
+
+    // Special-case: Allow saving Capital Outlay breakdown details by validating
+    // the parent CapitalOutlay record's organizational ownership instead of
+    // requiring region/department/division in the request body.
+    // This catches routes like: POST /api/capital-outlay/:capitalOutlayId/details
+    try {
+      const url = (req.originalUrl || '').toLowerCase();
+      const method = (req.method || 'GET').toUpperCase();
+      // Match 24-hex ObjectId in the details route
+      const detailsMatch = url.match(/\/api\/capital-outlay\/([a-f0-9]{24})\/details/);
+      if (method === 'POST' && detailsMatch && detailsMatch[1]) {
+        const capitalOutlayId = detailsMatch[1];
+        const mongoose = require('mongoose');
+        if (!mongoose.Types.ObjectId.isValid(capitalOutlayId)) {
+          return res.status(400).json({ message: 'Invalid capital outlay ID' });
+        }
+        const CapitalOutlay = require('../models/CapitalOutlay');
+        const record = await CapitalOutlay.findById(capitalOutlayId).lean();
+        if (!record) {
+          return res.status(404).json({ message: 'Capital outlay not found' });
+        }
+        const recRegion = record.region;
+        const recDept = record.department;
+        const recDiv = record.division;
+        const inAllowedRegion = !allowedRegionNames.length || (recRegion && allowedRegionNames.some(v => String(v).trim().toUpperCase() === String(recRegion).trim().toUpperCase()));
+        const inAllowedDept = !allowedDeptNames.length || (recDept && allowedDeptNames.some(v => String(v).trim().toUpperCase() === String(recDept).trim().toUpperCase()));
+        const inAllowedDiv = !allowedDivisions.length || (recDiv && allowedDivisions.some(v => String(v).trim().toUpperCase() === String(recDiv).trim().toUpperCase()));
+
+        if (assignment.accessScope === 'REGION' && !inAllowedRegion) {
+          return res.status(403).json({ message: 'You cannot modify records outside your Region.' });
+        }
+        if (assignment.accessScope === 'DEPARTMENT' && (!inAllowedRegion || !inAllowedDept)) {
+          return res.status(403).json({ message: 'You cannot modify records outside your Department.' });
+        }
+        if (assignment.accessScope === 'DIVISION' && (!inAllowedRegion || !inAllowedDept || !inAllowedDiv)) {
+          return res.status(403).json({ message: 'You cannot modify records outside your Division.' });
+        }
+        // Organizational access validated against existing record – allow without requiring org fields in body
+        return next();
+      }
+    } catch (e) {
+      // If this special-case validation fails unexpectedly, fall through to standard checks
+    }
     // If updating a specific record and org fields are missing in body, try to validate against existing record
     if ((req.method === 'PUT' || req.method === 'PATCH') && req.params?.id) {
       try {

@@ -1,4 +1,4 @@
-import { Snackbar, Alert } from '@mui/material';
+import CustomSnackbar from './CustomSnackbar';
 import { createRoot } from 'react-dom/client';
 
 // Global notification system for real-time updates
@@ -7,6 +7,7 @@ class NotificationManager {
     this.container = null;
     this.root = null;
     this.currentSnackbar = null;
+    this.isVisible = false;
   }
 
   init() {
@@ -21,23 +22,17 @@ class NotificationManager {
 
   show(message, severity = 'info', duration = 6000) {
     this.init();
+    this.isVisible = true;
 
     const NotificationComponent = () => (
-      <Snackbar
-        open={true}
+      <CustomSnackbar
+        open={this.isVisible}
+        message={message}
+        severity={severity}
         autoHideDuration={duration}
         onClose={() => this.hide()}
         anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-      >
-        <Alert
-          onClose={() => this.hide()}
-          severity={severity}
-          variant="filled"
-          sx={{ width: '100%' }}
-        >
-          {message}
-        </Alert>
-      </Snackbar>
+      />
     );
 
     this.root.render(<NotificationComponent />);
@@ -50,10 +45,10 @@ class NotificationManager {
   }
 
   hide() {
-    if (this.root && this.currentSnackbar) {
-      this.root.render(null);
-      this.currentSnackbar = null;
-    }
+    if (!this.root) return;
+    this.isVisible = false;
+    this.root.render(null);
+    this.currentSnackbar = null;
   }
 
   success(message, duration) {

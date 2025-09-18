@@ -365,7 +365,7 @@ const EmployeeList = () => {
               </Typography>
               <Typography variant="body2">Step: {row.Step || "N/A"}</Typography>
               <Typography variant="body2">
-                Job Grade: {row.JG || "N/A"}
+                Job Grade: {row.JG ? row.JG.toString().replace(/^JG-?/, '') : "N/A"}
               </Typography>
               <Divider sx={{ my: 1, bgcolor: "rgba(255,255,255,0.2)" }} />
               <Typography variant="body2" fontWeight={600}>

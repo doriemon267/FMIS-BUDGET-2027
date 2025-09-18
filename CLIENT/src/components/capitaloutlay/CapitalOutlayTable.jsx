@@ -428,6 +428,10 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
       setNewlyAddedItemId(newItem._id);
       
       toast.success("Capital outlay item created successfully with breakdown details!");
+    } else if (totals.capitalOutlayId) {
+      // Fallback path: details were saved to an existing item we attached to
+      await handleDetailsSaved(totals.capitalOutlayId, totals);
+      toast.success("Capital outlay details saved to existing item successfully");
     } else if (selectedCapitalOutlay && selectedCapitalOutlay._id) {
       // Handle existing item update
       await handleDetailsSaved(selectedCapitalOutlay._id, totals);

@@ -693,28 +693,30 @@ const PSPCustomPageTable = ({
 
   return (
     <>
-      {/* Header Section with Title and User Access Info */}
-      <Paper sx={{ p: 3, mb: 2, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
-        <Box>
-          <Typography variant="h4" fontWeight="bold" gutterBottom>
-            {pageTitle}
-          </Typography>
-          <Typography variant="h6" sx={{ opacity: 0.9, mb: 2 }}>
-            {pageDescription}
-          </Typography>
-          <Typography variant="body2" sx={{ opacity: 0.8, mb: 1 }}>
-            Access Level: {currentUser?.hierarchicalAccess?.scope || 'REGION'}
-          </Typography>
-          <Typography variant="body2" sx={{ opacity: 0.7 }}>
-            {currentUser?.hierarchicalAccess?.scope === 'DIVISION' 
-              ? `You can process permanent personnel within your division (${currentUser?.hierarchicalAccess?.accessibleDivisions?.[0] || 'Division'}). Bulk operations are limited to your access scope.`
-              : currentUser?.hierarchicalAccess?.scope === 'DEPARTMENT'
-              ? `You can process permanent personnel across your department (${currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName || 'Department'}). You have oversight of all divisions within your department.`
-              : `You have full access to process permanent personnel across all departments and divisions in your region.`
-            }
-          </Typography>
-        </Box>
-      </Paper>
+      {/* Header Section with Title and User Access Info (hidden via env toggle) */}
+  {!(String(import.meta.env.VITE_HIDE_ACCESS_INFO_BANNERS).trim() === 'true') && (
+        <Paper sx={{ p: 3, mb: 2, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
+          <Box>
+            <Typography variant="h4" fontWeight="bold" gutterBottom>
+              {pageTitle}
+            </Typography>
+            <Typography variant="h6" sx={{ opacity: 0.9, mb: 2 }}>
+              {pageDescription}
+            </Typography>
+            <Typography variant="body2" sx={{ opacity: 0.8, mb: 1 }}>
+              Access Level: {currentUser?.hierarchicalAccess?.scope || 'REGION'}
+            </Typography>
+            <Typography variant="body2" sx={{ opacity: 0.7 }}>
+              {currentUser?.hierarchicalAccess?.scope === 'DIVISION' 
+                ? `You can process permanent personnel within your division (${currentUser?.hierarchicalAccess?.accessibleDivisions?.[0] || 'Division'}). Bulk operations are limited to your access scope.`
+                : currentUser?.hierarchicalAccess?.scope === 'DEPARTMENT'
+                ? `You can process permanent personnel across your department (${currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName || 'Department'}). You have oversight of all divisions within your department.`
+                : `You have full access to process permanent personnel across all departments and divisions in your region.`
+              }
+            </Typography>
+          </Box>
+        </Paper>
+      )}
 
       {/* Enhanced Action Bar */}
 

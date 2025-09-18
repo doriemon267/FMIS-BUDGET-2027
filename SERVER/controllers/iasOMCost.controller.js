@@ -30,7 +30,8 @@ const getIAsOMCost = async (req, res) => {
       fiscalYear,
       budgetType,
       region
-    });    if (existingData) {
+    }).lean();
+    if (existingData) {
       // Calculate totals for the response
       const totals = {
         totalNIS: (existingData.nis || 0) + (existingData.nisSubsidy || 0),

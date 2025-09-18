@@ -45,10 +45,10 @@ module.exports = async (req, res, next) => {
         userId = payload.username;
       }
       
-      // If no user ID found in JWT, check for dev headers from frontend
-      if (!userId && payload.accessToken) {
+      // If no user ID found in JWT, check for dev headers from frontend (always allowed in dev mode)
+      if (!userId) {
         // The frontend sends X-Dev-User-Id header for development authentication
-        const devUserId = req.headers['x-dev-user-id'];
+        const devUserId = req.headers['x-dev-user-id'] || req.headers['X-Dev-User-Id'];
         if (devUserId) {
           userId = String(devUserId).trim();
         }
@@ -62,7 +62,7 @@ module.exports = async (req, res, next) => {
       
       // User authenticated successfully
       // Extract roles from dev headers if available  
-      const devRoles = req.headers['x-dev-roles'];
+      const devRoles = req.headers['x-dev-roles'] || req.headers['X-Dev-Roles'];
       let userRoles = payload.roles || payload.role;
       if (devRoles) {
         userRoles = devRoles.split(',').map(r => r.trim()).filter(Boolean);

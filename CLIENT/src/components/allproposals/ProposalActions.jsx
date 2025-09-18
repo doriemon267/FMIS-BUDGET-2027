@@ -503,7 +503,7 @@ export const ViewButton = ({ row }) => {
                       }}
                     >
                       <TableCell>{item.positionTitle || 'N/A'}</TableCell>
-                      <TableCell>{item.salaryGrade || item.gradelevel_JG || 'N/A'}</TableCell>
+                      <TableCell>{item.salaryGrade ? item.salaryGrade.toString().replace(/^JG-?/, '') : (item.gradelevel_JG ? item.gradelevel_JG.toString().replace(/^JG-?/, '') : 'N/A')}</TableCell>
                       <TableCell>{item.step || 'N/A'}</TableCell>
                       <TableCell>{item.employeeFullName || 'N/A'}</TableCell>
                       <TableCell>{item.division || 'N/A'}</TableCell>

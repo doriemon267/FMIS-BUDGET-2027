@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
-import { Alert, Snackbar, Stack } from '@mui/material';
+import CustomSnackbar from './CustomSnackbar';
 import api from '../../config/api'; // Fixed import path
 import { useQuery } from '@tanstack/react-query';
 
@@ -94,26 +94,24 @@ export const NotificationsProvider = ({ children }) => {
 
 // Component to display alerts
 const AlertsDisplay = ({ alerts, removeAlert }) => {
+  const handleCloseAlert = (alertId) => {
+    removeAlert(alertId);
+  };
+
   return (
-    <Stack spacing={2} sx={{ position: 'fixed', bottom: 24, right: 24, zIndex: 2000 }}>
+    <>
       {alerts.map((alert) => (
-        <Snackbar
+        <CustomSnackbar
           key={alert.id}
           open={alert.open}
+          message={alert.message}
+          severity={alert.type}
           autoHideDuration={6000}
           onClose={() => handleCloseAlert(alert.id)}
-          disableWindowBlurListener
-        >
-          <Alert 
-            onClose={() => handleCloseAlert(alert.id)} 
-            severity={alert.type} 
-            sx={{ width: '100%' }}
-          >
-            {alert.message}
-          </Alert>
-        </Snackbar>
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        />
       ))}
-    </Stack>
+    </>
   );
 };
 

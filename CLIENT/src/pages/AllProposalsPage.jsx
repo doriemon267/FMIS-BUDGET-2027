@@ -22,11 +22,13 @@ import MonetizationOnIcon from "@mui/icons-material/MonetizationOn";
 import PaymentsIcon from '@mui/icons-material/Payments';
 import { FaPesoSign } from "react-icons/fa6";
 import AssessmentIcon from "@mui/icons-material/Assessment";
+import { toast } from "react-toastify";
 import api from "../config/api";
 
 const AllProposalsPage = () => {
   const tableRef = useRef(null);
   const { currentUser } = useUser();
+  const [submittingAll, setSubmittingAll] = useState(false);
   const [stats, setStats] = useState({
     totalProposals: 0,
     totalProjectedCorporateIncome: 0,
@@ -40,6 +42,93 @@ const AllProposalsPage = () => {
       tableRef.current.refetch();
     }
     fetchStats(); // Refresh stats when data is refreshed
+  };
+
+  // Helper: map COB to entity key used by submission workflow
+  const mapCobToEntity = (cob) => {
+    if (!cob) return 'personnel';
+    const s = String(cob).toLowerCase();
+    if (s.includes('personnel')) return 'personnel';
+    if (s.includes('mooe')) return 'mooe';
+    if (s.includes('capital')) return 'capital';
+    if (s.includes('income') || s.includes('corporate')) return 'income';
+    return 'personnel';
+  };
+
+  // Submit all Drafts for the current scope per expenditure row
+  const handleSubmitAllDrafts = async () => {
+    try {
+      setSubmittingAll(true);
+      // Ask table for current rows (ProposalCustomPage should expose getRows() via ref, else fallback to fetch)
+      const rows = (tableRef.current && typeof tableRef.current.getRows === 'function')
+        ? await tableRef.current.getRows()
+        : null;
+
+      if (!rows || rows.length === 0) {
+        toast.error('No rows found to submit.');
+        return;
+      }
+
+      const scope = currentUser?.hierarchicalAccess?.scope;
+      const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
+
+      for (const row of rows) {
+        if (row.status !== 'Draft') continue;
+        const entity = mapCobToEntity(row.cobExpenditures);
+        // Build params identical to ProposalActions fetchIdsForRow
+        const params = {
+          fiscalYear: row.fiscalYear,
+          budgetType: row.budgetType,
+          processBy: row.processBy,
+          region: row.region,
+        };
+        let url = '';
+        switch (entity) {
+          case 'personnel': url = '/getpersonnels/byParams'; break;
+          case 'mooe': url = '/mooe/getByParams'; break;
+          case 'capital': url = '/capital-outlay/getByParams'; break;
+          case 'income': url = '/income/getByParams'; break;
+          default: url = '/getpersonnels/byParams';
+        }
+        const resp = await api.get(url, { params });
+        const list = Array.isArray(resp.data) ? resp.data : (resp.data?.data || []);
+        const ids = list.filter(i => String(i.status).toLowerCase() === 'draft').map(i => i._id).filter(Boolean);
+        if (!ids.length) continue;
+
+        // Choose endpoint based on scope (reuse same behavior as SubmitDraftButton)
+        let endpoint = '';
+        let successMessage = '';
+        if (scope === 'DIVISION' && roles.includes('divisionCreator')) {
+          endpoint = '/api/submission-workflow/division/submit-to-department';
+          successMessage = 'Submitted to Department';
+        } else if (scope === 'DEPARTMENT' && roles.includes('departmentConsolidator')) {
+          endpoint = '/api/submission-workflow/department/submit-own-to-region';
+          successMessage = 'Submitted to Region';
+        } else if (scope === 'REGION' && roles.includes('regionFinalVerifier')) {
+          endpoint = '/api/submission-workflow/region/submit-own';
+          successMessage = 'Finalized';
+        } else {
+          // Skip if user lacks role for this scope
+          continue;
+        }
+
+        await api.post(endpoint, {
+          ids,
+          entity,
+          submissionNote: `Submitted all drafts from ${scope} level on ${new Date().toLocaleString()}`
+        });
+        toast.success(`${successMessage}: ${row.cobExpenditures}`);
+      }
+
+      // Refresh table and stats
+      if (tableRef.current?.refetch) await tableRef.current.refetch();
+      await fetchStats();
+    } catch (e) {
+      console.error(e);
+      toast.error(e.response?.data?.message || e.message || 'Failed to submit all drafts');
+    } finally {
+      setSubmittingAll(false);
+    }
   };
 
   // Fetch statistics data
