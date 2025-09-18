@@ -69,21 +69,21 @@ const {currentUser} =  useUser();
               {
                 link: "/Proposal",
                 name: "Create Proposal",
-                isAllow: hasPermission(currentUser, 'canCreateProposals') || hasPermission(currentUser, 'canEditOwnProposals'),
+                isAllow: hasPermission(currentUser, 'CreateProposals') || hasPermission(currentUser, 'EditOwnProposals'),
                 icon: <FaFileAlt />,
               },
 
               {
                 link: "/AllProposals",
                 name: "Proposals",
-                isAllow: hasPermission(currentUser, 'canViewReports'),
+                isAllow: hasPermission(currentUser, 'ViewReports'),
                 icon: <FaClipboardList />,
        
               },
               {
                 link: "/myProposals",
                 name: "My Proposals",
-                isAllow: hasPermission(currentUser, 'canEditOwnProposals'),
+                isAllow: hasPermission(currentUser, 'EditOwnProposals'),
                 icon: <FaClipboardList />,
               },
               // {
@@ -98,7 +98,7 @@ const {currentUser} =  useUser();
           <LinkTo
             icon={<TbReportAnalytics />}
             name="Reports & Analytics"
-            isAllow={hasPermission(currentUser, 'canViewReports')}
+            isAllow={hasPermission(currentUser, 'ViewReports')}
             collapsed={collapsed}
             iconRight={<FaChevronCircleDown />}
             subLinks={[
@@ -110,31 +110,31 @@ const {currentUser} =  useUser();
               {
                 link: "/consolidated-corporate-income",
                 name: "Consolidated Corporate Income",
-                isAllow: hasPermission(currentUser, 'canViewReports'),
+                isAllow: hasPermission(currentUser, 'ViewReports'),
                 icon: <FaRegMoneyBillAlt />,
               },
               {
                 link: "/consolidated-reports",
                 name: "Consolidated MOOE",
-                isAllow: hasPermission(currentUser, 'canViewReports'),
+                isAllow: hasPermission(currentUser, 'ViewReports'),
                 icon: <TbReportAnalytics />,
               },
               {
                 link: "/consolidated-capital-outlay-reports",
                 name: "Consolidated Capital Outlay Reports",
-                isAllow: hasPermission(currentUser, 'canViewReports'),
+                isAllow: hasPermission(currentUser, 'ViewReports'),
                 icon: <FaRegMoneyBillAlt />,
               },
               {
                 link: "/consolidated-personnel-services-reports",
                 name: "Consolidated Personnel Services Reports",
-                isAllow: hasPermission(currentUser, 'canViewReports'),
+                isAllow: hasPermission(currentUser, 'ViewReports'),
                 icon: <FiUsers />,
               },
               {
                 link: "/comprehensive-reports",
                 name: "Comprehensive Budget Report",
-                isAllow: hasPermission(currentUser, 'canViewReports'),
+                isAllow: hasPermission(currentUser, 'ViewReports'),
                 icon: <FaRegChartBar />,
               },
               // {
@@ -172,7 +172,7 @@ const {currentUser} =  useUser();
             icon={<FiUsers />}
             name="Employee List"
             link="/Employee"
-            isAllow={hasPermission(currentUser, 'canEditAllProposals')}
+            isAllow={hasPermission(currentUser, 'EditAllProposals')}
             collapsed={collapsed}
           />
 
@@ -180,7 +180,7 @@ const {currentUser} =  useUser();
             icon={<FaBriefcase />}
             name="Employee Benefits"
             link="/employeeBenefits"
-            isAllow={hasPermission(currentUser, 'canEditAllProposals')}
+            isAllow={hasPermission(currentUser, 'EditAllProposals')}
             collapsed={collapsed}
           />
 
@@ -188,20 +188,20 @@ const {currentUser} =  useUser();
           <LinkTo
             icon={<IoSettingsOutline />}
             name="Settings"
-             isAllow={hasPermission(currentUser, 'canManageSettings')}
+             isAllow={hasPermission(currentUser, 'ManageSettings')}
             collapsed={collapsed}
             iconRight={<FaChevronCircleDown />}
             subLinks={[
               {
                 link: "/fysettings",
                 name: "Set Cut-Off",
-                isAllow: hasPermission(currentUser, 'canManageSettings'),
+                isAllow: hasPermission(currentUser, 'ManageSettings'),
                 icon: <IoSettingsOutline />,
               },
               {
                 link: "/compsettings",
                 name: "Compensation Settings",
-                isAllow: hasPermission(currentUser, 'canManageSettings'),
+                isAllow: hasPermission(currentUser, 'ManageSettings'),
                 icon: <IoSettingsOutline />,
               },
               // {
@@ -212,21 +212,21 @@ const {currentUser} =  useUser();
               {
                 link: "/rata",
                 name: "RATA",
-                isAllow: hasPermission(currentUser, 'canManageSettings'),
+                isAllow: hasPermission(currentUser, 'ManageSettings'),
                 icon: <IoSettingsOutline />,
               },
 
               {
                 link: "/categories",
                 name: "Capital Outlay",
-                isAllow: hasPermission(currentUser, 'canManageSettings'),
+                isAllow: hasPermission(currentUser, 'ManageSettings'),
                 icon: <IoSettingsOutline />,
               },
 
               {
                 link: "/income-management",
                 name: "Income Management",
-                isAllow: hasPermission(currentUser, 'canManageSettings'),
+                isAllow: hasPermission(currentUser, 'ManageSettings'),
                 icon: <TbCategory />,
               },
               
@@ -241,7 +241,7 @@ const {currentUser} =  useUser();
                 
                 link: "/hierarchical-user-assignments",
                 name: "Hierarchical User Assignments",
-                isAllow: hasPermission(currentUser, 'canManageUsers'),
+                isAllow: hasPermission(currentUser, 'ManageUsers'),
                 icon: <IoSettingsOutline />,
                 
               }

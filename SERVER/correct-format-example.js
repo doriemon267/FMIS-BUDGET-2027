@@ -8,14 +8,14 @@ const testData = {
   departmentId: '67c7fa8cb10250a3e86b34fd', // First department ID from debug
   divisionName: 'Planning & Programming Division', // Exact division name from debug
   rolePermissions: {
-    canCreateProposals: true,
-    canEditOwnProposals: true,
-    canEditAllProposals: false,
-    canDeleteProposals: false,
-    canApproveProposals: false,
-    canViewReports: true,
-    canManageUsers: false,
-    canManageSettings: false
+    CreateProposals: true,
+    EditOwnProposals: true,
+    EditAllProposals: false,
+    DeleteProposals: false,
+    ApproveProposals: false,
+    ViewReports: true,
+    ManageUsers: false,
+    ManageSettings: false
   }
 };
-);
+

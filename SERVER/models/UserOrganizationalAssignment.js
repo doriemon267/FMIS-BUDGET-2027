@@ -35,14 +35,14 @@ const UserOrganizationalAssignmentSchema = new mongoose.Schema({
   }],
   // Role-based permissions
   rolePermissions: {
-    canCreateProposals: { type: Boolean, default: true },
-    canEditOwnProposals: { type: Boolean, default: true },
-    canEditAllProposals: { type: Boolean, default: false },
-    canDeleteProposals: { type: Boolean, default: false },
-    canApproveProposals: { type: Boolean, default: false },
-    canViewReports: { type: Boolean, default: true },
-    canManageUsers: { type: Boolean, default: false },
-    canManageSettings: { type: Boolean, default: false }
+    CreateProposals: { type: Boolean, default: true },
+    EditOwnProposals: { type: Boolean, default: true },
+    EditAllProposals: { type: Boolean, default: false },
+    DeleteProposals: { type: Boolean, default: false },
+    ApproveProposals: { type: Boolean, default: false },
+    ViewReports: { type: Boolean, default: true },
+    ManageUsers: { type: Boolean, default: false },
+    ManageSettings: { type: Boolean, default: false }
   },
   // Operational restrictions
   restrictions: {
@@ -157,17 +157,17 @@ UserOrganizationalAssignmentSchema.statics.getUserPermissions = async function(u
       departments: [],
       divisions: [],
       rolePermissions: {
-        canCreateProposals: true,
-        canEditOwnProposals: true,
-        canEditAllProposals: false,
-        canDeleteProposals: false,
-        canApproveProposals: false,
-        canViewReports: false,
-        canManageUsers: false,
-        canManageSettings: false
+        CreateProposals: true,
+        EditOwnProposals: true,
+        EditAllProposals: false,
+        DeleteProposals: false,
+        ApproveProposals: false,
+        ViewReports: false,
+        ManageUsers: false,
+        ManageSettings: false
       }
     };
   }
   return assignment;
 };
-module.exports = mongoose.model('UserOrganizationalAssignment', UserOrganizationalAssignmentSchema);
+module.exports = mongoose.model('UserOrganizationalAssignment', UserOrganizationalAssignmentSchema);

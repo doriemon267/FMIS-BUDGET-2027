@@ -111,14 +111,14 @@ const HierarchicalUserAssignmentPage = () => {
     divisionName: '',
     workflowRoles: getDefaultWorkflowRolesMap(),
     rolePermissions: {
-      canCreateProposals: true,
-      canEditOwnProposals: true,
-      canEditAllProposals: false,
-      canDeleteProposals: false,
-      canApproveProposals: false,
-      canViewReports: true,
-      canManageUsers: false,
-      canManageSettings: false
+      CreateProposals: true,
+      EditOwnProposals: true,
+      EditAllProposals: false,
+      DeleteProposals: false,
+      ApproveProposals: false,
+      ViewReports: true,
+      ManageUsers: false,
+      ManageSettings: false
     }
   });
   
@@ -314,14 +314,14 @@ const HierarchicalUserAssignmentPage = () => {
       divisionName: '',
       workflowRoles: getDefaultWorkflowRolesMap(),
       rolePermissions: {
-        canCreateProposals: true,
-        canEditOwnProposals: true,
-        canEditAllProposals: false,
-        canDeleteProposals: false,
-        canApproveProposals: false,
-        canViewReports: true,
-        canManageUsers: false,
-        canManageSettings: false
+        CreateProposals: true,
+        EditOwnProposals: true,
+        EditAllProposals: false,
+        DeleteProposals: false,
+        ApproveProposals: false,
+        ViewReports: true,
+        ManageUsers: false,
+        ManageSettings: false
       }
     });
     setEditingAssignment(null);
@@ -445,9 +445,9 @@ const HierarchicalUserAssignmentPage = () => {
         ...prev.workflowRoles,
         [roleKey]: value
       },
-      // If regionFinalVerifier is selected, ensure canApproveProposals is enabled for smoother UX
+      // If regionFinalVerifier is selected, ensure ApproveProposals is enabled for smoother UX
       rolePermissions: roleKey === 'regionFinalVerifier' && value
-        ? { ...prev.rolePermissions, canApproveProposals: true }
+        ? { ...prev.rolePermissions, ApproveProposals: true }
         : prev.rolePermissions
     }));
   };
@@ -461,14 +461,14 @@ const HierarchicalUserAssignmentPage = () => {
     }
     // Merge role permissions with defaults to ensure all keys exist
     const defaultPerms = {
-      canCreateProposals: true,
-      canEditOwnProposals: true,
-      canEditAllProposals: false,
-      canDeleteProposals: false,
-      canApproveProposals: false,
-      canViewReports: true,
-      canManageUsers: false,
-      canManageSettings: false
+      CreateProposals: true,
+      EditOwnProposals: true,
+      EditAllProposals: false,
+      DeleteProposals: false,
+      ApproveProposals: false,
+      ViewReports: true,
+      ManageUsers: false,
+      ManageSettings: false
     };
     setFormData({
       userId: assignment.userId,
@@ -573,9 +573,9 @@ const HierarchicalUserAssignmentPage = () => {
       rolePermissions: {
         ...formData.rolePermissions,
         // Auto-enable approval if final verifier is selected to avoid server 403s
-        canApproveProposals: selectedWorkflowRoles.includes('regionFinalVerifier')
+        ApproveProposals: selectedWorkflowRoles.includes('regionFinalVerifier')
           ? true
-          : formData.rolePermissions.canApproveProposals
+          : formData.rolePermissions.ApproveProposals
       }
     };
     delete payload.workflowRoles;

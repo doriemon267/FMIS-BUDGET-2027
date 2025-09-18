@@ -25,14 +25,14 @@ const loadHierarchicalAssignment = async (req, res, next) => {
       isRegionLevel: assignment.assignmentLevel === 'REGION',
       isDepartmentLevel: assignment.assignmentLevel === 'DEPARTMENT',
       isDivisionLevel: assignment.assignmentLevel === 'DIVISION',
-      canCreateProposals: assignment.rolePermissions.canCreateProposals,
-      canEditOwnProposals: assignment.rolePermissions.canEditOwnProposals,
-      canEditAllProposals: assignment.rolePermissions.canEditAllProposals,
-      canDeleteProposals: assignment.rolePermissions.canDeleteProposals,
-      canApproveProposals: assignment.rolePermissions.canApproveProposals,
-      canViewReports: assignment.rolePermissions.canViewReports,
-      canManageUsers: assignment.rolePermissions.canManageUsers,
-      canManageSettings: assignment.rolePermissions.canManageSettings
+      canCreateProposals: assignment.rolePermissions.CreateProposals,
+      canEditOwnProposals: assignment.rolePermissions.EditOwnProposals,
+      canEditAllProposals: assignment.rolePermissions.EditAllProposals,
+      canDeleteProposals: assignment.rolePermissions.DeleteProposals,
+      canApproveProposals: assignment.rolePermissions.ApproveProposals,
+      canViewReports: assignment.rolePermissions.ViewReports,
+      canManageUsers: assignment.rolePermissions.ManageUsers,
+      canManageSettings: assignment.rolePermissions.ManageSettings
     };
     next();
   } catch (error) {
@@ -148,4 +148,4 @@ module.exports = {
   hasPermission,
   requirePermission,
   applyHierarchicalFilters
-};
+};

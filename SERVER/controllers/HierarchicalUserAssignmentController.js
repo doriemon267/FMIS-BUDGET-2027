@@ -96,14 +96,14 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       divisionName: assignmentData.divisions?.[0] || null,
       rolePermissions: {
         // Default permissions based on assignment level
-        canCreateProposals: true,
-        canEditOwnProposals: true,
-        canEditAllProposals: assignmentLevel === 'REGION' || assignmentLevel === 'FULL',
-        canDeleteProposals: assignmentLevel === 'FULL',
-        canApproveProposals: assignmentLevel === 'REGION' || assignmentLevel === 'FULL',
-        canViewReports: true,
-        canManageUsers: assignmentLevel === 'FULL',
-        canManageSettings: assignmentLevel === 'FULL',
+        CreateProposals: true,
+        EditOwnProposals: true,
+        EditAllProposals: assignmentLevel === 'REGION' || assignmentLevel === 'FULL',
+        DeleteProposals: assignmentLevel === 'FULL',
+        ApproveProposals: assignmentLevel === 'REGION' || assignmentLevel === 'FULL',
+        ViewReports: true,
+        ManageUsers: assignmentLevel === 'FULL',
+        ManageSettings: assignmentLevel === 'FULL',
         ...rolePermissions
       },
       restrictions: {

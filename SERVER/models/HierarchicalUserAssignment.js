@@ -44,14 +44,14 @@ const HierarchicalUserAssignmentSchema = new mongoose.Schema({
     }
   },
   rolePermissions: {
-    canCreateProposals: { type: Boolean, default: false },
-    canEditOwnProposals: { type: Boolean, default: false },
-    canEditAllProposals: { type: Boolean, default: false },
-    canDeleteProposals: { type: Boolean, default: false },
-    canApproveProposals: { type: Boolean, default: false },
-    canViewReports: { type: Boolean, default: false },
-    canManageUsers: { type: Boolean, default: false },
-    canManageSettings: { type: Boolean, default: false }
+    CreateProposals: { type: Boolean, default: false },
+    EditOwnProposals: { type: Boolean, default: false },
+    EditAllProposals: { type: Boolean, default: false },
+    DeleteProposals: { type: Boolean, default: false },
+    ApproveProposals: { type: Boolean, default: false },
+    ViewReports: { type: Boolean, default: false },
+    ManageUsers: { type: Boolean, default: false },
+    ManageSettings: { type: Boolean, default: false }
   },
   workflowRoles: {
     type: [String],
@@ -118,14 +118,14 @@ HierarchicalUserAssignmentSchema.statics.getUserPermissions = async function(use
       divisions: [],
       workflowRoles: [],
       rolePermissions: {
-        canCreateProposals: false,
-        canEditOwnProposals: true,
-        canEditAllProposals: false,
-        canDeleteProposals: false,
-        canApproveProposals: false,
-        canViewReports: false,
-        canManageUsers: false,
-        canManageSettings: false
+        CreateProposals: false,
+        EditOwnProposals: true,
+        EditAllProposals: false,
+        DeleteProposals: false,
+        ApproveProposals: false,
+        ViewReports: false,
+        ManageUsers: false,
+        ManageSettings: false
       },
       hasRegionAccess: () => false,
       hasDepartmentAccess: () => false,

@@ -69,7 +69,7 @@ const App = () => {
           path="/proposal"
           element={
             <ProtectedRoute
-              requiredPermissions={["canCreateProposals", "canEditOwnProposals"]}
+              requiredPermissions={["CreateProposals", "EditOwnProposals"]}
               requiredWorkflowRoles={["divisionCreator", "departmentCreator", "regionCreator"]}
             >
               <Proposals />
@@ -80,7 +80,7 @@ const App = () => {
           path="/myProposals"
           element={
             <ProtectedRoute
-              requiredPermissions={["canEditOwnProposals"]}
+              requiredPermissions={["EditOwnProposals"]}
               requiredWorkflowRoles={["divisionCreator", "departmentCreator", "regionCreator"]}
             >
               <ProposalPage />
@@ -91,7 +91,7 @@ const App = () => {
           path="/employee"
           element={
             <ProtectedRoute
-              requiredPermissions={["canEditAllProposals"]}
+              requiredPermissions={["EditAllProposals"]}
             >
               <EmployeeList />
             </ProtectedRoute>
@@ -104,7 +104,7 @@ const App = () => {
           path="/categories"
           element={
             <ProtectedRoute
-              requiredPermissions={["canManageSettings"]}
+              requiredPermissions={["ManageSettings"]}
               requiredWorkflowRoles={["regionCreator"]}
             >
               <Categories />
@@ -115,7 +115,7 @@ const App = () => {
           path="/rata"
           element={
             <ProtectedRoute
-              requiredPermissions={["canManageSettings"]}
+              requiredPermissions={["ManageSettings"]}
               requiredWorkflowRoles={["regionCreator"]}
             >
               <RataPage />
@@ -126,7 +126,7 @@ const App = () => {
           path="/fysettings"
           element={
             <ProtectedRoute
-              requiredPermissions={["canManageSettings"]}
+              requiredPermissions={["ManageSettings"]}
               requiredWorkflowRoles={["regionCreator"]}
             >
               <FiscalYearSettingsPage />
@@ -138,7 +138,7 @@ const App = () => {
           path="/compsettings"
           element={
             <ProtectedRoute
-              requiredPermissions={["canManageSettings"]}
+              requiredPermissions={["ManageSettings"]}
             >
               <CompensationSettingsPage />
             </ProtectedRoute>
@@ -148,7 +148,7 @@ const App = () => {
           path="/settings"
           element={
             <ProtectedRoute
-              requiredPermissions={["canManageSettings"]}
+              requiredPermissions={["ManageSettings"]}
             >
               <SettingsManagement />
             </ProtectedRoute>
@@ -158,7 +158,7 @@ const App = () => {
           path="/AllProposals"
           element={
             <ProtectedRoute
-              requiredPermissions={["canViewReports"]}
+              requiredPermissions={["ViewReports"]}
             >
               <AllProposalsPage />
             </ProtectedRoute>
@@ -168,7 +168,7 @@ const App = () => {
           path="/income-management"
           element={
             <ProtectedRoute
-              requiredPermissions={["canEditAllProposals"]}
+              requiredPermissions={["EditAllProposals"]}
             >
               <IncomeManagementPage />
             </ProtectedRoute>
@@ -178,7 +178,7 @@ const App = () => {
           path="/categories"
           element={
             <ProtectedRoute
-              requiredPermissions={["canManageSettings"]}
+              requiredPermissions={["ManageSettings"]}
             >
               <CapitalOutlayTitleMappingPage />
             </ProtectedRoute>
@@ -192,7 +192,7 @@ const App = () => {
           path="/employeeBenefits"
           element={
             <ProtectedRoute
-              requiredPermissions={["canEditAllProposals"]}
+              requiredPermissions={["EditAllProposals"]}
             >
               <EmployeeBenefitsPage />
             </ProtectedRoute>
@@ -221,7 +221,7 @@ const App = () => {
         <Route
           path="/hierarchical-user-assignments"
           element={
-            <ProtectedRoute requiredPermissions={["canManageUsers"]}>
+            <ProtectedRoute requiredPermissions={["ManageUsers"]}>
               <HierarchicalUserAssignmentPage />
             </ProtectedRoute>
           }
@@ -240,7 +240,7 @@ const App = () => {
           path="/corporate-income-upload"
           element={
             <ProtectedRoute
-              requiredPermissions={["canEditAllProposals"]}
+              requiredPermissions={["EditAllProposals"]}
             >
               <CorporateIncomeUploadPage />
             </ProtectedRoute>
@@ -250,7 +250,7 @@ const App = () => {
           path="/consolidated-corporate-income"
           element={
             <ProtectedRoute
-              requiredPermissions={["canViewReports"]}
+              requiredPermissions={["ViewReports"]}
             >
               <ConsolidatedCorporateIncomePage />
             </ProtectedRoute>
@@ -260,7 +260,7 @@ const App = () => {
           path="/mooe-upload"
           element={
             <ProtectedRoute
-              requiredPermissions={["canEditAllProposals"]}
+              requiredPermissions={["EditAllProposals"]}
             >
               <MooeUploadPage />
             </ProtectedRoute>
@@ -270,7 +270,7 @@ const App = () => {
           path="/consolidated-reports"
           element={
             <ProtectedRoute
-              requiredPermissions={["canViewReports"]}
+              requiredPermissions={["ViewReports"]}
             >
               <ConsolidatedReportsPage />
             </ProtectedRoute>
@@ -280,7 +280,7 @@ const App = () => {
           path="/consolidated-capital-outlay-reports"
           element={
             <ProtectedRoute
-              requiredPermissions={["canViewReports"]}
+              requiredPermissions={["ViewReports"]}
             >
               <ConsolidatedCapitalOutlayReportsPage />
             </ProtectedRoute>
@@ -290,7 +290,7 @@ const App = () => {
           path="/consolidated-personnel-services-reports"
           element={
             <ProtectedRoute
-              requiredPermissions={["canViewReports"]}
+              requiredPermissions={["ViewReports"]}
             >
               <ConsolidatedPersonnelServicesReportsPage />
             </ProtectedRoute>
@@ -299,7 +299,7 @@ const App = () => {
         <Route
           path="/comprehensive-reports"
           element={
-            <ProtectedRoute requiredPermissions={["canViewReports"]}>
+            <ProtectedRoute requiredPermissions={["ViewReports"]}>
               <ComprehensiveReportsPage />
             </ProtectedRoute>
           }
@@ -308,7 +308,7 @@ const App = () => {
           path="/database-backup"
           element={
             <ProtectedRoute
-              requiredPermissions={["canManageSettings"]}
+              requiredPermissions={["ManageSettings"]}
             >
               <DatabaseBackupPage />
             </ProtectedRoute>

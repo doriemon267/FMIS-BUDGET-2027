@@ -264,13 +264,13 @@ const handleSubmissionWorkflowWrite = async (req, res, next, assignment, operati
   let canPerformOperation = true;
   switch (operation) {
     case 'create':
-      canPerformOperation = permissions.canCreateProposals !== false;
+      canPerformOperation = permissions.CreateProposals !== false;
       break;
     case 'update':
-      canPerformOperation = permissions.canEditOwnProposals !== false || permissions.canEditAllProposals === true;
+      canPerformOperation = permissions.EditOwnProposals !== false || permissions.EditAllProposals === true;
       break;
     case 'delete':
-      canPerformOperation = permissions.canDeleteProposals === true;
+      canPerformOperation = permissions.DeleteProposals === true;
       break;
   }
   if (!canPerformOperation) {

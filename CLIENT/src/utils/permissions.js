@@ -10,12 +10,12 @@ export function hasPermission(currentUser, permissionKey) {
 }
 
 export const PERMISSIONS = {
-  CREATE: 'canCreateProposals',
-  EDIT_OWN: 'canEditOwnProposals',
-  EDIT_ALL: 'canEditAllProposals',
-  DELETE: 'canDeleteProposals',
-  APPROVE: 'canApproveProposals',
-  VIEW_REPORTS: 'canViewReports',
-  MANAGE_USERS: 'canManageUsers',
-  MANAGE_SETTINGS: 'canManageSettings',
+  CREATE: 'CreateProposals',
+  EDIT_OWN: 'EditOwnProposals',
+  EDIT_ALL: 'EditAllProposals',
+  DELETE: 'DeleteProposals',
+  APPROVE: 'ApproveProposals',
+  VIEW_REPORTS: 'ViewReports',
+  MANAGE_USERS: 'ManageUsers',
+  MANAGE_SETTINGS: 'ManageSettings',
 };

@@ -41,7 +41,7 @@ const testRealTimePermissions = () => {
       timestamp: new Date(),
       changes: {
         assignmentLevel: 'REGION',
-        rolePermissions: { canViewReports: true },
+        rolePermissions: { ViewReports: true },
         workflowRoles: ['regionCreator']
       },
       action: 'updated'

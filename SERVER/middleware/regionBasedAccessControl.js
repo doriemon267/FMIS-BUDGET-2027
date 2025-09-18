@@ -232,11 +232,11 @@ const checkOperationPermission = (assignment, operation) => {
   const permissions = assignment.rolePermissions || {};
   switch (operation) {
     case 'create':
-      return permissions.canCreateProposals !== false; // Default true
+      return permissions.CreateProposals !== false; // Default true
     case 'update':
-      return permissions.canEditOwnProposals !== false || permissions.canEditAllProposals === true;
+      return permissions.EditOwnProposals !== false || permissions.EditAllProposals === true;
     case 'delete':
-      return permissions.canDeleteProposals === true; // Default false
+      return permissions.DeleteProposals === true; // Default false
     default:
       return true;
   }
@@ -249,11 +249,11 @@ const checkOperationPermission = (assignment, operation) => {
 const getRequiredPermissionsForOperation = (operation) => {
   switch (operation) {
     case 'create':
-      return ['canCreateProposals'];
+      return ['CreateProposals'];
     case 'update':
-      return ['canEditOwnProposals', 'canEditAllProposals'];
+      return ['EditOwnProposals', 'EditAllProposals'];
     case 'delete':
-      return ['canDeleteProposals'];
+      return ['DeleteProposals'];
     default:
       return [];
   }
@@ -307,4 +307,4 @@ module.exports = {
   checkRegionAccess,
   buildRegionFilters,
   checkOperationPermission
-};
+};
