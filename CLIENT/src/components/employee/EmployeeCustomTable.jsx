@@ -7,7 +7,6 @@ import {
   TableHead,
   TableRow,
   Paper,
-  TablePagination,
   Checkbox,
   IconButton,
   Popover,
@@ -27,7 +26,9 @@ import {
   useMediaQuery,
   Menu,
   MenuItem,
-  Divider
+  Divider,
+  Pagination,
+  Select
 } from "@mui/material";
 import FilterListIcon from "@mui/icons-material/FilterList";
 import SearchIcon from "@mui/icons-material/Search";
@@ -57,6 +58,7 @@ const CustomTable = ({
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [employees, setEmployees] = useState([]);
   const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(ROWS_PER_PAGE);
   const [totalRecords, setTotalRecords] = useState(0);
   const [loading, setLoading] = useState(false);
   const [selectedRows, setSelectedRows] = useState([]);
@@ -78,11 +80,21 @@ const CustomTable = ({
   const { activeRegion } = useRegion();
   const { currentUser } = useUser();
 
-  // Get user's hierarchical access information
-  const userAccessLevel = currentUser?.hierarchicalAccess?.scope || 'REGION';
-  const userDivision = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
-  const userDepartment = currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-  const userRegion = currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
+      // Get user's hierarchical access information
+      const userAccessLevel = currentUser?.hierarchicalAccess?.scope || 'REGION';
+      const userDivision = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
+      const userDepartment = currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+      const userRegion = currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
+
+      // Debug hierarchical access information
+      console.log('🔍 Hierarchical Access Info:', {
+        userAccessLevel,
+        userDivision,
+        userDepartment,
+        userRegion,
+        hierarchicalAccess: currentUser?.hierarchicalAccess,
+        currentUser: currentUser ? 'User exists' : 'No user'
+      });
 
   const fetchData = async () => {
     setLoading(true);
@@ -119,22 +131,45 @@ const CustomTable = ({
       // This ensures we're using the exact region name for filtering
       const queryParams = {
         page: page + 1,
-        limit: ROWS_PER_PAGE,
+        limit: rowsPerPage,
         search: searchQuery,
-        // Add region parameter for security filtering - use exact name
-        region: regionName,
       };
 
       // Add hierarchical access parameters based on user access level
+      // IMPORTANT: For Division/Department level users, DO NOT send region parameter
+      // The backend will enforce hierarchical restrictions automatically
+      console.log('🔍 User Access Debug:', {
+        userAccessLevel,
+        userDivision,
+        userDepartment,
+        userRegion,
+        currentUserHierarchicalAccess: currentUser?.hierarchicalAccess
+      });
+
       if (userAccessLevel === 'DIVISION' && userDivision) {
+        // Division level: Only send division parameter, no region override
         queryParams.division = userDivision;
+        console.log(`Division level user - restricting to division: ${userDivision}`);
       } else if (userAccessLevel === 'DEPARTMENT' && userDepartment) {
+        // Department level: Only send department parameter, no region override
         queryParams.department = userDepartment;
         if (userDivision) {
           queryParams.division = userDivision;
         }
+        console.log(`Department level user - restricting to department: ${userDepartment}`);
       } else if (userAccessLevel === 'REGION' && userRegion) {
+        // Region level: Can specify region (within their assigned regions)
         queryParams.region = userRegion;
+        console.log(`Region level user - using region: ${userRegion}`);
+      } else {
+        // Fallback: Only send region if we have hierarchical access info
+        // For users without proper hierarchical setup, don't send region to avoid conflicts
+        if (currentUser?.hierarchicalAccess?.scope) {
+          queryParams.region = regionName;
+          console.log(`Fallback - using active region: ${regionName}`);
+        } else {
+          console.log('No hierarchical access info - not sending region parameter');
+        }
       }
 
       // Add processBy parameter for additional access control
@@ -167,17 +202,57 @@ const CustomTable = ({
         return;
       }
       
-      // CRITICAL: Verify that all employees belong to the requested region (case-insensitive)
+      // CRITICAL: Verify that all employees belong to the user's allowed scope (case-insensitive)
       // This is a double-check to ensure security while avoiding case mismatches
       const verifiedEmployees = response.data.employees.filter(emp => {
+        // For Division level users: check if employee belongs to their division
+        if (userAccessLevel === 'DIVISION' && userDivision) {
+          const employeeDivision = (emp.Division || '').trim();
+          const matchesDivision = employeeDivision.localeCompare(userDivision.trim(), undefined, { sensitivity: 'accent' }) === 0 ||
+                                  new RegExp(`^${userDivision.trim()}$`, 'i').test(employeeDivision);
+
+          if (!matchesDivision) {
+            console.error(`SECURITY WARNING: Employee ${emp.EmployeeFullName} has division ${employeeDivision} but user division is ${userDivision}`);
+          }
+
+          return matchesDivision;
+        }
+
+        // For Department level users: check if employee belongs to their department
+        if (userAccessLevel === 'DEPARTMENT' && userDepartment) {
+          const employeeDepartment = (emp.Department || '').trim();
+          const matchesDepartment = employeeDepartment.localeCompare(userDepartment.trim(), undefined, { sensitivity: 'accent' }) === 0 ||
+                                    new RegExp(`^${userDepartment.trim()}$`, 'i').test(employeeDepartment);
+
+          if (!matchesDepartment) {
+            console.error(`SECURITY WARNING: Employee ${emp.EmployeeFullName} has department ${employeeDepartment} but user department is ${userDepartment}`);
+          }
+
+          return matchesDepartment;
+        }
+
+        // For Region level users: check if employee belongs to their region
+        if (userAccessLevel === 'REGION' && userRegion) {
+          const employeeRegion = (emp.Region || '').trim();
+          const matchesRegion = employeeRegion.localeCompare(userRegion.trim(), undefined, { sensitivity: 'accent' }) === 0 ||
+                                new RegExp(`^${userRegion.trim()}$`, 'i').test(employeeRegion);
+
+          if (!matchesRegion) {
+            console.error(`SECURITY WARNING: Employee ${emp.EmployeeFullName} has region ${employeeRegion} but user region is ${userRegion}`);
+          }
+
+          return matchesRegion;
+        }
+
+        // For other levels: use the requested region as fallback
         const employeeRegion = (emp.Region || '').trim();
         const matchesRegion = employeeRegion.localeCompare((regionName || '').trim(), undefined, { sensitivity: 'accent' }) === 0 ||
                               new RegExp(`^${(regionName || '').trim()}$`, 'i').test(employeeRegion);
-        
+
         if (!matchesRegion) {
           console.error(`SECURITY WARNING: Employee ${emp.EmployeeFullName} has region ${employeeRegion} but requested region is ${regionName}`);
         }
-        
+
         return matchesRegion;
       });
 
@@ -185,10 +260,21 @@ const CustomTable = ({
       setEmployees(verifiedEmployees);
 
       // Use the total records from the server for pagination
-      setTotalRecords(response.data.totalRecords || 0);      // If we filtered out any employees, show a warning
+      setTotalRecords(response.data.totalRecords || 0);
+      
+      // Debug pagination data
+      console.log('📊 Pagination Debug:', {
+        totalRecords: response.data.totalRecords,
+        totalPages: response.data.totalPages,
+        currentPage: response.data.currentPage,
+        employeesCount: verifiedEmployees.length,
+        page,
+        rowsPerPage
+      });
       if (verifiedEmployees.length < response.data.employees.length) {
-        console.warn(`Filtered out ${response.data.employees.length - verifiedEmployees.length} employees with incorrect region`);
-        toast.warning(`Some employees were filtered out due to region mismatch`, {
+        const filteredCount = response.data.employees.length - verifiedEmployees.length;
+        console.warn(`Filtered out ${filteredCount} employees due to hierarchical access restrictions`);
+        toast.warning(`${filteredCount} employee(s) were filtered out due to access restrictions`, {
           style: {
             borderRadius: '10px',
             background: theme.palette.mode === 'dark' ? '#333' : '#fff',
@@ -234,12 +320,12 @@ const CustomTable = ({
   // Reset page when anything except page changes
   useEffect(() => {
     setPage(0);
-  }, [ROWS_PER_PAGE, apiPath, refreshTrigger, refreshTriggerInternal, searchQuery, filters, sortConfig, activeRegion]);
+  }, [rowsPerPage, apiPath, refreshTrigger, refreshTriggerInternal, searchQuery, filters, sortConfig, activeRegion]);
 
   // Fetch data when any dependency changes
   useEffect(() => {
     fetchData();
-  }, [page, ROWS_PER_PAGE, apiPath, refreshTrigger, refreshTriggerInternal, searchQuery, filters, sortConfig, activeRegion]);
+  }, [page, rowsPerPage, apiPath, refreshTrigger, refreshTriggerInternal, searchQuery, filters, sortConfig, activeRegion]);
 
   useEffect(() => {
     // Count active filters
@@ -298,8 +384,24 @@ const CustomTable = ({
   };
 
   const handleChangePage = (event, newPage) => {
+    console.log('📄 Page change:', { from: page, to: newPage, totalRecords, rowsPerPage });
     setPage(newPage);
     setSelectedRows([]);
+    // Optional: Add loading state for page changes
+    setLoading(true);
+  };
+
+  const handleChangeRowsPerPage = (event) => {
+    const newRowsPerPage = parseInt(event.target.value, 10);
+    console.log('📏 Rows per page change:', { from: rowsPerPage, to: newRowsPerPage });
+
+    // Handle "All" option
+    const actualRowsPerPage = newRowsPerPage === -1 ? totalRecords : newRowsPerPage;
+
+    setRowsPerPage(actualRowsPerPage);
+    setPage(0); // Reset to first page when changing rows per page
+    setSelectedRows([]);
+    setLoading(true);
   };
 
   const handleRefresh = () => {
@@ -487,7 +589,7 @@ const CustomTable = ({
             />
           )}
           <Typography variant="body2" color="text.secondary">
-            {totalRecords} {totalRecords === 1 ? 'employee' : 'employees'}
+            Showing {employees.length > 0 ? (page * rowsPerPage) + 1 : 0} - {Math.min((page + 1) * rowsPerPage, totalRecords)} of {totalRecords} employees
           </Typography>
         </Box>
       </Box>
@@ -705,6 +807,79 @@ const CustomTable = ({
             )}
           </TableBody>
         </Table>
+
+        {/* Sticky Pagination inside scroll area */}
+        {totalRecords > 0 && (
+          <Box
+            sx={{
+              position: 'sticky',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              bgcolor: theme.palette.background.paper,
+              borderTop: `1px solid ${theme.palette.mode === 'light' ? '#e0e0e0' : '#424242'}`,
+              px: 2,
+              py: 1.25,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              zIndex: 1
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <Typography variant="body2" color="text.secondary">
+                Employees per page:
+              </Typography>
+              <Select
+                size="small"
+                value={rowsPerPage === totalRecords ? -1 : rowsPerPage}
+                onChange={handleChangeRowsPerPage}
+                sx={{
+                  minWidth: 100,
+                  height: 36,
+                  borderRadius: '8px',
+                  '& .MuiSelect-select': {
+                    py: 0.75
+                  }
+                }}
+              >
+                <MenuItem value={10}>10</MenuItem>
+                <MenuItem value={20}>20</MenuItem>
+                <MenuItem value={50}>50</MenuItem>
+                <MenuItem value={100}>100</MenuItem>
+                <MenuItem value={-1}>All</MenuItem>
+              </Select>
+            </Box>
+
+            <Pagination
+              count={rowsPerPage === -1 || rowsPerPage === totalRecords ? 1 : Math.max(1, Math.ceil(totalRecords / rowsPerPage))}
+              page={totalRecords === 0 ? 1 : Math.min(page + 1, (rowsPerPage === -1 || rowsPerPage === totalRecords) ? 1 : Math.ceil(totalRecords / rowsPerPage))}
+              onChange={(e, value) => handleChangePage(e, value - 1)}
+              variant="outlined"
+              shape="rounded"
+              color="primary"
+              siblingCount={1}
+              boundaryCount={1}
+              sx={{
+                '& .MuiPaginationItem-root': {
+                  border: `2px solid ${theme.palette.mode === 'light' ? '#1976d2' : '#90caf9'}`,
+                  borderRadius: '8px',
+                  fontWeight: 500,
+                  '&.Mui-selected': {
+                    backgroundColor: theme.palette.primary.main,
+                    color: '#fff',
+                    borderColor: theme.palette.primary.dark,
+                  },
+                  '&:hover': {
+                    backgroundColor: theme.palette.primary.main,
+                    color: '#fff',
+                    borderColor: theme.palette.primary.dark,
+                  }
+                }
+              }}
+            />
+          </Box>
+        )}
         
         {/* Filter Popover */}
         <Popover
@@ -772,21 +947,17 @@ const CustomTable = ({
         
       </TableContainer>
       
-      {/* Pagination */}
-      <TablePagination
-        rowsPerPageOptions={[ROWS_PER_PAGE]}
-        component="div"
-        count={totalRecords}
-        rowsPerPage={ROWS_PER_PAGE}
-        page={totalRecords === 0 ? 0 : Math.min(page, Math.ceil(totalRecords / ROWS_PER_PAGE) - 1)}
-        onPageChange={handleChangePage}
-        sx={{
-          borderTop: `1px solid ${theme.palette.mode === 'light' ? '#e0e0e0' : '#424242'}`,
-          '.MuiTablePagination-selectIcon': {
-            color: theme.palette.text.secondary
-          }
-        }}
-      />
+
+      
+      {/* Debug Info */}
+      {process.env.NODE_ENV === 'development' && (
+        <Box sx={{ p: 2, bgcolor: 'grey.100', borderTop: '1px solid #e0e0e0' }}>
+          <Typography variant="body2" color="text.secondary">
+            Debug: Page {page + 1}, Rows per page: {rowsPerPage}, Total: {totalRecords}, 
+            Employees shown: {employees.length}
+          </Typography>
+        </Box>
+      )}
       </Paper>
     </>
   );

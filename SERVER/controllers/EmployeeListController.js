@@ -37,9 +37,35 @@ exports.getAllEmployees = async (req, res) => {
     // Get filters from middleware - prioritize submission workflow filters over hierarchical filters
     const submissionWorkflowFilters = req.submissionWorkflowFilters || {};
     const hierarchicalFilters = req.hierarchicalFilters || {};
-    
+
     // Use submission workflow filters if available (they include status filtering), otherwise use hierarchical filters
     const activeFilters = Object.keys(submissionWorkflowFilters).length > 0 ? submissionWorkflowFilters : hierarchicalFilters;
+
+    // ENFORCE HIERARCHICAL ACCESS CONTROL
+    // Get user's assignment level to determine access restrictions
+    const assignment = req.userHierarchicalAssignment || {};
+    const userLevel = assignment.assignmentLevel || 'NONE';
+
+    // Declare variables needed for access control
+    const assignedRegions = Array.isArray(assignment.regions) ? assignment.regions : [];
+    const hasRequestedRegionAccess = region ? assignedRegions.some(r => {
+      const rn = (r.Region || r.regionName || r.name || '').trim();
+      return rn && (rn.localeCompare(region.trim(), undefined, { sensitivity: 'accent' }) === 0 || new RegExp(`^${region.trim()}$`, 'i').test(rn));
+    }) : false;
+
+    // For Division and Department level users, strictly enforce their assigned scope
+    // They should NOT be able to see employees outside their division/department
+    if (userLevel === 'DIVISION' || userLevel === 'DEPARTMENT') {
+      // Override any region parameter - they can only see their assigned scope
+      if (region && !hasRequestedRegionAccess) {
+        return res.status(403).json({
+          success: false,
+          message: `Access denied: You can only view employees from your assigned ${userLevel.toLowerCase()}`,
+          code: 'HIERARCHICAL_ACCESS_VIOLATION'
+        });
+      }
+    }
+
     // Map filters to database field names
     const mapFiltersToDb = (filters) => {
       const mapped = {};
@@ -64,6 +90,7 @@ exports.getAllEmployees = async (req, res) => {
       if (filters.status) mapped.Status = filters.status;
       return mapped;
     };
+
     const dbFilters = mapFiltersToDb(activeFilters);
     // Start with active filters as base
     let query = { ...dbFilters };
@@ -99,26 +126,31 @@ exports.getAllEmployees = async (req, res) => {
       });
     }
     // Allow requested region to override hierarchical Region if user has access to it
-    const assignment = req.userHierarchicalAssignment || {};
-    const assignedRegions = Array.isArray(assignment.regions) ? assignment.regions : [];
-    const hasRequestedRegionAccess = region ? assignedRegions.some(r => {
-      const rn = (r.Region || r.regionName || r.name || '').trim();
-      return rn && (rn.localeCompare(region.trim(), undefined, { sensitivity: 'accent' }) === 0 || new RegExp(`^${region.trim()}$`, 'i').test(rn));
-    }) : false;
 
     if (region) {
-      // Add region filter to all access conditions
-      if (query.$or) {
-        query.$or = query.$or.map(condition => ({
-          ...condition,
-          Region: region
-        }));
-      } else if (!query.Region) {
-        // No hierarchical region set, use requested region
-        query.Region = region;
-      } else if (hasRequestedRegionAccess) {
-        // User has access to requested region, override hierarchical Region to match UI selection
-        query.Region = region;
+      // For REGION level users, allow region switching within their assigned regions
+      if (userLevel === 'REGION') {
+        if (query.$or) {
+          query.$or = query.$or.map(condition => ({
+            ...condition,
+            Region: region
+          }));
+        } else if (!query.Region) {
+          // No hierarchical region set, use requested region
+          query.Region = region;
+        } else if (hasRequestedRegionAccess) {
+          // User has access to requested region, override hierarchical Region to match UI selection
+          query.Region = region;
+        }
+      } else if (userLevel === 'DIVISION' || userLevel === 'DEPARTMENT') {
+        // For Division/Department level users, they can only see their assigned scope
+        // Region parameter is ignored - they stay within their hierarchical constraints
+        console.log(`User at ${userLevel} level requested region: ${region}, but access restricted to assigned scope only`);
+      } else {
+        // For other levels (FULL, NONE), use region parameter if provided
+        if (!query.Region) {
+          query.Region = region;
+        }
       }
     }
     // Add search functionality if provided
@@ -270,8 +302,10 @@ exports.getAllEmployees = async (req, res) => {
     const sortOrder = order.toLowerCase() === "desc" ? -1 : 1;
     const sortQuery = { [sortByField]: sortOrder };
     const pageNum = Math.max(1, Number(page));
-    const limitNum = Math.max(1, Number(limit));
-    const skip = (pageNum - 1) * limitNum;
+
+    // Handle "All" option - if limit is -1 or very large, don't apply pagination
+    const limitNum = limit === -1 || Number(limit) > 10000 ? null : Math.max(1, Number(limit));
+    const skip = limitNum ? (pageNum - 1) * limitNum : 0;
     // DIRECT APPROACH: Use the raw MongoDB driver to ensure we're using the correct collection
     const db = mongoose.connection.db;
     const collection = db.collection('employees'); // This is the actual collection name
@@ -295,11 +329,14 @@ exports.getAllEmployees = async (req, res) => {
       else query.Division = normalizeExact(d);
     }
     // Execute the query
-    const employees = await collection.find(query)
-      .skip(skip)
-      .limit(limitNum)
-      .sort(sortQuery)
-      .toArray();
+    let queryBuilder = collection.find(query).skip(skip).sort(sortQuery);
+
+    // Only apply limit if not showing all records
+    if (limitNum) {
+      queryBuilder = queryBuilder.limit(limitNum);
+    }
+
+    const employees = await queryBuilder.toArray();
     if (employees.length > 0) {
       }
     // Double-check that all returned employees belong to the requested region (case-insensitive exact)
@@ -317,8 +354,8 @@ exports.getAllEmployees = async (req, res) => {
     const totalRecords = await collection.countDocuments(query);
     const response = {
       employees: verifiedEmployees,
-      totalPages: Math.ceil(totalRecords / limitNum),
-      currentPage: pageNum,
+      totalPages: limitNum ? Math.ceil(totalRecords / limitNum) : 1,
+      currentPage: limitNum ? pageNum : 1,
       totalRecords: totalRecords,
       region,
       queryUsed: query,
