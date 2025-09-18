@@ -309,11 +309,76 @@ exports.getLoyaltyPayStats = async (req, res) => {
     const averageAmount = totalRecords > 0 ? totalAmount / totalRecords : 0;
     // Get unique employees count with fiscal year filter
     const uniqueEmployees = await LoyaltyPay.distinct('employeeNumber', query);
+    
+    // Get eligible employees count
+    let eligibleCount = 0;
+    try {
+      // Get hierarchical filters from middleware
+      const hierarchicalFilters = req.hierarchicalFilters || {};
+      const settings = await Settings.findOne({ isActive: true }).lean();
+      if (settings) {
+        // Get region from hierarchical filters
+        let regionFilter = '';
+        if (hierarchicalFilters.$and) {
+          const regionCondition = hierarchicalFilters.$and.find(cond => cond.region);
+          if (regionCondition) {
+            regionFilter = regionCondition.region;
+          }
+        } else if (hierarchicalFilters.region) {
+          regionFilter = hierarchicalFilters.region;
+        }
+        
+        if (regionFilter) {
+          const { getEligibleForLoyaltyPay } = require('../controllers/employeelistController');
+          // We can't call the function directly here as it requires req/res
+          // Instead, we'll count eligible personnel using the same logic
+          const personnelQuery = {
+            employeeStatus: "Active",
+            DateOfAppointment: { $exists: true, $ne: null },
+            ...hierarchicalFilters
+          };
+          
+          const personnelServices = await PersonnelServices.find(personnelQuery).lean();
+          const {
+            calculateLoyaltyPayYearsOfService,
+            getEligibleLoyaltyPayYear
+          } = require("../utils/loyaltyPayUtils");
+          
+          const fiscalYearNum = parseInt(settings.fiscalYear);
+          const cutoffDate = settings?.loyaltyPay?.cutoffDate || "06-22";
+          
+          for (const employee of personnelServices) {
+            if (!employee.DateOfAppointment) continue;
+            const yearsOfService = calculateLoyaltyPayYearsOfService(
+              employee.DateOfAppointment,
+              fiscalYearNum.toString(),
+              cutoffDate
+            );
+            const eligibleYear = getEligibleLoyaltyPayYear(yearsOfService);
+            if (eligibleYear !== null) {
+              // Check if already received
+              const existingRecord = await LoyaltyPay.findOne({
+                employeeNumber: employee.employeeNumber,
+                yearsInService: eligibleYear,
+                fiscalYear: fiscalYearNum.toString()
+              }).lean();
+              if (!existingRecord) {
+                eligibleCount++;
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error calculating eligible count:", error);
+    }
+    
     const result = {
       totalRecords,
       totalAmount,
       averageAmount,
-      uniqueEmployees: uniqueEmployees.length
+      uniqueEmployees: uniqueEmployees.length,
+      eligiblePersonnel: eligibleCount
     };
     res.status(200).json(result);
   } catch (error) {

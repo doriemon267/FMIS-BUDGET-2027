@@ -492,7 +492,9 @@ exports.getEligibleForLoyaltyPay = async (req, res) => {
   try {
     // // Get the region and fiscal year from the query parameters
     const { region, fiscalYear: requestedFiscalYear } = req.query;
-    if (!region) {
+    
+    // If no region provided but hierarchical filters exist, we can proceed
+    if (!region && (!req.hierarchicalFilters || Object.keys(req.hierarchicalFilters).length === 0)) {
       return res.status(400).json({ 
         error: "Region parameter is required", 
         message: "Please specify a region to view eligible employees" 
@@ -508,18 +510,18 @@ exports.getEligibleForLoyaltyPay = async (req, res) => {
       if (filters.$and && Array.isArray(filters.$and)) {
         mapped.$and = filters.$and.map(condition => {
           const conditionMapped = {};
-          if (condition.region) conditionMapped.Region = condition.region;
-          if (condition.department) conditionMapped.Department = condition.department;
-          if (condition.division) conditionMapped.Division = condition.division;
+          if (condition.region) conditionMapped.region = condition.region;
+          if (condition.department) conditionMapped.department = condition.department;
+          if (condition.division) conditionMapped.division = condition.division;
           return conditionMapped;
         });
         return mapped;
       }
 
       // Handle simple key-value filters
-      if (filters.region) mapped.Region = filters.region;
-      if (filters.department) mapped.Department = filters.department;
-      if (filters.division) mapped.Division = filters.division;
+      if (filters.region) mapped.region = filters.region;
+      if (filters.department) mapped.department = filters.department;
+      if (filters.division) mapped.division = filters.division;
       return mapped;
     };
     const dbHierarchicalFilters = mapFiltersToDb(hierarchicalFilters);

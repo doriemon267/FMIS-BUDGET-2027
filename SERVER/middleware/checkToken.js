@@ -56,6 +56,7 @@ module.exports = async (req, res, next) => {
       
       if (!userId) {
         console.error('❌ Unable to determine user identity from JWT or headers');
+        console.error('JWT Payload:', JSON.stringify(payload, null, 2));
         console.error('Available headers:', Object.keys(req.headers));
         return res.status(401).json({ error: "Authentication required: Unable to identify user" });
       }

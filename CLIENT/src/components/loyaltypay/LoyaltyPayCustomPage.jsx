@@ -338,6 +338,42 @@ const CustomPage = ({
               </CardContent>
             </Card>
           </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Card 
+              sx={{ 
+                backgroundColor: '#e1f5fe', 
+                borderLeft: '4px solid #00bcd4',
+                transition: 'all 0.3s ease',
+                cursor: 'pointer',
+                '&:hover': {
+                  transform: 'translateY(-5px)',
+                  boxShadow: '0 10px 20px rgba(0, 188, 212, 0.2)',
+                  backgroundColor: '#b2ebf2',
+                }
+              }}
+            >
+              <CardContent sx={{ py: 1 }}>
+                <Box display="flex" alignItems="center" gap={1}>
+                  <PeopleIcon 
+                    sx={{ 
+                      color: '#00bcd4',
+                      fontSize: '2rem',
+                      transition: 'transform 0.3s ease',
+                      '.MuiCard-root:hover &': {
+                        transform: 'scale(1.2)',
+                      }
+                    }} 
+                  />
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">Eligible Personnel</Typography>
+                    <Typography variant="h6" fontWeight="bold">
+                      {statsLoading ? '0' : stats?.eligiblePersonnel || 0}
+                    </Typography>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
         </Grid>
       </Paper>
 

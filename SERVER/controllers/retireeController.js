@@ -340,7 +340,11 @@ exports.getEligibleForRetirement = async (req, res) => {
     }
     // Get employees based on query
     const employees = await PersonnelServices.find(query).lean();
-    const eligible = employees
+    // Remove duplicates based on employeeNumber
+    const uniqueEmployees = employees.filter((emp, index, self) => 
+      index === self.findIndex(e => e.employeeNumber === emp.employeeNumber || e.EmployeeID === emp.EmployeeID)
+    );
+    const eligible = uniqueEmployees
       .map(emp => {
         const dob = new Date(emp.dateOfBirth || emp.DateOfBirth);
         const doa = new Date(emp.dateOfAppointment || emp.DateOfAppointment);

@@ -84,6 +84,7 @@ const enforceOrgAccess = require('./middleware/enforceOrgAccess');
 const { initializeCleanupScheduler } = require("./utils/backupCleanup");
 const { initializeBackupSystem } = require("./backup-scripts/initBackupSystem");
 const income_categories = require("./routers/income_categories");
+const authRouter = require("./routers/AuthRoutes");
 require("./config/mongo_db")();
 // Fix database index for region isolation
 const mongoose = require('mongoose');
@@ -259,6 +260,7 @@ app.use(employeeRouter);
 app.use(statusRouter);
 app.use(salaryRouter);
 // Routes
+app.use(authRouter);
 app.use(personnelRoutes);
 //Position Title Routes
 app.use(positionTitleRoutes);

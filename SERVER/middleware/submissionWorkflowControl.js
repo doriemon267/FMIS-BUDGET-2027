@@ -151,7 +151,7 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
             }
           ]
         };
-
+        hierarchicalFilters = submissionFilters; // Fix: set hierarchicalFilters for controller use
       } else {
         // Fallback to standard hierarchical filtering
         hierarchicalFilters = {
@@ -203,6 +203,7 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
             }
           ]
         };
+        hierarchicalFilters = submissionFilters; // Fix: set hierarchicalFilters for controller use
       } else {
         // Fallback to standard hierarchical filtering
         hierarchicalFilters = {
