@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -54,9 +54,10 @@ import {
   ExpandMore as ExpandMoreIcon,
   Assignment as AssignmentIcon,
   AccountTree as HierarchyIcon,
-  AccountTree as AccountTreeIcon,
   Info as InfoIcon
 } from '@mui/icons-material';
+import { getFilteredDepartments, getAvailableDivisions, getDepartmentsWithDivisions, selectedDepartmentHasDivisions } from '../utils/organizationUtils';
+import { isTokenExpired } from '../utils/jwt';
 
 const ITEM_HEIGHT = 48;
 const ITEM_PADDING_TOP = 8;
@@ -77,7 +78,6 @@ const ACCESS_LEVELS = [
   { value: 'OWN_ONLY', label: 'Own Records Only', icon: <PersonIcon />, color: '#757575' }
 ];
 
-// Workflow roles available for assignment
 const WORKFLOW_ROLES = [
   { key: 'divisionCreator', label: 'Division Creator', description: 'Create proposals at division level' },
   { key: 'divisionApprover', label: 'Division Approver', description: 'Approve division proposals' },
@@ -94,13 +94,12 @@ const getDefaultWorkflowRolesMap = () =>
 const HierarchicalUserAssignmentPage = () => {
   const { currentUser, jwtToken } = useUser();
   const queryClient = useQueryClient();
-  
+
   // Pagination state
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  
+
   // Form state
-  const [selectedUser, setSelectedUser] = useState('');
   const [formData, setFormData] = useState({
     userId: '',
     userName: '',
@@ -121,7 +120,7 @@ const HierarchicalUserAssignmentPage = () => {
       ManageSettings: false
     }
   });
-  
+
   // UI state
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -130,12 +129,13 @@ const HierarchicalUserAssignmentPage = () => {
   });
   const [editingAssignment, setEditingAssignment] = useState(null);
   const [showPermissions, setShowPermissions] = useState(false);
-  // Inline roles dialog state
   const [rolesDialogOpen, setRolesDialogOpen] = useState(false);
   const [rolesDialogUser, setRolesDialogUser] = useState(null);
   const [rolesDialogMap, setRolesDialogMap] = useState(getDefaultWorkflowRolesMap());
-  
-  // Check if user is admin (align with server adminRoute allowed roles)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteUserId, setDeleteUserId] = useState(null);
+
+  // Check if user is admin
   const isAdmin = currentUser?.Roles && (
     currentUser.Roles.includes('BUDGET ADMIN') ||
     currentUser.Roles.includes('BUDGET MANAGER') ||
@@ -149,13 +149,15 @@ const HierarchicalUserAssignmentPage = () => {
     queryKey: ['hierarchical-organization-structure'],
     queryFn: async () => {
       try {
+        if (isTokenExpired(jwtToken)) {
+          throw new Error('Session expired. Please log in again.');
+        }
         const res = await api.get('/api/hierarchical-rbac/organization-structure');
         let data = res.data?.data || { availableUnits: { regions: [], departments: [], departmentsWithDivisions: [], divisions: [] }, mappings: [] };
 
         const regionsCount = data?.availableUnits?.regions?.length || 0;
         const departmentsCount = data?.availableUnits?.departments?.length || 0;
 
-        // Fallback load if empty: fetch plain regions and departments endpoints
         if (regionsCount === 0 || departmentsCount === 0) {
           const [regionsRes, departmentsRes] = await Promise.allSettled([
             api.get('/api/regions'),
@@ -180,22 +182,17 @@ const HierarchicalUserAssignmentPage = () => {
         return data;
       } catch (error) {
         console.error('❌ Error fetching organization structure:', error);
-        console.error('Response data:', error.response?.data);
-        console.error('Response status:', error.response?.status);
-        console.error('Response headers:', error.response?.headers);
-        
-        // Show error to user
         setSnackbar({
           open: true,
           message: `Failed to load organization structure: ${error.response?.data?.message || error.message}`,
           severity: 'error'
         });
-        
-  return { availableUnits: { regions: [], departments: [], departmentsWithDivisions: [], divisions: [] }, mappings: [] };
+        return { availableUnits: { regions: [], departments: [], departmentsWithDivisions: [], divisions: [] }, mappings: [] };
       }
     },
-    retry: 1, // Only retry once
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled: !!currentUser && !!jwtToken,
+    retry: (failureCount, error) => error.message.includes('network') && failureCount < 3,
+    staleTime: 30 * 60 * 1000, // 30 minutes
   });
 
   // Fetch hierarchical assignments
@@ -203,6 +200,9 @@ const HierarchicalUserAssignmentPage = () => {
     queryKey: ['hierarchical-assignments'],
     queryFn: async () => {
       try {
+        if (isTokenExpired(jwtToken)) {
+          throw new Error('Session expired. Please log in again.');
+        }
         const deriveUserId = () => currentUser?.Username?.[0] || currentUser?.Id || currentUser?.id || currentUser?.userId;
 
         if (isAdmin) {
@@ -210,7 +210,6 @@ const HierarchicalUserAssignmentPage = () => {
             const res = await api.get('/api/hierarchical-rbac/assignments');
             return res.data?.assignments || [];
           } catch (adminErr) {
-            // Fallback: fetch own assignment if admin list fails due to role drift
             const userId = deriveUserId();
             if (!userId) throw adminErr;
             const res = await api.get(`/api/hierarchical-rbac/assignments/${userId}`);
@@ -226,22 +225,25 @@ const HierarchicalUserAssignmentPage = () => {
         const res = await api.get(`/api/hierarchical-rbac/assignments/${userId}`);
         return res.data?.assignment ? [res.data.assignment] : [];
       } catch (error) {
-        const status = error?.response?.status;
-        const dataMsg = error?.response?.data?.message;
-        console.error('Error fetching hierarchical assignments:', status, dataMsg || error.message);
+        console.error('Error fetching hierarchical assignments:', error);
         return [];
       }
-    }
+    },
+    enabled: !!currentUser && !!jwtToken,
+    retry: (failureCount, error) => error.message.includes('network') && failureCount < 3,
   });
 
   // Mutation for creating/updating assignments
   const createOrUpdateMutation = useMutation({
     mutationFn: async (data) => {
+      if (isTokenExpired(jwtToken)) {
+        throw new Error('Session expired. Please log in again.');
+      }
       return api.post('/api/hierarchical-rbac/assignments', data, {
         headers: { Authorization: `Bearer ${jwtToken}` }
       });
     },
-    onSuccess: (response) => {
+    onSuccess: () => {
       queryClient.invalidateQueries(['hierarchical-assignments']);
       setSnackbar({
         open: true,
@@ -252,17 +254,19 @@ const HierarchicalUserAssignmentPage = () => {
     },
     onError: (error) => {
       console.error('Error saving assignment:', error);
-      setSnackbar({
-        open: true,
-        message: error.response?.data?.message || 'Failed to save hierarchical assignment',
-        severity: 'error'
-      });
+      const message = error.response?.status === 409
+        ? 'User already has an assignment'
+        : error.response?.data?.message || 'Failed to save hierarchical assignment';
+      setSnackbar({ open: true, message, severity: 'error' });
     }
   });
 
   // Mutation for deleting assignments
   const deleteMutation = useMutation({
     mutationFn: async (userId) => {
+      if (isTokenExpired(jwtToken)) {
+        throw new Error('Session expired. Please log in again.');
+      }
       return api.delete(`/api/hierarchical-rbac/assignments/${userId}`, {
         headers: { Authorization: `Bearer ${jwtToken}` }
       });
@@ -280,7 +284,7 @@ const HierarchicalUserAssignmentPage = () => {
       console.error('Error deleting assignment:', error);
       setSnackbar({
         open: true,
-        message: 'Failed to delete hierarchical assignment',
+        message: error.response?.data?.message || 'Failed to delete hierarchical assignment',
         severity: 'error'
       });
     }
@@ -289,6 +293,9 @@ const HierarchicalUserAssignmentPage = () => {
   // Mutation for updating workflow roles inline
   const updateWorkflowRolesMutation = useMutation({
     mutationFn: async ({ userId, workflowRoles }) => {
+      if (isTokenExpired(jwtToken)) {
+        throw new Error('Session expired. Please log in again.');
+      }
       return api.post(`/api/hierarchical-rbac/assignments/${userId}/workflow-roles`, { workflowRoles });
     },
     onSuccess: () => {
@@ -301,6 +308,21 @@ const HierarchicalUserAssignmentPage = () => {
       setSnackbar({ open: true, message: error.response?.data?.message || 'Failed to update workflow roles', severity: 'error' });
     }
   });
+
+  // Helper: Check if user exists
+  const checkUserExists = async (userId) => {
+    try {
+      const res = await api.get(`/api/users/${userId}`, {
+        headers: { Authorization: `Bearer ${jwtToken}` }
+      });
+      return res.data.exists;
+    } catch {
+      return false;
+    }
+  };
+
+  // Helper: Validate email format
+  const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
   // Helper functions
   const resetForm = () => {
@@ -334,9 +356,9 @@ const HierarchicalUserAssignmentPage = () => {
       case 'DIVISION':
         return WORKFLOW_ROLES.filter(r => ['divisionCreator'].includes(r.key));
       case 'DEPARTMENT':
-        return WORKFLOW_ROLES.filter(r => ['divisionApprover','departmentCreator','departmentConsolidator','departmentSubmission'].includes(r.key));
+        return WORKFLOW_ROLES.filter(r => ['divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission'].includes(r.key));
       case 'REGION':
-        return WORKFLOW_ROLES.filter(r => ['regionCreator','regionFinalVerifier'].includes(r.key));
+        return WORKFLOW_ROLES.filter(r => ['regionCreator', 'regionFinalVerifier'].includes(r.key));
       case 'FULL':
         return WORKFLOW_ROLES;
       case 'OWN_ONLY':
@@ -345,86 +367,17 @@ const HierarchicalUserAssignmentPage = () => {
     }
   };
 
-  // Get available divisions for selected department
-  const getAvailableDivisions = () => {
-    if (!formData.departmentId || !organizationStructure?.availableUnits?.departmentsWithDivisions) {
-      return [];
-    }
-    
-    // Filter departmentsWithDivisions by selected region if applicable
-    let deptsWithDivisions = organizationStructure.availableUnits.departmentsWithDivisions;
-    if (formData.regionId) {
-      deptsWithDivisions = deptsWithDivisions.filter(dept => dept.regionId === formData.regionId);
-    }
-    
-    const department = deptsWithDivisions.find(
-      dept => dept.departmentId === formData.departmentId
-    );
-    
-    return department ? department.divisions : [];
-  };
-
-  // Get departments that have divisions (for Division level assignments)
-  const getDepartmentsWithDivisions = () => {
-    if (!organizationStructure?.availableUnits?.departmentsWithDivisions) {
-      return [];
-    }
-    
-    let depts = organizationStructure.availableUnits.departmentsWithDivisions;
-    
-    // Filter by selected region if one is selected
-    if (formData.regionId) {
-      depts = depts.filter(dept => dept.regionId === formData.regionId);
-    }
-
-    return depts;
-  };
-
-  // Get departments filtered by selected region (for Department level assignments)
-  const getFilteredDepartments = () => {
-    if (!organizationStructure?.availableUnits?.departments) {
-      return [];
-    }
-    
-    let depts = organizationStructure.availableUnits.departments;
-    
-    // Filter by selected region if one is selected
-    if (formData.regionId) {
-      // Get department IDs from mappings that match the selected region
-      const regionMappings = organizationStructure.mappings?.filter(mapping => 
-        mapping.regionId === formData.regionId
-      ) || [];
-      const departmentIds = regionMappings.map(mapping => mapping.departmentId);
-      
-      depts = depts.filter(dept => departmentIds.includes(dept.id));
-    }
-
-    return depts;
-  };
-
-  // Check if selected department has divisions
-  const selectedDepartmentHasDivisions = () => {
-    if (!formData.departmentId || !organizationStructure?.availableUnits?.departmentsWithDivisions) {
-      return false;
-    }
-    
-    // Filter departmentsWithDivisions by selected region if applicable
-    let deptsWithDivisions = organizationStructure.availableUnits.departmentsWithDivisions;
-    if (formData.regionId) {
-      deptsWithDivisions = deptsWithDivisions.filter(dept => dept.regionId === formData.regionId);
-    }
-    
-    const department = deptsWithDivisions.find(
-      dept => dept.departmentId === formData.departmentId
-    );
-    
-    return department ? (department.divisions && department.divisions.length > 0) : false;
-  };
+  // Memoized organizational data
+  const filteredDepartments = useMemo(() => getFilteredDepartments(formData.regionId, organizationStructure), [formData.regionId, organizationStructure]);
+  const availableDivisions = useMemo(() => getAvailableDivisions(formData.departmentId, formData.regionId, organizationStructure), [formData.departmentId, formData.regionId, organizationStructure]);
+  const departmentsWithDivisions = useMemo(() => getDepartmentsWithDivisions(formData.regionId, organizationStructure), [formData.regionId, organizationStructure]);
 
   const handleFormChange = (field, value) => {
     setFormData(prev => ({
       ...prev,
-      [field]: value
+      [field]: value,
+      ...(field === 'regionId' ? { departmentId: '', divisionName: '' } : {}),
+      ...(field === 'departmentId' && prev.assignmentLevel === 'DIVISION' ? { divisionName: '' } : {})
     }));
   };
 
@@ -445,7 +398,6 @@ const HierarchicalUserAssignmentPage = () => {
         ...prev.workflowRoles,
         [roleKey]: value
       },
-      // If regionFinalVerifier is selected, ensure ApproveProposals is enabled for smoother UX
       rolePermissions: roleKey === 'regionFinalVerifier' && value
         ? { ...prev.rolePermissions, ApproveProposals: true }
         : prev.rolePermissions
@@ -454,12 +406,10 @@ const HierarchicalUserAssignmentPage = () => {
 
   const handleEditAssignment = (assignment) => {
     setEditingAssignment(assignment);
-    // Map existing workflowRoles (array) to checkbox map
     const roleMap = getDefaultWorkflowRolesMap();
     if (Array.isArray(assignment.workflowRoles)) {
       assignment.workflowRoles.forEach(r => { if (r in roleMap) roleMap[r] = true; });
     }
-    // Merge role permissions with defaults to ensure all keys exist
     const defaultPerms = {
       CreateProposals: true,
       EditOwnProposals: true,
@@ -484,7 +434,6 @@ const HierarchicalUserAssignmentPage = () => {
     setSelectedUser(assignment.userId);
   };
 
-  // Inline roles dialog handlers
   const openRolesDialog = (assignment) => {
     const map = getDefaultWorkflowRolesMap();
     if (Array.isArray(assignment.workflowRoles)) {
@@ -494,15 +443,17 @@ const HierarchicalUserAssignmentPage = () => {
     setRolesDialogUser(assignment);
     setRolesDialogOpen(true);
   };
+
   const closeRolesDialog = () => {
     setRolesDialogOpen(false);
     setRolesDialogUser(null);
   };
+
   const toggleDialogRole = (roleKey, checked) => {
     setRolesDialogMap(prev => ({ ...prev, [roleKey]: checked }));
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!formData.userId || !formData.userName || !formData.email) {
       setSnackbar({
         open: true,
@@ -512,7 +463,27 @@ const HierarchicalUserAssignmentPage = () => {
       return;
     }
 
-    // Validate required fields based on assignment level
+    if (!isValidEmail(formData.email)) {
+      setSnackbar({
+        open: true,
+        message: 'Invalid email format',
+        severity: 'warning'
+      });
+      return;
+    }
+
+    if (!editingAssignment) {
+      const userExists = await checkUserExists(formData.userId);
+      if (!userExists) {
+        setSnackbar({
+          open: true,
+          message: 'User ID does not exist in the system',
+          severity: 'warning'
+        });
+        return;
+      }
+    }
+
     if (formData.assignmentLevel === 'DIVISION') {
       if (!formData.regionId || !formData.departmentId || !formData.divisionName) {
         setSnackbar({
@@ -522,23 +493,20 @@ const HierarchicalUserAssignmentPage = () => {
         });
         return;
       }
-      
-      // Validate that selected department has divisions
-      if (!selectedDepartmentHasDivisions()) {
+
+      if (!selectedDepartmentHasDivisions(formData.departmentId, formData.regionId, organizationStructure)) {
         setSnackbar({
           open: true,
-          message: 'Selected department does not have divisions. Please choose a department with divisions.',
+          message: 'Selected department does not have divisions',
           severity: 'warning'
         });
         return;
       }
-      
-      // Validate that selected division exists in the department
-      const availableDivisions = getAvailableDivisions();
+
       if (!availableDivisions.some(div => div.name === formData.divisionName)) {
         setSnackbar({
           open: true,
-          message: 'Selected division does not exist in the chosen department.',
+          message: 'Selected division does not exist in the chosen department',
           severity: 'warning'
         });
         return;
@@ -562,17 +530,15 @@ const HierarchicalUserAssignmentPage = () => {
       });
       return;
     }
-    // Prepare payload: convert workflowRoles map to array of selected keys
+
     const selectedWorkflowRoles = Object.entries(formData.workflowRoles || {})
       .filter(([, v]) => v)
       .map(([k]) => k);
 
-    // Build payload; omit workflowRoles if none selected to allow server defaults
     const payload = {
       ...formData,
       rolePermissions: {
         ...formData.rolePermissions,
-        // Auto-enable approval if final verifier is selected to avoid server 403s
         ApproveProposals: selectedWorkflowRoles.includes('regionFinalVerifier')
           ? true
           : formData.rolePermissions.ApproveProposals
@@ -584,6 +550,19 @@ const HierarchicalUserAssignmentPage = () => {
     }
 
     createOrUpdateMutation.mutate(payload);
+  };
+
+  const handleDelete = (userId) => {
+    setDeleteUserId(userId);
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (deleteUserId) {
+      deleteMutation.mutate(deleteUserId);
+    }
+    setDeleteConfirmOpen(false);
+    setDeleteUserId(null);
   };
 
   const getAccessLevelInfo = (level) => {
@@ -613,6 +592,9 @@ const HierarchicalUserAssignmentPage = () => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
   };
+
+  // TODO: Add unit tests for handleSubmit, getVisibleWorkflowRoles, etc.
+  // Example: test('handleSubmit shows warning for missing userId', () => { ... });
 
   if (!isAdmin) {
     return (
@@ -664,8 +646,7 @@ const HierarchicalUserAssignmentPage = () => {
   return (
     <Box sx={{ p: 3 }}>
       <DashboardHeader title="Hierarchical User Assignments" />
-      
-      {/* Debug Information */}
+
       {process.env.NODE_ENV === 'development' && (
         <Card sx={{ mb: 3, bgcolor: '#f5f5f5' }}>
           <CardHeader title="🐛 Debug Information" />
@@ -683,10 +664,9 @@ const HierarchicalUserAssignmentPage = () => {
         </Card>
       )}
 
-      {/* Hierarchical System Overview */}
       <Card sx={{ mb: 3 }}>
         <CardHeader
-          avatar={<AccountTreeIcon />}
+          avatar={<HierarchyIcon />}
           title="Hierarchical RBAC System"
           subheader="Division → Department → Region Consolidation"
         />
@@ -724,15 +704,13 @@ const HierarchicalUserAssignmentPage = () => {
       </Card>
 
       <Grid container spacing={3}>
-        {/* Assignment Form */}
         <Grid item xs={12} md={6}>
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
               {editingAssignment ? 'Edit' : 'Create'} Hierarchical Assignment
             </Typography>
-            
+
             <Grid container spacing={2}>
-              {/* User Information */}
               <Grid item xs={12}>
                 <TextField
                   fullWidth
@@ -740,6 +718,9 @@ const HierarchicalUserAssignmentPage = () => {
                   value={formData.userId}
                   onChange={(e) => handleFormChange('userId', e.target.value)}
                   disabled={!!editingAssignment}
+                  required
+                  helperText={formData.userId ? '' : 'User ID is required'}
+                  inputProps={{ 'aria-label': 'User ID' }}
                 />
               </Grid>
               <Grid item xs={12}>
@@ -748,6 +729,9 @@ const HierarchicalUserAssignmentPage = () => {
                   label="User Name"
                   value={formData.userName}
                   onChange={(e) => handleFormChange('userName', e.target.value)}
+                  required
+                  helperText={formData.userName ? '' : 'User Name is required'}
+                  inputProps={{ 'aria-label': 'User Name' }}
                 />
               </Grid>
               <Grid item xs={12}>
@@ -757,10 +741,12 @@ const HierarchicalUserAssignmentPage = () => {
                   type="email"
                   value={formData.email}
                   onChange={(e) => handleFormChange('email', e.target.value)}
+                  required
+                  helperText={formData.email && isValidEmail(formData.email) ? '' : 'Valid email is required'}
+                  inputProps={{ 'aria-label': 'Email' }}
                 />
               </Grid>
 
-              {/* Assignment Level */}
               <Grid item xs={12}>
                 <FormControl fullWidth>
                   <InputLabel>Assignment Level</InputLabel>
@@ -768,6 +754,7 @@ const HierarchicalUserAssignmentPage = () => {
                     value={formData.assignmentLevel}
                     onChange={(e) => handleFormChange('assignmentLevel', e.target.value)}
                     label="Assignment Level"
+                    inputProps={{ 'aria-label': 'Assignment Level' }}
                   >
                     {ACCESS_LEVELS.map((level) => (
                       <MenuItem key={level.value} value={level.value}>
@@ -781,22 +768,15 @@ const HierarchicalUserAssignmentPage = () => {
                 </FormControl>
               </Grid>
 
-              {/* Organizational Units */}
               {(formData.assignmentLevel === 'REGION' || formData.assignmentLevel === 'DEPARTMENT' || formData.assignmentLevel === 'DIVISION') && (
                 <Grid item xs={12}>
                   <FormControl fullWidth>
                     <InputLabel>Region</InputLabel>
                     <Select
                       value={formData.regionId}
-                      onChange={(e) => {
-                        handleFormChange('regionId', e.target.value);
-                        // Reset department and division when region changes
-                        handleFormChange('departmentId', '');
-                        if (formData.assignmentLevel === 'DIVISION') {
-                          handleFormChange('divisionName', '');
-                        }
-                      }}
+                      onChange={(e) => handleFormChange('regionId', e.target.value)}
                       label="Region"
+                      inputProps={{ 'aria-label': 'Region' }}
                     >
                       {organizationStructure?.availableUnits?.regions?.map((region) => (
                         <MenuItem key={region.id} value={region.id}>
@@ -814,39 +794,33 @@ const HierarchicalUserAssignmentPage = () => {
                     <InputLabel>Department</InputLabel>
                     <Select
                       value={formData.departmentId}
-                      onChange={(e) => {
-                        handleFormChange('departmentId', e.target.value);
-                        // Reset division when department changes
-                        if (formData.assignmentLevel === 'DIVISION') {
-                          handleFormChange('divisionName', '');
-                        }
-                      }}
+                      onChange={(e) => handleFormChange('departmentId', e.target.value)}
                       label="Department"
+                      inputProps={{ 'aria-label': 'Department' }}
                     >
-                      {/* For Division level, only show departments that have divisions */}
-                      {formData.assignmentLevel === 'DIVISION' ? 
-                        getDepartmentsWithDivisions().map((department) => (
+                      {formData.assignmentLevel === 'DIVISION' ?
+                        departmentsWithDivisions.map((department) => (
                           <MenuItem key={department.departmentId} value={department.departmentId}>
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                               <Typography>{department.departmentName}</Typography>
-                              <Chip 
-                                label={`${department.divisions.length} divisions`} 
-                                size="small" 
-                                color="primary" 
+                              <Chip
+                                label={`${department.divisions.length} divisions`}
+                                size="small"
+                                color="primary"
                                 variant="outlined"
                               />
                             </Box>
                           </MenuItem>
                         )) :
-                        getFilteredDepartments().map((department) => (
+                        filteredDepartments.map((department) => (
                           <MenuItem key={department.id} value={department.id}>
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                               <Typography>{department.name}</Typography>
                               {department.hasSubDivisions && (
-                                <Chip 
-                                  label="Has divisions" 
-                                  size="small" 
-                                  color="secondary" 
+                                <Chip
+                                  label="Has divisions"
+                                  size="small"
+                                  color="secondary"
                                   variant="outlined"
                                 />
                               )}
@@ -856,8 +830,7 @@ const HierarchicalUserAssignmentPage = () => {
                       }
                     </Select>
                   </FormControl>
-                  
-                  {/* Show additional info for Division level */}
+
                   {formData.assignmentLevel === 'DIVISION' && (
                     <Alert severity="info" sx={{ mt: 1 }}>
                       <Typography variant="body2">
@@ -877,15 +850,16 @@ const HierarchicalUserAssignmentPage = () => {
                       onChange={(e) => handleFormChange('divisionName', e.target.value)}
                       label="Division"
                       disabled={!formData.departmentId}
+                      inputProps={{ 'aria-label': 'Division' }}
                     >
-                      {getAvailableDivisions().map((division) => (
+                      {availableDivisions.map((division) => (
                         <MenuItem key={division.name} value={division.name}>
                           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                             <Typography>{division.name}</Typography>
                             {division.code && (
-                              <Chip 
-                                label={division.code} 
-                                size="small" 
+                              <Chip
+                                label={division.code}
+                                size="small"
                                 variant="outlined"
                               />
                             )}
@@ -894,7 +868,7 @@ const HierarchicalUserAssignmentPage = () => {
                       ))}
                     </Select>
                   </FormControl>
-                  
+
                   {!formData.departmentId && (
                     <Alert severity="warning" sx={{ mt: 1 }}>
                       <Typography variant="body2">
@@ -902,8 +876,8 @@ const HierarchicalUserAssignmentPage = () => {
                       </Typography>
                     </Alert>
                   )}
-                  
-                  {formData.departmentId && getAvailableDivisions().length === 0 && (
+
+                  {formData.departmentId && availableDivisions.length === 0 && (
                     <Alert severity="error" sx={{ mt: 1 }}>
                       <Typography variant="body2">
                         Selected department has no divisions. Please choose a different department.
@@ -913,7 +887,6 @@ const HierarchicalUserAssignmentPage = () => {
                 </Grid>
               )}
 
-              {/* Consolidation Info */}
               <Grid item xs={12}>
                 <Alert severity="info" icon={<InfoIcon />}>
                   <Typography variant="subtitle2">Consolidation Behavior:</Typography>
@@ -923,7 +896,6 @@ const HierarchicalUserAssignmentPage = () => {
                 </Alert>
               </Grid>
 
-              {/* Role Permissions */}
               <Grid item xs={12}>
                 <Accordion expanded={showPermissions} onChange={() => setShowPermissions(!showPermissions)}>
                   <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -937,6 +909,7 @@ const HierarchicalUserAssignmentPage = () => {
                             <Checkbox
                               checked={value}
                               onChange={(e) => handlePermissionChange(permission, e.target.checked)}
+                              inputProps={{ 'aria-label': permission }}
                             />
                             <Typography variant="body2">
                               {permission.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
@@ -949,7 +922,6 @@ const HierarchicalUserAssignmentPage = () => {
                 </Accordion>
               </Grid>
 
-              {/* Workflow Roles */}
               <Grid item xs={12}>
                 <Accordion>
                   <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -967,6 +939,7 @@ const HierarchicalUserAssignmentPage = () => {
                               <Checkbox
                                 checked={!!formData.workflowRoles?.[role.key]}
                                 onChange={(e) => handleWorkflowRoleChange(role.key, e.target.checked)}
+                                inputProps={{ 'aria-label': role.label }}
                               />
                             </Tooltip>
                             <Tooltip title={role.description} arrow>
@@ -983,13 +956,12 @@ const HierarchicalUserAssignmentPage = () => {
                 </Accordion>
               </Grid>
 
-              {/* Action Buttons */}
               <Grid item xs={12}>
                 <Stack direction="row" spacing={2}>
                   <Button
                     variant="contained"
                     onClick={handleSubmit}
-                    disabled={createOrUpdateMutation.isLoading}
+                    disabled={createOrUpdateMutation.isLoading || !formData.userId || !formData.userName || !isValidEmail(formData.email)}
                     startIcon={createOrUpdateMutation.isLoading ? <CircularProgress size={20} /> : <AssignmentIcon />}
                   >
                     {editingAssignment ? 'Update' : 'Create'} Assignment
@@ -1003,18 +975,17 @@ const HierarchicalUserAssignmentPage = () => {
           </Paper>
         </Grid>
 
-        {/* Assignments List */}
         <Grid item xs={12} md={6}>
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
               Current Assignments ({assignments.length})
             </Typography>
-            
+
             {loadingAssignments ? (
               <CircularProgress />
             ) : (
               <TableContainer>
-                <Table size="small">
+                <Table size="small" aria-label="Assignments Table">
                   <TableHead>
                     <TableRow>
                       <TableCell>User</TableCell>
@@ -1080,6 +1051,7 @@ const HierarchicalUserAssignmentPage = () => {
                                   <IconButton
                                     size="small"
                                     onClick={() => handleEditAssignment(assignment)}
+                                    aria-label="Edit Assignment"
                                   >
                                     <EditIcon />
                                   </IconButton>
@@ -1088,6 +1060,7 @@ const HierarchicalUserAssignmentPage = () => {
                                   <IconButton
                                     size="small"
                                     onClick={() => openRolesDialog(assignment)}
+                                    aria-label="Manage Workflow Roles"
                                   >
                                     <AssignmentIcon />
                                   </IconButton>
@@ -1095,8 +1068,9 @@ const HierarchicalUserAssignmentPage = () => {
                                 <Tooltip title="Delete Assignment">
                                   <IconButton
                                     size="small"
-                                    onClick={() => deleteMutation.mutate(assignment.userId)}
+                                    onClick={() => handleDelete(assignment.userId)}
                                     disabled={deleteMutation.isLoading}
+                                    aria-label="Delete Assignment"
                                   >
                                     <DeleteIcon />
                                   </IconButton>
@@ -1130,7 +1104,6 @@ const HierarchicalUserAssignmentPage = () => {
         severity={snackbar.severity}
       />
 
-      {/* Manage Workflow Roles Dialog */}
       <Dialog open={rolesDialogOpen} onClose={closeRolesDialog} fullWidth maxWidth="sm">
         <DialogTitle>Manage Workflow Roles{rolesDialogUser ? ` — ${rolesDialogUser.userName}` : ''}</DialogTitle>
         <DialogContent dividers>
@@ -1143,6 +1116,7 @@ const HierarchicalUserAssignmentPage = () => {
                       <Checkbox
                         checked={!!rolesDialogMap[role.key]}
                         onChange={(e) => toggleDialogRole(role.key, e.target.checked)}
+                        inputProps={{ 'aria-label': role.label }}
                       />
                     </Tooltip>
                     <Tooltip title={role.description} arrow>
@@ -1174,6 +1148,19 @@ const HierarchicalUserAssignmentPage = () => {
             startIcon={updateWorkflowRolesMutation.isLoading ? <CircularProgress size={18} /> : <AssignmentIcon />}
           >
             Save Roles
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)}>
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent>
+          <Typography>Are you sure you want to delete this assignment?</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={confirmDelete}>
+            Delete
           </Button>
         </DialogActions>
       </Dialog>

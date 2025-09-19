@@ -43,6 +43,9 @@ const EmployeeSchema = mongoose.Schema(
       type: String,
       required: true,
     },
+    itemNumber: {
+      type: String,
+    },
     fiscalYear: {
       type: String,
       required: true,
@@ -71,4 +74,4 @@ const EmployeeSchema = mongoose.Schema(
   }
 );
 const Employee = mongoose.model("employee", EmployeeSchema);
-module.exports = Employee;
+module.exports = Employee;

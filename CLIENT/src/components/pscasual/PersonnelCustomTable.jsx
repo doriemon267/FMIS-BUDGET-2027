@@ -572,7 +572,7 @@ const CasualCustomTable = ({
         </Paper>
         {!isLoading && (
           <TablePagination
-            rowsPerPageOptions={[10, ROWS_PER_PAGE, 50]}
+            rowsPerPageOptions={[...new Set([10, ROWS_PER_PAGE, 50])]}
             component="div"
             count={data ? data.totalRecords : 0}
             rowsPerPage={rowsPerPage}

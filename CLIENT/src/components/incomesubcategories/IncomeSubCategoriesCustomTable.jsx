@@ -530,7 +530,7 @@ const CustomTable = ({
         {/* PAGINATION AREA */}
         {!isLoading && data && data[dataListName] && data[dataListName].length > 0 ? (
           <TablePagination
-            rowsPerPageOptions={[10, ROWS_PER_PAGE, 50]}
+            rowsPerPageOptions={[...new Set([10, ROWS_PER_PAGE, 50])]}
             component="div"
             count={data.totalRecords || data[dataListName].length || 0} // Fallback to array length or 0
             rowsPerPage={rowsPerPage}

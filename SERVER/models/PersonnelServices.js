@@ -241,7 +241,7 @@ courtAppearance: {
   },
   { timestamps: true }
 );
-// Add a pre-save hook to ensure meal is properly set
+// Add a pre-save hook to ensure meal is properly set and calculate total
 personnelServicesSchema.pre('save', function(next) {
   // If meal is undefined or null, set it to 0
   if (this.meal === undefined || this.meal === null) {
@@ -249,6 +249,22 @@ personnelServicesSchema.pre('save', function(next) {
   }
   // Ensure meal is a number
   this.meal = Number(this.meal);
+  
+  // Calculate total from all numeric fields
+  const numericFields = [
+    "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
+    "medical", "meal", "cashGift", "midyearBonus", "yearEndBonus",
+    "gsisPremium", "philhealthPremium", "pagibigPremium", "employeeCompensation",
+    "subsistenceAllowanceMDS", "subsistenceAllowanceST", "overtimePay", "loyaltyAward",
+    "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
+    "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
+  ];
+  
+  this.Total = numericFields.reduce(
+    (acc, field) => acc + (Number(this[field]) || 0),
+    0
+  );
+  
   next();
 });
 // Add a static method to reset meal allowance

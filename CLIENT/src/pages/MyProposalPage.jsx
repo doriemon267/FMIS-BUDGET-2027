@@ -297,10 +297,7 @@ const MyProposalPage = () => {
     let workingProposals = filteredProposals;
     const isPersonnelCategory = String(category).toLowerCase() === 'personnel';
     if (isPersonnelCategory) {
-      const psFields = [
-        'annualSalary','RATA','PERA','uniformALLOWANCE','productivityIncentive','medical','childrenAllowance','meal','cashGift','subsistenceAllowanceMDS','subsistenceAllowanceST','midyearBonus','yearEndBonus','gsisPremium','philhealthPremium','pagibigPremium','employeeCompensation','loyaltyAward','overtimePay','earnedLeaves','retirementBenefits','terminalLeave','courtAppearance'
-      ];
-      const calcTotal = (item) => psFields.reduce((sum, f) => sum + (Number(item?.[f]) || 0), 0);
+      const calcTotal = (item) => Number(item?.Total) || 0;
       const groups = new Map();
       filteredProposals.forEach(p => {
         const key = `${p.fiscalYear || 'Unknown'}|${p.budgetType || 'Unknown'}|${p.region || 'Unknown'}|${p.status || 'Unknown'}`;

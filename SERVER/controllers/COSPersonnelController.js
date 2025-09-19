@@ -109,35 +109,70 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
           employeeNumber: employee.EmployeeID,
           fiscalYear: fiscalYear,
         });
-        if (!existingRecord) {
-          // Check if essential required fields are present (SG and Rate are still required)
-          if (!employee.SG || !employee.Rate) {
-            // Skip employees with missing essential required fields
-            return null;
+        
+        // Additional check for VACANT positions using ItemNumber or position details
+        const isVacant = employee.EmployeeFullName && 
+                        employee.EmployeeFullName.toString().toUpperCase() === 'VACANT';
+        
+        let existingVacantRecord = null;
+        if (isVacant && !existingRecord) {
+          const duplicateConditions = [];
+          
+          // Check by ItemNumber if available (most reliable)
+          if (employee.ItemNumber && employee.ItemNumber.trim() !== '') {
+            duplicateConditions.push({ itemNumber: employee.ItemNumber });
           }
-          const monthlySalary = employee.Rate;
-          const annualSalary = monthlySalary * 12;
-          return {
-            department: employee.Department,
-            region: employee.Region,
-            budgetType: budgetType,
-            processBy: req.body.processBy,
-            processDate: new Date(),
-            fiscalYear: fiscalYear,
+          
+          // Always include position details as fallback
+          duplicateConditions.push({
             positionTitle: employee.PositionTitle,
-            gradelevel_SG: employee.SG.toString(),
-            step: employee.Step || null, // Allow null/undefined values
-            gradelevel_JG: employee.JG ? employee.JG.toString() : "", // Allow empty string for missing JG
-            employeeFullName: employee.EmployeeFullName,
-            employeeNumber: employee.EmployeeID,
-            division: employee.Division,
-            statusOfAppointment: employee.StatusOfAppointment,
-            monthlySalary: monthlySalary,
-            annualSalary: annualSalary,
-            Total: annualSalary,
-          };
+            department: employee.Department,
+            division: employee.Division || null,
+            section: employee.Section || null,
+            gradelevel_SG: employee.SG?.toString() || "",
+            fiscalYear: fiscalYear,
+            region: employee.Region,
+            employeeFullName: "VACANT"
+          });
+          
+          existingVacantRecord = await COSPersonnel.findOne({
+            $or: duplicateConditions
+          });
         }
-        return null;
+        
+        if (existingRecord || existingVacantRecord) {
+          console.log(`Skipping ${isVacant ? 'VACANT position' : 'employee'} ${employee.EmployeeFullName} - already exists`);
+          return null;
+        }
+        
+        // Check if essential required fields are present (SG and Rate are still required)
+        if (!employee.SG || !employee.Rate) {
+          // Skip employees with missing essential required fields
+          return null;
+        }
+        
+        const monthlySalary = employee.Rate;
+        const annualSalary = monthlySalary * 12;
+        return {
+          department: employee.Department,
+          region: employee.Region,
+          budgetType: budgetType,
+          processBy: req.body.processBy,
+          processDate: new Date(),
+          fiscalYear: fiscalYear,
+          positionTitle: employee.PositionTitle,
+          itemNumber: employee.ItemNumber || "",
+          gradelevel_SG: employee.SG.toString(),
+          step: employee.Step || null,
+          gradelevel_JG: employee.JG ? employee.JG.toString() : "",
+          employeeFullName: employee.EmployeeFullName,
+          employeeNumber: employee.EmployeeID,
+          division: employee.Division,
+          statusOfAppointment: employee.StatusOfAppointment,
+          monthlySalary: monthlySalary,
+          annualSalary: annualSalary,
+          Total: annualSalary,
+        };
       })
     );
     const cosPersonnelData = checks.filter((record) => record !== null);

@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const PersonnelServices = require("../models/personnelServices");
+const PersonnelServices = require("../models/PersonnelServices");
 const EmployeeMaster = require("../models/EmployeeList");
 const Settings = require("../models/Settings");
 // Import MealAllowance and MedicalAllowance models safely
@@ -472,13 +472,63 @@ exports.bulkAddPersonnelServices = async (req, res) => {
       return res.status(200).json([]);
     }
     const personnelServicesData = [];
+    const duplicates = [];
+    
   for (const employee of employees) {
-      // Check if employee already exists in PersonnelServices for current fiscal year
-      const existingPersonnelService = await PersonnelServices.findOne({
-        employeeNumber: employee.EmployeeID,
-        fiscalYear: fiscalYear,
-      });
+      let existingPersonnelService;
+      
+      // Check for duplicates differently based on whether it's a VACANT position
+      const isVacant = employee.EmployeeFullName && 
+                      employee.EmployeeFullName.toString().toUpperCase() === 'VACANT';
+      
+      if (isVacant) {
+        // For VACANT positions, check by position details since employeeNumber might be null/empty
+        const duplicateConditions = [];
+        
+        // Check by ItemNumber if available (most reliable)
+        if (employee.ItemNumber && employee.ItemNumber.trim() !== '') {
+          duplicateConditions.push({ itemNumber: employee.ItemNumber });
+        }
+        
+        // Always include position details as fallback
+        duplicateConditions.push({
+          positionTitle: employee.PositionTitle,
+          department: employee.Department,
+          division: employee.Division || null,
+          section: employee.Section || null,
+          gradelevel_SG: employee.SG?.toString() || "",
+          fiscalYear: fiscalYear,
+          region: employee.Region,
+          employeeFullName: "VACANT"
+        });
+        
+        existingPersonnelService = await PersonnelServices.findOne({
+          $or: duplicateConditions
+        });
+      } else {
+        // For regular employees, check by employeeNumber and fiscalYear
+        existingPersonnelService = await PersonnelServices.findOne({
+          employeeNumber: employee.EmployeeID,
+          fiscalYear: fiscalYear,
+        });
+      }
+      
       if (existingPersonnelService) {
+        const identifier = isVacant 
+          ? `${employee.PositionTitle} (${employee.Department})`
+          : `${employee.EmployeeFullName} (${employee.EmployeeID})`;
+        
+        console.log(`Skipping ${isVacant ? 'VACANT position' : 'employee'} ${identifier} - already exists in fiscal year ${fiscalYear}`);
+        duplicates.push({
+          employeeNumber: employee.EmployeeID || 'VACANT',
+          employeeName: employee.EmployeeFullName,
+          positionTitle: employee.PositionTitle,
+          department: employee.Department,
+          division: employee.Division,
+          existingStatus: existingPersonnelService.statusOfAppointment,
+          existingId: existingPersonnelService._id,
+          isVacant: isVacant
+        });
         continue;
       }
       const monthlySalary = employee.Rate || 0;
@@ -615,9 +665,17 @@ exports.bulkAddPersonnelServices = async (req, res) => {
       const addedPersonnelServices = await PersonnelServices.insertMany(
         personnelServicesData
       );
-      res.status(200).json(addedPersonnelServices);
+      res.status(200).json({
+        added: addedPersonnelServices,
+        duplicates: duplicates,
+        message: `Successfully added ${addedPersonnelServices.length} personnel services. ${duplicates.length} duplicates were skipped.`
+      });
     } else {
-      res.status(200).json({ message: "No new personnel services to add." });
+      res.status(200).json({ 
+        added: [],
+        duplicates: duplicates,
+        message: `No new personnel services to add. ${duplicates.length} duplicates were found.` 
+      });
     }
   } catch (error) {
     console.error("Error in bulkAddPersonnelServices:", error.stack);
@@ -1057,5 +1115,5 @@ module.exports = {
   getPersonnelHiredBeforeJune1988: exports.getPersonnelHiredBeforeJune1988,
   syncAllMealAllowances: exports.syncAllMealAllowances,
   getPersonnelServices: exports.getPersonnelServices,
-  PersonnelServices: require("../models/personnelServices"),
+  PersonnelServices: require("../models/PersonnelServices"),
 };

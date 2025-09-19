@@ -199,13 +199,26 @@ const PSCasualCustomPageTable = ({
         region // Include the active region in the request
       });
 
-      if (Array.isArray(response.data)) {
-        toast.success("Casual personnel successfully added!");
+      if (response.data.added && Array.isArray(response.data.added)) {
+        const addedCount = response.data.added.length;
+        const duplicateCount = response.data.duplicates ? response.data.duplicates.length : 0;
+        
+        if (addedCount > 0) {
+          toast.success(`Successfully added ${addedCount} casual personnel${duplicateCount > 0 ? ` (${duplicateCount} duplicates skipped)` : ''}!`);
+        } else if (duplicateCount > 0) {
+          toast.warning(`No new casual personnel added. ${duplicateCount} employees already exist in the system.`);
+        } else {
+          toast.info(response.data.message || "No casual personnel services to add.");
+        }
+        
         await fetchData();
         queryClient.invalidateQueries(dataListName);
+      } else if (response.data.message) {
+        toast.info(response.data.message);
+        console.error("Bulk add response:", response.data);
       } else {
-        toast.info(response.data.message || "Bulk add failed");
-        console.error("Bulk add response is not an array:", response.data);
+        toast.info("Bulk add completed");
+        console.error("Bulk add response is not in expected format:", response.data);
       }
     } catch (error) {
       if (error.response?.status === 403) {

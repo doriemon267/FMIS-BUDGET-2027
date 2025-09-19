@@ -105,16 +105,30 @@ const CustomPageTable = ({
         region // Include the active region in the request
       });
 
-      if (Array.isArray(response.data)) {
-        toast.success("Personnel successfully added!");
+      if (response.data.added && Array.isArray(response.data.added)) {
+        const addedCount = response.data.added.length;
+        const duplicateCount = response.data.duplicates ? response.data.duplicates.length : 0;
+        
+        if (addedCount > 0) {
+          toast.success(`Successfully added ${addedCount} personnel${duplicateCount > 0 ? ` (${duplicateCount} duplicates skipped)` : ''}!`);
+        } else if (duplicateCount > 0) {
+          toast.warning(`No new personnel added. ${duplicateCount} employees already exist in the system.`);
+        } else {
+          toast.info(response.data.message || "No personnel services to add.");
+        }
+        
         const newStatusLabel = `Personnel Services - ${selectedStatus.charAt(0).toUpperCase() + selectedStatus.slice(1).toLowerCase()}`;
         setStatusLabel(newStatusLabel);
         localStorage.setItem("statusLabel", newStatusLabel);
 
         // await fetchData(); // Ensure table refreshes before dialog closes
         location.reload()
+      } else if (response.data.message) {
+        toast.info(response.data.message);
+        console.error("Bulk add response:", response.data);
       } else {
-        console.error("Bulk add response is not an array:", response.data);
+        toast.info("Bulk add completed");
+        console.error("Bulk add response is not in expected format:", response.data);
       }
     } catch (error) {
       console.error("Error bulk adding personnel:", error);

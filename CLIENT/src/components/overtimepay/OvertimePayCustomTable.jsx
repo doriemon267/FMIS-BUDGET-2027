@@ -783,7 +783,7 @@ const OvertimePayCustomTable = ({
 
             {/* PAGINATION */}
             <TablePagination
-              rowsPerPageOptions={[10, ROWS_PER_PAGE, 50]}
+              rowsPerPageOptions={[...new Set([10, ROWS_PER_PAGE, 50])]}
               component="div"
               count={data?.totalRecords || 0}
               rowsPerPage={rowsPerPage}

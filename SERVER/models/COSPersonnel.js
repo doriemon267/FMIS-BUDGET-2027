@@ -27,6 +27,9 @@ const COSPersonnelSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    itemNumber: {
+      type: String,
+    },
     gradelevel_SG: {
       type: String,
       required: true,
@@ -74,4 +77,4 @@ const COSPersonnelSchema = new mongoose.Schema(
 );
 // Optional: Gumawa ng composite index para siguraduhing walang duplicate record para sa parehong employee sa isang fiscalYear
 COSPersonnelSchema.index({ employeeNumber: 1, fiscalYear: 1 }, { unique: true });
-module.exports = mongoose.model("COSPersonnel", COSPersonnelSchema);
+module.exports = mongoose.model("COSPersonnel", COSPersonnelSchema);

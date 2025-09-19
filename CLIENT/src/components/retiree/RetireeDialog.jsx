@@ -465,43 +465,45 @@ const RetireeDialog = ({
                   )}
                   renderOption={(props, option) => {
                     const uniqueKey = String(option.employeeNumber ?? option.employeeID ?? option.EmployeeID ?? option._id ?? `${option.employeeFullName}-${option.dateOfBirth || option.DateOfBirth || ''}`);
+                    // Extract 'key' from props to avoid spreading it; pass explicitly to satisfy React warning
+                    const { key, ...optionProps } = props;
                     return (
-                      <Box component="li" key={uniqueKey} {...props}>
+                      <Box component="li" key={uniqueKey} {...optionProps}>
                         <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
                           <Typography variant="body1">
                             {option.employeeNumber} - {option.employeeFullName}
                           </Typography>
-                        <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
-                          <Chip
-                            size="small"
-                            label={`Age: ${calculateRetirementType(option.dateOfBirth || option.DateOfBirth).age}`}
-                            color="primary"
-                            variant="outlined"
-                          />
-                         <Chip
-                            size="small"
-                            label={option.eligibleType ? option.eligibleType : "Not Eligible"}
-                            color={
-                              option.eligibleType === "Compulsory"
-                                ? "error"
-                                : option.eligibleType === "Optional"
-                                ? "warning"
-                                : "default"
-                            }
-                          />
-                          {option.earnedLeaves && (
+                          <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
                             <Chip
                               size="small"
-                              label={`${option.earnedLeaves} leave days`}
-                              color="info"
+                              label={`Age: ${calculateRetirementType(option.dateOfBirth || option.DateOfBirth).age}`}
+                              color="primary"
                               variant="outlined"
                             />
-                          )}
+                            <Chip
+                              size="small"
+                              label={option.eligibleType ? option.eligibleType : "Not Eligible"}
+                              color={
+                                option.eligibleType === "Compulsory"
+                                  ? "error"
+                                  : option.eligibleType === "Optional"
+                                  ? "warning"
+                                  : "default"
+                              }
+                            />
+                            {option.earnedLeaves && (
+                              <Chip
+                                size="small"
+                                label={`${option.earnedLeaves} leave days`}
+                                color="info"
+                                variant="outlined"
+                              />
+                            )}
+                          </Box>
                         </Box>
                       </Box>
-                    </Box>
-                  );
-                }}
+                    );
+                  }}
                 />
               </Grid>
             )}
