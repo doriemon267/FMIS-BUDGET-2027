@@ -40,66 +40,57 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh }) => {
       status,
       workflowRoles,
       proposalId: proposal?._id,
-      departmentConsolidator: workflowRoles.includes("departmentConsolidator")
+      officeConsolidator: workflowRoles.includes("officeConsolidator")
     });
 
-    // Division Level Actions
-    if (userLevel === "DIVISION" && workflowRoles.includes("divisionCreator")) {
+    // Responsibility Center Level Actions
+    if (userLevel === "RESPONSIBILITY_CENTER" && workflowRoles.includes("responsibilityCenterCreator")) {
       if (status === "Draft") {
         actions.push({
-          label: "Submit to Department",
-          action: "division-submit",
+          label: "Submit to Office",
+          action: "responsibility-center-submit",
           color: "bg-blue-500 hover:bg-blue-600",
           icon: "📤",
-          description: "Submit to Department for verification"
+          description: "Submit to Office for verification"
         });
       }
     }
 
-    // Department Level Actions
-    if (userLevel === "DEPARTMENT" && workflowRoles.includes("departmentConsolidator")) {
-      if (status === "Division Submitted" || status === "DIVISION SUBMITTED") {
+    // Office Level Actions
+    if (userLevel === "OFFICE" && workflowRoles.includes("officeConsolidator")) {
+      if (status === "Responsibility Center Submitted" || status === "RESPONSIBILITY_CENTER_SUBMITTED") {
         actions.push({
           label: "Verify",
-          action: "department-verify",
+          action: "office-verify",
           color: "bg-green-500 hover:bg-green-600",
           icon: "✅",
-          description: "Verify and approve the division submission"
+          description: "Verify and approve the responsibility center submission"
         });
         actions.push({
           label: "Return",
-          action: "department-return",
+          action: "office-return",
           color: "bg-red-500 hover:bg-red-600",
           icon: "↩️",
-          description: "Return submission to division for revisions"
+          description: "Return submission to responsibility center for revisions"
         });
       }
-      if (status === "Department Verified" || status === "DEPARTMENT VERIFIED") {
+      if (status === "Office Verified" || status === "OFFICE VERIFIED") {
         actions.push({
-          label: "Submit to Region",
-          action: "department-submit",
+          label: "Submit for Finalization",
+          action: "office-submit",
           color: "bg-purple-500 hover:bg-purple-600",
           icon: "📋",
-          description: "Submit to Region for approval"
+          description: "Submit for finalization"
         });
       }
     }
 
-    // Region Level Actions
-    if (userLevel === "REGION" && workflowRoles.includes("regionFinalVerifier")) {
-      if (status === "Department Submitted" || status === "DEPARTMENT SUBMITTED") {
-        actions.push({
-          label: "Approve Submission",
-          action: "region-approve",
-          color: "bg-green-500 hover:bg-green-600",
-          icon: "👍",
-          description: "Approve the submission"
-        });
-      }
-      if (status === "Region Approved" || status === "REGION APPROVED") {
+    // Office Level Actions (Final verification)
+    if (userLevel === "OFFICE" && workflowRoles.includes("officeFinalVerifier")) {
+      if (status === "Office Submitted" || status === "OFFICE SUBMITTED") {
         actions.push({
           label: "Finalize",
-          action: "region-finalize",
+          action: "office-finalize",
           color: "bg-emerald-500 hover:bg-emerald-600",
           icon: "🏆",
           description: "Finalize the submission"
@@ -120,35 +111,25 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh }) => {
       let successMessage = "";
 
       switch (action) {
-        case "division-submit":
-          endpoint = "/api/submission-workflow/division/submit-to-department";
+        case "responsibility-center-submit":
+          endpoint = "/api/submission-workflow/responsibility-center/submit-to-office";
           noteField = "submissionNote";
-          successMessage = "Successfully submitted to Department for verification";
+          successMessage = "Successfully submitted to Office for verification";
           break;
-        case "department-verify":
-          endpoint = "/api/submission-workflow/department/verify-submission";
+        case "office-verify":
+          endpoint = "/api/submission-workflow/office/verify-submission";
           noteField = "verificationNote";
-          successMessage = "Successfully verified division submission";
+          successMessage = "Successfully verified responsibility center submission";
           break;
-        case "department-submit":
-          endpoint = "/api/submission-workflow/department/submit-to-region";
+        case "office-submit":
+          endpoint = "/api/submission-workflow/office/submit-own";
           noteField = "approvalNote";
-          successMessage = "Successfully submitted to Region for approval";
-          break;
-        case "region-approve":
-          endpoint = "/api/submission-workflow/region/approve-submission";
-          noteField = "regionApprovalNote";
-          successMessage = "Successfully approved submission";
-          break;
-        case "region-finalize":
-          endpoint = "/api/submission-workflow/region/finalize-submission";
-          noteField = "finalizationNote";
           successMessage = "Successfully finalized submission";
           break;
-        case "department-return":
-          endpoint = "/api/submission-workflow/department/return-to-division";
+        case "office-return":
+          endpoint = "/api/submission-workflow/office/return-to-responsibility-center";
           noteField = "returnNote";
-          successMessage = "Successfully returned submission to division for revisions";
+          successMessage = "Successfully returned submission to responsibility center for revisions";
           break;
         default:
           throw new Error("Unknown workflow action");

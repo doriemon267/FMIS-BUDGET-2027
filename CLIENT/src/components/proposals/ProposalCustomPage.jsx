@@ -94,6 +94,8 @@ import DraftsIcon from "@mui/icons-material/Drafts";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import BudgetSummary from "./BudgetSummary";
 import { hasPermission, PERMISSIONS } from "../../utils/permissions";
+import { useUserRestrictions } from "../../hooks/useUserRestrictions";
+import { AccessStatusIndicator } from "../common/AccessStatusIndicator";
 
 const CustomPage = ({
   dataListName,
@@ -104,6 +106,7 @@ const CustomPage = ({
 }) => {
   const { currentUser } = useUser();
   const { activeRegion } = useRegion();
+  const { readOnly, canCreate, canDelete } = useUserRestrictions();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [regionFilter, setRegionFilter] = useState("");
@@ -142,7 +145,7 @@ const CustomPage = ({
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [speedDialOpen, setSpeedDialOpen] = useState(false);
 
-  const canCreate = hasPermission(currentUser, PERMISSIONS.CREATE);
+  // Use canCreate from the hook, but keep canEditOwn from permissions
   const canEditOwn = hasPermission(currentUser, PERMISSIONS.EDIT_OWN);
   // Initialize budgetSummary with default values
   const [budgetSummary, setBudgetSummary] = useState({
@@ -284,75 +287,6 @@ const CustomPage = ({
 
     return () => clearTimeout(timeoutId);
   }, [validateBudgetData]);
-
-  const calculateDraftTotal = () => {
-    const personnelTotal = personnelData
-      .filter((p) => p.status === "Draft")
-      .reduce((sum, p) => {
-        return (
-          sum +
-          (p.annualSalary || 0) +
-          (p.RATA || 0) +
-          (p.PERA || 0) +
-          (p.uniformALLOWANCE || 0) +
-          (p.productivityIncentive || 0) +
-          (p.medical || 0) +
-          (p.childrenAllowance || 0) +
-          (p.meal || 0) +
-          (p.cashGift || 0) +
-          (p.subsistenceAllowanceMDS || 0) +
-          (p.subsistenceAllowanceST || 0) +
-          (p.midyearBonus || 0) +
-          (p.yearEndBonus || 0) +
-          (p.gsisPremium || 0) +
-          (p.philhealthPremium || 0) +
-          (p.pagibigPremium || 0) +
-          (p.employeeCompensation || 0) +
-          (p.loyaltyAward || 0) +
-          (p.overtimePay || 0) +
-          (p.earnedLeaves || 0) +
-          (p.retirementBenefits || 0) +
-          (p.terminalLeave || 0) +
-          (p.courtAppearance || 0)
-        );
-      }, 0);
-
-    // Calculate regular MOOE total
-    const mooeRegularTotal = mooeData
-      .filter((p) => p.status === "Draft")
-      .reduce((sum, p) => sum + (p.amount || 0), 0);
-
-      //       console.log("MOOE Data:", mooeData);
-      // console.log("Region Filter:", regionFilter, "Fiscal Year:", fiscalYearToUse);
-      // console.log("Filtered MOOE Data:", filteredMooeData);
-      filteredMooeData.forEach(item => {
-        // console.log("MOOE Item:", item, "Amount:", item.amount, "Status:", item.status);
-      });
-
-    // Calculate IAs O&M Cost total
-    const iasOMCostTotal = iasOMCostData
-      ? (Number(iasOMCostData.nis) || 0) +
-        (Number(iasOMCostData.cis) || 0) +
-        (Number(iasOMCostData.nisSubsidy) || 0) +
-        (Number(iasOMCostData.cisSubsidy) || 0)
-      : 0;
-
-    // Total MOOE is regular MOOE plus IAs O&M Cost
-    const mooeTotal = mooeRegularTotal + iasOMCostTotal;
-    // console.log("MOOE Regular Total:", mooeRegularTotal);
-    // console.log("IAS OM Cost Total:", iasOMCostTotal);
-    // console.log("Total MOOE:", mooeTotal);
-
-    const capitalOutlayTotal = capitalOutlayData
-      .filter((p) => p.status === "Draft")
-      .reduce((sum, p) => sum + (p.cost || 0), 0);
-
-    const incomeTotal = incomeData
-      .filter((p) => p.status === "Draft")
-      .reduce((sum, p) => sum + (p.amount || 0), 0);
-
-    return personnelTotal + mooeTotal + capitalOutlayTotal + incomeTotal;
-  };
 
   const hasDrafts =
     personnelData.some((p) => p.status === "Draft") ||
@@ -519,8 +453,8 @@ const CustomPage = ({
         0
       );
       const combinedTotal = mooeIncomeTotal + capitalOutlayIncomeTotal;
-      // Set disable flag if totals match
-      setDisableIncomeInputs(Math.abs(total - combinedTotal) < 0.01); // Using small epsilon for float comparison
+      // Set disable flag if totals match or if user is in read-only mode
+      setDisableIncomeInputs(Math.abs(total - combinedTotal) < 0.01 || readOnly); // Using small epsilon for float comparison
     },
     [mooeData, capitalOutlayData, activeRegion]
   );
@@ -1074,6 +1008,7 @@ const CustomPage = ({
     const budgetarySupportIds = budgetarySupportData
       .filter((p) => isEligibleForSubmission(p.status))
       .map((p) => p._id);
+    
     if (
       personnelIds.length === 0 &&
       mooeIds.length === 0 &&
@@ -2323,6 +2258,7 @@ const CustomPage = ({
         description={description}
         searchable={searchable}
       />
+      <AccessStatusIndicator />
       <StyledBox>
         {/* Add fiscal year and budget type indicator */}
         {/* Consolidated Header Section */}
@@ -3038,7 +2974,9 @@ const CustomPage = ({
               <>
                 <Tooltip
                   title={
-                    !canEditOwn
+                    readOnly
+                      ? "Account is in read-only mode"
+                      : !canEditOwn
                       ? "You don't have permission to submit proposals. Please contact your administrator."
                       : !budgetSummary.isIncomeBalanced
                       ? "Combined Income Total must equal Corporate Income before submission"
@@ -3051,6 +2989,7 @@ const CustomPage = ({
                       color="primary"
                       onClick={handleOpenDialog}
                       disabled={
+                        readOnly ||
                         !canEditOwn ||
                         !anyNotSubmitted ||
                         isSubmitting
@@ -3073,7 +3012,9 @@ const CustomPage = ({
                 </Tooltip>
                 <Tooltip
                   title={
-                    Object.keys(validationErrors).length > 0
+                    readOnly
+                      ? "Account is in read-only mode"
+                      : Object.keys(validationErrors).length > 0
                       ? "Please fix validation errors before saving"
                       : !anyNotSubmitted
                       ? "No eligible proposals to save as draft. All proposals may already be submitted or there are no proposals to save."
@@ -3088,7 +3029,7 @@ const CustomPage = ({
                       variant="outlined"
                       color="success"
                       onClick={() => handleSaveAsDraft()}
-                      disabled={!canEditOwn || !anyNotSubmitted || isSubmitting || Object.keys(validationErrors).length > 0}
+                      disabled={!canEditOwn || !anyNotSubmitted || isSubmitting || Object.keys(validationErrors).length > 0 || readOnly}
                       startIcon={
                         saveStatus === "saving" ? (
                           <CircularProgress size={16} />

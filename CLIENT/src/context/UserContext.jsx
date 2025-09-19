@@ -325,10 +325,10 @@ const UserProvider = ({ children }) => {
   const hasWorkflowRole = (role) => workflowRoles.includes(role);
 
   const canTransition = {
-    divisionApprove: assignmentLevel === 'DIVISION' || assignmentLevel === 'FULL' ? hasWorkflowRole('divisionApprover') : false,
-    departmentConsolidate: (assignmentLevel === 'DEPARTMENT' || assignmentLevel === 'FULL') && hasWorkflowRole('departmentConsolidator'),
-    departmentSubmit: (assignmentLevel === 'DEPARTMENT' || assignmentLevel === 'FULL') && hasWorkflowRole('departmentSubmission'),
-    regionFinalVerify: (assignmentLevel === 'REGION' || assignmentLevel === 'FULL') && hasWorkflowRole('regionFinalVerifier')
+    responsibilityCenterApprove: assignmentLevel === 'RESPONSIBILITY_CENTER' || assignmentLevel === 'FULL' ? hasWorkflowRole('responsibilityCenterApprover') : false,
+    officeConsolidate: (assignmentLevel === 'OFFICE' || assignmentLevel === 'FULL') && hasWorkflowRole('officeConsolidator'),
+    officeSubmit: (assignmentLevel === 'OFFICE' || assignmentLevel === 'FULL') && hasWorkflowRole('officeSubmission'),
+    officeFinalVerify: (assignmentLevel === 'OFFICE' || assignmentLevel === 'FULL') && hasWorkflowRole('officeFinalVerifier')
   };
 
   const value = {

@@ -1002,21 +1002,21 @@ export const ApproveButton = ({ row, refreshData }) => {
   const scope = currentUser?.hierarchicalAccess?.scope;
   const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
   const canApprovePermission = currentUser?.hierarchicalFlags?.canApproveProposals === true || currentUser?.hierarchicalAccess?.rolePermissions?.canApproveProposals === true;
-  const canApprove = (scope === 'REGION' || scope === 'FULL') && roles.includes('regionFinalVerifier') && canApprovePermission && row.status === 'Department Submitted';
+  const canApprove = (scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier') && canApprovePermission && row.status === 'Office Submitted';
   if (!canApprove) return null;
 
   const handleApprove = async () => {
     setLoading(true);
     try {
-      const ids = await fetchIdsForRow(row, 'Department Submitted');
+      const ids = await fetchIdsForRow(row, 'Office Submitted');
       if (ids.length === 0) throw new Error('No records to approve');
       const entity = mapCobToEntity(row.cobExpenditures);
-      await api.post('/api/submission-workflow/region/approve-submission', {
+      await api.post('/api/submission-workflow/office/approve-submission', {
         ids,
         entity,
-        regionApprovalNote: note || `Approved at Region on ${new Date().toLocaleString()}`
+        officeApprovalNote: note || `Approved at Office on ${new Date().toLocaleString()}`
       });
-      toast.success('Region approval successful');
+      toast.success('Office approval successful');
       await queryClient.invalidateQueries(['proposals']);
       refreshData?.();
       setOpen(false);
@@ -1064,8 +1064,8 @@ export const ApproveButton = ({ row, refreshData }) => {
   );
 };
 
-// Submit to Region (Department) Button
-export const SubmitToRegionButton = ({ row, refreshData }) => {
+// Submit to Office Button
+export const SubmitToOfficeButton = ({ row, refreshData }) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState('');
@@ -1088,21 +1088,21 @@ export const SubmitToRegionButton = ({ row, refreshData }) => {
 
   const scope = currentUser?.hierarchicalAccess?.scope;
   const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
-  const canSubmit = scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && row.status === 'Department Verified';
+  const canSubmit = scope === 'OFFICE' && roles.includes('officeConsolidator') && row.status === 'Office Verified';
   if (!canSubmit) return null;
 
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      const ids = await fetchIdsForRow(row, 'Department Verified');
+      const ids = await fetchIdsForRow(row, 'Office Verified');
       if (ids.length === 0) throw new Error('No verified records to submit');
       const entity = mapCobToEntity(row.cobExpenditures);
-      await api.post('/api/submission-workflow/department/submit-to-region', {
+      await api.post('/api/submission-workflow/office/submit-own', {
         ids,
         entity,
-        approvalNote: note || `Submitted to Region on ${new Date().toLocaleString()}`
+        approvalNote: note || `Finalized on ${new Date().toLocaleString()}`
       });
-      toast.success('Submitted to Region');
+      toast.success('Finalized submission');
       await queryClient.invalidateQueries(['proposals']);
       refreshData?.();
       setOpen(false);
@@ -1116,7 +1116,7 @@ export const SubmitToRegionButton = ({ row, refreshData }) => {
 
   return (
     <>
-      <Tooltip title="Submit to Region">
+      <Tooltip title="Finalize Submission">
         <IconButton color="primary" onClick={handleOpen} size="small" disabled={loading}>
           <KeyboardArrowRightIcon />
         </IconButton>
@@ -1163,9 +1163,9 @@ export const ReturnButton = ({ row, refreshData }) => {
   const scope = currentUser?.hierarchicalAccess?.scope;
   const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
   const canReturn = (
-    (scope === 'DEPARTMENT' && roles.includes('departmentConsolidator')) ||
-    ((scope === 'REGION' || scope === 'FULL') && roles.includes('regionFinalVerifier'))
-  ) && ['Division Submitted','Department Verified','Department Submitted','Region Approved','Submitted'].includes(row.status);
+    (scope === 'OFFICE' && roles.includes('officeConsolidator')) ||
+    ((scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier'))
+  ) && ['Responsibility Center Submitted','Office Verified','Office Submitted','Submitted'].includes(row.status);
 
   if (!canReturn) return null;
 
@@ -1269,14 +1269,14 @@ export const VerifyButton = ({ row, refreshData }) => {
 
   const scope = currentUser?.hierarchicalAccess?.scope;
   const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
-  const canVerify = scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && row.status === 'Division Submitted';
+  const canVerify = scope === 'OFFICE' && roles.includes('officeConsolidator') && row.status === 'Responsibility Center Submitted';
   if (!canVerify) return null;
 
   const handleOpen = async () => {
     setOpen(true);
     setIdsPreviewLoading(true);
     try {
-      const ids = await fetchIdsForRow(row, 'Division Submitted');
+      const ids = await fetchIdsForRow(row, 'Responsibility Center Submitted');
       setIdsPreviewCount(ids.length || 0);
     } catch (e) {
       setIdsPreviewCount(0);
@@ -1288,15 +1288,15 @@ export const VerifyButton = ({ row, refreshData }) => {
   const handleVerify = async () => {
     setLoading(true);
     try {
-      const ids = await fetchIdsForRow(row, 'Division Submitted');
+      const ids = await fetchIdsForRow(row, 'Responsibility Center Submitted');
       if (ids.length === 0) throw new Error('No matching records to verify');
       const entity = mapCobToEntity(row.cobExpenditures);
-      await api.post('/api/submission-workflow/department/verify-submission', {
+      await api.post('/api/submission-workflow/office/verify-submission', {
         ids,
         entity,
         verificationNote: note || `Verified on ${new Date().toLocaleString()}`
       });
-      toast.success('Division submission verified');
+      toast.success('Responsibility Center submission verified');
       await queryClient.invalidateQueries(['proposals']);
       refreshData?.();
       setOpen(false);
@@ -1316,7 +1316,7 @@ export const VerifyButton = ({ row, refreshData }) => {
         </IconButton>
       </Tooltip>
       <Dialog open={open} onClose={() => !loading && setOpen(false)}>
-        <DialogTitle>Verify Division Submission</DialogTitle>
+        <DialogTitle>Verify Responsibility Center Submission</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 1 }}>
             This will move records to <strong>Department Verified</strong>.
@@ -1356,14 +1356,14 @@ export const FinalizeButton = ({ row, refreshData }) => {
 
   const scope = currentUser?.hierarchicalAccess?.scope;
   const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
-  const canFinalize = (scope === 'REGION' || scope === 'FULL') && roles.includes('regionFinalVerifier') && (currentUser?.hierarchicalFlags?.canApproveProposals || currentUser?.hierarchicalAccess?.rolePermissions?.canApproveProposals) && row.status === 'Region Approved';
+  const canFinalize = (scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier') && (currentUser?.hierarchicalFlags?.canApproveProposals || currentUser?.hierarchicalAccess?.rolePermissions?.canApproveProposals) && row.status === 'Office Approved';
   if (!canFinalize) return null;
 
   const handleOpen = async () => {
     setOpen(true);
     setIdsPreviewLoading(true);
     try {
-      const ids = await fetchIdsForRow(row, 'Region Approved');
+      const ids = await fetchIdsForRow(row, 'Office Approved');
       setIdsPreviewCount(ids.length || 0);
     } catch (e) {
       setIdsPreviewCount(0);
@@ -1375,10 +1375,10 @@ export const FinalizeButton = ({ row, refreshData }) => {
   const handleFinalize = async () => {
     setLoading(true);
     try {
-      const ids = await fetchIdsForRow(row, 'Region Approved');
+      const ids = await fetchIdsForRow(row, 'Office Approved');
       if (ids.length === 0) throw new Error('No approved records to finalize');
       const entity = mapCobToEntity(row.cobExpenditures);
-      await api.post('/api/submission-workflow/region/finalize-submission', {
+      await api.post('/api/submission-workflow/office/finalize-submission', {
         ids,
         entity,
         finalizationNote: note || `Finalized on ${new Date().toLocaleString()}`
@@ -1446,9 +1446,8 @@ export const SubmitDraftButton = ({ row, refreshData }) => {
 
   // Determine if user can submit draft based on their level and roles
   const canSubmitDraft = (
-    (scope === 'DIVISION' && roles.includes('divisionCreator') && row.status === 'Draft') ||
-    (scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && row.status === 'Draft') ||
-    (scope === 'REGION' && roles.includes('regionFinalVerifier') && row.status === 'Draft')
+    (scope === 'RESPONSIBILITY_CENTER' && roles.includes('responsibilityCenterCreator') && row.status === 'Draft') ||
+    (scope === 'OFFICE' && roles.includes('officeConsolidator') && row.status === 'Draft')
   );
 
   if (!canSubmitDraft) return null;
@@ -1479,16 +1478,12 @@ export const SubmitDraftButton = ({ row, refreshData }) => {
       let endpoint = '';
       let successMessage = '';
 
-      if (scope === 'DIVISION') {
-        endpoint = '/api/submission-workflow/division/submit-to-department';
-        successMessage = 'Submitted to Department';
-      } else if (scope === 'DEPARTMENT') {
-        // Use the endpoint dedicated for department-owned drafts
-        endpoint = '/api/submission-workflow/department/submit-own-to-region';
-        successMessage = 'Submitted to Region';
-      } else if (scope === 'REGION') {
-        // For region, use the new submit-own endpoint that finalizes directly
-        endpoint = '/api/submission-workflow/region/submit-own';
+      if (scope === 'RESPONSIBILITY_CENTER') {
+        endpoint = '/api/submission-workflow/responsibility-center/submit-to-office';
+        successMessage = 'Submitted to Office';
+      } else if (scope === 'OFFICE') {
+        // For office, use the new submit-own endpoint that finalizes directly
+        endpoint = '/api/submission-workflow/office/submit-own';
         successMessage = 'Finalized';
       }
 

@@ -648,11 +648,11 @@ const PSCasualCustomPageTable = ({
               Access Level: {currentUser?.hierarchicalAccess?.scope || 'REGION'}
             </Typography>
             <Typography variant="body2" sx={{ opacity: 0.7 }}>
-              {currentUser?.hierarchicalAccess?.scope === 'DIVISION' 
-                ? `You can process casual personnel within your division (${currentUser?.hierarchicalAccess?.accessibleDivisions?.[0] || 'Division'}). Bulk operations are limited to your access scope.`
-                : currentUser?.hierarchicalAccess?.scope === 'DEPARTMENT'
-                ? `You can process casual personnel across your department (${currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName || 'Department'}). You have oversight of all divisions within your department.`
-                : `You have full access to process casual personnel across all departments and divisions in your region.`
+              {currentUser?.hierarchicalAccess?.scope === 'RESPONSIBILITY_CENTER'
+                ? `You can process casual personnel within your responsibility center (${currentUser?.hierarchicalAccess?.accessibleDivisions?.[0] || 'Responsibility Center'}). Bulk operations are limited to your access scope.`
+                : currentUser?.hierarchicalAccess?.scope === 'OFFICE'
+                ? `You can process casual personnel across your office (${currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName || 'Office'}). You have oversight of all responsibility centers within your office.`
+                : `You have full access to process casual personnel across all offices and responsibility centers.`
               }
             </Typography>
           </Box>

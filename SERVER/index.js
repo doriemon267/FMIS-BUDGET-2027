@@ -88,6 +88,8 @@ const authRouter = require("./routers/AuthRoutes");
 require("./config/mongo_db")();
 // Fix database index for region isolation
 const mongoose = require('mongoose');
+// Load UserOrganizationalAssignment model to ensure it's registered with mongoose
+require('./models/UserOrganizationalAssignment');
 mongoose.connection.once('open', async () => {
   try {
     const db = mongoose.connection.db;

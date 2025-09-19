@@ -58,4 +58,4 @@ const settingsSchema = new mongoose.Schema(
 );
 // Ensure compound unique index on (fiscalYear, budgetType)
 settingsSchema.index({ fiscalYear: 1, budgetType: 1 }, { unique: true });
-module.exports = mongoose.model("Settings", settingsSchema);
+module.exports = mongoose.model("Settings", settingsSchema);

@@ -1,15 +1,17 @@
 /**
  * 🏢 Hierarchical Access Control Routes
- * 
- * Routes for managing the hierarchical RBAC system with Division → Department → Region consolidation
+ *
+ * Routes for managing the hierarchical RBAC system with:
+ * - NEW: Responsibility Center → Office consolidation
+ * - OLD: Division → Department → Region consolidation (backward compatibility)
  */
 const express = require('express');
 const router = express.Router();
 const { authenticatedRoute, adminRoute } = require('../middleware/securityMiddleware');
-const { 
-  hierarchicalAccessControl, 
-  strictHierarchicalControl, 
-  getHierarchicalAccessInfo 
+const {
+  hierarchicalAccessControl,
+  strictHierarchicalControl,
+  getHierarchicalAccessInfo
 } = require('../middleware/hierarchicalAccessControl');
 const {
   createOrUpdateHierarchicalAssignment,
@@ -19,6 +21,14 @@ const {
   deleteHierarchicalAssignment,
   testHierarchicalConsolidation
 } = require('../controllers/HierarchicalUserAssignmentController');
+
+// NEW: Import new organizational assignment controller
+let newOrgAssignmentController = null;
+try {
+  newOrgAssignmentController = require('../controllers/UserOrganizationalAssignmentController');
+} catch (error) {
+  console.log('New organizational assignment controller not available, using backward compatibility mode');
+}
 // =============================================================================
 // HIERARCHICAL USER ASSIGNMENT MANAGEMENT ROUTES (Admin Only)
 // =============================================================================
@@ -76,6 +86,106 @@ router.post(
   '/test-consolidation',
   ...adminRoute(),
   testHierarchicalConsolidation
+);
+
+// =============================================================================
+// NEW ORGANIZATIONAL ASSIGNMENT ROUTES (Responsibility Center → Office)
+// =============================================================================
+
+/**
+ * Create or update organizational assignment (NEW STRUCTURE)
+ * POST /api/hierarchical-rbac/organizational-assignments
+ * NOTE: Redirecting to hierarchical assignments to focus on hierarchical system
+ */
+router.post(
+  '/organizational-assignments',
+  ...adminRoute(),
+  async (req, res) => {
+    try {
+      // Redirect to hierarchical assignments controller to focus on hierarchical system
+      const hierarchicalController = require('../controllers/HierarchicalUserAssignmentController');
+      return await hierarchicalController.createOrUpdateHierarchicalAssignment(req, res);
+    } catch (error) {
+      console.error('Error in organizational assignment creation:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error creating organizational assignment',
+        error: error.message
+      });
+    }
+  }
+);
+
+/**
+ * Get organizational assignment for a specific user (NEW STRUCTURE)
+ * GET /api/hierarchical-rbac/organizational-assignments/:userId
+ * NOTE: Redirecting to hierarchical assignments to focus on hierarchical system
+ */
+router.get(
+  '/organizational-assignments/:userId',
+  ...authenticatedRoute(),
+  async (req, res) => {
+    try {
+      // Redirect to hierarchical assignments controller to focus on hierarchical system
+      const hierarchicalController = require('../controllers/HierarchicalUserAssignmentController');
+      return await hierarchicalController.getHierarchicalAssignment(req, res);
+    } catch (error) {
+      console.error('Error getting organizational assignment:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error retrieving organizational assignment',
+        error: error.message
+      });
+    }
+  }
+);
+
+/**
+ * Get all organizational assignments (Admin only) (NEW STRUCTURE)
+ * GET /api/hierarchical-rbac/organizational-assignments
+ * NOTE: Redirecting to hierarchical assignments to focus on hierarchical system
+ */
+router.get(
+  '/organizational-assignments',
+  ...adminRoute(),
+  async (req, res) => {
+    try {
+      // Redirect to hierarchical assignments controller to focus on hierarchical system
+      const hierarchicalController = require('../controllers/HierarchicalUserAssignmentController');
+      return await hierarchicalController.getAllHierarchicalAssignments(req, res);
+    } catch (error) {
+      console.error('Error getting all organizational assignments:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error retrieving organizational assignments',
+        error: error.message
+      });
+    }
+  }
+);
+
+/**
+ * Delete organizational assignment (NEW STRUCTURE)
+ * DELETE /api/hierarchical-rbac/organizational-assignments/:userId
+ * NOTE: Redirecting to hierarchical assignments to focus on hierarchical system
+ */
+router.delete(
+  '/organizational-assignments/:userId',
+  ...adminRoute(),
+  async (req, res) => {
+    try {
+      // Redirect to hierarchical assignments controller to focus on hierarchical system
+      const hierarchicalController = require('../controllers/HierarchicalUserAssignmentController');
+      return await hierarchicalController.deleteHierarchicalAssignment(req, res);
+    } catch (error) {
+      console.error('Error deleting organizational assignment:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error deleting organizational assignment',
+        error: error.message
+      });
+    }
+  }
 );
 // =============================================================================
 // HIERARCHICAL ACCESS INFORMATION ROUTES
@@ -356,7 +466,7 @@ router.put(
 // HIERARCHICAL REPORTING ROUTES
 // =============================================================================
 /**
- * Get hierarchical organization structure
+ * Get hierarchical organization structure (SUPPORTS BOTH OLD AND NEW STRUCTURES)
  * GET /api/hierarchical-rbac/organization-structure
  */
 router.get(
@@ -365,28 +475,353 @@ router.get(
   async (req, res) => {
     try {
       const mongoose = require('mongoose');
-      // Get data directly from collections to avoid model issues
+      const { structure = 'new' } = req.query; // 'new' or 'old'
+
+      if (structure === 'new') {
+        // NEW STRUCTURE: Convert old NIA structure to new format
+        // Get data from existing collections first
+        const mappingsCollection = mongoose.connection.db.collection('departmentdivisionmappings');
+        const regionsCollection = mongoose.connection.db.collection('regions');
+        const departmentsCollection = mongoose.connection.db.collection('departments');
+
+        const [mappings, regions, departments] = await Promise.all([
+          mappingsCollection.find({}).toArray(),
+          regionsCollection.find({}).toArray(),
+          departmentsCollection.find({}).toArray()
+        ]);
+
+        const officesMap = new Map();
+        const responsibilityCentersMap = new Map();
+
+        // Convert departments/divisions to offices
+        if (departments && departments.length > 0) {
+          departments.forEach((dept, index) => {
+            // Use actual department _id as officeId instead of fabricated string
+            const officeId = dept._id;
+
+            // Find region information for this department from mappings
+            const deptMappings = mappings.filter(m =>
+              m.departmentId && m.departmentId.toString() === dept._id.toString()
+            );
+
+            let regionName = 'NCR'; // Default
+            let regionId = null;
+
+            if (deptMappings.length > 0) {
+              // Check if this is a central office that serves multiple regions
+              const isCentralOffice = deptMappings.length > 1 ||
+                dept.Department === 'IRRIGATION MANAGEMENT OFFICE' ||
+                dept.Department === 'REGIONAL OFFICE';
+
+              if (isCentralOffice && deptMappings.length > 1) {
+                // Central office serving multiple regions
+                regionName = 'All Regions';
+                regionId = null; // No specific region ID for multi-region offices
+              } else {
+                // Regular office with single region mapping
+                const firstMapping = deptMappings[0];
+                if (firstMapping.regionId) {
+                  const region = regions.find(r => r._id.toString() === firstMapping.regionId.toString());
+                  if (region) {
+                    regionName = region.Region || region.name || region.regionName || 'NCR';
+                    regionId = region._id;
+                  }
+                }
+              }
+            }
+
+            officesMap.set(officeId.toString(), {
+              id: officeId,
+              name: dept.Department || dept.name || `Office ${index + 1}`,
+              code: dept.DepartmentCode || dept.code || `O${index + 1}`,
+              region: regionName,
+              regionId: regionId,
+              departmentId: dept._id
+            });
+          });
+        }
+
+                // Convert divisions/sections to responsibility centers
+                if (mappings && mappings.length > 0) {
+                  // First, handle central offices specially
+                  const centralOfficeDivisions = new Map();
+
+                  mappings.forEach((mapping) => {
+                    if (mapping.divisions && mapping.divisions.length > 0) {
+                      const officeId = mapping.departmentId;
+                      const office = officesMap.get(officeId?.toString());
+
+                      // Check if this is a central office
+                      const isCentralOffice = office && office.region === 'All Regions';
+
+                      if (isCentralOffice) {
+                        // For central offices, create provincial IMO entries based on region
+                        const region = regions.find(r => r._id.toString() === mapping.regionId.toString());
+                        const regionName = region ? region.Region : 'Unknown';
+
+                        // Define provincial IMOs for each region
+                        const provincialIMOs = {
+                          'REGION I': [
+                            { name: 'ILOCOS NORTE IMO', sections: ['Administrative and Finance Section', 'Engineering, Operation and Maintenance Section'] },
+                            { name: 'ILOCOS SUR IMO', sections: ['Operation Section', 'Engineering Section', 'Administrative and Finance Section'] },
+                            { name: 'LA UNION IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operations Section'] },
+                            { name: 'PANGASINAN IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation & Maintenance Section'] }
+                          ],
+                          'REGION II': [
+                            { name: 'ISABELA IMO', sections: ['Engineering - Construction', 'Engineering - Planning and Design', 'Engineering - Operations', 'Engineering - Equipment', 'Engineering - Institutional Development', 'Administrative and Finance Section'] },
+                            { name: 'QUIRINO IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'NUEVA VIZCAYA IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'CAGAYAN-BATANES IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] }
+                          ],
+                          'REGION III': [
+                            { name: 'BATAAN-ZAMBALES IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'PAMPANGA IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'BULACAN-AURORA IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'TARLAC IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] }
+                          ],
+                          'REGION IV-A': [
+                            { name: 'LAGUNA-RIZAL IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'BATANGAS IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'QUEZON IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'CAVITE IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] }
+                          ],
+                          'REGION IV-B': [
+                            { name: 'MINDORO ORIENTAL-MARINDUQUE IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'MINDORO OCCIDENTAL IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'PALAWAN IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'ROMBLON IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] }
+                          ],
+                          'REGION V': [
+                            { name: 'CAMARINES SUR IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'CAMARINES NORTE IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'ALBAY-CATANDUANES IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'SORSOGON-MASBATE IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] }
+                          ],
+                          'REGION VI': [
+                            { name: 'ILOILO-GUIMARAS IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'AKLAN-CAPIZ IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'NEGROS OCCIDENTAL IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'ANTIQUE IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] }
+                          ],
+                          'REGION VII': [
+                            { name: 'BOHOL IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'CEBU IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'NEGROS ORIENTAL-SIQUIJOR IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] }
+                          ],
+                          'REGION VIII': [
+                            { name: 'LEYTE-BILIRAN IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'SAMAR-NORTHERN SAMAR IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'EASTERN SAMAR IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'SOUTHERN LEYTE IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] }
+                          ],
+                          'REGION IX': [
+                            { name: 'ZAMBOANGA DEL SUR IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'ZAMBOANGA DEL NORTE IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'ZAMBOANGA-SIBUGAY IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] }
+                          ],
+                          'REGION X': [
+                            { name: 'BUKIDNON IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'LANAO DEL NORTE-MISAMIS OCCIDENTAL IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'MISAMIS ORIENTAL-CAMIGUIN IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] }
+                          ],
+                          'REGION XI': [
+                            { name: 'DAVAO DEL SUR-DAVAO OCCIDENTAL IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'DAVAO DEL NORTE-DAVAO DE ORO IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'DAVAO ORIENTAL IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] }
+                          ],
+                          'REGION XII': [
+                            { name: 'SOUTH COTABATO-SARANGANI IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'SULTAN KUDARAT IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'NORTH COTABATO IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] }
+                          ],
+                          'CAR': [
+                            { name: 'KALINGA-APAYAO IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'MT. PROVINCE-IFUGAO IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'ABRA-BENGUET IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] }
+                          ],
+                          'CARAGA': [
+                            { name: 'AGUSAN DEL SUR IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'AGUSAN DEL NORTE-SURIGAO DEL NORTE IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] },
+                            { name: 'SURIGAO DEL SUR IMO', sections: ['Engineering Section', 'Administrative and Finance Section', 'Operation and Maintenance Section'] }
+                          ]
+                        };
+
+                        const regionIMOs = provincialIMOs[regionName] || [];
+
+                        regionIMOs.forEach((provincialIMO, imoIndex) => {
+                          const rcId = `rc_${officeId}_${mapping.regionId}_${imoIndex}`;
+                          const rcName = provincialIMO.name;
+
+                          responsibilityCentersMap.set(rcId, {
+                            id: rcId,
+                            name: rcName,
+                            code: `RC${imoIndex + 1}`,
+                            officeId: officeId,
+                            officeName: office?.name || 'Unknown Office',
+                            region: regionName,
+                            regionId: mapping.regionId,
+                            departmentId: mapping.departmentId,
+                            departmentName: mapping.departmentName,
+                            provincialIMO: provincialIMO.name
+                          });
+                        });
+                      } else {
+                        // For regular offices, create responsibility centers as before
+                        mapping.divisions.forEach((division, divIndex) => {
+                          const rcId = `rc_${mapping._id || mappingIndex}_${divIndex}`;
+
+                          responsibilityCentersMap.set(rcId, {
+                            id: rcId,
+                            name: division.name || `Responsibility Center ${divIndex + 1}`,
+                            code: division.code || `RC${divIndex + 1}`,
+                            officeId: officeId,
+                            officeName: office?.name || 'Unknown Office',
+                            region: office?.region || 'NCR',
+                            regionId: office?.regionId || null,
+                            departmentId: mapping.departmentId,
+                            departmentName: mapping.departmentName
+                          });
+                        });
+                      }
+                    }
+                  });
+                }        // If no data from old structure, create default NIA offices and responsibility centers
+        if (officesMap.size === 0) {
+          // Create default offices based on NIA structure
+          const defaultOffices = [
+            { id: 'office_regional', name: 'Regional Office', code: 'RO', region: 'NCR' },
+            { id: 'office_engineering', name: 'Engineering & Operations Division', code: 'EOD', region: 'NCR' },
+            { id: 'office_admin', name: 'Administrative & Finance Division', code: 'AFD', region: 'NCR' },
+            { id: 'office_imo', name: 'Irrigation Management Office', code: 'IMO', region: 'NCR' }
+          ];
+
+          defaultOffices.forEach(office => officesMap.set(office.id, office));
+
+          // Create default responsibility centers based on NIA divisions (NOT sections)
+          const defaultResponsibilityCenters = [
+            { id: 'rc_construction', name: 'Construction Management Division', code: 'CMD', officeId: 'office_engineering', officeName: 'Engineering & Operations Division' },
+            { id: 'rc_planning', name: 'Planning & Design Division', code: 'PDD', officeId: 'office_engineering', officeName: 'Engineering & Operations Division' },
+            { id: 'rc_operations', name: 'Operations Division', code: 'OD', officeId: 'office_engineering', officeName: 'Engineering & Operations Division' },
+            { id: 'rc_finance', name: 'Finance Division', code: 'FD', officeId: 'office_admin', officeName: 'Administrative & Finance Division' },
+            { id: 'rc_admin', name: 'Administrative Division', code: 'AD', officeId: 'office_admin', officeName: 'Administrative & Finance Division' },
+            { id: 'rc_institutional', name: 'Institutional Development Division', code: 'IDD', officeId: 'office_engineering', officeName: 'Engineering & Operations Division' },
+            { id: 'rc_equipment', name: 'Equipment Management Division', code: 'EMD', officeId: 'office_engineering', officeName: 'Engineering & Operations Division' }
+          ];
+
+          defaultResponsibilityCenters.forEach(rc => responsibilityCentersMap.set(rc.id, rc));
+        }
+
+        const formattedOffices = Array.from(officesMap.values());
+        const formattedResponsibilityCenters = Array.from(responsibilityCentersMap.values());
+
+        // Create region mapping for easy lookup
+        const regionMapping = {};
+        formattedOffices.forEach(office => {
+          if (!regionMapping[office.region]) {
+            regionMapping[office.region] = {
+              regionName: office.region,
+              regionId: office.regionId,
+              offices: [],
+              responsibilityCenters: []
+            };
+          }
+          regionMapping[office.region].offices.push({
+            id: office.id,
+            name: office.name,
+            code: office.code
+          });
+        });
+
+        formattedResponsibilityCenters.forEach(rc => {
+          const regionName = rc.region;
+          if (regionMapping[regionName]) {
+            regionMapping[regionName].responsibilityCenters.push({
+              id: rc.id,
+              name: rc.name,
+              code: rc.code,
+              officeId: rc.officeId,
+              officeName: rc.officeName
+            });
+          }
+        });
+
+        const response = {
+          hierarchy: 'Responsibility Center → Office',
+          regions: Object.values(regionMapping),
+          consolidationFlow: {
+            'RESPONSIBILITY_CENTER': 'Proposals consolidate to Office level',
+            'OFFICE': 'Proposals remain at Office level',
+            'FULL': 'Can access all organizational levels',
+            'OWN_ONLY': 'Access limited to own records only'
+          },
+          availableUnits: {
+            offices: formattedOffices,
+            responsibilityCenters: formattedResponsibilityCenters,
+            officeResponsibilityCenterMappings: formattedResponsibilityCenters.reduce((mappings, rc) => {
+              const officeId = rc.officeId;
+              if (!mappings[officeId]) {
+                mappings[officeId] = [];
+              }
+              mappings[officeId].push({
+                id: rc.id,
+                name: rc.name,
+                code: rc.code
+              });
+              return mappings;
+            }, {})
+          },
+          mappings: formattedOffices.map(office => ({
+            officeId: office.id,
+            officeName: office.name,
+            region: office.region,
+            regionId: office.regionId,
+            responsibilityCenters: formattedResponsibilityCenters
+              .filter(rc => rc.officeId === office.id)
+              .map(rc => ({
+                id: rc.id,
+                name: rc.name,
+                code: rc.code
+              }))
+          })),
+          validationRules: {
+            responsibilityCenter: 'Responsibility Center assignments require valid Office',
+            office: 'Office assignments require valid Office',
+            responsibilityCenterValidation: 'Responsibility Center must exist in selected Office'
+          }
+        };
+
+        return res.status(200).json({
+          success: true,
+          message: 'New organization structure retrieved successfully',
+          data: response
+        });
+      }
+
+      // OLD STRUCTURE: Division → Department → Region (BACKWARD COMPATIBILITY)
       const mappingsCollection = mongoose.connection.db.collection('departmentdivisionmappings');
       const regionsCollection = mongoose.connection.db.collection('regions');
       const departmentsCollection = mongoose.connection.db.collection('departments');
+
       // Get all collections data
       const [mappings, regions, departments] = await Promise.all([
         mappingsCollection.find({}).toArray(),
         regionsCollection.find({}).toArray(),
         departmentsCollection.find({}).toArray()
       ]);
+
       // Format the data
       const formattedRegions = regions.map(region => ({
         id: region._id,
         name: region.Region || region.name || region.regionName,
         code: region.RegionCode || region.code || region.regionCode
       }));
+
       const formattedDepartments = departments.map(dept => {
         // Check if this department has subdivisions
-        const hasSubDivisions = mappings.some(mapping => 
-          mapping.departmentId.toString() === dept._id.toString() && 
-          mapping.hasSubDivisions && 
-          mapping.divisions && 
+        const hasSubDivisions = mappings.some(mapping =>
+          mapping.departmentId.toString() === dept._id.toString() &&
+          mapping.hasSubDivisions &&
+          mapping.divisions &&
           mapping.divisions.length > 0
         );
         return {
@@ -396,6 +831,7 @@ router.get(
           hasSubDivisions
         };
       });
+
       const formattedMappings = mappings.map(mapping => ({
         departmentId: mapping.departmentId,
         departmentName: mapping.departmentName,
@@ -407,10 +843,12 @@ router.get(
         hasSubDivisions: mapping.hasSubDivisions || false,
         regionId: mapping.regionId
       }));
+
       // Get departments with divisions
-      const departmentsWithDivisions = formattedMappings.filter(mapping => 
+      const departmentsWithDivisions = formattedMappings.filter(mapping =>
         mapping.hasSubDivisions && mapping.divisions.length > 0
       );
+
       const response = {
         hierarchy: 'Division → Department → Region',
         consolidationFlow: {
@@ -444,6 +882,7 @@ router.get(
           divisionValidation: 'Division name must exist in selected Department'
         }
       };
+
       return res.status(200).json({
         success: true,
         message: 'Organization structure retrieved successfully',

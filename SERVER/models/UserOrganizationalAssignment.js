@@ -16,21 +16,16 @@ const UserOrganizationalAssignmentSchema = new mongoose.Schema({
   // Access scope defines the level of organizational access
   accessScope: {
     type: String,
-    enum: ['FULL', 'REGION', 'DEPARTMENT', 'DIVISION', 'OWN_ONLY'],
-    default: 'REGION'
+    enum: ['FULL', 'OFFICE', 'RESPONSIBILITY_CENTER', 'OWN_ONLY'],
+    default: 'OFFICE'
   },
-  // Region assignments (existing functionality)
-  regions: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'region'
-  }],
-  // Department assignments
-  departments: [{
-    type: mongoose.Schema.Types.ObjectId,
+  // Office assignments (combines old department and region functionality)
+  offices: [{
+    type: mongoose.Schema.Types.Mixed, // Allow both ObjectId and String for flexibility
     ref: 'department'
   }],
-  // Division assignments (for future use)
-  divisions: [{
+  // Responsibility Center assignments (was divisions)
+  responsibilityCenters: [{
     type: String // Store as string for now, can be ObjectId later
   }],
   // Role-based permissions
@@ -46,7 +41,6 @@ const UserOrganizationalAssignmentSchema = new mongoose.Schema({
   },
   // Operational restrictions
   restrictions: {
-    maxProposalAmount: { type: Number, default: null }, // null = no limit
     allowedBudgetTypes: [{ type: String }], // ['Initial', 'NEP', 'GAA']
     allowedFiscalYears: [{ type: String }],
     readOnlyMode: { type: Boolean, default: false }
@@ -72,19 +66,14 @@ UserOrganizationalAssignmentSchema.pre('save', function(next) {
   next();
 });
 // Instance methods
-UserOrganizationalAssignmentSchema.methods.hasRegionAccess = function(regionId) {
+UserOrganizationalAssignmentSchema.methods.hasOfficeAccess = function(officeId) {
   if (this.accessScope === 'FULL') return true;
-  return this.regions.some(r => r.toString() === regionId.toString());
+  return this.offices.some(o => o.toString() === officeId.toString());
 };
-UserOrganizationalAssignmentSchema.methods.hasDepartmentAccess = function(departmentId) {
+UserOrganizationalAssignmentSchema.methods.hasResponsibilityCenterAccess = function(responsibilityCenterName) {
   if (this.accessScope === 'FULL') return true;
   if (this.accessScope === 'OWN_ONLY') return false;
-  return this.departments.some(d => d.toString() === departmentId.toString());
-};
-UserOrganizationalAssignmentSchema.methods.hasDivisionAccess = function(divisionName) {
-  if (this.accessScope === 'FULL') return true;
-  if (this.accessScope === 'OWN_ONLY') return false;
-  return this.divisions.includes(divisionName);
+  return this.responsibilityCenters.includes(responsibilityCenterName);
 };
 // New method to get the consolidation target for hierarchical saving
 UserOrganizationalAssignmentSchema.methods.getConsolidationTarget = function() {
@@ -93,34 +82,24 @@ UserOrganizationalAssignmentSchema.methods.getConsolidationTarget = function() {
     consolidationData: {}
   };
   switch (this.accessScope) {
-    case 'DIVISION':
-      // Division users save to their Department's records
+    case 'RESPONSIBILITY_CENTER':
+      // Responsibility Center users save to their Office's records
       result.consolidationData = {
-        originalLevel: 'DIVISION',
-        targetLevel: 'DEPARTMENT',
-        originalValue: this.divisions[0], // Primary division
-        targetValue: this.departments[0], // Consolidate to department
-        region: this.regions[0] // Ultimate region for reporting
+        originalLevel: 'RESPONSIBILITY_CENTER',
+        targetLevel: 'OFFICE',
+        originalValue: this.responsibilityCenters[0], // Primary responsibility center
+        targetValue: this.offices[0], // Consolidate to office
+        office: this.offices[0] // Ultimate office for reporting
       };
       break;
-    case 'DEPARTMENT':
-      // Department users save to their Region's records
+    case 'OFFICE':
+      // Office users save directly to their office
       result.consolidationData = {
-        originalLevel: 'DEPARTMENT',
-        targetLevel: 'REGION',
-        originalValue: this.departments[0], // Primary department
-        targetValue: this.regions[0], // Consolidate to region
-        region: this.regions[0] // Same region
-      };
-      break;
-    case 'REGION':
-      // Region users save directly to their region
-      result.consolidationData = {
-        originalLevel: 'REGION',
-        targetLevel: 'REGION',
-        originalValue: this.regions[0],
-        targetValue: this.regions[0],
-        region: this.regions[0]
+        originalLevel: 'OFFICE',
+        targetLevel: 'OFFICE',
+        originalValue: this.offices[0],
+        targetValue: this.offices[0],
+        office: this.offices[0]
       };
       break;
     default:
@@ -130,22 +109,22 @@ UserOrganizationalAssignmentSchema.methods.getConsolidationTarget = function() {
         targetLevel: this.accessScope,
         originalValue: null,
         targetValue: null,
-        region: null
+        office: null
       };
   }
   return result;
 };
-// Method to get effective region for data consolidation
-UserOrganizationalAssignmentSchema.methods.getEffectiveRegion = function() {
-  // Always return the primary region for consolidation
-  if (this.regions && this.regions.length > 0) {
-    return this.regions[0];
+// Method to get effective office for data consolidation
+UserOrganizationalAssignmentSchema.methods.getEffectiveOffice = function() {
+  // Always return the primary office for consolidation
+  if (this.offices && this.offices.length > 0) {
+    return this.offices[0];
   }
   return null;
 };
 // Static methods
 UserOrganizationalAssignmentSchema.statics.findByUserId = function(userId) {
-  return this.findOne({ userId }).populate('regions departments');
+  return this.findOne({ userId }).populate('offices');
 };
 UserOrganizationalAssignmentSchema.statics.getUserPermissions = async function(userId) {
   const assignment = await this.findByUserId(userId);
@@ -153,9 +132,8 @@ UserOrganizationalAssignmentSchema.statics.getUserPermissions = async function(u
     // Default permissions for users without assignments
     return {
       accessScope: 'OWN_ONLY',
-      regions: [],
-      departments: [],
-      divisions: [],
+      offices: [],
+      responsibilityCenters: [],
       rolePermissions: {
         CreateProposals: true,
         EditOwnProposals: true,

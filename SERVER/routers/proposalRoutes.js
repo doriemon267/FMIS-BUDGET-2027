@@ -30,6 +30,7 @@ const {
 } = require('../middleware/hierarchicalAssignmentMiddleware');
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
 const { checkProposalOwnership } = require('../middleware/proposalAccessControl');
+const { enforceAccessRestrictions } = require('../middleware/accessRestrictions');
 const Proposal = require("../models/Proposal");
 const DraftProposal = require("../models/DraftProposal");
 const proposalRouter = Router();
@@ -74,6 +75,7 @@ proposalRouter.post(
   "/proposals",
   submissionWorkflowControl('create'),
   requirePermission('canCreateProposals'),
+  enforceAccessRestrictions({ checkBudgetType: true, checkFiscalYear: true, checkReadOnly: true }),
   createProposal
 );
 // Edit an existing proposal (requires edit permission and ownership unless canEditAllProposals)
@@ -82,6 +84,7 @@ proposalRouter.put(
   submissionWorkflowControl('update'),
   requirePermission('canEditOwnProposals'),
   checkProposalOwnership(Proposal),
+  enforceAccessRestrictions({ checkBudgetType: true, checkFiscalYear: true, checkReadOnly: true }),
   updateProposal
 );
 // Delete a proposal (requires delete permission and ownership unless admin)

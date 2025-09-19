@@ -469,6 +469,99 @@ const HomePage = () => {
           </Stack>
 
           <Grid container spacing={3}>
+            {/* User Permissions & Restrictions Card */}
+            <Grid item xs={12} sm={6} md={4}>
+              <Zoom in timeout={400}>
+                <Card
+                  elevation={isDarkMode ? 8 : 4}
+                  sx={{
+                    height: '100%',
+                    borderRadius: 3,
+                    background: isDarkMode
+                      ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)'
+                      : 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+                    border: isDarkMode ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(34, 197, 94, 0.2)',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    '&:hover': {
+                      transform: 'translateY(-8px) scale(1.02)',
+                      boxShadow: isDarkMode
+                        ? '0 20px 40px rgba(16, 185, 129, 0.3)'
+                        : '0 20px 40px rgba(34, 197, 94, 0.2)'
+                    }
+                  }}
+                >
+                  <CardContent sx={{ p: 3 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <Box sx={{
+                        display: 'inline-flex',
+                        p: 1.5,
+                        borderRadius: '50%',
+                        bgcolor: alpha('#10b981', 0.1),
+                        mr: 2
+                      }}>
+                        <AssessmentIcon sx={{ fontSize: 24, color: '#10b981' }} />
+                      </Box>
+                      <Typography variant="h6" sx={{ fontWeight: 600, color: isDarkMode ? '#fff' : '#1f2937' }}>
+                        Your Permissions
+                      </Typography>
+                    </Box>
+
+                    <Stack spacing={1.5}>
+                      {/* Access Level */}
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: isDarkMode ? '#e5e7eb' : '#6b7280', mb: 0.5 }}>
+                          Access Level
+                        </Typography>
+                        <Chip
+                          label={displayInfo.level}
+                          size="small"
+                          sx={{
+                            fontWeight: 600,
+                            bgcolor: alpha('#10b981', 0.1),
+                            color: '#10b981'
+                          }}
+                        />
+                      </Box>
+
+                      {/* Key Permissions */}
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: isDarkMode ? '#e5e7eb' : '#6b7280', mb: 1 }}>
+                          Key Permissions
+                        </Typography>
+                        <Stack direction="row" spacing={1} flexWrap="wrap">
+                          {(() => {
+                            const permissions = currentUser?.hierarchicalAccess?.rolePermissions || {};
+                            const keyPerms = [
+                              { key: 'CreateProposals', label: 'Create', icon: '➕' },
+                              { key: 'EditAllProposals', label: 'Edit All', icon: '✏️' },
+                              { key: 'ApproveProposals', label: 'Approve', icon: '✅' },
+                              { key: 'ManageUsers', label: 'Manage Users', icon: '👥' }
+                            ];
+
+                            return keyPerms
+                              .filter(perm => permissions[perm.key])
+                              .map(perm => (
+                                <Chip
+                                  key={perm.key}
+                                  label={`${perm.icon} ${perm.label}`}
+                                  size="small"
+                                  variant="outlined"
+                                  sx={{
+                                    fontSize: '0.7rem',
+                                    borderColor: alpha('#10b981', 0.3),
+                                    color: '#10b981'
+                                  }}
+                                />
+                              ));
+                          })()}
+                        </Stack>
+                      </Box>
+                    </Stack>
+                  </CardContent>
+                </Card>
+              </Zoom>
+            </Grid>
+
             <Grid item xs={12} sm={6} md={3}>
               <Zoom in timeout={600}>
                 <Card

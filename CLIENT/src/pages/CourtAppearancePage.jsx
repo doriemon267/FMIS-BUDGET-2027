@@ -167,7 +167,7 @@ const EmployeeCourtAppearancePage = () => {
     const filenameSafe = hierarchicalDisplay.replace(/[^a-zA-Z0-9-]/g, '-');
 
     const csvData = [
-      ["Employee Number", "Full Name", "Position Title", "Department", "Division", "Region", "No. of Court Appearances", "Court Appearance Amount", "Fiscal Year", "Budget Type"],
+      ["Employee Number", "Full Name", "Position Title", "Office", "Responsibility Center", "No. of Court Appearances", "Court Appearance Amount", "Fiscal Year", "Budget Type"],
       ...tableData.map(row => [
         row.employeeNumber || '',
         row.employeeFullName || '',

@@ -37,8 +37,7 @@ import {
 } from "react-icons/md";
 import * as yup from "yup";
 import api from "../../config/api";
-
-// Custom component for numeric input formatting
+// Component for numeric input formatting
 const NumberFormatCustom = React.forwardRef(function NumberFormatCustom(
   props,
   ref
@@ -934,6 +933,8 @@ const SettingsDialog = ({ row, onCloseDialog }) => {
               </Grid>
             </AccordionDetails>
           </Accordion>
+
+          <Divider sx={{ my: 2 }} />
         </DialogContent>
         <DialogActions>
           <Button onClick={handleAdvancedClose} variant="outlined">

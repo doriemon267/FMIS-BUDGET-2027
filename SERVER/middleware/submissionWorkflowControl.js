@@ -1,27 +1,27 @@
 /**
  * 🔄 Submission Workflow Control Middleware
- * 
+ *
  * This middleware implements submission-based visibility control where:
- * - Division level data is only visible to Department level AFTER submission
- * - Department level data is only visible to Region level AFTER submission  
+ * - Responsibility Center level data is only visible to Office level AFTER submission
+ * - Office level data is only visible to Office level (final) AFTER submission
  * - Each level needs proper approval users to review and approve submissions
- * 
- * Hierarchy: Division → Submit → Department → Submit → Region
+ *
+ * Hierarchy: Responsibility Center → Submit → Office → Finalize
+ *
+ * BACKWARD COMPATIBILITY: Supports both old (HierarchicalUserAssignment) and new (UserOrganizationalAssignment) structures
  */
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+const UserOrganizationalAssignment = require('../models/UserOrganizationalAssignment');
 const { hasFullAccess } = require('./securityMiddleware');
 const mongoose = require('mongoose');
-/**
- * Enhanced hierarchical access control with submission workflow
- * @param {string} operation - The operation type: 'create', 'read', 'update', 'delete'
- * @param {object} options - Additional options
- */
+
 const submissionWorkflowControl = (operation = 'read', options = {}) => {
-  const { 
-    strictMode = false, 
-    logAccess = true, 
-    enforceSubmissionWorkflow = true 
+  const {
+    strictMode = false,
+    logAccess = true,
+    enforceSubmissionWorkflow = true
   } = options;
+
   return async (req, res, next) => {
     try {
       const userId = req.user.id;
@@ -30,7 +30,7 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
 
       // Debug logging for overtime pay debugging
       if (logAccess) {
-        // User access logging
+        console.log(`🔍 [${userName}] Submission Workflow Access Check - Operation: ${operation}`);
       }
 
       // For submission workflow, DO NOT bypass based on roles alone
@@ -40,8 +40,29 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
       if (isSuperAdmin) {
         return next();
       }
-      // Get user's hierarchical assignment
-      const assignment = await HierarchicalUserAssignment.getUserPermissions(userId);
+
+      // Try to get user's assignment from new model first, fallback to old model
+      let assignment = null;
+      let isNewStructure = false;
+
+      try {
+        assignment = await UserOrganizationalAssignment.getUserPermissions(userId);
+        if (assignment) {
+          isNewStructure = true;
+        }
+      } catch (error) {
+        console.log('New assignment model not available, trying old model');
+      }
+
+      if (!assignment) {
+        try {
+          assignment = await HierarchicalUserAssignment.getUserPermissions(userId);
+          isNewStructure = false;
+        } catch (error) {
+          console.log('Old assignment model not available');
+        }
+      }
+
       if (!assignment) {
         // If user has full access roles but no hierarchical assignment, allow full access
         if (hasFullAccess(userRoles)) {
@@ -57,14 +78,14 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
       // User has hierarchical assignment, applying submission workflow control
       // Handle different operations
       if (operation === 'read') {
-        await handleSubmissionWorkflowRead(req, res, next, assignment, { logAccess, userName, enforceSubmissionWorkflow });
+        await handleSubmissionWorkflowRead(req, res, next, assignment, { logAccess, userName, enforceSubmissionWorkflow, isNewStructure });
       } else if (['create', 'update', 'delete'].includes(operation)) {
-        await handleSubmissionWorkflowWrite(req, res, next, assignment, operation, { logAccess, userName, strictMode });
+        await handleSubmissionWorkflowWrite(req, res, next, assignment, operation, { logAccess, userName, strictMode, isNewStructure });
       } else {
         return next();
       }
     } catch (error) {
-      // Submission Workflow Control Error
+      console.error('Submission Workflow Control Error:', error);
       return res.status(500).json({
         success: false,
         message: 'Error in submission workflow control',
@@ -77,191 +98,300 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
  * Handle read operations with submission workflow filtering
  */
 const handleSubmissionWorkflowRead = async (req, res, next, assignment, options) => {
-  const { logAccess, userName, enforceSubmissionWorkflow } = options;
-
-
+  const { logAccess, userName, enforceSubmissionWorkflow, isNewStructure } = options;
 
   // Build base hierarchical filters
   let hierarchicalFilters = {};
   let submissionFilters = {};
-  switch (assignment.assignmentLevel) {
-    case 'DIVISION':
-      // Division users can only see their own division data (any status)
-      // AND submitted data from their level (but not other divisions)
-      hierarchicalFilters = {
-        $and: [
-          { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
-          { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName },
-          { division: assignment.divisionName || assignment.divisions[0] }
-        ]
-      };
-      if (enforceSubmissionWorkflow) {
-        // Division users see all their own data regardless of status
-        // BUT only for records that originated at DIVISION level
-        submissionFilters = {
+
+  if (isNewStructure) {
+    // NEW STRUCTURE: Responsibility Center → Office
+    switch (assignment.accessScope) {
+      case 'RESPONSIBILITY_CENTER':
+        // Responsibility Center users can only see their own responsibility center data (any status)
+        // AND submitted data from their level (but not other responsibility centers)
+        hierarchicalFilters = {
           $and: [
-            ...hierarchicalFilters.$and,
-            { originalLevel: 'DIVISION' }
+            { responsibilityCenter: { $in: assignment.responsibilityCenters || [] } }
           ]
         };
-      }
-      break;
-    case 'DEPARTMENT':
-      // Department users can see:
-      // 1. Their own department data (any status)
-      // 2. SUBMITTED data from divisions within their department
+        if (enforceSubmissionWorkflow) {
+          // Responsibility Center users see all their own data regardless of status
+          // BUT only for records that originated at RESPONSIBILITY_CENTER level
+          submissionFilters = {
+            $and: [
+              ...hierarchicalFilters.$and,
+              { originalLevel: 'RESPONSIBILITY_CENTER' }
+            ]
+          };
+        }
+        break;
 
-      if (enforceSubmissionWorkflow) {
+      case 'OFFICE':
+        // Office users can see:
+        // 1. Their own office data (any status)
+        // 2. SUBMITTED data from responsibility centers within their office
+        if (enforceSubmissionWorkflow) {
+          submissionFilters = {
+            $and: [
+              { office: { $in: assignment.offices || [] } },
+              {
+                $or: [
+                  // Own office-level data (no responsibility center specified, any status)
+                  {
+                    $and: [
+                      { office: { $in: assignment.offices || [] } },
+                      {
+                        $or: [
+                          { workflowLevel: 'OFFICE' },
+                          { $or: [{ responsibilityCenter: { $exists: false } }, { responsibilityCenter: null }, { responsibilityCenter: "" }] }
+                        ]
+                      }
+                    ]
+                  },
+                  // Responsibility Center data that has been submitted to office (Responsibility Center Submitted, Office Verified, or higher)
+                  {
+                    $and: [
+                      { responsibilityCenter: { $exists: true, $ne: null, $ne: "" } },
+                      { office: { $in: assignment.offices || [] } },
+                      { workflowLevel: 'RESPONSIBILITY_CENTER' },
+                      {
+                        $or: [
+                          { status: { $in: ['Responsibility Center Submitted', 'RESPONSIBILITY_CENTER_SUBMITTED'] } },
+                          { status: { $in: ['Office Verified', 'OFFICE_VERIFIED'] } },
+                          { status: { $in: ['Office Submitted', 'OFFICE_SUBMITTED'] } },
+                          { status: { $in: ['Final Approved', 'FINAL_APPROVED'] } },
+                          { status: 'Finalized' }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          };
+          hierarchicalFilters = submissionFilters; // Fix: set hierarchicalFilters for controller use
+        } else {
+          // Fallback to standard hierarchical filtering
+          hierarchicalFilters = {
+            office: { $in: assignment.offices || [] }
+          };
+          submissionFilters = hierarchicalFilters;
+        }
+        break;
+
+      case 'FULL':
+        // Full access users can see everything
+        submissionFilters = {};
+        break;
+
+      case 'OWN_ONLY':
+        // Users with own-only access - restrict to their own data only
         submissionFilters = {
+          createdBy: req.user.id
+        };
+        break;
+
+      default:
+        return res.status(403).json({
+          success: false,
+          message: 'Invalid access scope',
+          code: 'INVALID_ACCESS_SCOPE'
+        });
+    }
+  } else {
+    // OLD STRUCTURE: Division → Department → Region (BACKWARD COMPATIBILITY)
+    switch (assignment.assignmentLevel) {
+      case 'DIVISION':
+        // Division users can only see their own division data (any status)
+        // AND submitted data from their level (but not other divisions)
+        hierarchicalFilters = {
           $and: [
             { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
             { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName },
-            {
-              $or: [
-                // Own department-level data (no division specified, any status)
-                { 
-                  $and: [
-                    { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName },
-                    { 
-                      $or: [
-                        { workflowLevel: 'DEPARTMENT' },
-                        { $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] }
-                      ]
-                    }
-                  ]
-                },
-                // Division data that has been submitted to department (Division Submitted, Department Verified, or higher)
-                { 
-                  $and: [
-                    { division: { $exists: true, $ne: null, $ne: "" } },
-                    { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName },
-                    { workflowLevel: 'DIVISION' },
-                    { 
-                      $or: [
-                        { status: { $in: ['Division Submitted', 'DIVISION SUBMITTED'] } },
-                        { status: { $in: ['Department Verified', 'DEPARTMENT VERIFIED'] } },
-                        { status: { $in: ['Department Submitted', 'DEPARTMENT SUBMITTED'] } },
-                        { status: { $in: ['Region Approved', 'REGION APPROVED'] } },
-                        { status: 'Finalized' }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
+            { division: assignment.divisionName || assignment.divisions[0] }
           ]
         };
-        hierarchicalFilters = submissionFilters; // Fix: set hierarchicalFilters for controller use
-      } else {
-        // Fallback to standard hierarchical filtering
-        hierarchicalFilters = {
-          $and: [
-            { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
-            { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName }
-          ]
-        };
-        submissionFilters = hierarchicalFilters;
-      }
+        if (enforceSubmissionWorkflow) {
+          // Division users see all their own data regardless of status
+          // BUT only for records that originated at DIVISION level
+          submissionFilters = {
+            $and: [
+              ...hierarchicalFilters.$and,
+              { originalLevel: 'DIVISION' }
+            ]
+          };
+        }
+        break;
 
-      break;
-    case 'REGION':
-      // Region users can see:
-      // 1. Their own region data (any status)
-      // 2. SUBMITTED data from departments within their region
-      if (enforceSubmissionWorkflow) {
+      case 'DEPARTMENT':
+        // Department users can see:
+        // 1. Their own department data (any status)
+        // 2. SUBMITTED data from divisions within their department
+        if (enforceSubmissionWorkflow) {
+          submissionFilters = {
+            $and: [
+              { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
+              { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName },
+              {
+                $or: [
+                  // Own department-level data (no division specified, any status)
+                  {
+                    $and: [
+                      { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName },
+                      {
+                        $or: [
+                          { workflowLevel: 'DEPARTMENT' },
+                          { $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] }
+                        ]
+                      }
+                    ]
+                  },
+                  // Division data that has been submitted to department (Division Submitted, Department Verified, or higher)
+                  {
+                    $and: [
+                      { division: { $exists: true, $ne: null, $ne: "" } },
+                      { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName },
+                      { workflowLevel: 'DIVISION' },
+                      {
+                        $or: [
+                          { status: { $in: ['Division Submitted', 'DIVISION SUBMITTED'] } },
+                          { status: { $in: ['Department Verified', 'DEPARTMENT VERIFIED'] } },
+                          { status: { $in: ['Department Submitted', 'DEPARTMENT SUBMITTED'] } },
+                          { status: { $in: ['Region Approved', 'REGION APPROVED'] } },
+                          { status: 'Finalized' }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          };
+          hierarchicalFilters = submissionFilters; // Fix: set hierarchicalFilters for controller use
+        } else {
+          // Fallback to standard hierarchical filtering
+          hierarchicalFilters = {
+            $and: [
+              { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
+              { department: assignment.departmentId?.Department || assignment.departments[0]?.departmentName }
+            ]
+          };
+          submissionFilters = hierarchicalFilters;
+        }
+        break;
+
+      case 'REGION':
+        // Region users can see:
+        // 1. Their own region data (any status)
+        // 2. SUBMITTED data from departments within their region
+        if (enforceSubmissionWorkflow) {
+          submissionFilters = {
+            $and: [
+              { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
+              {
+                $or: [
+                  // Own region-level data (no department/division specified, any status)
+                  {
+                    $and: [
+                      { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
+                      { $or: [{ department: { $exists: false } }, { department: null }, { department: "" }] },
+                      { workflowLevel: 'REGION' }
+                    ]
+                  },
+                  // Department/division data that has been submitted to region (Department Submitted, Region Approved, or Finalized)
+                  {
+                    $and: [
+                      { $or: [
+                        { department: { $exists: true, $ne: null, $ne: "" } },
+                        { division: { $exists: true, $ne: null, $ne: "" } }
+                      ] },
+                      { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
+                      {
+                        $or: [
+                          { status: 'Department Submitted' },
+                          { status: 'Region Approved' },
+                          { status: 'Finalized' }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          };
+          hierarchicalFilters = submissionFilters; // Fix: set hierarchicalFilters for controller use
+        } else {
+          // Fallback to standard hierarchical filtering
+          hierarchicalFilters = {
+            region: assignment.regionId?.Region || assignment.regions[0]?.regionName
+          };
+          submissionFilters = hierarchicalFilters;
+        }
+        break;
+
+      case 'FULL':
+        // Full access users can see everything
+        submissionFilters = {};
+        break;
+
+      case 'NONE':
+        // Users with no assignment - restrict to department-level data only (no division data)
+        // This prevents NONE users from seeing unsubmitted division-level data
         submissionFilters = {
-          $and: [
-            { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
-            {
-              $or: [
-                // Own region-level data (no department/division specified, any status)
-                { 
-                  $and: [
-                    { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
-                    { $or: [{ department: { $exists: false } }, { department: null }, { department: "" }] },
-                    { workflowLevel: 'REGION' }
-                  ]
-                },
-                // Department/division data that has been submitted to region (Department Submitted, Region Approved, or Finalized)
-                { 
-                  $and: [
-                    { $or: [
-                      { department: { $exists: true, $ne: null, $ne: "" } },
-                      { division: { $exists: true, $ne: null, $ne: "" } }
-                    ] },
-                    { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
-                    { 
-                      $or: [
-                        { status: 'Department Submitted' },
-                        { status: 'Region Approved' },
-                        { status: 'Finalized' }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
+          $or: [
+            { division: { $exists: false } },
+            { division: null },
+            { division: "" }
           ]
         };
-        hierarchicalFilters = submissionFilters; // Fix: set hierarchicalFilters for controller use
-      } else {
-        // Fallback to standard hierarchical filtering
-        hierarchicalFilters = {
-          region: assignment.regionId?.Region || assignment.regions[0]?.regionName
-        };
-        submissionFilters = hierarchicalFilters;
-      }
-      break;
-    case 'FULL':
-      // Full access users can see everything
-      submissionFilters = {};
-      break;
-    case 'NONE':
-      // Users with no assignment - restrict to department-level data only (no division data)
-      // This prevents NONE users from seeing unsubmitted division-level data
-      submissionFilters = {
-        $or: [
-          { division: { $exists: false } },
-          { division: null },
-          { division: "" }
-        ]
-      };
-      break;
-    default:
-      return res.status(403).json({
-        success: false,
-        message: 'Invalid assignment level',
-        code: 'INVALID_ASSIGNMENT_LEVEL'
-      });
+        break;
+
+      default:
+        return res.status(403).json({
+          success: false,
+          message: 'Invalid assignment level',
+          code: 'INVALID_ASSIGNMENT_LEVEL'
+        });
+    }
   }
+
   // Add filters to request for use in controllers
   if (logAccess) {
-    // Setting filters for user
+    console.log(`🔍 [${userName}] Applied ${isNewStructure ? 'NEW' : 'OLD'} structure filters:`, {
+      hierarchicalFilters,
+      submissionFilters,
+      accessScope: isNewStructure ? assignment.accessScope : assignment.assignmentLevel
+    });
   }
+
   req.submissionWorkflowFilters = submissionFilters;
   req.hierarchicalFilters = hierarchicalFilters;
   req.hierarchicalAccessInfo = {
-    scope: assignment.assignmentLevel,
-    hasFullAccess: assignment.assignmentLevel === 'FULL',
+    scope: isNewStructure ? assignment.accessScope : assignment.assignmentLevel,
+    hasFullAccess: (isNewStructure ? assignment.accessScope : assignment.assignmentLevel) === 'FULL',
     accessibleRegions: assignment.regions || [],
     accessibleDepartments: assignment.departments || [],
     accessibleDivisions: assignment.divisions || [],
+    accessibleOffices: assignment.offices || [],
+    accessibleResponsibilityCenters: assignment.responsibilityCenters || [],
     rolePermissions: assignment.rolePermissions,
-    submissionWorkflowEnabled: enforceSubmissionWorkflow
+    submissionWorkflowEnabled: enforceSubmissionWorkflow,
+    isNewStructure
   };
 
-
-  
   next();
 };
 /**
  * Handle write operations with submission workflow validation
  */
 const handleSubmissionWorkflowWrite = async (req, res, next, assignment, operation, options) => {
-  const { logAccess, userName, strictMode } = options;
+  const { logAccess, userName, strictMode, isNewStructure } = options;
+
   // Check basic permissions
   const permissions = assignment.rolePermissions || {};
   let canPerformOperation = true;
+
   switch (operation) {
     case 'create':
       canPerformOperation = permissions.CreateProposals !== false;
@@ -273,145 +403,288 @@ const handleSubmissionWorkflowWrite = async (req, res, next, assignment, operati
       canPerformOperation = permissions.DeleteProposals === true;
       break;
   }
+
   if (!canPerformOperation) {
     return res.status(403).json({
       success: false,
       message: `Access denied. You don't have permission to ${operation} data`,
       code: 'INSUFFICIENT_PERMISSIONS',
       operation,
-      userLevel: assignment.assignmentLevel
+      userLevel: isNewStructure ? assignment.accessScope : assignment.assignmentLevel
     });
   }
+
   // Validate hierarchical access
-  const isValidAccess = await validateHierarchicalAccess(req, assignment);
+  const isValidAccess = await validateHierarchicalAccess(req, assignment, isNewStructure);
   if (!isValidAccess) {
     if (strictMode) {
-      return res.status(403).json({
-        message: `Access denied. You cannot ${operation} data outside your assigned organizational units`,
-        code: 'INVALID_HIERARCHICAL_ACCESS',
-        operation,
+      const accessInfo = isNewStructure ? {
+        userLevel: assignment.accessScope,
+        allowedOffices: assignment.offices || [],
+        allowedResponsibilityCenters: assignment.responsibilityCenters || []
+      } : {
         userLevel: assignment.assignmentLevel,
         allowedRegions: assignment.regions?.map(r => r.regionName) || [],
         allowedDepartments: assignment.departments?.map(d => d.departmentName) || [],
         allowedDivisions: assignment.divisions || []
+      };
+
+      return res.status(403).json({
+        message: `Access denied. You cannot ${operation} data outside your assigned organizational units`,
+        code: 'INVALID_HIERARCHICAL_ACCESS',
+        operation,
+        ...accessInfo
       });
     }
   }
+
+  // Log successful access
+  if (logAccess) {
+    console.log(`✅ [${userName}] ${operation.toUpperCase()} access granted - Level: ${isNewStructure ? assignment.accessScope : assignment.assignmentLevel}`);
+  }
+
   // Apply submission workflow consolidation for create operations
   if (operation === 'create') {
     applySubmissionWorkflowConsolidation(req, assignment);
   }
+
   // Provide submission workflow data to controllers that expect it
   try {
-    const regionName = assignment.regionId?.Region || assignment.regions[0]?.regionName || req.body.region;
-    const departmentName = assignment.departmentId?.Department || assignment.departments[0]?.departmentName || req.body.department;
-    const divisionName = assignment.divisions?.[0] || req.body.division || null;
+    const regionName = isNewStructure ?
+      (assignment.offices?.[0] || req.body.office) :
+      (assignment.regionId?.Region || assignment.regions[0]?.regionName || req.body.region);
+    const departmentName = isNewStructure ?
+      (assignment.responsibilityCenters?.[0] || req.body.responsibilityCenter) :
+      (assignment.departmentId?.Department || assignment.departments[0]?.departmentName || req.body.department);
+    const divisionName = isNewStructure ? null : (assignment.divisions?.[0] || req.body.division || null);
+
     req.submissionWorkflowData = {
       region: req.body.region ?? regionName,
       department: req.body.department ?? departmentName,
       division: req.body.division ?? divisionName,
+      office: req.body.office ?? (isNewStructure ? regionName : null),
+      responsibilityCenter: req.body.responsibilityCenter ?? (isNewStructure ? departmentName : null),
       originalLevel: req.body.originalLevel,
       workflowLevel: req.body.workflowLevel,
-      userLevel: assignment.assignmentLevel
+      userLevel: isNewStructure ? assignment.accessScope : assignment.assignmentLevel,
+      isNewStructure
     };
   } catch (_) {
     // no-op
   }
+
   next();
 };
 /**
  * Apply submission workflow consolidation logic
  */
-const applySubmissionWorkflowConsolidation = (req, assignment) => {
-  const regionName = assignment.regionId?.Region || assignment.regions[0]?.regionName;
-  const departmentName = assignment.departmentId?.Department || assignment.departments[0]?.departmentName;
-  const divisionName = assignment.divisions?.[0] || null;
-  // Store original organizational context
-  req.originalOrgContext = {
-    region: req.body.region,
-    department: req.body.department,
-    division: req.body.division
-  };
-  // Apply consolidation based on user's access scope
-  switch (assignment.assignmentLevel) {
-    case 'DIVISION':
-      // Division submissions stay at division level (not consolidated until submitted)
-      req.body.originalLevel = 'DIVISION';
-      req.body.originalDivision = divisionName;
-      req.body.division = divisionName;
-      req.body.department = departmentName;
-      req.body.region = regionName;
-      req.body.workflowLevel = 'DIVISION';
-      req.body.status = req.body.status || 'Draft'; // Default to Draft for new submissions
-      break;
-    case 'DEPARTMENT':
-      // Department submissions stay at department level (not consolidated until submitted)
-      req.body.originalLevel = 'DEPARTMENT';
-      req.body.originalDepartment = departmentName;
-      req.body.department = departmentName;
-      req.body.region = regionName;
-      // Clear division for department-origin records to avoid leaking to division scope filters
-      req.body.division = null;
-      req.body.workflowLevel = 'DEPARTMENT';
-      req.body.status = req.body.status || 'Draft'; // Default to Draft for new submissions
-      break;
-    case 'REGION':
-      // Region submissions stay at region level
-      req.body.originalLevel = 'REGION';
-      req.body.region = regionName || req.body.region || null;
-      req.body.workflowLevel = 'REGION';
-      req.body.status = req.body.status || 'Draft'; // Default to Draft for new submissions
-      break;
-  }
-  // Add submission workflow metadata
-  req.body.submissionWorkflowMetadata = {
-    submittedBy: req.user.id,
-    submittedByScope: assignment.assignmentLevel,
-    submissionTimestamp: new Date(),
-    workflowApplied: true,
-    originalContext: req.originalOrgContext,
-    currentContext: {
+const applySubmissionWorkflowConsolidation = (req, assignment, isNewStructure = false) => {
+  if (isNewStructure) {
+    // NEW STRUCTURE: Apply consolidation for Office/Responsibility Center
+    const officeName = assignment.offices?.[0] || null;
+    const responsibilityCenterName = assignment.responsibilityCenters?.[0] || null;
+
+    // Store original organizational context
+    req.originalOrgContext = {
+      office: req.body.office,
+      responsibilityCenter: req.body.responsibilityCenter
+    };
+
+    // Set default values if not provided
+    if (!req.body.office && officeName) {
+      req.body.office = officeName;
+    }
+    if (!req.body.responsibilityCenter && responsibilityCenterName) {
+      req.body.responsibilityCenter = responsibilityCenterName;
+    }
+
+    // Apply consolidation based on user's access scope
+    switch (assignment.accessScope) {
+      case 'RESPONSIBILITY_CENTER':
+        // Responsibility Center submissions stay at responsibility center level
+        req.body.originalLevel = 'RESPONSIBILITY_CENTER';
+        req.body.responsibilityCenter = responsibilityCenterName;
+        req.body.office = officeName;
+        req.body.workflowLevel = 'RESPONSIBILITY_CENTER';
+        req.body.status = req.body.status || 'Draft';
+        break;
+
+      case 'OFFICE':
+        // Office submissions stay at office level
+        req.body.originalLevel = 'OFFICE';
+        req.body.office = officeName;
+        req.body.workflowLevel = 'OFFICE';
+        req.body.status = req.body.status || 'Draft';
+        break;
+
+      case 'FULL':
+        // Full access - no consolidation needed
+        req.body.originalLevel = req.body.originalLevel || 'FULL';
+        req.body.workflowLevel = req.body.workflowLevel || 'FULL';
+        req.body.status = req.body.status || 'Draft';
+        break;
+
+      case 'OWN_ONLY':
+        // Own only - restrict to user's own data
+        req.body.originalLevel = 'OWN_ONLY';
+        req.body.createdBy = req.user.id;
+        req.body.workflowLevel = 'OWN_ONLY';
+        req.body.status = req.body.status || 'Draft';
+        break;
+    }
+  } else {
+    // OLD STRUCTURE: Apply consolidation for Region/Department/Division
+    const regionName = assignment.regionId?.Region || assignment.regions?.[0]?.regionName;
+    const departmentName = assignment.departmentId?.Department || assignment.departments?.[0]?.departmentName;
+    const divisionName = assignment.divisions?.[0] || null;
+
+    // Store original organizational context
+    req.originalOrgContext = {
       region: req.body.region,
       department: req.body.department,
       division: req.body.division
+    };
+
+    // Set default values if not provided
+    if (!req.body.region && regionName) {
+      req.body.region = regionName;
     }
+    if (!req.body.department && departmentName) {
+      req.body.department = departmentName;
+    }
+    if (!req.body.division && divisionName) {
+      req.body.division = divisionName;
+    }
+
+    // Apply consolidation based on user's access scope
+    switch (assignment.assignmentLevel) {
+      case 'DIVISION':
+        // Division submissions stay at division level (not consolidated until submitted)
+        req.body.originalLevel = 'DIVISION';
+        req.body.originalDivision = divisionName;
+        req.body.division = divisionName;
+        req.body.department = departmentName;
+        req.body.region = regionName;
+        req.body.workflowLevel = 'DIVISION';
+        req.body.status = req.body.status || 'Draft'; // Default to Draft for new submissions
+        break;
+      case 'DEPARTMENT':
+        // Department submissions stay at department level (not consolidated until submitted)
+        req.body.originalLevel = 'DEPARTMENT';
+        req.body.originalDepartment = departmentName;
+        req.body.department = departmentName;
+        req.body.region = regionName;
+        // Clear division for department-origin records to avoid leaking to division scope filters
+        req.body.division = null;
+        req.body.workflowLevel = 'DEPARTMENT';
+        req.body.status = req.body.status || 'Draft'; // Default to Draft for new submissions
+        break;
+      case 'REGION':
+        // Region submissions stay at region level
+        req.body.originalLevel = 'REGION';
+        req.body.region = regionName || req.body.region || null;
+        req.body.workflowLevel = 'REGION';
+        req.body.status = req.body.status || 'Draft'; // Default to Draft for new submissions
+        break;
+      case 'FULL':
+        // Full access - no consolidation needed
+        req.body.originalLevel = req.body.originalLevel || 'FULL';
+        req.body.workflowLevel = req.body.workflowLevel || 'FULL';
+        req.body.status = req.body.status || 'Draft';
+        break;
+      case 'NONE':
+        // No assignment - restrict access
+        req.body.originalLevel = 'NONE';
+        req.body.workflowLevel = 'NONE';
+        req.body.status = req.body.status || 'Draft';
+        break;
+    }
+  }
+
+  // Add submission workflow metadata
+  req.body.submissionWorkflowMetadata = {
+    submittedBy: req.user.id,
+    submittedByScope: isNewStructure ? assignment.accessScope : assignment.assignmentLevel,
+    submissionTimestamp: new Date(),
+    workflowApplied: true,
+    originalContext: req.originalOrgContext,
+    currentContext: isNewStructure ? {
+      office: req.body.office,
+      responsibilityCenter: req.body.responsibilityCenter
+    } : {
+      region: req.body.region,
+      department: req.body.department,
+      division: req.body.division
+    },
+    isNewStructure
   };
 };
 /**
  * Validate hierarchical access permissions
  */
-const validateHierarchicalAccess = async (req, assignment) => {
-  const { region, department, division } = req.body;
-  // Check region access if region is specified
-  if (region) {
-    const hasRegionAccess = assignment.hasRegionAccess(region);
-    if (!hasRegionAccess) {
-      return false;
+const validateHierarchicalAccess = async (req, assignment, isNewStructure = false) => {
+  if (isNewStructure) {
+    // NEW STRUCTURE: Validate Office and Responsibility Center access
+    const { office, responsibilityCenter } = req.body;
+
+    // Check office access if office is specified
+    if (office) {
+      const hasOfficeAccess = assignment.offices && assignment.offices.includes(office);
+      if (!hasOfficeAccess) {
+        return false;
+      }
     }
-  }
-  // Check department access if department is specified
-  if (department) {
-    const hasDepartmentAccess = assignment.hasDepartmentAccess(department);
-    if (!hasDepartmentAccess) {
-      return false;
+
+    // Check responsibility center access if responsibility center is specified
+    if (responsibilityCenter) {
+      const hasResponsibilityCenterAccess = assignment.responsibilityCenters && assignment.responsibilityCenters.includes(responsibilityCenter);
+      if (!hasResponsibilityCenterAccess) {
+        return false;
+      }
     }
-  }
-  // Check division access if division is specified
-  if (division) {
-    const hasDivisionAccess = assignment.hasDivisionAccess(division);
-    if (!hasDivisionAccess) {
-      return false;
+
+    return true;
+  } else {
+    // OLD STRUCTURE: Validate Region, Department, Division access
+    const { region, department, division } = req.body;
+
+    // Check region access if region is specified
+    if (region) {
+      const hasRegionAccess = assignment.hasRegionAccess ? assignment.hasRegionAccess(region) :
+        (assignment.regions && assignment.regions.some(r => r.regionName === region));
+      if (!hasRegionAccess) {
+        return false;
+      }
     }
+
+    // Check department access if department is specified
+    if (department) {
+      const hasDepartmentAccess = assignment.hasDepartmentAccess ? assignment.hasDepartmentAccess(department) :
+        (assignment.departments && assignment.departments.some(d => d.departmentName === department));
+      if (!hasDepartmentAccess) {
+        return false;
+      }
+    }
+
+    // Check division access if division is specified
+    if (division) {
+      const hasDivisionAccess = assignment.hasDivisionAccess ? assignment.hasDivisionAccess(division) :
+        (assignment.divisions && assignment.divisions.includes(division));
+      if (!hasDivisionAccess) {
+        return false;
+      }
+    }
+
+    return true;
   }
-  return true;
 };
 /**
  * New 6-Step Submission Workflow:
  * Draft → Division Submitted → Department Verified → Department Submitted → Region Approved → Finalized
  */
 const submissionWorkflowTransitions = {
-  // Step 1→2: Division submits to Department (Draft → Division Submitted)
-  divisionSubmitToDepartment: async (req, res) => {
+  // Step 1→2: Responsibility Center submits to Office (Draft → Responsibility Center Submitted)
+  responsibilityCenterSubmitToOffice: async (req, res) => {
     try {
       const { ids = [], entity = 'personnel', submissionNote } = req.body;
       const userId = req.user?.id || 'system';
@@ -437,55 +710,55 @@ const submissionWorkflowTransitions = {
         {
           _id: { $in: objectIds },
           $or: [
-            { originalLevel: 'DIVISION' },
+            { originalLevel: 'RESPONSIBILITY_CENTER' },
             { originalLevel: { $exists: false } },
             { originalLevel: null },
             { originalLevel: '' }
           ],
           status: {
-            $in: ['Draft', 'Not Submitted', 'DRAFT', 'NOT SUBMITTED', 'Division Submitted', 'DIVISION SUBMITTED']
+            $in: ['Draft', 'Not Submitted', 'DRAFT', 'NOT SUBMITTED', 'Responsibility Center Submitted', 'RESPONSIBILITY_CENTER SUBMITTED']
           }
         },
         {
           $set: {
-            status: 'Division Submitted',
-            originalLevel: 'DIVISION', // Ensure originalLevel is set
-            submittedToDepartmentAt: new Date(),
-            submittedToDepartmentBy: userId,
+            status: 'Responsibility Center Submitted',
+            originalLevel: 'RESPONSIBILITY_CENTER', // Ensure originalLevel is set
+            submittedToOfficeAt: new Date(),
+            submittedToOfficeBy: userId,
             submissionNote: submissionNote || '',
-            lastWorkflowTransition: 'DIVISION_TO_DEPARTMENT'
+            lastWorkflowTransition: 'RESPONSIBILITY_CENTER_TO_OFFICE'
           }
         }
       );
 
-      console.log('Division Submit Result:', {
+      console.log('Responsibility Center Submit Result:', {
         matchedCount: result.matchedCount,
         modifiedCount: result.modifiedCount,
         acknowledged: result.acknowledged
       });
 
       return res.status(200).json({
-        message: 'Successfully submitted to Department for verification',
+        message: 'Successfully submitted to Office for verification',
         modified: result.modifiedCount,
         matched: result.matchedCount
       });
     } catch (e) {
-      console.error('Division submission error:', e);
+      console.error('Responsibility Center submission error:', e);
       return res.status(500).json({
-        message: 'Division submission failed',
+        message: 'Responsibility Center submission failed',
         error: e.message
       });
     }
   },
 
-  // Step 2→3: Department verifies division submission (Division Submitted → Department Verified)
-  departmentVerifySubmission: async (req, res) => {
+  // Step 2→3: Office verifies responsibility center submission (Responsibility Center Submitted → Office Verified)
+  officeVerifySubmission: async (req, res) => {
     try {
       const { ids = [], entity = 'personnel', verificationNote } = req.body;
       const userId = req.user?.id || 'system';
       const Model = getModelByEntity(entity);
 
-      console.log('Department Verify Debug:', {
+      console.log('Office Verify Debug:', {
         ids,
         entity,
         userId,
@@ -509,27 +782,27 @@ const submissionWorkflowTransitions = {
         {
           _id: { $in: objectIds },
           $or: [
-            { originalLevel: 'DIVISION' },
+            { originalLevel: 'RESPONSIBILITY_CENTER' },
             { originalLevel: { $exists: false } },
             { originalLevel: null },
             { originalLevel: '' }
           ],
           status: {
-            $in: ['Division Submitted', 'DIVISION SUBMITTED', 'Department Verified', 'DEPARTMENT VERIFIED']
+            $in: ['Responsibility Center Submitted', 'RESPONSIBILITY_CENTER SUBMITTED', 'Office Verified', 'OFFICE VERIFIED']
           }
         },
         {
           $set: {
-            status: 'Department Verified',
-            originalLevel: 'DIVISION', // Ensure originalLevel is set
-            verifiedByDepartmentAt: new Date(),
-            verifiedByDepartmentBy: userId,
+            status: 'Office Verified',
+            originalLevel: 'RESPONSIBILITY_CENTER', // Ensure originalLevel is set
+            verifiedByOfficeAt: new Date(),
+            verifiedByOfficeBy: userId,
             verificationNote: verificationNote || '',
-            lastWorkflowTransition: 'DEPARTMENT_VERIFICATION'
+            lastWorkflowTransition: 'OFFICE_VERIFICATION'
           } 
         }
       );
-      console.log('Department Verify Result:', {
+      console.log('Office Verify Result:', {
         matchedCount: result.matchedCount,
         modifiedCount: result.modifiedCount,
         acknowledged: result.acknowledged
@@ -538,26 +811,26 @@ const submissionWorkflowTransitions = {
       if (!result.modifiedCount) {
         return res.status(404).json({
           success: false,
-          message: 'No matching record to verify. Ensure items are Division level and status is Division Submitted.',
+          message: 'No matching record to verify. Ensure items are Responsibility Center level and status is Responsibility Center Submitted.',
           code: 'NO_MATCH_VERIFY',
         });
       }
       return res.status(200).json({
         success: true,
-        message: 'Successfully verified division submissions',
+        message: 'Successfully verified responsibility center submissions',
         modified: result.modifiedCount,
         matched: result.matchedCount
       });
     } catch (e) {
       return res.status(500).json({
-        message: 'Department verification failed',
+        message: 'Office verification failed',
         error: e.message
       });
     }
   },
 
-  // Step 3→4: Department submits to Region (Department Verified → Department Submitted)
-  departmentSubmitToRegion: async (req, res) => {
+  // Step 3→4: Office submits own (Office Verified → Office Submitted)
+  officeSubmitOwn: async (req, res) => {
     try {
       const { ids = [], entity = 'personnel', approvalNote } = req.body;
       const userId = req.user?.id || 'system';
@@ -565,85 +838,85 @@ const submissionWorkflowTransitions = {
       const result = await Model.updateMany(
         { 
           _id: { $in: ids },
-          originalLevel: { $in: ['DIVISION', 'DEPARTMENT'] },
-          status: { $in: ['Department Verified', 'DEPARTMENT VERIFIED', 'Draft', 'DRAFT'] }
+          originalLevel: { $in: ['RESPONSIBILITY_CENTER', 'OFFICE'] },
+          status: { $in: ['Office Verified', 'OFFICE VERIFIED', 'Draft', 'DRAFT'] }
         },
         { 
           $set: { 
-            status: 'Department Submitted',
-            approvedByDepartmentAt: new Date(),
-            approvedByDepartmentBy: userId,
-            submittedToRegionAt: new Date(),
-            submittedToRegionBy: userId,
+            status: 'Office Submitted',
+            approvedByOfficeAt: new Date(),
+            approvedByOfficeBy: userId,
+            submittedToOfficeAt: new Date(),
+            submittedToOfficeBy: userId,
             approvalNote: approvalNote || '',
-            lastWorkflowTransition: 'DEPARTMENT_TO_REGION'
+            lastWorkflowTransition: 'OFFICE_TO_FINALIZE'
           } 
         }
       );
       if (!result.modifiedCount) {
         return res.status(404).json({
           success: false,
-          message: 'No matching record to submit. Ensure items are verified or drafts at Department level.',
+          message: 'No matching record to submit. Ensure items are verified or drafts at Office level.',
           code: 'NO_MATCH_SUBMIT',
         });
       }
       return res.status(200).json({ 
         success: true,
-        message: 'Successfully submitted to Region for approval', 
+        message: 'Successfully submitted for finalization', 
         modified: result.modifiedCount 
       });
     } catch (e) {
       return res.status(500).json({
-        message: 'Department submission failed',
+        message: 'Office submission failed',
         error: e.message
       });
     }
   },
 
-  // Step 4→5: Region approves submission (Department Submitted → Region Approved)
-  regionApproveSubmission: async (req, res) => {
+  // Step 4→5: Office approves submission (Office Submitted → Office Approved)
+  officeApproveSubmission: async (req, res) => {
     try {
-      const { ids = [], entity = 'personnel', regionApprovalNote } = req.body;
+      const { ids = [], entity = 'personnel', officeApprovalNote } = req.body;
       const userId = req.user?.id || 'system';
       const Model = getModelByEntity(entity);
       const result = await Model.updateMany(
         { 
           _id: { $in: ids },
-          originalLevel: { $in: ['DIVISION', 'DEPARTMENT'] },
-          status: { $in: ['Department Submitted', 'DEPARTMENT SUBMITTED'] }
+          originalLevel: { $in: ['RESPONSIBILITY_CENTER', 'OFFICE'] },
+          status: { $in: ['Office Submitted', 'OFFICE SUBMITTED'] }
         },
         { 
           $set: { 
-            status: 'Region Approved',
-            approvedByRegionAt: new Date(),
-            approvedByRegionBy: userId,
-            regionApprovalNote: regionApprovalNote || '',
-            lastWorkflowTransition: 'REGION_APPROVAL'
+            status: 'Office Approved',
+            approvedByOfficeAt: new Date(),
+            approvedByOfficeBy: userId,
+            officeApprovalNote: officeApprovalNote || '',
+            lastWorkflowTransition: 'OFFICE_APPROVAL'
           } 
         }
       );
       if (!result.modifiedCount) {
         return res.status(404).json({
           success: false,
-          message: 'No matching record to approve. Ensure items are Department Submitted.',
+          message: 'No matching record to approve. Ensure items are Office Submitted.',
           code: 'NO_MATCH_APPROVE',
         });
       }
       return res.status(200).json({ 
         success: true,
-        message: 'Successfully approved submissions at Region level', 
+        message: 'Successfully approved submissions at Office level', 
         modified: result.modifiedCount 
       });
     } catch (e) {
       return res.status(500).json({
-        message: 'Region approval failed',
+        message: 'Office approval failed',
         error: e.message
       });
     }
   },
 
-  // Step 5→6: Final approval - Finalize submissions (Region Approved → Finalized)
-  regionFinalizeSubmission: async (req, res) => {
+  // Step 5→6: Final approval - Finalize submissions (Office Approved → Finalized)
+  officeFinalizeSubmission: async (req, res) => {
     try {
       const { ids = [], entity = 'personnel', finalizationNote } = req.body;
       const userId = req.user?.id || 'system';
@@ -651,8 +924,8 @@ const submissionWorkflowTransitions = {
       const result = await Model.updateMany(
         { 
           _id: { $in: ids },
-          originalLevel: { $in: ['DIVISION', 'DEPARTMENT', 'REGION'] },
-          status: { $in: ['Region Approved', 'REGION APPROVED'] }
+          originalLevel: { $in: ['RESPONSIBILITY_CENTER', 'OFFICE'] },
+          status: { $in: ['Office Approved', 'OFFICE APPROVED'] }
         },
         { 
           $set: { 
@@ -667,7 +940,7 @@ const submissionWorkflowTransitions = {
       if (!result.modifiedCount) {
         return res.status(404).json({
           success: false,
-          message: 'No matching record to finalize. Ensure items are Region Approved.',
+          message: 'No matching record to finalize. Ensure items are Office Approved.',
           code: 'NO_MATCH_FINALIZE',
         });
       }

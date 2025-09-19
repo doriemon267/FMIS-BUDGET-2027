@@ -9,6 +9,7 @@ const DepartmentDivisionMapping = require('../models/OrganizationStructure');
 const Region = require('../models/Region');
 const Department = require('../models/Department');
 const { hasFullAccess } = require('../middleware/securityMiddleware');
+const mongoose = require('mongoose');
 /**
  * Create or update hierarchical user assignment
  * This handles the complex logic of assigning users to Division/Department/Region
@@ -31,35 +32,75 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       userName,
       email,
       assignmentLevel, // 'DIVISION', 'DEPARTMENT', 'REGION', 'FULL'
+      accessScope, // NEW: Alternative field name for backward compatibility
       regionId,
       departmentId,
       divisionName,
+      officeId, // NEW: Office ID from new structure
+      responsibilityCenterName, // NEW: Responsibility center name from new structure
       rolePermissions = {},
       restrictions = {},
       workflowRoles: requestedWorkflowRoles
     } = req.body;
-    if (!userId || !userName || !email || !assignmentLevel) {
+
+    // Handle backward compatibility: map new field names to old ones
+    const effectiveAssignmentLevel = assignmentLevel || accessScope;
+    const effectiveDepartmentId = departmentId || officeId;
+    const effectiveDivisionName = divisionName || responsibilityCenterName;
+
+    // Map new assignment levels to old model enum values
+    let modelAssignmentLevel = effectiveAssignmentLevel;
+    if (effectiveAssignmentLevel === 'OFFICE') {
+      modelAssignmentLevel = 'DEPARTMENT';
+    } else if (effectiveAssignmentLevel === 'RESPONSIBILITY_CENTER') {
+      modelAssignmentLevel = 'DIVISION';
+    }
+
+    if (!userId || !userName || !email || !effectiveAssignmentLevel) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required fields: userId, userName, email, assignmentLevel',
+        message: 'Missing required fields: userId, userName, email, assignmentLevel/accessScope',
         code: 'MISSING_REQUIRED_FIELDS'
       });
     }
     // Validate assignment level
-    const validLevels = ['DIVISION', 'DEPARTMENT', 'REGION', 'FULL', 'OWN_ONLY'];
-    if (!validLevels.includes(assignmentLevel)) {
+    const validLevels = ['DIVISION', 'DEPARTMENT', 'REGION', 'FULL', 'OWN_ONLY', 'RESPONSIBILITY_CENTER', 'OFFICE'];
+    if (!validLevels.includes(effectiveAssignmentLevel)) {
       return res.status(400).json({
         success: false,
         message: `Invalid assignment level. Must be one of: ${validLevels.join(', ')}`,
         code: 'INVALID_ASSIGNMENT_LEVEL'
       });
     }
+
+    // Validate ObjectIds if provided
+    if (regionId && !mongoose.Types.ObjectId.isValid(regionId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid regionId format',
+        code: 'INVALID_REGION_ID'
+      });
+    }
+    if (departmentId && !mongoose.Types.ObjectId.isValid(departmentId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid departmentId format',
+        code: 'INVALID_DEPARTMENT_ID'
+      });
+    }
+    if (effectiveDepartmentId && !mongoose.Types.ObjectId.isValid(effectiveDepartmentId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid officeId format',
+        code: 'INVALID_OFFICE_ID'
+      });
+    }
     // Build hierarchical assignment based on level
     const assignmentData = await buildHierarchicalAssignment({
-      assignmentLevel,
+      assignmentLevel: effectiveAssignmentLevel,
       regionId,
-      departmentId,
-      divisionName
+      departmentId: effectiveDepartmentId,
+      divisionName: effectiveDivisionName
     });
     if (!assignmentData.success) {
       return res.status(400).json(assignmentData);
@@ -90,7 +131,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       userId,
       userName,
       email,
-      assignmentLevel,
+      assignmentLevel: modelAssignmentLevel,
       regionId: assignmentData.regions?.[0] || null,
       departmentId: assignmentData.departments?.[0] || null,
       divisionName: assignmentData.divisions?.[0] || null,
@@ -98,20 +139,18 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
         // Default permissions based on assignment level
         CreateProposals: true,
         EditOwnProposals: true,
-        EditAllProposals: assignmentLevel === 'REGION' || assignmentLevel === 'FULL',
-        DeleteProposals: assignmentLevel === 'FULL',
-        ApproveProposals: assignmentLevel === 'REGION' || assignmentLevel === 'FULL',
+        EditAllProposals: effectiveAssignmentLevel === 'REGION' || effectiveAssignmentLevel === 'FULL' || effectiveAssignmentLevel === 'OFFICE',
+        DeleteProposals: effectiveAssignmentLevel === 'FULL',
+        ApproveProposals: effectiveAssignmentLevel === 'REGION' || effectiveAssignmentLevel === 'FULL',
         ViewReports: true,
-        ManageUsers: assignmentLevel === 'FULL',
-        ManageSettings: assignmentLevel === 'FULL',
+        ManageUsers: effectiveAssignmentLevel === 'FULL',
+        ManageSettings: effectiveAssignmentLevel === 'FULL',
         ...rolePermissions
       },
       restrictions: {
-        maxProposalAmount: getMaxProposalAmountByLevel(assignmentLevel),
-        allowedBudgetTypes: ['Initial', 'NEP', 'GAA'],
-        allowedFiscalYears: [new Date().getFullYear().toString()],
-        readOnlyMode: false,
-        ...restrictions
+        allowedBudgetTypes: restrictions.allowedBudgetTypes || ['Initial', 'NEP', 'GAA'],
+        allowedFiscalYears: restrictions.allowedFiscalYears || [],
+        readOnlyMode: restrictions.readOnlyMode || false
       },
       // Persist workflowRoles immediately if explicitly provided; else keep existing/defaults
       ...(workflowRolesToAssign ? { workflowRoles: workflowRolesToAssign } : {}),
@@ -600,6 +639,88 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
           restrictedToOwnRecords: true
         };
         break;
+      case 'RESPONSIBILITY_CENTER':
+        // Responsibility Center assignment (new structure) - maps to division
+        if (!departmentId || !divisionName) {
+          return {
+            success: false,
+            message: 'Responsibility Center assignment requires departmentId and divisionName',
+            code: 'MISSING_RESPONSIBILITY_CENTER_REQUIREMENTS'
+          };
+        }
+        // For backward compatibility, we need to find the region for this department
+        const rcDepartment = await Department.findById(departmentId);
+        if (!rcDepartment) {
+          return {
+            success: false,
+            message: 'Invalid department ID for Responsibility Center assignment',
+            code: 'INVALID_DEPARTMENT'
+          };
+        }
+        // Find region from department mappings
+        const deptMappings = await DepartmentDivisionMapping.find({ departmentId: departmentId });
+        let rcRegionId = null;
+        if (deptMappings.length > 0) {
+          const firstMapping = deptMappings[0];
+          if (firstMapping.regionId) {
+            const region = await Region.findById(firstMapping.regionId);
+            if (region) {
+              rcRegionId = firstMapping.regionId;
+            }
+          }
+        }
+        regions = rcRegionId ? [rcRegionId] : [];
+        departments = [departmentId];
+        divisions = [divisionName];
+        hierarchicalStructure = {
+          level: 'RESPONSIBILITY_CENTER',
+          division: divisionName,
+          department: rcDepartment.Department,
+          region: rcRegionId ? (await Region.findById(rcRegionId))?.Region : 'NCR',
+          consolidatesTo: 'OFFICE',
+          ultimateRegion: rcRegionId ? (await Region.findById(rcRegionId))?.Region : 'NCR'
+        };
+        break;
+      case 'OFFICE':
+        // Office assignment (new structure) - maps to department
+        if (!departmentId) {
+          return {
+            success: false,
+            message: 'Office assignment requires departmentId',
+            code: 'MISSING_OFFICE_REQUIREMENTS'
+          };
+        }
+        const officeDepartment = await Department.findById(departmentId);
+        if (!officeDepartment) {
+          return {
+            success: false,
+            message: 'Invalid department ID for Office assignment',
+            code: 'INVALID_DEPARTMENT'
+          };
+        }
+        // Find region from department mappings
+        const officeDeptMappings = await DepartmentDivisionMapping.find({ departmentId: departmentId });
+        let officeRegionId = null;
+        if (officeDeptMappings.length > 0) {
+          const firstMapping = officeDeptMappings[0];
+          if (firstMapping.regionId) {
+            const region = await Region.findById(firstMapping.regionId);
+            if (region) {
+              officeRegionId = firstMapping.regionId;
+            }
+          }
+        }
+        regions = officeRegionId ? [officeRegionId] : [];
+        departments = [departmentId];
+        divisions = [];
+        hierarchicalStructure = {
+          level: 'OFFICE',
+          department: officeDepartment.Department,
+          region: officeRegionId ? (await Region.findById(officeRegionId))?.Region : 'NCR',
+          consolidatesTo: 'REGION',
+          ultimateRegion: officeRegionId ? (await Region.findById(officeRegionId))?.Region : 'NCR'
+        };
+        break;
       default:
         return {
           success: false,
@@ -621,23 +742,6 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
       message: 'Error building hierarchical assignment',
       error: error.message
     };
-  }
-};
-/**
- * Helper function to get max proposal amount by level
- */
-const getMaxProposalAmountByLevel = (level) => {
-  switch (level) {
-    case 'DIVISION':
-      return 100000; // 100K limit for division users
-    case 'DEPARTMENT':
-      return 500000; // 500K limit for department users
-    case 'REGION':
-      return 1000000; // 1M limit for region users
-    case 'FULL':
-      return null; // No limit for full access
-    default:
-      return 50000; // 50K limit for own-only users
   }
 };
 /**

@@ -1,6 +1,6 @@
 /**
  * 🔄 Workflow Action Buttons Component
- * Action buttons for Division → Department → Region workflow
+ * Action buttons for Responsibility Center → Office workflow
  */
 
 import React, { useState } from 'react';
@@ -30,23 +30,23 @@ import {
 import api from '../../config/api';
 
 /**
- * 📤 Submit to Department Button (Division Level)
+ * 📤 Submit Draft to Office Button (Responsibility Center Level)
  */
-export const SubmitToDepartmentButton = ({ row, refreshData, disabled }) => {
+export const SubmitDraftToOfficeButton = ({ row, refreshData, disabled }) => {
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
     setLoading(true);
     try {
       const modelType = determineModelType(row);
-      await api.post('/api/status-workflow/submit-to-department', {
+      await api.post('/api/status-workflow/submit-to-office', {
         modelType,
         recordIds: [row._id]
       });
-      
+
       if (refreshData) refreshData();
     } catch (error) {
-      console.error('Submit to Department error:', error);
+      console.error('Submit to Office error:', error);
     } finally {
       setLoading(false);
     }
@@ -55,12 +55,12 @@ export const SubmitToDepartmentButton = ({ row, refreshData, disabled }) => {
   if (row.status !== 'Draft') return null;
 
   return (
-    <Tooltip title="Submit to Department for Verification">
+    <Tooltip title="Submit to Office for Verification">
       <IconButton
         onClick={handleSubmit}
         disabled={disabled || loading}
         size="small"
-        sx={{ 
+        sx={{
           color: '#2196f3',
           '&:hover': { backgroundColor: '#e3f2fd' }
         }}
@@ -72,44 +72,44 @@ export const SubmitToDepartmentButton = ({ row, refreshData, disabled }) => {
 };
 
 /**
- * ✅ Department Verify Button (Department Level)
+ * ✅ Office Verify Button (Office Level)
  */
-export const DepartmentVerifyButton = ({ row, refreshData, disabled }) => {
+export const OfficeVerifyButton = ({ row, refreshData, disabled }) => {
   const [loading, setLoading] = useState(false);
 
   const handleVerify = async () => {
     setLoading(true);
     try {
-      console.log('🔧 Starting verification for:', { 
-        rowId: row._id, 
+      console.log('🔧 Starting verification for:', {
+        rowId: row._id,
         status: row.status,
         workflowLevel: row.workflowLevel,
-        fullRow: row 
+        fullRow: row
       });
-      
+
       const modelType = determineModelType(row);
       console.log('🔧 Model type determined:', modelType);
-      
+
       // Detailed model type analysis
       console.log('🔧 Model detection analysis:', {
         hasSalaryGrade: !!row.salaryGrade,
-        hasUacsCode: !!row.uacsCode, 
+        hasUacsCode: !!row.uacsCode,
         hasProjectTitle: !!row.projectTitle,
         detectedType: modelType
       });
-      
-      const response = await api.post('/api/status-workflow/verify-by-department', {
+
+      const response = await api.post('/api/status-workflow/verify-by-office', {
         modelType,
         recordIds: [row._id],
         action: 'verify'
       });
-      
+
       console.log('✅ Verification successful:', response.data);
-      
+
       if (response.data.modifiedCount > 0) {
-        const message = `✅ Successfully verified ${response.data.modifiedCount} proposal(s)! Status updated to: Department Verified`;
+        const message = `✅ Successfully verified ${response.data.modifiedCount} proposal(s)! Status updated to: Office Verified`;
         console.log('✅', message);
-        
+
         // Show success message and refresh page option
         if (confirm(`${message}\n\nClick OK to refresh the page to see updated data.`)) {
           window.location.reload();
@@ -117,18 +117,18 @@ export const DepartmentVerifyButton = ({ row, refreshData, disabled }) => {
       } else {
         alert(`⚠️ No records were updated. The proposal may already be processed or doesn't match the expected status.`);
       }
-      
+
       if (refreshData) {
         // Immediate refresh
         refreshData();
         console.log('🔄 Data refresh triggered immediately');
-        
+
         // Also do a delayed refresh to ensure data is updated
         setTimeout(() => {
           refreshData();
           console.log('🔄 Secondary data refresh triggered');
         }, 1000);
-        
+
         // If data still doesn't refresh after 3 seconds, suggest page reload
         setTimeout(() => {
           if (confirm('Data updated successfully! Click OK to refresh the page to see the latest status.')) {
@@ -137,26 +137,26 @@ export const DepartmentVerifyButton = ({ row, refreshData, disabled }) => {
         }, 3000);
       }
     } catch (error) {
-      console.error('❌ Department verification error:', error);
-      
+      console.error('❌ Office verification error:', error);
+
       let errorMessage = 'Failed to verify proposal';
       if (error.response?.data?.error) {
         errorMessage = error.response.data.error;
       } else if (error.message) {
         errorMessage = error.message;
       }
-      
+
       alert(`❌ Error: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
   };
 
-  // Only show verify button for proposals that need department verification
-  if (row.status !== 'Division Submitted' && row.status !== 'Submitted') return null;
-  
+  // Only show verify button for proposals that need office verification
+  if (row.status !== 'Responsibility Center Submitted' && row.status !== 'Submitted') return null;
+
   // Hide if already verified
-  if (row.status === 'Department Verified' || row.status === 'Department Submitted') return null;
+  if (row.status === 'Office Verified' || row.status === 'Office Submitted') return null;
 
   return (
     <Tooltip title="Verify Proposal">
@@ -164,7 +164,7 @@ export const DepartmentVerifyButton = ({ row, refreshData, disabled }) => {
         onClick={handleVerify}
         disabled={disabled || loading}
         size="small"
-        sx={{ 
+        sx={{
           color: '#ff9800',
           '&:hover': { backgroundColor: '#fff3e0' }
         }}
@@ -176,37 +176,37 @@ export const DepartmentVerifyButton = ({ row, refreshData, disabled }) => {
 };
 
 /**
- * 📤 Submit to Region Button (Department Level)
+ * 📤 Submit Verified to Office Button (Office Level - Submit for Finalization)
  */
-export const SubmitToRegionButton = ({ row, refreshData, disabled }) => {
+export const SubmitVerifiedToOfficeButton = ({ row, refreshData, disabled }) => {
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
     setLoading(true);
     try {
       const modelType = determineModelType(row);
-      await api.post('/api/status-workflow/submit-to-region', {
+      await api.post('/api/status-workflow/submit-to-office', {
         modelType,
         recordIds: [row._id]
       });
-      
+
       if (refreshData) refreshData();
     } catch (error) {
-      console.error('Submit to Region error:', error);
+      console.error('Submit to Office error:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  if (row.status !== 'Department Verified') return null;
+  if (row.status !== 'Office Verified') return null;
 
   return (
-    <Tooltip title="Submit to Region for Approval">
+    <Tooltip title="Submit to Office for Finalization">
       <IconButton
         onClick={handleSubmit}
         disabled={disabled || loading}
         size="small"
-        sx={{ 
+        sx={{
           color: '#673ab7',
           '&:hover': { backgroundColor: '#ede7f6' }
         }}
@@ -218,52 +218,9 @@ export const SubmitToRegionButton = ({ row, refreshData, disabled }) => {
 };
 
 /**
- * 👍 Region Approve Button (Region Level)
+ * 🏆 Office Finalize Button (Office Level)
  */
-export const RegionApproveButton = ({ row, refreshData, disabled }) => {
-  const [loading, setLoading] = useState(false);
-
-  const handleApprove = async () => {
-    setLoading(true);
-    try {
-      const modelType = determineModelType(row);
-      await api.post('/api/status-workflow/approve-by-region', {
-        modelType,
-        recordIds: [row._id],
-        action: 'approve'
-      });
-      
-      if (refreshData) refreshData();
-    } catch (error) {
-      console.error('Region approval error:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (row.status !== 'Department Submitted') return null;
-
-  return (
-    <Tooltip title="Approve Proposal">
-      <IconButton
-        onClick={handleApprove}
-        disabled={disabled || loading}
-        size="small"
-        sx={{ 
-          color: '#4caf50',
-          '&:hover': { backgroundColor: '#e8f5e8' }
-        }}
-      >
-        {loading ? <CircularProgress size={16} /> : <ApproveIcon />}
-      </IconButton>
-    </Tooltip>
-  );
-};
-
-/**
- * 🏆 Finalize Button (Admin Level)
- */
-export const FinalizeButton = ({ row, refreshData, disabled }) => {
+export const OfficeFinalizeButton = ({ row, refreshData, disabled }) => {
   const [loading, setLoading] = useState(false);
 
   const handleFinalize = async () => {
@@ -274,7 +231,7 @@ export const FinalizeButton = ({ row, refreshData, disabled }) => {
         modelType,
         recordIds: [row._id]
       });
-      
+
       if (refreshData) refreshData();
     } catch (error) {
       console.error('Finalize proposals error:', error);
@@ -283,7 +240,7 @@ export const FinalizeButton = ({ row, refreshData, disabled }) => {
     }
   };
 
-  if (row.status !== 'Region Approved') return null;
+  if (row.status !== 'Office Submitted') return null;
 
   return (
     <Tooltip title="Finalize Proposal">
@@ -291,7 +248,7 @@ export const FinalizeButton = ({ row, refreshData, disabled }) => {
         onClick={handleFinalize}
         disabled={disabled || loading}
         size="small"
-        sx={{ 
+        sx={{
           color: '#1b5e20',
           '&:hover': { backgroundColor: '#e0f2f1' }
         }}
@@ -311,10 +268,8 @@ export const RejectButton = ({ row, refreshData, disabled, userLevel }) => {
   const [loading, setLoading] = useState(false);
 
   const canReject = () => {
-    // Department can reject Division submissions
-    if (userLevel === 'DEPARTMENT' && (row.status === 'Division Submitted' || row.status === 'Submitted')) return true;
-    // Region can reject Department submissions
-    if (userLevel === 'REGION' && row.status === 'Department Submitted') return true;
+    // Office can reject Responsibility Center submissions
+    if (userLevel === 'OFFICE' && (row.status === 'Responsibility Center Submitted' || row.status === 'Submitted')) return true;
     // Full access can reject at any level (except finalized)
     if (userLevel === 'FULL' && row.status !== 'Finalized' && row.status !== 'Draft') return true;
     return false;
@@ -324,17 +279,15 @@ export const RejectButton = ({ row, refreshData, disabled, userLevel }) => {
     setLoading(true);
     try {
       const modelType = determineModelType(row);
-      const endpoint = userLevel === 'DEPARTMENT' 
-        ? '/api/status-workflow/verify-by-department'
-        : '/api/status-workflow/approve-by-region';
-      
+      const endpoint = '/api/status-workflow/verify-by-office';
+
       await api.post(endpoint, {
         modelType,
         recordIds: [row._id],
         action: 'reject',
         rejectionReason: reason
       });
-      
+
       setOpen(false);
       setReason('');
       if (refreshData) refreshData();
@@ -354,7 +307,7 @@ export const RejectButton = ({ row, refreshData, disabled, userLevel }) => {
           onClick={() => setOpen(true)}
           disabled={disabled || loading}
           size="small"
-          sx={{ 
+          sx={{
             color: '#f44336',
             '&:hover': { backgroundColor: '#ffebee' }
           }}
@@ -381,7 +334,7 @@ export const RejectButton = ({ row, refreshData, disabled, userLevel }) => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button 
+          <Button
             onClick={handleReject}
             disabled={loading || !reason.trim()}
             color="error"
@@ -404,33 +357,24 @@ export const WorkflowActionButtons = ({ row, refreshData, userAccess }) => {
 
   return (
     <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-      {/* Division Level: Submit to Department */}
-      {(userLevel === 'DIVISION' || userLevel === 'FULL') && (
-        <SubmitToDepartmentButton row={row} refreshData={refreshData} />
+      {/* Responsibility Center Level: Submit to Office */}
+      {(userLevel === 'RESPONSIBILITY_CENTER' || userLevel === 'FULL') && (
+        <SubmitDraftToOfficeButton row={row} refreshData={refreshData} />
       )}
-      
-      {/* Department Level: Verify and Submit to Region */}
-      {(userLevel === 'DEPARTMENT' || userLevel === 'FULL') && (
+
+      {/* Office Level: Verify, Submit, and Finalize */}
+      {(userLevel === 'OFFICE' || userLevel === 'FULL') && (
         <>
-          <DepartmentVerifyButton row={row} refreshData={refreshData} />
-          <SubmitToRegionButton row={row} refreshData={refreshData} />
+          <OfficeVerifyButton row={row} refreshData={refreshData} />
+          <SubmitVerifiedToOfficeButton row={row} refreshData={refreshData} />
+          <OfficeFinalizeButton row={row} refreshData={refreshData} />
         </>
       )}
-      
-      {/* Region Level: Approve */}
-      {(userLevel === 'REGION' || userLevel === 'FULL') && (
-        <RegionApproveButton row={row} refreshData={refreshData} />
-      )}
-      
-      {/* Full Access Only: Finalize */}
-      {userLevel === 'FULL' && (
-        <FinalizeButton row={row} refreshData={refreshData} />
-      )}
-      
+
       {/* Reject/Return Button - Available at all levels */}
-      <RejectButton 
-        row={row} 
-        refreshData={refreshData} 
+      <RejectButton
+        row={row}
+        refreshData={refreshData}
         userLevel={userLevel}
       />
     </Box>
@@ -449,14 +393,12 @@ const determineModelType = (row) => {
   return 'proposal';
 };
 
-// All components are already exported individually when declared above
-// Just export as default for convenience
+// Export all components
 export default {
-  SubmitToDepartmentButton,
-  DepartmentVerifyButton,
-  SubmitToRegionButton,
-  RegionApproveButton,
-  FinalizeButton,
+  SubmitDraftToOfficeButton,
+  OfficeVerifyButton,
+  SubmitVerifiedToOfficeButton,
+  OfficeFinalizeButton,
   RejectButton,
   WorkflowActionButtons
 };

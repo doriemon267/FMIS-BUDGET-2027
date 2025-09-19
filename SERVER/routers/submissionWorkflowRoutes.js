@@ -35,38 +35,38 @@ const requireWorkflowRole = (requiredRole) => {
   };
 };
 /**
- * Division Level Routes
+ * Responsibility Center Level Routes
  */
-// Division submits to Department
+// Responsibility Center submits to Office
 router.post(
-  '/division/submit-to-department',
+  '/responsibility-center/submit-to-office',
   submissionWorkflowControl('update'),
-  requireWorkflowRole('divisionCreator'),
-  submissionWorkflowTransitions.divisionSubmitToDepartment
+  requireWorkflowRole('responsibilityCenterCreator'),
+  submissionWorkflowTransitions.responsibilityCenterSubmitToOffice
 );
 /**
- * Department Level Routes
+ * Office Level Routes
  */
-// Step 2→3: Department verifies division submissions (Division Submitted → Department Verified)
+// Step 2→3: Office verifies responsibility center submissions (Responsibility Center Submitted → Office Verified)
 router.post(
-  '/department/verify-submission',
+  '/office/verify-submission',
   submissionWorkflowControl('update'),
-  requireWorkflowRole('departmentConsolidator'),
-  submissionWorkflowTransitions.departmentVerifySubmission
+  requireWorkflowRole('officeConsolidator'),
+  submissionWorkflowTransitions.officeVerifySubmission
 );
 
-// Step 3→4: Department submits to Region (Department Verified → Department Submitted)
+// Step 3→4: Office submits own (Office Verified → Office Submitted)
 router.post(
-  '/department/submit-to-region',
+  '/office/submit-own',
   submissionWorkflowControl('update'),
-  requireWorkflowRole('departmentConsolidator'),
-  submissionWorkflowTransitions.departmentSubmitToRegion
+  requireWorkflowRole('officeConsolidator'),
+  submissionWorkflowTransitions.officeSubmitOwn
 );
-// Department creates own submissions directly to region (for department-level proposals)
+// Office creates own submissions directly to finalization (for office-level proposals)
 router.post(
-  '/department/submit-own-to-region',
+  '/office/submit-own-to-finalize',
   submissionWorkflowControl('update'),
-  requireWorkflowRole('departmentSubmission'),
+  requireWorkflowRole('officeSubmission'),
   async (req, res) => {
     try {
       const { ids = [], entity = 'personnel', submissionNote } = req.body;
@@ -75,9 +75,9 @@ router.post(
       const result = await Model.updateMany(
         { 
           _id: { $in: ids },
-          // Accept records created at Department level; some legacy records may not have originalLevel set
+          // Accept records created at Office level; some legacy records may not have originalLevel set
           $or: [
-            { originalLevel: 'DEPARTMENT' },
+            { originalLevel: 'OFFICE' },
             { originalLevel: { $exists: false } },
             { originalLevel: null },
             { originalLevel: '' }
@@ -87,15 +87,15 @@ router.post(
         },
         { 
           $set: { 
-            status: 'Department Submitted',
-            submittedToRegionAt: new Date(),
-            submittedToRegionBy: userId,
+            status: 'Office Submitted',
+            submittedToOfficeAt: new Date(),
+            submittedToOfficeBy: userId,
             submissionNote: submissionNote || '',
-            lastWorkflowTransition: 'DEPARTMENT_TO_REGION',
+            lastWorkflowTransition: 'OFFICE_TO_FINALIZE',
             // Normalize originalLevel going forward
-            originalLevel: 'DEPARTMENT',
-            // Ensure department-origin records do not carry a division value
-            division: null
+            originalLevel: 'OFFICE',
+            // Ensure office-origin records do not carry a responsibility center value
+            responsibilityCenter: null
           } 
         }
       );
@@ -121,30 +121,30 @@ router.post(
   }
 );
 /**
- * Region Level Routes
+ * Office Level Routes (continued)
  */
-// Step 4→5: Region approves submissions (Department Submitted → Region Approved)
+// Step 4→5: Office approves submissions (Office Submitted → Office Approved)
 router.post(
-  '/region/approve-submission',
+  '/office/approve-submission',
   submissionWorkflowControl('update'),
-  requireWorkflowRole('regionFinalVerifier'),
+  requireWorkflowRole('officeFinalVerifier'),
   requirePermission('canApproveProposals', 'Permission denied: Can Approve Proposals is required'),
-  submissionWorkflowTransitions.regionApproveSubmission
+  submissionWorkflowTransitions.officeApproveSubmission
 );
 
-// Step 5→6: Region finalizes submissions (Region Approved → Finalized)
+// Step 5→6: Office finalizes submissions (Office Approved → Finalized)
 router.post(
-  '/region/finalize-submission',
+  '/office/finalize-submission',
   submissionWorkflowControl('update'),
-  requireWorkflowRole('regionFinalVerifier'),
+  requireWorkflowRole('officeFinalVerifier'),
   requirePermission('canApproveProposals', 'Permission denied: Can Approve Proposals is required'),
-  submissionWorkflowTransitions.regionFinalizeSubmission
+  submissionWorkflowTransitions.officeFinalizeSubmission
 );
-// Region creates own submissions and finalizes directly (for region-level proposals)
+// Office creates own submissions and finalizes directly (for office-level proposals)
 router.post(
-  '/region/submit-own',
+  '/office/submit-own',
   submissionWorkflowControl('update'),
-  requireWorkflowRole('regionFinalVerifier'),
+  requireWorkflowRole('officeFinalVerifier'),
   async (req, res) => {
     try {
       const { ids = [], entity = 'personnel', submissionNote } = req.body;
@@ -153,7 +153,7 @@ router.post(
       const result = await Model.updateMany(
         { 
           _id: { $in: ids },
-          originalLevel: 'REGION',
+          originalLevel: 'OFFICE',
           status: { $in: ['Draft', 'Not Submitted'] }
         },
         { 
@@ -162,18 +162,18 @@ router.post(
             finalizedAt: new Date(),
             finalizedBy: userId,
             submissionNote: submissionNote || '',
-            lastWorkflowTransition: 'REGION_FINALIZATION'
+            lastWorkflowTransition: 'OFFICE_FINALIZATION'
           } 
         }
       );
       return res.status(200).json({ 
-        message: 'Successfully finalized region proposals', 
+        message: 'Successfully finalized office proposals', 
         modified: result.modifiedCount 
       });
     } catch (e) {
-      console.error('region submit own error:', e);
+      console.error('office submit own error:', e);
       return res.status(500).json({ 
-        message: 'Region submission failed', 
+        message: 'Office submission failed', 
         error: e.message 
       });
     }
@@ -182,23 +182,23 @@ router.post(
 /**
  * Data Retrieval Routes with Submission Workflow Filtering
  */
-// Get submissions pending approval at department level
+// Get submissions pending approval at office level
 router.get(
-  '/department/pending-approvals',
+  '/office/pending-approvals',
   submissionWorkflowControl('read'),
-  requireWorkflowRole('departmentConsolidator'),
+  requireWorkflowRole('officeConsolidator'),
   async (req, res) => {
     try {
       const userId = req.user.id;
       const { entity = 'personnel' } = req.query;
       const Model = getModelByEntity(entity);
-      // Get submissions from divisions in this department that need verification or further action
+      // Get submissions from responsibility centers in this office that need verification or further action
       const pendingSubmissions = await Model.find({
         ...req.submissionWorkflowFilters,
-        originalLevel: 'DIVISION',
-        status: { $in: ['Division Submitted', 'Department Verified'] },
-        lastWorkflowTransition: { $in: ['DIVISION_TO_DEPARTMENT', 'DEPARTMENT_VERIFICATION'] }
-      }).sort({ submittedToDepartmentAt: -1 });
+        originalLevel: 'RESPONSIBILITY_CENTER',
+        status: { $in: ['Responsibility Center Submitted', 'Office Verified'] },
+        lastWorkflowTransition: { $in: ['RESPONSIBILITY_CENTER_TO_OFFICE', 'OFFICE_VERIFICATION'] }
+      }).sort({ submittedToOfficeAt: -1 });
       res.status(200).json({
         success: true,
         entity,
@@ -206,7 +206,7 @@ router.get(
         submissions: pendingSubmissions
       });
     } catch (error) {
-      console.error('Error fetching pending department approvals:', error);
+      console.error('Error fetching pending office approvals:', error);
       res.status(500).json({
         success: false,
         message: 'Error fetching pending approvals',
@@ -215,23 +215,23 @@ router.get(
     }
   }
 );
-// Get submissions pending approval at region level
+// Get submissions pending approval at office level
 router.get(
-  '/region/pending-approvals',
+  '/office/pending-approvals',
   submissionWorkflowControl('read'),
-  requireWorkflowRole('regionFinalVerifier'),
+  requireWorkflowRole('officeFinalVerifier'),
   async (req, res) => {
     try {
       const userId = req.user.id;
       const { entity = 'personnel' } = req.query;
       const Model = getModelByEntity(entity);
-      // Get submissions from departments in this region that are pending approval or finalization
+      // Get submissions from responsibility centers and office that are pending approval or finalization
       const pendingSubmissions = await Model.find({
         ...req.submissionWorkflowFilters,
-        originalLevel: { $in: ['DIVISION', 'DEPARTMENT'] },
-        status: { $in: ['Department Submitted', 'Region Approved'] },
-        lastWorkflowTransition: { $in: ['DEPARTMENT_TO_REGION', 'REGION_APPROVAL'] }
-      }).sort({ submittedToRegionAt: -1, approvedByRegionAt: -1 });
+        originalLevel: { $in: ['RESPONSIBILITY_CENTER', 'OFFICE'] },
+        status: { $in: ['Office Submitted', 'Office Approved'] },
+        lastWorkflowTransition: { $in: ['OFFICE_TO_FINALIZE', 'OFFICE_APPROVAL'] }
+      }).sort({ submittedToOfficeAt: -1, approvedByOfficeAt: -1 });
       res.status(200).json({
         success: true,
         entity,
@@ -239,7 +239,7 @@ router.get(
         submissions: pendingSubmissions
       });
     } catch (error) {
-      console.error('Error fetching pending region approvals:', error);
+      console.error('Error fetching pending office approvals:', error);
       res.status(500).json({
         success: false,
         message: 'Error fetching pending approvals',
@@ -251,11 +251,11 @@ router.get(
 
 // Additional routes for the new 6-step workflow
 
-// Get submissions pending verification at department level
+// Get submissions pending verification at office level
 router.get(
-  '/department/pending-verification',
+  '/office/pending-verification',
   submissionWorkflowControl('read'),
-  requireWorkflowRole('departmentConsolidator'),
+  requireWorkflowRole('officeConsolidator'),
   async (req, res) => {
     try {
       const { entity = 'personnel' } = req.query;
@@ -263,10 +263,10 @@ router.get(
       
       const pendingVerification = await Model.find({
         ...req.submissionWorkflowFilters,
-        originalLevel: 'DIVISION',
-        status: 'Division Submitted',
-        lastWorkflowTransition: 'DIVISION_TO_DEPARTMENT'
-      }).sort({ submittedToDepartmentAt: -1 });
+        originalLevel: 'RESPONSIBILITY_CENTER',
+        status: 'Responsibility Center Submitted',
+        lastWorkflowTransition: 'RESPONSIBILITY_CENTER_TO_OFFICE'
+      }).sort({ submittedToOfficeAt: -1 });
 
       res.status(200).json({
         success: true,
@@ -285,11 +285,11 @@ router.get(
   }
 );
 
-// Get verified submissions ready to submit to region
+// Get verified submissions ready to submit to finalization
 router.get(
-  '/department/ready-to-submit',
+  '/office/ready-to-submit',
   submissionWorkflowControl('read'),
-  requireWorkflowRole('departmentConsolidator'),
+  requireWorkflowRole('officeConsolidator'),
   async (req, res) => {
     try {
       const { entity = 'personnel' } = req.query;
@@ -297,10 +297,10 @@ router.get(
       
       const readyToSubmit = await Model.find({
         ...req.submissionWorkflowFilters,
-        originalLevel: 'DIVISION',
-        status: 'Department Verified',
-        lastWorkflowTransition: 'DEPARTMENT_VERIFICATION'
-      }).sort({ verifiedByDepartmentAt: -1 });
+        originalLevel: 'RESPONSIBILITY_CENTER',
+        status: 'Office Verified',
+        lastWorkflowTransition: 'OFFICE_VERIFICATION'
+      }).sort({ verifiedByOfficeAt: -1 });
 
       res.status(200).json({
         success: true,
@@ -319,11 +319,11 @@ router.get(
   }
 );
 
-// Get submissions ready for approval at region level
+// Get submissions ready for approval at office level
 router.get(
-  '/region/pending-approval',
+  '/office/pending-approval',
   submissionWorkflowControl('read'),
-  requireWorkflowRole('regionFinalVerifier'),
+  requireWorkflowRole('officeFinalVerifier'),
   async (req, res) => {
     try {
       const { entity = 'personnel' } = req.query;
@@ -331,10 +331,10 @@ router.get(
       
       const pendingApproval = await Model.find({
         ...req.submissionWorkflowFilters,
-        originalLevel: { $in: ['DIVISION', 'DEPARTMENT'] },
-        status: 'Department Submitted',
-        lastWorkflowTransition: 'DEPARTMENT_TO_REGION'
-      }).sort({ submittedToRegionAt: -1 });
+        originalLevel: { $in: ['RESPONSIBILITY_CENTER', 'OFFICE'] },
+        status: 'Office Submitted',
+        lastWorkflowTransition: 'OFFICE_TO_FINALIZE'
+      }).sort({ submittedToOfficeAt: -1 });
 
       res.status(200).json({
         success: true,
@@ -355,9 +355,9 @@ router.get(
 
 // Get approved submissions ready for finalization
 router.get(
-  '/region/ready-to-finalize',
+  '/office/ready-to-finalize',
   submissionWorkflowControl('read'),
-  requireWorkflowRole('regionFinalVerifier'),
+  requireWorkflowRole('officeFinalVerifier'),
   async (req, res) => {
     try {
       const { entity = 'personnel' } = req.query;
@@ -365,10 +365,10 @@ router.get(
       
       const readyToFinalize = await Model.find({
         ...req.submissionWorkflowFilters,
-        originalLevel: { $in: ['DIVISION', 'DEPARTMENT', 'REGION'] },
-        status: 'Region Approved',
-        lastWorkflowTransition: 'REGION_APPROVAL'
-      }).sort({ approvedByRegionAt: -1 });
+        originalLevel: { $in: ['RESPONSIBILITY_CENTER', 'OFFICE'] },
+        status: 'Office Approved',
+        lastWorkflowTransition: 'OFFICE_APPROVAL'
+      }).sort({ approvedByOfficeAt: -1 });
 
       res.status(200).json({
         success: true,

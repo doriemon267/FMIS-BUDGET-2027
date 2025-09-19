@@ -62,6 +62,12 @@ const HierarchicalUserAssignmentSchema = new mongoose.Schema({
     ],
     default: []
   },
+  // Operational restrictions
+  restrictions: {
+    allowedBudgetTypes: [{ type: String }], // ['Initial', 'NEP', 'GAA']
+    allowedFiscalYears: [{ type: String }],
+    readOnlyMode: { type: Boolean, default: false }
+  },
   isActive: {
     type: Boolean,
     default: true

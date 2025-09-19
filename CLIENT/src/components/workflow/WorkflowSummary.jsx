@@ -24,19 +24,19 @@ const WorkflowSummary = ({ userInfo }) => {
       
       let endpoints = [];
 
-      // Department users can see pending verifications and ready to submit
-      if (userLevel === "DEPARTMENT" && workflowRoles.includes("departmentConsolidator")) {
+      // Office users can see pending verifications and ready to submit
+      if (userLevel === "OFFICE" && workflowRoles.includes("officeConsolidator")) {
         endpoints = [
-          { key: "pendingVerification", endpoint: "/api/submission-workflow/department/pending-verification" },
-          { key: "readyToSubmit", endpoint: "/api/submission-workflow/department/ready-to-submit" }
+          { key: "pendingVerification", endpoint: "/api/submission-workflow/office/pending-verification" },
+          { key: "readyToSubmit", endpoint: "/api/submission-workflow/office/ready-to-submit" }
         ];
       }
 
-      // Region users can see pending approvals and ready to finalize
-      if (userLevel === "REGION" && workflowRoles.includes("regionFinalVerifier")) {
+      // Office users can see pending approvals and ready to finalize (combined department and region roles)
+      if (userLevel === "OFFICE" && workflowRoles.includes("officeFinalVerifier")) {
         endpoints = [
-          { key: "pendingApproval", endpoint: "/api/submission-workflow/region/pending-approval" },
-          { key: "readyToFinalize", endpoint: "/api/submission-workflow/region/ready-to-finalize" }
+          { key: "pendingApproval", endpoint: "/api/submission-workflow/office/pending-approval" },
+          { key: "readyToFinalize", endpoint: "/api/submission-workflow/office/ready-to-finalize" }
         ];
       }
 
@@ -86,7 +86,7 @@ const WorkflowSummary = ({ userInfo }) => {
   const getSummaryCards = () => {
     const cards = [];
 
-    if (userLevel === "DEPARTMENT") {
+    if (userLevel === "OFFICE") {
       cards.push(
         {
           title: "Pending Verification",
@@ -99,12 +99,7 @@ const WorkflowSummary = ({ userInfo }) => {
           count: pendingSummary.readyToSubmit || 0,
           color: "bg-blue-100 border-blue-300 text-blue-800",
           icon: "📤"
-        }
-      );
-    }
-
-    if (userLevel === "REGION") {
-      cards.push(
+        },
         {
           title: "Pending Approval",
           count: pendingSummary.pendingApproval || 0,

@@ -48,6 +48,10 @@ import {
   Image,
 } from '@react-pdf/renderer';
 
+// Custom hook for user restrictions
+import { useUserRestrictions } from "../../hooks/useUserRestrictions";
+import { AccessStatusIndicator } from "../common/AccessStatusIndicator";
+
 // ====================================================================================
 // START: PDF REPORTING SECTION (This part is correct and remains the same)
 // ====================================================================================
@@ -670,6 +674,7 @@ const PDFReport = ({ reportData, filters }) => {
 
 const ComprehensiveReportsPage = () => {
   const theme = useTheme();
+  const { getFilteredOptions } = useUserRestrictions();
   const [selectedRegion, setSelectedRegion] = useState("all");
   const [availableRegions, setAvailableRegions] = useState([]);
   const [availableFiscalYears, setAvailableFiscalYears] = useState([]);
@@ -939,13 +944,14 @@ const ComprehensiveReportsPage = () => {
           <Stack direction="row" alignItems="center" spacing={2}><Avatar sx={{ bgcolor: alpha("#fff", 0.2), color: "white", width: 56, height: 56 }}><Assessment fontSize="large" /></Avatar><Box><Typography variant="h4" fontWeight="bold">Comprehensive Budget Report</Typography><Typography variant="h6" sx={{ opacity: 0.9 }}>Detailed budget analysis</Typography></Box></Stack>
         </Stack>
       </Paper>
+      <AccessStatusIndicator />
       <Card elevation={4} sx={{ mb: 3, borderRadius: "16px" }}>
         <CardContent sx={{ p: 3 }}>
           {loadingInitialData && <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}><CircularProgress /></Box>}
           <Grid container spacing={2} alignItems="center">
             <Grid item xs={12} sm={6} md={3}><FormControl fullWidth><InputLabel>Region</InputLabel><Select value={selectedRegion} onChange={(e) => setSelectedRegion(e.target.value)} label="Region"><MenuItem value="all">All Regions</MenuItem>{availableRegions.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}</Select></FormControl></Grid>
-            <Grid item xs={12} sm={6} md={2}><FormControl fullWidth><InputLabel>Fiscal Year</InputLabel><Select value={selectedFiscalYear} onChange={(e) => setSelectedFiscalYear(e.target.value)} label="Fiscal Year">{availableFiscalYears.map((y) => <MenuItem key={y} value={y}>{y}</MenuItem>)}</Select></FormControl></Grid>
-            <Grid item xs={12} sm={6} md={2}><FormControl fullWidth><InputLabel>Budget Type</InputLabel><Select value={selectedBudgetType} onChange={(e) => setSelectedBudgetType(e.target.value)} label="Budget Type">{availableBudgetTypes.map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}</Select></FormControl></Grid>
+            <Grid item xs={12} sm={6} md={2}><FormControl fullWidth><InputLabel>Fiscal Year</InputLabel><Select value={selectedFiscalYear} onChange={(e) => setSelectedFiscalYear(e.target.value)} label="Fiscal Year">{getFilteredOptions(availableFiscalYears, 'fiscalYear').map((y) => <MenuItem key={y} value={y}>{y}</MenuItem>)}</Select></FormControl></Grid>
+            <Grid item xs={12} sm={6} md={2}><FormControl fullWidth><InputLabel>Budget Type</InputLabel><Select value={selectedBudgetType} onChange={(e) => setSelectedBudgetType(e.target.value)} label="Budget Type">{getFilteredOptions(availableBudgetTypes, 'budgetType').map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}</Select></FormControl></Grid>
             <Grid item xs={12} sm={6} md={2}><Button variant="contained" fullWidth onClick={fetchReportData} disabled={loading} startIcon={loading ? <CircularProgress size={20} /> : <Summarize />} sx={{ py: 1.5 }}>{loading ? "Generating..." : "Generate"}</Button></Grid>
             {reportData && (<Grid item xs={12} sm={12} md={3}><PDFDownloadLink document={<PDFReport reportData={reportData} filters={getReportFilters()} />} fileName={`Comprehensive_Report_${selectedFiscalYear}_${selectedBudgetType}.pdf`} style={{ textDecoration: 'none' }}>{({ loading: pdfLoading }) => (<Button variant="contained" color="secondary" fullWidth disabled={pdfLoading} startIcon={pdfLoading ? <CircularProgress size={20} /> : <FileDownload />} sx={{ py: 1.5 }}>{pdfLoading ? "Creating PDF..." : "Export to PDF"}</Button>)}</PDFDownloadLink></Grid>)}
           </Grid>

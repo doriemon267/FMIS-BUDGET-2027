@@ -395,7 +395,8 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
           accessibleDivisions,
           consolidationInfo,
           rolePermissions: assignmentDoc.rolePermissions,
-          workflowRoles: assignmentDoc.workflowRoles
+          workflowRoles: assignmentDoc.workflowRoles,
+          restrictions: assignmentDoc.restrictions // ✅ ADD RESTRICTIONS
         };
         return next();
       }
@@ -406,7 +407,8 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
         accessibleRegions: [],
         accessibleDepartments: [],
         accessibleDivisions: [],
-        consolidationInfo: null
+        consolidationInfo: null,
+        restrictions: null // ✅ ADD RESTRICTIONS
       };
       return next();
     }
@@ -418,7 +420,8 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
         accessibleRegions: [],
         accessibleDepartments: [],
         accessibleDivisions: [],
-        consolidationInfo: null
+        consolidationInfo: null,
+        restrictions: null // ✅ ADD RESTRICTIONS
       };
       return next();
     }
@@ -438,7 +441,8 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
       accessibleDivisions,
       consolidationInfo,
       rolePermissions: assignmentDoc.rolePermissions,
-      workflowRoles: assignmentDoc.workflowRoles
+      workflowRoles: assignmentDoc.workflowRoles,
+      restrictions: assignmentDoc.restrictions // ✅ ADD RESTRICTIONS
     };
     next();
   } catch (error) {

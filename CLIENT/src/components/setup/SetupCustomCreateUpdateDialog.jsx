@@ -219,10 +219,19 @@ const CustomCreateUpdateDialog = ({
             fullWidth
             sx={{ mb: 2 }}
           >
-            <MenuItem value={2026}>2026</MenuItem>
-            <MenuItem value={2027}>2027</MenuItem>
-            <MenuItem value={2028}>2028</MenuItem>
-            <MenuItem value={2029}>2029</MenuItem>
+            {(() => {
+              // Generate dynamic fiscal years: current year - 1 to current year + 3
+              const currentYear = new Date().getFullYear();
+              const fiscalYears = [];
+              for (let i = -1; i <= 3; i++) {
+                fiscalYears.push(currentYear + i);
+              }
+              return fiscalYears.map((year) => (
+                <MenuItem key={year} value={year}>
+                  {year}
+                </MenuItem>
+              ));
+            })()}
           </CustomTextField>
 
           <FormControlLabel

@@ -3,8 +3,8 @@ import React from "react";
 /**
  * Workflow Status Badge Component
  * 
- * Shows the current status in the 6-step workflow:
- * Draft → Division Submitted → Department Verified → Department Submitted → Region Approved → Finalized
+ * Shows the current status in the 5-step workflow:
+ * Draft → Responsibility Center Submitted → Office Verified → Office Submitted → Finalized
  */
 const WorkflowStatusBadge = ({ status, className = "" }) => {
   const getStatusConfig = (status) => {
@@ -15,35 +15,29 @@ const WorkflowStatusBadge = ({ status, className = "" }) => {
           icon: "📝",
           step: "1/6"
         };
-      case "Division Submitted":
+      case "Responsibility Center Submitted":
         return {
           color: "bg-blue-200 text-blue-800",
           icon: "📤",
-          step: "2/6"
+          step: "2/5"
         };
-      case "Department Verified":
+      case "Office Verified":
         return {
           color: "bg-yellow-200 text-yellow-800",
           icon: "✅",
-          step: "3/6"
+          step: "3/5"
         };
-      case "Department Submitted":
+      case "Office Submitted":
         return {
           color: "bg-purple-200 text-purple-800",
           icon: "📋",
-          step: "4/6"
-        };
-      case "Region Approved":
-        return {
-          color: "bg-green-200 text-green-800",
-          icon: "👍",
-          step: "5/6"
+          step: "4/5"
         };
       case "Finalized":
         return {
           color: "bg-emerald-200 text-emerald-800",
           icon: "🏆",
-          step: "6/6"
+          step: "5/5"
         };
       default:
         return {

@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from "react";
 import ProposalCustomPage from "../components/allproposals/ProposalCustomPage";
 import TextSearchable from "../global/components/TextSearchable";
-import { ViewButton, ApproveButton, ReturnButton, VerifyButton, SubmitToRegionButton, FinalizeButton, SubmitDraftButton } from "../components/allproposals/ProposalActions";
+import { ViewButton, ApproveButton, ReturnButton, VerifyButton, SubmitToOfficeButton, FinalizeButton, SubmitDraftButton } from "../components/allproposals/ProposalActions";
 import { useUser } from "../context/UserContext";
 import { 
   Box, 
@@ -98,14 +98,11 @@ const AllProposalsPage = () => {
         // Choose endpoint based on scope (reuse same behavior as SubmitDraftButton)
         let endpoint = '';
         let successMessage = '';
-        if (scope === 'DIVISION' && roles.includes('divisionCreator')) {
-          endpoint = '/api/submission-workflow/division/submit-to-department';
-          successMessage = 'Submitted to Department';
-        } else if (scope === 'DEPARTMENT' && roles.includes('departmentConsolidator')) {
-          endpoint = '/api/submission-workflow/department/submit-own-to-region';
-          successMessage = 'Submitted to Region';
-        } else if (scope === 'REGION' && roles.includes('regionFinalVerifier')) {
-          endpoint = '/api/submission-workflow/region/submit-own';
+        if (scope === 'RESPONSIBILITY_CENTER' && roles.includes('responsibilityCenterCreator')) {
+          endpoint = '/api/submission-workflow/responsibility-center/submit-to-office';
+          successMessage = 'Submitted to Office';
+        } else if (scope === 'OFFICE' && roles.includes('officeConsolidator')) {
+          endpoint = '/api/submission-workflow/office/submit-own';
           successMessage = 'Finalized';
         } else {
           // Skip if user lacks role for this scope
@@ -226,23 +223,23 @@ const AllProposalsPage = () => {
       label: "EXPENDITURE TYPE",
       show: true,
     },
-    region: {
+    office: {
       type: "text",
       label: (() => {
         const scope = currentUser?.hierarchicalAccess?.scope;
-        if (scope === 'DIVISION') return 'DIVISION';
-        if (scope === 'DEPARTMENT') return 'DEPARTMENT';
-        return 'REGION';
+        if (scope === 'RESPONSIBILITY_CENTER') return 'RESPONSIBILITY CENTER';
+        if (scope === 'OFFICE') return 'OFFICE';
+        return 'OFFICE';
       })(),
       show: true,
       customRender: (row) => {
         // Show the most specific organizational level available
-        if (row.division && String(row.division).trim() !== "") {
-          return `Division: ${row.division}`;
-        } else if (row.department && String(row.department).trim() !== "") {
-          return `Department: ${row.department}`;
+        if (row.responsibilityCenter && String(row.responsibilityCenter).trim() !== "") {
+          return `Responsibility Center: ${row.responsibilityCenter}`;
+        } else if (row.office && String(row.office).trim() !== "") {
+          return `Office: ${row.office}`;
         } else {
-          return row.region ? `Region: ${row.region}` : "CENTRAL OFFICE";
+          return row.office ? `Office: ${row.office}` : "CENTRAL OFFICE";
         }
       }
     },
@@ -269,35 +266,31 @@ const AllProposalsPage = () => {
         if (row.consolidationMetadata) {
           const { submittedByLevel } = row.consolidationMetadata;
           switch (submittedByLevel) {
-            case 'DIVISION':
-              level = "Department"; // Division data consolidated to Department
+            case 'RESPONSIBILITY_CENTER':
+              level = "Office"; // Responsibility Center data consolidated to Office
               levelColor = "secondary";
               break;
-            case 'DEPARTMENT':
-              level = "Region"; // Department data consolidated to Region
-              levelColor = "success";
-              break;
-            case 'REGION':
-              level = "Region"; // Region data stays at Region
+            case 'OFFICE':
+              level = "Office"; // Office data stays at Office
               levelColor = "success";
               break;
           }
         } else {
           // Fallback to organizational field analysis
-          if (row.originalDivision) {
-            level = "Department"; // Has original division, so it's consolidated department data
+          if (row.originalResponsibilityCenter) {
+            level = "Office"; // Has original responsibility center, so it's consolidated office data
             levelColor = "secondary";
-          } else if (row.originalDepartment) {
-            level = "Region"; // Has original department, so it's consolidated region data
+          } else if (row.originalOffice) {
+            level = "Office"; // Has original office, so it's consolidated office data
             levelColor = "success";
-          } else if (row.division && row.division.trim() !== "") {
-            level = "Division";
+          } else if (row.responsibilityCenter && row.responsibilityCenter.trim() !== "") {
+            level = "Responsibility Center";
             levelColor = "primary";
-          } else if (row.department && row.department.trim() !== "") {
-            level = "Department";
+          } else if (row.office && row.office.trim() !== "") {
+            level = "Office";
             levelColor = "secondary";
-          } else if (row.region && row.region.trim() !== "") {
-            level = "Region";
+          } else if (row.office && row.office.trim() !== "") {
+            level = "Office";
             levelColor = "success";
           }
         }
@@ -485,10 +478,10 @@ const AllProposalsPage = () => {
         // Normalize status to new 6-step workflow
         const map = {
           'Draft': { color: 'warning', text: 'Draft' },
-          'Division Submitted': { color: 'info', text: 'Division Submitted' },
-          'Department Verified': { color: 'secondary', text: 'Department Verified' },
-          'Department Submitted': { color: 'info', text: 'Department Submitted' },
-          'Region Approved': { color: 'success', text: 'Region Approved' },
+          'Responsibility Center Submitted': { color: 'info', text: 'Responsibility Center Submitted' },
+          'Office Verified': { color: 'secondary', text: 'Office Verified' },
+          'Office Submitted': { color: 'info', text: 'Office Submitted' },
+          'Office Approved': { color: 'success', text: 'Office Approved' },
           'Finalized': { color: 'success', text: 'Finalized' },
           'Submitted': { color: 'info', text: 'Submitted' }, // legacy
           'Approved': { color: 'success', text: 'Approved' }, // legacy
@@ -518,29 +511,27 @@ const AllProposalsPage = () => {
       customRender: (row) => {
         const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
         const scope = currentUser?.hierarchicalAccess?.scope;
-        const isDivision = scope === 'DIVISION';
-        const isDepartment = scope === 'DEPARTMENT';
-        const isRegion = scope === 'REGION' || scope === 'FULL';
-        const canVerify = isDepartment && roles.includes('departmentConsolidator');
-        const canSubmitToRegion = isDepartment && roles.includes('departmentConsolidator');
-        const canApproveRegion = isRegion && roles.includes('regionFinalVerifier');
-        const canFinalize = isRegion && roles.includes('regionFinalVerifier');
-        const canSubmitDraft = (isDivision && roles.includes('divisionCreator')) || 
-                               (isDepartment && roles.includes('departmentConsolidator')) || 
-                               (isRegion && roles.includes('regionFinalVerifier'));
+        const isResponsibilityCenter = scope === 'RESPONSIBILITY_CENTER';
+        const isOffice = scope === 'OFFICE' || scope === 'FULL';
+        const canVerify = isOffice && roles.includes('officeConsolidator');
+        const canSubmitToOffice = isOffice && roles.includes('officeConsolidator');
+        const canApproveOffice = isOffice && roles.includes('officeFinalVerifier');
+        const canFinalize = isOffice && roles.includes('officeFinalVerifier');
+        const canSubmitDraft = (isResponsibilityCenter && roles.includes('responsibilityCenterCreator')) || 
+                               (isOffice && roles.includes('officeConsolidator'));
         
-        const showVerify = row.status === 'Division Submitted' && canVerify;
-        const showSubmitToRegion = row.status === 'Department Verified' && canSubmitToRegion;
-        const showApprove = row.status === 'Department Submitted' && canApproveRegion;
-        const showFinalize = row.status === 'Region Approved' && canFinalize;
+        const showVerify = row.status === 'Responsibility Center Submitted' && canVerify;
+        const showSubmitToOffice = row.status === 'Office Verified' && canSubmitToOffice;
+        const showApprove = row.status === 'Office Submitted' && canApproveOffice;
+        const showFinalize = row.status === 'Office Approved' && canFinalize;
         const showSubmitDraft = row.status === 'Draft' && canSubmitDraft;
-        const showReturn = ['Division Submitted','Department Verified','Department Submitted','Region Approved'].includes(row.status) && (canVerify || canApproveRegion);
+        const showReturn = ['Responsibility Center Submitted','Office Verified','Office Submitted','Office Approved'].includes(row.status) && (canVerify || canApproveOffice);
         return (
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
             <ViewButton row={row} />
             {showSubmitDraft && (<SubmitDraftButton row={row} refreshData={refreshData} />)}
             {showVerify && (<VerifyButton row={row} refreshData={refreshData} />)}
-            {showSubmitToRegion && (<SubmitToRegionButton row={row} refreshData={refreshData} />)}
+            {showSubmitToOffice && (<SubmitToOfficeButton row={row} refreshData={refreshData} />)}
             {showApprove && (<ApproveButton row={row} refreshData={refreshData} />)}
             {showFinalize && (<FinalizeButton row={row} refreshData={refreshData} />)}
             {showReturn && (<ReturnButton row={row} refreshData={refreshData} />)}
