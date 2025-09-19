@@ -16,6 +16,18 @@ const {
   logOrgSelection,
   validateOrgSelection
 } = require('../middleware/budgetManagerOrgSelection');
+const Settings = require('../models/Settings');
+
+// Helper function to get active fiscal year
+const getActiveFiscalYear = async () => {
+  try {
+    const activeSettings = await Settings.findOne({ isActive: true });
+    return activeSettings ? activeSettings.fiscalYear : new Date().getFullYear().toString();
+  } catch (error) {
+    console.error('Error fetching active fiscal year:', error);
+    return new Date().getFullYear().toString();
+  }
+};
 const budgetManagerOrgRouter = Router();
 // 🔒 SECURED ROUTES FOR BUDGET MANAGER ORGANIZATIONAL SELECTION
 // Get all available organizational units for Budget Manager selection
@@ -76,7 +88,7 @@ budgetManagerOrgRouter.post(
             division: division,
             processBy: req.user.id,
             processDate: new Date(),
-            fiscalYear: proposalData.fiscalYear || '2024',
+            fiscalYear: proposalData.fiscalYear || new Date().getFullYear().toString(),
             status: 'Draft'
           });
           break;
@@ -87,24 +99,26 @@ budgetManagerOrgRouter.post(
             region: region,
             processBy: req.user.id,
             processDate: new Date(),
-            fiscalYear: proposalData.fiscalYear || '2024',
+            fiscalYear: proposalData.fiscalYear || new Date().getFullYear().toString(),
             status: 'Draft'
           });
           break;
         case 'capitalOutlay':
           const CapitalOutlay = require('../models/CapitalOutlay');
+          const activeFiscalYear = await getActiveFiscalYear();
           createdProposal = await CapitalOutlay.create({
             ...proposalData,
             region: region,
             department: department,
             processBy: req.user.id,
             processDate: new Date(),
-            fiscalYear: proposalData.fiscalYear || '2024',
+            fiscalYear: proposalData.fiscalYear || activeFiscalYear,
             status: 'Not Submitted'
           });
           break;
         case 'cos':
           const COSPersonnel = require('../models/COSPersonnel');
+          const activeFiscalYearCOS = await getActiveFiscalYear();
           createdProposal = await COSPersonnel.create({
             ...proposalData,
             region: region,
@@ -112,7 +126,7 @@ budgetManagerOrgRouter.post(
             division: division,
             processBy: req.user.id,
             processDate: new Date(),
-            fiscalYear: proposalData.fiscalYear || '2024'
+            fiscalYear: proposalData.fiscalYear || activeFiscalYearCOS
           });
           break;
         default:
@@ -472,4 +486,4 @@ budgetManagerOrgRouter.get(
     }
   }
 );
-module.exports = budgetManagerOrgRouter;
+module.exports = budgetManagerOrgRouter;
