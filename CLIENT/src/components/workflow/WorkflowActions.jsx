@@ -1,13 +1,14 @@
 import React, { useState } from "react";
 import { toast } from "react-toastify";
 import api from "../../config/api";
-import { Button, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions, Typography, Menu, MenuItem, ListItemIcon, ListItemText } from "@mui/material";
+import { Button, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions, Typography, Menu, MenuItem, ListItemIcon, ListItemText, Chip, Divider, Stepper, Step, StepLabel, Box, Stack } from "@mui/material";
 import CheckIcon from "@mui/icons-material/Check";
 import UndoIcon from "@mui/icons-material/Undo";
 import SendIcon from "@mui/icons-material/Send";
 import VerifiedIcon from "@mui/icons-material/Verified";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import TimelineIcon from "@mui/icons-material/Timeline";
 
 /**
  * Workflow Actions Component
@@ -15,7 +16,7 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
  * Provides action buttons for the 6-step workflow based on user role and current status:
  * Draft → Division Submitted → Department Verified → Department Submitted → Region Approved → Finalized
  */
-const WorkflowActions = ({ proposal, userInfo, onRefresh, onView }) => {
+const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = true, showTrackInMenu = true }) => {
   const [loading, setLoading] = useState(false);
 
   // Top-level render log to confirm component renders
@@ -208,7 +209,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView }) => {
           break;
         case "office-approve":
           endpoint = "/api/submission-workflow/office/approve-submission";
-          noteField = "approvalNote";
+          noteField = "officeApprovalNote"; // align with backend
           successMessage = "Successfully approved submission";
           break;
         case "office-finalize":
@@ -326,6 +327,23 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView }) => {
     }
   };
 
+  // Step metadata for progress tracking
+  const steps = [
+    { key: 'Draft', label: 'Draft' },
+    { key: 'Responsibility Center Submitted', label: 'RC Submitted', ts: 'submittedToOfficeAt', by: 'submittedToOfficeName' },
+    { key: 'Office Verified', label: 'Office Verified', ts: 'verifiedByOfficeAt', by: 'verifiedByOfficeName' },
+    { key: 'Office Submitted', label: 'Office Submitted', ts: 'submittedToOfficeAt', by: 'submittedToOfficeName' },
+    { key: 'Office Approved', label: 'Office Approved', ts: 'approvedByOfficeAt', by: 'approvedByOfficeName' },
+    { key: 'Finalized', label: 'Finalized', ts: 'finalizedAt', by: 'finalizedByName' }
+  ];
+
+  const currentStepIndex = steps.findIndex(s => s.key === (proposal?.status || 'Draft'));
+
+  // Dialog state for progress tracker
+  const [trackOpen, setTrackOpen] = useState(false);
+  const openTrack = () => setTrackOpen(true);
+  const closeTrack = () => setTrackOpen(false);
+
   // Compact actions menu (icon + dropdown)
   const [anchorEl, setAnchorEl] = useState(null);
   const menuOpen = Boolean(anchorEl);
@@ -338,21 +356,68 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView }) => {
 
   return (
     <>
-      <Tooltip title="Workflow actions" arrow>
-        <span>
-          <Button
+      {/* Status header with track + actions */}
+      {showHeader && (
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1, flexWrap: 'wrap' }}>
+          <Chip
             size="small"
-            variant="contained"
-            color="primary"
-            onClick={handleMenuOpen}
-            endIcon={<KeyboardArrowDownIcon fontSize="small" />}
-            disabled={loading}
-            sx={{ textTransform: 'none', fontWeight: 600 }}
-          >
-            Actions
-          </Button>
-        </span>
-      </Tooltip>
+            label={proposal?.status || 'Draft'}
+            color={(() => {
+              switch (proposal?.status) {
+                case 'Responsibility Center Submitted':
+                case 'RESPONSIBILITY_CENTER_SUBMITTED':
+                  return 'info';
+                case 'Office Verified':
+                case 'OFFICE_VERIFIED':
+                  return 'success';
+                case 'Office Submitted':
+                case 'OFFICE_SUBMITTED':
+                  return 'secondary';
+                case 'Office Approved':
+                case 'OFFICE_APPROVED':
+                  return 'success';
+                case 'Finalized':
+                  return 'primary';
+                default:
+                  return 'default';
+              }
+            })()}
+            variant="outlined"
+          />
+
+          <Tooltip title="Track progress" arrow>
+            <span>
+              <Button
+                size="small"
+                variant="text"
+                startIcon={<TimelineIcon fontSize="small" />}
+                onClick={openTrack}
+                sx={{ textTransform: 'none' }}
+              >
+                Track
+              </Button>
+            </span>
+          </Tooltip>
+
+          <Box sx={{ flexGrow: 1 }} />
+
+          <Tooltip title="Workflow actions" arrow>
+            <span>
+              <Button
+                size="small"
+                variant="contained"
+                color="primary"
+                onClick={handleMenuOpen}
+                endIcon={<KeyboardArrowDownIcon fontSize="small" />}
+                disabled={loading}
+                sx={{ textTransform: 'none', fontWeight: 600 }}
+              >
+                Actions
+              </Button>
+            </span>
+          </Tooltip>
+        </Stack>
+      )}
 
       <Menu anchorEl={anchorEl} open={menuOpen} onClose={handleMenuClose} elevation={3}>
         {/* View action at top */}
@@ -370,8 +435,20 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView }) => {
             <ListItemText primary={actionConfig.label} secondary={actionConfig.description} />
           </MenuItem>
         ))}
+        {showTrackInMenu && (
+          <>
+            <Divider sx={{ my: 0.5 }} />
+            <MenuItem onClick={() => { handleMenuClose(); openTrack(); }}>
+              <ListItemIcon>
+                <TimelineIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText primary="Track progress" secondary="View workflow timeline" />
+            </MenuItem>
+          </>
+        )}
       </Menu>
 
+      {/* Confirmation dialog */}
       <Dialog open={confirmState.open} onClose={handleClose} maxWidth="xs" fullWidth>
         <DialogTitle>Confirm Action</DialogTitle>
         <DialogContent>
@@ -384,6 +461,49 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView }) => {
           <Button onClick={handleConfirm} variant="contained" disabled={loading}>
             Confirm
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Track progress dialog */}
+      <Dialog open={trackOpen} onClose={closeTrack} maxWidth="sm" fullWidth>
+        <DialogTitle>Workflow Progress</DialogTitle>
+        <DialogContent>
+          <Stepper activeStep={Math.max(currentStepIndex, 0)} alternativeLabel>
+            {steps.map((s, idx) => {
+              const ts = s.ts && proposal?.[s.ts];
+              const by = s.by && proposal?.[s.by];
+              return (
+                <Step key={s.key} completed={idx < currentStepIndex}>
+                  <StepLabel
+                    optional={
+                      ts ? (
+                        <Typography variant="caption">
+                          {new Date(ts).toLocaleString()} {by ? `— ${by}` : ''}
+                        </Typography>
+                      ) : undefined
+                    }
+                  >
+                    {s.label}
+                  </StepLabel>
+                </Step>
+              );
+            })}
+          </Stepper>
+
+          {/* Latest audit entry (if present) */}
+          {Array.isArray(proposal?.workflowHistory) && proposal.workflowHistory.length > 0 && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                Latest: {proposal.workflowHistory[proposal.workflowHistory.length - 1]?.action} → {proposal.workflowHistory[proposal.workflowHistory.length - 1]?.toStatus}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {new Date(proposal.workflowHistory[proposal.workflowHistory.length - 1]?.date).toLocaleString()} — {proposal.workflowHistory[proposal.workflowHistory.length - 1]?.byName}
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeTrack}>Close</Button>
         </DialogActions>
       </Dialog>
     </>

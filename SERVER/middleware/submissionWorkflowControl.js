@@ -708,8 +708,19 @@ const submissionWorkflowTransitions = {
             originalLevel: 'RESPONSIBILITY_CENTER', // Ensure originalLevel is set
             submittedToOfficeAt: new Date(),
             submittedToOfficeBy: userId,
+            submittedToOfficeName: (req.user?.FirstName && req.user?.LastName) ? `${req.user.FirstName} ${req.user.LastName}` : (req.user?.name || req.user?.username || 'system'),
             submissionNote: submissionNote || '',
             lastWorkflowTransition: 'RESPONSIBILITY_CENTER_TO_OFFICE'
+          },
+          $push: {
+            workflowHistory: {
+              action: 'RC_SUBMIT',
+              toStatus: 'Responsibility Center Submitted',
+              byUserId: userId,
+              byName: (req.user?.FirstName && req.user?.LastName) ? `${req.user.FirstName} ${req.user.LastName}` : (req.user?.name || req.user?.username || 'system'),
+              date: new Date(),
+              note: submissionNote || ''
+            }
           }
         }
       );
@@ -778,9 +789,20 @@ const submissionWorkflowTransitions = {
             originalLevel: 'RESPONSIBILITY_CENTER', // Normalize level for legacy data
             verifiedByOfficeAt: new Date(),
             verifiedByOfficeBy: userId,
+            verifiedByOfficeName: (req.user?.FirstName && req.user?.LastName) ? `${req.user.FirstName} ${req.user.LastName}` : (req.user?.name || req.user?.username || 'system'),
             verificationNote: verificationNote || '',
             lastWorkflowTransition: 'OFFICE_VERIFICATION'
-          } 
+          },
+          $push: {
+            workflowHistory: {
+              action: 'OFFICE_VERIFY',
+              toStatus: 'Office Verified',
+              byUserId: userId,
+              byName: (req.user?.FirstName && req.user?.LastName) ? `${req.user.FirstName} ${req.user.LastName}` : (req.user?.name || req.user?.username || 'system'),
+              date: new Date(),
+              note: verificationNote || ''
+            }
+          }
         }
       );
       if (!result.modifiedCount) {
@@ -821,11 +843,23 @@ const submissionWorkflowTransitions = {
             status: 'Office Submitted',
             approvedByOfficeAt: new Date(),
             approvedByOfficeBy: userId,
+            approvedByOfficeName: (req.user?.FirstName && req.user?.LastName) ? `${req.user.FirstName} ${req.user.LastName}` : (req.user?.name || req.user?.username || 'system'),
             submittedToOfficeAt: new Date(),
             submittedToOfficeBy: userId,
+            submittedToOfficeName: (req.user?.FirstName && req.user?.LastName) ? `${req.user.FirstName} ${req.user.LastName}` : (req.user?.name || req.user?.username || 'system'),
             approvalNote: approvalNote || '',
             lastWorkflowTransition: 'OFFICE_TO_FINALIZE'
-          } 
+          },
+          $push: {
+            workflowHistory: {
+              action: 'OFFICE_SUBMIT',
+              toStatus: 'Office Submitted',
+              byUserId: userId,
+              byName: (req.user?.FirstName && req.user?.LastName) ? `${req.user.FirstName} ${req.user.LastName}` : (req.user?.name || req.user?.username || 'system'),
+              date: new Date(),
+              note: approvalNote || ''
+            }
+          }
         }
       );
       if (!result.modifiedCount) {
@@ -865,9 +899,20 @@ const submissionWorkflowTransitions = {
             status: 'Office Approved',
             approvedByOfficeAt: new Date(),
             approvedByOfficeBy: userId,
+            approvedByOfficeName: (req.user?.FirstName && req.user?.LastName) ? `${req.user.FirstName} ${req.user.LastName}` : (req.user?.name || req.user?.username || 'system'),
             officeApprovalNote: officeApprovalNote || '',
             lastWorkflowTransition: 'OFFICE_APPROVAL'
-          } 
+          },
+          $push: {
+            workflowHistory: {
+              action: 'OFFICE_APPROVE',
+              toStatus: 'Office Approved',
+              byUserId: userId,
+              byName: (req.user?.FirstName && req.user?.LastName) ? `${req.user.FirstName} ${req.user.LastName}` : (req.user?.name || req.user?.username || 'system'),
+              date: new Date(),
+              note: officeApprovalNote || ''
+            }
+          }
         }
       );
       if (!result.modifiedCount) {
@@ -907,9 +952,20 @@ const submissionWorkflowTransitions = {
             status: 'Finalized',
             finalizedAt: new Date(),
             finalizedBy: userId,
+            finalizedByName: (req.user?.FirstName && req.user?.LastName) ? `${req.user.FirstName} ${req.user.LastName}` : (req.user?.name || req.user?.username || 'system'),
             finalizationNote: finalizationNote || '',
             lastWorkflowTransition: 'FINALIZATION'
-          } 
+          },
+          $push: {
+            workflowHistory: {
+              action: 'OFFICE_FINALIZE',
+              toStatus: 'Finalized',
+              byUserId: userId,
+              byName: (req.user?.FirstName && req.user?.LastName) ? `${req.user.FirstName} ${req.user.LastName}` : (req.user?.name || req.user?.username || 'system'),
+              date: new Date(),
+              note: finalizationNote || ''
+            }
+          }
         }
       );
       if (!result.modifiedCount) {
