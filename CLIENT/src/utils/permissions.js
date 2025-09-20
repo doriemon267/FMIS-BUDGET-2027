@@ -6,7 +6,8 @@ export function hasPermission(currentUser, permissionKey) {
   // Fallback to hierarchicalAccess.rolePermissions when available
   const rolePerms = currentUser.hierarchicalAccess?.rolePermissions || {};
   if (typeof rolePerms[permissionKey] === 'boolean') return rolePerms[permissionKey];
-  return false;
+  // If permission is undefined, default to true (allow access) for consistency with ProtectedRoute
+  return true;
 }
 
 export function getUserRestrictions(currentUser) {

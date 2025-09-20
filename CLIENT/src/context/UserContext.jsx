@@ -88,6 +88,32 @@ const UserProvider = ({ children }) => {
       const haRes = await api.get("/api/hierarchical-rbac/my-access", { headers: devHeaders });
       const accessInfo = haRes?.data?.accessInfo;
 
+      // Also load current user's assignment to get workflow roles
+      let userWorkflowRoles = [];
+      try {
+        const userId = cu?.Id || cu?.id || cu?.userId || (Array.isArray(cu?.Username) ? cu.Username[0] : cu?.Username);
+        if (userId) {
+          const assignmentRes = await api.get(`/api/hierarchical-rbac/assignments/${userId}`, { headers: devHeaders });
+          if (assignmentRes?.data?.assignment?.workflowRoles) {
+            userWorkflowRoles = assignmentRes.data.assignment.workflowRoles;
+          }
+
+          // If user has FULL access but no workflow roles, auto-assign them
+          if (accessInfo?.scope === 'FULL' && (!userWorkflowRoles || userWorkflowRoles.length === 0)) {
+            console.log('🔧 Auto-assigning workflow roles for FULL access user');
+            userWorkflowRoles = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'regionCreator', 'regionFinalVerifier'];
+          }
+        }
+      } catch (assignmentError) {
+        console.log('Could not load user assignment for workflow roles:', assignmentError.message);
+
+        // If we can't load assignment but user has FULL access, auto-assign workflow roles
+        if (accessInfo?.scope === 'FULL') {
+          console.log('🔧 Auto-assigning workflow roles for FULL access user (fallback)');
+          userWorkflowRoles = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'regionCreator', 'regionFinalVerifier'];
+        }
+      }
+
       if (accessInfo) {
         // Normalize regions for backward-compat fields
         const normalizedRegions = (accessInfo.accessibleRegions || []).map((r) => ({
@@ -100,7 +126,10 @@ const UserProvider = ({ children }) => {
 
         const updatedUser = {
           ...currentUser,
-          hierarchicalAccess: accessInfo,
+          hierarchicalAccess: {
+            ...accessInfo,
+            workflowRoles: accessInfo.workflowRoles || userWorkflowRoles
+          },
           regions: normalizedRegions,
         };
         setCurrentUser(updatedUser);
@@ -261,6 +290,20 @@ const UserProvider = ({ children }) => {
             const haRes = await api.get("/api/hierarchical-rbac/my-access", { headers: devHeaders });
             const accessInfo = haRes?.data?.accessInfo;
 
+            // Also load current user's assignment to get workflow roles
+            let userWorkflowRoles = [];
+            try {
+              const userId = user?.Id || user?.id || user?.userId || (Array.isArray(user?.Username) ? user.Username[0] : user?.Username);
+              if (userId) {
+                const assignmentRes = await api.get(`/api/hierarchical-rbac/assignments/${userId}`, { headers: devHeaders });
+                if (assignmentRes?.data?.assignment?.workflowRoles) {
+                  userWorkflowRoles = assignmentRes.data.assignment.workflowRoles;
+                }
+              }
+            } catch (assignmentError) {
+              console.log('Could not load user assignment for workflow roles:', assignmentError.message);
+            }
+
             if (accessInfo) {
               const normalizedRegions = (accessInfo.accessibleRegions || []).map((r) => ({
                 id: r._id,
@@ -272,7 +315,10 @@ const UserProvider = ({ children }) => {
 
               user = {
                 ...user,
-                hierarchicalAccess: accessInfo,
+                hierarchicalAccess: {
+                  ...accessInfo,
+                  workflowRoles: accessInfo.workflowRoles || userWorkflowRoles
+                },
                 regions: normalizedRegions,
               };
             }

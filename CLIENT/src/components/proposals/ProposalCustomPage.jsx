@@ -95,7 +95,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import BudgetSummary from "./BudgetSummary";
 import { hasPermission, PERMISSIONS } from "../../utils/permissions";
 import { useUserRestrictions } from "../../hooks/useUserRestrictions";
-import { AccessStatusIndicator } from "../common/AccessStatusIndicator";
 
 const CustomPage = ({
   dataListName,
@@ -2258,7 +2257,6 @@ const CustomPage = ({
         description={description}
         searchable={searchable}
       />
-      <AccessStatusIndicator />
       <StyledBox>
         {/* Add fiscal year and budget type indicator */}
         {/* Consolidated Header Section */}

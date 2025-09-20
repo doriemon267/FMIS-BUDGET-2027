@@ -76,7 +76,7 @@ const MenuProps = {
 const ACCESS_LEVELS = [
   { value: 'RESPONSIBILITY_CENTER', label: 'Responsibility Center Level', icon: <BusinessIcon />, color: '#2196F3' },
   { value: 'OFFICE', label: 'Office Level', icon: <DomainIcon />, color: '#FF9800' },
-  { value: 'FULL', label: 'Full Access (Admin)', icon: <HierarchyIcon />, color: '#9C27B0' },
+  { value: 'FULL', label: 'Administrative Level', icon: <HierarchyIcon />, color: '#9C27B0' },
   { value: 'OWN_ONLY', label: 'Own Records Only', icon: <PersonIcon />, color: '#757575' }
 ];
 
@@ -86,14 +86,15 @@ const WORKFLOW_ROLES = [
   { key: 'officeCreator', label: 'Office Creator', description: 'Create proposals at office level' },
   { key: 'officeConsolidator', label: 'Office Consolidator', description: 'Consolidate responsibility center to office' },
   { key: 'officeSubmission', label: 'Office Submission', description: 'Submit office proposals for finalization' },
-  { key: 'officeFinalVerifier', label: 'Office Final Verifier', description: 'Final verification/approval at office' }
+  { key: 'officeFinalVerifier', label: 'Office Final Verifier', description: 'Final verification/approval at office' },
+  { key: 'regionCreator', label: 'Region Creator', description: 'Create and manage regional settings' }
 ];
 
 const getDefaultWorkflowRolesMap = () =>
   WORKFLOW_ROLES.reduce((acc, r) => ({ ...acc, [r.key]: false }), {});
 
 const HierarchicalUserAssignmentPage = () => {
-  const { currentUser, jwtToken } = useUser();
+  const { currentUser, jwtToken, refetchUserProfile } = useUser();
   const queryClient = useQueryClient();
 
   // Pagination state
@@ -296,6 +297,8 @@ const HierarchicalUserAssignmentPage = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries(['hierarchical-assignments']);
+      // Refresh current user's hierarchical access data
+      refetchUserProfile();
 
       // Show detailed success message with auto-assigned permissions
       let successMessage = 'Hierarchical assignment saved successfully';
@@ -347,6 +350,8 @@ const HierarchicalUserAssignmentPage = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['hierarchical-assignments']);
+      // Refresh current user's hierarchical access data
+      refetchUserProfile();
       setSnackbar({
         open: true,
         message: 'Hierarchical assignment deleted successfully',
@@ -374,6 +379,8 @@ const HierarchicalUserAssignmentPage = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['hierarchical-assignments']);
+      // Refresh current user's hierarchical access data
+      refetchUserProfile();
       setSnackbar({
         open: true,
         message: 'Workflow roles updated successfully',
@@ -499,8 +506,8 @@ const HierarchicalUserAssignmentPage = () => {
       officeCreator: 'departmentCreator',
       officeConsolidator: 'departmentConsolidator',
       officeSubmission: 'departmentSubmission',
-      // Closest server role for a final verifier at higher level
-      officeFinalVerifier: 'regionFinalVerifier'
+      officeFinalVerifier: 'regionFinalVerifier',
+      regionCreator: 'regionCreator'
     };
     const serverWorkflowRoles = uiSelectedRoles
       .map((r) => roleMap[r])
@@ -546,8 +553,17 @@ const HierarchicalUserAssignmentPage = () => {
     setDeleteUserId(null);
   };
 
+  const normalizeAssignmentLevel = (level) => {
+    return level === 'DIVISION'
+      ? 'RESPONSIBILITY_CENTER'
+      : level === 'DEPARTMENT'
+        ? 'OFFICE'
+        : level;
+  };
+
   const getAccessLevelInfo = (level) => {
-    return ACCESS_LEVELS.find(al => al.value === level) || ACCESS_LEVELS[0];
+    const normalizedLevel = normalizeAssignmentLevel(level);
+    return ACCESS_LEVELS.find(al => al.value === normalizedLevel) || ACCESS_LEVELS[0];
   };
 
   const getConsolidationInfo = (level) => {
@@ -557,7 +573,7 @@ const HierarchicalUserAssignmentPage = () => {
       case 'OFFICE':
         return 'Proposals saved directly to Office';
       case 'FULL':
-        return 'Can access all organizational levels';
+        return 'Can access all organizational levels (all permissions and workflow roles automatically granted)';
       default:
         return 'Access limited to own records';
     }
@@ -586,12 +602,12 @@ const HierarchicalUserAssignmentPage = () => {
     const { offices = [], responsibilityCenters = [] } = organizationStructure.availableUnits;
 
     // For FULL access, show special message
-    if (assignment.assignmentLevel === 'FULL') {
+    if (normalizeAssignmentLevel(assignment.assignmentLevel) === 'FULL') {
       return 'All Organizations';
     }
 
     // For OWN_ONLY access
-    if (assignment.assignmentLevel === 'OWN_ONLY') {
+    if (normalizeAssignmentLevel(assignment.assignmentLevel) === 'OWN_ONLY') {
       return 'Own Records Only';
     }
 
@@ -613,18 +629,18 @@ const HierarchicalUserAssignmentPage = () => {
     }
 
     // For REGION level assignments
-    if (assignment.assignmentLevel === 'REGION' && assignment.regions?.length > 0) {
+    if (normalizeAssignmentLevel(assignment.assignmentLevel) === 'REGION' && assignment.regions?.length > 0) {
       const region = assignment.regions[0];
       return `Region: ${region.regionName || region.Region || 'Unknown'}`;
     }
 
     // For OFFICE level assignments without specific office
-    if (assignment.assignmentLevel === 'OFFICE') {
+    if (normalizeAssignmentLevel(assignment.assignmentLevel) === 'OFFICE') {
       return 'Office Level Access';
     }
 
     // For RESPONSIBILITY_CENTER level assignments without specific center
-    if (assignment.assignmentLevel === 'RESPONSIBILITY_CENTER') {
+    if (normalizeAssignmentLevel(assignment.assignmentLevel) === 'RESPONSIBILITY_CENTER') {
       return 'Responsibility Center Access';
     }
 
@@ -720,6 +736,7 @@ const HierarchicalUserAssignmentPage = () => {
                   value={ACCESS_LEVELS.find(level => level.value === formData.assignmentLevel) || ACCESS_LEVELS[1]}
                   onChange={(event, newValue) => {
                     const newLevel = newValue?.value || 'OFFICE';
+                    const oldLevel = formData.assignmentLevel;
                     handleFormChange('assignmentLevel', newLevel);
                     // Clear office and responsibility center when assignment level changes
                     handleFormChange('officeId', '');
@@ -737,6 +754,17 @@ const HierarchicalUserAssignmentPage = () => {
                     if (isOwn) {
                       // No workflow roles for OWN_ONLY
                       Object.keys(nextRoles).forEach(k => { nextRoles[k] = false; });
+                      // Reset permissions for OWN_ONLY
+                      handleFormChange('rolePermissions', {
+                        CreateProposals: true,
+                        EditOwnProposals: true,
+                        EditAllProposals: false,
+                        DeleteProposals: false,
+                        ApproveProposals: false,
+                        ViewReports: true,
+                        ManageUsers: false,
+                        ManageSettings: false
+                      });
                     } else if (isRC) {
                       // Only RC roles allowed
                       setRole('responsibilityCenterCreator', !!nextRoles.responsibilityCenterCreator);
@@ -745,6 +773,19 @@ const HierarchicalUserAssignmentPage = () => {
                       setRole('officeConsolidator', false);
                       setRole('officeSubmission', false);
                       setRole('officeFinalVerifier', false);
+                      // If changing FROM FULL, reset to basic permissions
+                      if (oldLevel === 'FULL') {
+                        handleFormChange('rolePermissions', {
+                          CreateProposals: true,
+                          EditOwnProposals: true,
+                          EditAllProposals: false,
+                          DeleteProposals: false,
+                          ApproveProposals: false,
+                          ViewReports: true,
+                          ManageUsers: false,
+                          ManageSettings: false
+                        });
+                      }
                     } else if (isOffice) {
                       // Office roles allowed; RC creator optional -> keep selection
                       setRole('officeCreator', !!nextRoles.officeCreator);
@@ -754,8 +795,33 @@ const HierarchicalUserAssignmentPage = () => {
                       // RC roles are typically not applicable at pure office scope
                       setRole('responsibilityCenterCreator', false);
                       setRole('responsibilityCenterApprover', false);
+                      // If changing FROM FULL, reset to basic permissions
+                      if (oldLevel === 'FULL') {
+                        handleFormChange('rolePermissions', {
+                          CreateProposals: true,
+                          EditOwnProposals: true,
+                          EditAllProposals: true,
+                          DeleteProposals: false,
+                          ApproveProposals: true,
+                          ViewReports: true,
+                          ManageUsers: false,
+                          ManageSettings: false
+                        });
+                      }
                     } else if (isFull) {
-                      // All roles permitted; keep as-is
+                      // All roles permitted; automatically grant all workflow roles for FULL access
+                      Object.keys(nextRoles).forEach(k => { nextRoles[k] = true; });
+                      // Automatically grant all permissions for FULL access
+                      handleFormChange('rolePermissions', {
+                        CreateProposals: true,
+                        EditOwnProposals: true,
+                        EditAllProposals: true,
+                        DeleteProposals: true,
+                        ApproveProposals: true,
+                        ViewReports: true,
+                        ManageUsers: true,
+                        ManageSettings: true
+                      });
                     }
 
                     handleFormChange('workflowRoles', nextRoles);
@@ -771,17 +837,40 @@ const HierarchicalUserAssignmentPage = () => {
                   renderOption={(props, option) => {
                     const { key, ...otherProps } = props;
                     return (
-                      <Box component="li" key={key} {...otherProps}>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          {option.icon}
-                          <Typography sx={{ ml: 1 }}>{option.label}</Typography>
+                      <Tooltip
+                        key={key}
+                        title={
+                          option.value === 'FULL'
+                            ? 'Administrative level access to all organizational levels (all permissions and workflow roles automatically granted)'
+                            : option.value === 'RESPONSIBILITY_CENTER'
+                              ? 'Access limited to responsibility center level'
+                              : option.value === 'OFFICE'
+                                ? 'Access limited to office level'
+                                : 'Access limited to own records only'
+                        }
+                        placement="right"
+                      >
+                        <Box component="li" {...otherProps}>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            {option.icon}
+                            <Typography sx={{ ml: 1 }}>{option.label}</Typography>
+                          </Box>
                         </Box>
-                      </Box>
+                      </Tooltip>
                     );
                   }}
                   noOptionsText="No assignment levels found"
                   fullWidth
                 />
+                {formData.assignmentLevel === 'FULL' && (
+                  <Grid item xs={12}>
+                    <Alert severity="success" sx={{ mt: 1 }}>
+                      <Typography variant="body2">
+                        <strong>Administrative Level:</strong> All permissions and workflow roles are automatically granted for users with administrative access, including access to all settings pages.
+                      </Typography>
+                    </Alert>
+                  </Grid>
+                )}
               </Grid>
 
               {(formData.assignmentLevel === 'OFFICE' || formData.assignmentLevel === 'RESPONSIBILITY_CENTER') && (
@@ -1218,6 +1307,29 @@ const HierarchicalUserAssignmentPage = () => {
                         </Stack>
                       </Grid>
 
+                      {/* Administrative/Regional Roles */}
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
+                          Administrative Roles
+                        </Typography>
+                        <Stack spacing={1}>
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                checked={formData.workflowRoles.regionCreator || false}
+                                onChange={(e) => handleFormChange('workflowRoles', {
+                                  ...formData.workflowRoles,
+                                  regionCreator: e.target.checked
+                                })}
+                                size="small"
+                              />
+                            }
+                            label="Region Creator"
+                            disabled={!(formData.assignmentLevel === 'FULL')}
+                          />
+                        </Stack>
+                      </Grid>
+
                       {/* Quick Actions */}
                       <Grid item xs={12}>
                         <Stack direction="row" spacing={1} flexWrap="wrap">
@@ -1498,7 +1610,7 @@ const HierarchicalUserAssignmentPage = () => {
                                     Organization Details
                                   </Typography>
                                   <Typography variant="caption" display="block">
-                                    Level: {assignment.assignmentLevel}
+                                    Level: {getAccessLevelInfo(assignment.assignmentLevel).label}
                                   </Typography>
                                   {assignment.regions?.length > 0 && (
                                     <Typography variant="caption" display="block">
@@ -1536,7 +1648,7 @@ const HierarchicalUserAssignmentPage = () => {
                               placement="top"
                             >
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer' }}>
-                                {assignment.assignmentLevel === 'FULL' && (
+                                {normalizeAssignmentLevel(assignment.assignmentLevel) === 'FULL' && (
                                   <Chip
                                     label="FULL"
                                     size="small"
@@ -1544,7 +1656,7 @@ const HierarchicalUserAssignmentPage = () => {
                                     variant="outlined"
                                   />
                                 )}
-                                {assignment.assignmentLevel === 'OWN_ONLY' && (
+                                {normalizeAssignmentLevel(assignment.assignmentLevel) === 'OWN_ONLY' && (
                                   <Chip
                                     label="OWN"
                                     size="small"
@@ -1640,7 +1752,8 @@ const HierarchicalUserAssignmentPage = () => {
                                     departmentCreator: 'officeCreator',
                                     departmentConsolidator: 'officeConsolidator',
                                     departmentSubmission: 'officeSubmission',
-                                    regionFinalVerifier: 'officeFinalVerifier'
+                                    regionFinalVerifier: 'officeFinalVerifier',
+                                    regionCreator: 'regionCreator'
                                   };
                                   const formFields = {
                                     userId: assignment.userId,

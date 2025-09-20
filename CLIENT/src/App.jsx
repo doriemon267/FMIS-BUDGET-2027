@@ -133,12 +133,12 @@ const App = () => {
             </ProtectedRoute>
           }
         />
-
         <Route
           path="/compsettings"
           element={
             <ProtectedRoute
               requiredPermissions={["ManageSettings"]}
+              requiredWorkflowRoles={["regionCreator"]}
             >
               <CompensationSettingsPage />
             </ProtectedRoute>
@@ -149,6 +149,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["ManageSettings"]}
+              requiredWorkflowRoles={["regionCreator"]}
             >
               <SettingsManagement />
             </ProtectedRoute>
@@ -171,16 +172,6 @@ const App = () => {
               requiredPermissions={["EditAllProposals"]}
             >
               <IncomeManagementPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/categories"
-          element={
-            <ProtectedRoute
-              requiredPermissions={["ManageSettings"]}
-            >
-              <CapitalOutlayTitleMappingPage />
             </ProtectedRoute>
           }
         />
@@ -221,7 +212,10 @@ const App = () => {
         <Route
           path="/hierarchical-user-assignments"
           element={
-            <ProtectedRoute requiredPermissions={["ManageUsers"]}>
+            <ProtectedRoute 
+              requiredPermissions={["ManageUsers"]}
+              requiredWorkflowRoles={["regionCreator"]}
+            >
               <HierarchicalUserAssignmentPage />
             </ProtectedRoute>
           }
@@ -301,16 +295,6 @@ const App = () => {
           element={
             <ProtectedRoute requiredPermissions={["ViewReports"]}>
               <ComprehensiveReportsPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/database-backup"
-          element={
-            <ProtectedRoute
-              requiredPermissions={["ManageSettings"]}
-            >
-              <DatabaseBackupPage />
             </ProtectedRoute>
           }
         />

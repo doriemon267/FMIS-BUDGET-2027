@@ -68,7 +68,8 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
       departmentConsolidator: 'officeConsolidator',
       departmentSubmission: 'officeSubmission',
       regionFinalVerifier: 'officeFinalVerifier',
-      divisionCreator: 'responsibilityCenterCreator'
+      divisionCreator: 'responsibilityCenterCreator',
+      regionCreator: 'regionCreator'
     };
     const normalizedRoles = new Set([
       ...workflowRoles,

@@ -22,11 +22,11 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
   const userPermissions = hierarchicalAccess.rolePermissions || {};
   console.log('🔍 ProtectedRoute Debug:', {
     requiredPermissions,
+    requiredWorkflowRoles,
     userPermissions,
-    hierarchicalAccess: {
-      scope: hierarchicalAccess.scope,
-      workflowRoles: hierarchicalAccess.workflowRoles
-    }
+    userWorkflowRoles: hierarchicalAccess.workflowRoles || [],
+    hierarchicalAccess: hierarchicalAccess,
+    allFields: Object.keys(hierarchicalAccess)
   });
 
   const hasRequiredPermissions = requiredPermissions.length === 0 ||
@@ -42,10 +42,30 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
       return hasPermission;
     });
 
-  // Check workflow roles
-  const userWorkflowRoles = hierarchicalAccess.workflowRoles || [];
+  // Check workflow roles - try multiple possible field names
+  const userWorkflowRoles = hierarchicalAccess.workflowRoles ||
+                           hierarchicalAccess.roles ||
+                           hierarchicalAccess.userRoles ||
+                           [];
+
+  // Special handling for FULL access users - ensure they have regionCreator role
+  let effectiveWorkflowRoles = [...userWorkflowRoles];
+  if (hierarchicalAccess.scope === 'FULL' && !effectiveWorkflowRoles.includes('regionCreator')) {
+    console.log('🔧 Adding regionCreator role for FULL access user');
+    effectiveWorkflowRoles.push('regionCreator');
+  }
+
   const hasRequiredWorkflowRoles = requiredWorkflowRoles.length === 0 ||
-    requiredWorkflowRoles.some(role => userWorkflowRoles.includes(role));
+    requiredWorkflowRoles.every(role => effectiveWorkflowRoles.includes(role));
+
+  console.log('🔍 Workflow Roles Check:', {
+    requiredWorkflowRoles,
+    userWorkflowRoles,
+    effectiveWorkflowRoles,
+    hasRequiredWorkflowRoles,
+    missingRoles: requiredWorkflowRoles.filter(role => !effectiveWorkflowRoles.includes(role)),
+    isFullAccess: hierarchicalAccess.scope === 'FULL'
+  });
 
   // User must have both required permissions AND required workflow roles
   if (!hasRequiredPermissions || !hasRequiredWorkflowRoles) {
