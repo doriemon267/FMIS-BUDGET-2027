@@ -460,7 +460,16 @@ const HierarchicalUserAssignmentPage = () => {
       return;
     }
 
-    if (formData.assignmentLevel === 'RESPONSIBILITY_CENTER' && (!formData.officeId || !formData.responsibilityCenterName)) {
+    // Normalize legacy levels to new structure for submission
+    const normalizedLevel =
+      formData.assignmentLevel === 'DIVISION'
+        ? 'RESPONSIBILITY_CENTER'
+        : formData.assignmentLevel === 'DEPARTMENT'
+          ? 'OFFICE'
+          : formData.assignmentLevel;
+
+    // Validate based on normalized level
+    if (normalizedLevel === 'RESPONSIBILITY_CENTER' && (!formData.officeId || !formData.responsibilityCenterName)) {
       setSnackbar({
         open: true,
         message: 'Responsibility Center assignment requires Office and Responsibility Center',
@@ -469,40 +478,57 @@ const HierarchicalUserAssignmentPage = () => {
       return;
     }
 
-    if (formData.assignmentLevel === 'OFFICE' && !formData.officeId) {
+    if (normalizedLevel === 'OFFICE' && !formData.officeId) {
       setSnackbar({
         open: true,
-        message: 'Office assignment requires Office',
+        message: 'Office assignment requires Office selection',
         severity: 'warning'
       });
       return;
     }
 
-    const selectedWorkflowRoles = Object.entries(formData.workflowRoles || {})
+    // Gather selected workflow roles from UI
+    const uiSelectedRoles = Object.entries(formData.workflowRoles || {})
       .filter(([, v]) => v)
       .map(([k]) => k);
+
+    // Map UI workflow roles to server-allowed role keys
+    const roleMap = {
+      responsibilityCenterCreator: 'divisionCreator',
+      responsibilityCenterApprover: 'divisionApprover',
+      officeCreator: 'departmentCreator',
+      officeConsolidator: 'departmentConsolidator',
+      officeSubmission: 'departmentSubmission',
+      // Closest server role for a final verifier at higher level
+      officeFinalVerifier: 'regionFinalVerifier'
+    };
+    const serverWorkflowRoles = uiSelectedRoles
+      .map((r) => roleMap[r])
+      .filter(Boolean);
 
     const payload = {
       userId: formData.userId,
       userName: formData.userName,
       email: formData.email,
-      assignmentLevel: formData.assignmentLevel,
-      accessScope: formData.assignmentLevel,
+      assignmentLevel: normalizedLevel,
+      accessScope: normalizedLevel,
+      // Map officeId to departmentId and responsibilityCenterName to divisionName for server compatibility
+      departmentId: formData.officeId,
+      divisionName: formData.responsibilityCenterName,
       officeId: formData.officeId,
       responsibilityCenterName: formData.responsibilityCenterName,
       rolePermissions: {
         ...formData.rolePermissions,
-        ApproveProposals: selectedWorkflowRoles.includes('officeFinalVerifier')
+        // Preserve existing UI behavior for ApproveProposals toggle
+        ApproveProposals: uiSelectedRoles.includes('officeFinalVerifier')
           ? true
           : formData.rolePermissions.ApproveProposals
       },
       restrictions: formData.restrictions
     };
 
-    // Only include workflowRoles if there are any selected
-    if (selectedWorkflowRoles.length > 0) {
-      payload.workflowRoles = selectedWorkflowRoles;
-    }
+    // Always include workflowRoles (can be an empty array to explicitly clear roles)
+    payload.workflowRoles = serverWorkflowRoles;
 
     createOrUpdateMutation.mutate(payload);
   };
@@ -693,10 +719,46 @@ const HierarchicalUserAssignmentPage = () => {
                   getOptionLabel={(option) => option.label || ''}
                   value={ACCESS_LEVELS.find(level => level.value === formData.assignmentLevel) || ACCESS_LEVELS[1]}
                   onChange={(event, newValue) => {
-                    handleFormChange('assignmentLevel', newValue?.value || 'OFFICE');
+                    const newLevel = newValue?.value || 'OFFICE';
+                    handleFormChange('assignmentLevel', newLevel);
                     // Clear office and responsibility center when assignment level changes
                     handleFormChange('officeId', '');
                     handleFormChange('responsibilityCenterName', '');
+                    // Enforce role applicability (Option A: strict disable)
+                    const nextRoles = { ...formData.workflowRoles };
+                    const isRC = newLevel === 'RESPONSIBILITY_CENTER';
+                    const isOffice = newLevel === 'OFFICE';
+                    const isFull = newLevel === 'FULL';
+                    const isOwn = newLevel === 'OWN_ONLY';
+
+                    // Helper to set a role value safely
+                    const setRole = (key, val) => { nextRoles[key] = !!val; };
+
+                    if (isOwn) {
+                      // No workflow roles for OWN_ONLY
+                      Object.keys(nextRoles).forEach(k => { nextRoles[k] = false; });
+                    } else if (isRC) {
+                      // Only RC roles allowed
+                      setRole('responsibilityCenterCreator', !!nextRoles.responsibilityCenterCreator);
+                      setRole('responsibilityCenterApprover', !!nextRoles.responsibilityCenterApprover);
+                      setRole('officeCreator', false);
+                      setRole('officeConsolidator', false);
+                      setRole('officeSubmission', false);
+                      setRole('officeFinalVerifier', false);
+                    } else if (isOffice) {
+                      // Office roles allowed; RC creator optional -> keep selection
+                      setRole('officeCreator', !!nextRoles.officeCreator);
+                      setRole('officeConsolidator', !!nextRoles.officeConsolidator);
+                      setRole('officeSubmission', !!nextRoles.officeSubmission);
+                      setRole('officeFinalVerifier', !!nextRoles.officeFinalVerifier);
+                      // RC roles are typically not applicable at pure office scope
+                      setRole('responsibilityCenterCreator', false);
+                      setRole('responsibilityCenterApprover', false);
+                    } else if (isFull) {
+                      // All roles permitted; keep as-is
+                    }
+
+                    handleFormChange('workflowRoles', nextRoles);
                   }}
                   renderInput={(params) => (
                     <TextField
@@ -729,7 +791,9 @@ const HierarchicalUserAssignmentPage = () => {
                     getOptionLabel={(option) => option.name || ''}
                     value={organizationStructure?.availableUnits?.offices?.find(office => office.id === formData.officeId) || null}
                     onChange={(event, newValue) => {
-                      handleFormChange('officeId', newValue?.id || '');
+                      // Handle both object (selected option) and string (free text) cases
+                      const officeId = (typeof newValue === 'object' && newValue?.id) ? newValue.id : '';
+                      handleFormChange('officeId', officeId);
                       // Clear responsibility center when office changes
                       if (formData.assignmentLevel === 'RESPONSIBILITY_CENTER') {
                         handleFormChange('responsibilityCenterName', '');
@@ -772,7 +836,9 @@ const HierarchicalUserAssignmentPage = () => {
                     value={organizationStructure?.availableUnits?.responsibilityCenters
                       ?.find(rc => rc.name === formData.responsibilityCenterName) || null}
                     onChange={(event, newValue) => {
-                      handleFormChange('responsibilityCenterName', newValue?.name || '');
+                      // Handle both object (selected option) and string (free text) cases
+                      const centerName = (typeof newValue === 'object' && newValue?.name) ? newValue.name : '';
+                      handleFormChange('responsibilityCenterName', centerName);
                     }}
                     renderInput={(params) => (
                       <TextField
@@ -1019,6 +1085,169 @@ const HierarchicalUserAssignmentPage = () => {
                             })}
                           >
                             Revoke All
+                          </Button>
+                        </Stack>
+                      </Grid>
+                    </Grid>
+                  </AccordionDetails>
+                </Accordion>
+
+                {/* Workflow Roles Section */}
+                <Accordion sx={{ mt: 2 }}>
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreIcon />}
+                    aria-controls="workflow-roles-content"
+                    id="workflow-roles-header"
+                  >
+                    <Typography variant="subtitle1" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <HierarchyIcon fontSize="small" />
+                      Workflow Roles
+                      <Chip
+                        label={`${Object.values(formData.workflowRoles || {}).filter(Boolean).length} selected`}
+                        size="small"
+                        color="secondary"
+                        variant="outlined"
+                      />
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Typography variant="body2" color="text.secondary" gutterBottom sx={{ mb: 2 }}>
+                      Select workflow roles to assign. These map to the backend's legacy roles automatically.
+                    </Typography>
+
+                    <Grid container spacing={2}>
+                      {/* Responsibility Center Roles */}
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
+                          Responsibility Center Roles
+                        </Typography>
+                        <Stack spacing={1}>
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                checked={formData.workflowRoles.responsibilityCenterCreator || false}
+                                onChange={(e) => handleFormChange('workflowRoles', {
+                                  ...formData.workflowRoles,
+                                  responsibilityCenterCreator: e.target.checked
+                                })}
+                                size="small"
+                              />
+                            }
+                            label="Responsibility Center Creator"
+                            disabled={!(formData.assignmentLevel === 'RESPONSIBILITY_CENTER' || formData.assignmentLevel === 'FULL')}
+                          />
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                checked={formData.workflowRoles.responsibilityCenterApprover || false}
+                                onChange={(e) => handleFormChange('workflowRoles', {
+                                  ...formData.workflowRoles,
+                                  responsibilityCenterApprover: e.target.checked
+                                })}
+                                size="small"
+                              />
+                            }
+                            label="Responsibility Center Approver"
+                            disabled={!(formData.assignmentLevel === 'RESPONSIBILITY_CENTER' || formData.assignmentLevel === 'FULL')}
+                          />
+                        </Stack>
+                      </Grid>
+
+                      {/* Office Roles */}
+                      <Grid item xs={12} sm={6}>
+                        <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
+                          Office Roles
+                        </Typography>
+                        <Stack spacing={1}>
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                checked={formData.workflowRoles.officeCreator || false}
+                                onChange={(e) => handleFormChange('workflowRoles', {
+                                  ...formData.workflowRoles,
+                                  officeCreator: e.target.checked
+                                })}
+                                size="small"
+                              />
+                            }
+                            label="Office Creator"
+                            disabled={!(formData.assignmentLevel === 'OFFICE' || formData.assignmentLevel === 'FULL')}
+                          />
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                checked={formData.workflowRoles.officeConsolidator || false}
+                                onChange={(e) => handleFormChange('workflowRoles', {
+                                  ...formData.workflowRoles,
+                                  officeConsolidator: e.target.checked
+                                })}
+                                size="small"
+                              />
+                            }
+                            label="Office Consolidator"
+                            disabled={!(formData.assignmentLevel === 'OFFICE' || formData.assignmentLevel === 'FULL')}
+                          />
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                checked={formData.workflowRoles.officeSubmission || false}
+                                onChange={(e) => handleFormChange('workflowRoles', {
+                                  ...formData.workflowRoles,
+                                  officeSubmission: e.target.checked
+                                })}
+                                size="small"
+                              />
+                            }
+                            label="Office Submission"
+                            disabled={!(formData.assignmentLevel === 'OFFICE' || formData.assignmentLevel === 'FULL')}
+                          />
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                checked={formData.workflowRoles.officeFinalVerifier || false}
+                                onChange={(e) => handleFormChange('workflowRoles', {
+                                  ...formData.workflowRoles,
+                                  officeFinalVerifier: e.target.checked
+                                })}
+                                size="small"
+                              />
+                            }
+                            label="Office Final Verifier"
+                            disabled={!(formData.assignmentLevel === 'OFFICE' || formData.assignmentLevel === 'FULL')}
+                          />
+                        </Stack>
+                      </Grid>
+
+                      {/* Quick Actions */}
+                      <Grid item xs={12}>
+                        <Stack direction="row" spacing={1} flexWrap="wrap">
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => handleFormChange('workflowRoles', getDefaultWorkflowRolesMap())}
+                          >
+                            Clear All
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="primary"
+                            onClick={() => handleFormChange('workflowRoles', WORKFLOW_ROLES.reduce((acc, r) => ({ ...acc, [r.key]: true }), {}))}
+                          >
+                            Select All
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            onClick={() => handleFormChange('workflowRoles', {
+                              ...getDefaultWorkflowRolesMap(),
+                              responsibilityCenterCreator: formData.assignmentLevel === 'RESPONSIBILITY_CENTER' || formData.assignmentLevel === 'OFFICE',
+                              officeCreator: formData.assignmentLevel === 'OFFICE',
+                              officeConsolidator: formData.assignmentLevel === 'OFFICE',
+                              officeSubmission: formData.assignmentLevel === 'OFFICE'
+                            })}
+                          >
+                            Suggest for Level
                           </Button>
                         </Stack>
                       </Grid>
@@ -1405,6 +1634,14 @@ const HierarchicalUserAssignmentPage = () => {
                                 onClick={() => {
                                   setEditingAssignment(assignment);
                                   // Extract only the necessary form fields from the assignment
+                                  const reverseRoleMap = {
+                                    divisionCreator: 'responsibilityCenterCreator',
+                                    divisionApprover: 'responsibilityCenterApprover',
+                                    departmentCreator: 'officeCreator',
+                                    departmentConsolidator: 'officeConsolidator',
+                                    departmentSubmission: 'officeSubmission',
+                                    regionFinalVerifier: 'officeFinalVerifier'
+                                  };
                                   const formFields = {
                                     userId: assignment.userId,
                                     userName: assignment.userName,
@@ -1430,10 +1667,12 @@ const HierarchicalUserAssignmentPage = () => {
                                         return activeSetting ? [activeSetting.fiscalYear] : [new Date().getFullYear().toString()];
                                       })()
                                     },
-                                    workflowRoles: assignment.workflowRoles?.reduce((acc, role) => ({
-                                      ...acc,
-                                      [role]: true
-                                    }), getDefaultWorkflowRolesMap()) || getDefaultWorkflowRolesMap()
+                                    // Convert legacy roles from server back to UI keys for checkbox map
+                                    workflowRoles: (assignment.workflowRoles || []).reduce((acc, legacyRole) => {
+                                      const uiKey = reverseRoleMap[legacyRole];
+                                      if (uiKey) acc[uiKey] = true;
+                                      return acc;
+                                    }, getDefaultWorkflowRolesMap())
                                   };
                                   setFormData(formFields);
                                   setShowPermissions(true); // Show permissions when editing

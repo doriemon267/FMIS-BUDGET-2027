@@ -47,11 +47,16 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
 
       try {
         assignment = await UserOrganizationalAssignment.getUserPermissions(userId);
-        if (assignment) {
+        // Check if this is a real database record or just defaults
+        if (assignment && assignment._id) {
           isNewStructure = true;
+        } else {
+          // This is just default values, skip to old structure
+          assignment = null;
         }
       } catch (error) {
         console.log('New assignment model not available, trying old model');
+        assignment = null;
       }
 
       if (!assignment) {
@@ -783,18 +788,31 @@ const submissionWorkflowTransitions = {
           _id: { $in: objectIds },
           $or: [
             { originalLevel: 'RESPONSIBILITY_CENTER' },
+            { originalLevel: 'DIVISION' }, // legacy support
             { originalLevel: { $exists: false } },
             { originalLevel: null },
             { originalLevel: '' }
           ],
           status: {
-            $in: ['Responsibility Center Submitted', 'RESPONSIBILITY_CENTER SUBMITTED', 'Office Verified', 'OFFICE VERIFIED']
+            $in: [
+              // Responsibility Center variants
+              'Responsibility Center Submitted',
+              'RESPONSIBILITY_CENTER SUBMITTED',
+              'RESPONSIBILITY_CENTER_SUBMITTED',
+              // Office verified variants
+              'Office Verified',
+              'OFFICE VERIFIED',
+              'OFFICE_VERIFIED',
+              // Legacy Division submissions
+              'Division Submitted',
+              'DIVISION_SUBMITTED'
+            ]
           }
         },
         {
           $set: {
             status: 'Office Verified',
-            originalLevel: 'RESPONSIBILITY_CENTER', // Ensure originalLevel is set
+            originalLevel: 'RESPONSIBILITY_CENTER', // Normalize level for legacy data
             verifiedByOfficeAt: new Date(),
             verifiedByOfficeBy: userId,
             verificationNote: verificationNote || '',

@@ -38,6 +38,17 @@ import { useUser } from "../../context/UserContext";
 
 // View Proposal Button
 export const ViewButton = ({ row }) => {
+  const { currentUser } = useUser();
+  
+  // Debug logging for user data
+  console.log('👤 ViewButton User Debug:', {
+    currentUser: currentUser,
+    hierarchicalAccess: currentUser?.hierarchicalAccess,
+    scope: currentUser?.hierarchicalAccess?.scope,
+    workflowRoles: currentUser?.hierarchicalAccess?.workflowRoles,
+    rolePermissions: currentUser?.hierarchicalAccess?.rolePermissions,
+    hierarchicalFlags: currentUser?.hierarchicalFlags
+  });
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState(null);
@@ -985,6 +996,23 @@ export const ApproveButton = ({ row, refreshData }) => {
   const [idsPreviewCount, setIdsPreviewCount] = useState(0);
   const queryClient = useQueryClient();
   const { currentUser } = useUser();
+  
+  // Debug logging for user data
+  console.log('👤 ApproveButton User Debug:', {
+    currentUser: currentUser,
+    hierarchicalAccess: currentUser?.hierarchicalAccess,
+    scope: currentUser?.hierarchicalAccess?.scope,
+    workflowRoles: currentUser?.hierarchicalAccess?.workflowRoles,
+    rolePermissions: currentUser?.hierarchicalAccess?.rolePermissions,
+    hierarchicalFlags: currentUser?.hierarchicalFlags
+  });
+  
+  // Debug logging for row data
+  console.log('📋 ApproveButton Row Debug:', {
+    rowId: row._id,
+    rowStatus: row.status,
+    fullRow: row
+  });
   const handleOpen = async () => {
     setOpen(true);
     // Prefetch affected record count
@@ -1002,21 +1030,58 @@ export const ApproveButton = ({ row, refreshData }) => {
   const scope = currentUser?.hierarchicalAccess?.scope;
   const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
   const canApprovePermission = currentUser?.hierarchicalFlags?.canApproveProposals === true || currentUser?.hierarchicalAccess?.rolePermissions?.canApproveProposals === true;
-  const canApprove = (scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier') && canApprovePermission && row.status === 'Office Submitted';
+  
+  // Department users with departmentConsolidator role can approve Division Submitted proposals
+  // Office users need explicit approval permission and officeFinalVerifier role
+  const canApprove = (
+    (scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && row.status === 'Division Submitted') ||
+    ((scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier') && canApprovePermission && row.status === 'Office Submitted')
+  );
+  
+  // Debug logging
+  console.log('🔍 ApproveButton Debug:', {
+    scope,
+    roles,
+    rowStatus: row.status,
+    canApprove,
+    departmentCondition: scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && row.status === 'Division Submitted',
+    officeCondition: (scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier') && canApprovePermission && row.status === 'Office Submitted',
+    hasDepartmentConsolidator: roles.includes('departmentConsolidator'),
+    hasOfficeFinalVerifier: roles.includes('officeFinalVerifier'),
+    canApprovePermission
+  });
+  
   if (!canApprove) return null;
 
   const handleApprove = async () => {
     setLoading(true);
     try {
-      const ids = await fetchIdsForRow(row, 'Office Submitted');
-      if (ids.length === 0) throw new Error('No records to approve');
       const entity = mapCobToEntity(row.cobExpenditures);
-      await api.post('/api/submission-workflow/office/approve-submission', {
-        ids,
-        entity,
-        officeApprovalNote: note || `Approved at Office on ${new Date().toLocaleString()}`
-      });
-      toast.success('Office approval successful');
+      
+      if (scope === 'DEPARTMENT' && row.status === 'Division Submitted') {
+        // Department approval: Division Submitted → Department Verified
+        const ids = await fetchIdsForRow(row, 'Division Submitted');
+        if (ids.length === 0) throw new Error('No records to approve');
+        
+        await api.post('/api/submission-workflow/office/verify-submission', {
+          ids,
+          entity,
+          departmentVerificationNote: note || `Verified at Department on ${new Date().toLocaleString()}`
+        });
+        toast.success('Department verification successful');
+      } else if ((scope === 'OFFICE' || scope === 'FULL') && row.status === 'Office Submitted') {
+        // Office approval: Office Submitted → Region Approved
+        const ids = await fetchIdsForRow(row, 'Office Submitted');
+        if (ids.length === 0) throw new Error('No records to approve');
+        
+        await api.post('/api/submission-workflow/office/approve-submission', {
+          ids,
+          entity,
+          officeApprovalNote: note || `Approved at Office on ${new Date().toLocaleString()}`
+        });
+        toast.success('Office approval successful');
+      }
+      
       await queryClient.invalidateQueries(['proposals']);
       refreshData?.();
       setOpen(false);
@@ -1036,10 +1101,14 @@ export const ApproveButton = ({ row, refreshData }) => {
         </IconButton>
       </Tooltip>
       <Dialog open={open} onClose={() => !loading && setOpen(false)}>
-        <DialogTitle>Approve Submission</DialogTitle>
+        <DialogTitle>
+          {scope === 'DEPARTMENT' ? 'Verify Division Submission' : 'Approve Submission'}
+        </DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 1 }}>
-            This will move records to <strong>Region Approved</strong>.
+            This will move records to <strong>
+              {scope === 'DEPARTMENT' ? 'Department Verified' : 'Region Approved'}
+            </strong>.
           </Typography>
           <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
             {idsPreviewLoading ? 'Checking affected records…' : `Affected records: ${idsPreviewCount}`}
@@ -1159,13 +1228,49 @@ export const ReturnButton = ({ row, refreshData }) => {
   const [idsPreviewCount, setIdsPreviewCount] = useState(0);
   const queryClient = useQueryClient();
   const { currentUser } = useUser();
+  
+  // Debug logging for user data
+  console.log('👤 ReturnButton User Debug:', {
+    currentUser: currentUser,
+    hierarchicalAccess: currentUser?.hierarchicalAccess,
+    scope: currentUser?.hierarchicalAccess?.scope,
+    workflowRoles: currentUser?.hierarchicalAccess?.workflowRoles,
+    rolePermissions: currentUser?.hierarchicalAccess?.rolePermissions,
+    hierarchicalFlags: currentUser?.hierarchicalFlags
+  });
+  
+  // Debug logging for row data
+  console.log('📋 ReturnButton Row Debug:', {
+    rowId: row._id,
+    rowStatus: row.status,
+    fullRow: row
+  });
 
   const scope = currentUser?.hierarchicalAccess?.scope;
   const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
   const canReturn = (
-    (scope === 'OFFICE' && roles.includes('officeConsolidator')) ||
-    ((scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier'))
-  ) && ['Responsibility Center Submitted','Office Verified','Office Submitted','Submitted'].includes(row.status);
+    // Department users with departmentConsolidator role can return Division Submitted and Department Verified proposals
+    (scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && ['Division Submitted', 'Department Verified'].includes(row.status)) ||
+    // Office users can return various statuses
+    ((scope === 'OFFICE' && roles.includes('officeConsolidator')) ||
+     ((scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier'))) &&
+    ['Responsibility Center Submitted','Office Verified','Office Submitted','Submitted'].includes(row.status)
+  );
+  
+  // Debug logging
+  console.log('🔍 ReturnButton Debug:', {
+    scope,
+    roles,
+    rowStatus: row.status,
+    canReturn,
+    departmentCondition: scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && ['Division Submitted', 'Department Verified'].includes(row.status),
+    officeCondition: ((scope === 'OFFICE' && roles.includes('officeConsolidator')) ||
+                     ((scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier'))) &&
+                    ['Responsibility Center Submitted','Office Verified','Office Submitted','Submitted'].includes(row.status),
+    hasDepartmentConsolidator: roles.includes('departmentConsolidator'),
+    hasOfficeConsolidator: roles.includes('officeConsolidator'),
+    hasOfficeFinalVerifier: roles.includes('officeFinalVerifier')
+  });
 
   if (!canReturn) return null;
 

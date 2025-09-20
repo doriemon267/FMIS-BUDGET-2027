@@ -19,8 +19,10 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
   try {
     const adminUserRoles = req.user.Roles;
     const adminUserId = req.user.id;
+
     // Only admins can manage hierarchical assignments
     if (!hasFullAccess(adminUserRoles)) {
+      console.log('❌ Admin access denied');
       return res.status(403).json({
         success: false,
         message: 'Access denied. Admin privileges required to manage hierarchical assignments.',
@@ -73,7 +75,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       });
     }
 
-    // Validate ObjectIds if provided
+    // Validate ObjectIds if provided (use effective values after mapping)
     if (regionId && !mongoose.Types.ObjectId.isValid(regionId)) {
       return res.status(400).json({
         success: false,
@@ -81,18 +83,11 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
         code: 'INVALID_REGION_ID'
       });
     }
-    if (departmentId && !mongoose.Types.ObjectId.isValid(departmentId)) {
+    if (effectiveDepartmentId && typeof effectiveDepartmentId === 'string' && effectiveDepartmentId.trim() && !mongoose.Types.ObjectId.isValid(effectiveDepartmentId)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid departmentId format',
         code: 'INVALID_DEPARTMENT_ID'
-      });
-    }
-    if (effectiveDepartmentId && !mongoose.Types.ObjectId.isValid(effectiveDepartmentId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid officeId format',
-        code: 'INVALID_OFFICE_ID'
       });
     }
     // Build hierarchical assignment based on level
@@ -107,15 +102,26 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
     }
     // Find existing assignment or create new one
     let assignment = await HierarchicalUserAssignment.findOne({ userId, isActive: true });
-    // Validate custom workflow roles if provided
+    // Validate and normalize custom workflow roles if provided
     const ALLOWED_WORKFLOW_ROLES = [
       'divisionCreator', 'divisionApprover',
       'departmentCreator', 'departmentConsolidator', 'departmentSubmission',
       'regionCreator', 'regionFinalVerifier'
     ];
+    // Map new-structure role keys to legacy/model enum accepted by DB
+    const INCOMING_ROLE_ALIASES = {
+      officeConsolidator: 'departmentConsolidator',
+      officeFinalVerifier: 'regionFinalVerifier',
+      officeSubmission: 'departmentSubmission',
+      responsibilityCenterCreator: 'divisionCreator'
+    };
     let workflowRolesToAssign = undefined;
     if (Array.isArray(requestedWorkflowRoles)) {
-      const invalid = requestedWorkflowRoles.filter(r => !ALLOWED_WORKFLOW_ROLES.includes(r));
+      const normalized = requestedWorkflowRoles
+        .map(r => INCOMING_ROLE_ALIASES[r] || r)
+        .filter(Boolean);
+      const uniqueNormalized = [...new Set(normalized)];
+      const invalid = uniqueNormalized.filter(r => !ALLOWED_WORKFLOW_ROLES.includes(r));
       if (invalid.length > 0) {
         return res.status(400).json({
           success: false,
@@ -124,7 +130,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
           allowed: ALLOWED_WORKFLOW_ROLES
         });
       }
-      workflowRolesToAssign = requestedWorkflowRoles;
+      workflowRolesToAssign = uniqueNormalized;
     }
 
     const assignmentPayload = {
@@ -171,11 +177,11 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
     const { assignWorkflowRoles } = require('../helpers/workflowRoleManager');
     try {
       if (workflowRolesToAssign) {
-        await assignWorkflowRoles(userId, assignmentLevel, workflowRolesToAssign);
+        await assignWorkflowRoles(userId, modelAssignmentLevel, workflowRolesToAssign);
         console.log(`✅ Custom workflow roles assigned for ${userName}: ${workflowRolesToAssign.join(', ')}`);
       } else {
-        await assignWorkflowRoles(userId, assignmentLevel);
-        console.log(`✅ Workflow roles automatically assigned for ${assignmentLevel} user: ${userName}`);
+        await assignWorkflowRoles(userId, modelAssignmentLevel);
+        console.log(`✅ Workflow roles automatically assigned for ${modelAssignmentLevel} user: ${userName}`);
       }
     } catch (roleError) {
       console.error(`⚠️ Failed to auto-assign workflow roles for ${userName}:`, roleError.message);

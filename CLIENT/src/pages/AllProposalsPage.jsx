@@ -258,47 +258,70 @@ const AllProposalsPage = () => {
       label: "WORKFLOW LEVEL",
       show: true,
       customRender: (row) => {
-        // Determine workflow level based on consolidation metadata and organizational fields
+        // Use the workflowLevel field directly if available
         let level = "Unknown";
         let levelColor = "default";
-        
-        // Check consolidation metadata first
-        if (row.consolidationMetadata) {
-          const { submittedByLevel } = row.consolidationMetadata;
-          switch (submittedByLevel) {
-            case 'RESPONSIBILITY_CENTER':
-              level = "Office"; // Responsibility Center data consolidated to Office
+
+        if (row.workflowLevel) {
+          // Use the workflowLevel field directly
+          switch (row.workflowLevel.toUpperCase()) {
+            case 'DIVISION':
+              level = "Division";
+              levelColor = "primary";
+              break;
+            case 'DEPARTMENT':
+              level = "Department";
               levelColor = "secondary";
               break;
-            case 'OFFICE':
-              level = "Office"; // Office data stays at Office
+            case 'REGION':
+              level = "Region";
               levelColor = "success";
               break;
+            case 'RESPONSIBILITY_CENTER':
+              level = "Responsibility Center";
+              levelColor = "warning";
+              break;
+            case 'OFFICE':
+              level = "Office";
+              levelColor = "info";
+              break;
+            default:
+              level = row.workflowLevel;
+              levelColor = "default";
           }
-        } else {
-          // Fallback to organizational field analysis
-          if (row.originalResponsibilityCenter) {
-            level = "Office"; // Has original responsibility center, so it's consolidated office data
-            levelColor = "secondary";
-          } else if (row.originalOffice) {
-            level = "Office"; // Has original office, so it's consolidated office data
-            levelColor = "success";
-          } else if (row.responsibilityCenter && row.responsibilityCenter.trim() !== "") {
-            level = "Responsibility Center";
-            levelColor = "primary";
-          } else if (row.office && row.office.trim() !== "") {
-            level = "Office";
-            levelColor = "secondary";
-          } else if (row.office && row.office.trim() !== "") {
-            level = "Office";
-            levelColor = "success";
+        } else if (row.originalLevel) {
+          // Fallback to originalLevel if workflowLevel is not available
+          switch (row.originalLevel.toUpperCase()) {
+            case 'DIVISION':
+              level = "Division";
+              levelColor = "primary";
+              break;
+            case 'DEPARTMENT':
+              level = "Department";
+              levelColor = "secondary";
+              break;
+            case 'REGION':
+              level = "Region";
+              levelColor = "success";
+              break;
+            case 'RESPONSIBILITY_CENTER':
+              level = "Responsibility Center";
+              levelColor = "warning";
+              break;
+            case 'OFFICE':
+              level = "Office";
+              levelColor = "info";
+              break;
+            default:
+              level = row.originalLevel;
+              levelColor = "default";
           }
         }
-        
+
         return (
-          <Typography 
-            variant="body2" 
-            sx={{ 
+          <Typography
+            variant="body2"
+            sx={{
               color: `${levelColor}.main`,
               fontWeight: 'medium'
             }}
@@ -513,6 +536,18 @@ const AllProposalsPage = () => {
         const scope = currentUser?.hierarchicalAccess?.scope;
         const isResponsibilityCenter = scope === 'RESPONSIBILITY_CENTER';
         const isOffice = scope === 'OFFICE' || scope === 'FULL';
+        const isDepartment = scope === 'DEPARTMENT';
+        
+        // Debug logging
+        console.log('🔍 Schema Action Debug:', {
+          scope,
+          roles,
+          rowStatus: row.status,
+          isDepartment,
+          hasDepartmentConsolidator: roles.includes('departmentConsolidator')
+        });
+        
+        // Office level permissions
         const canVerify = isOffice && roles.includes('officeConsolidator');
         const canSubmitToOffice = isOffice && roles.includes('officeConsolidator');
         const canApproveOffice = isOffice && roles.includes('officeFinalVerifier');
@@ -520,12 +555,31 @@ const AllProposalsPage = () => {
         const canSubmitDraft = (isResponsibilityCenter && roles.includes('responsibilityCenterCreator')) || 
                                (isOffice && roles.includes('officeConsolidator'));
         
+        // Department level permissions
+        const canApproveDepartment = isDepartment && roles.includes('departmentConsolidator');
+        const canReturnDepartment = isDepartment && roles.includes('departmentConsolidator');
+        
+        // Office level conditions
         const showVerify = row.status === 'Responsibility Center Submitted' && canVerify;
         const showSubmitToOffice = row.status === 'Office Verified' && canSubmitToOffice;
         const showApprove = row.status === 'Office Submitted' && canApproveOffice;
         const showFinalize = row.status === 'Office Approved' && canFinalize;
         const showSubmitDraft = row.status === 'Draft' && canSubmitDraft;
         const showReturn = ['Responsibility Center Submitted','Office Verified','Office Submitted','Office Approved'].includes(row.status) && (canVerify || canApproveOffice);
+        
+        // Department level conditions
+        const showApproveDepartment = row.status === 'Division Submitted' && canApproveDepartment;
+        const showReturnDepartment = ['Division Submitted', 'Department Verified'].includes(row.status) && canReturnDepartment;
+        
+        // Debug logging for conditions
+        console.log('🔍 Schema Conditions Debug:', {
+          showApproveDepartment,
+          showReturnDepartment,
+          canApproveDepartment,
+          canReturnDepartment,
+          rowStatus: row.status
+        });
+        
         return (
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
             <ViewButton row={row} />
@@ -533,8 +587,10 @@ const AllProposalsPage = () => {
             {showVerify && (<VerifyButton row={row} refreshData={refreshData} />)}
             {showSubmitToOffice && (<SubmitToOfficeButton row={row} refreshData={refreshData} />)}
             {showApprove && (<ApproveButton row={row} refreshData={refreshData} />)}
+            {showApproveDepartment && (<ApproveButton row={row} refreshData={refreshData} />)}
             {showFinalize && (<FinalizeButton row={row} refreshData={refreshData} />)}
             {showReturn && (<ReturnButton row={row} refreshData={refreshData} />)}
+            {showReturnDepartment && (<ReturnButton row={row} refreshData={refreshData} />)}
           </Box>
         );
       }

@@ -20,27 +20,27 @@ const HierarchicalUserAssignmentSchema = new mongoose.Schema({
   },
   assignmentLevel: {
     type: String,
-    enum: ['DIVISION', 'DEPARTMENT', 'REGION', 'FULL'],
+    enum: ['DIVISION', 'DEPARTMENT', 'REGION', 'FULL', 'RESPONSIBILITY_CENTER', 'OFFICE'],
     required: true
   },
   regionId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'region',
     required: function() {
-      return ['DIVISION', 'DEPARTMENT', 'REGION'].includes(this.assignmentLevel);
+      return ['DIVISION', 'DEPARTMENT', 'REGION', 'RESPONSIBILITY_CENTER'].includes(this.assignmentLevel);
     }
   },
   departmentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'department',
     required: function() {
-      return ['DIVISION', 'DEPARTMENT'].includes(this.assignmentLevel);
+      return ['DIVISION', 'DEPARTMENT', 'RESPONSIBILITY_CENTER', 'OFFICE'].includes(this.assignmentLevel);
     }
   },
   divisionName: {
     type: String,
     required: function() {
-      return this.assignmentLevel === 'DIVISION';
+      return ['DIVISION', 'RESPONSIBILITY_CENTER'].includes(this.assignmentLevel);
     }
   },
   rolePermissions: {

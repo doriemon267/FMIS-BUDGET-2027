@@ -9,39 +9,45 @@
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 /**
  * Assign workflow roles to users based on their organizational level
+ * - If roles argument is OMITTED, auto-assign defaults based on level
+ * - If roles argument is PROVIDED (even []), honor it exactly (no auto-assignment)
  */
-const assignWorkflowRoles = async (userId, assignmentLevel, workflowRoles = []) => {
+const assignWorkflowRoles = async (userId, assignmentLevel, workflowRoles) => {
   try {
     const assignment = await HierarchicalUserAssignment.findOne({ userId, isActive: true });
     if (!assignment) {
       throw new Error('User assignment not found');
     }
-    // Auto-assign default workflow roles based on assignment level if none provided
-    if (workflowRoles.length === 0) {
+    const rolesArgProvided = arguments.length >= 3; // detect explicit provision
+    let rolesToSave = Array.isArray(workflowRoles) ? [...workflowRoles] : [];
+
+    if (!rolesArgProvided) {
+      // Auto-assign default workflow roles based on assignment level
       switch (assignmentLevel) {
         case 'DIVISION':
-          workflowRoles = ['divisionCreator']; // Can create division-level data
+          rolesToSave = ['divisionCreator']; // Can create division-level data
           break;
         case 'DEPARTMENT':
-          workflowRoles = ['departmentCreator', 'departmentConsolidator']; // Can create and approve division submissions
+          rolesToSave = ['departmentCreator', 'departmentConsolidator']; // Can create and approve division submissions
           break;
         case 'REGION':
-          workflowRoles = ['regionCreator', 'regionFinalVerifier']; // Can create and provide final approval
+          rolesToSave = ['regionCreator', 'regionFinalVerifier']; // Can create and provide final approval
           break;
         case 'FULL':
-          workflowRoles = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'regionCreator', 'regionFinalVerifier'];
+          rolesToSave = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'regionCreator', 'regionFinalVerifier'];
           break;
       }
     }
-    // Update the assignment with workflow roles
-    assignment.workflowRoles = workflowRoles;
+
+    // Update the assignment with workflow roles (as provided or auto)
+    assignment.workflowRoles = rolesToSave;
     await assignment.save();
     return {
       success: true,
       message: 'Workflow roles assigned successfully',
       userId,
       assignmentLevel,
-      workflowRoles
+      workflowRoles: rolesToSave
     };
   } catch (error) {
     console.error('Error assigning workflow roles:', error);
@@ -61,7 +67,22 @@ const hasWorkflowRole = async (userId, requiredRole) => {
     if (!assignment) {
       return false;
     }
-    return assignment.workflowRoles && assignment.workflowRoles.includes(requiredRole);
+
+    // Bridge new vs legacy role names used by workflow routes vs. model enum
+    // New structure routes use: officeConsolidator, officeFinalVerifier, officeSubmission, responsibilityCenterCreator
+    // Legacy/model roles are: departmentConsolidator, regionFinalVerifier, departmentSubmission, divisionCreator
+    const roleAliases = {
+      officeConsolidator: 'departmentConsolidator',
+      officeFinalVerifier: 'regionFinalVerifier',
+      officeSubmission: 'departmentSubmission',
+      responsibilityCenterCreator: 'divisionCreator'
+    };
+
+    const acceptableRoles = [requiredRole];
+    if (roleAliases[requiredRole]) acceptableRoles.push(roleAliases[requiredRole]);
+
+    const roles = assignment.workflowRoles || [];
+    return acceptableRoles.some(r => roles.includes(r));
   } catch (error) {
     console.error('Error checking workflow role:', error);
     return false;
