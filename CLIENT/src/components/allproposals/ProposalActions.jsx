@@ -221,6 +221,18 @@ export const ViewButton = ({ row }) => {
     }
   };
 
+  // Allow external triggers (e.g., Actions menu) to open this view dialog
+  useEffect(() => {
+    const handler = (e) => {
+      const incoming = e?.detail?.row;
+      if (incoming?._id && row?._id && String(incoming._id) === String(row._id)) {
+        handleView();
+      }
+    };
+    window.addEventListener('open-proposal-view', handler);
+    return () => window.removeEventListener('open-proposal-view', handler);
+  }, [row?._id]);
+
   // Helper function to format currency
   const formatCurrency = (value) => {
     return typeof value === 'number' 

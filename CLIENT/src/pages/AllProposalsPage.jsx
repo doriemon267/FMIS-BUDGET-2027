@@ -1,7 +1,8 @@
 import React, { useRef, useState, useEffect } from "react";
 import ProposalCustomPage from "../components/allproposals/ProposalCustomPage";
 import TextSearchable from "../global/components/TextSearchable";
-import { ViewButton, ApproveButton, ReturnButton, VerifyButton, SubmitToOfficeButton, FinalizeButton, SubmitDraftButton } from "../components/allproposals/ProposalActions";
+import { ViewButton } from "../components/allproposals/ProposalActions";
+import WorkflowActions from "../components/workflow/WorkflowActions";
 import { useUser } from "../context/UserContext";
 import { 
   Box, 
@@ -532,65 +533,27 @@ const AllProposalsPage = () => {
       label: "ACTIONS",
       show: true,
       customRender: (row) => {
-        const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
-        const scope = currentUser?.hierarchicalAccess?.scope;
-        const isResponsibilityCenter = scope === 'RESPONSIBILITY_CENTER';
-        const isOffice = scope === 'OFFICE' || scope === 'FULL';
-        const isDepartment = scope === 'DEPARTMENT';
-        
-        // Debug logging
-        console.log('🔍 Schema Action Debug:', {
-          scope,
-          roles,
-          rowStatus: row.status,
-          isDepartment,
-          hasDepartmentConsolidator: roles.includes('departmentConsolidator')
-        });
-        
-        // Office level permissions
-        const canVerify = isOffice && roles.includes('officeConsolidator');
-        const canSubmitToOffice = isOffice && roles.includes('officeConsolidator');
-        const canApproveOffice = isOffice && roles.includes('officeFinalVerifier');
-        const canFinalize = isOffice && roles.includes('officeFinalVerifier');
-        const canSubmitDraft = (isResponsibilityCenter && roles.includes('responsibilityCenterCreator')) || 
-                               (isOffice && roles.includes('officeConsolidator'));
-        
-        // Department level permissions
-        const canApproveDepartment = isDepartment && roles.includes('departmentConsolidator');
-        const canReturnDepartment = isDepartment && roles.includes('departmentConsolidator');
-        
-        // Office level conditions
-        const showVerify = row.status === 'Responsibility Center Submitted' && canVerify;
-        const showSubmitToOffice = row.status === 'Office Verified' && canSubmitToOffice;
-        const showApprove = row.status === 'Office Submitted' && canApproveOffice;
-        const showFinalize = row.status === 'Office Approved' && canFinalize;
-        const showSubmitDraft = row.status === 'Draft' && canSubmitDraft;
-        const showReturn = ['Responsibility Center Submitted','Office Verified','Office Submitted','Office Approved'].includes(row.status) && (canVerify || canApproveOffice);
-        
-        // Department level conditions
-        const showApproveDepartment = row.status === 'Division Submitted' && canApproveDepartment;
-        const showReturnDepartment = ['Division Submitted', 'Department Verified'].includes(row.status) && canReturnDepartment;
-        
-        // Debug logging for conditions
-        console.log('🔍 Schema Conditions Debug:', {
-          showApproveDepartment,
-          showReturnDepartment,
-          canApproveDepartment,
-          canReturnDepartment,
-          rowStatus: row.status
-        });
-        
+        const userInfoForWorkflow = {
+          assignmentLevel: currentUser?.hierarchicalAccess?.assignmentLevel,
+          accessScope: currentUser?.hierarchicalAccess?.scope,
+          scope: currentUser?.hierarchicalAccess?.scope,
+          workflowRoles: currentUser?.hierarchicalAccess?.workflowRoles || []
+        };
+
         return (
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-            <ViewButton row={row} />
-            {showSubmitDraft && (<SubmitDraftButton row={row} refreshData={refreshData} />)}
-            {showVerify && (<VerifyButton row={row} refreshData={refreshData} />)}
-            {showSubmitToOffice && (<SubmitToOfficeButton row={row} refreshData={refreshData} />)}
-            {showApprove && (<ApproveButton row={row} refreshData={refreshData} />)}
-            {showApproveDepartment && (<ApproveButton row={row} refreshData={refreshData} />)}
-            {showFinalize && (<FinalizeButton row={row} refreshData={refreshData} />)}
-            {showReturn && (<ReturnButton row={row} refreshData={refreshData} />)}
-            {showReturnDepartment && (<ReturnButton row={row} refreshData={refreshData} />)}
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', justifyContent: 'center' }}>
+            {/* Hidden ViewButton instance to ensure the dialog exists for this row */}
+            <Box sx={{ display: 'none' }}>
+              <ViewButton row={row} />
+            </Box>
+            <WorkflowActions
+              proposal={row}
+              userInfo={userInfoForWorkflow}
+              onRefresh={refreshData}
+              onView={() => {
+                window.dispatchEvent(new CustomEvent('open-proposal-view', { detail: { row } }));
+              }}
+            />
           </Box>
         );
       }
@@ -743,7 +706,7 @@ const AllProposalsPage = () => {
             hasEdit={false}
             hasDelete={false}
             hasAdd={false}
-            additionalMenuOptions={[ViewButton, ApproveButton, ReturnButton]}
+            additionalMenuOptions={[ViewButton]}
             refreshData={refreshData}
             title="All Proposals"
             description="View and manage all submitted proposals"

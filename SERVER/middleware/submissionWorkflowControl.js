@@ -28,11 +28,6 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
       const userRoles = req.user.Roles;
       const userName = req.user.FirstName + ' ' + req.user.LastName;
 
-      // Debug logging for overtime pay debugging
-      if (logAccess) {
-        console.log(`🔍 [${userName}] Submission Workflow Access Check - Operation: ${operation}`);
-      }
-
       // For submission workflow, DO NOT bypass based on roles alone
       // Even BUDGET ADMIN/ANALYST users must follow submission workflow if they have hierarchical assignments
       // Only bypass if user has SUPER_ADMIN role or no organizational constraints
@@ -55,7 +50,6 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
           assignment = null;
         }
       } catch (error) {
-        console.log('New assignment model not available, trying old model');
         assignment = null;
       }
 
@@ -64,7 +58,7 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
           assignment = await HierarchicalUserAssignment.getUserPermissions(userId);
           isNewStructure = false;
         } catch (error) {
-          console.log('Old assignment model not available');
+          // Old assignment model not available
         }
       }
 
@@ -90,7 +84,6 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
         return next();
       }
     } catch (error) {
-      console.error('Submission Workflow Control Error:', error);
       return res.status(500).json({
         success: false,
         message: 'Error in submission workflow control',
@@ -362,14 +355,6 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
   }
 
   // Add filters to request for use in controllers
-  if (logAccess) {
-    console.log(`🔍 [${userName}] Applied ${isNewStructure ? 'NEW' : 'OLD'} structure filters:`, {
-      hierarchicalFilters,
-      submissionFilters,
-      accessScope: isNewStructure ? assignment.accessScope : assignment.assignmentLevel
-    });
-  }
-
   req.submissionWorkflowFilters = submissionFilters;
   req.hierarchicalFilters = hierarchicalFilters;
   req.hierarchicalAccessInfo = {
@@ -444,10 +429,6 @@ const handleSubmissionWorkflowWrite = async (req, res, next, assignment, operati
   }
 
   // Log successful access
-  if (logAccess) {
-    console.log(`✅ [${userName}] ${operation.toUpperCase()} access granted - Level: ${isNewStructure ? assignment.accessScope : assignment.assignmentLevel}`);
-  }
-
   // Apply submission workflow consolidation for create operations
   if (operation === 'create') {
     applySubmissionWorkflowConsolidation(req, assignment);
@@ -701,14 +682,11 @@ const submissionWorkflowTransitions = {
           try {
             return mongoose.Types.ObjectId(id);
           } catch (e) {
-            console.log('Invalid ObjectId format:', id);
             return id;
           }
         }
         return id;
       });
-
-      console.log('Converted IDs:', objectIds);
 
       // More flexible query - allow various status values and originalLevel conditions
       const result = await Model.updateMany(
@@ -736,19 +714,12 @@ const submissionWorkflowTransitions = {
         }
       );
 
-      console.log('Responsibility Center Submit Result:', {
-        matchedCount: result.matchedCount,
-        modifiedCount: result.modifiedCount,
-        acknowledged: result.acknowledged
-      });
-
       return res.status(200).json({
         message: 'Successfully submitted to Office for verification',
         modified: result.modifiedCount,
         matched: result.matchedCount
       });
     } catch (e) {
-      console.error('Responsibility Center submission error:', e);
       return res.status(500).json({
         message: 'Responsibility Center submission failed',
         error: e.message
@@ -763,20 +734,12 @@ const submissionWorkflowTransitions = {
       const userId = req.user?.id || 'system';
       const Model = getModelByEntity(entity);
 
-      console.log('Office Verify Debug:', {
-        ids,
-        entity,
-        userId,
-        verificationNote
-      });
-
       // Convert string IDs to ObjectId if needed
       const objectIds = ids.map(id => {
         if (typeof id === 'string') {
           try {
             return mongoose.Types.ObjectId(id);
           } catch (e) {
-            console.log('Invalid ObjectId format:', id);
             return id;
           }
         }
@@ -820,12 +783,6 @@ const submissionWorkflowTransitions = {
           } 
         }
       );
-      console.log('Office Verify Result:', {
-        matchedCount: result.matchedCount,
-        modifiedCount: result.modifiedCount,
-        acknowledged: result.acknowledged
-      });
-
       if (!result.modifiedCount) {
         return res.status(404).json({
           success: false,
