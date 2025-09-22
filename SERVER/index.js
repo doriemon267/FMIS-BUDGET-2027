@@ -282,6 +282,11 @@ app.use('/api/workflow', require('./routers/proposalWorkflowRoutes'));
 // 🔄 Submission Workflow Routes - Controls data visibility based on submission status
 const submissionWorkflowRoutes = require('./routers/submissionWorkflowRoutes');
 app.use('/api/submission-workflow', submissionWorkflowRoutes);
+// 🔄 Status Workflow Routes - Legacy workflow compatibility
+const statusWorkflowRoutes = require('./routers/statusWorkflowRoutes');
+app.use('/api/status-workflow', statusWorkflowRoutes);
+// In-app notifications
+app.use('/api', require('./routers/notificationRoutes'));
 app.use(rataRoutes);
 app.use(settings);
 app.use("/api", regionRouter);

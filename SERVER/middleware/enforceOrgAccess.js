@@ -91,6 +91,52 @@ module.exports = async function enforceOrgAccess(req, res, next) {
         // Organizational access validated against existing record – allow without requiring org fields in body
         return next();
       }
+
+      // Special-case: Submission Workflow writes - validate scope by target records (ids) instead of requiring org fields in body
+      if (method === 'POST' && url.startsWith('/api/submission-workflow/')) {
+        const { ids = [], entity = 'personnel' } = req.body || {};
+        if (!Array.isArray(ids) || ids.length === 0) {
+          return res.status(400).json({ message: 'ids array is required for submission workflow operations' });
+        }
+        const mongoose = require('mongoose');
+        if (ids.some(id => !mongoose.Types.ObjectId.isValid(String(id)))) {
+          return res.status(400).json({ message: 'One or more ids are invalid' });
+        }
+        const getModelByEntity = (e) => {
+          switch ((e || '').toLowerCase()) {
+            case 'personnel': return require('../models/personnelServices');
+            case 'mooe': return require('../models/mooeProposals');
+            case 'capital': return require('../models/CapitalOutlay');
+            case 'income': return require('../models/Income');
+            case 'budgetarysupport': return require('../models/BudgetarySupport');
+            default: return require('../models/personnelServices');
+          }
+        };
+        const Model = getModelByEntity(entity);
+        const records = await Model.find({ _id: { $in: ids } }).select('region department division').lean();
+        if (!records || records.length === 0) {
+          return res.status(404).json({ message: 'No target records found for submission' });
+        }
+        for (const rec of records) {
+          const recRegion = rec?.region;
+          const recDept = rec?.department;
+          const recDiv = rec?.division;
+          const inAllowedRegion = !allowedRegionNames.length || (recRegion && allowedRegionNames.some(v => String(v).trim().toUpperCase() === String(recRegion).trim().toUpperCase()));
+          const inAllowedDept = !allowedDeptNames.length || (recDept && allowedDeptNames.some(v => String(v).trim().toUpperCase() === String(recDept).trim().toUpperCase()));
+          const inAllowedDiv = !allowedDivisions.length || (recDiv && allowedDivisions.some(v => String(v).trim().toUpperCase() === String(recDiv).trim().toUpperCase()));
+          if (assignment.accessScope === 'REGION' && !inAllowedRegion) {
+            return res.status(403).json({ message: 'You cannot modify records outside your Region.' });
+          }
+          if (assignment.accessScope === 'DEPARTMENT' && (!inAllowedRegion || !inAllowedDept)) {
+            return res.status(403).json({ message: 'You cannot modify records outside your Department.' });
+          }
+          if (assignment.accessScope === 'DIVISION' && (!inAllowedRegion || !inAllowedDept || !inAllowedDiv)) {
+            return res.status(403).json({ message: 'You cannot modify records outside your Division.' });
+          }
+        }
+        // All target records validated – proceed without requiring org fields in body
+        return next();
+      }
     } catch (e) {
       // If this special-case validation fails unexpectedly, fall through to standard checks
     }

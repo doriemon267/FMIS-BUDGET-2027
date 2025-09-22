@@ -164,15 +164,18 @@ const AllProposalsPage = () => {
         
         // Corporate Income entries
         if (row.cobExpenditures === 'Corporate Income') {
-          incomeAmount = row.amount || 0;
+          const amt = Number(row.amount);
+          incomeAmount = Number.isFinite(amt) ? amt : 0;
         }
         // Income from MOOE and Capital Outlay
         else if (row.cobExpenditures === 'MOOE' || row.cobExpenditures === 'Capital Outlay') {
-          incomeAmount = row.income || 0;
+          const inc = Number(row.income);
+          incomeAmount = Number.isFinite(inc) ? inc : 0;
         }
         // Fallback to totalIncome field
         else {
-          incomeAmount = row.totalIncome || 0;
+          const totInc = Number(row.totalIncome);
+          incomeAmount = Number.isFinite(totInc) ? totInc : 0;
         }
         
         const formattedAmount = `₱${incomeAmount.toLocaleString('en-US', { 
@@ -200,38 +203,46 @@ const AllProposalsPage = () => {
       customRender: (row) => {
         let subsidyAmount = 0;
         
-        // Personnel Services - calculate total from individual fields
-        if (row.cobExpenditures && row.cobExpenditures.includes('Personnel Services')) {
-          subsidyAmount = (row.annualSalary || 0) + 
-                          (row.RATA || 0) + 
-                          (row.PERA || 0) + 
-                          (row.uniformALLOWANCE || 0) + 
-                          (row.productivityIncentive || 0) + 
-                          (row.medical || 0) + 
-                          (row.childrenAllowance || 0) + 
-                          (row.meal || 0) + 
-                          (row.cashGift || 0) + 
-                          (row.subsistenceAllowanceMDS || 0) + 
-                          (row.subsistenceAllowanceST || 0) + 
-                          (row.midyearBonus || 0) + 
-                          (row.yearEndBonus || 0) + 
-                          (row.gsisPremium || 0) + 
-                          (row.philhealthPremium || 0) + 
-                          (row.pagibigPremium || 0) + 
-                          (row.employeeCompensation || 0) ||
-                          row.Total || 0; // Fallback to Total field if individual fields not available
+        // Personnel Services - use backend aggregated Total for aggregated rows; otherwise compute from fields
+        if (String(row.cobExpenditures || '').toLowerCase().includes('personnel services')) {
+          if (row.modelType === 'personnel') {
+            const backendTotal = Number(row.Total);
+            subsidyAmount = Number.isFinite(backendTotal) ? backendTotal : 0;
+          } else {
+            const backendTotal = Number(row.Total);
+            if (Number.isFinite(backendTotal)) {
+              subsidyAmount = backendTotal;
+            } else {
+              const psParts = [
+                Number(row.annualSalary), Number(row.RATA), Number(row.PERA), Number(row.uniformALLOWANCE),
+                Number(row.productivityIncentive), Number(row.medical), Number(row.childrenAllowance), Number(row.meal),
+                Number(row.cashGift), Number(row.subsistenceAllowanceMDS), Number(row.subsistenceAllowanceST),
+                Number(row.midyearBonus), Number(row.yearEndBonus), Number(row.gsisPremium), Number(row.philhealthPremium),
+                Number(row.pagibigPremium), Number(row.employeeCompensation),
+                // Additional PS components to match backend aggregation
+                Number(row.loyaltyAward), Number(row.overtimePay), Number(row.earnedLeaves),
+                Number(row.retirementBenefits), Number(row.terminalLeave), Number(row.courtAppearance)
+              ];
+              subsidyAmount = psParts.reduce((sum, val) => sum + (Number.isFinite(val) ? val : 0), 0);
+            }
+          }
         }
         // MOOE - use subsidy or amount field
         else if (row.cobExpenditures === 'MOOE') {
-          subsidyAmount = row.subsidy || row.amount || 0;
+          const sub = Number(row.subsidy);
+          const amt = Number(row.amount);
+          subsidyAmount = Number.isFinite(sub) ? sub : (Number.isFinite(amt) ? amt : 0);
         }
         // Capital Outlay - use subsidy or cost field
         else if (row.cobExpenditures === 'Capital Outlay') {
-          subsidyAmount = row.subsidy || row.cost || 0;
+          const sub = Number(row.subsidy);
+          const cost = Number(row.cost);
+          subsidyAmount = Number.isFinite(sub) ? sub : (Number.isFinite(cost) ? cost : 0);
         }
         // Fallback to totalExpenses field
         else {
-          subsidyAmount = row.totalExpenses || 0;
+          const totExp = Number(row.totalExpenses);
+          subsidyAmount = Number.isFinite(totExp) ? totExp : 0;
         }
         
         const formattedAmount = `₱${subsidyAmount.toLocaleString('en-US', { 
@@ -269,32 +280,35 @@ const AllProposalsPage = () => {
           incomeAmount = row.totalIncome || 0;
         }
         
-        // Calculate subsidy (same logic as totalExpenses column)
-        if (row.cobExpenditures && row.cobExpenditures.includes('Personnel Services')) {
-          subsidyAmount = (row.annualSalary || 0) + 
-                          (row.RATA || 0) + 
-                          (row.PERA || 0) + 
-                          (row.uniformALLOWANCE || 0) + 
-                          (row.productivityIncentive || 0) + 
-                          (row.medical || 0) + 
-                          (row.childrenAllowance || 0) + 
-                          (row.meal || 0) + 
-                          (row.cashGift || 0) + 
-                          (row.subsistenceAllowanceMDS || 0) + 
-                          (row.subsistenceAllowanceST || 0) + 
-                          (row.midyearBonus || 0) + 
-                          (row.yearEndBonus || 0) + 
-                          (row.gsisPremium || 0) + 
-                          (row.philhealthPremium || 0) + 
-                          (row.pagibigPremium || 0) + 
-                          (row.employeeCompensation || 0) ||
-                          row.Total || 0; // Fallback to Total field if individual fields not available
+        // Calculate subsidy (same logic as totalExpenses, prefer backend Total when available)
+        if (String(row.cobExpenditures || '').toLowerCase().includes('personnel services')) {
+          const backendTotal = Number(row.Total);
+          if (Number.isFinite(backendTotal)) {
+            subsidyAmount = backendTotal;
+          } else {
+            const psParts = [
+              Number(row.annualSalary), Number(row.RATA), Number(row.PERA), Number(row.uniformALLOWANCE),
+              Number(row.productivityIncentive), Number(row.medical), Number(row.childrenAllowance), Number(row.meal),
+              Number(row.cashGift), Number(row.subsistenceAllowanceMDS), Number(row.subsistenceAllowanceST),
+              Number(row.midyearBonus), Number(row.yearEndBonus), Number(row.gsisPremium), Number(row.philhealthPremium),
+              Number(row.pagibigPremium), Number(row.employeeCompensation),
+              // Additional PS components to match backend aggregation
+              Number(row.loyaltyAward), Number(row.overtimePay), Number(row.earnedLeaves),
+              Number(row.retirementBenefits), Number(row.terminalLeave), Number(row.courtAppearance)
+            ];
+            subsidyAmount = psParts.reduce((sum, val) => sum + (Number.isFinite(val) ? val : 0), 0);
+          }
         } else if (row.cobExpenditures === 'MOOE') {
-          subsidyAmount = row.subsidy || row.amount || 0;
+          const sub = Number(row.subsidy);
+          const amt = Number(row.amount);
+          subsidyAmount = Number.isFinite(sub) ? sub : (Number.isFinite(amt) ? amt : 0);
         } else if (row.cobExpenditures === 'Capital Outlay') {
-          subsidyAmount = row.subsidy || row.cost || 0;
+          const sub = Number(row.subsidy);
+          const cost = Number(row.cost);
+          subsidyAmount = Number.isFinite(sub) ? sub : (Number.isFinite(cost) ? cost : 0);
         } else {
-          subsidyAmount = row.totalExpenses || 0;
+          const totExp = Number(row.totalExpenses);
+          subsidyAmount = Number.isFinite(totExp) ? totExp : 0;
         }
         
         const total = incomeAmount + subsidyAmount;

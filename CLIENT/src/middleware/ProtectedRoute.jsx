@@ -56,7 +56,7 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
   }
 
   const hasRequiredWorkflowRoles = requiredWorkflowRoles.length === 0 ||
-    requiredWorkflowRoles.every(role => effectiveWorkflowRoles.includes(role));
+    requiredWorkflowRoles.some(role => effectiveWorkflowRoles.includes(role));
 
   console.log('🔍 Workflow Roles Check:', {
     requiredWorkflowRoles,

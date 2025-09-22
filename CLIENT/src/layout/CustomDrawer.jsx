@@ -67,7 +67,7 @@ const {currentUser} =  useUser();
             iconRight={<FaChevronCircleDown />}
             subLinks={[
               {
-                link: "/Proposal",
+                link: "/proposal",
                 name: "Create Proposal",
                 isAllow: hasPermission(currentUser, 'CreateProposals') || hasPermission(currentUser, 'EditOwnProposals'),
                 icon: <FaFileAlt />,

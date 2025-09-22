@@ -45,16 +45,12 @@ module.exports = async (req, res, next) => {
         userId = payload.username;
       }
       
-      // If no user ID found in JWT, check for dev headers from frontend (always allowed in dev mode)
-      if (!userId) {
-        // The frontend sends X-Dev-User-Id header for development authentication
-        const devUserId = req.headers['x-dev-user-id'] || req.headers['X-Dev-User-Id'];
-        if (devUserId) {
-          userId = String(devUserId).trim();
-        }
-      }
-      
-      if (!userId) {
+      // Allow dev header to override identity in development mode
+      const devUserId = req.headers['x-dev-user-id'] || req.headers['X-Dev-User-Id'];
+      if (devUserId) {
+        userId = String(devUserId).trim();
+      } else if (!userId) {
+        // If still no user ID found in JWT, fail with guidance
         console.error('❌ Unable to determine user identity from JWT or headers');
         console.error('JWT Payload:', JSON.stringify(payload, null, 2));
         console.error('Available headers:', Object.keys(req.headers));
@@ -75,12 +71,20 @@ module.exports = async (req, res, next) => {
         return res.status(401).json({ error: "Authentication required: No user roles found" });
       }
       
+      // Enrich req.user with multiple identifier mirrors for downstream matching
+      const usernameArr = Array.isArray(payload.Username) ? payload.Username : (payload.Username ? [payload.Username] : []);
       req.user = {
         id: userId,
-        name: payload.name || payload.username,
+        userId: userId,
+        UserId: userId,
+        username: payload.username || userId,
+        Username: usernameArr.length ? usernameArr : [userId],
+        userCode: payload.userCode,
+        UserCode: payload.UserCode,
+        employeeCode: payload.employeeCode,
         email: payload.email,
         Roles: userRoles,
-        Username: payload.Username || []
+        name: payload.name || payload.username || String(userId)
       };
       return next();
     }

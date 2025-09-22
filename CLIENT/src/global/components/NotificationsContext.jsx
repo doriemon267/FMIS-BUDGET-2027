@@ -1,89 +1,105 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import CustomSnackbar from './CustomSnackbar';
-import api from '../../config/api'; // Fixed import path
-import { useQuery } from '@tanstack/react-query';
+import api from '../../config/api';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 export const NotificationsContext = createContext();
 
 export const NotificationsProvider = ({ children }) => {
-  const [notifications, setNotifications] = useState([]);
+  const [notifications, setNotifications] = useState([]); // legacy local notifications (strings)
   const [alerts, setAlerts] = useState([]);
-  
-  // Fetch active settings for due date
-  const { data: activeSettings } = useQuery({
-    queryKey: ["activeSettings"],
+  const queryClient = useQueryClient();
+
+  // Server notifications: unread list for current user
+  const {
+    data: serverNotifications = [],
+    isFetching: fetchingServerNotifications,
+  } = useQuery({
+    queryKey: ['serverNotifications'],
     queryFn: async () => {
-      const res = await api.get("/settings/active");
+      const res = await api.get('/api/notifications');
+      return res.data?.data || [];
+    },
+    refetchInterval: 60000, // poll every 60s
+    refetchOnWindowFocus: true,
+  });
+
+  // Mark notifications as read (bulk or single)
+  const { mutateAsync: markNotificationsAsRead } = useMutation({
+    mutationFn: async (ids) => {
+      // Accept single id or array
+      const payload = { ids: Array.isArray(ids) ? ids : [ids] };
+      await api.post('/api/notifications/mark-read', payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['serverNotifications'] });
+    },
+  });
+
+  // Legacy: add/remove local toast-like notifications (kept for compatibility)
+  const addNotification = (notification) => setNotifications((prev) => [...prev, notification]);
+  const removeNotification = (index) => setNotifications((prev) => prev.filter((_, i) => i !== index));
+
+  // Due date alerts sourced from settings
+  const { data: activeSettings } = useQuery({
+    queryKey: ['activeSettings'],
+    queryFn: async () => {
+      const res = await api.get('/settings/active');
       return res.data;
     },
   });
 
-  // Check for due date proximity
   useEffect(() => {
     if (!activeSettings?.dueDate) return;
-    
     const checkDueDate = () => {
       const now = new Date();
       const dueDate = new Date(activeSettings.dueDate);
       const oneDayBefore = new Date(dueDate.getTime() - 24 * 60 * 60 * 1000);
-      
-      // If we're within one day of the due date
       if (now >= oneDayBefore && now <= dueDate) {
         const formattedDate = dueDate.toLocaleDateString(undefined, {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
         });
-        
-        // Add due date alert if not already present
         const dueDateAlert = {
           id: 'due-date-warning',
           message: `Submission deadline is approaching: ${formattedDate}`,
           severity: 'warning',
-          autoHideDuration: null // Don't auto-hide this important alert
+          autoHideDuration: null,
         };
-        
-        setAlerts(prev => {
-          if (!prev.some(alert => alert.id === 'due-date-warning')) {
-            return [...prev, dueDateAlert];
-          }
+        setAlerts((prev) => {
+          if (!prev.some((a) => a.id === 'due-date-warning')) return [...prev, dueDateAlert];
           return prev;
         });
       }
     };
-    
     checkDueDate();
-    const interval = setInterval(checkDueDate, 60 * 60 * 1000); // Check hourly
-    
+    const interval = setInterval(checkDueDate, 60 * 60 * 1000);
     return () => clearInterval(interval);
   }, [activeSettings]);
 
-  const addNotification = (notification) => {
-    setNotifications(prev => [...prev, notification]);
-  };
-
-  const removeNotification = (index) => {
-    setNotifications(prev => prev.filter((_, i) => i !== index));
-  };
-
   const addAlert = (alert) => {
     const id = Date.now().toString();
-    setAlerts(prev => [...prev, { ...alert, id }]);
+    setAlerts((prev) => [...prev, { ...alert, id }]);
     return id;
   };
 
-  const removeAlert = (id) => {
-    setAlerts(prev => prev.filter(alert => alert.id !== id));
-  };
+  const removeAlert = (id) => setAlerts((prev) => prev.filter((a) => a.id !== id));
 
   return (
-    <NotificationsContext.Provider 
-      value={{ 
-        notifications, 
-        addNotification, 
+    <NotificationsContext.Provider
+      value={{
+        // Legacy local notifications (strings)
+        notifications,
+        addNotification,
         removeNotification,
+        // Server notifications
+        serverNotifications,
+        fetchingServerNotifications,
+        markNotificationsAsRead,
+        // Alerts (snackbars)
         addAlert,
-        removeAlert
+        removeAlert,
       }}
     >
       {children}
@@ -94,19 +110,16 @@ export const NotificationsProvider = ({ children }) => {
 
 // Component to display alerts
 const AlertsDisplay = ({ alerts, removeAlert }) => {
-  const handleCloseAlert = (alertId) => {
-    removeAlert(alertId);
-  };
-
+  const handleCloseAlert = (alertId) => removeAlert(alertId);
   return (
     <>
       {alerts.map((alert) => (
         <CustomSnackbar
           key={alert.id}
-          open={alert.open}
+          open
           message={alert.message}
-          severity={alert.type}
-          autoHideDuration={6000}
+          severity={alert.severity || alert.type || 'info'}
+          autoHideDuration={alert.autoHideDuration ?? 6000}
           onClose={() => handleCloseAlert(alert.id)}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         />

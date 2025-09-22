@@ -725,6 +725,61 @@ const submissionWorkflowTransitions = {
         }
       );
 
+      // Create notifications for Office consolidators in same org
+      try {
+        const Notification = require('../models/Notification');
+        const { getUsersWithWorkflowRole } = require('../helpers/workflowRoleManager');
+
+        // sample record for org context
+        const sample = await Model.findOne({ _id: { $in: objectIds } })
+          .select('region department division').lean();
+
+        // Support both new ('officeConsolidator') and legacy ('departmentConsolidator') role names
+        const officeUsersPrimary = await getUsersWithWorkflowRole('departmentConsolidator');
+        const officeUsersLegacy = await getUsersWithWorkflowRole('departmentConsolidator');
+        const officeUsers = [...officeUsersPrimary, ...officeUsersLegacy];
+
+        // Prefer org-matched users; if none match (naming mismatch), fall back to all office consolidators
+        let recipients = officeUsers.filter(u => (
+          (!sample?.region || String(u.region || '').trim().toUpperCase() === String(sample.region || '').trim().toUpperCase()) &&
+          (!sample?.department || String(u.department || '').trim().toUpperCase() === String(sample.department || '').trim().toUpperCase())
+        ));
+        if (!recipients.length) recipients = officeUsers;
+
+        if (recipients.length) {
+          const creatorName = (req.user?.FirstName && req.user?.LastName)
+            ? `${req.user.FirstName} ${req.user.LastName}`
+            : (req.user?.name || req.user?.username || 'User');
+
+          const pickRecipientId = (u) => {
+            const first = (v) => Array.isArray(v) ? v[0] : v;
+            const candidates = [
+              u.userId, u.UserId, u.UserID,
+              first(u.Username), u.username,
+              u.userCode, u.UserCode,
+              u.employeeCode, u.EmployeeCode,
+              u.empCode, u.EmpCode,
+              u.id, u.Id, u.ID
+            ].map(v => v != null ? String(v).trim() : '').filter(Boolean);
+            return candidates[0] || String(u.id || '');
+          };
+
+          const docs = recipients.map(u => ({
+            recipientUserId: pickRecipientId(u),
+            title: 'New Responsibility Center submission',
+            message: `${creatorName} submitted ${objectIds.length} item(s) for Office verification.`,
+            entity,
+            recordIds: objectIds,
+            org: { region: sample?.region || null, department: sample?.department || null, division: sample?.division || null },
+            createdBy: { userId: req.user?.id, name: creatorName }
+          }));
+          await Notification.insertMany(docs);
+        }
+      } catch (notifyErr) {
+        // Non-blocking
+        console.error('Notify error (RC submit):', notifyErr?.message);
+      }
+
       return res.status(200).json({
         message: 'Successfully submitted to Office for verification',
         modified: result.modifiedCount,
@@ -869,6 +924,60 @@ const submissionWorkflowTransitions = {
           code: 'NO_MATCH_SUBMIT',
         });
       }
+
+      // Create notifications for Office finalizers
+      try {
+        const Notification = require('../models/Notification');
+        const { getUsersWithWorkflowRole } = require('../helpers/workflowRoleManager');
+
+        // sample record for org context
+        const sample = await Model.findOne({ _id: { $in: ids } })
+          .select('region department division').lean();
+
+        // Get office finalizers (users who can finalize submissions)
+        const officeFinalizers = await getUsersWithWorkflowRole('regionFinalVerifier');
+
+        // Prefer org-matched users; if none match, fall back to all office finalizers
+        let recipients = officeFinalizers.filter(u => (
+          (!sample?.region || String(u.region || '').trim().toUpperCase() === String(sample.region || '').trim().toUpperCase()) &&
+          (!sample?.department || String(u.department || '').trim().toUpperCase() === String(sample.department || '').trim().toUpperCase())
+        ));
+        if (!recipients.length) recipients = officeFinalizers;
+
+        if (recipients.length) {
+          const creatorName = (req.user?.FirstName && req.user?.LastName)
+            ? `${req.user.FirstName} ${req.user.LastName}`
+            : (req.user?.name || req.user?.username || 'User');
+
+          const pickRecipientId = (u) => {
+            const first = (v) => Array.isArray(v) ? v[0] : v;
+            const candidates = [
+              u.userId, u.UserId, u.UserID,
+              first(u.Username), u.username,
+              u.userCode, u.UserCode,
+              u.employeeCode, u.EmployeeCode,
+              u.empCode, u.EmpCode,
+              u.id, u.Id, u.ID
+            ].map(v => v != null ? String(v).trim() : '').filter(Boolean);
+            return candidates[0] || String(u.id || '');
+          };
+
+          const docs = recipients.map(u => ({
+            recipientUserId: pickRecipientId(u),
+            title: 'Office submissions ready for finalization',
+            message: `${creatorName} submitted ${ids.length} item(s) for final Office approval.`,
+            entity,
+            recordIds: ids,
+            org: { region: sample?.region || null, department: sample?.department || null, division: sample?.division || null },
+            createdBy: { userId: req.user?.id, name: creatorName }
+          }));
+          await Notification.insertMany(docs);
+        }
+      } catch (notifyErr) {
+        // Non-blocking
+        console.error('Notify error (office submit):', notifyErr?.message);
+      }
+
       return res.status(200).json({ 
         success: true,
         message: 'Successfully submitted for finalization', 
@@ -922,6 +1031,60 @@ const submissionWorkflowTransitions = {
           code: 'NO_MATCH_APPROVE',
         });
       }
+
+      // Create notifications for final approvers (could be regional or system admins)
+      try {
+        const Notification = require('../models/Notification');
+        const { getUsersWithWorkflowRole } = require('../helpers/workflowRoleManager');
+
+        // sample record for org context
+        const sample = await Model.findOne({ _id: { $in: ids } })
+          .select('region department division').lean();
+
+        // Get final approvers (users who can finalize submissions)
+        const finalApprovers = await getUsersWithWorkflowRole('regionFinalVerifier');
+
+        // Prefer org-matched users; if none match, fall back to all final approvers
+        let recipients = finalApprovers.filter(u => (
+          (!sample?.region || String(u.region || '').trim().toUpperCase() === String(sample.region || '').trim().toUpperCase()) &&
+          (!sample?.department || String(u.department || '').trim().toUpperCase() === String(sample.department || '').trim().toUpperCase())
+        ));
+        if (!recipients.length) recipients = finalApprovers;
+
+        if (recipients.length) {
+          const creatorName = (req.user?.FirstName && req.user?.LastName)
+            ? `${req.user.FirstName} ${req.user.LastName}`
+            : (req.user?.name || req.user?.username || 'User');
+
+          const pickRecipientId = (u) => {
+            const first = (v) => Array.isArray(v) ? v[0] : v;
+            const candidates = [
+              u.userId, u.UserId, u.UserID,
+              first(u.Username), u.username,
+              u.userCode, u.UserCode,
+              u.employeeCode, u.EmployeeCode,
+              u.empCode, u.EmpCode,
+              u.id, u.Id, u.ID
+            ].map(v => v != null ? String(v).trim() : '').filter(Boolean);
+            return candidates[0] || String(u.id || '');
+          };
+
+          const docs = recipients.map(u => ({
+            recipientUserId: pickRecipientId(u),
+            title: 'Office approved submissions ready for finalization',
+            message: `${creatorName} approved ${ids.length} item(s) at Office level. Ready for final approval.`,
+            entity,
+            recordIds: ids,
+            org: { region: sample?.region || null, department: sample?.department || null, division: sample?.division || null },
+            createdBy: { userId: req.user?.id, name: creatorName }
+          }));
+          await Notification.insertMany(docs);
+        }
+      } catch (notifyErr) {
+        // Non-blocking
+        console.error('Notify error (office approve):', notifyErr?.message);
+      }
+
       return res.status(200).json({ 
         success: true,
         message: 'Successfully approved submissions at Office level', 
@@ -975,6 +1138,51 @@ const submissionWorkflowTransitions = {
           code: 'NO_MATCH_FINALIZE',
         });
       }
+
+      // Create notifications for submitters and relevant stakeholders about finalization
+      try {
+        const Notification = require('../models/Notification');
+
+        // sample record for org context
+        const sample = await Model.findOne({ _id: { $in: ids } })
+          .select('region department division processBy').lean();
+
+        if (sample?.processBy) {
+          // Notify the original submitter
+          const submitterQuery = {
+            $or: [
+              { _id: sample.processBy },
+              { FirstName: { $regex: new RegExp(`^${sample.processBy.split(' ')[0]}$`, 'i') } },
+              { username: sample.processBy },
+              { userCode: sample.processBy }
+            ]
+          };
+
+          const User = require('../models/User');
+          const submitter = await User.findOne(submitterQuery).select('_id FirstName LastName').lean();
+
+          if (submitter) {
+            const finalizerName = (req.user?.FirstName && req.user?.LastName)
+              ? `${req.user.FirstName} ${req.user.LastName}`
+              : (req.user?.name || req.user?.username || 'User');
+
+            const notificationDoc = {
+              recipientUserId: submitter._id.toString(),
+              title: 'Your proposal has been finalized',
+              message: `${finalizerName} has finalized ${ids.length} of your submitted item(s). The budget proposal is now complete.`,
+              entity,
+              recordIds: ids,
+              org: { region: sample?.region || null, department: sample?.department || null, division: sample?.division || null },
+              createdBy: { userId: req.user?.id, name: finalizerName }
+            };
+            await Notification.create(notificationDoc);
+          }
+        }
+      } catch (notifyErr) {
+        // Non-blocking
+        console.error('Notify error (finalize):', notifyErr?.message);
+      }
+
       return res.status(200).json({ 
         success: true,
         message: 'Successfully finalized submissions', 

@@ -109,12 +109,13 @@ const DashboardContent = () => {
     }
   };
 
-  // notifications
-  const { notifications } = useContext(NotificationsContext);
+  // notifications from server
+  const { serverNotifications, markNotificationsAsRead } = useNotifications();
   const [anchorEl, setAnchorEl] = useState(null);
   const openNotifications = Boolean(anchorEl);
   const handleNotificationsClick = (e) => setAnchorEl(e.currentTarget);
   const handleNotificationsClose = () => setAnchorEl(null);
+  const unreadCount = serverNotifications.length;
   
   // Get active region
   const { activeRegion } = useRegion();
@@ -218,7 +219,7 @@ const DashboardContent = () => {
             onClick={handleNotificationsClick}
             aria-label="Notifications"
           >
-            <Badge badgeContent={notifications.length} color="error">
+            <Badge badgeContent={unreadCount} color={unreadCount > 0 ? 'error' : 'default'}>
               <NotificationsIcon />
             </Badge>
           </IconButton>
@@ -229,14 +230,27 @@ const DashboardContent = () => {
             anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
             transformOrigin={{ vertical: "top", horizontal: "right" }}
           >
-            {notifications.length === 0 ? (
+            {unreadCount === 0 ? (
               <MenuItem onClick={handleNotificationsClose}>
                 <ListItemText primary="No notifications" />
               </MenuItem>
             ) : (
-              notifications.map((note, idx) => (
-                <MenuItem key={idx} onClick={handleNotificationsClose}>
-                  <ListItemText primary={note} />
+              serverNotifications.map((n) => (
+                <MenuItem
+                  key={n._id}
+                  onClick={async () => {
+                    await markNotificationsAsRead(n._id);
+                    handleNotificationsClose();
+                  }}
+                >
+                  <ListItemText
+                    primary={n.title || n.message || 'New submission'}
+                    secondary={
+                      [n?.org?.region, n?.org?.department, n?.org?.division]
+                        .filter(Boolean)
+                        .join(' • ')
+                    }
+                  />
                 </MenuItem>
               ))
             )}

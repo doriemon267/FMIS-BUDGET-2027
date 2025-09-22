@@ -1127,18 +1127,18 @@ exports.getProposals = async (req, res) => {
     const sortOrder = order === "asc" ? 1 : -1;
     const skipCount = pageNum * limitNum;
 
-    // Query all models in parallel
+    // Query all models in parallel (unpaginated for correct aggregation)
     const [proposals, personnelData, mooeData, capitalData, incomeData] = await Promise.all([
-      Proposal.find(query).sort({ [sort]: sortOrder }).limit(limitNum),
-      PersonnelService.find(query).sort({ [sort]: sortOrder }).limit(limitNum),
-      MooeProposal.find(query).sort({ [sort]: sortOrder }).limit(limitNum), 
-      CapitalOutlay.find(query).sort({ [sort]: sortOrder }).limit(limitNum),
-      Income.find(query).sort({ [sort]: sortOrder }).limit(limitNum)
+      Proposal.find(query).lean(),
+      PersonnelService.find(query).lean(),
+      MooeProposal.find(query).lean(), 
+      CapitalOutlay.find(query).lean(),
+      Income.find(query).lean()
     ]);
 
     // Combine all data and add model type identifier + cobExpenditures for consistent display
     const allProposals = [
-      ...proposals.map(p => ({ ...p.toObject(), modelType: 'proposal' })),
+      ...proposals.map(p => ({ ...p, modelType: 'proposal' })), 
       // Aggregate Personnel Services (merge CASUAL and PERMANENT into one)
       ...(() => {
         const psGroups = new Map();
@@ -1148,12 +1148,36 @@ exports.getProposals = async (req, res) => {
           'annualSalary','RATA','PERA','uniformALLOWANCE','productivityIncentive','medical','childrenAllowance','meal','cashGift','subsistenceAllowanceMDS','subsistenceAllowanceST','midyearBonus','yearEndBonus','gsisPremium','philhealthPremium','pagibigPremium','employeeCompensation','loyaltyAward','overtimePay','earnedLeaves','retirementBenefits','terminalLeave','courtAppearance'
         ];
 
-        const calcPSTotal = (item) => {
-          return psFields.reduce((sum, f) => sum + (Number(item?.[f]) || 0), 0);
+        const toNumber = (val) => {
+          if (typeof val === 'number') return Number.isFinite(val) ? val : 0;
+          if (val == null) return 0;
+          const cleaned = String(val).replace(/[^0-9.-]/g, '');
+          const n = parseFloat(cleaned);
+          return Number.isFinite(n) ? n : 0;
         };
+        const calcPSTotal = (item) => psFields.reduce((sum, f) => sum + toNumber(item?.[f]), 0);
 
+        const norm = (v) => String(v ?? '').trim().toUpperCase();
+        const scope = req.hierarchicalAccessInfo?.scope?.toUpperCase() || 'REGION';
         personnelData.forEach(p => {
-          const key = `${p.processBy || 'Unknown'}-${p.region || 'Unknown'}-${p.department || ''}-${p.division || ''}-${p.fiscalYear || 'Unknown'}-${p.budgetType || 'Unknown'}-${p.status || 'Unknown'}`;
+          // Dynamic grouping by scope: REGION -> region only; DEPARTMENT -> +department; DIVISION -> +department +division
+          const parts = [
+            // For Division scope, merge across processBy (do not include in key)
+            norm(p.region) || 'UNKNOWN',
+            norm(p.fiscalYear) || 'UNKNOWN',
+            norm(p.budgetType) || 'UNKNOWN'
+          ];
+          if (scope !== 'DIVISION') {
+            // Keep processBy separation for Region/Department
+            parts.unshift(norm(p.processBy) || 'UNKNOWN');
+          }
+          if (scope === 'DEPARTMENT' || scope === 'DIVISION') {
+            parts.push(norm(p.department) || 'UNKNOWN');
+          }
+          if (scope === 'DIVISION') {
+            parts.push(norm(p.division) || 'UNKNOWN');
+          }
+          const key = parts.join('-');
           if (psGroups.has(key)) {
             const existing = psGroups.get(key);
             // Accumulate only the total; keep breakdown fields zeroed to avoid UI double-summing
@@ -1167,7 +1191,7 @@ exports.getProposals = async (req, res) => {
           } else {
             // Start a new aggregated record; copy some identifying fields from the first item
             const base = {
-              ...p.toObject(),
+              ...p,
               modelType: 'personnel',
               cobExpenditures: 'Personnel Services',
               recordCount: 1,
@@ -1190,12 +1214,28 @@ exports.getProposals = async (req, res) => {
           statusTypes: Array.from(rec.statusTypes || [])
         }));
       })(),
-      // Aggregate MOOE records by region, fiscalYear, budgetType
+      // Aggregate MOOE records by processBy, region, fiscalYear, budgetType (dynamic by scope)
       ...(() => {
         const mooeGroups = new Map();
+        const norm = (v) => String(v ?? '').trim().toUpperCase();
+        const scope = req.hierarchicalAccessInfo?.scope?.toUpperCase() || 'REGION';
         
         mooeData.forEach(p => {
-          const groupKey = `${p.region || 'Unknown'}-${p.fiscalYear || 'Unknown'}-${p.budgetType || 'Unknown'}-${p.status || 'Unknown'}`;
+          const parts = [
+            norm(p.processBy) || 'UNKNOWN',
+            norm(p.region) || 'UNKNOWN',
+            norm(p.fiscalYear) || 'UNKNOWN',
+            norm(p.budgetType) || 'UNKNOWN'
+          ];
+          if (scope === 'DEPARTMENT' || scope === 'DIVISION') {
+            parts.push(norm(p.department) || 'UNKNOWN');
+          }
+          if (scope === 'DIVISION') {
+            parts.push(norm(p.division) || 'UNKNOWN');
+          }
+          // Preserve status split as before
+          parts.push(norm(p.status) || 'UNKNOWN');
+          const groupKey = parts.join('-');
           
           if (mooeGroups.has(groupKey)) {
             const existing = mooeGroups.get(groupKey);
@@ -1211,7 +1251,7 @@ exports.getProposals = async (req, res) => {
             }
           } else {
             const mooeRecord = {
-              ...p.toObject(),
+              ...p,
               modelType: 'mooe',
               cobExpenditures: 'MOOE',
               recordCount: 1,
@@ -1229,17 +1269,68 @@ exports.getProposals = async (req, res) => {
             : record.accountingTitle || 'MOOE'
         }));
       })(),
-      ...capitalData.map(p => ({ 
-        ...p.toObject(), 
-        modelType: 'capital',
-        cobExpenditures: 'Capital Outlay' // Format same as Proposal collection
-      })),
-      // Aggregate Income records by region, fiscalYear, budgetType, status
+      // Aggregate Capital Outlay records by processBy, region, fiscalYear, budgetType (dynamic by scope)
+      ...(() => {
+        const capitalGroups = new Map();
+        const norm = (v) => String(v ?? '').trim().toUpperCase();
+        const scope = req.hierarchicalAccessInfo?.scope?.toUpperCase() || 'REGION';
+        
+        capitalData.forEach(p => {
+          const parts = [
+            norm(p.processBy) || 'UNKNOWN',
+            norm(p.region) || 'UNKNOWN',
+            norm(p.fiscalYear) || 'UNKNOWN',
+            norm(p.budgetType) || 'UNKNOWN'
+          ];
+          if (scope === 'DEPARTMENT' || scope === 'DIVISION') {
+            parts.push(norm(p.department) || 'UNKNOWN');
+          }
+          if (scope === 'DIVISION') {
+            parts.push(norm(p.division) || 'UNKNOWN');
+          }
+          // Preserve status split as before
+          parts.push(norm(p.status) || 'UNKNOWN');
+          const groupKey = parts.join('-');
+          
+          if (capitalGroups.has(groupKey)) {
+            const existing = capitalGroups.get(groupKey);
+            // Aggregate amounts
+            existing.income = (existing.income || 0) + (p.income || 0);
+            existing.subsidy = (existing.subsidy || 0) + (p.subsidy || 0);
+            existing.cost = (existing.cost || 0) + (p.cost || 0);
+            existing.amount = (existing.amount || 0) + (p.amount || 0);
+            // Keep track of aggregated records count
+            existing.recordCount = (existing.recordCount || 1) + 1;
+            existing.accountingTitles = existing.accountingTitles || [];
+            if (p.accountingTitle && !existing.accountingTitles.includes(p.accountingTitle)) {
+              existing.accountingTitles.push(p.accountingTitle);
+            }
+          } else {
+            const capitalRecord = {
+              ...p,
+              modelType: 'capital',
+              cobExpenditures: 'Capital Outlay',
+              recordCount: 1,
+              accountingTitles: p.accountingTitle ? [p.accountingTitle] : []
+            };
+            capitalGroups.set(groupKey, capitalRecord);
+          }
+        });
+        
+        return Array.from(capitalGroups.values()).map(record => ({
+          ...record,
+          // Create a combined title if multiple records were aggregated
+          aggregatedTitle: record.recordCount > 1 
+            ? `Capital Outlay (${record.recordCount} items: ${record.accountingTitles.join(', ')})`
+            : record.accountingTitle || 'Capital Outlay'
+        }));
+      })(),
+      // Aggregate Income records by processBy, region, fiscalYear, budgetType, status
       ...(() => {
         const incomeGroups = new Map();
         
         incomeData.forEach(p => {
-          const groupKey = `${p.region || 'Unknown'}-${p.fiscalYear || 'Unknown'}-${p.budgetType || 'Unknown'}-${p.status || 'Unknown'}`;
+          const groupKey = `${p.processBy || 'Unknown'}-${p.region || 'Unknown'}-${p.fiscalYear || 'Unknown'}-${p.budgetType || 'Unknown'}-${p.status || 'Unknown'}`;
           
           if (incomeGroups.has(groupKey)) {
             const existing = incomeGroups.get(groupKey);
@@ -1253,7 +1344,7 @@ exports.getProposals = async (req, res) => {
             }
           } else {
             const incomeRecord = {
-              ...p.toObject(),
+              ...p,
               modelType: 'income',
               cobExpenditures: 'Corporate Income',
               recordCount: 1,
