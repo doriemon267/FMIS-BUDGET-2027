@@ -348,6 +348,53 @@ const AllProposalsPage = () => {
         );
       }
     },
+    track: {
+      type: "text",
+      label: "TRACK",
+      show: true,
+      customRender: (row) => {
+        // Show workflow progress tracking
+        const status = row.status || 'Draft';
+        const workflowLevel = row.workflowLevel || row.originalLevel || 'Unknown';
+        
+        // Define workflow steps based on status and level
+        const getWorkflowStep = (status, level) => {
+          const statusUpper = status.toUpperCase();
+          const levelUpper = level.toUpperCase();
+          
+          if (statusUpper === 'DRAFT') return '1. Draft';
+          if (statusUpper.includes('RESPONSIBILITY CENTER') && statusUpper.includes('SUBMITTED')) return '2. RC Submitted';
+          if (statusUpper.includes('OFFICE') && statusUpper.includes('VERIFIED')) return '3. Office Verified';
+          if (statusUpper.includes('OFFICE') && statusUpper.includes('SUBMITTED')) return '4. Office Submitted';
+          if (statusUpper.includes('OFFICE') && statusUpper.includes('APPROVED')) return '5. Office Approved';
+          if (statusUpper === 'FINALIZED' || statusUpper === 'APPROVED') return '6. Finalized';
+          if (statusUpper === 'RETURNED') return 'Returned';
+          
+          // Fallback based on level
+          switch (levelUpper) {
+            case 'RESPONSIBILITY_CENTER': return '2. At RC Level';
+            case 'OFFICE': return '3. At Office Level';
+            case 'DEPARTMENT': return '4. At Department Level';
+            case 'REGION': return '5. At Region Level';
+            default: return '1. Draft';
+          }
+        };
+        
+        const step = getWorkflowStep(status, workflowLevel);
+        
+        return (
+          <Typography
+            variant="body2"
+            sx={{
+              fontWeight: 'medium',
+              color: 'text.primary'
+            }}
+          >
+            {step}
+          </Typography>
+        );
+      }
+    },
     submittedDate: {
       type: "date",
       label: "SUBMITTED DATE",
@@ -517,29 +564,42 @@ const AllProposalsPage = () => {
       customRender: (row) => {
         // Normalize status to new 6-step workflow
         const map = {
-          'Draft': { color: 'warning', text: 'Draft' },
-          'Responsibility Center Submitted': { color: 'info', text: 'Responsibility Center Submitted' },
-          'Office Verified': { color: 'secondary', text: 'Office Verified' },
-          'Office Submitted': { color: 'info', text: 'Office Submitted' },
-          'Office Approved': { color: 'success', text: 'Office Approved' },
-          'Finalized': { color: 'success', text: 'Finalized' },
-          'Submitted': { color: 'info', text: 'Submitted' }, // legacy
-          'Approved': { color: 'success', text: 'Approved' }, // legacy
-          'Returned': { color: 'error', text: 'Returned' },
+          'Draft': { color: 'warning', text: 'Draft', bgColor: 'warning.light' },
+          'Responsibility Center Submitted': { color: 'info', text: 'RC Submitted', bgColor: 'info.light' },
+          'Office Verified': { color: 'secondary', text: 'Office Verified', bgColor: 'secondary.light' },
+          'Office Submitted': { color: 'info', text: 'Office Submitted', bgColor: 'info.light' },
+          'Office Approved': { color: 'success', text: 'Office Approved', bgColor: 'success.light' },
+          'Finalized': { color: 'success', text: 'Finalized', bgColor: 'success.light' },
+          'Submitted': { color: 'info', text: 'Submitted', bgColor: 'info.light' }, // legacy
+          'Approved': { color: 'success', text: 'Approved', bgColor: 'success.light' }, // legacy
+          'Returned': { color: 'error', text: 'Returned', bgColor: 'error.light' },
         };
-        const { color = 'default', text = (row.status || 'Unknown') } = map[row.status] || {};
+        const { color = 'default', text = (row.status || 'Unknown'), bgColor = 'grey.100' } = map[row.status] || {};
         return (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography 
-              variant="body2" 
-              sx={{ 
-                color: `${color}.main`,
-                fontWeight: 'bold',
-                textTransform: 'uppercase'
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Box
+              sx={{
+                px: 2,
+                py: 0.5,
+                borderRadius: 2,
+                backgroundColor: bgColor,
+                border: `1px solid ${color}.main`,
+                minWidth: 'fit-content'
               }}
             >
-              {text}
-            </Typography>
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  color: `${color}.main`,
+                  fontWeight: 'bold',
+                  textTransform: 'uppercase',
+                  fontSize: '0.75rem',
+                  textAlign: 'center'
+                }}
+              >
+                {text}
+              </Typography>
+            </Box>
           </Box>
         );
       }
