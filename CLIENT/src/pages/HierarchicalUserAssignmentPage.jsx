@@ -1832,7 +1832,7 @@ const HierarchicalUserAssignmentPage = () => {
                                     userName: assignment.userName,
                                     email: assignment.email,
                                     assignmentLevel: reverseAssignmentLevelMap[assignment.assignmentLevel] || assignment.assignmentLevel,
-                                    officeId: assignment.departmentId || '', // Map departmentId back to officeId for form
+                                    officeId: assignment.officeId || assignment.departmentId || '', // Use officeId if available, otherwise departmentId
                                     responsibilityCenterName: assignment.divisionName || '',
                                     rolePermissions: assignment.rolePermissions || {
                                       CreateProposals: true,

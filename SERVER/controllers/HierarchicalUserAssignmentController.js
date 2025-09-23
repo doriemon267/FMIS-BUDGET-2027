@@ -313,17 +313,42 @@ const getAllHierarchicalAssignments = async (req, res) => {
     // Add consolidation info to each assignment
     const assignmentsWithConsolidation = await Promise.all(
       assignments.map(async (assignment) => {
-        const assignmentDoc = await HierarchicalUserAssignment.findById(assignment._id);
-        const consolidationInfo = assignmentDoc.getConsolidationTarget();
-        // Shape to match UI expectations
-        return {
-          ...assignment,
-          accessScope: assignment.assignmentLevel,
-          regions: assignment.regionId ? [{ _id: assignment.regionId._id, Region: assignment.regionId.Region || assignment.regionId.regionName || assignment.regionId.RegionName }] : [],
-          departments: assignment.departmentId ? [{ _id: assignment.departmentId._id, Department: assignment.departmentId.Department || assignment.departmentId.departmentName || assignment.departmentId.DepartmentName }] : [],
-          divisions: assignment.divisionName ? [assignment.divisionName] : [],
-          consolidationInfo
-        };
+        try {
+          const assignmentDoc = await HierarchicalUserAssignment.findById(assignment._id);
+          const consolidationInfo = assignmentDoc ? assignmentDoc.getConsolidationTarget() : null;
+          // Shape to match UI expectations
+          const officeId = assignment.regionId && assignment.departmentId
+            ? `${assignment.departmentId._id}_${assignment.regionId._id}`
+            : assignment.departmentId
+              ? assignment.departmentId._id.toString()
+              : '';
+          return {
+            ...assignment,
+            accessScope: assignment.assignmentLevel,
+            officeId: officeId,
+            regions: assignment.regionId ? [{ _id: assignment.regionId._id, Region: assignment.regionId.Region || assignment.regionId.regionName || assignment.regionId.RegionName }] : [],
+            departments: assignment.departmentId ? [{ _id: assignment.departmentId._id, Department: assignment.departmentId.Department || assignment.departmentId.departmentName || assignment.departmentId.DepartmentName }] : [],
+            divisions: assignment.divisionName ? [assignment.divisionName] : [],
+            consolidationInfo
+          };
+        } catch (error) {
+          console.error(`Error processing assignment ${assignment._id}:`, error);
+          // Return assignment without consolidation info if there's an error
+          const officeId = assignment.regionId && assignment.departmentId
+            ? `${assignment.departmentId._id}_${assignment.regionId._id}`
+            : assignment.departmentId
+              ? assignment.departmentId._id.toString()
+              : '';
+          return {
+            ...assignment,
+            accessScope: assignment.assignmentLevel,
+            officeId: officeId,
+            regions: assignment.regionId ? [{ _id: assignment.regionId._id, Region: assignment.regionId.Region || assignment.regionId.regionName || assignment.regionId.RegionName }] : [],
+            departments: assignment.departmentId ? [{ _id: assignment.departmentId._id, Department: assignment.departmentId.Department || assignment.departmentId.departmentName || assignment.departmentId.DepartmentName }] : [],
+            divisions: assignment.divisionName ? [assignment.divisionName] : [],
+            consolidationInfo: null
+          };
+        }
       })
     );
     // Group by access scope for better organization
