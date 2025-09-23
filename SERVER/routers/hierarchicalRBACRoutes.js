@@ -510,8 +510,7 @@ router.get(
             if (deptMappings.length > 0) {
               // Check if this is a central office that serves multiple regions
               const isCentralOffice = deptMappings.length > 1 ||
-                dept.Department === 'IRRIGATION MANAGEMENT OFFICE' ||
-                dept.Department === 'REGIONAL OFFICE';
+                dept.Department === 'IRRIGATION MANAGEMENT OFFICE';
 
               if (isCentralOffice && deptMappings.length > 1) {
                 // Central office serving multiple regions
