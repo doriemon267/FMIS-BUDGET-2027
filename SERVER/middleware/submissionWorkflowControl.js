@@ -32,10 +32,8 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
       const isSuperAdmin = userRoles && userRoles.includes('SUPER_ADMIN');
       const hasFullAccessPrivileges = hasFullAccess(userRoles);
       if (isSuperAdmin || hasFullAccessPrivileges) {
-        if (!(operation === 'read' && enforceSubmissionWorkflow)) {
-          return next();
-        }
-        // else: continue and apply submission workflow filters
+        // FULL access users should bypass submission workflow controls entirely
+        return next();
       }
 
       // Try to get user's assignment from new model first, fallback to old model

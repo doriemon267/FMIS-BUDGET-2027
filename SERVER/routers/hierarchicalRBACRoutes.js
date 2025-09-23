@@ -504,8 +504,9 @@ router.get(
               m.departmentId && m.departmentId.toString() === dept._id.toString()
             );
 
-            // Special handling for REGIONAL OFFICE and IRRIGATION MANAGEMENT OFFICE - create separate entries for each region
-            if ((dept.Department === 'REGIONAL OFFICE' || dept.Department === 'IRRIGATION MANAGEMENT OFFICE') && deptMappings.length > 1) {
+            // Special handling for departments that should be split by region
+            const departmentsToSplit = ['REGIONAL OFFICE', 'IRRIGATION MANAGEMENT OFFICE', 'HEAD OFFICE', 'DIVISION I', 'DIVISION II', 'DIVISION III', 'DIVISION IV'];
+            if (departmentsToSplit.includes(dept.Department) && deptMappings.length > 1) {
               deptMappings.forEach((mapping, mappingIndex) => {
                 const region = regions.find(r => r._id.toString() === mapping.regionId.toString());
                 if (region) {
@@ -515,7 +516,7 @@ router.get(
                   officesMap.set(officeId, {
                     id: officeId,
                     name: dept.Department,
-                    code: dept.DepartmentCode || `RO${mappingIndex + 1}`,
+                    code: dept.DepartmentCode || `${dept.Department.substring(0, 2)}${mappingIndex + 1}`,
                     region: regionName,
                     regionId: region._id,
                     departmentId: dept._id,
@@ -529,11 +530,19 @@ router.get(
               let regionId = null;
 
               if (deptMappings.length > 0) {
-                // Check if this is a central office that serves multiple regions
-                const isCentralOffice = deptMappings.length > 1 ||
-                  dept.Department === 'IRRIGATION MANAGEMENT OFFICE';
-
-                if (isCentralOffice && deptMappings.length > 1) {
+              // Check if this is a central office that serves multiple regions
+              const centralOfficeNames = [
+                'IRRIGATION MANAGEMENT OFFICE',
+                'PUBLIC AFFAIRS AND STAFF INFORMATION', 
+                'LEGAL SERVICES',
+                'INTERNAL AUDIT SERVICES',
+                'ADMINISTRATIVE DEPARTMENT',
+                'CORPORATE PLANNING SERVICES',
+                'FINANCIAL MANAGEMENT DEPARTMENT',
+                'HEAD OFFICE',
+                'OPERATIONS DEPARTMENT'
+              ];
+              const isCentralOffice = deptMappings.length > 1 || centralOfficeNames.includes(dept.Department);                if (isCentralOffice && deptMappings.length > 1) {
                   // Central office serving multiple regions
                   regionName = 'All Regions';
                   regionId = null; // No specific region ID for multi-region offices

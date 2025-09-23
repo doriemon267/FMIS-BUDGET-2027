@@ -224,6 +224,22 @@ const AllProposalsPage = () => {
       label: "EXPENDITURE TYPE",
       show: true,
     },
+    region: {
+      type: "text",
+      label: "REGION",
+      show: currentUser?.hierarchicalAccess?.scope === 'FULL',
+      customRender: (row) => {
+        return row.region || "N/A";
+      }
+    },
+    division: {
+      type: "text",
+      label: "DIVISION",
+      show: currentUser?.hierarchicalAccess?.scope === 'FULL',
+      customRender: (row) => {
+        return row.division || "N/A";
+      }
+    },
     office: {
       type: "text",
       label: (() => {

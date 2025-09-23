@@ -682,11 +682,16 @@ const CustomPage = ({
     queryFn: async () => {
       const region = activeRegion?.name || activeRegion?.regionName;
       const fiscalYear = selectedFiscalYear || activeFiscalYear;
-      const response = await api.get(
-        `/getpersonnels?region=${region}&fiscalYear=${fiscalYear}`
-      );
+      const isFullAccess = currentUser?.hierarchicalAccess?.scope === 'FULL';
+      
+      // For FULL access users, don't include region parameter to get all regions
+      const url = isFullAccess 
+        ? `/getpersonnels?fiscalYear=${fiscalYear}`
+        : `/getpersonnels?region=${region}&fiscalYear=${fiscalYear}`;
+        
+      const response = await api.get(url);
       // console.log(
-      //   `Fetched personnel data for region: ${region}, fiscal year: ${fiscalYear}`
+      //   `Fetched personnel data for ${isFullAccess ? 'all regions' : 'region: ' + region}, fiscal year: ${fiscalYear}`
       // );
       return response.data.map((item) => ({
         ...item,
@@ -710,9 +715,14 @@ const CustomPage = ({
     queryFn: async () => {
       const region = activeRegion?.name || activeRegion?.regionName;
       const fiscalYear = selectedFiscalYear || activeFiscalYear;
-      const response = await api.get(
-        `/mooe-list?region=${region}&fiscalYear=${fiscalYear}`
-      );
+      const isFullAccess = currentUser?.hierarchicalAccess?.scope === 'FULL';
+      
+      // For FULL access users, don't include region parameter to get all regions
+      const url = isFullAccess 
+        ? `/mooe-list?fiscalYear=${fiscalYear}`
+        : `/mooe-list?region=${region}&fiscalYear=${fiscalYear}`;
+        
+      const response = await api.get(url);
       // console.log(
       //   `Fetched MOOE data for region: ${region}, fiscal year: ${fiscalYear}`
       // );
@@ -767,9 +777,14 @@ const CustomPage = ({
       // Use the same endpoint as CapitalOutlayTable for consistency
       const region = activeRegion?.name || activeRegion?.regionName;
       const fiscalYear = selectedFiscalYear || activeFiscalYear;
-      const response = await api.get(
-        `/capital-outlays?region=${region}&fiscalYear=${fiscalYear}`
-      );
+      const isFullAccess = currentUser?.hierarchicalAccess?.scope === 'FULL';
+      
+      // For FULL access users, don't include region parameter to get all regions
+      const url = isFullAccess 
+        ? `/capital-outlays?fiscalYear=${fiscalYear}`
+        : `/capital-outlays?region=${region}&fiscalYear=${fiscalYear}`;
+        
+      const response = await api.get(url);
       // console.log(
       //   `Fetched Capital Outlay data for region: ${region}, fiscal year: ${fiscalYear}`
       // );
@@ -795,9 +810,14 @@ const CustomPage = ({
     queryFn: async () => {
       const region = activeRegion?.name || activeRegion?.regionName;
       const fiscalYear = selectedFiscalYear || activeFiscalYear;
-      const response = await api.get("/income", {
-        params: { fiscalYear, region }
-      });
+      const isFullAccess = currentUser?.hierarchicalAccess?.scope === 'FULL';
+      
+      // For FULL access users, don't include region parameter to get all regions
+      const params = isFullAccess 
+        ? { fiscalYear }
+        : { fiscalYear, region };
+        
+      const response = await api.get("/income", { params });
       // console.log(
       //   `Fetched Income data for region: ${region}, fiscal year: ${fiscalYear}`
       // );
@@ -824,18 +844,14 @@ const CustomPage = ({
       queryFn: async () => {
         const region = activeRegion?.name || activeRegion?.regionName;
         const fiscalYear = selectedFiscalYear || activeFiscalYear;
-        // console.log("Fetching budgetary support data with params:", {
-        //   fiscalYear: fiscalYear,
-        //   budgetType: activeBudgetType,
-        //   region: region,
-        // });
-        const response = await api.get("/budgetary-support", {
-          params: {
-            fiscalYear: fiscalYear,
-            budgetType: activeBudgetType,
-            region: region,
-          },
-        });
+        const isFullAccess = currentUser?.hierarchicalAccess?.scope === 'FULL';
+        
+        // For FULL access users, don't include region parameter to get all regions
+        const params = isFullAccess 
+          ? { fiscalYear, budgetType: activeBudgetType }
+          : { fiscalYear, budgetType: activeBudgetType, region };
+          
+        const response = await api.get("/budgetary-support", { params });
         // console.log("Budgetary support response:", response.data);
         return response.data.map((item) => ({
           ...item,
@@ -2369,6 +2385,9 @@ const CustomPage = ({
                   📊 Status Overview{" "}
                   {(() => {
                     const scope = currentUser?.hierarchicalAccess?.scope;
+                    if (scope === 'FULL') {
+                      return '(Administrative Access - All Regions)';
+                    }
                     if (scope === 'DIVISION') {
                       const divisionName = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
                       return divisionName ? `(${divisionName})` : '';
