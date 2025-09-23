@@ -368,7 +368,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
       {/* Status header with track + actions */}
       {showHeader && (
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1, flexWrap: 'wrap' }}>
-          <Chip
+          {/* <Chip
             size="small"
             label={proposal?.status || 'Draft'}
             color={(() => {
@@ -392,9 +392,9 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
               }
             })()}
             variant="outlined"
-          />
+          /> */}
 
-          <Tooltip title="Track progress" arrow>
+          {/* <Tooltip title="Track progress" arrow>
             <span>
               <Button
                 size="small"
@@ -406,7 +406,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
                 Track
               </Button>
             </span>
-          </Tooltip>
+          </Tooltip> */}
 
           <Box sx={{ flexGrow: 1 }} />
 
