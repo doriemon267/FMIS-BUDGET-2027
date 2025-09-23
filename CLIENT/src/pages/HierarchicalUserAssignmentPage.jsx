@@ -1755,11 +1755,18 @@ const HierarchicalUserAssignmentPage = () => {
                                     regionFinalVerifier: 'officeFinalVerifier',
                                     regionCreator: 'regionCreator'
                                   };
+                                  const reverseAssignmentLevelMap = {
+                                    'DIVISION': 'RESPONSIBILITY_CENTER',
+                                    'DEPARTMENT': 'OFFICE',
+                                    'REGION': 'FULL',
+                                    'FULL': 'FULL',
+                                    'OWN_ONLY': 'OWN_ONLY'
+                                  };
                                   const formFields = {
                                     userId: assignment.userId,
                                     userName: assignment.userName,
                                     email: assignment.email,
-                                    assignmentLevel: assignment.assignmentLevel,
+                                    assignmentLevel: reverseAssignmentLevelMap[assignment.assignmentLevel] || assignment.assignmentLevel,
                                     officeId: assignment.departmentId || '', // Map departmentId back to officeId for form
                                     responsibilityCenterName: assignment.divisionName || '',
                                     rolePermissions: assignment.rolePermissions || {
