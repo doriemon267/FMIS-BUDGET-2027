@@ -877,7 +877,12 @@ const HierarchicalUserAssignmentPage = () => {
                 <Grid item xs={12}>
                   <Autocomplete
                     options={organizationStructure?.availableUnits?.offices || []}
-                    getOptionLabel={(option) => option.name || ''}
+                    getOptionLabel={(option) => {
+                      if (typeof option === 'string') return option;
+                      return option.region && option.region !== 'All Regions' 
+                        ? `${option.name} - ${option.region}` 
+                        : option.name || '';
+                    }}
                     value={organizationStructure?.availableUnits?.offices?.find(office => office.id === formData.officeId) || null}
                     onChange={(event, newValue) => {
                       // Handle both object (selected option) and string (free text) cases
@@ -898,13 +903,18 @@ const HierarchicalUserAssignmentPage = () => {
                     )}
                     renderOption={(props, option) => {
                       const { key, ...otherProps } = props;
+                      const displayName = option.region && option.region !== 'All Regions' 
+                        ? `${option.name} - ${option.region}` 
+                        : option.name;
                       return (
                         <Box component="li" key={key} {...otherProps}>
                           <Box>
-                            <Typography variant="body1">{option.name}</Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              Region: {option.region || 'N/A'}
-                            </Typography>
+                            <Typography variant="body1">{displayName}</Typography>
+                            {option.region === 'All Regions' && (
+                              <Typography variant="caption" color="text.secondary">
+                                Serves multiple regions
+                              </Typography>
+                            )}
                           </Box>
                         </Box>
                       );
@@ -921,7 +931,12 @@ const HierarchicalUserAssignmentPage = () => {
                   <Autocomplete
                     options={organizationStructure?.availableUnits?.responsibilityCenters
                       ?.filter(rc => !formData.officeId || rc.officeId === formData.officeId) || []}
-                    getOptionLabel={(option) => option.name || ''}
+                    getOptionLabel={(option) => {
+                      if (typeof option === 'string') return option;
+                      return option.region && option.region !== 'All Regions' 
+                        ? `${option.name} - ${option.region}` 
+                        : option.name || '';
+                    }}
                     value={organizationStructure?.availableUnits?.responsibilityCenters
                       ?.find(rc => rc.name === formData.responsibilityCenterName) || null}
                     onChange={(event, newValue) => {
@@ -939,12 +954,16 @@ const HierarchicalUserAssignmentPage = () => {
                     )}
                     renderOption={(props, option) => {
                       const { key, ...otherProps } = props;
+                      const displayName = option.region && option.region !== 'All Regions' 
+                        ? `${option.name} - ${option.region}` 
+                        : option.name;
                       return (
                         <Box component="li" key={key} {...otherProps}>
                           <Box>
-                            <Typography variant="body1">{option.name}</Typography>
+                            <Typography variant="body1">{displayName}</Typography>
                             <Typography variant="caption" color="text.secondary">
-                              Office: {option.officeName || 'N/A'} | Region: {option.region || 'N/A'}
+                              Office: {option.officeName || 'N/A'}
+                              {option.region === 'All Regions' && ' | Serves multiple regions'}
                             </Typography>
                           </Box>
                         </Box>
