@@ -73,13 +73,22 @@ const PermanentCustomTable = ({
       const params = {
         page: page + 1,
         limit: rowsPerPage,
-        search: searchValue || undefined,
-        [fieldAndValue.field]: fieldAndValue.value || undefined,
         orderBy,
         order,
-        operator: fieldAndValue.operator,
         statusOfAppointment: "PERMANENT",
       };
+      
+      // Only add search if it has a value
+      if (searchValue) {
+        params.search = searchValue;
+      }
+      
+      // Only add field filter and operator if field is specified
+      if (fieldAndValue.field) {
+        params[fieldAndValue.field] = fieldAndValue.value || undefined;
+        params.operator = fieldAndValue.operator;
+      }
+      
       // Clean undefined to avoid sending "undefined" strings
       Object.keys(params).forEach(k => params[k] === undefined && delete params[k]);
       const res = await api.get(apiPath, { params });
@@ -156,7 +165,7 @@ const PermanentCustomTable = ({
       const regionName = activeRegion.name || activeRegion.regionName;
       setRegionFilter(regionName);
     } else {
-      setRegionFilter("");
+      setRegionFilter("Central Office");
     }
   }, [activeRegion]);
 

@@ -92,6 +92,43 @@ const AllProposalsPage = () => {
         );
       }
     },
+    originLevel: {
+      type: "text",
+      label: "ORIGIN",
+      show: true,
+      customRender: (row) => (
+        <span className="text-xs text-gray-700">{row.originLabel || '—'}</span>
+      )
+    },
+    currentOwner: {
+      type: "text",
+      label: "CURRENT LEVEL",
+      show: true,
+      customRender: (row) => (
+        <span className="text-xs text-gray-700">{row.currentOwnerLabel || '—'}</span>
+      )
+    },
+    approvedBy: {
+      type: "text",
+      label: "VERIFIED/APPROVED BY",
+      show: true,
+      customRender: (row) => {
+        const info = row.approvalInfo || {};
+        // Prefer department verifier when visible; else region approver; else last action
+        const actor = info.departmentVerifiedBy || info.submittedToDepartmentBy || info.regionApprovedBy || info.submittedToRegionBy || info.lastActionBy;
+        const when = info.departmentVerifiedAt || info.submittedToDepartmentAt || info.regionApprovedAt || info.submittedToRegionAt || info.lastActionDate;
+        return (
+          <div className="flex flex-col">
+            <span className="text-xs font-medium text-gray-800">{actor || '—'}</span>
+            {when && (
+              <span className="text-[10px] text-gray-500">
+                {new Date(when).toLocaleString('en-PH', { year:'numeric', month:'short', day:'numeric' })}
+              </span>
+            )}
+          </div>
+        );
+      }
+    },
     fiscalYear: {
       type: "text", 
       label: "FISCAL YEAR",

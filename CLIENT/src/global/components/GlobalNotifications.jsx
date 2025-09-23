@@ -20,7 +20,7 @@ class NotificationManager {
     }
   }
 
-  show(message, severity = 'info', duration = 6000) {
+  show(message, severity = 'info', duration = 6000, onClick = null) {
     this.init();
     this.isVisible = true;
 
@@ -31,6 +31,7 @@ class NotificationManager {
         severity={severity}
         autoHideDuration={duration}
         onClose={() => this.hide()}
+        onClick={onClick}
         anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
       />
     );
@@ -51,20 +52,20 @@ class NotificationManager {
     this.currentSnackbar = null;
   }
 
-  success(message, duration) {
-    this.show(message, 'success', duration);
+  success(message, duration, onClick = null) {
+    this.show(message, 'success', duration, onClick);
   }
 
-  error(message, duration) {
-    this.show(message, 'error', duration);
+  error(message, duration, onClick = null) {
+    this.show(message, 'error', duration, onClick);
   }
 
-  warning(message, duration) {
-    this.show(message, 'warning', duration);
+  warning(message, duration, onClick = null) {
+    this.show(message, 'warning', duration, onClick);
   }
 
-  info(message, duration) {
-    this.show(message, 'info', duration);
+  info(message, duration, onClick = null) {
+    this.show(message, 'info', duration, onClick);
   }
 }
 
@@ -73,13 +74,13 @@ const notificationManager = new NotificationManager();
 
 // Make it globally available
 if (typeof window !== 'undefined') {
-  window.showSnackbar = (message, severity = 'info', duration = 6000) => {
-    notificationManager.show(message, severity, duration);
+  window.showSnackbar = (message, severity = 'info', duration = 6000, onClick = null) => {
+    notificationManager.show(message, severity, duration, onClick);
   };
-  window.showSuccess = (message, duration) => notificationManager.success(message, duration);
-  window.showError = (message, duration) => notificationManager.error(message, duration);
-  window.showWarning = (message, duration) => notificationManager.warning(message, duration);
-  window.showInfo = (message, duration) => notificationManager.info(message, duration);
+  window.showSuccess = (message, duration, onClick = null) => notificationManager.success(message, duration, onClick);
+  window.showError = (message, duration, onClick = null) => notificationManager.error(message, duration, onClick);
+  window.showWarning = (message, duration, onClick = null) => notificationManager.warning(message, duration, onClick);
+  window.showInfo = (message, duration, onClick = null) => notificationManager.info(message, duration, onClick);
 }
 
 export default notificationManager;

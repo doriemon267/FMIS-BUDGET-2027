@@ -136,7 +136,7 @@ exports.updateProposalStatus = async (req, res) => {
       updatePromises.push(
         PersonnelService.updateMany(
           { _id: { $in: validPersonnelIds }, ...accessScope },
-          { $set: { status: "Division Submitted", fiscalYear, budgetType, processBy, region, workflowLevel: "DEPARTMENT" } }
+          { $set: { status: "Division Submitted", fiscalYear, budgetType, processBy, region, workflowLevel: "DIVISION" } }
         )
       );
     }
@@ -153,7 +153,7 @@ exports.updateProposalStatus = async (req, res) => {
       updatePromises.push(
         MooeProposal.updateMany(
           { _id: { $in: validMooeIds }, ...accessScope },
-          { $set: { status: "Division Submitted", fiscalYear, budgetType, processBy, region, workflowLevel: "DEPARTMENT" } }
+          { $set: { status: "Division Submitted", fiscalYear, budgetType, processBy, region, workflowLevel: "DIVISION" } }
         )
       );
     }
@@ -170,7 +170,7 @@ exports.updateProposalStatus = async (req, res) => {
       updatePromises.push(
         CapitalOutlay.updateMany(
           { _id: { $in: validCapitalIds }, ...accessScope },
-          { $set: { status: "Division Submitted", fiscalYear, budgetType, processBy, region, workflowLevel: "DEPARTMENT" } }
+          { $set: { status: "Division Submitted", fiscalYear, budgetType, processBy, region, workflowLevel: "DIVISION" } }
         )
       );
     }
@@ -187,7 +187,7 @@ exports.updateProposalStatus = async (req, res) => {
       updatePromises.push(
         Income.updateMany(
           { _id: { $in: validIncomeIds }, ...accessScope },
-          { $set: { status: "Division Submitted", fiscalYear, budgetType, processBy, region, workflowLevel: "DEPARTMENT" } }
+          { $set: { status: "Division Submitted", fiscalYear, budgetType, processBy, region, workflowLevel: "DIVISION" } }
         )
       );
     }
@@ -1368,14 +1368,71 @@ exports.getProposals = async (req, res) => {
       })()
     ];
 
+    // Enrich results with origin/current level and approval info
+    const inferOriginLevel = (doc) => {
+      const orig = (doc.originalLevel || doc.workflowLevel || '').toUpperCase();
+      if (orig) return orig;
+      if (doc.division) return 'DIVISION';
+      if (doc.department) return 'DEPARTMENT';
+      return 'REGION';
+    };
+    const mapLevelFromStatus = (status) => {
+      const s = String(status || '').toUpperCase();
+      if (s.includes('FINAL')) return 'FINALIZED';
+      if (s.includes('REGION')) return 'REGION';
+      if (s.includes('DEPARTMENT')) return 'DEPARTMENT';
+      return 'DIVISION';
+    };
+    const inferCurrentLevel = (doc) => {
+      if (doc.workflowLevel) return String(doc.workflowLevel).toUpperCase();
+      return mapLevelFromStatus(doc.status);
+    };
+    const makeLabel = (level, doc) => {
+      const L = String(level || '').toUpperCase();
+      if (L === 'DIVISION') return doc.division ? `DIVISION: ${doc.division}` : 'DIVISION';
+      if (L === 'DEPARTMENT') return doc.department ? `DEPARTMENT: ${doc.department}` : 'DEPARTMENT';
+      if (L === 'REGION') return doc.region ? `REGION: ${doc.region}` : 'REGION';
+      if (L === 'FINALIZED') return 'FINALIZED';
+      return L || 'UNKNOWN';
+    };
+    const pickLatest = (dates) => {
+      return dates
+        .map(d => (d ? new Date(d) : null))
+        .filter(Boolean)
+        .sort((a,b)=>b-a)[0] || null;
+    };
+    const enrichOne = (item) => {
+      const originLevel = inferOriginLevel(item);
+      const currentLevel = inferCurrentLevel(item);
+      const originLabel = makeLabel(originLevel, item);
+      const currentOwnerLabel = makeLabel(currentLevel, item);
+      // Approval/verification metadata (best-effort across models)
+      const approvalInfo = {
+        lastActionBy: item.lastActionBy || item.submittedToRegionBy || item.submittedToDepartmentBy || null,
+        lastActionDate: item.lastActionDate || pickLatest([item.finalApprovedAt, item.regionApprovedDate, item.departmentVerifiedDate, item.submittedDate]) || null,
+        departmentVerifiedBy: item.departmentVerifiedBy || item?.departmentConsolidated?.by || null,
+        departmentVerifiedAt: item.departmentVerifiedDate || item?.departmentConsolidated?.at || item.submittedToDepartmentAt || null,
+        regionApprovedBy: item.regionApprovedBy || item.finalApprovedBy || item?.regionFinalVerified?.by || null,
+        regionApprovedAt: item.regionApprovedDate || item.finalApprovedAt || item?.regionFinalVerified?.at || item.submittedToRegionAt || null,
+        submittedToDepartmentBy: item.submittedToDepartmentBy || null,
+        submittedToDepartmentAt: item.submittedToDepartmentAt || null,
+        submittedToRegionBy: item.submittedToRegionBy || null,
+        submittedToRegionAt: item.submittedToRegionAt || null
+      };
+      return { ...item, originLevel, originLabel, currentLevel, currentOwnerLabel, approvalInfo };
+    };
+
+    // If PS/MOOE/Capital entries were aggregated, keep aggregation but also aggregate approval info sensibly
+    const enrichedProposals = allProposals.map(enrichOne);
+
     // Sort combined results and apply pagination
-    allProposals.sort((a, b) => {
+    enrichedProposals.sort((a, b) => {
       const aValue = a[sort] || a.createdAt || new Date(0);
       const bValue = b[sort] || b.createdAt || new Date(0);
       return sortOrder * (aValue > bValue ? 1 : -1);
     });
 
-    const paginatedProposals = allProposals.slice(skipCount, skipCount + limitNum);
+    const paginatedProposals = enrichedProposals.slice(skipCount, skipCount + limitNum);
     if (proposals.length > 0) {
       proposals.forEach((proposal, index) => {
         });
@@ -2075,45 +2132,103 @@ exports.getAllUserProposals = async (req, res) => {
       return res.status(400).json({ message: "Region parameter is required" });
     }
 
-    // Build base query with processBy and region
-    const baseQuery = { 
-      processBy: processBy,
-      region: region
-    };
+    // Base query
+    const baseQuery = { processBy, region };
 
-    // Apply hierarchical filters from middleware if available
-    let hierarchicalQuery = { ...baseQuery };
-    if (req.submissionWorkflowFilters) {
-      // Merge hierarchical filters with base query
-      hierarchicalQuery = {
+    // Determine user scope from middleware/assignment
+    const assignment = req.userHierarchicalAssignment || {};
+    const scope = (req.hierarchicalAccessInfo?.scope || assignment.assignmentLevel || 'NONE').toUpperCase();
+    const departmentName = assignment?.departmentId?.Department || assignment?.departments?.[0]?.departmentName || null;
+    const divisionName = assignment?.divisionName || assignment?.divisions?.[0] || null;
+
+    // Visibility gates to prevent lower-level draft leakage
+    const submittedStatuses = [
+      'Division Submitted','DIVISION SUBMITTED',
+      'Department Verified','DEPARTMENT VERIFIED',
+      'Department Submitted','DEPARTMENT SUBMITTED',
+      'Region Approved','REGION APPROVED','Finalized'
+    ];
+
+    let visibilityGate = {};
+    if (scope === 'DIVISION') {
+      // Division: only own division items (any status)
+      visibilityGate = {
         $and: [
           baseQuery,
-          req.submissionWorkflowFilters
+          { department: departmentName },
+          { division: divisionName }
         ]
       };
+    } else if (scope === 'DEPARTMENT') {
+      // Department: own department-level drafts + submitted division items only
+      visibilityGate = {
+        $and: [
+          baseQuery,
+          { department: departmentName },
+          {
+            $or: [
+              // Own department-level items (no division or explicit DEPARTMENT level)
+              {
+                $and: [
+                  { $or: [
+                    { workflowLevel: 'DEPARTMENT' },
+                    { $or: [ { division: { $exists: false } }, { division: null }, { division: '' } ] }
+                  ] }
+                ]
+              },
+              // Division items visible only when submitted upward
+              {
+                $and: [
+                  { division: { $exists: true, $ne: null, $ne: '' } },
+                  { $or: [ { originalLevel: 'DIVISION' }, { workflowLevel: 'DIVISION' } ] },
+                  { status: { $in: submittedStatuses } }
+                ]
+              }
+            ]
+          }
+        ]
+      };
+    } else if (scope === 'REGION' || scope === 'FULL') {
+      // Region: own region-level drafts + submitted department/division items only
+      const depDivSubmitted = ['Department Submitted','DEPARTMENT SUBMITTED','Region Approved','REGION APPROVED','Finalized'];
+      visibilityGate = {
+        $and: [
+          baseQuery,
+          {
+            $or: [
+              // Own region-level items (no department/division, explicit REGION level)
+              {
+                $and: [
+                  { $or: [ { department: { $exists: false } }, { department: null }, { department: '' } ] },
+                  { $or: [ { division: { $exists: false } }, { division: null }, { division: '' } ] },
+                  { workflowLevel: 'REGION' }
+                ]
+              },
+              // Department/Division items only when submitted upward
+              {
+                $and: [
+                  { $or: [ { department: { $exists: true, $ne: null, $ne: '' } }, { division: { $exists: true, $ne: null, $ne: '' } } ] },
+                  { status: { $in: depDivSubmitted } }
+                ]
+              }
+            ]
+          }
+        ]
+      };
+    } else {
+      // Fallback: just base query
+      visibilityGate = baseQuery;
     }
 
-    // Get all personnel services with hierarchical filtering
-    const personnel = await PersonnelService.find(hierarchicalQuery).sort({ updatedAt: -1 });
-    
-    // Get all MOOE proposals with hierarchical filtering
-    const mooe = await MooeProposal.find(hierarchicalQuery).sort({ updatedAt: -1 });
-    
-    // Get all capital outlay proposals with hierarchical filtering
-    const capitalOutlay = await CapitalOutlay.find(hierarchicalQuery).sort({ updatedAt: -1 });
-    
-    // Get all income proposals with hierarchical filtering
-    const income = await Income.find(hierarchicalQuery).sort({ updatedAt: -1 });
-
-    // Get all budgetary support proposals with hierarchical filtering
-    const budgetarySupport = await BudgetarySupport.find(hierarchicalQuery).sort({ updatedAt: -1 });
-
-    // Get all draft proposals (drafts might have different filtering)
-    const draftQuery = { ...baseQuery };
-    if (req.submissionWorkflowFilters) {
-      draftQuery.$and = [baseQuery, req.submissionWorkflowFilters];
-    }
-    const drafts = await DraftProposal.find(draftQuery).sort({ updatedAt: -1 });
+    // Query all collections with the same visibility gate
+    const [personnel, mooe, capitalOutlay, income, budgetarySupport, drafts] = await Promise.all([
+      PersonnelService.find(visibilityGate).sort({ updatedAt: -1 }),
+      MooeProposal.find(visibilityGate).sort({ updatedAt: -1 }),
+      CapitalOutlay.find(visibilityGate).sort({ updatedAt: -1 }),
+      Income.find(visibilityGate).sort({ updatedAt: -1 }),
+      BudgetarySupport.find(visibilityGate).sort({ updatedAt: -1 }),
+      DraftProposal.find(visibilityGate).sort({ updatedAt: -1 })
+    ]);
 
     return res.status(200).json({
       personnel,
@@ -2122,7 +2237,8 @@ exports.getAllUserProposals = async (req, res) => {
       income,
       budgetarySupport,
       drafts,
-      filters: { region, processBy } // Include the filters used in the response
+      filters: { region, processBy },
+      scope
     });
   } catch (error) {
     console.error("Error getting all user proposals:", error);

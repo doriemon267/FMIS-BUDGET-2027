@@ -5,14 +5,16 @@ const PersonnelServices = require("../models/personnelServices");
 // Kumuha ng combined proposal summary
 exports.getProposalSummary = async (req, res) => {
   try {
-    // Build query with hierarchical filters
-    const query = {};
-    if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
-      query.region = req.hierarchicalFilters.region;
+    // Build query using submission workflow filters when available
+    let baseQuery = {};
+    if (req.submissionWorkflowFilters && Object.keys(req.submissionWorkflowFilters).length) {
+      baseQuery = { ...req.submissionWorkflowFilters };
+    } else if (req.hierarchicalFilters && Object.keys(req.hierarchicalFilters).length) {
+      baseQuery = { ...req.hierarchicalFilters };
     }
-    const capitalOutlays = await CapitalOutlay.find(query).lean();
-    const mooeProposals = await MOOEProposal.find(query).lean();
-    const personnelServices = await PersonnelServices.find(query).lean();
+    const capitalOutlays = await CapitalOutlay.find(baseQuery).lean();
+    const mooeProposals = await MOOEProposal.find(baseQuery).lean();
+    const personnelServices = await PersonnelServices.find(baseQuery).lean();
     // I-format ang data para magkaroon ng property na 'type'
     const capitalOutlaysFormatted = capitalOutlays.map(item => ({
       type: "Capital Outlay",
@@ -136,4 +138,4 @@ exports.getAnalytics = async (req, res) => {
     console.error(error);
     res.status(500).json({ message: "Server Error" });
   }
-};
+};

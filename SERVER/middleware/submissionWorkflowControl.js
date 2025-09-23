@@ -28,12 +28,14 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
       const userRoles = req.user.Roles;
       const userName = req.user.FirstName + ' ' + req.user.LastName;
 
-      // For submission workflow, DO NOT bypass based on roles alone
-      // Even BUDGET ADMIN/ANALYST users must follow submission workflow if they have hierarchical assignments
-      // Only bypass if user has SUPER_ADMIN role or no organizational constraints
+      // For submission workflow reads, do not bypass even for FULL ACCESS if enforceSubmissionWorkflow=true
       const isSuperAdmin = userRoles && userRoles.includes('SUPER_ADMIN');
-      if (isSuperAdmin) {
-        return next();
+      const hasFullAccessPrivileges = hasFullAccess(userRoles);
+      if (isSuperAdmin || hasFullAccessPrivileges) {
+        if (!(operation === 'read' && enforceSubmissionWorkflow)) {
+          return next();
+        }
+        // else: continue and apply submission workflow filters
       }
 
       // Try to get user's assignment from new model first, fallback to old model
@@ -64,6 +66,7 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
 
       if (!assignment) {
         // If user has full access roles but no hierarchical assignment, allow full access
+        // (This case should be rare since full access users now bypass above)
         if (hasFullAccess(userRoles)) {
           return next();
         }
@@ -179,8 +182,42 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
         break;
 
       case 'FULL':
-        // Full access users can see everything
-        submissionFilters = {};
+        // Full access users see submitted-only across all offices; hide unsubmitted lower-level drafts
+        if (enforceSubmissionWorkflow) {
+          submissionFilters = {
+            $or: [
+              // Office-level data (no responsibility center specified)
+              {
+                $and: [
+                  {
+                    $or: [
+                      { workflowLevel: 'OFFICE' },
+                      { $or: [ { responsibilityCenter: { $exists: false } }, { responsibilityCenter: null }, { responsibilityCenter: "" } ] }
+                    ]
+                  }
+                ]
+              },
+              // Responsibility Center data that has been submitted upward
+              {
+                $and: [
+                  { workflowLevel: 'RESPONSIBILITY_CENTER' },
+                  {
+                    $or: [
+                      { status: { $in: ['Responsibility Center Submitted', 'RESPONSIBILITY_CENTER_SUBMITTED'] } },
+                      { status: { $in: ['Office Verified', 'OFFICE_VERIFIED'] } },
+                      { status: { $in: ['Office Submitted', 'OFFICE_SUBMITTED'] } },
+                      { status: { $in: ['Final Approved', 'FINAL_APPROVED'] } },
+                      { status: 'Finalized' }
+                    ]
+                  }
+                ]
+              }
+            ]
+          };
+          hierarchicalFilters = submissionFilters;
+        } else {
+          submissionFilters = {};
+        }
         break;
 
       case 'OWN_ONLY':
@@ -211,12 +248,19 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
           ]
         };
         if (enforceSubmissionWorkflow) {
-          // Division users see all their own data regardless of status
-          // BUT only for records that originated at DIVISION level
+          // Division users see all their own data regardless of status.
+          // Compatibility: many legacy records lack originalLevel/workflowLevel;
+          // treat presence of division as DIVISION-level.
           submissionFilters = {
             $and: [
               ...hierarchicalFilters.$and,
-              { originalLevel: 'DIVISION' }
+              {
+                $or: [
+                  { originalLevel: 'DIVISION' },
+                  { workflowLevel: 'DIVISION' },
+                  { division: { $exists: true, $ne: null, $ne: '' } }
+                ]
+              }
             ]
           };
         }
@@ -253,10 +297,16 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                       { workflowLevel: 'DIVISION' },
                       {
                         $or: [
+                          // Legacy status labels
                           { status: { $in: ['Division Submitted', 'DIVISION SUBMITTED'] } },
                           { status: { $in: ['Department Verified', 'DEPARTMENT VERIFIED'] } },
                           { status: { $in: ['Department Submitted', 'DEPARTMENT SUBMITTED'] } },
                           { status: { $in: ['Region Approved', 'REGION APPROVED'] } },
+                          // Newer labels (Responsibility Center/Office workflow)
+                          { status: { $in: ['Responsibility Center Submitted', 'RESPONSIBILITY_CENTER_SUBMITTED'] } },
+                          { status: { $in: ['Office Verified', 'OFFICE_VERIFIED'] } },
+                          { status: { $in: ['Office Submitted', 'OFFICE_SUBMITTED'] } },
+                          { status: { $in: ['Final Approved', 'FINAL_APPROVED'] } },
                           { status: 'Finalized' }
                         ]
                       }
@@ -307,8 +357,12 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                       { region: assignment.regionId?.Region || assignment.regions[0]?.regionName },
                       {
                         $or: [
-                          { status: 'Department Submitted' },
-                          { status: 'Region Approved' },
+                          // Legacy labels
+                          { status: { $in: ['Department Submitted', 'DEPARTMENT SUBMITTED'] } },
+                          { status: { $in: ['Region Approved', 'REGION APPROVED'] } },
+                          // Newer labels
+                          { status: { $in: ['Office Submitted', 'OFFICE_SUBMITTED'] } },
+                          { status: { $in: ['Final Approved', 'FINAL_APPROVED'] } },
                           { status: 'Finalized' }
                         ]
                       }
@@ -329,8 +383,48 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
         break;
 
       case 'FULL':
-        // Full access users can see everything
-        submissionFilters = {};
+        // Full access users see submitted-only across all regions; hide unsubmitted lower-level drafts
+        if (enforceSubmissionWorkflow) {
+          submissionFilters = {
+            $or: [
+              // Region-level data (no department/division specified)
+              {
+                $and: [
+                  { $or: [ { department: { $exists: false } }, { department: null }, { department: '' } ] },
+                  { $or: [ { division: { $exists: false } }, { division: null }, { division: '' } ] },
+                  { workflowLevel: 'REGION' }
+                ]
+              },
+              // Department/Division data that has been submitted upward
+              {
+                $and: [
+                  { $or: [
+                    { department: { $exists: true, $ne: null, $ne: '' } },
+                    { division: { $exists: true, $ne: null, $ne: '' } }
+                  ] },
+                  {
+                    $or: [
+                      // Legacy labels
+                      { status: { $in: ['Division Submitted','DIVISION SUBMITTED'] } },
+                      { status: { $in: ['Department Verified','DEPARTMENT VERIFIED'] } },
+                      { status: { $in: ['Department Submitted','DEPARTMENT SUBMITTED'] } },
+                      { status: { $in: ['Region Approved','REGION APPROVED'] } },
+                      // Newer labels
+                      { status: { $in: ['Responsibility Center Submitted','RESPONSIBILITY_CENTER_SUBMITTED'] } },
+                      { status: { $in: ['Office Verified','OFFICE_VERIFIED'] } },
+                      { status: { $in: ['Office Submitted','OFFICE_SUBMITTED'] } },
+                      { status: { $in: ['Final Approved','FINAL_APPROVED'] } },
+                      { status: 'Finalized' }
+                    ]
+                  }
+                ]
+              }
+            ]
+          };
+          hierarchicalFilters = submissionFilters;
+        } else {
+          submissionFilters = {};
+        }
         break;
 
       case 'NONE':

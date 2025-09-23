@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useUser } from "../../context/UserContext";
 import { useRegion } from "../../context/RegionContext";
 import api from "../../config/api";
+import { REGIONS, doesItemBelongToRegion, getRegionErrorMessage, getDefaultRegionForSave } from "../../constants/regions";
 import {
   Box, Paper, Typography, Button, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, TextField, IconButton,
@@ -124,7 +125,7 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate }) => {
       setFiscalYear(newFiscalYear);
     }
     if (!budgetType) {
-      const newBudgetType = currentUser?.budgetType || "REGULAR";
+      const newBudgetType = currentUser?.budgetType || "Initial";
       setBudgetType(newBudgetType);
     }
   }, [currentUser, fiscalYear, budgetType]);
@@ -142,7 +143,7 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate }) => {
       
       setRegionFilter(regionName);
     } else {
-      setRegionFilter("Central Office");
+      setRegionFilter(REGIONS.DEFAULT_REGION);
     }
   }, [activeRegion, regionFilter, queryClient]);
 
@@ -220,8 +221,7 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate }) => {
   };
 
   const checkRegionMatch = (item) => {
-    if (!item.region && regionFilter === "Central Office") return true;
-    return item.region === regionFilter;
+    return doesItemBelongToRegion(item, regionFilter);
   };
 
   const { data: incomeItems = [], isLoading } = useQuery({
@@ -239,11 +239,7 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate }) => {
       } catch (error) {
         console.error("❌ Error fetching income items:", error);
         
-        if (regionFilter === "Central Office") {
-          toast.error(`Central Office income error: ${error.response?.data?.error || error.message}`);
-        } else {
-          toast.error(`Error fetching income items: ${error.message}`);
-        }
+        toast.error(getRegionErrorMessage(regionFilter, error));
         return [];
       }
     },
@@ -294,12 +290,7 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate }) => {
       } catch (error) {
         console.error("❌ Error fetching income categories:", error);
         
-        // Show specific error message for Central Office
-        if (regionFilter === "Central Office") {
-          toast.error(`Central Office error: ${error.response?.data?.error || error.message}`);
-        } else {
-          toast.error(`Error fetching income categories: ${error.message}`);
-        }
+        toast.error(getRegionErrorMessage(regionFilter, error));
         
         return [];
       }
@@ -415,7 +406,7 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate }) => {
     const existingItem = incomeItems.find(item =>
       (item.incomecategory === category._id || item.incomecategory?._id === category._id) &&
       item.subcategory === subcategoryName &&
-      (item.region === regionFilter || (!item.region && regionFilter === "Central Office"))
+      doesItemBelongToRegion(item, regionFilter)
     );
     const categoryName = category.incomeCategoryName?.trim() || "Unknown Category";
     const incomeData = {
@@ -427,7 +418,7 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate }) => {
       amount: Number(amount),
       fiscalYear,
       budgetType,
-      region: regionFilter || "Central Office",
+      region: getDefaultRegionForSave(regionFilter),
       processBy: currentUser ? `${currentUser.FirstName} ${currentUser.LastName}` : "User",
       processDate: new Date()
     };
@@ -478,7 +469,7 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate }) => {
     let hasIsfCategory = false;
 
     incomeItems.forEach(item => {
-      // Add comprehensive null checking for Central Office region
+      // Add comprehensive null checking for default region
       if (!item || !item.incomecategory) {
         return;
       }
@@ -677,7 +668,7 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate }) => {
       const existingItem = incomeItems.find(item =>
         (item.incomecategory === categoryId || item.incomecategory?._id === categoryId) &&
         item.subcategory === subcategoryName &&
-        (item.region === regionFilter || (!item.region && regionFilter === "Central Office"))
+        doesItemBelongToRegion(item, regionFilter)
       );
       const categoryName = category.incomeCategoryName?.trim() || "Unknown Category";
       const incomeData = {
@@ -689,7 +680,7 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate }) => {
         amount: Number(amount),
         fiscalYear,
         budgetType,
-        region: regionFilter || "Central Office",
+        region: getDefaultRegionForSave(regionFilter),
         processBy: currentUser ? `${currentUser.FirstName} ${currentUser.LastName}` : "User",
         processDate: new Date()
       };

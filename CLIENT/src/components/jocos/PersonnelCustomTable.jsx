@@ -29,6 +29,7 @@ import React, { useEffect, useState } from "react";
 import { TiFilter } from "react-icons/ti";
 import api from "../../config/api";
 import { useSearch } from "../../context/SearchContext";
+import { useRegion } from "../../context/RegionContext";
 import TableBodyLoading from "../../global/components/TableBodyLoading";
 import TextSearchable from "../../global/components/TextSearchable";
 import formatCurrency from "../../utils/formatCurrency";
@@ -43,10 +44,12 @@ const COSCustomTable = ({
   onDataChange,
 }) => {
   const { searchValue, setSearchValue } = useSearch();
+  const { activeRegion } = useRegion();
   const TEN_SECONDS_AGO = dayjs().subtract(10, "second");
 
   const [order, setOrder] = useState("desc");
   const [orderBy, setOrderBy] = useState(orderByDefault);
+  const [regionFilter, setRegionFilter] = useState("");
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(ROWS_PER_PAGE);
   const [filterAnchorEl, setFilterAnchorEl] = useState(null);
@@ -59,21 +62,42 @@ const COSCustomTable = ({
   });
   const [totals, setTotals] = useState({});
  const [grandTotal, setGrandTotal] = useState(0);
+
+  // Update region filter when active region changes
+  useEffect(() => {
+    const regionName = activeRegion?.name || activeRegion?.regionName || "Central Office";
+    setRegionFilter(regionName);
+  }, [activeRegion]);
+
   const { data, isLoading, refetch } = useQuery({
-    queryKey: [dataListName, page],
+    queryKey: [dataListName, page, regionFilter],
+    enabled: Boolean(regionFilter),
     queryFn: async () => {
-      const res = await api.get(apiPath, {
-        params: {
-          page: page + 1,
-          limit: rowsPerPage,
-          search: searchValue,
-          [fieldAndValue.field]: fieldAndValue.value,
-          orderBy,
-          order,
-          operator: fieldAndValue.operator,
-          statusOfAppointment: "COS",
-        },
-      });
+      const params = {
+        page: page + 1,
+        limit: rowsPerPage,
+        orderBy,
+        order,
+        statusOfAppointment: "COS",
+      };
+      
+      // Only add search if it has a value
+      if (searchValue) {
+        params.search = searchValue;
+      }
+      
+      // Only add field filter and operator if field is specified
+      if (fieldAndValue.field) {
+        params[fieldAndValue.field] = fieldAndValue.value;
+        params.operator = fieldAndValue.operator;
+      }
+
+      // Include region once available (required by backend)
+      if (regionFilter) {
+        params.region = regionFilter;
+      }
+      
+      const res = await api.get(apiPath, { params });
       return res.data;
     },
   });
@@ -138,14 +162,21 @@ const COSCustomTable = ({
   useEffect(() => {
     const fetchGrandTotal = async () => {
       try {
-        const response = await api.get("/grandtotalCOS");
-        setGrandTotal(response.data.grandTotal || 0);
+        const params = new URLSearchParams();
+        // Always send a region; backend requires it. Default to Central Office.
+        params.append('region', regionFilter || 'Central Office');
+        
+        const response = await api.get(`/grandtotalCOS?${params.toString()}`);
+        setGrandTotal(response.data.grandTotal ?? 0);
       } catch (error) {
         console.error("Error fetching grand total:", error);
+        setGrandTotal(0);
       }
     };
-    fetchGrandTotal();
-  }, [data]); // Ensure this effect runs when personnel data changes
+    if (regionFilter !== undefined) {
+      fetchGrandTotal();
+    }
+  }, [regionFilter]); // Ensure this effect runs when personnel data changes
 
   const handleRequestSort = (property) => {
     const isAsc = orderBy === property && order === "asc";

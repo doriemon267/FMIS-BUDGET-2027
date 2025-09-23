@@ -63,18 +63,26 @@ const CasualCustomTable = ({
   const { data, isLoading, refetch } = useQuery({
     queryKey: [dataListName, page],
     queryFn: async () => {
-      const res = await api.get(apiPath, {
-        params: {
-          page: page + 1,
-          limit: rowsPerPage,
-          search: searchValue,
-          [fieldAndValue.field]: fieldAndValue.value,
-          orderBy,
-          order,
-          operator: fieldAndValue.operator,
-          statusOfAppointment: "CASUAL",
-        },
-      });
+      const params = {
+        page: page + 1,
+        limit: rowsPerPage,
+        orderBy,
+        order,
+        statusOfAppointment: "CASUAL",
+      };
+      
+      // Only add search if it has a value
+      if (searchValue) {
+        params.search = searchValue;
+      }
+      
+      // Only add field filter and operator if field is specified
+      if (fieldAndValue.field) {
+        params[fieldAndValue.field] = fieldAndValue.value;
+        params.operator = fieldAndValue.operator;
+      }
+      
+      const res = await api.get(apiPath, { params });
       return res.data;
     },
   });
@@ -146,7 +154,7 @@ const CasualCustomTable = ({
       const regionName = activeRegion.name || activeRegion.regionName;
       setRegionFilter(regionName);
     } else {
-      setRegionFilter("");
+      setRegionFilter("Central Office");
     }
   }, [activeRegion]);
 

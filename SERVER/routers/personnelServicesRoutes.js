@@ -19,15 +19,15 @@ const Router = require("express").Router;
 const personnelServicesRouter = Router();
 // Apply authentication to all personnel services routes
 personnelServicesRouter.use(checkToken);
-// Apply submission workflow control middleware for read operations
-personnelServicesRouter.use('/personnelServices', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
-personnelServicesRouter.use('/personnel_services', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
-personnelServicesRouter.use('/personnel-service', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
-personnelServicesRouter.use('/getpersonnels', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
-personnelServicesRouter.use('/grandtotalPermanent', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
-personnelServicesRouter.use('/grandtotalCasual', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
-personnelServicesRouter.use('/getpersonnels/byParams', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
-personnelServicesRouter.use('/api/personnel/getByParams', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
+// Apply submission workflow control middleware for read operations (relaxed to show drafts for PS lists)
+personnelServicesRouter.use('/personnelServices', submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }));
+personnelServicesRouter.use('/personnel_services', submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }));
+personnelServicesRouter.use('/personnel-service', submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }));
+personnelServicesRouter.use('/getpersonnels', submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }));
+personnelServicesRouter.use('/grandtotalPermanent', submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }));
+personnelServicesRouter.use('/grandtotalCasual', submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }));
+personnelServicesRouter.use('/getpersonnels/byParams', submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }));
+personnelServicesRouter.use('/api/personnel/getByParams', submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }));
 // 🔒 Protect with due date check and submission workflow control
 personnelServicesRouter.post(
   "/personnelServices/bulk-add", 

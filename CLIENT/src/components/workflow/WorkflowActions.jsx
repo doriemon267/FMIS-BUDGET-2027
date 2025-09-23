@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { toast } from "react-toastify";
 import api from "../../config/api";
+import { goTo } from "../../global/navigation";
 import { Button, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions, Typography, Menu, MenuItem, ListItemIcon, ListItemText, Chip, Divider, Stepper, Step, StepLabel, Box, Stack } from "@mui/material";
 import CheckIcon from "@mui/icons-material/Check";
 import UndoIcon from "@mui/icons-material/Undo";
@@ -258,6 +259,13 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
 
       if (isSuccess) {
         toast.success(successMessage);
+        try {
+          if (typeof window !== 'undefined' && window.showSuccess) {
+            window.showSuccess(`${successMessage}. Click to view All Proposals.`, 8000, () => {
+              goTo('/AllProposals');
+            });
+          }
+        } catch (_) {}
         onRefresh(); // Refresh the proposals list
       } else {
         throw new Error(response.data.message || "Workflow action failed");

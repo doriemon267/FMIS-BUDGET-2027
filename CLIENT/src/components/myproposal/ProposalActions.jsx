@@ -24,6 +24,7 @@ import CancelIcon from "@mui/icons-material/Cancel";
 import api from "../../config/api";
 import toast from "react-hot-toast";
 import ViewReportDialog from "../reports/ViewReportDialog";
+import { goTo } from "../../global/navigation";
 
 export function ViewMenuItem({ row, parentClose }) {
   const [open, setOpen] = useState(false);
@@ -81,6 +82,13 @@ export function ApproveMenuItem({ row, parentClose, refreshData }) {
     try {
       await api.put(`/proposals/${row._id}`, { status: "Approved" });
       toast.success("Proposal approved.");
+      try {
+        if (typeof window !== 'undefined' && window.showSuccess) {
+          window.showSuccess('Proposal approved. Click to view All Proposals.', 8000, () => {
+            goTo('/AllProposals');
+          });
+        }
+      } catch (_) {}
       refreshData?.();
     } catch (err) {
       console.error(err);
@@ -131,6 +139,13 @@ export function RejectMenuItem({ row, parentClose, refreshData }) {
         reason,
       });
       toast.success("Proposal rejected.");
+      try {
+        if (typeof window !== 'undefined' && window.showWarning) {
+          window.showWarning('Proposal rejected. Click to view All Proposals.', 8000, () => {
+            goTo('/AllProposals');
+          });
+        }
+      } catch (_) {}
       refreshData?.();
     } catch (err) {
       console.error(err);

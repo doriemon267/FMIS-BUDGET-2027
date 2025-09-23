@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import api from '../config/api';
 import { toast } from 'react-toastify';
+import { REGIONS } from '../constants/regions';
 
 // Create the context
 const RegionContext = createContext();
@@ -96,17 +97,17 @@ export const RegionProvider = ({ children }) => {
                 localStorage.removeItem('activeRegion');
               }
             } else {
-              // If no saved region, set "Central Office" as default
-              const centralOffice = response.data.find(region => 
-                region.name === "Central Office" || 
-                region.regionName === "Central Office" ||
-                region.Region === "Central Office"
+              // If no saved region, set default region as default
+              const defaultRegion = response.data.find(region => 
+                region.name === REGIONS.DEFAULT_REGION || 
+                region.regionName === REGIONS.DEFAULT_REGION ||
+                region.Region === REGIONS.DEFAULT_REGION
               );
               
-              if (centralOffice) {
-                setActiveRegion(centralOffice);
-                localStorage.setItem('activeRegion', JSON.stringify(centralOffice));
-                toast.info(`Default region set to Central Office`);
+              if (defaultRegion) {
+                setActiveRegion(defaultRegion);
+                localStorage.setItem('activeRegion', JSON.stringify(defaultRegion));
+                toast.info(`Default region set to ${REGIONS.DEFAULT_REGION}`);
               }
             }
           }

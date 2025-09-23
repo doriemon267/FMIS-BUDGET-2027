@@ -28,6 +28,7 @@ import {
   Undo as ReturnIcon
 } from '@mui/icons-material';
 import api from '../../config/api';
+import { goTo } from '../../global/navigation';
 
 /**
  * 📤 Submit Draft to Office Button (Responsibility Center Level)
@@ -43,6 +44,14 @@ export const SubmitDraftToOfficeButton = ({ row, refreshData, disabled }) => {
         modelType,
         recordIds: [row._id]
       });
+
+      try {
+        if (typeof window !== 'undefined' && window.showSuccess) {
+          window.showSuccess('Submitted to Office. Click to view All Proposals.', 8000, () => {
+            goTo('/AllProposals');
+          });
+        }
+      } catch (_) {}
 
       if (refreshData) refreshData();
     } catch (error) {
@@ -109,6 +118,15 @@ export const OfficeVerifyButton = ({ row, refreshData, disabled }) => {
       if (response.data.modifiedCount > 0) {
         const message = `✅ Successfully verified ${response.data.modifiedCount} proposal(s)! Status updated to: Office Verified`;
         console.log('✅', message);
+
+        // Show global clickable notification to open All Proposals
+        try {
+          if (typeof window !== 'undefined' && window.showSuccess) {
+            window.showSuccess('Office verified. Click to view All Proposals.', 8000, () => {
+              goTo('/AllProposals');
+            });
+          }
+        } catch (_) {}
 
         // Show success message and refresh page option
         if (confirm(`${message}\n\nClick OK to refresh the page to see updated data.`)) {
@@ -190,6 +208,14 @@ export const SubmitVerifiedToOfficeButton = ({ row, refreshData, disabled }) => 
         recordIds: [row._id]
       });
 
+      try {
+        if (typeof window !== 'undefined' && window.showSuccess) {
+          window.showSuccess('Submitted to Office for Finalization. Click to view All Proposals.', 8000, () => {
+            goTo('/AllProposals');
+          });
+        }
+      } catch (_) {}
+
       if (refreshData) refreshData();
     } catch (error) {
       console.error('Submit to Office error:', error);
@@ -231,6 +257,14 @@ export const OfficeFinalizeButton = ({ row, refreshData, disabled }) => {
         modelType,
         recordIds: [row._id]
       });
+
+      try {
+        if (typeof window !== 'undefined' && window.showSuccess) {
+          window.showSuccess('Finalized. Click to view All Proposals.', 8000, () => {
+            goTo('/AllProposals');
+          });
+        }
+      } catch (_) {}
 
       if (refreshData) refreshData();
     } catch (error) {
@@ -287,6 +321,15 @@ export const RejectButton = ({ row, refreshData, disabled, userLevel }) => {
         action: 'reject',
         rejectionReason: reason
       });
+
+      // Clickable warning notification to navigate to All Proposals
+      try {
+        if (typeof window !== 'undefined' && window.showWarning) {
+          window.showWarning('Proposal returned. Click to view All Proposals.', 8000, () => {
+            goTo('/AllProposals');
+          });
+        }
+      } catch (_) {}
 
       setOpen(false);
       setReason('');

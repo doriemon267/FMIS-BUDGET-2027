@@ -12,7 +12,8 @@ const CustomSnackbar = ({
   severity = "info", 
   onClose, 
   autoHideDuration = 6000, 
-  anchorOrigin = { vertical: "bottom", horizontal: "center" } 
+  anchorOrigin = { vertical: "bottom", horizontal: "center" },
+  onClick
 }) => {
   const [isVisible, setIsVisible] = useState(false);
   
@@ -72,7 +73,8 @@ const CustomSnackbar = ({
           severity={severity}
           variant="filled"
           elevation={6}
-          sx={{ width: '100%', minWidth: '288px', maxWidth: '500px' }}
+          onClick={onClick ? (e) => { onClick(); handleClose(e); } : undefined}
+          sx={{ width: '100%', minWidth: '288px', maxWidth: '500px', cursor: onClick ? 'pointer' : 'default' }}
         >
           {message}
         </Alert>
@@ -90,7 +92,8 @@ CustomSnackbar.propTypes = {
   anchorOrigin: PropTypes.shape({
     vertical: PropTypes.oneOf(['top', 'bottom']),
     horizontal: PropTypes.oneOf(['left', 'center', 'right'])
-  })
+  }),
+  onClick: PropTypes.func
 };
 
 export default CustomSnackbar;

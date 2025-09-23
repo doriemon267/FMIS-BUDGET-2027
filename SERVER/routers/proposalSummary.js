@@ -5,14 +5,26 @@ const {
   } = require("../controllers/proposalSummaryController");
   const Router = require("express").Router;
   const checkToken = require('../middleware/checkToken');
-  const { strictHierarchicalControl, hierarchicalAccessControl } = require('../middleware/hierarchicalAccessControl');
+  const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
   const proposalSummaryRouter = Router();
   // Apply authentication middleware to all routes in this router
   proposalSummaryRouter.use(checkToken);
-  // Get all proposal summaries
-  proposalSummaryRouter.get("/proposalsummary", hierarchicalAccessControl('read', { allowedFields: ['region'] }), getProposalSummary);
-  // Get analytics data para sa proposal summary
-  proposalSummaryRouter.get("/analytics", hierarchicalAccessControl('read', { allowedFields: ['region'] }), getAnalytics);
-  // Get personnel aggregates
-  proposalSummaryRouter.get("/personnelAggregates", hierarchicalAccessControl('read', { allowedFields: ['region'] }), getPersonnelAggregates);
+  // Get all proposal summaries (respect submission workflow)
+  proposalSummaryRouter.get(
+    "/proposalsummary",
+    submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
+    getProposalSummary
+  );
+  // Get analytics data para sa proposal summary (respect submission workflow)
+  proposalSummaryRouter.get(
+    "/analytics",
+    submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
+    getAnalytics
+  );
+  // Get personnel aggregates (respect submission workflow)
+  proposalSummaryRouter.get(
+    "/personnelAggregates",
+    submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
+    getPersonnelAggregates
+  );
   module.exports = proposalSummaryRouter;

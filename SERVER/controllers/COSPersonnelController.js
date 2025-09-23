@@ -6,8 +6,8 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
   try {
     const { statusOfAppointment, region } = req.body;
 
-    // Get hierarchical filters from middleware (support both hierarchical and submission workflow)
-    const hierarchicalFilters = req.hierarchicalFilters || req.submissionWorkflowFilters || {};
+    // Prefer submission workflow filters; fallback to hierarchical
+    const hierarchicalFilters = req.submissionWorkflowFilters || req.hierarchicalFilters || {};
 
     // Get user's assignment level to determine access restrictions
     const assignment = req.userHierarchicalAssignment || {};
@@ -216,8 +216,8 @@ exports.getAllCOSPersonnel = async (req, res) => {
       region, // Add region parameter
     } = req.query;
 
-    // Get hierarchical filters from middleware (support both hierarchical and submission workflow)
-    const hierarchicalFilters = req.hierarchicalFilters || req.submissionWorkflowFilters || {};
+    // Prefer submission workflow filters; fallback to hierarchical
+    const hierarchicalFilters = req.submissionWorkflowFilters || req.hierarchicalFilters || {};
 
     // Map hierarchical filters to database field names
     const mapFiltersToDb = (filters) => {
@@ -303,8 +303,24 @@ exports.getAllCOSPersonnel = async (req, res) => {
       return true;
     });
     const totalRecords = await COSPersonnel.countDocuments(query);
+
+    // Derive workflow level for UI if not present in documents
+    const enrichedPersonnel = verifiedPersonnel.map((p) => {
+      const obj = p.toObject ? p.toObject() : p;
+      const hasDivision = obj.division && String(obj.division).trim() !== "";
+      const hasDepartment = obj.department && String(obj.department).trim() !== "";
+      // Old structure derivation
+      let derivedLevel = "REGION";
+      if (hasDivision) derivedLevel = "DIVISION";
+      else if (hasDepartment) derivedLevel = "DEPARTMENT";
+      // Only set if not already provided
+      obj.workflowLevel = obj.workflowLevel || derivedLevel;
+      obj.originalLevel = obj.originalLevel || derivedLevel;
+      return obj;
+    });
+
     return res.json({
-      cosPersonnels: verifiedPersonnel,
+      cosPersonnels: enrichedPersonnel,
       totalPages: Math.ceil(totalRecords / limitNum),
       currentPage: pageNum,
       totalRecords,
@@ -320,8 +336,8 @@ exports.updateCOSPersonnel = async (req, res) => {
     const { id } = req.params;
     const updateFields = req.body;
 
-    // Get hierarchical filters from middleware (support both hierarchical and submission workflow)
-    const hierarchicalFilters = req.hierarchicalFilters || req.submissionWorkflowFilters || {};
+    // Prefer submission workflow filters; fallback to hierarchical
+    const hierarchicalFilters = req.submissionWorkflowFilters || req.hierarchicalFilters || {};
 
     // Map hierarchical filters to database field names
     const mapFiltersToDb = (filters) => {
@@ -407,8 +423,8 @@ exports.deleteCOSPersonnel = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Get hierarchical filters from middleware (support both hierarchical and submission workflow)
-    const hierarchicalFilters = req.hierarchicalFilters || req.submissionWorkflowFilters || {};
+    // Prefer submission workflow filters; fallback to hierarchical
+    const hierarchicalFilters = req.submissionWorkflowFilters || req.hierarchicalFilters || {};
 
     // Map hierarchical filters to database field names
     const mapFiltersToDb = (filters) => {
@@ -478,8 +494,8 @@ exports.getGrandTotalCOS = async (req, res) => {
   try {
     const { region } = req.query;
 
-    // Get hierarchical filters from middleware (support both hierarchical and submission workflow)
-    const hierarchicalFilters = req.hierarchicalFilters || req.submissionWorkflowFilters || {};
+    // Prefer submission workflow filters; fallback to hierarchical
+    const hierarchicalFilters = req.submissionWorkflowFilters || req.hierarchicalFilters || {};
 
     // Map hierarchical filters to database field names
     const mapFiltersToDb = (filters) => {
