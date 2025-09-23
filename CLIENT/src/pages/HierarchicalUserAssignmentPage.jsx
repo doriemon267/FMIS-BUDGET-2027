@@ -520,7 +520,8 @@ const HierarchicalUserAssignmentPage = () => {
       assignmentLevel: normalizedLevel,
       accessScope: normalizedLevel,
       // Map officeId to departmentId and responsibilityCenterName to divisionName for server compatibility
-      departmentId: formData.officeId,
+      // Handle composite officeId for regional offices (format: originalDeptId_regionId)
+      departmentId: formData.officeId.includes('_') ? formData.officeId.split('_')[0] : formData.officeId,
       divisionName: formData.responsibilityCenterName,
       officeId: formData.officeId,
       responsibilityCenterName: formData.responsibilityCenterName,
@@ -930,7 +931,12 @@ const HierarchicalUserAssignmentPage = () => {
                 <Grid item xs={12}>
                   <Autocomplete
                     options={organizationStructure?.availableUnits?.responsibilityCenters
-                      ?.filter(rc => !formData.officeId || rc.officeId === formData.officeId) || []}
+                      ?.filter(rc => {
+                        if (!formData.officeId) return true;
+                        // Handle composite officeId (originalDeptId_regionId)
+                        const originalDeptId = formData.officeId.includes('_') ? formData.officeId.split('_')[0] : formData.officeId;
+                        return rc.officeId === originalDeptId;
+                      }) || []}
                     getOptionLabel={(option) => {
                       if (typeof option === 'string') return option;
                       return option.region && option.region !== 'All Regions' 
