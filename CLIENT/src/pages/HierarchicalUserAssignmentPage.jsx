@@ -181,7 +181,47 @@ const HierarchicalUserAssignmentPage = () => {
 
             const normalized = {
               availableUnits: {
-                offices: (data.availableUnits.offices?.length ? data.availableUnits.offices : fallbackRegions.map(r => ({ id: r._id, name: r.Region }))) || [],
+                offices: ((data.availableUnits.offices?.length ? data.availableUnits.offices : fallbackRegions.map(r => ({ id: r._id, name: r.Region }))) || [])
+                  .sort((a, b) => {
+                    // Central offices (All Regions) first, grouped together
+                    const aIsCentral = a.region === 'All Regions';
+                    const bIsCentral = b.region === 'All Regions';
+                    
+                    if (aIsCentral && !bIsCentral) return -1;
+                    if (!aIsCentral && bIsCentral) return 1;
+                    
+                    // Within central offices, use custom order
+                    if (aIsCentral && bIsCentral) {
+                      const centralOrder = [
+                        'ADMINISTRATIVE DEPARTMENT',
+                        'CORPORATE PLANNING SERVICES',
+                        'PUBLIC AFFAIRS AND STAFF INFORMATION',
+                        'LEGAL SERVICES',
+                        'INTERNAL AUDIT SERVICES',
+                        'FINANCIAL MANAGEMENT DEPARTMENT',
+                        'HEAD OFFICE',
+                        'OPERATIONS DEPARTMENT',
+                        'IRRIGATION MANAGEMENT OFFICE'
+                      ];
+                      const aIndex = centralOrder.indexOf(a.name);
+                      const bIndex = centralOrder.indexOf(b.name);
+                      
+                      if (aIndex !== -1 && bIndex !== -1) {
+                        return aIndex - bIndex;
+                      }
+                      if (aIndex !== -1) return -1;
+                      if (bIndex !== -1) return 1;
+                      
+                      // Fallback to alphabetical
+                      return a.name.localeCompare(b.name);
+                    }
+                    
+                    // Within region-specific offices, sort by region then name
+                    const regionCompare = (a.region || '').localeCompare(b.region || '');
+                    if (regionCompare !== 0) return regionCompare;
+                    
+                    return a.name.localeCompare(b.name);
+                  }),
                 responsibilityCenters: (data.availableUnits.responsibilityCenters?.length ? data.availableUnits.responsibilityCenters : fallbackDepartments.map(d => ({ id: d._id, name: d.Department }))) || [],
                 officeResponsibilityCenterMappings: data.availableUnits.officeResponsibilityCenterMappings || {}
               },
