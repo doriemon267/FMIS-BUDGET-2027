@@ -307,11 +307,26 @@ const Mooe = ({ onDataChange }) => {
       return [];
     }
 
-    // Group by sublineItem but keep all accounting titles visible
+    // First, group by sublineItem for main categories
     const grouped = {};
+    const parentEntries = [];
+    const childEntries = [];
+
+    // Separate parent and child entries
     for (let idx = 0; idx < rawData.length; idx++) {
       const item = rawData[idx];
-      const key = item.sublineItem || `unknown-${idx}`;
+      if (item.sublineItem) {
+        // This is a parent entry
+        parentEntries.push(item);
+      } else {
+        // This might be a child entry
+        childEntries.push(item);
+      }
+    }
+
+    // Group parent entries by sublineItem
+    for (const item of parentEntries) {
+      const key = item.sublineItem;
       if (!grouped[key]) {
         grouped[key] = {
           id: key,
@@ -321,8 +336,45 @@ const Mooe = ({ onDataChange }) => {
       }
       grouped[key].children.push({
         ...item,
-        id: `${key}-${item.uacsCode || "none"}-${idx}`,
+        id: `${key}-${item.uacsCode || "none"}-${Date.now()}-${Math.random()}`,
       });
+    }
+
+    // Now handle child entries - check if they belong to a parent
+    for (const child of childEntries) {
+      let foundParent = false;
+
+      // Check if this child belongs to a parent based on UACS code pattern
+      for (const parent of parentEntries) {
+        if (parent.uacsCode && child.uacsCode && child.uacsCode.startsWith(parent.uacsCode + '-')) {
+          // This child belongs to this parent
+          const key = parent.sublineItem;
+          if (grouped[key]) {
+            grouped[key].children.push({
+              ...child,
+              id: `${key}-${child.uacsCode || "none"}-${Date.now()}-${Math.random()}`,
+            });
+            foundParent = true;
+            break;
+          }
+        }
+      }
+
+      // If no parent found, create a new group or add to unknown
+      if (!foundParent) {
+        const key = child.sublineItem || `unknown-${Date.now()}-${Math.random()}`;
+        if (!grouped[key]) {
+          grouped[key] = {
+            id: key,
+            sublineItem: child.sublineItem || "Other",
+            children: [],
+          };
+        }
+        grouped[key].children.push({
+          ...child,
+          id: `${key}-${child.uacsCode || "none"}-${Date.now()}-${Math.random()}`,
+        });
+      }
     }
 
     return Object.values(grouped);
@@ -1595,117 +1647,137 @@ const Mooe = ({ onDataChange }) => {
                   </TableRow>
 
                   {/* Child rows */}
-                  {expandedRows.includes(row.id) && row.children.map((child) => (
-                    <TableRow key={child.id}>
-                      <TableCell></TableCell>
-                      {viewMode === "consolidated" && <TableCell></TableCell>}
-                      <TableCell></TableCell>
-                      <TableCell>{child.accountingTitle || child.name}</TableCell>
-                      <TableCell>{child.uacsCode || child.particulars}</TableCell>
+                  {expandedRows.includes(row.id) && row.children.map((child) => {
+                    // Check if this child has hierarchical children (sub-UACS codes)
+                    const hierarchicalChildren = row.children.filter(c => 
+                      c.uacsCode && child.uacsCode && c.uacsCode.startsWith(child.uacsCode + '-')
+                    );
+                    const hasHierarchicalChildren = hierarchicalChildren.length > 0;
+                    
+                    // Calculate sum of hierarchical children
+                    const hierarchicalIncomeSum = hierarchicalChildren.reduce((sum, c) => sum + parseFloat(c.income || 0), 0);
+                    const hierarchicalSubsidySum = hierarchicalChildren.reduce((sum, c) => sum + parseFloat(c.subsidy || 0), 0);
+                    
+                    return (
+                      <TableRow key={child.id}>
+                        <TableCell></TableCell>
+                        {viewMode === "consolidated" && <TableCell></TableCell>}
+                        <TableCell></TableCell>
+                        <TableCell>{child.accountingTitle || child.name}</TableCell>
+                        <TableCell>{child.uacsCode || child.particulars}</TableCell>
 
-                      {/* Income field */}
-                      <TableCell>
-                        {viewMode === "consolidated" ? (
+                        {/* Income field */}
+                        <TableCell>
+                          {viewMode === "consolidated" ? (
+                            <Typography variant="body2" align="right">
+                              ₱{parseFloat(child.income || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </Typography>
+                          ) : hasHierarchicalChildren ? (
+                            <Typography variant="body2" align="right" sx={{ fontWeight: 'bold', color: '#375e38' }}>
+                              ₱{hierarchicalIncomeSum.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </Typography>
+                          ) : (
+                            <TextField
+                              fullWidth
+                              size="small"
+                              value={(() => {
+                                // Prefer local draft value while typing
+                                const draft = draftInputs[child.id]?.income;
+                                if (draft !== undefined) return draft;
+                                const val = child.income;
+                                if (val === "0" || val === 0) return "";
+                                if (val === null || val === undefined) return "";
+                                return val.toString();
+                              })()}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setDraftInputs(prev => ({
+                                  ...prev,
+                                  [child.id]: { ...(prev[child.id]||{}), income: v }
+                                }));
+                                handleIncomeChange(child.id, v);
+                              }}
+                              disabled={!isEditable || disableIncomeInputs}
+                              placeholder="0.00"
+                              InputProps={{
+                                startAdornment: <InputAdornment position="start">₱</InputAdornment>,
+                                inputComponent: NumberFormatCustom,
+                                inputProps: { style: { textAlign: 'right' } }
+                              }}
+                              sx={{
+                                backgroundColor: !isEditable || disableIncomeInputs ? "#f5f5f5" : "white",
+                                '& .MuiInputBase-input': { textAlign: 'right' }
+                              }}
+                            />
+                          )}
+                        </TableCell>
+
+                        {/* Subsidy field */}
+                        <TableCell>
+                          {viewMode === "consolidated" ? (
+                            <Typography variant="body2" align="right">
+                              ₱{parseFloat(child.subsidy || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </Typography>
+                          ) : hasHierarchicalChildren ? (
+                            <Typography variant="body2" align="right" sx={{ fontWeight: 'bold', color: '#375e38' }}>
+                              ₱{hierarchicalSubsidySum.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </Typography>
+                          ) : (
+                            <TextField
+                              fullWidth
+                              size="small"
+                              value={(() => {
+                                // Prefer local draft value while typing
+                                const draft = draftInputs[child.id]?.subsidy;
+                                if (draft !== undefined) return draft;
+                                const val = child.subsidy;
+                                if (val === "0" || val === 0) return "";
+                                if (val === null || val === undefined) return "";
+                                return val.toString();
+                              })()}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setDraftInputs(prev => ({
+                                  ...prev,
+                                  [child.id]: { ...(prev[child.id]||{}), subsidy: v }
+                                }));
+                                handleSubsidyChange(child.id, v);
+                              }}
+                              disabled={!isEditable}
+                              placeholder="0.00"
+                              InputProps={{
+                                startAdornment: <InputAdornment position="start">₱</InputAdornment>,
+                                inputComponent: NumberFormatCustom,
+                                inputProps: { style: { textAlign: 'right' } }
+                              }}
+                              sx={{
+                                backgroundColor: !isEditable ? "#f5f5f5" : "white",
+                                '& .MuiInputBase-input': { textAlign: 'right' }
+                              }}
+                            />
+                          )}
+                        </TableCell>
+
+                        {/* Amount field (calculated) */}
+                        <TableCell>
                           <Typography variant="body2" align="right">
-                            ₱{parseFloat(child.income || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </Typography>
-                        ) : (
-                          <TextField
-                            fullWidth
-                            size="small"
-                            value={(() => {
-                              // Prefer local draft value while typing
-                              const draft = draftInputs[child.id]?.income;
-                              if (draft !== undefined) return draft;
-                              const val = child.income;
-                              if (val === "0" || val === 0) return "";
-                              if (val === null || val === undefined) return "";
-                              return val.toString();
-                            })()}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setDraftInputs(prev => ({
-                                ...prev,
-                                [child.id]: { ...(prev[child.id]||{}), income: v }
-                              }));
-                              handleIncomeChange(child.id, v);
-                            }}
-                            disabled={!isEditable || disableIncomeInputs}
-                            placeholder="0.00"
-                            InputProps={{
-                              startAdornment: <InputAdornment position="start">₱</InputAdornment>,
-                              inputComponent: NumberFormatCustom,
-                              inputProps: { style: { textAlign: 'right' } }
-                            }}
-                            sx={{
-                              backgroundColor: !isEditable || disableIncomeInputs ? "#f5f5f5" : "white",
-                              '& .MuiInputBase-input': { textAlign: 'right' }
-                            }}
-                          />
-                        )}
-                      </TableCell>
-
-                      {/* Subsidy field */}
-                      <TableCell>
-                        {viewMode === "consolidated" ? (
-                          <Typography variant="body2" align="right">
-                            ₱{parseFloat(child.subsidy || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </Typography>
-                        ) : (
-                          <TextField
-                            fullWidth
-                            size="small"
-                            value={(() => {
-                              // Prefer local draft value while typing
-                              const draft = draftInputs[child.id]?.subsidy;
-                              if (draft !== undefined) return draft;
-                              const val = child.subsidy;
-                              if (val === "0" || val === 0) return "";
-                              if (val === null || val === undefined) return "";
-                              return val.toString();
-                            })()}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setDraftInputs(prev => ({
-                                ...prev,
-                                [child.id]: { ...(prev[child.id]||{}), subsidy: v }
-                              }));
-                              handleSubsidyChange(child.id, v);
-                            }}
-                            disabled={!isEditable}
-                            placeholder="0.00"
-                            InputProps={{
-                              startAdornment: <InputAdornment position="start">₱</InputAdornment>,
-                              inputComponent: NumberFormatCustom,
-                              inputProps: { style: { textAlign: 'right' } }
-                            }}
-                            sx={{
-                              backgroundColor: !isEditable ? "#f5f5f5" : "white",
-                              '& .MuiInputBase-input': { textAlign: 'right' }
-                            }}
-                          />
-                        )}
-                      </TableCell>
-
-                      {/* Amount field (calculated) */}
-                      <TableCell>
-                        <Typography variant="body2" align="right">
-                          {(() => {
-                            // Prefer draft values while typing
-                            const income = parseFloat((draftInputs[child.id]?.income ?? child.income) || 0);
-                            const subsidy = parseFloat((draftInputs[child.id]?.subsidy ?? child.subsidy) || 0);
-                            const total = income + subsidy;
+                            {(() => {
+                              // Prefer draft values while typing
+                              const income = hasHierarchicalChildren ? hierarchicalIncomeSum : parseFloat((draftInputs[child.id]?.income ?? child.income) || 0);
+                              const subsidy = hasHierarchicalChildren ? hierarchicalSubsidySum : parseFloat((draftInputs[child.id]?.subsidy ?? child.subsidy) || 0);
+                              const total = income + subsidy;
                             
-                            if (total === 0 && !(draftInputs[child.id]?.income ?? child.income) && !(draftInputs[child.id]?.subsidy ?? child.subsidy)) {
-                              return "";
-                            }
-                            
-                            return `₱${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
-                          })()}
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                              if (total === 0 && !(draftInputs[child.id]?.income ?? child.income) && !(draftInputs[child.id]?.subsidy ?? child.subsidy)) {
+                                return "";
+                              }
+                              
+                              return `₱${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+                            })()}
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </React.Fragment>
               ))}
             </TableBody>

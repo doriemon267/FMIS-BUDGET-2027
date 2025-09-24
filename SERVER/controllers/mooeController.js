@@ -117,8 +117,15 @@ exports.getMOOEData = async (req, res) => {
     try {
       const results = await Promise.all([
         ChartOfAccounts.find({
-          accountClass: "Expense",
-          lineItem:    "Maintenance and Other Operating Expenses"
+          $or: [
+            {
+              accountClass: "Expense",
+              lineItem: "Maintenance and Other Operating Expenses"
+            },
+            {
+              uacsCode: { $regex: /^5-02-99-990/ }
+            }
+          ]
         }).lean(),
         MooeProposal.find(filter).lean(), // Use the filter object that includes region if available
         COSPersonnel.find({
