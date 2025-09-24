@@ -1,5 +1,7 @@
 // models/ChartOfAccounts.js
 const mongoose = require("mongoose");
+const { mainConnection } = require("../config/mongo_db");
+
 const chartOfAccountsSchema = new mongoose.Schema(
   {
     accountClass: { type: String },
@@ -12,7 +14,8 @@ const chartOfAccountsSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
 // ✅ Use existing model if already compiled to prevent OverwriteModelError
 module.exports =
-  mongoose.models.ChartOfAccounts ||
-  mongoose.model("chart_of_accounts", chartOfAccountsSchema);
+  mainConnection.models.ChartOfAccounts ||
+  mainConnection.model("chart_of_accounts", chartOfAccountsSchema);
