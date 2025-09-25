@@ -17,7 +17,7 @@ import { FaMoneyCheckAlt } from "react-icons/fa";
 import StyledBox from "../../global/components/StyledBox";
 import PSPermanentServiceTable from "../pspermanent/PersonnelServicesPage";
 import PSCasualServiceTable from "../pscasual/PersonnelServicesPage";
-import MooeTable from "../mooe/MooeTable";
+import Mooe from "../mooe/MooeTable";
 import CapitalOutlayTable from "../capitaloutlay/CapitalOutlayTable";
 import PSCOSCustomPageTable from "../jocos/PersonnelServicesPage";
 import IncomeTable from "../corporateincome/IncomeTable";
@@ -3214,7 +3214,7 @@ const CustomPage = ({
           {activeTab === "MOOE" && (
             <Suspense fallback={<CircularProgress />}>
               {import.meta.env.VITE_HIDE_INCOME_LOCK_BANNER === 'true' ? null : <IncomeLockedBanner />}
-              <MooeTable
+              <Mooe
                 data={mooeData}
                 disableIncomeInputs={disableIncomeInputs}
                 addMutation={addMooeMutation}

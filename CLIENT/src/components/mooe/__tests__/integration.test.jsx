@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
-import MooeTable from '../MooeTable';
+import Mooe from '../MooeTable';
 import { UserProvider } from '../../../context/UserContext';
 import { RegionProvider } from '../../../context/RegionContext';
 import api from '../../../config/api';
@@ -104,7 +104,7 @@ describe('MOOE Table Integration Tests', () => {
   test('complete workflow: load data, edit values, save', async () => {
     render(
       <IntegrationTestWrapper>
-        <MooeTable />
+        <Mooe />
       </IntegrationTestWrapper>
     );
 
@@ -153,7 +153,7 @@ describe('MOOE Table Integration Tests', () => {
   test('search and filter functionality', async () => {
     render(
       <IntegrationTestWrapper>
-        <MooeTable />
+        <Mooe />
       </IntegrationTestWrapper>
     );
 
@@ -185,7 +185,7 @@ describe('MOOE Table Integration Tests', () => {
 
     render(
       <IntegrationTestWrapper>
-        <MooeTable />
+        <Mooe />
       </IntegrationTestWrapper>
     );
 
@@ -242,7 +242,7 @@ describe('MOOE Table Integration Tests', () => {
 
     render(
       <IntegrationTestWrapper>
-        <MooeTable />
+        <Mooe />
       </IntegrationTestWrapper>
     );
 
@@ -263,7 +263,7 @@ describe('MOOE Table Integration Tests', () => {
   test('import functionality', async () => {
     render(
       <IntegrationTestWrapper>
-        <MooeTable />
+        <Mooe />
       </IntegrationTestWrapper>
     );
 
@@ -294,7 +294,7 @@ describe('MOOE Table Integration Tests', () => {
   test('validation error handling', async () => {
     render(
       <IntegrationTestWrapper>
-        <MooeTable />
+        <Mooe />
       </IntegrationTestWrapper>
     );
 
@@ -339,7 +339,7 @@ describe('MOOE Table Integration Tests', () => {
   test('region change triggers data refetch', async () => {
     const { rerender } = render(
       <IntegrationTestWrapper>
-        <MooeTable />
+        <Mooe />
       </IntegrationTestWrapper>
     );
 
@@ -375,7 +375,7 @@ describe('MOOE Table Integration Tests', () => {
 
     rerender(
       <NewRegionWrapper>
-        <MooeTable />
+        <Mooe />
       </NewRegionWrapper>
     );
 

@@ -30,7 +30,8 @@ import api from "../config/api";
 import { useUser } from "../context/UserContext";
 import { useRegion } from "../context/RegionContext";
 import ProposalViewModal from "../components/myproposal/ProposalViewModal";
-import ActiveRegionDisplay from "../components/common/ActiveRegionDisplay";
+// ActiveRegionDisplay is shown globally in the Dashboard AppBar
+// import ActiveRegionDisplay from "../components/common/ActiveRegionDisplay";
 import { toast } from "react-toastify";
 
 const MyProposalPage = () => {
@@ -665,8 +666,6 @@ const MyProposalPage = () => {
           </Typography>
 
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-            <ActiveRegionDisplay />
-            
             <Tooltip title="Refresh proposals">
               <IconButton
                 onClick={handleRefresh}

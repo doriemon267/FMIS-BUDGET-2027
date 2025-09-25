@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import MooeTable from '../MooeTable';
+import Mooe from '../MooeTable';
 import { UserProvider } from '../../../context/UserContext';
 import { RegionProvider } from '../../../context/RegionContext';
 
@@ -79,7 +79,7 @@ const TestWrapper = ({ children }) => {
   );
 };
 
-describe('MooeTable Component', () => {
+describe('Mooe Component', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -87,7 +87,7 @@ describe('MooeTable Component', () => {
   test('renders loading state initially', () => {
     render(
       <TestWrapper>
-        <MooeTable />
+        <Mooe />
       </TestWrapper>
     );
 
@@ -100,7 +100,7 @@ describe('MooeTable Component', () => {
 
     render(
       <TestWrapper>
-        <MooeTable />
+        <Mooe />
       </TestWrapper>
     );
 
@@ -124,7 +124,7 @@ describe('MooeTable Component', () => {
 
     render(
       <TestWrapper>
-        <MooeTable />
+        <Mooe />
       </TestWrapper>
     );
 
@@ -153,7 +153,7 @@ describe('MooeTable Component', () => {
 
     render(
       <TestWrapper>
-        <MooeTable />
+        <Mooe />
       </TestWrapper>
     );
 
@@ -184,7 +184,7 @@ describe('MooeTable Component', () => {
 
     render(
       <TestWrapper>
-        <MooeTable />
+        <Mooe />
       </TestWrapper>
     );
 
@@ -216,7 +216,7 @@ describe('MooeTable Component', () => {
 
     render(
       <TestWrapper>
-        <MooeTable />
+        <Mooe />
       </TestWrapper>
     );
 
@@ -262,7 +262,7 @@ describe('MooeTable Component', () => {
 
     render(
       <TestWrapper>
-        <MooeTable />
+        <Mooe />
       </TestWrapper>
     );
 
@@ -295,7 +295,7 @@ describe('MooeTable Component', () => {
 
     render(
       <TestWrapper>
-        <MooeTable />
+        <Mooe />
       </TestWrapper>
     );
 
