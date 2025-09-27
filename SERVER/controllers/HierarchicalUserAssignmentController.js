@@ -34,21 +34,26 @@ const lookupUserFromMainDB = async (req, res) => {
     // Get current user's highest role level
     const currentUserMaxLevel = Math.max(...currentUserRoles.map(role => roleHierarchy[role] || 0));
 
-    // Only allow lookup if user has sufficient permissions
-    if (currentUserMaxLevel < 3) { // At least BUDGET_OFFICER level
+    // Allow lookup for users with any budget role or admin roles
+    const hasBudgetRole = currentUserRoles.some(role => roleHierarchy[role] !== undefined);
+    const hasAdminRole = currentUserRoles.some(role => 
+      role.includes('ADMIN') || role.includes('SUPER') || role.includes('MANAGER')
+    );
+
+    if (!hasBudgetRole && !hasAdminRole) {
       return res.status(403).json({
         success: false,
-        message: 'Insufficient permissions to lookup users',
+        message: 'Access denied. Budget or admin role required for user lookup.',
         code: 'INSUFFICIENT_PERMISSIONS'
       });
     }
 
     // Query the assigned_roles collection from fmis_main database
     const AssignedRole = mainConnection.model('assigned_roles', new mongoose.Schema({}, { strict: false }), 'assigned_roles');
+    const Role = mainConnection.model('roles', new mongoose.Schema({}, { strict: false }), 'roles');
 
     const userData = await AssignedRole.findOne({
-      userId: userId,
-      isActive: true
+      user: userId
     }).lean();
 
     if (!userData) {
@@ -59,12 +64,24 @@ const lookupUserFromMainDB = async (req, res) => {
       });
     }
 
+    // Get the actual role names from the roles collection
+    const roleNames = [];
+    if (userData.roles && userData.roles.length > 0) {
+      const roles = await Promise.all(
+        userData.roles.map(roleId => Role.findById(roleId, { name: 1 }).lean())
+      );
+      // Filter to only show budget-related roles
+      const allRoleNames = roles.filter(role => role).map(role => role.name);
+      const budgetRoles = allRoleNames.filter(roleName => roleName.includes('BUDGET'));
+      roleNames.push(...budgetRoles);
+    }
+
     // Extract relevant user information
     const userInfo = {
-      userId: userData.userId,
-      userName: userData.userName || userData.name || userData.fullName,
+      userId: userData.user,
+      userName: userData.fullName || userData.userName || userData.name,
       email: userData.email || userData.userEmail,
-      roles: userData.roles || userData.userRoles || [],
+      roles: roleNames, // Return actual role names, not just IDs
       department: userData.department || userData.departmentName,
       division: userData.division || userData.divisionName,
       region: userData.region || userData.regionName
@@ -73,13 +90,13 @@ const lookupUserFromMainDB = async (req, res) => {
     // Determine the appropriate budget role based on user's main roles
     let budgetRole = 'BUDGET_ANALYST'; // default
 
-    if (userInfo.roles.includes('SUPER ADMIN') || userInfo.roles.includes('ADMIN')) {
+    if (roleNames.includes('SUPER ADMIN') || roleNames.includes('ADMIN')) {
       budgetRole = 'BUDGET_ADMIN';
-    } else if (userInfo.roles.includes('MANAGER') || userInfo.roles.includes('DEPARTMENT_HEAD')) {
+    } else if (roleNames.includes('BUDGET MANAGER') || roleNames.includes('DEPARTMENT_HEAD')) {
       budgetRole = 'BUDGET_MANAGER';
-    } else if (userInfo.roles.includes('OFFICER') || userInfo.roles.includes('SUPERVISOR')) {
+    } else if (roleNames.includes('BUDGET OFFICER') || roleNames.includes('SUPERVISOR')) {
       budgetRole = 'BUDGET_OFFICER';
-    } else if (userInfo.roles.includes('COORDINATOR') || userInfo.roles.includes('SENIOR_STAFF')) {
+    } else if (roleNames.includes('BUDGET COORDINATOR') || roleNames.includes('SENIOR_STAFF')) {
       budgetRole = 'BUDGET_COORDINATOR';
     }
 
@@ -203,7 +220,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
         EditOwnProposals: true,
         EditAllProposals: effectiveAssignmentLevel === 'REGION' || effectiveAssignmentLevel === 'FULL' || effectiveAssignmentLevel === 'OFFICE',
         DeleteProposals: effectiveAssignmentLevel === 'FULL',
-        ApproveProposals: effectiveAssignmentLevel === 'REGION' || effectiveAssignmentLevel === 'FULL',
+        ApproveProposals: effectiveAssignmentLevel === 'REGION' || effectiveAssignmentLevel === 'FULL' || effectiveAssignmentLevel === 'OFFICE',
         ViewReports: true,
         ManageUsers: effectiveAssignmentLevel === 'FULL',
         ManageSettings: effectiveAssignmentLevel === 'FULL'
@@ -436,6 +453,7 @@ const updateWorkflowRoles = async (req, res) => {
     const ALLOWED_WORKFLOW_ROLES = [
       'divisionCreator', 'divisionApprover',
       'departmentCreator', 'departmentConsolidator', 'departmentSubmission',
+      'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier',
       'regionCreator', 'regionFinalVerifier'
     ];
     if (!Array.isArray(workflowRoles)) {

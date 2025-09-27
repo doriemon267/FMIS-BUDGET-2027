@@ -1044,10 +1044,14 @@ export const ApproveButton = ({ row, refreshData }) => {
   const canApprovePermission = currentUser?.hierarchicalFlags?.canApproveProposals === true || currentUser?.hierarchicalAccess?.rolePermissions?.canApproveProposals === true;
   
   // Department users with departmentConsolidator role can approve Division Submitted proposals
-  // Office users need explicit approval permission and officeFinalVerifier role
+  // Office users (BUDGET_OFFICER) can approve proposals pending their review
+  // Full/Region users (BUDGET_MANAGER/BUDGET_ADMIN) can approve at higher levels
   const canApprove = (
     (scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && row.status === 'Division Submitted') ||
-    ((scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier') && canApprovePermission && row.status === 'Office Submitted')
+    (scope === 'OFFICE' && roles.includes('officeFinalVerifier') && canApprovePermission && 
+     ['Division Submitted', 'Responsibility Center Submitted', 'Submitted to Officer', 'Submitted'].includes(row.status)) ||
+    ((scope === 'FULL' || scope === 'REGION') && canApprovePermission && 
+     ['Officer Approved', 'Submitted to Manager', 'Office Submitted'].includes(row.status))
   );
   
   // Debug logging
@@ -1057,7 +1061,9 @@ export const ApproveButton = ({ row, refreshData }) => {
     rowStatus: row.status,
     canApprove,
     departmentCondition: scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && row.status === 'Division Submitted',
-    officeCondition: (scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier') && canApprovePermission && row.status === 'Office Submitted',
+    officeFinalCondition: (scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier') && canApprovePermission && row.status === 'Office Submitted',
+    officeVerificationCondition: (scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier') && canApprovePermission && 
+                               ['Division Submitted', 'Responsibility Center Submitted', 'Submitted to Officer', 'Submitted'].includes(row.status),
     hasDepartmentConsolidator: roles.includes('departmentConsolidator'),
     hasOfficeFinalVerifier: roles.includes('officeFinalVerifier'),
     canApprovePermission
@@ -1081,17 +1087,30 @@ export const ApproveButton = ({ row, refreshData }) => {
           departmentVerificationNote: note || `Verified at Department on ${new Date().toLocaleString()}`
         });
         toast.success('Department verification successful');
-      } else if ((scope === 'OFFICE' || scope === 'FULL') && row.status === 'Office Submitted') {
-        // Office approval: Office Submitted → Region Approved
-        const ids = await fetchIdsForRow(row, 'Office Submitted');
+      } else if (scope === 'OFFICE' && ['Division Submitted', 'Responsibility Center Submitted', 'Submitted to Officer', 'Submitted'].includes(row.status)) {
+        // BUDGET_OFFICER approval: Division/RC Submitted → Officer Approved
+        const statusToUse = row.status;
+        const ids = await fetchIdsForRow(row, statusToUse);
+        if (ids.length === 0) throw new Error('No records to approve');
+        
+        await api.post('/api/submission-workflow/office/verify-submission', {
+          ids,
+          entity,
+          officeVerificationNote: note || `Approved by Officer on ${new Date().toLocaleString()}`
+        });
+        toast.success('Officer approval successful');
+      } else if ((scope === 'FULL' || scope === 'REGION') && ['Officer Approved', 'Submitted to Manager', 'Office Submitted'].includes(row.status)) {
+        // BUDGET_MANAGER/BUDGET_ADMIN approval: Officer Approved/Submitted to Manager → Manager Approved
+        const statusToUse = row.status;
+        const ids = await fetchIdsForRow(row, statusToUse);
         if (ids.length === 0) throw new Error('No records to approve');
         
         await api.post('/api/submission-workflow/office/approve-submission', {
           ids,
           entity,
-          officeApprovalNote: note || `Approved at Office on ${new Date().toLocaleString()}`
+          managerApprovalNote: note || `Approved by Manager on ${new Date().toLocaleString()}`
         });
-        toast.success('Office approval successful');
+        toast.success('Manager approval successful');
       }
       
       await queryClient.invalidateQueries(['proposals']);

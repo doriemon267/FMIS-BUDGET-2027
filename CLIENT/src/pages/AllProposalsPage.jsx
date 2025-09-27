@@ -308,20 +308,19 @@ const AllProposalsPage = () => {
         // Simplified role-based workflow status mapping
         const map = {
           'Draft': { color: 'warning', text: 'DRAFT', bgColor: 'warning.light' },
-          'Submitted to Officer': { color: 'info', text: 'OFFICER REVIEW', bgColor: 'info.light' },
           'Officer Approved': { color: 'secondary', text: 'MANAGER REVIEW', bgColor: 'secondary.light' },
           'Officer Returned': { color: 'error', text: 'OFFICER RETURNED', bgColor: 'error.light' },
           'Submitted to Manager': { color: 'secondary', text: 'MANAGER REVIEW', bgColor: 'secondary.light' },
           'Manager Approved': { color: 'success', text: 'FINAL REVIEW', bgColor: 'success.light' },
           'Manager Returned': { color: 'error', text: 'MANAGER RETURNED', bgColor: 'error.light' },
           'Finalized': { color: 'success', text: 'FINALIZED', bgColor: 'success.light' },
-          // Legacy status mappings for backward compatibility
-          'Responsibility Center Submitted': { color: 'info', text: 'OFFICER REVIEW', bgColor: 'info.light' },
-          'Division Submitted': { color: 'info', text: 'OFFICER REVIEW', bgColor: 'info.light' },
-          'Office Verified': { color: 'secondary', text: 'MANAGER REVIEW', bgColor: 'secondary.light' },
-          'Office Submitted': { color: 'secondary', text: 'MANAGER REVIEW', bgColor: 'secondary.light' },
+          // Updated status mappings for new workflow
+          'Responsibility Center Submitted': { color: 'info', text: 'PENDING OFFICER APPROVAL', bgColor: 'info.light' },
+          'Division Submitted': { color: 'info', text: 'PENDING OFFICER APPROVAL', bgColor: 'info.light' },
+          'Submitted to Officer': { color: 'info', text: 'PENDING OFFICER APPROVAL', bgColor: 'info.light' },
+          'Submitted': { color: 'info', text: 'PENDING OFFICER APPROVAL', bgColor: 'info.light' },
+          'Office Submitted': { color: 'secondary', text: 'PENDING MANAGER APPROVAL', bgColor: 'secondary.light' },
           'Office Approved': { color: 'success', text: 'FINAL REVIEW', bgColor: 'success.light' },
-          'Submitted': { color: 'info', text: 'OFFICER REVIEW', bgColor: 'info.light' },
           'Approved': { color: 'success', text: 'FINAL REVIEW', bgColor: 'success.light' },
           'Returned': { color: 'error', text: 'RETURNED', bgColor: 'error.light' },
         };

@@ -384,6 +384,50 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
           ? [{ _id: assignmentDoc.departmentId._id, departmentName: assignmentDoc.departmentId.Department || assignmentDoc.departmentId.departmentName || assignmentDoc.departmentId.DepartmentName || null }]
           : [];
         const accessibleDivisions = assignmentDoc.divisionName ? [assignmentDoc.divisionName] : [];
+        
+        // Auto-assign workflow roles based on user's main system roles if not already set
+        let workflowRoles = assignmentDoc.workflowRoles || [];
+        if (!workflowRoles || workflowRoles.length === 0) {
+          // Determine workflow roles based on user's main roles
+          const userMainRoles = userRoles || [];
+          if (userMainRoles.includes('BUDGET_OFFICER') || userMainRoles.includes('SUPERVISOR')) {
+            workflowRoles = ['officeFinalVerifier'];
+          } else if (userMainRoles.includes('BUDGET_MANAGER') || userMainRoles.includes('DEPARTMENT_HEAD')) {
+            workflowRoles = ['departmentConsolidator', 'regionFinalVerifier'];
+          } else if (userMainRoles.includes('BUDGET_ADMIN') || userMainRoles.includes('SUPER ADMIN') || userMainRoles.includes('ADMIN')) {
+            workflowRoles = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier', 'regionCreator', 'regionFinalVerifier'];
+          }
+          
+          // Update the assignment document with auto-assigned workflow roles
+          if (workflowRoles.length > 0) {
+            assignmentDoc.workflowRoles = workflowRoles;
+            assignmentDoc.save().catch(err => console.warn('Failed to save auto-assigned workflow roles:', err.message));
+          }
+        }
+        
+        // Ensure rolePermissions are set based on assignment level
+        let rolePermissions = assignmentDoc.rolePermissions || {};
+        const effectiveAssignmentLevel = assignmentDoc.assignmentLevel;
+        
+        // Set default permissions based on assignment level
+        rolePermissions = {
+          CreateProposals: true,
+          EditOwnProposals: true,
+          EditAllProposals: effectiveAssignmentLevel === 'REGION' || effectiveAssignmentLevel === 'FULL' || effectiveAssignmentLevel === 'OFFICE',
+          DeleteProposals: effectiveAssignmentLevel === 'FULL',
+          ApproveProposals: effectiveAssignmentLevel === 'REGION' || effectiveAssignmentLevel === 'FULL' || effectiveAssignmentLevel === 'OFFICE',
+          ViewReports: true,
+          ManageUsers: effectiveAssignmentLevel === 'FULL',
+          ManageSettings: effectiveAssignmentLevel === 'FULL',
+          ...rolePermissions // Override with stored permissions if they exist
+        };
+        
+        // Update the assignment document if permissions were missing
+        if (!assignmentDoc.rolePermissions || !assignmentDoc.rolePermissions.ApproveProposals) {
+          assignmentDoc.rolePermissions = rolePermissions;
+          assignmentDoc.save().catch(err => console.warn('Failed to save updated role permissions:', err.message));
+        }
+        
         req.hierarchicalAccessInfo = {
           scope: assignmentDoc.assignmentLevel,
           hasFullAccess: true, // indicate elevated capability
@@ -394,20 +438,42 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
           accessibleDepartments,
           accessibleDivisions,
           consolidationInfo,
-          rolePermissions: assignmentDoc.rolePermissions,
-          workflowRoles: assignmentDoc.workflowRoles,
+          rolePermissions: rolePermissions,
+          workflowRoles: workflowRoles,
           restrictions: assignmentDoc.restrictions // ✅ ADD RESTRICTIONS
         };
         return next();
       }
-      // No assignment stored: do NOT default to FULL; show OWN_ONLY to avoid misleading UI
+      // No assignment stored: provide appropriate defaults based on user role
+      let defaultScope = 'OWN_ONLY';
+      let defaultRolePermissions = {};
+      let defaultWorkflowRoles = [];
+      
+      // Special handling for BUDGET_OFFICER - give them OFFICE scope and permissions
+      if (userRoles.includes('BUDGET_OFFICER') || userRoles.includes('SUPERVISOR')) {
+        defaultScope = 'OFFICE';
+        defaultRolePermissions = {
+          CreateProposals: true,
+          EditOwnProposals: true,
+          EditAllProposals: true,
+          DeleteProposals: false,
+          ApproveProposals: true,
+          ViewReports: true,
+          ManageUsers: false,
+          ManageSettings: false
+        };
+        defaultWorkflowRoles = ['officeFinalVerifier'];
+      }
+      
       req.hierarchicalAccessInfo = {
-        scope: 'OWN_ONLY',
+        scope: defaultScope,
         hasFullAccess: true,
         accessibleRegions: [],
         accessibleDepartments: [],
         accessibleDivisions: [],
         consolidationInfo: null,
+        rolePermissions: defaultRolePermissions,
+        workflowRoles: defaultWorkflowRoles,
         restrictions: null // ✅ ADD RESTRICTIONS
       };
       return next();
@@ -433,6 +499,50 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
       ? [{ _id: assignmentDoc.departmentId._id, departmentName: assignmentDoc.departmentId.Department || assignmentDoc.departmentId.departmentName || assignmentDoc.departmentId.DepartmentName || null }]
       : [];
     const accessibleDivisions = assignmentDoc.divisionName ? [assignmentDoc.divisionName] : [];
+    
+    // Auto-assign workflow roles based on user's main system roles if not already set
+    let workflowRoles = assignmentDoc.workflowRoles || [];
+    if (!workflowRoles || workflowRoles.length === 0) {
+      // Determine workflow roles based on user's main roles
+      const userMainRoles = userRoles || [];
+      if (userMainRoles.includes('BUDGET_OFFICER') || userMainRoles.includes('SUPERVISOR')) {
+        workflowRoles = ['officeFinalVerifier'];
+      } else if (userMainRoles.includes('BUDGET_MANAGER') || userMainRoles.includes('DEPARTMENT_HEAD')) {
+        workflowRoles = ['departmentConsolidator', 'regionFinalVerifier'];
+      } else if (userMainRoles.includes('BUDGET_ADMIN') || userMainRoles.includes('SUPER ADMIN') || userMainRoles.includes('ADMIN')) {
+        workflowRoles = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier', 'regionCreator', 'regionFinalVerifier'];
+      }
+      
+      // Update the assignment document with auto-assigned workflow roles
+      if (workflowRoles.length > 0) {
+        assignmentDoc.workflowRoles = workflowRoles;
+        assignmentDoc.save().catch(err => console.warn('Failed to save auto-assigned workflow roles:', err.message));
+      }
+    }
+    
+    // Ensure rolePermissions are set based on assignment level
+    let rolePermissions = assignmentDoc.rolePermissions || {};
+    const effectiveAssignmentLevel = assignmentDoc.assignmentLevel;
+    
+    // Set default permissions based on assignment level
+    rolePermissions = {
+      CreateProposals: true,
+      EditOwnProposals: true,
+      EditAllProposals: effectiveAssignmentLevel === 'REGION' || effectiveAssignmentLevel === 'FULL' || effectiveAssignmentLevel === 'OFFICE',
+      DeleteProposals: effectiveAssignmentLevel === 'FULL',
+      ApproveProposals: effectiveAssignmentLevel === 'REGION' || effectiveAssignmentLevel === 'FULL' || effectiveAssignmentLevel === 'OFFICE',
+      ViewReports: true,
+      ManageUsers: effectiveAssignmentLevel === 'FULL',
+      ManageSettings: effectiveAssignmentLevel === 'FULL',
+      ...rolePermissions // Override with stored permissions if they exist
+    };
+    
+    // Update the assignment document if permissions were missing
+    if (!assignmentDoc.rolePermissions || !assignmentDoc.rolePermissions.ApproveProposals) {
+      assignmentDoc.rolePermissions = rolePermissions;
+      assignmentDoc.save().catch(err => console.warn('Failed to save updated role permissions:', err.message));
+    }
+    
     req.hierarchicalAccessInfo = {
       scope: assignmentDoc.assignmentLevel,
       hasFullAccess: false,
@@ -440,8 +550,8 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
       accessibleDepartments,
       accessibleDivisions,
       consolidationInfo,
-      rolePermissions: assignmentDoc.rolePermissions,
-      workflowRoles: assignmentDoc.workflowRoles,
+      rolePermissions: rolePermissions,
+      workflowRoles: workflowRoles,
       restrictions: assignmentDoc.restrictions // ✅ ADD RESTRICTIONS
     };
     next();

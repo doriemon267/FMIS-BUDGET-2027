@@ -36,7 +36,8 @@ const hasFullAccess = (userRoles) => {
     PERMISSION_LEVELS.ADMIN,
     PERMISSION_LEVELS.BUDGET_ADMIN,
     PERMISSION_LEVELS.BUDGET_ANALYST,
-    PERMISSION_LEVELS.BUDGET_MANAGER
+    PERMISSION_LEVELS.BUDGET_MANAGER,
+    PERMISSION_LEVELS.BUDGET_OFFICER  // Added BUDGET_OFFICER for approval permissions
   ]);
 };
 // Check organizational unit access with Budget Manager flexibility
