@@ -19,7 +19,8 @@ const {
   getAllHierarchicalAssignments,
   updateWorkflowRoles,
   deleteHierarchicalAssignment,
-  testHierarchicalConsolidation
+  testHierarchicalConsolidation,
+  lookupUserFromMainDB
 } = require('../controllers/HierarchicalUserAssignmentController');
 
 // NEW: Import new organizational assignment controller
@@ -67,6 +68,16 @@ router.delete(
   '/assignments/:userId',
   ...adminRoute(),
   deleteHierarchicalAssignment
+);
+
+/**
+ * Lookup user information from fmis_main database
+ * GET /api/hierarchical-rbac/user-lookup/:userId
+ */
+router.get(
+  '/user-lookup/:userId',
+  ...authenticatedRoute(),
+  lookupUserFromMainDB
 );
 
 /**

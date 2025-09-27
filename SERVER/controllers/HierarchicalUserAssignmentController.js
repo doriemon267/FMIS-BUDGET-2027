@@ -10,6 +10,95 @@ const Region = require('../models/Region');
 const Department = require('../models/Department');
 const { hasFullAccess } = require('../middleware/securityMiddleware');
 const mongoose = require('mongoose');
+const { mainConnection } = require('../config/mongo_db');
+
+/**
+ * Lookup user from fmis_main.assigned_roles table
+ * Restricted based on current user's role permissions
+ */
+const lookupUserFromMainDB = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const currentUserRoles = req.user.Roles || [];
+    const currentUserId = req.user.id;
+
+    // Define role hierarchy for access control
+    const roleHierarchy = {
+      'BUDGET_ADMIN': 5,
+      'BUDGET_MANAGER': 4,
+      'BUDGET_OFFICER': 3,
+      'BUDGET_COORDINATOR': 2,
+      'BUDGET_ANALYST': 1
+    };
+
+    // Get current user's highest role level
+    const currentUserMaxLevel = Math.max(...currentUserRoles.map(role => roleHierarchy[role] || 0));
+
+    // Only allow lookup if user has sufficient permissions
+    if (currentUserMaxLevel < 3) { // At least BUDGET_OFFICER level
+      return res.status(403).json({
+        success: false,
+        message: 'Insufficient permissions to lookup users',
+        code: 'INSUFFICIENT_PERMISSIONS'
+      });
+    }
+
+    // Query the assigned_roles collection from fmis_main database
+    const AssignedRole = mainConnection.model('assigned_roles', new mongoose.Schema({}, { strict: false }), 'assigned_roles');
+
+    const userData = await AssignedRole.findOne({
+      userId: userId,
+      isActive: true
+    }).lean();
+
+    if (!userData) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found in assigned roles',
+        code: 'USER_NOT_FOUND'
+      });
+    }
+
+    // Extract relevant user information
+    const userInfo = {
+      userId: userData.userId,
+      userName: userData.userName || userData.name || userData.fullName,
+      email: userData.email || userData.userEmail,
+      roles: userData.roles || userData.userRoles || [],
+      department: userData.department || userData.departmentName,
+      division: userData.division || userData.divisionName,
+      region: userData.region || userData.regionName
+    };
+
+    // Determine the appropriate budget role based on user's main roles
+    let budgetRole = 'BUDGET_ANALYST'; // default
+
+    if (userInfo.roles.includes('SUPER ADMIN') || userInfo.roles.includes('ADMIN')) {
+      budgetRole = 'BUDGET_ADMIN';
+    } else if (userInfo.roles.includes('MANAGER') || userInfo.roles.includes('DEPARTMENT_HEAD')) {
+      budgetRole = 'BUDGET_MANAGER';
+    } else if (userInfo.roles.includes('OFFICER') || userInfo.roles.includes('SUPERVISOR')) {
+      budgetRole = 'BUDGET_OFFICER';
+    } else if (userInfo.roles.includes('COORDINATOR') || userInfo.roles.includes('SENIOR_STAFF')) {
+      budgetRole = 'BUDGET_COORDINATOR';
+    }
+
+    userInfo.budgetRole = budgetRole;
+
+    res.json({
+      success: true,
+      data: userInfo
+    });
+
+  } catch (error) {
+    console.error('❌ Error looking up user from main DB:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to lookup user information',
+      error: error.message
+    });
+  }
+};
 /**
  * Create or update hierarchical user assignment
  * This handles the complex logic of assigning users to Division/Department/Region
@@ -745,5 +834,6 @@ module.exports = {
   updateWorkflowRoles,
   deleteHierarchicalAssignment,
   testHierarchicalConsolidation,
-  buildHierarchicalAssignment
+  buildHierarchicalAssignment,
+  lookupUserFromMainDB
 };

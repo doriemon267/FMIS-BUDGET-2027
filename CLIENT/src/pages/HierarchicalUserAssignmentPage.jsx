@@ -259,6 +259,42 @@ const HierarchicalUserAssignmentPage = () => {
     retry: (failureCount, error) => error.message.includes('network') && failureCount < 3,
   });
 
+  // State for user lookup
+  const [userLookupId, setUserLookupId] = useState('');
+  const [isLookingUpUser, setIsLookingUpUser] = useState(false);
+
+  // User lookup query (debounced)
+  const { data: userLookupData, isLoading: loadingUserLookup } = useQuery({
+    queryKey: ['user-lookup', userLookupId],
+    queryFn: async () => {
+      if (!userLookupId || userLookupId.length < 2) return null;
+
+      try {
+        if (isTokenExpired(jwtToken)) {
+          throw new Error('Session expired. Please log in again.');
+        }
+
+        const res = await api.get(`/api/hierarchical-rbac/user-lookup/${userLookupId}`);
+        return res.data?.data || null;
+      } catch (error) {
+        console.error('Error looking up user:', error);
+        return null;
+      }
+    },
+    enabled: !!userLookupId && userLookupId.length >= 2 && !!jwtToken,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    retry: false // Don't retry on user lookup failures
+  });
+
+  // Effect to auto-populate form when user lookup succeeds
+  React.useEffect(() => {
+    if (userLookupData && !editingAssignment) {
+      handleFormChange('userName', userLookupData.userName || '');
+      handleFormChange('email', userLookupData.email || '');
+      handleFormChange('userRole', userLookupData.budgetRole || 'BUDGET_ANALYST');
+    }
+  }, [userLookupData, editingAssignment]);
+
   // Mutation for creating/updating assignments
   const createOrUpdateMutation = useMutation({
     mutationFn: async (data) => {
@@ -601,10 +637,21 @@ const HierarchicalUserAssignmentPage = () => {
                   fullWidth
                   label="User ID"
                   value={formData.userId}
-                  onChange={(e) => handleFormChange('userId', e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    handleFormChange('userId', value);
+                    // Trigger user lookup with debouncing
+                    setUserLookupId(value);
+                  }}
                   disabled={!!editingAssignment}
                   required
-                  helperText={formData.userId ? '' : 'User ID is required'}
+                  helperText={
+                    formData.userId ? 
+                      (loadingUserLookup ? 'Looking up user...' : 
+                       userLookupData ? 'User found and auto-filled' : 
+                       userLookupId.length >= 2 ? 'User not found' : '') : 
+                      'User ID is required'
+                  }
                   inputProps={{ 'aria-label': 'User ID' }}
                 />
               </Grid>
