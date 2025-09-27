@@ -150,18 +150,19 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
 
     // Handle backward compatibility: map new field names to old ones
     const effectiveAssignmentLevel = assignmentLevel || accessScope;
+    const normalizedEffectiveLevel = (effectiveAssignmentLevel || '').toUpperCase();
     const effectiveDepartmentId = departmentId || officeId;
     const effectiveDivisionName = divisionName || responsibilityCenterName;
 
     // Map new assignment levels to old model enum values
-    let modelAssignmentLevel = effectiveAssignmentLevel;
-    if (effectiveAssignmentLevel === 'OFFICE') {
+    let modelAssignmentLevel = normalizedEffectiveLevel;
+    if (normalizedEffectiveLevel === 'OFFICE') {
       modelAssignmentLevel = 'DEPARTMENT';
-    } else if (effectiveAssignmentLevel === 'RESPONSIBILITY_CENTER') {
+    } else if (normalizedEffectiveLevel === 'RESPONSIBILITY_CENTER') {
       modelAssignmentLevel = 'DIVISION';
     }
 
-    if (!userId || !userName || !email || !effectiveAssignmentLevel) {
+    if (!userId || !userName || !email || !normalizedEffectiveLevel) {
       return res.status(400).json({
         success: false,
         message: 'Missing required fields: userId, userName, email, assignmentLevel/accessScope',
@@ -170,7 +171,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
     }
     // Validate assignment level
     const validLevels = ['DIVISION', 'DEPARTMENT', 'REGION', 'FULL', 'OWN_ONLY', 'RESPONSIBILITY_CENTER', 'OFFICE'];
-    if (!validLevels.includes(effectiveAssignmentLevel)) {
+    if (!validLevels.includes(normalizedEffectiveLevel)) {
       return res.status(400).json({
         success: false,
         message: `Invalid assignment level. Must be one of: ${validLevels.join(', ')}`,
@@ -195,7 +196,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
     }
     // Build hierarchical assignment based on level
     const assignmentData = await buildHierarchicalAssignment({
-      assignmentLevel: effectiveAssignmentLevel,
+      assignmentLevel: normalizedEffectiveLevel,
       regionId,
       departmentId: effectiveDepartmentId,
       divisionName: effectiveDivisionName
@@ -206,6 +207,11 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
     // Find existing assignment or create new one
     let assignment = await HierarchicalUserAssignment.findOne({ userId, isActive: true });
 
+    const approvalLevels = ['REGION', 'FULL', 'OFFICE'];
+    const hasExplicitWorkflowRoles = Array.isArray(req.body.workflowRoles);
+    const sanitizedWorkflowRoles = hasExplicitWorkflowRoles
+      ? (req.body.workflowRoles || []).filter(role => typeof role === 'string' && role.trim())
+      : [];
     const assignmentPayload = {
       userId,
       userName,
@@ -218,25 +224,36 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
         // Default permissions based on assignment level
         CreateProposals: true,
         EditOwnProposals: true,
-        EditAllProposals: effectiveAssignmentLevel === 'REGION' || effectiveAssignmentLevel === 'FULL' || effectiveAssignmentLevel === 'OFFICE',
-        DeleteProposals: effectiveAssignmentLevel === 'FULL',
-        ApproveProposals: effectiveAssignmentLevel === 'REGION' || effectiveAssignmentLevel === 'FULL' || effectiveAssignmentLevel === 'OFFICE',
+        EditAllProposals: approvalLevels.includes(normalizedEffectiveLevel),
+        DeleteProposals: normalizedEffectiveLevel === 'FULL',
+        ApproveProposals: approvalLevels.includes(normalizedEffectiveLevel),
+        canApproveProposals: approvalLevels.includes(normalizedEffectiveLevel),
         ViewReports: true,
-        ManageUsers: effectiveAssignmentLevel === 'FULL',
-        ManageSettings: effectiveAssignmentLevel === 'FULL'
+        ManageUsers: normalizedEffectiveLevel === 'FULL',
+        ManageSettings: normalizedEffectiveLevel === 'FULL'
       },
+      workflowRoles: hasExplicitWorkflowRoles ? sanitizedWorkflowRoles : undefined,
       isActive: true,
       lastModifiedBy: adminUserId
     };
+
+    if (!hasExplicitWorkflowRoles) {
+      delete assignmentPayload.workflowRoles;
+    }
+
     if (assignment) {
       // Update existing assignment
       Object.assign(assignment, assignmentPayload);
-      await assignment.save();
     } else {
       // Create new assignment
       assignmentPayload.createdBy = adminUserId;
       assignment = await HierarchicalUserAssignment.create(assignmentPayload);
     }
+
+    // Auto-configure workflow roles and approval flag based on assignment level
+    applyOfficeDefaults(assignment, sanitizedWorkflowRoles, normalizedEffectiveLevel, hasExplicitWorkflowRoles);
+    ensureApprovalFlagConsistency(assignment, sanitizedWorkflowRoles, normalizedEffectiveLevel, hasExplicitWorkflowRoles);
+    await assignment.save();
 
     // Populate the result for response
     const populatedAssignment = await HierarchicalUserAssignment
@@ -326,11 +343,36 @@ const getHierarchicalAssignment = async (req, res) => {
     // Get consolidation information
     const assignmentDoc = await HierarchicalUserAssignment.findOne({ userId, isActive: true });
     const consolidationInfo = assignmentDoc.getConsolidationTarget();
+    
+    // If userName is missing, try to look it up
+    let userName = assignment.userName;
+    if (!userName || userName.trim() === '') {
+      try {
+        // Simple user lookup from main DB
+        const AssignedRole = mainConnection.model('assigned_roles', new mongoose.Schema({}, { strict: false }), 'assigned_roles');
+        const userData = await AssignedRole.findOne({
+          user: userId
+        }).lean();
+        
+        if (userData) {
+          userName = userData.fullName || userData.userName || userData.name || userData.user;
+          // Update the assignment document with the looked up name
+          if (assignmentDoc && userName) {
+            assignmentDoc.userName = userName;
+            await assignmentDoc.save().catch(err => console.warn('Failed to save userName:', err.message));
+          }
+        }
+      } catch (lookupError) {
+        console.warn(`Failed to lookup userName for ${userId}:`, lookupError.message);
+      }
+    }
+    
     return res.status(200).json({
       success: true,
       message: 'Hierarchical assignment retrieved successfully',
       assignment: {
         ...assignment,
+        userName: userName || userId, // Fallback to userId if name not found
         consolidationInfo
       }
     });
@@ -368,6 +410,30 @@ const getAllHierarchicalAssignments = async (req, res) => {
         try {
           const assignmentDoc = await HierarchicalUserAssignment.findById(assignment._id);
           const consolidationInfo = assignmentDoc ? assignmentDoc.getConsolidationTarget() : null;
+          
+          // If userName is missing, try to look it up
+          let userName = assignment.userName;
+          if (!userName || userName.trim() === '') {
+            try {
+              // Simple user lookup from main DB
+              const AssignedRole = mainConnection.model('assigned_roles', new mongoose.Schema({}, { strict: false }), 'assigned_roles');
+              const userData = await AssignedRole.findOne({
+                user: assignment.userId
+              }).lean();
+              
+              if (userData) {
+                userName = userData.fullName || userData.userName || userData.name || userData.user;
+                // Update the assignment document with the looked up name
+                if (assignmentDoc && userName) {
+                  assignmentDoc.userName = userName;
+                  await assignmentDoc.save().catch(err => console.warn('Failed to save userName:', err.message));
+                }
+              }
+            } catch (lookupError) {
+              console.warn(`Failed to lookup userName for ${assignment.userId}:`, lookupError.message);
+            }
+          }
+          
           // Shape to match UI expectations
           const officeId = assignment.regionId && assignment.departmentId
             ? `${assignment.departmentId._id}_${assignment.regionId._id}`
@@ -376,6 +442,7 @@ const getAllHierarchicalAssignments = async (req, res) => {
               : '';
           return {
             ...assignment,
+            userName: userName || assignment.userId, // Fallback to userId if name not found
             accessScope: assignment.assignmentLevel,
             officeId: officeId,
             regions: assignment.regionId ? [{ _id: assignment.regionId._id, Region: assignment.regionId.Region || assignment.regionId.regionName || assignment.regionId.RegionName }] : [],
@@ -855,3 +922,50 @@ module.exports = {
   buildHierarchicalAssignment,
   lookupUserFromMainDB
 };
+
+// ----- Internal helper utilities -----
+const APPROVAL_ENABLED_LEVELS = ['REGION', 'FULL', 'OFFICE'];
+const DEFAULT_WORKFLOW_ROLES_BY_LEVEL = {
+  REGION: ['regionCreator', 'regionFinalVerifier', 'officeCreator', 'officeConsolidator', 'officeSubmission'],
+  FULL: ['regionCreator', 'regionFinalVerifier', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier'],
+  OFFICE: ['officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier'],
+  DEPARTMENT: ['departmentCreator', 'departmentConsolidator', 'departmentSubmission'],
+  DIVISION: ['divisionCreator', 'divisionApprover'],
+  RESPONSIBILITY_CENTER: ['divisionCreator', 'divisionApprover']
+};
+const APPROVAL_WORKFLOW_ROLES = new Set(['officeConsolidator', 'officeFinalVerifier', 'regionFinalVerifier']);
+
+/**
+ * Ensure default workflow roles and approval flags align with assignment level.
+ */
+function applyOfficeDefaults(assignmentDoc, sanitizedWorkflowRoles, normalizedLevel, hasExplicitWorkflowRoles) {
+  if (!assignmentDoc) return;
+
+  const level = normalizedLevel || assignmentDoc.assignmentLevel || '';
+  const levelDefaults = DEFAULT_WORKFLOW_ROLES_BY_LEVEL[level];
+  if (!hasExplicitWorkflowRoles && Array.isArray(levelDefaults)) {
+    assignmentDoc.workflowRoles = [...levelDefaults];
+  } else if (hasExplicitWorkflowRoles) {
+    assignmentDoc.workflowRoles = sanitizedWorkflowRoles;
+  }
+
+  ensureApprovalFlagConsistency(assignmentDoc, sanitizedWorkflowRoles, normalizedLevel, hasExplicitWorkflowRoles);
+}
+
+/**
+ * Guarantee `ApproveProposals` and `canApproveProposals` stay in sync.
+ */
+function ensureApprovalFlagConsistency(assignmentDoc, sanitizedWorkflowRoles, normalizedLevel, hasExplicitWorkflowRoles) {
+  if (!assignmentDoc?.rolePermissions) {
+    assignmentDoc.rolePermissions = {};
+  }
+
+  const level = normalizedLevel || assignmentDoc.assignmentLevel || '';
+  const hasApprovalByLevel = APPROVAL_ENABLED_LEVELS.includes(level);
+  const workflows = hasExplicitWorkflowRoles ? sanitizedWorkflowRoles : assignmentDoc.workflowRoles || [];
+  const hasApprovalByWorkflow = Array.isArray(workflows) && workflows.some(role => APPROVAL_WORKFLOW_ROLES.has(role));
+
+  const canApprove = Boolean(hasApprovalByLevel || hasApprovalByWorkflow);
+  assignmentDoc.rolePermissions.ApproveProposals = canApprove;
+  assignmentDoc.rolePermissions.canApproveProposals = canApprove;
+}
