@@ -34,10 +34,31 @@ exports.uploadMooe = async (req, res) => {
         const subsidy = parseFloat(row[`${region} Subsidy`] || 0) || 0;
         if (income === 0 && subsidy === 0) continue; // skip empty
         try {
+          // Include organizational context when available
+          // Prefer current user's hierarchical assignment to populate department/division
+          let org = {};
+          try {
+            if (req.user && req.user.id) {
+              const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+              const assignment = await HierarchicalUserAssignment.getUserPermissions(req.user.id);
+              const userRegion = assignment?.regions?.[0]?.regionName;
+              const userDept = assignment?.departments?.[0]?.departmentName;
+              const userDiv = Array.isArray(assignment?.divisions) ? assignment.divisions[0] : assignment?.divisionName;
+              if (userDept) org.department = userDept;
+              if (userDiv) org.division = userDiv;
+              // If upload is done under a region user, prefer their region label over column header formatting
+              if (userRegion) org.region = userRegion;
+            }
+          } catch (_) {
+            // Non-fatal: fallback to parsed region only
+          }
+
           await MooeProposal.create({
             sublineItem: row["Subline Item"] || '',
             accountingTitle: row["Accounting Title"] || '',
-            region,
+            region: org.region || region,
+            department: org.department, // may be undefined
+            division: org.division,     // may be undefined
             income,
             subsidy,
             amount: income + subsidy,
@@ -88,4 +109,4 @@ exports.getSampleMooeTemplate = async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: "Internal server error", message: error.message });
   }
-};
+};

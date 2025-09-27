@@ -410,6 +410,8 @@ exports.updateProposalStatus = async (req, res) => {
     const personnelTransformed = personnelDataToTransform.map((p) => ({
       processBy: p._id.processBy,
       region: p._id.region,
+      department: p._id.department, // may be undefined for region-level aggregation
+      division: p._id.division,     // not present in current agg; reserved for future use
       fiscalYear,
       budgetType,
       submittedDate: new Date(),
@@ -510,6 +512,8 @@ exports.updateProposalStatus = async (req, res) => {
     const mooeTransformed = mooeDataToTransform.map((p) => ({
       processBy: p._id.processBy,
       region: p._id.region,
+      department: p._id.department, // present when department-level aggregation is used
+      division: p._id.division,     // not present in current agg; reserved for future use
       fiscalYear,
       budgetType,
       submittedDate: new Date(),
@@ -610,6 +614,8 @@ exports.updateProposalStatus = async (req, res) => {
     const capitalOutlaysTransformed = capitalOutlayDataToTransform.map((p) => ({
       processBy: p._id.processBy,
       region: p._id.region,
+      department: p._id.department, // present when department-level aggregation is used
+      division: p._id.division,     // not present in current agg; reserved for future use
       fiscalYear,
       budgetType,
       submittedDate: new Date(),
@@ -674,6 +680,8 @@ exports.updateProposalStatus = async (req, res) => {
           filter: {
             processBy: item.processBy,
             region: item.region,
+            department: item.department ?? null,
+            division: item.division ?? null,
             fiscalYear: item.fiscalYear,
             budgetType: item.budgetType,
             cobExpenditures: item.cobExpenditures,
@@ -684,6 +692,13 @@ exports.updateProposalStatus = async (req, res) => {
               status: item.status,
               totalExpenses: item.totalExpenses,
               totalIncome: item.totalIncome,
+              // Persist org context on record
+              region: item.region,
+              department: item.department ?? null,
+              division: item.division ?? null,
+              fiscalYear: item.fiscalYear,
+              budgetType: item.budgetType,
+              cobExpenditures: item.cobExpenditures,
             },
           },
           upsert: true
@@ -1057,6 +1072,10 @@ exports.getProposals = async (req, res) => {
     // Convert page and limit to numbers
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
+    // Define divisionOnly flag for use throughout the function
+    const isDivisionOnly = String(req.query.divisionOnly) === 'true';
+    // Define scope once for use throughout the function
+    const scope = (req.hierarchicalAccessInfo?.scope || req.hierarchicalAccess?.scope || 'REGION').toUpperCase();
     // Build the query
     let query = {};
     // Apply submission workflow filters first (these respect submission status)
@@ -1115,6 +1134,27 @@ exports.getProposals = async (req, res) => {
         ]
       };
     }
+    // Division-only view for All Proposals (show only division-level records)
+    if (String(req.query.divisionOnly) === 'true') {
+      query = {
+        $and: [
+          query,
+          {
+            $or: [
+              { originalLevel: 'DIVISION' },
+              // Also include records that have been submitted from Division level
+              {
+                $and: [
+                  { workflowLevel: 'DIVISION' },
+                  { status: { $in: ['Division Submitted', 'DIVISION SUBMITTED', 'Department Verified', 'DEPARTMENT VERIFIED'] } },
+                  { originalLevel: { $in: [null, ''] } }
+                ]
+              }
+            ]
+          }
+        ]
+      };
+    }
     // First, let's check how many total proposals exist in the database
     const totalProposalsInDB = await Proposal.countDocuments();
     // Check what proposals exist for this user
@@ -1159,23 +1199,36 @@ exports.getProposals = async (req, res) => {
 
         const norm = (v) => String(v ?? '').trim().toUpperCase();
         const scope = req.hierarchicalAccessInfo?.scope?.toUpperCase() || 'REGION';
+        
         personnelData.forEach(p => {
-          // Dynamic grouping by scope: REGION -> region only; DEPARTMENT -> +department; DIVISION -> +department +division
-          const parts = [
-            // For Division scope, merge across processBy (do not include in key)
-            norm(p.region) || 'UNKNOWN',
-            norm(p.fiscalYear) || 'UNKNOWN',
-            norm(p.budgetType) || 'UNKNOWN'
-          ];
-          if (scope !== 'DIVISION') {
-            // Keep processBy separation for Region/Department
-            parts.unshift(norm(p.processBy) || 'UNKNOWN');
-          }
-          if (scope === 'DEPARTMENT' || scope === 'DIVISION') {
-            parts.push(norm(p.department) || 'UNKNOWN');
-          }
-          if (scope === 'DIVISION') {
-            parts.push(norm(p.division) || 'UNKNOWN');
+          let parts;
+          
+          if (isDivisionOnly) {
+            // For divisionOnly view, group by target organizational unit based on user scope
+            parts = [
+              norm(p.region) || 'UNKNOWN',
+              norm(p.fiscalYear) || 'UNKNOWN',
+              norm(p.budgetType) || 'UNKNOWN'
+            ];
+            
+            // Group by office/department for Department users, by region for higher levels
+            if (scope === 'DEPARTMENT' || scope === 'OFFICE') {
+              parts.push(norm(p.office) || norm(p.department) || 'UNKNOWN');
+            } else if (scope === 'REGION' || scope === 'FULL') {
+              parts.push(norm(p.office) || norm(p.region) || 'UNKNOWN');
+            } else {
+              // For Division users, still group by division
+              parts.push(norm(p.division) || 'UNKNOWN');
+            }
+          } else {
+            // Normal aggregation: group by region, fiscalYear, budgetType, department, division
+            parts = [
+              norm(p.region) || 'UNKNOWN',
+              norm(p.fiscalYear) || 'UNKNOWN',
+              norm(p.budgetType) || 'UNKNOWN',
+              norm(p.department) || 'UNKNOWN',
+              norm(p.division) || 'UNKNOWN'
+            ];
           }
           const key = parts.join('-');
           if (psGroups.has(key)) {
@@ -1198,6 +1251,22 @@ exports.getProposals = async (req, res) => {
               statusTypes: new Set(),
               personnelIds: p._id ? [String(p._id)] : [],
             };
+            
+            // For divisionOnly, override organizational fields based on user scope
+            if (isDivisionOnly) {
+              if (scope === 'DEPARTMENT' || scope === 'OFFICE') {
+                base.office = req.hierarchicalAccessInfo?.accessibleOffices?.[0] || 
+                             req.hierarchicalAccessInfo?.accessibleDepartments?.[0] || 
+                             p.office || p.department;
+                base.department = req.hierarchicalAccessInfo?.accessibleDepartments?.[0] || p.department;
+                base.responsibilityCenter = p.division || base.office || base.department;
+              } else if (scope === 'REGION' || scope === 'FULL') {
+                base.office = req.hierarchicalAccessInfo?.accessibleOffices?.[0] || p.office;
+                base.responsibilityCenter = p.division || base.office || p.region;
+              }
+              // For Division scope, keep original division
+            }
+            
             // Zero-out PS breakdown fields so the UI uses Total as fallback
             psFields.forEach(f => { base[f] = 0; });
             base.Total = calcPSTotal(p);
@@ -1221,20 +1290,41 @@ exports.getProposals = async (req, res) => {
         const scope = req.hierarchicalAccessInfo?.scope?.toUpperCase() || 'REGION';
         
         mooeData.forEach(p => {
-          const parts = [
-            norm(p.processBy) || 'UNKNOWN',
-            norm(p.region) || 'UNKNOWN',
-            norm(p.fiscalYear) || 'UNKNOWN',
-            norm(p.budgetType) || 'UNKNOWN'
-          ];
-          if (scope === 'DEPARTMENT' || scope === 'DIVISION') {
-            parts.push(norm(p.department) || 'UNKNOWN');
+          let parts;
+          
+          if (isDivisionOnly) {
+            // For divisionOnly view, group by target organizational unit
+            parts = [
+              norm(p.region) || 'UNKNOWN',
+              norm(p.fiscalYear) || 'UNKNOWN',
+              norm(p.budgetType) || 'UNKNOWN'
+            ];
+            
+            // Group by office/department for Department users, by region for higher levels
+            if (scope === 'DEPARTMENT' || scope === 'OFFICE') {
+              parts.push(norm(p.office) || norm(p.department) || 'UNKNOWN');
+            } else if (scope === 'REGION' || scope === 'FULL') {
+              parts.push(norm(p.office) || norm(p.region) || 'UNKNOWN');
+            } else {
+              // For Division users, still group by division
+              parts.push(norm(p.division) || 'UNKNOWN');
+            }
+          } else {
+            // Normal aggregation: dynamic by scope
+            parts = [
+              norm(p.processBy) || 'UNKNOWN',
+              norm(p.region) || 'UNKNOWN',
+              norm(p.fiscalYear) || 'UNKNOWN',
+              norm(p.budgetType) || 'UNKNOWN'
+            ];
+            if (scope === 'DEPARTMENT' || scope === 'DIVISION') {
+              parts.push(norm(p.department) || 'UNKNOWN');
+            }
+            if (scope === 'DIVISION') {
+              parts.push(norm(p.division) || 'UNKNOWN');
+            }
           }
-          if (scope === 'DIVISION') {
-            parts.push(norm(p.division) || 'UNKNOWN');
-          }
-          // Preserve status split as before
-          parts.push(norm(p.status) || 'UNKNOWN');
+          // Do not include status in grouping - aggregate all MOOE records together
           const groupKey = parts.join('-');
           
           if (mooeGroups.has(groupKey)) {
@@ -1257,6 +1347,22 @@ exports.getProposals = async (req, res) => {
               recordCount: 1,
               accountingTitles: p.accountingTitle ? [p.accountingTitle] : []
             };
+            
+            // For divisionOnly, override organizational fields based on user scope
+            if (isDivisionOnly) {
+              if (scope === 'DEPARTMENT' || scope === 'OFFICE') {
+                mooeRecord.office = req.hierarchicalAccessInfo?.accessibleOffices?.[0] || 
+                                   req.hierarchicalAccessInfo?.accessibleDepartments?.[0] || 
+                                   p.office || p.department;
+                mooeRecord.department = req.hierarchicalAccessInfo?.accessibleDepartments?.[0] || p.department;
+                mooeRecord.responsibilityCenter = p.division || mooeRecord.office || mooeRecord.department;
+              } else if (scope === 'REGION' || scope === 'FULL') {
+                mooeRecord.office = req.hierarchicalAccessInfo?.accessibleOffices?.[0] || p.office;
+                mooeRecord.responsibilityCenter = p.division || mooeRecord.office || p.region;
+              }
+              // For Division scope, keep original division
+            }
+            
             mooeGroups.set(groupKey, mooeRecord);
           }
         });
@@ -1276,20 +1382,41 @@ exports.getProposals = async (req, res) => {
         const scope = req.hierarchicalAccessInfo?.scope?.toUpperCase() || 'REGION';
         
         capitalData.forEach(p => {
-          const parts = [
-            norm(p.processBy) || 'UNKNOWN',
-            norm(p.region) || 'UNKNOWN',
-            norm(p.fiscalYear) || 'UNKNOWN',
-            norm(p.budgetType) || 'UNKNOWN'
-          ];
-          if (scope === 'DEPARTMENT' || scope === 'DIVISION') {
-            parts.push(norm(p.department) || 'UNKNOWN');
+          let parts;
+          
+          if (isDivisionOnly) {
+            // For divisionOnly view, group by target organizational unit
+            parts = [
+              norm(p.region) || 'UNKNOWN',
+              norm(p.fiscalYear) || 'UNKNOWN',
+              norm(p.budgetType) || 'UNKNOWN'
+            ];
+            
+            // Group by office/department for Department users, by region for higher levels
+            if (scope === 'DEPARTMENT' || scope === 'OFFICE') {
+              parts.push(norm(p.office) || norm(p.department) || 'UNKNOWN');
+            } else if (scope === 'REGION' || scope === 'FULL') {
+              parts.push(norm(p.office) || norm(p.region) || 'UNKNOWN');
+            } else {
+              // For Division users, still group by division
+              parts.push(norm(p.division) || 'UNKNOWN');
+            }
+          } else {
+            // Normal aggregation: dynamic by scope
+            parts = [
+              norm(p.processBy) || 'UNKNOWN',
+              norm(p.region) || 'UNKNOWN',
+              norm(p.fiscalYear) || 'UNKNOWN',
+              norm(p.budgetType) || 'UNKNOWN'
+            ];
+            if (scope === 'DEPARTMENT' || scope === 'DIVISION') {
+              parts.push(norm(p.department) || 'UNKNOWN');
+            }
+            if (scope === 'DIVISION') {
+              parts.push(norm(p.division) || 'UNKNOWN');
+            }
           }
-          if (scope === 'DIVISION') {
-            parts.push(norm(p.division) || 'UNKNOWN');
-          }
-          // Preserve status split as before
-          parts.push(norm(p.status) || 'UNKNOWN');
+          // Do not include status in grouping - aggregate all Capital Outlay records together
           const groupKey = parts.join('-');
           
           if (capitalGroups.has(groupKey)) {
@@ -1313,6 +1440,22 @@ exports.getProposals = async (req, res) => {
               recordCount: 1,
               accountingTitles: p.accountingTitle ? [p.accountingTitle] : []
             };
+            
+            // For divisionOnly, override organizational fields based on user scope
+            if (isDivisionOnly) {
+              if (scope === 'DEPARTMENT' || scope === 'OFFICE') {
+                capitalRecord.office = req.hierarchicalAccessInfo?.accessibleOffices?.[0] || 
+                                      req.hierarchicalAccessInfo?.accessibleDepartments?.[0] || 
+                                      p.office || p.department;
+                capitalRecord.department = req.hierarchicalAccessInfo?.accessibleDepartments?.[0] || p.department;
+                capitalRecord.responsibilityCenter = p.division || capitalRecord.office || capitalRecord.department;
+              } else if (scope === 'REGION' || scope === 'FULL') {
+                capitalRecord.office = req.hierarchicalAccessInfo?.accessibleOffices?.[0] || p.office;
+                capitalRecord.responsibilityCenter = p.division || capitalRecord.office || p.region;
+              }
+              // For Division scope, keep original division
+            }
+            
             capitalGroups.set(groupKey, capitalRecord);
           }
         });
@@ -1330,7 +1473,32 @@ exports.getProposals = async (req, res) => {
         const incomeGroups = new Map();
         
         incomeData.forEach(p => {
-          const groupKey = `${p.processBy || 'Unknown'}-${p.region || 'Unknown'}-${p.fiscalYear || 'Unknown'}-${p.budgetType || 'Unknown'}-${p.status || 'Unknown'}`;
+          let groupKey;
+          
+          if (isDivisionOnly) {
+            // For divisionOnly view, group by target organizational unit
+            const norm = (v) => String(v ?? '').trim().toUpperCase();
+            const parts = [
+              norm(p.region) || 'UNKNOWN',
+              norm(p.fiscalYear) || 'UNKNOWN',
+              norm(p.budgetType) || 'UNKNOWN'
+            ];
+            
+            // Group by office/department for Department users, by region for higher levels
+            if (scope === 'DEPARTMENT' || scope === 'OFFICE') {
+              parts.push(norm(p.office) || norm(p.department) || 'UNKNOWN');
+            } else if (scope === 'REGION' || scope === 'FULL') {
+              parts.push(norm(p.office) || norm(p.region) || 'UNKNOWN');
+            } else {
+              // For Division users, still group by division
+              parts.push(norm(p.division) || 'UNKNOWN');
+            }
+            
+            groupKey = parts.join('-');
+          } else {
+            // Normal aggregation: group by processBy, region, fiscalYear, budgetType, status
+            groupKey = `${p.processBy || 'Unknown'}-${p.region || 'Unknown'}-${p.fiscalYear || 'Unknown'}-${p.budgetType || 'Unknown'}-${p.status || 'Unknown'}`;
+          }
           
           if (incomeGroups.has(groupKey)) {
             const existing = incomeGroups.get(groupKey);
@@ -1350,6 +1518,22 @@ exports.getProposals = async (req, res) => {
               recordCount: 1,
               particularsArray: p.particulars ? [p.particulars] : []
             };
+            
+            // For divisionOnly, override organizational fields based on user scope
+            if (isDivisionOnly) {
+              if (scope === 'DEPARTMENT' || scope === 'OFFICE') {
+                incomeRecord.office = req.hierarchicalAccessInfo?.accessibleOffices?.[0] || 
+                                     req.hierarchicalAccessInfo?.accessibleDepartments?.[0] || 
+                                     p.office || p.department;
+                incomeRecord.department = req.hierarchicalAccessInfo?.accessibleDepartments?.[0] || p.department;
+                incomeRecord.responsibilityCenter = p.division || incomeRecord.office || incomeRecord.department;
+              } else if (scope === 'REGION' || scope === 'FULL') {
+                incomeRecord.office = req.hierarchicalAccessInfo?.accessibleOffices?.[0] || p.office;
+                incomeRecord.responsibilityCenter = p.division || incomeRecord.office || p.region;
+              }
+              // For Division scope, keep original division
+            }
+            
             incomeGroups.set(groupKey, incomeRecord);
           }
         });
@@ -1423,16 +1607,121 @@ exports.getProposals = async (req, res) => {
     };
 
     // If PS/MOOE/Capital entries were aggregated, keep aggregation but also aggregate approval info sensibly
-    const enrichedProposals = allProposals.map(enrichOne);
+    let finalProposals = allProposals.map(enrichOne);
+
+    // For divisionOnly, aggregate by Division first (fallback to office/department/region) and compute proposedBudget
+    if (isDivisionOnly) {
+      const aggregatedByOrg = new Map();
+      const scopeUpper = (req.hierarchicalAccessInfo?.scope || 'REGION').toUpperCase();
+
+      finalProposals.forEach((proposal) => {
+        const norm = (v) => String(v ?? '').trim().toUpperCase();
+        const accessibleDivisionName = req.hierarchicalAccessInfo?.accessibleDivisions?.[0] || null;
+
+        // Prefer Division to ensure Responsibility Center shows the division name
+        // If user scope is DIVISION, collapse all items into the user's division bucket
+        const groupUnit =
+          scopeUpper === 'DIVISION'
+            ? (norm(accessibleDivisionName) ||
+               norm(proposal.division) ||
+               norm(proposal.office) ||
+               norm(proposal.department) ||
+               'UNKNOWN')
+            : (norm(proposal.division) ||
+               norm(proposal.office) ||
+               norm(proposal.department) ||
+               norm(proposal.region) ||
+               'UNKNOWN');
+
+        // Add fiscal year and budget type to make groups more specific
+        const groupKey = `${groupUnit}-${norm(proposal.fiscalYear)}-${norm(
+          proposal.budgetType
+        )}`;
+
+        // Normalize income/expenses per model type before aggregation
+        // Important: Do NOT count raw Proposal model totals to avoid double-counting with PS/MOOE/Capital/Income
+        const income = Number(
+          proposal.modelType === 'income'
+            ? (proposal.amount || 0)
+            : 0
+        );
+        const expenses = Number(
+          proposal.modelType === 'personnel'
+            ? (proposal.Total || 0)
+            : proposal.modelType === 'mooe'
+              ? ((proposal.amount ?? proposal.subsidy) || 0)
+              : proposal.modelType === 'capital'
+                ? ((proposal.amount ?? proposal.cost) || 0)
+                : 0
+        );
+        const computedProposed = income + expenses; // derive per-item proposed budget
+
+        if (aggregatedByOrg.has(groupKey)) {
+          const existing = aggregatedByOrg.get(groupKey);
+          // Aggregate the amounts
+          existing.totalIncome = (existing.totalIncome || 0) + income;
+          existing.totalExpenses = (existing.totalExpenses || 0) + expenses;
+          // Recompute proposedBudget as income + expenses to avoid 0 carry-over
+          existing.proposedBudget = (existing.totalIncome || 0) + (existing.totalExpenses || 0);
+
+          // Keep the latest submitted date
+          if (
+            proposal.submittedDate &&
+            (!existing.submittedDate || proposal.submittedDate > existing.submittedDate)
+          ) {
+            existing.submittedDate = proposal.submittedDate;
+          }
+          // Keep the most recent status/workflow level
+          existing.status = proposal.status;
+          existing.workflowLevel = proposal.workflowLevel || existing.workflowLevel || 'DIVISION';
+        } else {
+          // Create new aggregated record
+          const officeVal =
+            req.hierarchicalAccessInfo?.accessibleOffices?.[0] || proposal.office || proposal.department;
+          const deptVal =
+            req.hierarchicalAccessInfo?.accessibleDepartments?.[0] || proposal.department;
+
+          aggregatedByOrg.set(groupKey, {
+            ...proposal,
+            // normalized totals + computed proposed budget
+            totalIncome: income,
+            totalExpenses: expenses,
+            proposedBudget: computedProposed,
+            // Normalize org fields and ensure responsibilityCenter prefers division
+            office: officeVal,
+            department: deptVal,
+            division: scopeUpper === 'DIVISION'
+              ? (accessibleDivisionName || proposal.division)
+              : proposal.division,
+            responsibilityCenter: scopeUpper === 'DIVISION'
+              ? (accessibleDivisionName || proposal.division || proposal.responsibilityCenter || officeVal || deptVal || 'UNKNOWN')
+              : (proposal.division || proposal.responsibilityCenter || officeVal || deptVal || proposal.region || 'UNKNOWN'),
+            workflowLevel: 'DIVISION',
+          });
+        }
+      });
+
+      // Filter out zero-total groups and any residual region-only rows when in DIVISION scope
+      finalProposals = Array.from(aggregatedByOrg.values()).filter(item => {
+        const total = Number(item.totalIncome || 0) + Number(item.totalExpenses || 0);
+        if (total <= 0) return false; // drop zero rows
+        if (scopeUpper === 'DIVISION') {
+          const rc = String(item.responsibilityCenter || '').toUpperCase();
+          // Do not allow CENTRAL OFFICE buckets in division view
+          if (rc === 'CENTRAL OFFICE') return false;
+        }
+        return true;
+      });
+    }
 
     // Sort combined results and apply pagination
-    enrichedProposals.sort((a, b) => {
+    finalProposals.sort((a, b) => {
       const aValue = a[sort] || a.createdAt || new Date(0);
       const bValue = b[sort] || b.createdAt || new Date(0);
       return sortOrder * (aValue > bValue ? 1 : -1);
     });
 
-    const paginatedProposals = enrichedProposals.slice(skipCount, skipCount + limitNum);
+    const paginatedProposals = finalProposals.slice(skipCount, skipCount + limitNum);
     if (proposals.length > 0) {
       proposals.forEach((proposal, index) => {
         });

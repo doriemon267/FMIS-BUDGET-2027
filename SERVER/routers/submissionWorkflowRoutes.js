@@ -47,6 +47,14 @@ router.post(
 /**
  * Office Level Routes
  */
+// Office returns RC submissions back to Responsibility Center
+router.post(
+  '/office/return-to-responsibility-center',
+  submissionWorkflowControl('update'),
+  requireWorkflowRole('officeConsolidator'),
+  submissionWorkflowTransitions.officeReturnToResponsibilityCenter
+);
+
 // Step 2→3: Office verifies responsibility center submissions (Responsibility Center Submitted → Office Verified)
 router.post(
   '/office/verify-submission',

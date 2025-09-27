@@ -32,6 +32,8 @@ const ProposalCustomTable = forwardRef(({
   hasDelete = true,
   refreshData,
   groupBy = null,
+  showTotals = false,
+  totalsData = null,
 }, ref) => {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -328,6 +330,30 @@ const ProposalCustomTable = forwardRef(({
                       No data available
                     </TableCell>
                   </TableRow>
+                )}
+                {/* Totals Row */}
+                {showTotals && totalsData && rows.length > 0 && (
+                  <>
+                    <TableRow>
+                      <TableCell colSpan={columns.length} sx={{ borderBottom: '2px solid #000', padding: '8px' }}>
+                      </TableCell>
+                    </TableRow>
+                    <TableRow sx={{ backgroundColor: '#f5f5f5', fontWeight: 'bold' }}>
+                      {columns.map((column) => (
+                        <TableCell
+                          key={`total-${column.field}`}
+                          align={column.type === 'number' ? 'right' : 'left'}
+                          sx={{ fontWeight: 'bold', borderTop: '2px solid #000' }}
+                        >
+                          {column.field === 'office' ? 'TOTAL' : 
+                           column.field === 'totalIncome' ? `₱${(totalsData.totalProjectedCorporateIncome || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` :
+                           column.field === 'totalExpenses' ? `₱${(totalsData.totalProjectedSubsidy || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` :
+                           column.field === 'proposedBudget' ? `₱${(totalsData.totalProposedBudget || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` :
+                           ''}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  </>
                 )}
                 {loading && rows.length > 0 && (
                   <TableRow>

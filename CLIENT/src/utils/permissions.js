@@ -1,5 +1,27 @@
 export function hasPermission(currentUser, permissionKey) {
   if (!currentUser) return false;
+
+  const userRoles = currentUser.Roles || [];
+
+  // Role-based access control for menu permissions
+  if (permissionKey === 'ManageSettings') {
+    // Only BUDGET ADMIN can access Settings
+      // Only BUDGET ADMIN and SUPER ADMIN can access Settings
+      return userRoles.includes('BUDGET ADMIN') || userRoles.includes('SUPER ADMIN');
+  }
+
+  // For other permissions, BUDGET ADMIN gets all access
+  if (userRoles.includes('BUDGET ADMIN')) {
+    return true;
+  }
+
+  // BUDGET ANALYST, BUDGET COORDINATOR, BUDGET MANAGER, BUDGET OFFICER get all menus except Settings
+  const allowedRoles = ['BUDGET ANALYST', 'BUDGET COORDINATOR', 'BUDGET MANAGER', 'BUDGET OFFICER'];
+  if (allowedRoles.some(role => userRoles.includes(role))) {
+    return true;
+  }
+
+  // Fallback to hierarchical permissions for backward compatibility
   // Prefer hierarchicalFlags populated by middleware
   const flags = currentUser.hierarchicalFlags || {};
   if (typeof flags[permissionKey] === 'boolean') return flags[permissionKey];

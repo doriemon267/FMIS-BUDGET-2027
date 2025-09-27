@@ -133,59 +133,31 @@ const AllProposalsPage = () => {
   const fetchStats = async () => {
     try {
       setStats(prev => ({ ...prev, loading: true }));
-      const response = await api.get("/proposals");
-      
+
+      // Use the same endpoint as the table to get aggregated data
+      const response = await api.get("/proposals?divisionOnly=true");
+
       if (response.data && response.data.proposals) {
         const proposals = response.data.proposals;
-        
+
         const totalProposals = proposals.length;
-        
-        // Calculate Corporate Income correctly - from Income entries and MOOE/Capital income
+
+        // For aggregated data, sum up the values from each aggregated row
         const totalProjectedCorporateIncome = proposals.reduce((sum, proposal) => {
-          // Corporate Income from Income entries
-          if (proposal.cobExpenditures === 'Corporate Income') {
-            return sum + (proposal.amount || 0);
-          }
-          // Income from MOOE and Capital Outlay
-          if (proposal.cobExpenditures === 'MOOE' || proposal.cobExpenditures === 'Capital Outlay') {
-            return sum + (proposal.income || 0);
-          }
-          return sum;
+          // Use the totalIncome field from aggregated data
+          return sum + (proposal.totalIncome || 0);
         }, 0);
-        
-        // Calculate Subsidy correctly - from expenses only (Personnel + MOOE + Capital costs)
+
         const totalProjectedSubsidy = proposals.reduce((sum, proposal) => {
-          if (proposal.cobExpenditures && proposal.cobExpenditures.includes('Personnel Services')) {
-            // For personnel, calculate total from all allowance fields, fallback to aggregated Total if present
-            const breakdownTotal = (proposal.annualSalary || 0) + 
-                                   (proposal.RATA || 0) + 
-                                   (proposal.PERA || 0) + 
-                                   (proposal.uniformALLOWANCE || 0) + 
-                                   (proposal.productivityIncentive || 0) + 
-                                   (proposal.medical || 0) + 
-                                   (proposal.childrenAllowance || 0) + 
-                                   (proposal.meal || 0) + 
-                                   (proposal.cashGift || 0) + 
-                                   (proposal.subsistenceAllowanceMDS || 0) + 
-                                   (proposal.subsistenceAllowanceST || 0) + 
-                                   (proposal.midyearBonus || 0) + 
-                                   (proposal.yearEndBonus || 0) + 
-                                   (proposal.gsisPremium || 0) + 
-                                   (proposal.philhealthPremium || 0) + 
-                                   (proposal.pagibigPremium || 0) + 
-                                   (proposal.employeeCompensation || 0);
-            const personnelTotal = breakdownTotal > 0 ? breakdownTotal : (proposal.Total || 0);
-            return sum + (personnelTotal || 0);
-          } else if (proposal.cobExpenditures === 'MOOE') {
-            return sum + (proposal.subsidy || proposal.amount || 0);
-          } else if (proposal.cobExpenditures === 'Capital Outlay') {
-            return sum + (proposal.subsidy || proposal.cost || 0);
-          }
-          return sum;
+          // Use the totalExpenses field from aggregated data
+          return sum + (proposal.totalExpenses || 0);
         }, 0);
-        
-        const totalProposedBudget = totalProjectedCorporateIncome + totalProjectedSubsidy;
-        
+
+        const totalProposedBudget = proposals.reduce((sum, proposal) => {
+          // Use the proposedBudget field from aggregated data
+          return sum + (proposal.proposedBudget || 0);
+        }, 0);
+
         setStats({
           totalProposals,
           totalProjectedCorporateIncome,
@@ -219,45 +191,23 @@ const AllProposalsPage = () => {
   };
 
   const proposalSchema = {
-    cobExpenditures: {  // Changed from processBy to cobExpenditures
-      type: "text",
-      label: "EXPENDITURE TYPE",
-      show: true,
-    },
-    region: {
-      type: "text",
-      label: "REGION",
-      show: currentUser?.hierarchicalAccess?.scope === 'FULL',
-      customRender: (row) => {
-        return row.region || "N/A";
-      }
-    },
-    division: {
-      type: "text",
-      label: "DIVISION",
-      show: currentUser?.hierarchicalAccess?.scope === 'FULL',
-      customRender: (row) => {
-        return row.division || "N/A";
-      }
-    },
     office: {
       type: "text",
-      label: (() => {
-        const scope = currentUser?.hierarchicalAccess?.scope;
-        if (scope === 'RESPONSIBILITY_CENTER') return 'RESPONSIBILITY CENTER';
-        if (scope === 'OFFICE') return 'OFFICE';
-        return 'OFFICE';
-      })(),
+      label: "RESPONSIBILITY CENTER",
       show: true,
       customRender: (row) => {
-        // Show the most specific organizational level available
-        if (row.responsibilityCenter && String(row.responsibilityCenter).trim() !== "") {
-          return `Responsibility Center: ${row.responsibilityCenter}`;
-        } else if (row.office && String(row.office).trim() !== "") {
-          return `Office: ${row.office}`;
-        } else {
-          return row.office ? `Office: ${row.office}` : "CENTRAL OFFICE";
+        // For division-level submissions, show responsibility center
+        const workflowLevel = (row.workflowLevel || row.originalLevel || '').toUpperCase();
+        if (workflowLevel === 'DIVISION' || workflowLevel === 'RESPONSIBILITY_CENTER') {
+          // Try responsibilityCenter first, then division, then show N/A for missing data
+          return row.responsibilityCenter || row.division || "N/A";
         }
+        // For office-level submissions, show office/department
+        else if (workflowLevel === 'OFFICE' || workflowLevel === 'DEPARTMENT') {
+          return row.office || row.department || "N/A";
+        }
+        // Default fallback
+        return row.responsibilityCenter || row.office || row.division || "N/A";
       }
     },
     fiscalYear: {
@@ -269,131 +219,6 @@ const AllProposalsPage = () => {
       type: "text",
       label: "BUDGET TYPE",
       show: true,
-    },
-    workflowLevel: {
-      type: "text",
-      label: "WORKFLOW LEVEL",
-      show: true,
-      customRender: (row) => {
-        // Use the workflowLevel field directly if available
-        let level = "Unknown";
-        let levelColor = "default";
-
-        if (row.workflowLevel) {
-          // Use the workflowLevel field directly
-          switch (row.workflowLevel.toUpperCase()) {
-            case 'DIVISION':
-              level = "Division";
-              levelColor = "primary";
-              break;
-            case 'DEPARTMENT':
-              level = "Department";
-              levelColor = "secondary";
-              break;
-            case 'REGION':
-              level = "Region";
-              levelColor = "success";
-              break;
-            case 'RESPONSIBILITY_CENTER':
-              level = "Responsibility Center";
-              levelColor = "warning";
-              break;
-            case 'OFFICE':
-              level = "Office";
-              levelColor = "info";
-              break;
-            default:
-              level = row.workflowLevel;
-              levelColor = "default";
-          }
-        } else if (row.originalLevel) {
-          // Fallback to originalLevel if workflowLevel is not available
-          switch (row.originalLevel.toUpperCase()) {
-            case 'DIVISION':
-              level = "Division";
-              levelColor = "primary";
-              break;
-            case 'DEPARTMENT':
-              level = "Department";
-              levelColor = "secondary";
-              break;
-            case 'REGION':
-              level = "Region";
-              levelColor = "success";
-              break;
-            case 'RESPONSIBILITY_CENTER':
-              level = "Responsibility Center";
-              levelColor = "warning";
-              break;
-            case 'OFFICE':
-              level = "Office";
-              levelColor = "info";
-              break;
-            default:
-              level = row.originalLevel;
-              levelColor = "default";
-          }
-        }
-
-        return (
-          <Typography
-            variant="body2"
-            sx={{
-              color: `${levelColor}.main`,
-              fontWeight: 'medium'
-            }}
-          >
-            {level}
-          </Typography>
-        );
-      }
-    },
-    track: {
-      type: "text",
-      label: "TRACK",
-      show: true,
-      customRender: (row) => {
-        // Show workflow progress tracking
-        const status = row.status || 'Draft';
-        const workflowLevel = row.workflowLevel || row.originalLevel || 'Unknown';
-        
-        // Define workflow steps based on status and level
-        const getWorkflowStep = (status, level) => {
-          const statusUpper = status.toUpperCase();
-          const levelUpper = level.toUpperCase();
-          
-          if (statusUpper === 'DRAFT') return '1. Draft';
-          if (statusUpper.includes('RESPONSIBILITY CENTER') && statusUpper.includes('SUBMITTED')) return '2. RC Submitted';
-          if (statusUpper.includes('OFFICE') && statusUpper.includes('VERIFIED')) return '3. Office Verified';
-          if (statusUpper.includes('OFFICE') && statusUpper.includes('SUBMITTED')) return '4. Office Submitted';
-          if (statusUpper.includes('OFFICE') && statusUpper.includes('APPROVED')) return '5. Office Approved';
-          if (statusUpper === 'FINALIZED' || statusUpper === 'APPROVED') return '6. Finalized';
-          if (statusUpper === 'RETURNED') return 'Returned';
-          
-          // Fallback based on level
-          switch (levelUpper) {
-            case 'RESPONSIBILITY_CENTER': return '2. At RC Level';
-            case 'OFFICE': return '3. At Office Level';
-            case 'DEPARTMENT': return '4. At Department Level';
-            case 'REGION': return '5. At Region Level';
-            default: return '1. Draft';
-          }
-        };
-        
-        const step = getWorkflowStep(status, workflowLevel);
-        
-        return (
-          <Typography
-            variant="body2"
-            sx={{
-              fontWeight: 'medium',
-              color: 'text.primary'
-            }}
-          >
-            {step}
-          </Typography>
-        );
-      }
     },
     submittedDate: {
       type: "date",
@@ -426,21 +251,9 @@ const AllProposalsPage = () => {
       label: "PROJECTED CORPORATE INCOME",
       show: true,
       customRender: (row) => {
-        let incomeAmount = 0;
-        
-        // Corporate Income entries
-        if (row.cobExpenditures === 'Corporate Income') {
-          incomeAmount = row.amount || 0;
-        }
-        // Income from MOOE and Capital Outlay
-        else if (row.cobExpenditures === 'MOOE' || row.cobExpenditures === 'Capital Outlay') {
-          incomeAmount = row.income || 0;
-        }
-        // Fallback to totalIncome field
-        else {
-          incomeAmount = row.totalIncome || 0;
-        }
-        
+        // For aggregated data, use the totalIncome field directly
+        const incomeAmount = row.totalIncome || 0;
+
         return (
           <TextSearchable 
             columnName={`₱${incomeAmount.toLocaleString('en-US', { 
@@ -456,42 +269,9 @@ const AllProposalsPage = () => {
       label: "PROJECTED SUBSIDY",
       show: true,
       customRender: (row) => {
-        let subsidyAmount = 0;
-        
-        // Personnel Services - calculate total from individual fields
-        if (row.cobExpenditures && row.cobExpenditures.includes('Personnel Services')) {
-          subsidyAmount = (row.annualSalary || 0) + 
-                          (row.RATA || 0) + 
-                          (row.PERA || 0) + 
-                          (row.uniformALLOWANCE || 0) + 
-                          (row.productivityIncentive || 0) + 
-                          (row.medical || 0) + 
-                          (row.childrenAllowance || 0) + 
-                          (row.meal || 0) + 
-                          (row.cashGift || 0) + 
-                          (row.subsistenceAllowanceMDS || 0) + 
-                          (row.subsistenceAllowanceST || 0) + 
-                          (row.midyearBonus || 0) + 
-                          (row.yearEndBonus || 0) + 
-                          (row.gsisPremium || 0) + 
-                          (row.philhealthPremium || 0) + 
-                          (row.pagibigPremium || 0) + 
-                          (row.employeeCompensation || 0) ||
-                          row.Total || 0; // Fallback to Total field if individual fields not available
-        }
-        // MOOE - use subsidy or amount field
-        else if (row.cobExpenditures === 'MOOE') {
-          subsidyAmount = row.subsidy || row.amount || 0;
-        }
-        // Capital Outlay - use subsidy or cost field
-        else if (row.cobExpenditures === 'Capital Outlay') {
-          subsidyAmount = row.subsidy || row.cost || 0;
-        }
-        // Fallback to totalExpenses field
-        else {
-          subsidyAmount = row.totalExpenses || 0;
-        }
-        
+        // For aggregated data, use the totalExpenses field directly
+        const subsidyAmount = row.totalExpenses || 0;
+
         return (
           <TextSearchable 
             columnName={`₱${subsidyAmount.toLocaleString('en-US', { 
@@ -507,46 +287,9 @@ const AllProposalsPage = () => {
       label: "PROPOSED BUDGET",
       show: true,
       customRender: (row) => {
-        // Compute corporate income like in totalIncome column
-        let incomeAmount = 0;
-        if (row.cobExpenditures === 'Corporate Income') {
-          incomeAmount = row.amount || row.totalIncome || 0;
-        } else if (row.cobExpenditures === 'MOOE' || row.cobExpenditures === 'Capital Outlay') {
-          incomeAmount = row.income || 0;
-        } else {
-          incomeAmount = row.totalIncome || 0; // fallback if provided
-        }
+        // For aggregated data, use the proposedBudget field directly
+        const total = row.proposedBudget || 0;
 
-        // Compute subsidy like in totalExpenses column
-        let subsidyAmount = 0;
-        if (row.cobExpenditures && row.cobExpenditures.includes('Personnel Services')) {
-          subsidyAmount = (row.annualSalary || 0) + 
-                          (row.RATA || 0) + 
-                          (row.PERA || 0) + 
-                          (row.uniformALLOWANCE || 0) + 
-                          (row.productivityIncentive || 0) + 
-                          (row.medical || 0) + 
-                          (row.childrenAllowance || 0) + 
-                          (row.meal || 0) + 
-                          (row.cashGift || 0) + 
-                          (row.subsistenceAllowanceMDS || 0) + 
-                          (row.subsistenceAllowanceST || 0) + 
-                          (row.midyearBonus || 0) + 
-                          (row.yearEndBonus || 0) + 
-                          (row.gsisPremium || 0) + 
-                          (row.philhealthPremium || 0) + 
-                          (row.pagibigPremium || 0) + 
-                          (row.employeeCompensation || 0) ||
-                          row.Total || row.totalExpenses || 0;
-        } else if (row.cobExpenditures === 'MOOE') {
-          subsidyAmount = row.subsidy || row.amount || 0;
-        } else if (row.cobExpenditures === 'Capital Outlay') {
-          subsidyAmount = row.subsidy || row.cost || 0;
-        } else {
-          subsidyAmount = row.totalExpenses || 0; // fallback if provided
-        }
-
-        const total = Number(incomeAmount) + Number(subsidyAmount);
         return (
           <TextSearchable 
             columnName={`₱${(isFinite(total) ? total : 0).toLocaleString('en-US', { 
@@ -562,17 +305,25 @@ const AllProposalsPage = () => {
       label: "STATUS",
       show: true,
       customRender: (row) => {
-        // Normalize status to new 6-step workflow
+        // Simplified role-based workflow status mapping
         const map = {
-          'Draft': { color: 'warning', text: 'Draft', bgColor: 'warning.light' },
-          'Responsibility Center Submitted': { color: 'info', text: 'RC Submitted', bgColor: 'info.light' },
-          'Office Verified': { color: 'secondary', text: 'Office Verified', bgColor: 'secondary.light' },
-          'Office Submitted': { color: 'info', text: 'Office Submitted', bgColor: 'info.light' },
-          'Office Approved': { color: 'success', text: 'Office Approved', bgColor: 'success.light' },
-          'Finalized': { color: 'success', text: 'Finalized', bgColor: 'success.light' },
-          'Submitted': { color: 'info', text: 'Submitted', bgColor: 'info.light' }, // legacy
-          'Approved': { color: 'success', text: 'Approved', bgColor: 'success.light' }, // legacy
-          'Returned': { color: 'error', text: 'Returned', bgColor: 'error.light' },
+          'Draft': { color: 'warning', text: 'DRAFT', bgColor: 'warning.light' },
+          'Submitted to Officer': { color: 'info', text: 'OFFICER REVIEW', bgColor: 'info.light' },
+          'Officer Approved': { color: 'secondary', text: 'MANAGER REVIEW', bgColor: 'secondary.light' },
+          'Officer Returned': { color: 'error', text: 'OFFICER RETURNED', bgColor: 'error.light' },
+          'Submitted to Manager': { color: 'secondary', text: 'MANAGER REVIEW', bgColor: 'secondary.light' },
+          'Manager Approved': { color: 'success', text: 'FINAL REVIEW', bgColor: 'success.light' },
+          'Manager Returned': { color: 'error', text: 'MANAGER RETURNED', bgColor: 'error.light' },
+          'Finalized': { color: 'success', text: 'FINALIZED', bgColor: 'success.light' },
+          // Legacy status mappings for backward compatibility
+          'Responsibility Center Submitted': { color: 'info', text: 'OFFICER REVIEW', bgColor: 'info.light' },
+          'Division Submitted': { color: 'info', text: 'OFFICER REVIEW', bgColor: 'info.light' },
+          'Office Verified': { color: 'secondary', text: 'MANAGER REVIEW', bgColor: 'secondary.light' },
+          'Office Submitted': { color: 'secondary', text: 'MANAGER REVIEW', bgColor: 'secondary.light' },
+          'Office Approved': { color: 'success', text: 'FINAL REVIEW', bgColor: 'success.light' },
+          'Submitted': { color: 'info', text: 'OFFICER REVIEW', bgColor: 'info.light' },
+          'Approved': { color: 'success', text: 'FINAL REVIEW', bgColor: 'success.light' },
+          'Returned': { color: 'error', text: 'RETURNED', bgColor: 'error.light' },
         };
         const { color = 'default', text = (row.status || 'Unknown'), bgColor = 'grey.100' } = map[row.status] || {};
         return (
@@ -704,42 +455,44 @@ const AllProposalsPage = () => {
         </Grid>
       </Box>
 
-      {/* User Role Information */}
-      <Box sx={{ mb: 3, mx: 3 }}>
-        <Card sx={{ p: 2 }}>
-          <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
-            👤 Your Workflow Roles
-          </Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-            {currentUser?.hierarchicalAccess?.workflowRoles?.length > 0 ? (
-              currentUser.hierarchicalAccess.workflowRoles.map((role, index) => (
-                <Typography
-                  key={index}
-                  variant="body2"
-                  sx={{
-                    bgcolor: 'primary.light',
-                    color: 'primary.contrastText',
-                    px: 1,
-                    py: 0.5,
-                    borderRadius: 1,
-                    fontSize: '0.75rem',
-                    fontWeight: 'medium'
-                  }}
-                >
-                  {role.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+      {/* User Role Information — hidden per UI alignment */}
+      {false && (
+        <Box sx={{ mb: 3, mx: 3 }}>
+          <Card sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
+              👤 Your Workflow Roles
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+              {currentUser?.hierarchicalAccess?.workflowRoles?.length > 0 ? (
+                currentUser.hierarchicalAccess.workflowRoles.map((role, index) => (
+                  <Typography
+                    key={index}
+                    variant="body2"
+                    sx={{
+                      bgcolor: 'primary.light',
+                      color: 'primary.contrastText',
+                      px: 1,
+                      py: 0.5,
+                      borderRadius: 1,
+                      fontSize: '0.75rem',
+                      fontWeight: 'medium'
+                    }}
+                  >
+                    {role.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+                  </Typography>
+                ))
+              ) : (
+                <Typography variant="body2" color="textSecondary">
+                  No workflow roles assigned
                 </Typography>
-              ))
-            ) : (
-              <Typography variant="body2" color="textSecondary">
-                No workflow roles assigned
-              </Typography>
-            )}
-          </Box>
-          <Typography variant="body2" sx={{ mt: 1, color: 'textSecondary' }}>
-            Your roles determine which actions you can perform on proposals.
-          </Typography>
-        </Card>
-      </Box>
+              )}
+            </Box>
+            <Typography variant="body2" sx={{ mt: 1, color: 'textSecondary' }}>
+              Your roles determine which actions you can perform on proposals.
+            </Typography>
+          </Card>
+        </Box>
+      )}
 
       {/* Debug Section */}
       {/* <Box sx={{ mb: 2, mx: 3, mt: 2 }}>
@@ -772,8 +525,8 @@ const AllProposalsPage = () => {
       </Box> */}
 
       {(() => {
-        const scope = currentUser?.hierarchicalAccess?.scope;
-        const groupByField = scope === 'DIVISION' ? 'division' : (scope === 'DEPARTMENT' ? 'department' : 'region');
+        // For AllProposals, don't group by default - show individual entries
+        // Users can see aggregated data through the totals row
         return (
           <ProposalCustomPage
             tableRef={tableRef}
@@ -786,8 +539,10 @@ const AllProposalsPage = () => {
             refreshData={refreshData}
             title="All Proposals"
             description="View and manage all submitted proposals"
-            apiPath="/proposals"
-            groupBy={groupByField}
+            apiPath="/proposals?divisionOnly=true"
+            groupBy={null} // No grouping - show individual entries
+            showTotals={true}
+            totalsData={stats}
           />
         );
       })()}

@@ -885,6 +885,74 @@ const submissionWorkflowTransitions = {
     }
   },
 
+  // NEW: Office returns submission back to Responsibility Center (RC Submitted or Office Verified → Returned)
+  officeReturnToResponsibilityCenter: async (req, res) => {
+    try {
+      const { ids = [], entity = 'personnel', returnReason } = req.body;
+      const userId = req.user?.id || 'system';
+      const Model = getModelByEntity(entity);
+
+      // Convert string IDs to ObjectId if needed
+      const objectIds = ids.map(id => {
+        if (typeof id === 'string') {
+          try { return mongoose.Types.ObjectId(id); } catch (e) { return id; }
+        }
+        return id;
+      });
+
+      const result = await Model.updateMany(
+        {
+          _id: { $in: objectIds },
+          originalLevel: { $in: ['RESPONSIBILITY_CENTER', 'DIVISION'] }, // legacy support
+          status: { $in: [
+            'Responsibility Center Submitted','RESPONSIBILITY_CENTER SUBMITTED','RESPONSIBILITY_CENTER_SUBMITTED',
+            'Office Verified','OFFICE VERIFIED','OFFICE_VERIFIED',
+            'Division Submitted','DIVISION_SUBMITTED'
+          ]}
+        },
+        {
+          $set: {
+            status: 'Returned',
+            returnedByOfficeAt: new Date(),
+            returnedByOfficeBy: userId,
+            returnedByOfficeName: (req.user?.FirstName && req.user?.LastName) ? `${req.user.FirstName} ${req.user.LastName}` : (req.user?.name || req.user?.username || 'system'),
+            returnReason: returnReason || '',
+            lastWorkflowTransition: 'OFFICE_RETURN'
+          },
+          $push: {
+            workflowHistory: {
+              action: 'OFFICE_RETURN',
+              toStatus: 'Returned',
+              byUserId: userId,
+              byName: (req.user?.FirstName && req.user?.LastName) ? `${req.user.FirstName} ${req.user.LastName}` : (req.user?.name || req.user?.username || 'system'),
+              date: new Date(),
+              note: returnReason || ''
+            }
+          }
+        }
+      );
+
+      if (!result.modifiedCount) {
+        return res.status(404).json({
+          success: false,
+          message: 'No matching record to return. Ensure items are RC Submitted or Office Verified.',
+          code: 'NO_MATCH_RETURN',
+        });
+      }
+      return res.status(200).json({
+        success: true,
+        message: 'Returned to Responsibility Center',
+        modified: result.modifiedCount,
+        matched: result.matchedCount
+      });
+    } catch (e) {
+      return res.status(500).json({
+        message: 'Office return failed',
+        error: e.message
+      });
+    }
+  },
+
   // Step 2→3: Office verifies responsibility center submission (Responsibility Center Submitted → Office Verified)
   officeVerifySubmission: async (req, res) => {
     try {
@@ -1200,7 +1268,7 @@ const submissionWorkflowTransitions = {
         { 
           _id: { $in: ids },
           originalLevel: { $in: ['RESPONSIBILITY_CENTER', 'OFFICE'] },
-          status: { $in: ['Office Approved', 'OFFICE APPROVED'] }
+          status: { $in: ['Office Approved', 'OFFICE APPROVED', 'Office Submitted', 'OFFICE SUBMITTED'] }
         },
         { 
           $set: { 

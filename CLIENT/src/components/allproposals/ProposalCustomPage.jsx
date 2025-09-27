@@ -26,6 +26,8 @@ const ProposalCustomPage = ({
   tableRef,
   apiPath,
   groupBy = null, // Make sure this prop is defined
+  showTotals = false,
+  totalsData = null,
 }) => {
   const pageTitle =
     title || dataListName.charAt(0).toUpperCase() + dataListName.slice(1);
@@ -71,6 +73,8 @@ const ProposalCustomPage = ({
           refreshData={refreshData}
           groupBy={groupBy} // Make sure to pass the groupBy prop
           ROWS_PER_PAGE={ROWS_PER_PAGE}
+          showTotals={showTotals}
+          totalsData={totalsData}
         />
       </StyledBox>
     </>

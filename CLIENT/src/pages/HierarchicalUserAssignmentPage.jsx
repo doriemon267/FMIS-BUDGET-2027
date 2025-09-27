@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Typography,
@@ -7,15 +7,7 @@ import {
   CircularProgress,
   Alert,
   Grid,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Chip,
-  OutlinedInput,
-  Checkbox,
-  ListItemText,
-  FormControlLabel,
   TextField,
   Table,
   TableHead,
@@ -26,15 +18,8 @@ import {
   TablePagination,
   IconButton,
   Tooltip,
-  Card,
-  CardContent,
-  CardHeader,
-  Divider,
   Stack,
   Badge,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -52,46 +37,27 @@ import {
   Person as PersonIcon,
   Business as BusinessIcon,
   Domain as DomainIcon,
-  LocationCity as LocationCityIcon,
-  ExpandMore as ExpandMoreIcon,
   Assignment as AssignmentIcon,
   AccountTree as HierarchyIcon,
   Info as InfoIcon,
   Warning as WarningIcon
 } from '@mui/icons-material';
-import { getFilteredDepartments, getAvailableDivisions, getDepartmentsWithDivisions, selectedDepartmentHasDivisions } from '../utils/organizationUtils';
 import { isTokenExpired } from '../utils/jwt';
-
-const ITEM_HEIGHT = 48;
-const ITEM_PADDING_TOP = 8;
-const MenuProps = {
-  PaperProps: {
-    style: {
-      maxHeight: ITEM_HEIGHT * 4.5 + ITEM_PADDING_TOP,
-      width: 250,
-    },
-  },
-};
 
 const ACCESS_LEVELS = [
   { value: 'RESPONSIBILITY_CENTER', label: 'Responsibility Center Level', icon: <BusinessIcon />, color: '#2196F3' },
   { value: 'OFFICE', label: 'Office Level', icon: <DomainIcon />, color: '#FF9800' },
-  { value: 'FULL', label: 'Administrative Level', icon: <HierarchyIcon />, color: '#9C27B0' },
+  { value: 'FULL', label: 'Budget Admin Level', icon: <HierarchyIcon />, color: '#9C27B0' },
   { value: 'OWN_ONLY', label: 'Own Records Only', icon: <PersonIcon />, color: '#757575' }
 ];
 
-const WORKFLOW_ROLES = [
-  { key: 'responsibilityCenterCreator', label: 'Responsibility Center Creator', description: 'Create proposals at responsibility center level' },
-  { key: 'responsibilityCenterApprover', label: 'Responsibility Center Approver', description: 'Approve responsibility center proposals' },
-  { key: 'officeCreator', label: 'Office Creator', description: 'Create proposals at office level' },
-  { key: 'officeConsolidator', label: 'Office Consolidator', description: 'Consolidate responsibility center to office' },
-  { key: 'officeSubmission', label: 'Office Submission', description: 'Submit office proposals for finalization' },
-  { key: 'officeFinalVerifier', label: 'Office Final Verifier', description: 'Final verification/approval at office' },
-  { key: 'regionCreator', label: 'Region Creator', description: 'Create and manage regional settings' }
+const USER_ROLES = [
+  { value: 'BUDGET_ANALYST', label: 'Budget Analyst', description: 'Division/Responsibility Center Level - Creates and prepares proposals' },
+  { value: 'BUDGET_COORDINATOR', label: 'Budget Coordinator', description: 'Department/Office Level - Creates and prepares proposals' },
+  { value: 'BUDGET_OFFICER', label: 'Budget Officer', description: 'Department/Office Level - Approves/returns proposals, consolidates and submits to Budget Manager' },
+  { value: 'BUDGET_MANAGER', label: 'Budget Manager', description: 'Full access - Approves/returns proposals, consolidates all submissions' },
+  { value: 'BUDGET_ADMIN', label: 'Budget Admin', description: 'Full administrative access - Approves/returns proposals, consolidates all submissions, manages system settings' }
 ];
-
-const getDefaultWorkflowRolesMap = () =>
-  WORKFLOW_ROLES.reduce((acc, r) => ({ ...acc, [r.key]: false }), {});
 
 const HierarchicalUserAssignmentPage = () => {
   const { currentUser, jwtToken, refetchUserProfile } = useUser();
@@ -106,10 +72,10 @@ const HierarchicalUserAssignmentPage = () => {
     userId: '',
     userName: '',
     email: '',
+    userRole: '',
     assignmentLevel: 'OFFICE', // Changed from assignmentLevel to match new structure
     officeId: '',
     responsibilityCenterName: '',
-    workflowRoles: getDefaultWorkflowRolesMap(),
     rolePermissions: {
       CreateProposals: true,
       EditOwnProposals: true,
@@ -120,11 +86,6 @@ const HierarchicalUserAssignmentPage = () => {
       ManageUsers: false,
       ManageSettings: false
     },
-    restrictions: {
-      readOnlyMode: false,
-      allowedBudgetTypes: ['Initial', 'NEP', 'GAA'],
-      allowedFiscalYears: []
-    },
   });
 
   // UI state
@@ -134,11 +95,6 @@ const HierarchicalUserAssignmentPage = () => {
     severity: 'success'
   });
   const [editingAssignment, setEditingAssignment] = useState(null);
-  const [showPermissions, setShowPermissions] = useState(false);
-  const [showRestrictions, setShowRestrictions] = useState(false);
-  const [rolesDialogOpen, setRolesDialogOpen] = useState(false);
-  const [rolesDialogUser, setRolesDialogUser] = useState(null);
-  const [rolesDialogMap, setRolesDialogMap] = useState(getDefaultWorkflowRolesMap());
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteUserId, setDeleteUserId] = useState(null);
 
@@ -258,25 +214,6 @@ const HierarchicalUserAssignmentPage = () => {
     retry: (failureCount, error) => error.message.includes('network') && failureCount < 3,
     staleTime: 30 * 60 * 1000, // 30 minutes
   });
-
-  // Fetch settings for fiscal year options
-  const { data: settingsData } = useQuery({
-    queryKey: ['settings'],
-    queryFn: async () => {
-      try {
-        const response = await api.get('/settings');
-        return response.data;
-      } catch (error) {
-        console.error('❌ Error fetching settings:', error);
-        return { settings: [] };
-      }
-    },
-    enabled: !!currentUser && !!jwtToken,
-    staleTime: 30 * 60 * 1000, // 30 minutes
-  });
-
-  // Extract settings array from the response
-  const settings = settingsData?.settings || [];
 
   // Fetch hierarchical assignments
   const { data: assignments = [], isLoading: loadingAssignments } = useQuery({
@@ -409,50 +346,6 @@ const HierarchicalUserAssignmentPage = () => {
     }
   });
 
-  // Mutation for updating workflow roles inline
-  const updateWorkflowRolesMutation = useMutation({
-    mutationFn: async ({ userId, workflowRoles }) => {
-      if (isTokenExpired(jwtToken)) {
-        throw new Error('Session expired. Please log in again.');
-      }
-      return api.post(`/api/hierarchical-rbac/assignments/${userId}/workflow-roles`, { workflowRoles });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries(['hierarchical-assignments']);
-      // Refresh current user's hierarchical access data
-      refetchUserProfile();
-      setSnackbar({
-        open: true,
-        message: 'Workflow roles updated successfully',
-        severity: 'success'
-      });
-    },
-    onError: (error) => {
-      console.error('Error updating workflow roles:', error);
-      setSnackbar({
-        open: true,
-        message: error.response?.data?.message || 'Failed to update workflow roles',
-        severity: 'error'
-      });
-    }
-  });
-
-  // Set default fiscal year when settings are loaded
-  useEffect(() => {
-    if (settings && settings.length > 0) {
-      const activeSetting = settings.find(setting => setting.isActive);
-      if (activeSetting && formData.restrictions.allowedFiscalYears.length === 0) {
-        setFormData(prev => ({
-          ...prev,
-          restrictions: {
-            ...prev.restrictions,
-            allowedFiscalYears: [activeSetting.fiscalYear]
-          }
-        }));
-      }
-    }
-  }, [settings]);
-
   // Helper functions
   const handleFormChange = (field, value) => {
     setFormData(prev => ({
@@ -466,10 +359,10 @@ const HierarchicalUserAssignmentPage = () => {
       userId: '',
       userName: '',
       email: '',
+      userRole: '',
       assignmentLevel: 'OFFICE', // Keep assignmentLevel for form state
       officeId: '',
       responsibilityCenterName: '',
-      workflowRoles: getDefaultWorkflowRolesMap(),
       rolePermissions: {
         CreateProposals: true,
         EditOwnProposals: true,
@@ -482,8 +375,6 @@ const HierarchicalUserAssignmentPage = () => {
       }
     });
     setEditingAssignment(null);
-    setShowPermissions(false); // Collapse permissions when resetting
-    setShowRestrictions(false); // Collapse restrictions when resetting
   };
 
   const handleSubmit = (e) => {
@@ -534,25 +425,6 @@ const HierarchicalUserAssignmentPage = () => {
       return;
     }
 
-    // Gather selected workflow roles from UI
-    const uiSelectedRoles = Object.entries(formData.workflowRoles || {})
-      .filter(([, v]) => v)
-      .map(([k]) => k);
-
-    // Map UI workflow roles to server-allowed role keys
-    const roleMap = {
-      responsibilityCenterCreator: 'divisionCreator',
-      responsibilityCenterApprover: 'divisionApprover',
-      officeCreator: 'departmentCreator',
-      officeConsolidator: 'departmentConsolidator',
-      officeSubmission: 'departmentSubmission',
-      officeFinalVerifier: 'regionFinalVerifier',
-      regionCreator: 'regionCreator'
-    };
-    const serverWorkflowRoles = uiSelectedRoles
-      .map((r) => roleMap[r])
-      .filter(Boolean);
-
     const payload = {
       userId: formData.userId,
       userName: formData.userName,
@@ -565,18 +437,8 @@ const HierarchicalUserAssignmentPage = () => {
       divisionName: formData.responsibilityCenterName,
       officeId: formData.officeId,
       responsibilityCenterName: formData.responsibilityCenterName,
-      rolePermissions: {
-        ...formData.rolePermissions,
-        // Preserve existing UI behavior for ApproveProposals toggle
-        ApproveProposals: uiSelectedRoles.includes('officeFinalVerifier')
-          ? true
-          : formData.rolePermissions.ApproveProposals
-      },
-      restrictions: formData.restrictions
+      rolePermissions: formData.rolePermissions
     };
-
-    // Always include workflowRoles (can be an empty array to explicitly clear roles)
-    payload.workflowRoles = serverWorkflowRoles;
 
     createOrUpdateMutation.mutate(payload);
   };
@@ -772,6 +634,104 @@ const HierarchicalUserAssignmentPage = () => {
 
               <Grid item xs={12}>
                 <Autocomplete
+                  options={USER_ROLES}
+                  getOptionLabel={(option) => option.label || ''}
+                  value={USER_ROLES.find(role => role.value === formData.userRole) || null}
+                  onChange={(event, newValue) => {
+                    const newRole = newValue?.value || '';
+                    handleFormChange('userRole', newRole);
+                    
+                    // Auto-set assignment level and permissions based on role
+                    if (newRole === 'BUDGET_ANALYST') {
+                      handleFormChange('assignmentLevel', 'RESPONSIBILITY_CENTER');
+                      handleFormChange('rolePermissions', {
+                        CreateProposals: true,
+                        EditOwnProposals: true,
+                        EditAllProposals: false,
+                        DeleteProposals: false,
+                        ApproveProposals: false,
+                        ViewReports: true,
+                        ManageUsers: false,
+                        ManageSettings: false
+                      });
+                    } else if (newRole === 'BUDGET_COORDINATOR') {
+                      handleFormChange('assignmentLevel', 'OFFICE');
+                      handleFormChange('rolePermissions', {
+                        CreateProposals: true,
+                        EditOwnProposals: true,
+                        EditAllProposals: false,
+                        DeleteProposals: false,
+                        ApproveProposals: false,
+                        ViewReports: true,
+                        ManageUsers: false,
+                        ManageSettings: false
+                      });
+                    } else if (newRole === 'BUDGET_OFFICER') {
+                      handleFormChange('assignmentLevel', 'OFFICE');
+                      handleFormChange('rolePermissions', {
+                        CreateProposals: true,
+                        EditOwnProposals: true,
+                        EditAllProposals: true,
+                        DeleteProposals: false,
+                        ApproveProposals: true,
+                        ViewReports: true,
+                        ManageUsers: false,
+                        ManageSettings: false
+                      });
+                    } else if (newRole === 'BUDGET_MANAGER') {
+                      handleFormChange('assignmentLevel', 'FULL');
+                      handleFormChange('rolePermissions', {
+                        CreateProposals: true,
+                        EditOwnProposals: true,
+                        EditAllProposals: true,
+                        DeleteProposals: true,
+                        ApproveProposals: true,
+                        ViewReports: true,
+                        ManageUsers: true,
+                        ManageSettings: true
+                      });
+                    } else if (newRole === 'BUDGET_ADMIN') {
+                      handleFormChange('assignmentLevel', 'FULL');
+                      handleFormChange('rolePermissions', {
+                        CreateProposals: true,
+                        EditOwnProposals: true,
+                        EditAllProposals: true,
+                        DeleteProposals: true,
+                        ApproveProposals: true,
+                        ViewReports: true,
+                        ManageUsers: true,
+                        ManageSettings: true
+                      });
+                    }
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="User Role"
+                      placeholder="Select user role..."
+                      fullWidth
+                    />
+                  )}
+                  renderOption={(props, option) => {
+                    const { key, ...otherProps } = props;
+                    return (
+                      <Box component="li" key={key} {...otherProps}>
+                        <Box>
+                          <Typography variant="body1">{option.label}</Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {option.description}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    );
+                  }}
+                  noOptionsText="No roles found"
+                  fullWidth
+                />
+              </Grid>
+
+              <Grid item xs={12}>
+                <Autocomplete
                   options={ACCESS_LEVELS}
                   getOptionLabel={(option) => option.label || ''}
                   value={ACCESS_LEVELS.find(level => level.value === formData.assignmentLevel) || ACCESS_LEVELS[1]}
@@ -882,7 +842,7 @@ const HierarchicalUserAssignmentPage = () => {
                         key={key}
                         title={
                           option.value === 'FULL'
-                            ? 'Administrative level access to all organizational levels (all permissions and workflow roles automatically granted)'
+                            ? 'Budget admin level access to all organizational levels (all permissions and workflow roles automatically granted)'
                             : option.value === 'RESPONSIBILITY_CENTER'
                               ? 'Access limited to responsibility center level'
                               : option.value === 'OFFICE'
@@ -907,7 +867,7 @@ const HierarchicalUserAssignmentPage = () => {
                   <Grid item xs={12}>
                     <Alert severity="success" sx={{ mt: 1 }}>
                       <Typography variant="body2">
-                        <strong>Administrative Level:</strong> All permissions and workflow roles are automatically granted for users with administrative access, including access to all settings pages.
+                        <strong>Budget Admin Level:</strong> All permissions and workflow roles are automatically granted for users with administrative access, including access to all settings pages.
                       </Typography>
                     </Alert>
                   </Grid>
@@ -1031,578 +991,6 @@ const HierarchicalUserAssignmentPage = () => {
                 </Alert>
               </Grid>
 
-              {/* Permissions Management Section */}
-              <Grid item xs={12}>
-                <Accordion expanded={showPermissions} onChange={() => setShowPermissions(!showPermissions)}>
-                  <AccordionSummary
-                    expandIcon={<ExpandMoreIcon />}
-                    aria-controls="permissions-content"
-                    id="permissions-header"
-                  >
-                    <Typography variant="subtitle1" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <AssignmentIcon fontSize="small" />
-                      Role Permissions
-                      <Chip
-                        label={`${Object.values(formData.rolePermissions).filter(Boolean).length} enabled`}
-                        size="small"
-                        color="primary"
-                        variant="outlined"
-                      />
-                    </Typography>
-                  </AccordionSummary>
-                  <AccordionDetails>
-                    <Typography variant="body2" color="text.secondary" gutterBottom sx={{ mb: 2 }}>
-                      Configure specific permissions for this user. These permissions control what actions the user can perform within their assigned scope.
-                    </Typography>
-
-                    <Grid container spacing={2}>
-                      {/* Basic Permissions */}
-                      <Grid item xs={12} sm={6}>
-                        <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
-                          Basic Permissions
-                        </Typography>
-                        <Stack spacing={1}>
-                          <FormControlLabel
-                            control={
-                              <Checkbox
-                                checked={formData.rolePermissions.CreateProposals}
-                                onChange={(e) => handleFormChange('rolePermissions', {
-                                  ...formData.rolePermissions,
-                                  CreateProposals: e.target.checked
-                                })}
-                                size="small"
-                              />
-                            }
-                            label="Create Proposals"
-                          />
-                          <FormControlLabel
-                            control={
-                              <Checkbox
-                                checked={formData.rolePermissions.EditOwnProposals}
-                                onChange={(e) => handleFormChange('rolePermissions', {
-                                  ...formData.rolePermissions,
-                                  EditOwnProposals: e.target.checked
-                                })}
-                                size="small"
-                              />
-                            }
-                            label="Edit Own Proposals"
-                          />
-                          <FormControlLabel
-                            control={
-                              <Checkbox
-                                checked={formData.rolePermissions.ViewReports}
-                                onChange={(e) => handleFormChange('rolePermissions', {
-                                  ...formData.rolePermissions,
-                                  ViewReports: e.target.checked
-                                })}
-                                size="small"
-                              />
-                            }
-                            label="View Reports"
-                          />
-                        </Stack>
-                      </Grid>
-
-                      {/* Advanced Permissions */}
-                      <Grid item xs={12} sm={6}>
-                        <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
-                          Advanced Permissions
-                        </Typography>
-                        <Stack spacing={1}>
-                          <FormControlLabel
-                            control={
-                              <Checkbox
-                                checked={formData.rolePermissions.EditAllProposals}
-                                onChange={(e) => handleFormChange('rolePermissions', {
-                                  ...formData.rolePermissions,
-                                  EditAllProposals: e.target.checked
-                                })}
-                                size="small"
-                              />
-                            }
-                            label="Edit All Proposals"
-                          />
-                          <FormControlLabel
-                            control={
-                              <Checkbox
-                                checked={formData.rolePermissions.ApproveProposals}
-                                onChange={(e) => handleFormChange('rolePermissions', {
-                                  ...formData.rolePermissions,
-                                  ApproveProposals: e.target.checked
-                                })}
-                                size="small"
-                              />
-                            }
-                            label="Approve Proposals"
-                          />
-                          <FormControlLabel
-                            control={
-                              <Checkbox
-                                checked={formData.rolePermissions.DeleteProposals}
-                                onChange={(e) => handleFormChange('rolePermissions', {
-                                  ...formData.rolePermissions,
-                                  DeleteProposals: e.target.checked
-                                })}
-                                size="small"
-                              />
-                            }
-                            label="Delete Proposals"
-                          />
-                        </Stack>
-                      </Grid>
-
-                      {/* Administrative Permissions */}
-                      <Grid item xs={12}>
-                        <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
-                          Administrative Permissions
-                        </Typography>
-                        <Stack direction="row" spacing={2} flexWrap="wrap">
-                          <FormControlLabel
-                            control={
-                              <Checkbox
-                                checked={formData.rolePermissions.ManageUsers}
-                                onChange={(e) => handleFormChange('rolePermissions', {
-                                  ...formData.rolePermissions,
-                                  ManageUsers: e.target.checked
-                                })}
-                                size="small"
-                              />
-                            }
-                            label="Manage Users"
-                          />
-                          <FormControlLabel
-                            control={
-                              <Checkbox
-                                checked={formData.rolePermissions.ManageSettings}
-                                onChange={(e) => handleFormChange('rolePermissions', {
-                                  ...formData.rolePermissions,
-                                  ManageSettings: e.target.checked
-                                })}
-                                size="small"
-                              />
-                            }
-                            label="Manage Settings"
-                          />
-                        </Stack>
-                      </Grid>
-
-                      {/* Quick Actions */}
-                      <Grid item xs={12}>
-                        <Stack direction="row" spacing={1} flexWrap="wrap">
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            onClick={() => handleFormChange('rolePermissions', {
-                              CreateProposals: true,
-                              EditOwnProposals: true,
-                              EditAllProposals: false,
-                              DeleteProposals: false,
-                              ApproveProposals: false,
-                              ViewReports: true,
-                              ManageUsers: false,
-                              ManageSettings: false
-                            })}
-                          >
-                            Reset to Basic
-                          </Button>
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            color="primary"
-                            onClick={() => handleFormChange('rolePermissions', {
-                              CreateProposals: true,
-                              EditOwnProposals: true,
-                              EditAllProposals: true,
-                              DeleteProposals: true,
-                              ApproveProposals: true,
-                              ViewReports: true,
-                              ManageUsers: true,
-                              ManageSettings: true
-                            })}
-                          >
-                            Grant All
-                          </Button>
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            color="warning"
-                            onClick={() => handleFormChange('rolePermissions', {
-                              CreateProposals: false,
-                              EditOwnProposals: false,
-                              EditAllProposals: false,
-                              DeleteProposals: false,
-                              ApproveProposals: false,
-                              ViewReports: false,
-                              ManageUsers: false,
-                              ManageSettings: false
-                            })}
-                          >
-                            Revoke All
-                          </Button>
-                        </Stack>
-                      </Grid>
-                    </Grid>
-                  </AccordionDetails>
-                </Accordion>
-
-                {/* Workflow Roles Section */}
-                <Accordion sx={{ mt: 2 }}>
-                  <AccordionSummary
-                    expandIcon={<ExpandMoreIcon />}
-                    aria-controls="workflow-roles-content"
-                    id="workflow-roles-header"
-                  >
-                    <Typography variant="subtitle1" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <HierarchyIcon fontSize="small" />
-                      Workflow Roles
-                      <Chip
-                        label={`${Object.values(formData.workflowRoles || {}).filter(Boolean).length} selected`}
-                        size="small"
-                        color="secondary"
-                        variant="outlined"
-                      />
-                    </Typography>
-                  </AccordionSummary>
-                  <AccordionDetails>
-                    <Typography variant="body2" color="text.secondary" gutterBottom sx={{ mb: 2 }}>
-                      Select workflow roles to assign. These map to the backend's legacy roles automatically.
-                    </Typography>
-
-                    <Grid container spacing={2}>
-                      {/* Responsibility Center Roles */}
-                      <Grid item xs={12} sm={6}>
-                        <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
-                          Responsibility Center Roles
-                        </Typography>
-                        <Stack spacing={1}>
-                          <FormControlLabel
-                            control={
-                              <Checkbox
-                                checked={formData.workflowRoles.responsibilityCenterCreator || false}
-                                onChange={(e) => handleFormChange('workflowRoles', {
-                                  ...formData.workflowRoles,
-                                  responsibilityCenterCreator: e.target.checked
-                                })}
-                                size="small"
-                              />
-                            }
-                            label="Responsibility Center Creator"
-                            disabled={!(formData.assignmentLevel === 'RESPONSIBILITY_CENTER' || formData.assignmentLevel === 'FULL')}
-                          />
-                          <FormControlLabel
-                            control={
-                              <Checkbox
-                                checked={formData.workflowRoles.responsibilityCenterApprover || false}
-                                onChange={(e) => handleFormChange('workflowRoles', {
-                                  ...formData.workflowRoles,
-                                  responsibilityCenterApprover: e.target.checked
-                                })}
-                                size="small"
-                              />
-                            }
-                            label="Responsibility Center Approver"
-                            disabled={!(formData.assignmentLevel === 'RESPONSIBILITY_CENTER' || formData.assignmentLevel === 'FULL')}
-                          />
-                        </Stack>
-                      </Grid>
-
-                      {/* Office Roles */}
-                      <Grid item xs={12} sm={6}>
-                        <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
-                          Office Roles
-                        </Typography>
-                        <Stack spacing={1}>
-                          <FormControlLabel
-                            control={
-                              <Checkbox
-                                checked={formData.workflowRoles.officeCreator || false}
-                                onChange={(e) => handleFormChange('workflowRoles', {
-                                  ...formData.workflowRoles,
-                                  officeCreator: e.target.checked
-                                })}
-                                size="small"
-                              />
-                            }
-                            label="Office Creator"
-                            disabled={!(formData.assignmentLevel === 'OFFICE' || formData.assignmentLevel === 'FULL')}
-                          />
-                          <FormControlLabel
-                            control={
-                              <Checkbox
-                                checked={formData.workflowRoles.officeConsolidator || false}
-                                onChange={(e) => handleFormChange('workflowRoles', {
-                                  ...formData.workflowRoles,
-                                  officeConsolidator: e.target.checked
-                                })}
-                                size="small"
-                              />
-                            }
-                            label="Office Consolidator"
-                            disabled={!(formData.assignmentLevel === 'OFFICE' || formData.assignmentLevel === 'FULL')}
-                          />
-                          <FormControlLabel
-                            control={
-                              <Checkbox
-                                checked={formData.workflowRoles.officeSubmission || false}
-                                onChange={(e) => handleFormChange('workflowRoles', {
-                                  ...formData.workflowRoles,
-                                  officeSubmission: e.target.checked
-                                })}
-                                size="small"
-                              />
-                            }
-                            label="Office Submission"
-                            disabled={!(formData.assignmentLevel === 'OFFICE' || formData.assignmentLevel === 'FULL')}
-                          />
-                          <FormControlLabel
-                            control={
-                              <Checkbox
-                                checked={formData.workflowRoles.officeFinalVerifier || false}
-                                onChange={(e) => handleFormChange('workflowRoles', {
-                                  ...formData.workflowRoles,
-                                  officeFinalVerifier: e.target.checked
-                                })}
-                                size="small"
-                              />
-                            }
-                            label="Office Final Verifier"
-                            disabled={!(formData.assignmentLevel === 'OFFICE' || formData.assignmentLevel === 'FULL')}
-                          />
-                        </Stack>
-                      </Grid>
-
-                      {/* Administrative/Regional Roles */}
-                      <Grid item xs={12} sm={6}>
-                        <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
-                          Administrative Roles
-                        </Typography>
-                        <Stack spacing={1}>
-                          <FormControlLabel
-                            control={
-                              <Checkbox
-                                checked={formData.workflowRoles.regionCreator || false}
-                                onChange={(e) => handleFormChange('workflowRoles', {
-                                  ...formData.workflowRoles,
-                                  regionCreator: e.target.checked
-                                })}
-                                size="small"
-                              />
-                            }
-                            label="Region Creator"
-                            disabled={!(formData.assignmentLevel === 'FULL')}
-                          />
-                        </Stack>
-                      </Grid>
-
-                      {/* Quick Actions */}
-                      <Grid item xs={12}>
-                        <Stack direction="row" spacing={1} flexWrap="wrap">
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            onClick={() => handleFormChange('workflowRoles', getDefaultWorkflowRolesMap())}
-                          >
-                            Clear All
-                          </Button>
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            color="primary"
-                            onClick={() => handleFormChange('workflowRoles', WORKFLOW_ROLES.reduce((acc, r) => ({ ...acc, [r.key]: true }), {}))}
-                          >
-                            Select All
-                          </Button>
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            onClick={() => handleFormChange('workflowRoles', {
-                              ...getDefaultWorkflowRolesMap(),
-                              responsibilityCenterCreator: formData.assignmentLevel === 'RESPONSIBILITY_CENTER' || formData.assignmentLevel === 'OFFICE',
-                              officeCreator: formData.assignmentLevel === 'OFFICE',
-                              officeConsolidator: formData.assignmentLevel === 'OFFICE',
-                              officeSubmission: formData.assignmentLevel === 'OFFICE'
-                            })}
-                          >
-                            Suggest for Level
-                          </Button>
-                        </Stack>
-                      </Grid>
-                    </Grid>
-                  </AccordionDetails>
-                </Accordion>
-
-                {/* Restrictions Management Section */}
-                <Accordion expanded={showRestrictions} onChange={() => setShowRestrictions(!showRestrictions)} sx={{ mt: 2 }}>
-                  <AccordionSummary
-                    expandIcon={<ExpandMoreIcon />}
-                    aria-controls="restrictions-content"
-                    id="restrictions-header"
-                  >
-                    <Typography variant="subtitle1" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <DomainIcon fontSize="small" />
-                      Access Restrictions
-                      <Chip
-                        label={`${formData.restrictions?.allowedBudgetTypes?.length || 0} types, ${formData.restrictions?.allowedFiscalYears?.length || 0} years${formData.restrictions?.readOnlyMode ? ' (Read-Only)' : ''}`}
-                        size="small"
-                        color="info"
-                        variant="outlined"
-                      />
-                    </Typography>
-                  </AccordionSummary>
-                  <AccordionDetails>
-                    <Typography variant="body2" color="text.secondary" gutterBottom sx={{ mb: 2 }}>
-                      Configure access restrictions to limit what budget types and fiscal years this user can work with.
-                    </Typography>
-
-                    <Grid container spacing={2}>
-                      {/* Budget Types */}
-                      <Grid item xs={12} sm={6}>
-                        <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
-                          Allowed Budget Types
-                        </Typography>
-                        <Stack spacing={1}>
-                          {['Initial', 'NEP', 'GAA', 'Supplemental', 'Augmentation'].map((budgetType) => (
-                            <FormControlLabel
-                              key={budgetType}
-                              control={
-                                <Checkbox
-                                  checked={formData.restrictions?.allowedBudgetTypes?.includes(budgetType) || false}
-                                  onChange={(e) => {
-                                    const currentTypes = formData.restrictions?.allowedBudgetTypes || [];
-                                    const newTypes = e.target.checked
-                                      ? [...currentTypes, budgetType]
-                                      : currentTypes.filter(type => type !== budgetType);
-                                    handleFormChange('restrictions', {
-                                      ...formData.restrictions,
-                                      allowedBudgetTypes: newTypes
-                                    });
-                                  }}
-                                  size="small"
-                                />
-                              }
-                              label={budgetType}
-                            />
-                          ))}
-                        </Stack>
-                      </Grid>
-
-                      {/* Fiscal Years */}
-                      <Grid item xs={12} sm={6}>
-                        <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
-                          Allowed Fiscal Years
-                        </Typography>
-                        <Stack spacing={1}>
-                          {(() => {
-                            // Use fiscal years from database settings instead of dynamic generation
-                            const fiscalYears = Array.isArray(settings) ? settings.map(setting => setting.fiscalYear) : [];
-                            return fiscalYears;
-                          })().map((year) => (
-                            <FormControlLabel
-                              key={year}
-                              control={
-                                <Checkbox
-                                  checked={formData.restrictions?.allowedFiscalYears?.includes(year) || false}
-                                  onChange={(e) => {
-                                    const currentYears = formData.restrictions?.allowedFiscalYears || [];
-                                    const newYears = e.target.checked
-                                      ? [...currentYears, year]
-                                      : currentYears.filter(y => y !== year);
-                                    handleFormChange('restrictions', {
-                                      ...formData.restrictions,
-                                      allowedFiscalYears: newYears
-                                    });
-                                  }}
-                                  size="small"
-                                />
-                              }
-                              label={`FY ${year}`}
-                            />
-                          ))}
-                        </Stack>
-                      </Grid>
-
-                      {/* Read Only Mode */}
-                      <Grid item xs={12}>
-                        <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
-                          Access Mode
-                        </Typography>
-                        <FormControlLabel
-                          control={
-                            <Checkbox
-                              checked={formData.restrictions?.readOnlyMode || false}
-                              onChange={(e) => handleFormChange('restrictions', {
-                                ...formData.restrictions,
-                                readOnlyMode: e.target.checked
-                              })}
-                              size="small"
-                              color="warning"
-                            />
-                          }
-                          label={
-                            <Box>
-                              <Typography variant="body2">Read-Only Mode</Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                User can only view data, cannot make changes
-                              </Typography>
-                            </Box>
-                          }
-                        />
-                      </Grid>
-
-                      {/* Quick Actions for Restrictions */}
-                      <Grid item xs={12}>
-                        <Stack direction="row" spacing={1} flexWrap="wrap">
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            onClick={() => {
-                              const activeSetting = Array.isArray(settings) ? settings.find(setting => setting.isActive) : null;
-                              const activeFiscalYear = activeSetting ? activeSetting.fiscalYear : new Date().getFullYear().toString();
-                              handleFormChange('restrictions', {
-                                readOnlyMode: false,
-                                allowedBudgetTypes: ['Initial', 'NEP', 'GAA'],
-                                allowedFiscalYears: [activeFiscalYear]
-                              });
-                            }}
-                          >
-                            Reset to Current
-                          </Button>
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            color="success"
-                            onClick={() => {
-                              // Use all fiscal years from database settings for "Allow All"
-                              const fiscalYears = Array.isArray(settings) ? settings.map(setting => setting.fiscalYear) : [];
-                              handleFormChange('restrictions', {
-                                readOnlyMode: false,
-                                allowedBudgetTypes: ['Initial', 'NEP', 'GAA', 'Supplemental', 'Augmentation'],
-                                allowedFiscalYears: fiscalYears
-                              });
-                            }}
-                          >
-                            Allow All
-                          </Button>
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            color="warning"
-                            onClick={() => handleFormChange('restrictions', {
-                              readOnlyMode: true,
-                              allowedBudgetTypes: ['Initial'],
-                              allowedFiscalYears: [new Date().getFullYear().toString()]
-                            })}
-                          >
-                            Read-Only + Limited
-                          </Button>
-                        </Stack>
-                      </Grid>
-                    </Grid>
-                  </AccordionDetails>
-                </Accordion>
-              </Grid>
-
               <Grid item xs={12}>
                 <Stack direction="row" spacing={2}>
                   <Button
@@ -1637,6 +1025,7 @@ const HierarchicalUserAssignmentPage = () => {
                   <TableHead>
                     <TableRow>
                       <TableCell>User</TableCell>
+                      <TableCell>Role</TableCell>
                       <TableCell>Level</TableCell>
                       <TableCell>Organization</TableCell>
                       <TableCell>Actions</TableCell>
@@ -1654,6 +1043,40 @@ const HierarchicalUserAssignmentPage = () => {
                             <Typography variant="caption" color="textSecondary">
                               {assignment.userId}
                             </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={(() => {
+                                // First check if userRole is explicitly set
+                                if (assignment.userRole) {
+                                  const role = USER_ROLES.find(r => r.value === assignment.userRole);
+                                  return role ? role.label : assignment.userRole;
+                                }
+                                
+                                // Fallback to inference from level and permissions
+                                const level = assignment.assignmentLevel;
+                                const perms = assignment.rolePermissions || {};
+                                if (level === 'RESPONSIBILITY_CENTER' || level === 'DIVISION') {
+                                  return 'Budget Analyst';
+                                } else if (level === 'OFFICE' || level === 'DEPARTMENT') {
+                                  if (perms.ApproveProposals) {
+                                    return 'Budget Officer';
+                                  } else {
+                                    return 'Budget Coordinator';
+                                  }
+                                } else if (level === 'FULL') {
+                                  if (perms.ManageSettings) {
+                                    return 'Budget Admin';
+                                  } else {
+                                    return 'Budget Manager';
+                                  }
+                                }
+                                return 'Unknown';
+                              })()}
+                              size="small"
+                              color="primary"
+                              variant="outlined"
+                            />
                           </TableCell>
                           <TableCell>
                             <Chip
@@ -1690,21 +1113,6 @@ const HierarchicalUserAssignmentPage = () => {
                                   {assignment.divisions?.length > 0 && (
                                     <Typography variant="caption" display="block">
                                       Divisions: {assignment.divisions.join(', ')}
-                                    </Typography>
-                                  )}
-                                  {assignment.restrictions?.readOnlyMode && (
-                                    <Typography variant="caption" display="block" sx={{ color: 'warning.main' }}>
-                                      ⚠️ Read-Only Mode
-                                    </Typography>
-                                  )}
-                                  {assignment.restrictions?.allowedBudgetTypes && (
-                                    <Typography variant="caption" display="block">
-                                      Budget Types: {assignment.restrictions.allowedBudgetTypes.join(', ')}
-                                    </Typography>
-                                  )}
-                                  {assignment.restrictions?.allowedFiscalYears && (
-                                    <Typography variant="caption" display="block">
-                                      Fiscal Years: {assignment.restrictions.allowedFiscalYears.join(', ')}
                                     </Typography>
                                   )}
                                 </Box>
@@ -1766,38 +1174,7 @@ const HierarchicalUserAssignmentPage = () => {
                                     </Tooltip>
                                   );
                                 })()}
-                                {/* Show restrictions indicator if user has restrictions configured */}
-                                {(() => {
-                                  const activeSetting = Array.isArray(settings) ? settings.find(setting => setting.isActive) : null;
-                                  const defaultFiscalYear = activeSetting ? activeSetting.fiscalYear : new Date().getFullYear().toString();
-                                  const defaultRestrictions = {
-                                    readOnlyMode: false,
-                                    allowedBudgetTypes: ['Initial', 'NEP', 'GAA'],
-                                    allowedFiscalYears: [defaultFiscalYear]
-                                  };
-                                  const userRestrictions = assignment.restrictions || {};
-                                  const hasRestrictions = userRestrictions.readOnlyMode ||
-                                    userRestrictions.allowedBudgetTypes?.length !== defaultRestrictions.allowedBudgetTypes.length ||
-                                    userRestrictions.allowedFiscalYears?.length !== defaultRestrictions.allowedFiscalYears.length;
-                                  return hasRestrictions && (
-                                    <Tooltip title="Access restrictions configured">
-                                      <Badge
-                                        variant="dot"
-                                        color="warning"
-                                        sx={{
-                                          '& .MuiBadge-dot': {
-                                            width: 8,
-                                            height: 8,
-                                            borderRadius: '50%',
-                                            ml: 0.5
-                                          }
-                                        }}
-                                      >
-                                        <Box sx={{ width: 8, height: 8 }} />
-                                      </Badge>
-                                    </Tooltip>
-                                  );
-                                })()}
+
                                 <Typography variant="body2" sx={{ fontWeight: 500 }}>
                                   {getOrganizationDisplay(assignment)}
                                 </Typography>
@@ -1811,15 +1188,6 @@ const HierarchicalUserAssignmentPage = () => {
                                 onClick={() => {
                                   setEditingAssignment(assignment);
                                   // Extract only the necessary form fields from the assignment
-                                  const reverseRoleMap = {
-                                    divisionCreator: 'responsibilityCenterCreator',
-                                    divisionApprover: 'responsibilityCenterApprover',
-                                    departmentCreator: 'officeCreator',
-                                    departmentConsolidator: 'officeConsolidator',
-                                    departmentSubmission: 'officeSubmission',
-                                    regionFinalVerifier: 'officeFinalVerifier',
-                                    regionCreator: 'regionCreator'
-                                  };
                                   const reverseAssignmentLevelMap = {
                                     'DIVISION': 'RESPONSIBILITY_CENTER',
                                     'DEPARTMENT': 'OFFICE',
@@ -1831,6 +1199,26 @@ const HierarchicalUserAssignmentPage = () => {
                                     userId: assignment.userId,
                                     userName: assignment.userName,
                                     email: assignment.email,
+                                    userRole: assignment.userRole || (() => {
+                                      const level = reverseAssignmentLevelMap[assignment.assignmentLevel] || assignment.assignmentLevel;
+                                      const perms = assignment.rolePermissions || {};
+                                      if (level === 'RESPONSIBILITY_CENTER') {
+                                        return 'BUDGET_ANALYST';
+                                      } else if (level === 'OFFICE') {
+                                        if (perms.ApproveProposals) {
+                                          return 'BUDGET_OFFICER';
+                                        } else {
+                                          return 'BUDGET_COORDINATOR';
+                                        }
+                                      } else if (level === 'FULL') {
+                                        if (perms.ManageSettings) {
+                                          return 'BUDGET_ADMIN';
+                                        } else {
+                                          return 'BUDGET_MANAGER';
+                                        }
+                                      }
+                                      return '';
+                                    })(),
                                     assignmentLevel: reverseAssignmentLevelMap[assignment.assignmentLevel] || assignment.assignmentLevel,
                                     officeId: assignment.officeId || assignment.departmentId || '', // Use officeId if available, otherwise departmentId
                                     responsibilityCenterName: assignment.divisionName || '',
@@ -1843,25 +1231,9 @@ const HierarchicalUserAssignmentPage = () => {
                                       ViewReports: true,
                                       ManageUsers: false,
                                       ManageSettings: false
-                                    },
-                                    restrictions: assignment.restrictions || {
-                                      readOnlyMode: false,
-                                      allowedBudgetTypes: ['Initial', 'NEP', 'GAA'],
-                                      allowedFiscalYears: (() => {
-                                        const activeSetting = Array.isArray(settings) ? settings.find(setting => setting.isActive) : null;
-                                        return activeSetting ? [activeSetting.fiscalYear] : [new Date().getFullYear().toString()];
-                                      })()
-                                    },
-                                    // Convert legacy roles from server back to UI keys for checkbox map
-                                    workflowRoles: (assignment.workflowRoles || []).reduce((acc, legacyRole) => {
-                                      const uiKey = reverseRoleMap[legacyRole];
-                                      if (uiKey) acc[uiKey] = true;
-                                      return acc;
-                                    }, getDefaultWorkflowRolesMap())
+                                    }
                                   };
                                   setFormData(formFields);
-                                  setShowPermissions(true); // Show permissions when editing
-                                  setShowRestrictions(true); // Show restrictions when editing
                                 }}
                               >
                                 <EditIcon />

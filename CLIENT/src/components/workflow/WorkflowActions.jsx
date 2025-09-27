@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { toast } from "react-toastify";
 import api from "../../config/api";
 import { goTo } from "../../global/navigation";
-import { Button, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions, Typography, Menu, MenuItem, ListItemIcon, ListItemText, Chip, Divider, Stepper, Step, StepLabel, Box, Stack } from "@mui/material";
+import { Button, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions, Typography, TextField, Menu, MenuItem, ListItemIcon, ListItemText, Chip, Divider, Stepper, Step, StepLabel, Box, Stack } from "@mui/material";
 import CheckIcon from "@mui/icons-material/Check";
 import UndoIcon from "@mui/icons-material/Undo";
 import SendIcon from "@mui/icons-material/Send";
@@ -14,8 +14,8 @@ import TimelineIcon from "@mui/icons-material/Timeline";
 /**
  * Workflow Actions Component
  * 
- * Provides action buttons for the 6-step workflow based on user role and current status:
- * Draft → Division Submitted → Department Verified → Department Submitted → Region Approved → Finalized
+ * Provides action buttons for the role-based workflow based on user role and current status:
+ * Draft → Submitted to Officer → Officer Approved/Returned → Submitted to Manager → Manager Approved/Returned → Finalized
  */
 const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = true, showTrackInMenu = true }) => {
   const [loading, setLoading] = useState(false);
@@ -47,136 +47,96 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
   // Determine what actions are available based on user role and proposal status
   const getAvailableActions = () => {
     const actions = [];
-    // Support legacy and new keys for level: assignmentLevel (old), accessScope/scope (new)
-    const userLevelRaw = (userInfo?.assignmentLevel || userInfo?.accessScope || userInfo?.scope || '').toUpperCase();
+    const userRoles = userInfo?.roles || [];
     const status = proposal?.status;
-    const workflowRoles = userInfo?.workflowRoles || [];
 
-    // Map legacy assignment levels → new scopes used by workflow UI
-    // DIVISION → RESPONSIBILITY_CENTER, DEPARTMENT → OFFICE, REGION → OFFICE (final verification lives in office context)
-    const levelMap = {
-      DIVISION: 'RESPONSIBILITY_CENTER',
-      RESPONSIBILITY_CENTER: 'RESPONSIBILITY_CENTER',
-      DEPARTMENT: 'OFFICE',
-      OFFICE: 'OFFICE',
-      REGION: 'OFFICE'
-    };
-    const userLevel = levelMap[userLevelRaw] || userLevelRaw;
+    // Check if user has the required role for actions
+    const isBudgetAnalyst = userRoles.includes('BUDGET_ANALYST');
+    const isBudgetCoordinator = userRoles.includes('BUDGET_COORDINATOR');
+    const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
+    const isBudgetManager = userRoles.includes('BUDGET_MANAGER');
+    const isBudgetAdmin = userRoles.includes('BUDGET_ADMIN');
 
-    // Normalize/alias legacy role names to new UI keys so buttons appear correctly
-    // Legacy → UI
-    const roleAliases = {
-      departmentConsolidator: 'officeConsolidator',
-      departmentSubmission: 'officeSubmission',
-      regionFinalVerifier: 'officeFinalVerifier',
-      divisionCreator: 'responsibilityCenterCreator',
-      regionCreator: 'regionCreator'
-    };
-    const normalizedRoles = new Set([
-      ...workflowRoles,
-      ...workflowRoles.map((r) => roleAliases[r] || r)
-    ]);
-
-    // Debug: log the values to see what's happening
-    console.log('WorkflowActions Debug:', {
-      userLevelRaw,
-      userLevel,
+    console.log('New WorkflowActions Debug:', {
       status,
-      workflowRoles,
-      normalizedRoles: Array.from(normalizedRoles),
-      proposalId: proposal?._id,
-      officeConsolidator: normalizedRoles.has("officeConsolidator"),
-      officeSubmission: normalizedRoles.has("officeSubmission"),
-      officeFinalVerifier: normalizedRoles.has("officeFinalVerifier"),
+      userRoles,
+      isBudgetAnalyst,
+      isBudgetCoordinator,
+      isBudgetOfficer,
+      isBudgetManager,
+      isBudgetAdmin,
+      proposalId: proposal?._id
     });
 
-    // Responsibility Center Level Actions
-    if (userLevel === "RESPONSIBILITY_CENTER" && normalizedRoles.has("responsibilityCenterCreator")) {
+    // BUDGET ANALYST & BUDGET COORDINATOR Actions (Creation Level)
+    if (isBudgetAnalyst || isBudgetCoordinator) {
       if (status === "Draft") {
         actions.push({
-          label: "Submit to Office",
-          action: "responsibility-center-submit",
+          label: "Submit to Officer",
+          action: "submit-to-officer",
           color: "bg-blue-500 hover:bg-blue-600",
           icon: "📤",
-          description: "Submit to Office for verification"
+          description: "Submit proposal to Budget Officer for approval"
         });
       }
     }
 
-    // Office Level Actions
-    if (userLevel === "OFFICE" && normalizedRoles.has("officeConsolidator")) {
-      if (
-        status === "Responsibility Center Submitted" || 
-        status === "RESPONSIBILITY_CENTER_SUBMITTED" ||
-        status === "Division Submitted" || 
-        status === "DIVISION SUBMITTED"
-      ) {
-        actions.push({
-          label: "Verify",
-          action: "office-verify",
-          color: "bg-green-500 hover:bg-green-600",
-          icon: "✅",
-          description: "Verify and approve the responsibility center submission"
-        });
-        // Temporarily disabled until backend route exists
-        // actions.push({
-        //   label: "Return",
-        //   action: "office-return",
-        //   color: "bg-red-500 hover:bg-red-600",
-        //   icon: "↩️",
-        //   description: "Return submission to responsibility center for revisions"
-        // });
-      }
-      if (
-        status === "Office Verified" || 
-        status === "OFFICE VERIFIED" ||
-        status === "OFFICE_VERIFIED" ||
-        status === "Department Verified" ||
-        status === "DEPARTMENT VERIFIED" ||
-        status === "DEPARTMENT_VERIFIED"
-      ) {
-        actions.push({
-          label: "Submit for Finalization",
-          action: "office-submit",
-          color: "bg-purple-500 hover:bg-purple-600",
-          icon: "📋",
-          description: "Submit for finalization"
-        });
-      }
-    }
-
-    // Office Level Actions (Final verification)
-    if (userLevel === "OFFICE" && normalizedRoles.has("officeFinalVerifier")) {
-      // When items are submitted by Office consolidator, first Approve, then Finalize
-      if (
-        status === "Office Submitted" || 
-        status === "OFFICE SUBMITTED" ||
-        status === "OFFICE_SUBMITTED" ||
-        status === "Department Submitted" ||
-        status === "DEPARTMENT SUBMITTED" ||
-        status === "DEPARTMENT_SUBMITTED"
-      ) {
+    // BUDGET OFFICER Actions (Approval Level)
+    if (isBudgetOfficer) {
+      if (status === "Draft" || status === "Submitted to Officer" || 
+          status === "Responsibility Center Submitted" || status === "Division Submitted") {
         actions.push({
           label: "Approve",
-          action: "office-approve",
-          color: "bg-teal-500 hover:bg-teal-600",
-          icon: "✔",
-          description: "Approve office submission before finalization"
+          action: "officer-approve",
+          color: "bg-green-500 hover:bg-green-600",
+          icon: "✅",
+          description: "Approve the proposal submission"
+        });
+        actions.push({
+          label: "Return",
+          action: "officer-return",
+          color: "bg-red-500 hover:bg-red-600",
+          icon: "↩️",
+          description: "Return proposal to creator for revisions"
         });
       }
-      if (
-        status === "Office Approved" ||
-        status === "OFFICE APPROVED" ||
-        status === "OFFICE_APPROVED" ||
-        status === "Region Approved" ||
-        status === "REGION APPROVED"
-      ) {
+      if (status === "Officer Approved") {
+        actions.push({
+          label: "Submit to Manager",
+          action: "submit-to-manager",
+          color: "bg-purple-500 hover:bg-purple-600",
+          icon: "📋",
+          description: "Submit approved proposal to Budget Manager for finalization"
+        });
+      }
+    }
+
+    // BUDGET MANAGER & BUDGET ADMIN Actions (Finalization Level)
+    if (isBudgetManager || isBudgetAdmin) {
+      if (status === "Officer Approved" || status === "Submitted to Manager" ||
+          status === "Office Submitted" || status === "Department Submitted") {
+        actions.push({
+          label: "Approve",
+          action: "manager-approve",
+          color: "bg-teal-500 hover:bg-teal-600",
+          icon: "✔",
+          description: "Approve proposal for finalization"
+        });
+        actions.push({
+          label: "Return",
+          action: "manager-return",
+          color: "bg-red-500 hover:bg-red-600",
+          icon: "↩️",
+          description: "Return proposal to officer for revisions"
+        });
+      }
+      if (status === "Manager Approved" || status === "Office Approved" || status === "Region Approved") {
         actions.push({
           label: "Finalize",
-          action: "office-finalize",
+          action: "finalize",
           color: "bg-emerald-500 hover:bg-emerald-600",
-          icon: "🏆",
-          description: "Finalize the submission"
+          icon: "�",
+          description: "Finalize the proposal submission"
         });
       }
     }
@@ -185,7 +145,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
   };
 
   // Execute workflow action
-  const executeWorkflowAction = async (action) => {
+  const executeWorkflowAction = async (action, noteValue) => {
     setLoading(true);
     
     try {
@@ -194,6 +154,42 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
       let successMessage = "";
 
       switch (action) {
+        case "submit-to-officer":
+          endpoint = "/api/submission-workflow/responsibility-center/submit-to-office";
+          noteField = "submissionNote";
+          successMessage = "Successfully submitted to Budget Officer for approval";
+          break;
+        case "officer-approve":
+          endpoint = "/api/submission-workflow/office/verify-submission";
+          noteField = "verificationNote";
+          successMessage = "Successfully approved proposal";
+          break;
+        case "officer-return":
+          endpoint = "/api/submission-workflow/office/return-to-responsibility-center";
+          noteField = "returnReason";
+          successMessage = "Successfully returned proposal to creator for revisions";
+          break;
+        case "submit-to-manager":
+          endpoint = "/api/submission-workflow/office/submit-own";
+          noteField = "approvalNote";
+          successMessage = "Successfully submitted to Budget Manager for finalization";
+          break;
+        case "manager-approve":
+          endpoint = "/api/submission-workflow/office/approve-submission";
+          noteField = "officeApprovalNote";
+          successMessage = "Successfully approved proposal for finalization";
+          break;
+        case "manager-return":
+          endpoint = "/api/submission-workflow/office/return-to-responsibility-center";
+          noteField = "returnReason";
+          successMessage = "Successfully returned proposal to officer for revisions";
+          break;
+        case "finalize":
+          endpoint = "/api/submission-workflow/office/finalize-submission";
+          noteField = "finalizationNote";
+          successMessage = "Successfully finalized proposal submission";
+          break;
+        // Legacy actions for backward compatibility
         case "responsibility-center-submit":
           endpoint = "/api/submission-workflow/responsibility-center/submit-to-office";
           noteField = "submissionNote";
@@ -211,7 +207,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           break;
         case "office-approve":
           endpoint = "/api/submission-workflow/office/approve-submission";
-          noteField = "officeApprovalNote"; // align with backend
+          noteField = "officeApprovalNote";
           successMessage = "Successfully approved submission";
           break;
         case "office-finalize":
@@ -219,12 +215,11 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           noteField = "finalizationNote";
           successMessage = "Successfully finalized submission";
           break;
-        // Temporarily hide return until route exists in backend
-        // case "office-return":
-        //   endpoint = "/api/submission-workflow/office/return-to-responsibility-center";
-        //   noteField = "returnNote";
-        //   successMessage = "Successfully returned submission to responsibility center for revisions";
-        //   break;
+        case "office-return":
+          endpoint = "/api/submission-workflow/office/return-to-responsibility-center";
+          noteField = "returnReason";
+          successMessage = "Successfully returned submission to responsibility center for revisions";
+          break;
         default:
           throw new Error("Unknown workflow action");
       }
@@ -232,7 +227,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
       const response = await api.post(endpoint, {
         ids: [proposal._id],
         entity: getEntityType(proposal), // Dynamic entity type based on proposal
-        [noteField]: `Workflow action performed on ${new Date().toLocaleString()}`
+        [noteField]: noteValue?.trim() || `Workflow action performed on ${new Date().toLocaleString()}`
       });
 
       console.log('Workflow API Call Debug:', {
@@ -240,7 +235,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
         requestData: {
           ids: [proposal._id],
           entity: getEntityType(proposal),
-          [noteField]: `Workflow action performed on ${new Date().toLocaleString()}`
+          [noteField]: noteValue?.trim() || `Workflow action performed on ${new Date().toLocaleString()}`
         },
         proposal: {
           _id: proposal._id,
@@ -298,6 +293,8 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
 
   // Confirmation dialog state
   const [confirmState, setConfirmState] = useState({ open: false, action: null, label: '' });
+  const [returnReason, setReturnReason] = useState('');
+  const isReturnAction = confirmState.action === 'office-return' || confirmState.action === 'officer-return' || confirmState.action === 'manager-return';
 
   // Handle action click with MUI confirm dialog
   const handleActionClick = (action, label) => {
@@ -307,11 +304,20 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
 
   const handleConfirm = () => {
     if (!confirmState.action) return;
-    executeWorkflowAction(confirmState.action);
+    // For Return action, ensure a reason is provided
+    if ((confirmState.action === 'office-return' || confirmState.action === 'officer-return' || confirmState.action === 'manager-return') && !returnReason.trim()) {
+      toast.error('Please provide a return reason.');
+      return;
+    }
+    executeWorkflowAction(confirmState.action, returnReason);
     setConfirmState({ open: false, action: null, label: '' });
+    setReturnReason('');
   };
 
-  const handleClose = () => setConfirmState({ open: false, action: null, label: '' });
+  const handleClose = () => { 
+    setConfirmState({ open: false, action: null, label: '' });
+    setReturnReason('');
+  };
 
   const availableActions = getAvailableActions();
 
@@ -327,6 +333,14 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
     };
     const color = iconColorMap[action] || 'inherit';
     switch (action) {
+      case 'submit-to-officer': return <SendIcon fontSize="small" color={color} />;
+      case 'officer-approve': return <CheckIcon fontSize="small" color={color} />;
+      case 'officer-return': return <UndoIcon fontSize="small" color={color} />;
+      case 'submit-to-manager': return <SendIcon fontSize="small" color={color} />;
+      case 'manager-approve': return <CheckIcon fontSize="small" color={color} />;
+      case 'manager-return': return <UndoIcon fontSize="small" color={color} />;
+      case 'finalize': return <VerifiedIcon fontSize="small" color={color} />;
+      // Legacy actions for backward compatibility
       case 'office-verify': return <CheckIcon fontSize="small" color={color} />;
       case 'office-approve': return <CheckIcon fontSize="small" color={color} />;
       case 'office-submit': return <SendIcon fontSize="small" color={color} />;
@@ -336,14 +350,13 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
     }
   };
 
-  // Step metadata for progress tracking
+  // Step metadata for progress tracking - Simplified role-based workflow
   const steps = [
     { key: 'Draft', label: 'Draft' },
-    { key: 'Responsibility Center Submitted', label: 'RC Submitted', ts: 'submittedToOfficeAt', by: 'submittedToOfficeName' },
-    { key: 'Office Verified', label: 'Office Verified', ts: 'verifiedByOfficeAt', by: 'verifiedByOfficeName' },
-    { key: 'Office Submitted', label: 'Office Submitted', ts: 'submittedToOfficeAt', by: 'submittedToOfficeName' },
-    { key: 'Office Approved', label: 'Office Approved', ts: 'approvedByOfficeAt', by: 'approvedByOfficeName' },
-    { key: 'Finalized', label: 'Finalized', ts: 'finalizedAt', by: 'finalizedByName' }
+    { key: 'Submitted to Officer', label: 'Officer Review', ts: 'submittedToOfficerAt', by: 'submittedToOfficerBy' },
+    { key: 'Officer Approved', label: 'Manager Review', ts: 'officerApprovedAt', by: 'officerApprovedBy' },
+    { key: 'Manager Approved', label: 'Final Review', ts: 'managerApprovedAt', by: 'managerApprovedBy' },
+    { key: 'Finalized', label: 'Finalized', ts: 'finalizedAt', by: 'finalizedBy' }
   ];
 
   const currentStepIndex = steps.findIndex(s => s.key === (proposal?.status || 'Draft'));
@@ -461,13 +474,25 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
       <Dialog open={confirmState.open} onClose={handleClose} maxWidth="xs" fullWidth>
         <DialogTitle>Confirm Action</DialogTitle>
         <DialogContent>
-          <Typography variant="body2">
+          <Typography variant="body2" sx={{ mb: 1 }}>
             Are you sure you want to perform: <strong>{confirmState.label}</strong>?
           </Typography>
+          {isReturnAction && (
+            <TextField
+              autoFocus
+              multiline
+              minRows={3}
+              fullWidth
+              label="Return reason (required)"
+              placeholder="Explain why this submission is being returned"
+              value={returnReason}
+              onChange={(e) => setReturnReason(e.target.value)}
+            />
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleClose} disabled={loading}>Cancel</Button>
-          <Button onClick={handleConfirm} variant="contained" disabled={loading}>
+          <Button onClick={handleConfirm} variant="contained" disabled={loading || (isReturnAction && !returnReason.trim())}>
             Confirm
           </Button>
         </DialogActions>

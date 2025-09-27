@@ -97,6 +97,8 @@ budgetManagerOrgRouter.post(
           createdProposal = await MooeProposal.create({
             ...proposalData,
             region: region,
+            department: department,
+            division: division,
             processBy: req.user.id,
             processDate: new Date(),
             fiscalYear: proposalData.fiscalYear || new Date().getFullYear().toString(),

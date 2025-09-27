@@ -39,10 +39,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       departmentId,
       divisionName,
       officeId, // NEW: Office ID from new structure
-      responsibilityCenterName, // NEW: Responsibility center name from new structure
-      rolePermissions = {},
-      restrictions = {},
-      workflowRoles: requestedWorkflowRoles
+      responsibilityCenterName // NEW: Responsibility center name from new structure
     } = req.body;
 
     // Handle backward compatibility: map new field names to old ones
@@ -102,36 +99,6 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
     }
     // Find existing assignment or create new one
     let assignment = await HierarchicalUserAssignment.findOne({ userId, isActive: true });
-    // Validate and normalize custom workflow roles if provided
-    const ALLOWED_WORKFLOW_ROLES = [
-      'divisionCreator', 'divisionApprover',
-      'departmentCreator', 'departmentConsolidator', 'departmentSubmission',
-      'regionCreator', 'regionFinalVerifier'
-    ];
-    // Map new-structure role keys to legacy/model enum accepted by DB
-    const INCOMING_ROLE_ALIASES = {
-      officeConsolidator: 'departmentConsolidator',
-      officeFinalVerifier: 'regionFinalVerifier',
-      officeSubmission: 'departmentSubmission',
-      responsibilityCenterCreator: 'divisionCreator'
-    };
-    let workflowRolesToAssign = undefined;
-    if (Array.isArray(requestedWorkflowRoles)) {
-      const normalized = requestedWorkflowRoles
-        .map(r => INCOMING_ROLE_ALIASES[r] || r)
-        .filter(Boolean);
-      const uniqueNormalized = [...new Set(normalized)];
-      const invalid = uniqueNormalized.filter(r => !ALLOWED_WORKFLOW_ROLES.includes(r));
-      if (invalid.length > 0) {
-        return res.status(400).json({
-          success: false,
-          message: `Invalid workflowRoles: ${invalid.join(', ')}`,
-          code: 'INVALID_WORKFLOW_ROLES',
-          allowed: ALLOWED_WORKFLOW_ROLES
-        });
-      }
-      workflowRolesToAssign = uniqueNormalized;
-    }
 
     const assignmentPayload = {
       userId,
@@ -150,16 +117,8 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
         ApproveProposals: effectiveAssignmentLevel === 'REGION' || effectiveAssignmentLevel === 'FULL',
         ViewReports: true,
         ManageUsers: effectiveAssignmentLevel === 'FULL',
-        ManageSettings: effectiveAssignmentLevel === 'FULL',
-        ...rolePermissions
+        ManageSettings: effectiveAssignmentLevel === 'FULL'
       },
-      restrictions: {
-        allowedBudgetTypes: restrictions.allowedBudgetTypes || ['Initial', 'NEP', 'GAA'],
-        allowedFiscalYears: restrictions.allowedFiscalYears || [],
-        readOnlyMode: restrictions.readOnlyMode || false
-      },
-      // Persist workflowRoles immediately if explicitly provided; else keep existing/defaults
-      ...(workflowRolesToAssign ? { workflowRoles: workflowRolesToAssign } : {}),
       isActive: true,
       lastModifiedBy: adminUserId
     };
@@ -173,19 +132,6 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       assignment = await HierarchicalUserAssignment.create(assignmentPayload);
     }
 
-    // Auto-assign or apply custom workflow roles
-    const { assignWorkflowRoles } = require('../helpers/workflowRoleManager');
-    try {
-      if (workflowRolesToAssign) {
-        await assignWorkflowRoles(userId, modelAssignmentLevel, workflowRolesToAssign);
-        console.log(`✅ Custom workflow roles assigned for ${userName}: ${workflowRolesToAssign.join(', ')}`);
-      } else {
-        await assignWorkflowRoles(userId, modelAssignmentLevel);
-        console.log(`✅ Workflow roles automatically assigned for ${modelAssignmentLevel} user: ${userName}`);
-      }
-    } catch (roleError) {
-      console.error(`⚠️ Failed to auto-assign workflow roles for ${userName}:`, roleError.message);
-    }
     // Populate the result for response
     const populatedAssignment = await HierarchicalUserAssignment
       .findById(assignment._id)
