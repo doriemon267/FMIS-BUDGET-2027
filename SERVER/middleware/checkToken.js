@@ -65,6 +65,15 @@ module.exports = async (req, res, next) => {
         userRoles = devRoles.split(',').map(r => r.trim()).filter(Boolean);
       }
       
+      // Normalize roles - replace spaces with underscores for consistency
+      if (userRoles && Array.isArray(userRoles)) {
+        userRoles = userRoles.map(role => 
+          typeof role === 'string' ? role.replace(/\s+/g, '_').toUpperCase() : role
+        );
+      } else if (typeof userRoles === 'string') {
+        userRoles = [userRoles.replace(/\s+/g, '_').toUpperCase()];
+      }
+      
       // Reject if no roles found - no fallback roles allowed
       if (!userRoles || userRoles.length === 0) {
         console.error('❌ No user roles found in JWT or headers');

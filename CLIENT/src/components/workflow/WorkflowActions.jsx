@@ -298,12 +298,21 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
         }
       });
 
-      console.log('Workflow API Response:', response.data);
+      console.log('🔍 WORKFLOW API RESPONSE DEBUG:');
+      console.log('Full Response:', response);
+      console.log('Response Data:', response.data);
+      console.log('Response Status:', response.status);
+      console.log('Response Success Field:', response.data.success);
+      console.log('Response Message:', response.data.message);
 
       // Check for success - be flexible with response format
-      const isSuccess = response.data.success !== false && 
-                       (response.data.modified > 0 || response.data.modifiedCount > 0 || 
-                        response.data.message?.includes('Successfully'));
+      const isSuccess = response.data.success === true || 
+                       response.data.modified > 0 || 
+                       response.data.modifiedCount > 0 || 
+                       (response.data.message && 
+                        response.data.message.toLowerCase().includes('successfully'));
+
+      console.log('🎯 SUCCESS CHECK RESULT:', isSuccess);
 
       if (isSuccess) {
         toast.success(successMessage);
@@ -314,7 +323,13 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
             });
           }
         } catch (_) {}
-        onRefresh(); // Refresh the proposals list
+        
+        // Add a small delay to ensure backend processing is complete before refresh
+        console.log('✅ Workflow action successful, refreshing data in 500ms...');
+        setTimeout(() => {
+          console.log('🔄 Calling onRefresh after workflow success');
+          onRefresh(); // Refresh the proposals list
+        }, 500);
       } else {
         throw new Error(response.data.message || "Workflow action failed");
       }
