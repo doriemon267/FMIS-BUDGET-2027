@@ -304,7 +304,7 @@ const getHierarchicalAssignment = async (req, res) => {
     const { userId } = req.params;
     const currentUserRoles = req.user.Roles;
     // Check if user can view this assignment
-    if (!hasFullAccess(currentUserRoles) && req.user.id !== userId) {
+    if (!hasFullAccess(currentUserRoles) && String(req.user.id) !== String(userId)) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. You can only view your own assignment.',
