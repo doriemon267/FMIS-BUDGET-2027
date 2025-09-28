@@ -136,6 +136,29 @@ exports.updateProposalStatus = async (req, res) => {
     fiscalYear = fiscalYear.toString();
     // Build hierarchical scope from middleware (limits by division/department/region)
     const accessScope = req.hierarchicalFilters || {};
+    
+    // Determine submitter's organizational level for consistent grouping
+    // Use hierarchical access info or extract from the first record with dept/div info
+    let submitterDepartment = req.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+    let submitterDivision = req.hierarchicalAccess?.accessibleDivisions?.[0]?.divisionName;
+    
+    // If not available from hierarchical access, try to get from request context
+    if (!submitterDepartment && !submitterDivision) {
+      submitterDepartment = req.body.department;
+      submitterDivision = req.body.division;
+    }
+    
+    // If still not available, try to determine from records that have dept/div set
+    if (!submitterDepartment && !submitterDivision) {
+      // Find the first record that has department/division set
+      const recordWithOrg = summary.find(item => item.department || item.division);
+      if (recordWithOrg) {
+        submitterDepartment = recordWithOrg.department;
+        submitterDivision = recordWithOrg.division;
+      }
+    }
+    
+    console.log('Submitter organizational context:', { submitterDepartment, submitterDivision });
     // Optimize: Run all database updates in parallel for better performance
     const updatePromises = [];
     if (personnelIds && Array.isArray(personnelIds) && personnelIds.length > 0) {
@@ -691,17 +714,15 @@ exports.updateProposalStatus = async (req, res) => {
     // Group by submitter's organizational unit (not individual record's dept/div) to create ONE consolidated proposal per submission
     const consolidatedProposals = {};
     summary.forEach(item => {
-      // Use submitter's organizational context from the request, not the individual record's dept/div
-      const submitterDept = req.hierarchicalFilters?.department || item.department;
-      const submitterDiv = req.hierarchicalFilters?.division || item.division;
-      const key = `${item.processBy}_${item.region}_${submitterDept || ''}_${submitterDiv || ''}_${item.fiscalYear}_${item.budgetType}`;
+      // Use submitter's organizational context determined above, not individual record values
+      const key = `${item.processBy}_${item.region}_${submitterDepartment || ''}_${submitterDivision || ''}_${item.fiscalYear}_${item.budgetType}`;
 
       if (!consolidatedProposals[key]) {
         consolidatedProposals[key] = {
           processBy: item.processBy,
           region: item.region,
-          department: submitterDept,
-          division: submitterDiv,
+          department: submitterDepartment,
+          division: submitterDivision,
           fiscalYear: item.fiscalYear,
           budgetType: item.budgetType,
           submittedDate: item.submittedDate,

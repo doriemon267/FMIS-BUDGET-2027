@@ -3,6 +3,7 @@ const ChartOfAccounts  = require('../models/chartOfAccounts');
 const EmployeeList     = require('../models/EmployeeList');
 const COSPersonnel     = require('../models/COSPersonnel');
 const Settings         = require('../models/Settings');
+const mongoose         = require('mongoose');
 // New combined endpoint to fetch all data at once
 exports.getMOOEData = async (req, res) => {
   try {
@@ -1061,7 +1062,7 @@ exports.bulkSaveMOOE = async (req, res) => {
         updateObj.status = meta?.status || item.status || "Draft";
         return {
         updateOne: {
-          filter: hasExistingId ? 
+          filter: hasExistingId && mongoose.Types.ObjectId.isValid(item.id) ? 
             { _id: new mongoose.Types.ObjectId(item.id) } : // Match by _id for existing records
             { 
               uacsCode: item.uacsCode,
@@ -1073,7 +1074,7 @@ exports.bulkSaveMOOE = async (req, res) => {
               ]
             },
           update: { $set: updateObj },
-          upsert: !hasExistingId // Only upsert for new records, not existing ones
+          upsert: !hasExistingId || !mongoose.Types.ObjectId.isValid(item.id) // Only upsert for new records or invalid IDs
         }
       };
     });
