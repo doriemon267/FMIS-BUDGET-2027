@@ -455,7 +455,7 @@ const CustomPage = ({
       // Set disable flag if totals match or if user is in read-only mode
       setDisableIncomeInputs(Math.abs(total - combinedTotal) < 0.01 || readOnly); // Using small epsilon for float comparison
     },
-    [mooeData, capitalOutlayData, activeRegion]
+    [mooeData, capitalOutlayData, activeRegion, readOnly]
   );
 
   const calculateBudgetSummary = useCallback(() => {
@@ -979,11 +979,11 @@ const CustomPage = ({
     // Use the active region from context instead of user's default region
     // This ensures we use the currently selected region, not just the user's default
     const userRegion = activeRegion
-      ? activeRegion.name || activeRegion.regionName
-      : currentUser.Region;
+      ? activeRegion.name || activeRegion.regionName || activeRegion
+      : currentUser?.Region || currentUser?.region;
 
     if (!userRegion) {
-      console.error("Region information is missing");
+      console.error("Region information is missing", { activeRegion, currentUserRegion: currentUser?.Region });
       setSnackbar({
         open: true,
         message:
@@ -1243,11 +1243,11 @@ const CustomPage = ({
     // Use the active region from context instead of user's default region
     // This ensures we use the currently selected region, not just the user's default
     const userRegion = activeRegion
-      ? activeRegion.name || activeRegion.regionName
-      : currentUser.Region;
+      ? activeRegion.name || activeRegion.regionName || activeRegion
+      : currentUser?.Region || currentUser?.region;
 
     if (!userRegion) {
-      console.error("Region information is missing");
+      console.error("Region information is missing", { activeRegion, currentUserRegion: currentUser?.Region });
       setSnackbar({
         open: true,
         message:

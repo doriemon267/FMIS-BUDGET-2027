@@ -28,6 +28,8 @@ const ProposalCustomPage = ({
   groupBy = null, // Make sure this prop is defined
   showTotals = false,
   totalsData = null,
+  selectedRows = [],
+  onRowSelectionChange,
 }) => {
   const pageTitle =
     title || dataListName.charAt(0).toUpperCase() + dataListName.slice(1);
@@ -75,6 +77,8 @@ const ProposalCustomPage = ({
           ROWS_PER_PAGE={ROWS_PER_PAGE}
           showTotals={showTotals}
           totalsData={totalsData}
+          selectedRows={selectedRows}
+          onRowSelectionChange={onRowSelectionChange}
         />
       </StyledBox>
     </>

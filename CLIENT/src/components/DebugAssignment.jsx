@@ -10,7 +10,10 @@ const DebugAssignment = () => {
 
   useEffect(() => {
     const fetchAssignment = async () => {
-      if (!currentUser) return;
+      if (!currentUser) {
+        setLoading(false);
+        return;
+      }
 
       try {
         const userId = currentUser?.Id || currentUser?.id || currentUser?.userId ||

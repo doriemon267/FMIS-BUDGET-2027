@@ -203,7 +203,7 @@ export const SubmitVerifiedToOfficeButton = ({ row, refreshData, disabled }) => 
     setLoading(true);
     try {
       const modelType = determineModelType(row);
-      await api.post('/api/status-workflow/submit-to-office', {
+      await api.post('/api/submission-workflow/office/submit-own', {
         modelType,
         recordIds: [row._id]
       });

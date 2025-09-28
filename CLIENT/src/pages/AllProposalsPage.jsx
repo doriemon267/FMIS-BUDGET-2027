@@ -30,6 +30,8 @@ const AllProposalsPage = () => {
   const tableRef = useRef(null);
   const { currentUser } = useUser();
   const [submittingAll, setSubmittingAll] = useState(false);
+  const [bulkApproving, setBulkApproving] = useState(false);
+  const [selectedProposals, setSelectedProposals] = useState([]);
   const [stats, setStats] = useState({
     totalProposals: 0,
     totalProjectedCorporateIncome: 0,
@@ -37,6 +39,11 @@ const AllProposalsPage = () => {
     totalProposedBudget: 0,
     loading: true
   });
+
+  // Handle table row selection changes
+  const handleRowSelectionChange = (selectedIds) => {
+    setSelectedProposals(selectedIds);
+  };
 
   const refreshData = () => {
     if (tableRef.current && typeof tableRef.current.refetch === "function") {
@@ -126,6 +133,45 @@ const AllProposalsPage = () => {
       toast.error(e.response?.data?.message || e.message || 'Failed to submit all drafts');
     } finally {
       setSubmittingAll(false);
+    }
+  };
+
+  // Bulk approve selected proposals (Budget Officer only)
+  const handleBulkApprove = async () => {
+    if (selectedProposals.length === 0) {
+      toast.error('Please select proposals to approve.');
+      return;
+    }
+
+    // Check if user is Budget Officer
+    const userRoles = currentUser?.Roles || [];
+    if (!userRoles.includes('BUDGET_OFFICER')) {
+      toast.error('Only Budget Officers can perform bulk approvals.');
+      return;
+    }
+
+    try {
+      setBulkApproving(true);
+
+      const comment = `Bulk approved ${selectedProposals.length} proposals on ${new Date().toLocaleString()}`;
+
+      const response = await api.post('/api/workflow/bulk-approve', {
+        proposalIds: selectedProposals,
+        comment
+      });
+
+      if (response.data.success) {
+        toast.success(response.data.message);
+        setSelectedProposals([]);
+        refreshData();
+      } else {
+        throw new Error(response.data.message || 'Bulk approval failed');
+      }
+    } catch (error) {
+      console.error('Bulk approval error:', error);
+      toast.error(error.response?.data?.message || error.message || 'Failed to bulk approve proposals');
+    } finally {
+      setBulkApproving(false);
     }
   };
 
@@ -305,24 +351,15 @@ const AllProposalsPage = () => {
       label: "STATUS",
       show: true,
       customRender: (row) => {
-        // Simplified role-based workflow status mapping
+        // Status mapping based on Budget Proposal Workflow document
         const map = {
           'Draft': { color: 'warning', text: 'DRAFT', bgColor: 'warning.light' },
-          'Officer Approved': { color: 'secondary', text: 'MANAGER REVIEW', bgColor: 'secondary.light' },
-          'Officer Returned': { color: 'error', text: 'OFFICER RETURNED', bgColor: 'error.light' },
-          'Submitted to Manager': { color: 'secondary', text: 'MANAGER REVIEW', bgColor: 'secondary.light' },
-          'Manager Approved': { color: 'success', text: 'FINAL REVIEW', bgColor: 'success.light' },
-          'Manager Returned': { color: 'error', text: 'MANAGER RETURNED', bgColor: 'error.light' },
-          'Finalized': { color: 'success', text: 'FINALIZED', bgColor: 'success.light' },
-          // Updated status mappings for new workflow
-          'Responsibility Center Submitted': { color: 'info', text: 'PENDING OFFICER APPROVAL', bgColor: 'info.light' },
-          'Division Submitted': { color: 'info', text: 'PENDING OFFICER APPROVAL', bgColor: 'info.light' },
-          'Submitted to Officer': { color: 'info', text: 'PENDING OFFICER APPROVAL', bgColor: 'info.light' },
-          'Submitted': { color: 'info', text: 'PENDING OFFICER APPROVAL', bgColor: 'info.light' },
-          'Office Submitted': { color: 'secondary', text: 'PENDING MANAGER APPROVAL', bgColor: 'secondary.light' },
-          'Office Approved': { color: 'success', text: 'FINAL REVIEW', bgColor: 'success.light' },
-          'Approved': { color: 'success', text: 'FINAL REVIEW', bgColor: 'success.light' },
+          'Division Submitted': { color: 'info', text: 'DIVISION SUBMITTED', bgColor: 'info.light' },
+          'Office': { color: 'info', text: 'DEPARTMENT PROPOSAL', bgColor: 'info.light' },
+          'Office Approved': { color: 'success', text: 'OFFICE APPROVED', bgColor: 'success.light' },
+          'Office Submitted': { color: 'secondary', text: 'OFFICE SUBMITTED', bgColor: 'secondary.light' },
           'Returned': { color: 'error', text: 'RETURNED', bgColor: 'error.light' },
+          'Finalized': { color: 'success', text: 'FINALIZED', bgColor: 'success.light' },
         };
         const { color = 'default', text = (row.status || 'Unknown'), bgColor = 'grey.100' } = map[row.status] || {};
         return (
@@ -454,6 +491,31 @@ const AllProposalsPage = () => {
         </Grid>
       </Box>
 
+      {/* Bulk Actions Section - Only for Budget Officers */}
+      {currentUser?.Roles?.includes('BUDGET_OFFICER') && (
+        <Box sx={{ mb: 3, mx: 3 }}>
+          <Card sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
+              ⚡ Bulk Actions
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              <Button
+                variant="contained"
+                color="success"
+                onClick={handleBulkApprove}
+                disabled={selectedProposals.length === 0 || bulkApproving}
+                startIcon={bulkApproving ? <CircularProgress size={20} /> : null}
+              >
+                {bulkApproving ? 'Approving...' : `Bulk Approve (${selectedProposals.length})`}
+              </Button>
+              <Typography variant="body2" color="textSecondary">
+                Select proposals from the table below to perform bulk approval actions.
+              </Typography>
+            </Box>
+          </Card>
+        </Box>
+      )}
+
       {/* User Role Information — hidden per UI alignment */}
       {false && (
         <Box sx={{ mb: 3, mx: 3 }}>
@@ -542,6 +604,8 @@ const AllProposalsPage = () => {
             groupBy={null} // No grouping - show individual entries
             showTotals={true}
             totalsData={stats}
+            selectedRows={selectedProposals}
+            onRowSelectionChange={handleRowSelectionChange}
           />
         );
       })()}

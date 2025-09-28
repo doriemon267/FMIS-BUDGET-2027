@@ -111,7 +111,7 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
         // AND submitted data from their level (but not other responsibility centers)
         hierarchicalFilters = {
           $and: [
-            { responsibilityCenter: { $in: assignment.responsibilityCenters || [] } }
+            { department: { $in: assignment.responsibilityCenters || [] } }
           ]
         };
         if (enforceSubmissionWorkflow) {
@@ -133,17 +133,17 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
         if (enforceSubmissionWorkflow) {
           submissionFilters = {
             $and: [
-              { office: { $in: assignment.offices || [] } },
+              { region: { $in: assignment.offices || [] } },
               {
                 $or: [
                   // Own office-level data (no responsibility center specified, any status)
                   {
                     $and: [
-                      { office: { $in: assignment.offices || [] } },
+                      { region: { $in: assignment.offices || [] } },
                       {
                         $or: [
                           { workflowLevel: 'OFFICE' },
-                          { $or: [{ responsibilityCenter: { $exists: false } }, { responsibilityCenter: null }, { responsibilityCenter: "" }] }
+                          { $or: [{ department: { $exists: false } }, { department: null }, { department: "" }] }
                         ]
                       }
                     ]
@@ -151,8 +151,8 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                   // Responsibility Center data that has been submitted to office (Responsibility Center Submitted, Office Verified, or higher)
                   {
                     $and: [
-                      { responsibilityCenter: { $exists: true, $ne: null, $ne: "" } },
-                      { office: { $in: assignment.offices || [] } },
+                      { department: { $exists: true, $ne: null, $ne: "" } },
+                      { region: { $in: assignment.offices || [] } },
                       { workflowLevel: 'RESPONSIBILITY_CENTER' },
                       {
                         $or: [
@@ -173,7 +173,7 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
         } else {
           // Fallback to standard hierarchical filtering
           hierarchicalFilters = {
-            office: { $in: assignment.offices || [] }
+            region: { $in: assignment.offices || [] }
           };
           submissionFilters = hierarchicalFilters;
         }
@@ -190,7 +190,7 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                   {
                     $or: [
                       { workflowLevel: 'OFFICE' },
-                      { $or: [ { responsibilityCenter: { $exists: false } }, { responsibilityCenter: null }, { responsibilityCenter: "" } ] }
+                      { $or: [ { department: { $exists: false } }, { department: null }, { department: "" } ] }
                     ]
                   }
                 ]
@@ -198,6 +198,7 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
               // Responsibility Center data that has been submitted upward
               {
                 $and: [
+                  { department: { $exists: true, $ne: null, $ne: "" } },
                   { workflowLevel: 'RESPONSIBILITY_CENTER' },
                   {
                     $or: [
@@ -256,7 +257,10 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                 $or: [
                   { originalLevel: 'DIVISION' },
                   { workflowLevel: 'DIVISION' },
-                  { division: { $exists: true, $ne: null, $ne: '' } }
+                  { draftStage: 'DIVISION' },
+                  { division: { $exists: true, $ne: null, $ne: '' } },
+                  { createdByUserId: req.user.id },
+                  { status: { $in: ['Draft', 'Responsibility Center Draft', 'Division Draft'] } }
                 ]
               }
             ]

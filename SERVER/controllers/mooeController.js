@@ -82,8 +82,13 @@ exports.getMOOEData = async (req, res) => {
               division: userDiv,
               fiscalYear: activeFiscalYear,
               region: userRegion || region,
-              // IMPORTANT: Division reads must only include division-origin records
-              originalLevel: 'DIVISION'
+              $or: [
+                { originalLevel: 'DIVISION' },
+                { workflowLevel: 'DIVISION' },
+                { originalLevel: { $exists: false } },
+                { originalLevel: null },
+                { originalLevel: '' }
+              ]
             };
           }
         }
@@ -884,32 +889,81 @@ exports.bulkSaveMOOE = async (req, res) => {
       ownerDivision = null;
     }
     // Determine level tagging
-    const recordOriginalLevel = workflowData.originalLevel
-      || req.body.originalLevel
-      || (workflowData.userLevel === 'DIVISION' ? 'DIVISION'
-          : workflowData.userLevel === 'DEPARTMENT' ? 'DEPARTMENT'
-          : workflowData.userLevel === 'REGION' ? 'REGION' : undefined);
-    const recordWorkflowLevel = workflowData.workflowLevel || req.body.workflowLevel || recordOriginalLevel;
-    // // let processedEntries = [];
+    const derivedOriginalLevel = workflowData.userLevel === 'DIVISION'
+      ? 'DIVISION'
+      : workflowData.userLevel === 'DEPARTMENT'
+        ? 'DEPARTMENT'
+        : workflowData.userLevel === 'REGION'
+          ? 'REGION'
+          : undefined;
+
+    const resolveLevel = (preferredValue, fallbackValue) => {
+      if (preferredValue !== undefined && preferredValue !== null) {
+        return preferredValue;
+      }
+      if (fallbackValue !== undefined && fallbackValue !== null) {
+        return fallbackValue;
+      }
+      return undefined;
+    };
+
+    const recordOriginalLevel = resolveLevel(workflowData.originalLevel ?? meta?.originalLevel ?? req.body.originalLevel, derivedOriginalLevel);
+    const recordWorkflowLevel = resolveLevel(workflowData.workflowLevel ?? meta?.workflowLevel ?? req.body.workflowLevel, recordOriginalLevel);
+    let processedEntries = [];
     if (entries && Array.isArray(entries)) {
-      // Only include entries with a valid UACS code that have actual values > 0
       const MINIMUM_VALUE = 1; // Require > 0 to save
-      processedEntries = entries.filter(item => {
-        const hasUacsCode = item.uacsCode;
-        const incomeValue = Number(item.income) || 0;
-        const subsidyValue = Number(item.subsidy) || 0;
-        const nisValue = Number(item.nis) || 0;
-        const cisValue = Number(item.cis) || 0;
-        
-        // Check if ANY amount field has meaningful value
-        const hasActualValues = incomeValue >= MINIMUM_VALUE || subsidyValue >= MINIMUM_VALUE || nisValue >= MINIMUM_VALUE || cisValue >= MINIMUM_VALUE;
-        const hasExistingId = item.id && item.id !== "undefined" && item.id !== "";
-        const isSystemEntry = item.isSystemEntry;
-        
-        // Only save if it has actual values > 0 OR it's an existing record with ID OR it's a system entry
-        return hasUacsCode && (hasActualValues || hasExistingId || isSystemEntry);
-      });
-      } else if (Array.isArray(req.body)) {
+      processedEntries = entries
+        .map(item => {
+          const hasUacsCode = item.uacsCode;
+          if (!hasUacsCode) {
+            return null;
+          }
+
+          const incomeValue = Number(item.income) || 0;
+          const subsidyValue = Number(item.subsidy) || 0;
+          const nisValue = Number(item.nis) || 0;
+          const cisValue = Number(item.cis) || 0;
+          const hasActualValues = incomeValue >= MINIMUM_VALUE || subsidyValue >= MINIMUM_VALUE || nisValue >= MINIMUM_VALUE || cisValue >= MINIMUM_VALUE;
+          const hasExistingId = item.id && item.id !== "undefined" && item.id !== "";
+          const isSystemEntry = item.isSystemEntry;
+
+          // Derive draft stage tags from workflow level but keep base status as 'Draft' for compatibility
+          const inferredDraftStage = (() => {
+            if (recordOriginalLevel === 'RESPONSIBILITY_CENTER' || recordWorkflowLevel === 'RESPONSIBILITY_CENTER') {
+              return 'RESPONSIBILITY_CENTER';
+            }
+            if (recordOriginalLevel === 'DIVISION' || recordWorkflowLevel === 'DIVISION') {
+              return 'DIVISION';
+            }
+            if (recordOriginalLevel === 'DEPARTMENT' || recordWorkflowLevel === 'DEPARTMENT') {
+              return 'DEPARTMENT';
+            }
+            if (recordOriginalLevel === 'REGION' || recordWorkflowLevel === 'REGION') {
+              return 'REGION';
+            }
+            return null;
+          })();
+
+          const nextStatus = meta?.status || item.status || 'Draft';
+          const nextDraftStage = meta?.draftStage || item.draftStage || inferredDraftStage;
+
+          return {
+            ...item,
+            status: nextStatus,
+            draftStage: nextDraftStage,
+            originalLevel: item.originalLevel || recordOriginalLevel,
+            workflowLevel: item.workflowLevel || recordWorkflowLevel,
+            taggedByWorkflow: Boolean(recordOriginalLevel || recordWorkflowLevel),
+            __saveEligible: hasActualValues || hasExistingId || isSystemEntry
+          };
+        })
+        .filter(item => item && item.__saveEligible)
+        .map(item => {
+          const cleaned = { ...item };
+          delete cleaned.__saveEligible;
+          return cleaned;
+        });
+    } else if (Array.isArray(req.body)) {
       // Old format support
       processedEntries = req.body.flatMap(parentItem =>
         parentItem.children.filter(item => {
@@ -973,25 +1027,53 @@ exports.bulkSaveMOOE = async (req, res) => {
         updateObj.fiscalYear = meta?.fiscalYear || item.fiscalYear;
         updateObj.budgetType = meta?.budgetType || item.budgetType;
         updateObj.region = ownerRegion || meta?.region || item.region;
-        updateObj.department = ownerDepartment || meta?.department || item.department;
-        updateObj.division = ownerDivision || meta?.division || item.division;
+
+        const hasExistingId = Boolean(item.id && item.id !== 'undefined' && item.id !== '');
+        // Preserve stored department/division unless explicitly supplied or changed when updating
+        if (!hasExistingId) {
+          updateObj.department = ownerDepartment || meta?.department || item.department;
+          updateObj.division = ownerDivision || meta?.division || item.division;
+        } else {
+          if (meta?.department || item.department) {
+            updateObj.department = ownerDepartment || meta?.department || item.department;
+          }
+          if (meta?.division || item.division) {
+            updateObj.division = ownerDivision || meta?.division || item.division;
+          }
+        }
+
         // Tag records with origin/workflow levels for consistent visibility rules
-        if (recordOriginalLevel) updateObj.originalLevel = recordOriginalLevel;
-        if (recordWorkflowLevel) updateObj.workflowLevel = recordWorkflowLevel;
+        if (!hasExistingId) {
+          if (recordOriginalLevel) {
+            updateObj.originalLevel = recordOriginalLevel;
+          }
+          if (recordWorkflowLevel) {
+            updateObj.workflowLevel = recordWorkflowLevel;
+          }
+        } else {
+          if (item.originalLevel) {
+            updateObj.originalLevel = item.originalLevel;
+          }
+          if (item.workflowLevel) {
+            updateObj.workflowLevel = item.workflowLevel;
+          }
+        }
         updateObj.status = meta?.status || item.status || "Draft";
         return {
         updateOne: {
-          filter: { 
-            uacsCode: item.uacsCode,
-            fiscalYear: updateObj.fiscalYear,
-            region: updateObj.region,  // Add region to filter for proper isolation
-            $or: [
-              { status: { $exists: false } },  // New records
-              { status: "Draft" }  // Only update draft records
-            ]
-          },
+          filter: hasExistingId ? 
+            { _id: new mongoose.Types.ObjectId(item.id) } : // Match by _id for existing records
+            { 
+              uacsCode: item.uacsCode,
+              fiscalYear: updateObj.fiscalYear,
+              region: updateObj.region,  // Add region to filter for proper isolation
+              $or: [
+                { status: { $exists: false } },  // New records
+                { status: "Draft" }  // Only update draft records
+              ]
+            },
           update: { $set: updateObj },
-          upsert: true
+          upsert: !hasExistingId // Only upsert for new records, not existing ones
         }
       };
     });

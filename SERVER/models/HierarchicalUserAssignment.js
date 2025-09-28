@@ -49,6 +49,7 @@ const HierarchicalUserAssignmentSchema = new mongoose.Schema({
     EditAllProposals: { type: Boolean, default: false },
     DeleteProposals: { type: Boolean, default: false },
     ApproveProposals: { type: Boolean, default: false },
+    canApproveProposals: { type: Boolean, default: false },
     ViewReports: { type: Boolean, default: false },
     ManageUsers: { type: Boolean, default: false },
     ManageSettings: { type: Boolean, default: false }
@@ -58,6 +59,7 @@ const HierarchicalUserAssignmentSchema = new mongoose.Schema({
     enum: [
       'divisionCreator', 'divisionApprover',
       'departmentCreator', 'departmentConsolidator', 'departmentSubmission',
+      'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier',
       'regionCreator', 'regionFinalVerifier'
     ],
     default: []

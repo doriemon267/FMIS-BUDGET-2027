@@ -29,6 +29,7 @@ const {
   applyHierarchicalFilters
 } = require('../middleware/hierarchicalAssignmentMiddleware');
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
+const { budgetRoleAccessControl } = require('../controllers/proposalWorkflowController');
 const { checkProposalOwnership } = require('../middleware/proposalAccessControl');
 const { enforceAccessRestrictions } = require('../middleware/accessRestrictions');
 const Proposal = require("../models/Proposal");
@@ -41,11 +42,13 @@ proposalRouter.use(loadHierarchicalAssignment);
 // Get all proposals summary (with submission workflow control)
 proposalRouter.get("/summary", 
   submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), 
+  budgetRoleAccessControl('read'),
   getAllProposals
 );
 // Get all proposals with submission workflow filtering
 proposalRouter.get("/proposals", 
   submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), 
+  budgetRoleAccessControl('read'),
   getProposals
 );
 //Get all my proposals with submission workflow filtering

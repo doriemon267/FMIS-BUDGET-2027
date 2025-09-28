@@ -207,7 +207,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
     // Find existing assignment or create new one
     let assignment = await HierarchicalUserAssignment.findOne({ userId, isActive: true });
 
-    const approvalLevels = ['REGION', 'FULL', 'OFFICE'];
+    const approvalLevels = ['REGION', 'FULL', 'OFFICE', 'RESPONSIBILITY_CENTER'];
     const hasExplicitWorkflowRoles = Array.isArray(req.body.workflowRoles);
     const sanitizedWorkflowRoles = hasExplicitWorkflowRoles
       ? (req.body.workflowRoles || []).filter(role => typeof role === 'string' && role.trim())

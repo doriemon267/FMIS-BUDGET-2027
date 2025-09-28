@@ -108,6 +108,12 @@ export const RegionProvider = ({ children }) => {
                 setActiveRegion(defaultRegion);
                 localStorage.setItem('activeRegion', JSON.stringify(defaultRegion));
                 toast.info(`Default region set to ${REGIONS.DEFAULT_REGION}`);
+              } else if (response.data && response.data.length > 0) {
+                // Fallback: select the first region if no default found
+                const firstRegion = response.data[0];
+                setActiveRegion(firstRegion);
+                localStorage.setItem('activeRegion', JSON.stringify(firstRegion));
+                toast.info(`Default region set to ${firstRegion.name || firstRegion.regionName || 'first available region'}`);
               }
             }
           }

@@ -101,7 +101,7 @@ const UserProvider = ({ children }) => {
           // If user has FULL access but no workflow roles, auto-assign them
           if (accessInfo?.scope === 'FULL' && (!userWorkflowRoles || userWorkflowRoles.length === 0)) {
             console.log('🔧 Auto-assigning workflow roles for FULL access user');
-            userWorkflowRoles = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'regionCreator', 'regionFinalVerifier'];
+            userWorkflowRoles = ['responsibilityCenterCreator', 'responsibilityCenterApprover', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'responsibilityCenterFinalVerifier', 'officeFinalVerifier'];
           }
         }
       } catch (assignmentError) {
@@ -110,7 +110,7 @@ const UserProvider = ({ children }) => {
         // If we can't load assignment but user has FULL access, auto-assign workflow roles
         if (accessInfo?.scope === 'FULL') {
           console.log('🔧 Auto-assigning workflow roles for FULL access user (fallback)');
-          userWorkflowRoles = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'regionCreator', 'regionFinalVerifier'];
+          userWorkflowRoles = ['responsibilityCenterCreator', 'responsibilityCenterApprover', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'responsibilityCenterFinalVerifier', 'officeFinalVerifier'];
         }
       }
 
@@ -317,7 +317,7 @@ const UserProvider = ({ children }) => {
                 ...user,
                 hierarchicalAccess: {
                   ...accessInfo,
-                  workflowRoles: accessInfo.workflowRoles || userWorkflowRoles
+                  workflowRoles: accessInfo.workflowRoles || (accessInfo.scope === 'FULL' ? ['responsibilityCenterCreator', 'responsibilityCenterApprover', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'responsibilityCenterFinalVerifier', 'officeFinalVerifier'] : userWorkflowRoles)
                 },
                 regions: normalizedRegions,
               };

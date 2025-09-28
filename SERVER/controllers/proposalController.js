@@ -1,7 +1,7 @@
   const mongoose = require('mongoose');
 const Proposal = require('../models/Proposal');
 const DraftProposal = require('../models/DraftProposal');
-const PersonnelService = require('../models/personnelServices');
+const PersonnelService = require('../models/PersonnelServices');
 const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const BudgetarySupport = require('../models/BudgetarySupport');
@@ -37,7 +37,7 @@ exports.approveAtDivision = async (req, res) => {
   try {
     const { ids = [], entity = 'personnel' } = req.body; // entity: 'personnel' | 'mooe' | 'capital' | 'income'
     const userId = req.user?.id || 'system';
-    const Model = entity === 'personnel' ? require('../models/personnelServices')
+    const Model = entity === 'personnel' ? require('../models/PersonnelServices')
       : entity === 'mooe' ? require('../models/mooeProposals')
       : entity === 'capital' ? require('../models/CapitalOutlay')
       : require('../models/Income');
@@ -55,7 +55,7 @@ exports.consolidateAtDepartment = async (req, res) => {
   try {
     const { ids = [], entity = 'personnel' } = req.body;
     const userId = req.user?.id || 'system';
-    const Model = entity === 'personnel' ? require('../models/personnelServices')
+    const Model = entity === 'personnel' ? require('../models/PersonnelServices')
       : entity === 'mooe' ? require('../models/mooeProposals')
       : entity === 'capital' ? require('../models/CapitalOutlay')
       : require('../models/Income');
@@ -73,7 +73,7 @@ exports.submitToRegion = async (req, res) => {
   try {
     const { ids = [], entity = 'personnel' } = req.body;
     const userId = req.user?.id || 'system';
-    const Model = entity === 'personnel' ? require('../models/personnelServices')
+    const Model = entity === 'personnel' ? require('../models/PersonnelServices')
       : entity === 'mooe' ? require('../models/mooeProposals')
       : entity === 'capital' ? require('../models/CapitalOutlay')
       : require('../models/Income');
@@ -91,7 +91,7 @@ exports.finalVerifyAtRegion = async (req, res) => {
   try {
     const { ids = [], entity = 'personnel' } = req.body;
     const userId = req.user?.id || 'system';
-    const Model = entity === 'personnel' ? require('../models/personnelServices')
+    const Model = entity === 'personnel' ? require('../models/PersonnelServices')
       : entity === 'mooe' ? require('../models/mooeProposals')
       : entity === 'capital' ? require('../models/CapitalOutlay')
       : require('../models/Income');
@@ -107,6 +107,15 @@ exports.finalVerifyAtRegion = async (req, res) => {
 };
 exports.updateProposalStatus = async (req, res) => {
   try {
+    console.log('🔄 updateProposalStatus called with payload:', {
+      personnelIds: req.body.personnelIds?.length,
+      mooeIds: req.body.mooeIds?.length,
+      capitalOutlayIds: req.body.capitalOutlayIds?.length,
+      incomeIds: req.body.incomeIds?.length,
+      fiscalYear: req.body.fiscalYear,
+      budgetType: req.body.budgetType,
+      region: req.body.region
+    });
     const { 
       personnelIds, 
       mooeIds, 
@@ -380,6 +389,7 @@ exports.updateProposalStatus = async (req, res) => {
                 processBy: "$processBy",
                 region: "$region",
                 department: "$department",
+                division: "$division",
                 statusOfAppointment: "$statusOfAppointment"
               },
               totalCost: { $sum: "$computedTotal" }
@@ -411,7 +421,7 @@ exports.updateProposalStatus = async (req, res) => {
       processBy: p._id.processBy,
       region: p._id.region,
       department: p._id.department, // may be undefined for region-level aggregation
-      division: p._id.division,     // not present in current agg; reserved for future use
+      division: p._id.division,     // now included in aggregation
       fiscalYear,
       budgetType,
       submittedDate: new Date(),
@@ -426,7 +436,7 @@ exports.updateProposalStatus = async (req, res) => {
       { $match: { status, fiscalYear, budgetType, processBy, region } },
       {
         $group: {
-          _id: { processBy: "$processBy", region: "$region" },
+          _id: { processBy: "$processBy", region: "$region", department: "$department", division: "$division" },
           totalCost: { $sum: { $toDouble: { $ifNull: ["$amount", 0] } } },
           totalIncome: { $sum: { $toDouble: { $ifNull: ["$income", 0] } } },
         },
@@ -513,7 +523,7 @@ exports.updateProposalStatus = async (req, res) => {
       processBy: p._id.processBy,
       region: p._id.region,
       department: p._id.department, // present when department-level aggregation is used
-      division: p._id.division,     // not present in current agg; reserved for future use
+      division: p._id.division,     // now included in aggregation
       fiscalYear,
       budgetType,
       submittedDate: new Date(),
@@ -528,7 +538,7 @@ exports.updateProposalStatus = async (req, res) => {
       { $match: { status, fiscalYear, budgetType, processBy, region } },
       {
         $group: {
-          _id: { processBy: "$processBy", region: "$region" },
+          _id: { processBy: "$processBy", region: "$region", department: "$department", division: "$division" },
           totalCost: { $sum: { $toDouble: { $ifNull: ["$cost", 0] } } },
           totalIncome: { $sum: { $toDouble: { $ifNull: ["$income", 0] } } },
         },
@@ -615,7 +625,7 @@ exports.updateProposalStatus = async (req, res) => {
       processBy: p._id.processBy,
       region: p._id.region,
       department: p._id.department, // present when department-level aggregation is used
-      division: p._id.division,     // not present in current agg; reserved for future use
+      division: p._id.division,     // now included in aggregation
       fiscalYear,
       budgetType,
       submittedDate: new Date(),
@@ -640,7 +650,9 @@ exports.updateProposalStatus = async (req, res) => {
         $group: {
           _id: { 
             processBy: "$processBy", 
-            region: "$region" 
+            region: "$region",
+            department: "$department",
+            division: "$division"
           },
           totalAmount: { 
             $sum: { 
@@ -658,6 +670,8 @@ exports.updateProposalStatus = async (req, res) => {
       return {
         processBy: p._id.processBy,
         region: p._id.region,
+        department: p._id.department,
+        division: p._id.division,
         fiscalYear,
         budgetType,
         submittedDate: new Date(),
@@ -673,9 +687,70 @@ exports.updateProposalStatus = async (req, res) => {
       ...capitalOutlaysTransformed,
       ...incomeTransformed,
     ];
+
+    // Group by submitter's organizational unit (not individual record's dept/div) to create ONE consolidated proposal per submission
+    const consolidatedProposals = {};
+    summary.forEach(item => {
+      // Use submitter's organizational context from the request, not the individual record's dept/div
+      const submitterDept = req.hierarchicalFilters?.department || item.department;
+      const submitterDiv = req.hierarchicalFilters?.division || item.division;
+      const key = `${item.processBy}_${item.region}_${submitterDept || ''}_${submitterDiv || ''}_${item.fiscalYear}_${item.budgetType}`;
+
+      if (!consolidatedProposals[key]) {
+        consolidatedProposals[key] = {
+          processBy: item.processBy,
+          region: item.region,
+          department: submitterDept,
+          division: submitterDiv,
+          fiscalYear: item.fiscalYear,
+          budgetType: item.budgetType,
+          submittedDate: item.submittedDate,
+          status: item.status,
+          createdByUserId: req.user?.id || userId,
+          // Initialize financial totals
+          totalExpenses: 0,
+          totalIncome: 0,
+          projectedCorporateIncome: 0,
+          projectedSubsidy: 0,
+          proposedBudget: 0,
+          // Store category breakdowns
+          categoryBreakdown: {}
+        };
+      }
+
+      // Add to totals based on category
+      if (item.cobExpenditures === 'Income') {
+        consolidatedProposals[key].projectedCorporateIncome += item.totalIncome;
+        consolidatedProposals[key].totalIncome += item.totalIncome;
+      } else if (item.cobExpenditures === 'MOOE' || item.cobExpenditures === 'Capital Outlay') {
+        consolidatedProposals[key].projectedSubsidy += item.totalExpenses;
+        consolidatedProposals[key].totalExpenses += item.totalExpenses;
+      } else {
+        // Personnel Services
+        consolidatedProposals[key].totalExpenses += item.totalExpenses;
+      }
+
+      // Calculate proposed budget as total expenses + income
+      consolidatedProposals[key].proposedBudget = consolidatedProposals[key].totalExpenses + consolidatedProposals[key].totalIncome;
+
+      // Store category breakdown for reference
+      consolidatedProposals[key].categoryBreakdown[item.cobExpenditures] = {
+        totalExpenses: item.totalExpenses,
+        totalIncome: item.totalIncome
+      };
+    });
+
+    // Convert to array and create bulk operations for consolidated proposals
+    const consolidatedArray = Object.values(consolidatedProposals);
+
+    console.log('🔄 Creating consolidated proposals:', consolidatedArray.length);
+    if (consolidatedArray.length > 0) {
+      console.log('Sample consolidated proposal:', consolidatedArray[0]);
+    }
+
     // Optimize: Use bulkWrite for better performance instead of sequential updates
-    if (summary.length > 0) {
-      const bulkOps = summary.map(item => ({
+    if (consolidatedArray.length > 0) {
+      const bulkOps = consolidatedArray.map(item => ({
         updateOne: {
           filter: {
             processBy: item.processBy,
@@ -684,27 +759,36 @@ exports.updateProposalStatus = async (req, res) => {
             division: item.division ?? null,
             fiscalYear: item.fiscalYear,
             budgetType: item.budgetType,
-            cobExpenditures: item.cobExpenditures,
           },
           update: {
             $set: {
+              title: `${item.division || item.department || 'Proposal'} - ${item.fiscalYear} ${item.budgetType}`,
+              description: `Budget proposal for ${item.fiscalYear} ${item.budgetType}`,
               submittedDate: item.submittedDate,
-              status: item.status,
               totalExpenses: item.totalExpenses,
               totalIncome: item.totalIncome,
+              projectedCorporateIncome: item.projectedCorporateIncome,
+              projectedSubsidy: item.projectedSubsidy,
+              proposedBudget: item.proposedBudget,
+              categoryBreakdown: item.categoryBreakdown,
+              createdByUserId: item.createdByUserId,
               // Persist org context on record
               region: item.region,
               department: item.department ?? null,
               division: item.division ?? null,
               fiscalYear: item.fiscalYear,
               budgetType: item.budgetType,
-              cobExpenditures: item.cobExpenditures,
+            },
+            $setOnInsert: {
+              status: item.status,
+              workflowLevel: 'DIVISION',
             },
           },
           upsert: true
         }
       }));
       const bulkResult = await Proposal.bulkWrite(bulkOps);
+      console.log('✅ Bulk write result:', bulkResult);
       }
     return res.status(200).json({
       message: "Proposals status updated and summary saved successfully",
@@ -1081,11 +1165,19 @@ exports.getProposals = async (req, res) => {
     // Apply submission workflow filters first (these respect submission status)
     if (req.submissionWorkflowFilters) {
       Object.assign(query, req.submissionWorkflowFilters);
+    }
+    // Apply budget role visibility filters
+    if (req.query.visibilityFilter) {
+      if (Object.keys(query).length > 0) {
+        query = { $and: [query, req.query.visibilityFilter] };
+      } else {
+        query = req.query.visibilityFilter;
       }
+    }
     // Fallback to hierarchical filters if submission workflow not available
     else if (req.hierarchicalFilters) {
       Object.assign(query, req.hierarchicalFilters);
-      }
+    }
     // Add search condition if provided
     if (search) {
       const searchConditions = [
@@ -1614,6 +1706,20 @@ exports.getProposals = async (req, res) => {
       const aggregatedByOrg = new Map();
       const scopeUpper = (req.hierarchicalAccessInfo?.scope || 'REGION').toUpperCase();
 
+      // First, get all consolidated proposals to map organizational units to proposal IDs
+      const consolidatedProposals = await Proposal.find({
+        status: { $in: ['Division Submitted', 'Office', 'Office Approved', 'Office Submitted'] },
+        fiscalYear: { $in: finalProposals.map(p => p.fiscalYear).filter(Boolean) },
+        budgetType: { $in: finalProposals.map(p => p.budgetType).filter(Boolean) }
+      });
+
+      // Create a map of org unit -> consolidated proposal
+      const consolidatedMap = new Map();
+      consolidatedProposals.forEach(cp => {
+        const key = `${cp.division || cp.department || cp.region}_${cp.fiscalYear}_${cp.budgetType}`;
+        consolidatedMap.set(key, cp);
+      });
+
       finalProposals.forEach((proposal) => {
         const norm = (v) => String(v ?? '').trim().toUpperCase();
         const accessibleDivisionName = req.hierarchicalAccessInfo?.accessibleDivisions?.[0] || null;
@@ -1681,8 +1787,14 @@ exports.getProposals = async (req, res) => {
           const deptVal =
             req.hierarchicalAccessInfo?.accessibleDepartments?.[0] || proposal.department;
 
+          // Find the consolidated proposal for this organizational unit
+          const consolidatedKey = `${proposal.division || proposal.department || proposal.region}_${proposal.fiscalYear}_${proposal.budgetType}`;
+          const consolidatedProposal = consolidatedMap.get(consolidatedKey);
+
           aggregatedByOrg.set(groupKey, {
             ...proposal,
+            // Use consolidated proposal ID if available, otherwise keep the individual record ID
+            _id: consolidatedProposal?._id || proposal._id,
             // normalized totals + computed proposed budget
             totalIncome: income,
             totalExpenses: expenses,

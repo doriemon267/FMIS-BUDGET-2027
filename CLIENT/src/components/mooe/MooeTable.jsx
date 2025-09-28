@@ -1007,7 +1007,7 @@ const Mooe = ({ onDataChange }) => {
 
     // Save all MOOE data including IAs O&M Cost entries
     saveMutation.mutate(payload, {
-      onSuccess: (response) => {
+      onSuccess: () => {
         setHasUnsavedChanges(false);
         setLastSaved(new Date());
 
@@ -1020,11 +1020,9 @@ const Mooe = ({ onDataChange }) => {
         // Clear any remaining drafts after successful save
         setDraftInputs({});
 
-        // Refresh the data after saving
-        setTimeout(() => {
-          queryClient.invalidateQueries(["mooeData", activeRegion?.name || activeRegion.regionName]);
-          queryClient.invalidateQueries(["consolidatedSummary"]);
-        }, 500);
+        // Refresh the data after saving so the latest entries appear immediately
+        queryClient.invalidateQueries(["mooeData", activeRegion?.name || activeRegion?.regionName]);
+        queryClient.invalidateQueries(["consolidatedData", activeRegion?.name || activeRegion?.regionName]);
       },
       onError: (error) => {
         console.error("Save error:", error);

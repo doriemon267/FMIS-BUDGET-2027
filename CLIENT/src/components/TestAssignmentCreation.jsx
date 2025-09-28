@@ -28,14 +28,14 @@ const TestAssignmentCreation = () => {
         assignmentLevel: 'FULL',
         accessScope: 'FULL',
         rolePermissions: {
-          CreateProposals: true,
-          EditOwnProposals: true,
-          EditAllProposals: true,
-          DeleteProposals: true,
-          ApproveProposals: true,
-          ViewReports: true,
-          ManageUsers: true,
-          ManageSettings: true
+          canCreateProposals: true,
+          canEditOwnProposals: true,
+          canEditAllProposals: true,
+          canDeleteProposals: true,
+          canApproveProposals: true,
+          canViewReports: true,
+          canManageUsers: true,
+          canManageSettings: true
         },
         workflowRoles: [
           'divisionCreator',

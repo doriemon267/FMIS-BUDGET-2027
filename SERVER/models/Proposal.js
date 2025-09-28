@@ -38,22 +38,99 @@ const proposalSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: [
-      "Draft",                    // Division working copy
-      "Division Submitted",       // Division → Department
-      "Department Verified",      // Department technical validation
-      "Department Submitted",     // Department → Region  
-      "Region Approved",         // Region administrative approval
-      "Finalized",               // Ready for execution
-      "Returned"                 // Rejected at any level
+      "Draft",                    // Initial state
+      "Division Submitted",       // Division → Budget Officer
+      "Office",                   // Department-level proposal
+      "Office Approved",          // Budget Officer approved
+      "Office Submitted",         // Budget Officer → Budget Manager
+      "Returned",                 // Rejected at any level
+      "Finalized"                 // Completed after manager approval
     ],
     default: "Draft"
   },
-  // Enhanced workflow tracking
+  // Enhanced workflow tracking for budget roles
   workflowLevel: {
     type: String,
-    enum: ["DIVISION", "DEPARTMENT", "REGION", "FINALIZED"],
+    enum: ["DIVISION", "DEPARTMENT", "OFFICER", "MANAGER", "FINALIZED"],
     default: "DIVISION"
   },
+  // Workflow history with comments and user tracking
+  workflowHistory: [{
+    action: {
+      type: String,
+      enum: ["SUBMIT", "APPROVE", "RETURN", "CONSOLIDATE", "EDIT"],
+      required: true
+    },
+    comment: {
+      type: String,
+      required: function() {
+        return ["APPROVE", "RETURN"].includes(this.action);
+      }
+    },
+    userId: {
+      type: String,
+      required: true
+    },
+    userName: {
+      type: String,
+      required: true
+    },
+    timestamp: {
+      type: Date,
+      default: Date.now
+    },
+    previousStatus: String,
+    newStatus: String
+  }],
+  // Budget role specific tracking
+  submittedByRole: String, // BUDGET_ANALYST, BUDGET_COORDINATOR
+  approvedByOfficer: {
+    userId: String,
+    userName: String,
+    date: Date,
+    comment: String
+  },
+  returnedByOfficer: {
+    userId: String,
+    userName: String,
+    date: Date,
+    comment: String
+  },
+  consolidatedByOfficer: {
+    userId: String,
+    userName: String,
+    date: Date
+  },
+  approvedByManager: {
+    userId: String,
+    userName: String,
+    date: Date,
+    comment: String
+  },
+  returnedByManager: {
+    userId: String,
+    userName: String,
+    date: Date,
+    comment: String
+  },
+  // Consolidation tracking
+  isConsolidated: {
+    type: Boolean,
+    default: false
+  },
+  consolidatedProposals: [{
+    proposalId: mongoose.Schema.Types.ObjectId,
+    title: String,
+    department: String,
+    division: String
+  }],
+  // Notification tracking
+  notificationsSent: [{
+    notificationId: mongoose.Schema.Types.ObjectId,
+    recipientUserId: String,
+    type: String,
+    sentAt: Date
+  }],
   lastActionBy: String,
   lastActionDate: { type: Date, default: Date.now },
   departmentVerifiedBy: String,
@@ -71,6 +148,22 @@ const proposalSchema = new mongoose.Schema({
   totalIncome: {
     type: Number,
     default: 0
+  },
+  projectedCorporateIncome: {
+    type: Number,
+    default: 0
+  },
+  projectedSubsidy: {
+    type: Number,
+    default: 0
+  },
+  proposedBudget: {
+    type: Number,
+    default: 0
+  },
+  categoryBreakdown: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
   },
   submittedDate: {
     type: Date

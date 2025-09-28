@@ -227,7 +227,7 @@ const CustomCreateUpdateDialog = ({
                 fiscalYears.push(currentYear + i);
               }
               return fiscalYears.map((year) => (
-                <MenuItem key={year} value={year}>
+                <MenuItem key={year} value={String(year)}>
                   {year}
                 </MenuItem>
               ));

@@ -67,6 +67,9 @@ const HierarchicalUserAssignmentPage = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
+  // Ref to track current lookup value for auto-lookup
+  const currentLookupValue = React.useRef('');
+
   // Form state
   const [formData, setFormData] = useState({
     userId: '',
@@ -86,6 +89,7 @@ const HierarchicalUserAssignmentPage = () => {
       ManageUsers: false,
       ManageSettings: false
     },
+    workflowRoles: null
   });
 
   // UI state
@@ -263,35 +267,149 @@ const HierarchicalUserAssignmentPage = () => {
   const [userLookupId, setUserLookupId] = useState('');
   const [isLookingUpUser, setIsLookingUpUser] = useState(false);
 
-  // User lookup query (debounced)
-  const { data: userLookupData, isLoading: loadingUserLookup } = useQuery({
+  // Update ref when userLookupId changes
+  React.useEffect(() => {
+    currentLookupValue.current = userLookupId;
+  }, [userLookupId]);
+
+  // User lookup query - manual trigger only
+  const { data: userLookupData, isLoading: loadingUserLookup, refetch: lookupUser } = useQuery({
     queryKey: ['user-lookup', userLookupId],
     queryFn: async () => {
-      if (!userLookupId || userLookupId.length < 2) return null;
+      // Require exactly 6+ digits
+      if (!userLookupId || userLookupId.length < 6 || !/^\d{6,}$/.test(userLookupId)) {
+        throw new Error('Invalid user ID format');
+      }
 
       try {
         if (isTokenExpired(jwtToken)) {
-          throw new Error('Session expired. Please log in again.');
+          throw new Error('Session expired');
         }
 
         const res = await api.get(`/api/hierarchical-rbac/user-lookup/${userLookupId}`);
         return res.data?.data || null;
       } catch (error) {
-        console.error('Error looking up user:', error);
-        return null;
+        // Handle different error types with toast notifications (no console errors)
+        if (error.response?.status === 404) {
+          setSnackbar({
+            open: true,
+            message: `User ID "${userLookupId}" not found in the system.`,
+            severity: 'info'
+          });
+        } else if (error.response?.status === 403) {
+          setSnackbar({
+            open: true,
+            message: 'You do not have permission to look up users.',
+            severity: 'error'
+          });
+        } else if (error.response?.status === 401) {
+          setSnackbar({
+            open: true,
+            message: 'Authentication required. Please log in again.',
+            severity: 'warning'
+          });
+        } else if (error.message === 'Invalid user ID format') {
+          setSnackbar({
+            open: true,
+            message: 'Please enter a valid user ID (6+ digits).',
+            severity: 'warning'
+          });
+        } else {
+          setSnackbar({
+            open: true,
+            message: 'Failed to look up user. Please try again.',
+            severity: 'error'
+          });
+        }
+        throw error; // Re-throw to let React Query handle it
       }
     },
-    enabled: !!userLookupId && userLookupId.length >= 2 && !!jwtToken,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    retry: false // Don't retry on user lookup failures
+    enabled: false, // Manual trigger only - no automatic API calls
+    staleTime: 10 * 60 * 1000, // 10 minutes cache
+    retry: false, // No retries to prevent console spam
+    // Suppress all React Query error logging
+    onError: () => {
+      // Do nothing - we handle all errors internally
+    },
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false
   });
 
   // Effect to auto-populate form when user lookup succeeds
   React.useEffect(() => {
     if (userLookupData && !editingAssignment) {
+      handleFormChange('userId', userLookupData.userId || '');
       handleFormChange('userName', userLookupData.userName || '');
       handleFormChange('email', userLookupData.email || '');
-      handleFormChange('userRole', userLookupData.budgetRole || 'BUDGET_ANALYST');
+      const budgetRole = userLookupData.budgetRole || 'BUDGET_ANALYST';
+      handleFormChange('userRole', budgetRole);
+
+      // Auto-set assignment level and permissions based on the budget role
+      if (budgetRole === 'BUDGET_ANALYST') {
+        handleFormChange('assignmentLevel', 'RESPONSIBILITY_CENTER');
+        handleFormChange('rolePermissions', {
+          CreateProposals: true,
+          EditOwnProposals: true,
+          EditAllProposals: false,
+          DeleteProposals: false,
+          ApproveProposals: false,
+          ViewReports: true,
+          ManageUsers: false,
+          ManageSettings: false
+        });
+        handleFormChange('workflowRoles', null);
+      } else if (budgetRole === 'BUDGET_COORDINATOR') {
+        handleFormChange('assignmentLevel', 'OFFICE');
+        handleFormChange('rolePermissions', {
+          CreateProposals: true,
+          EditOwnProposals: true,
+          EditAllProposals: false,
+          DeleteProposals: false,
+          ApproveProposals: false,
+          ViewReports: true,
+          ManageUsers: false,
+          ManageSettings: false
+        });
+        handleFormChange('workflowRoles', null);
+      } else if (budgetRole === 'BUDGET_OFFICER') {
+        handleFormChange('assignmentLevel', 'OFFICE');
+        handleFormChange('rolePermissions', {
+          CreateProposals: true,
+          EditOwnProposals: true,
+          EditAllProposals: false,
+          DeleteProposals: false,
+          ApproveProposals: false,
+          ViewReports: true,
+          ManageUsers: false,
+          ManageSettings: false
+        });
+        handleFormChange('workflowRoles', null);
+      } else if (budgetRole === 'BUDGET_MANAGER') {
+        handleFormChange('assignmentLevel', 'DIVISION');
+        handleFormChange('rolePermissions', {
+          CreateProposals: true,
+          EditOwnProposals: true,
+          EditAllProposals: true,
+          DeleteProposals: false,
+          ApproveProposals: true,
+          ViewReports: true,
+          ManageUsers: true,
+          ManageSettings: false
+        });
+      } else if (budgetRole === 'BUDGET_ADMIN') {
+        handleFormChange('assignmentLevel', 'FULL');
+        handleFormChange('rolePermissions', {
+          CreateProposals: true,
+          EditOwnProposals: true,
+          EditAllProposals: true,
+          DeleteProposals: true,
+          ApproveProposals: true,
+          ViewReports: true,
+          ManageUsers: true,
+          ManageSettings: true
+        });
+        handleFormChange('workflowRoles', null);
+      }
     }
   }, [userLookupData, editingAssignment]);
 
@@ -408,7 +526,8 @@ const HierarchicalUserAssignmentPage = () => {
         ViewReports: true,
         ManageUsers: false,
         ManageSettings: false
-      }
+      },
+      workflowRoles: null
     });
     setEditingAssignment(null);
   };
@@ -640,17 +759,108 @@ const HierarchicalUserAssignmentPage = () => {
                   onChange={(e) => {
                     const value = e.target.value;
                     handleFormChange('userId', value);
-                    // Trigger user lookup with debouncing
-                    setUserLookupId(value);
+                    
+                    // Auto-lookup when user enters a valid userId (6+ digits)
+                    if (!editingAssignment && value && value.length >= 6 && /^\d{6,}$/.test(value)) {
+                      currentLookupValue.current = value;
+                      // Trigger lookup immediately with the new value
+                      queryClient.fetchQuery({
+                        queryKey: ['user-lookup', value],
+                        queryFn: async () => {
+                          try {
+                            if (isTokenExpired(jwtToken)) {
+                              throw new Error('Session expired');
+                            }
+                            const res = await api.get(`/api/hierarchical-rbac/user-lookup/${value}`);
+                            return res.data?.data || null;
+                          } catch (error) {
+                            // Handle errors silently for auto-lookup
+                            console.warn('Auto-lookup failed:', error.message);
+                            return null;
+                          }
+                        },
+                        staleTime: 10 * 60 * 1000,
+                      }).then((data) => {
+                        if (data && currentLookupValue.current === value) {
+                          // Manually trigger the population logic
+                          handleFormChange('userId', data.userId || '');
+                          handleFormChange('userName', data.userName || '');
+                          handleFormChange('email', data.email || '');
+                          const budgetRole = data.budgetRole || 'BUDGET_ANALYST';
+                          handleFormChange('userRole', budgetRole);
+                          
+                          // Auto-set assignment level and permissions based on the budget role
+                          if (budgetRole === 'BUDGET_ANALYST') {
+                            handleFormChange('assignmentLevel', 'RESPONSIBILITY_CENTER');
+                            handleFormChange('rolePermissions', {
+                              CreateProposals: true,
+                              EditOwnProposals: true,
+                              EditAllProposals: false,
+                              DeleteProposals: false,
+                              ApproveProposals: false,
+                              ViewReports: true,
+                              ManageUsers: false,
+                              ManageSettings: false
+                            });
+                          } else if (budgetRole === 'BUDGET_COORDINATOR') {
+                            handleFormChange('assignmentLevel', 'OFFICE');
+                            handleFormChange('rolePermissions', {
+                              CreateProposals: true,
+                              EditOwnProposals: true,
+                              EditAllProposals: false,
+                              DeleteProposals: false,
+                              ApproveProposals: false,
+                              ViewReports: true,
+                              ManageUsers: false,
+                              ManageSettings: false
+                            });
+                          } else if (budgetRole === 'BUDGET_OFFICER') {
+                            handleFormChange('assignmentLevel', 'OFFICE');
+                            handleFormChange('rolePermissions', {
+                              CreateProposals: true,
+                              EditOwnProposals: true,
+                              EditAllProposals: true,
+                              DeleteProposals: false,
+                              ApproveProposals: true,
+                              ViewReports: true,
+                              ManageUsers: false,
+                              ManageSettings: false
+                            });
+                          } else if (budgetRole === 'BUDGET_MANAGER') {
+                            handleFormChange('assignmentLevel', 'FULL');
+                            handleFormChange('rolePermissions', {
+                              CreateProposals: true,
+                              EditOwnProposals: true,
+                              EditAllProposals: true,
+                              DeleteProposals: true,
+                              ApproveProposals: true,
+                              ViewReports: true,
+                              ManageUsers: true,
+                              ManageSettings: true
+                            });
+                          } else if (budgetRole === 'BUDGET_ADMIN') {
+                            handleFormChange('assignmentLevel', 'FULL');
+                            handleFormChange('rolePermissions', {
+                              CreateProposals: true,
+                              EditOwnProposals: true,
+                              EditAllProposals: true,
+                              DeleteProposals: true,
+                              ApproveProposals: true,
+                              ViewReports: true,
+                              ManageUsers: true,
+                              ManageSettings: true
+                            });
+                          }
+                        }
+                      }).catch((error) => {
+                        console.warn('Auto-lookup query failed:', error);
+                      });
+                    }
                   }}
                   disabled={!!editingAssignment}
                   required
                   helperText={
-                    formData.userId ? 
-                      (loadingUserLookup ? 'Looking up user...' : 
-                       userLookupData ? 'User found and auto-filled' : 
-                       userLookupId.length >= 2 ? 'User not found' : '') : 
-                      'User ID is required'
+                    formData.userId ? 'User information will be auto-filled' : 'Enter a valid user ID (6+ digits)'
                   }
                   inputProps={{ 'aria-label': 'User ID' }}
                 />
@@ -661,8 +871,9 @@ const HierarchicalUserAssignmentPage = () => {
                   label="User Name"
                   value={formData.userName}
                   onChange={(e) => handleFormChange('userName', e.target.value)}
+                  disabled={!!editingAssignment}
                   required
-                  helperText={formData.userName ? '' : 'User Name is required'}
+                  helperText="User name will be auto-filled after entering User ID"
                   inputProps={{ 'aria-label': 'User Name' }}
                 />
               </Grid>
@@ -678,6 +889,28 @@ const HierarchicalUserAssignmentPage = () => {
                   inputProps={{ 'aria-label': 'Email' }}
                 />
               </Grid>
+
+              {/* Display user's actual roles from main database */}
+              {userLookupData?.roles && userLookupData.roles.length > 0 && (
+                <Grid item xs={12}>
+                  <Alert severity="info" sx={{ mb: 1 }}>
+                    <Typography variant="subtitle2" gutterBottom>
+                      User's Actual Roles from Main Database:
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      {userLookupData.roles.map((role, index) => (
+                        <Chip
+                          key={index}
+                          label={role}
+                          size="small"
+                          color="primary"
+                          variant="outlined"
+                        />
+                      ))}
+                    </Box>
+                  </Alert>
+                </Grid>
+              )}
 
               <Grid item xs={12}>
                 <Autocomplete
@@ -790,7 +1023,7 @@ const HierarchicalUserAssignmentPage = () => {
                     handleFormChange('officeId', '');
                     handleFormChange('responsibilityCenterName', '');
                     // Enforce role applicability (Option A: strict disable)
-                    const nextRoles = { ...formData.workflowRoles };
+                    const nextRoles = { ...(formData.workflowRoles || {}) };
                     const isRC = newLevel === 'RESPONSIBILITY_CENTER';
                     const isOffice = newLevel === 'OFFICE';
                     const isFull = newLevel === 'FULL';
@@ -815,8 +1048,8 @@ const HierarchicalUserAssignmentPage = () => {
                       });
                     } else if (isRC) {
                       // Only RC roles allowed
-                      setRole('responsibilityCenterCreator', !!nextRoles.responsibilityCenterCreator);
-                      setRole('responsibilityCenterApprover', !!nextRoles.responsibilityCenterApprover);
+                      setRole('divisionCreator', !!nextRoles.divisionCreator);
+                      setRole('divisionApprover', !!nextRoles.divisionApprover);
                       setRole('officeCreator', false);
                       setRole('officeConsolidator', false);
                       setRole('officeSubmission', false);
@@ -841,8 +1074,8 @@ const HierarchicalUserAssignmentPage = () => {
                       setRole('officeSubmission', !!nextRoles.officeSubmission);
                       setRole('officeFinalVerifier', !!nextRoles.officeFinalVerifier);
                       // RC roles are typically not applicable at pure office scope
-                      setRole('responsibilityCenterCreator', false);
-                      setRole('responsibilityCenterApprover', false);
+                      setRole('divisionCreator', false);
+                      setRole('divisionApprover', false);
                       // If changing FROM FULL, reset to basic permissions
                       if (oldLevel === 'FULL') {
                         handleFormChange('rolePermissions', {

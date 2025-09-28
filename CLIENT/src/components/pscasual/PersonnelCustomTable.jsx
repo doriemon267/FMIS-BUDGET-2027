@@ -46,6 +46,22 @@ const CasualCustomTable = ({
   const { searchValue, setSearchValue } = useSearch();
   const TEN_SECONDS_AGO = dayjs().subtract(10, "second");
 
+  // Get the active region
+  const { activeRegion } = useRegion();
+  const [regionFilter, setRegionFilter] = useState("");
+  
+  // Update region filter when active region changes
+  useEffect(() => {
+    if (activeRegion) {
+      const regionName = activeRegion.name || activeRegion.regionName;
+      setRegionFilter(regionName);
+    } else {
+      setRegionFilter("Central Office");
+    }
+    // Reset page to first page when region changes
+    setPage(0);
+  }, [activeRegion]);
+
   const [order, setOrder] = useState("desc");
   const [orderBy, setOrderBy] = useState(orderByDefault);
   const [page, setPage] = useState(0);
@@ -61,7 +77,7 @@ const CasualCustomTable = ({
   const [totals, setTotals] = useState({});
  const [grandTotal, setGrandTotal] = useState(0);
   const { data, isLoading, refetch } = useQuery({
-    queryKey: [dataListName, page],
+    queryKey: [dataListName, page, regionFilter],
     queryFn: async () => {
       const params = {
         page: page + 1,
@@ -80,6 +96,11 @@ const CasualCustomTable = ({
       if (fieldAndValue.field) {
         params[fieldAndValue.field] = fieldAndValue.value;
         params.operator = fieldAndValue.operator;
+      }
+
+      // Add region filter if present
+      if (regionFilter) {
+        params.region = regionFilter;
       }
       
       const res = await api.get(apiPath, { params });
@@ -143,20 +164,6 @@ const CasualCustomTable = ({
       }
     }
   }, [data, columns, dataListName, onDataChange]);
-
-  // Get the active region
-  const { activeRegion } = useRegion();
-  const [regionFilter, setRegionFilter] = useState("");
-  
-  // Update region filter when active region changes
-  useEffect(() => {
-    if (activeRegion) {
-      const regionName = activeRegion.name || activeRegion.regionName;
-      setRegionFilter(regionName);
-    } else {
-      setRegionFilter("Central Office");
-    }
-  }, [activeRegion]);
 
   useEffect(() => {
     const fetchGrandTotal = async () => {

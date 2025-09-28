@@ -14,6 +14,7 @@ import {
   Alert,
   Collapse,
   IconButton,
+  Checkbox,
 } from "@mui/material";
 import PropTypes from "prop-types";
 import api from "../../config/api";
@@ -34,6 +35,8 @@ const ProposalCustomTable = forwardRef(({
   groupBy = null,
   showTotals = false,
   totalsData = null,
+  selectedRows = [],
+  onRowSelectionChange,
 }, ref) => {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -117,13 +120,48 @@ const ProposalCustomTable = forwardRef(({
     return { data: [], count: 0 };
   };
 
+  // Selection handlers
+  const isSelected = (id) => selectedRows.indexOf(id) !== -1;
+
+  const handleRowClick = (event, id, fromCheckbox = false) => {
+    if (event.target.type === 'checkbox' && !fromCheckbox) return; // Don't trigger on checkbox click unless it originated from checkbox
+
+    const selectedIndex = selectedRows.indexOf(id);
+    let newSelected = [];
+
+    if (selectedIndex === -1) {
+      newSelected = newSelected.concat(selectedRows, id);
+    } else if (selectedIndex === 0) {
+      newSelected = newSelected.concat(selectedRows.slice(1));
+    } else if (selectedIndex === selectedRows.length - 1) {
+      newSelected = newSelected.concat(selectedRows.slice(0, -1));
+    } else if (selectedIndex > 0) {
+      newSelected = newSelected.concat(
+        selectedRows.slice(0, selectedIndex),
+        selectedRows.slice(selectedIndex + 1),
+      );
+    }
+
+    onRowSelectionChange && onRowSelectionChange(newSelected);
+  };
+
+  const handleSelectAllClick = (event) => {
+    if (event.target.checked) {
+      const newSelected = rows.map((row) => row._id || row.id);
+      onRowSelectionChange && onRowSelectionChange(newSelected);
+      return;
+    }
+    onRowSelectionChange && onRowSelectionChange([]);
+  };
+
   useEffect(() => {
     fetchData();
   }, [page, rowsPerPage, searchValue, apiPath]);
 
   // Expose refetch method to parent components
   useImperativeHandle(ref, () => ({
-    refetch: fetchData
+    refetch: fetchData,
+    getRows: () => rows
   }));
 
   const handleChangePage = (event, newPage) => {
@@ -291,6 +329,17 @@ const ProposalCustomTable = forwardRef(({
             <Table sx={{ minWidth: 750 }} size="medium">
               <TableHead>
                 <TableRow>
+                  {/* Checkbox column header */}
+                  {onRowSelectionChange && (
+                    <TableCell padding="checkbox">
+                      <Checkbox
+                        color="primary"
+                        indeterminate={selectedRows.length > 0 && selectedRows.length < rows.length}
+                        checked={rows.length > 0 && selectedRows.length === rows.length}
+                        onChange={handleSelectAllClick}
+                      />
+                    </TableCell>
+                  )}
                   {columns.map((column) => (
                     <TableCell
                       key={column.field}
@@ -304,29 +353,49 @@ const ProposalCustomTable = forwardRef(({
               </TableHead>
               <TableBody>
                 {rows.length > 0 ? (
-                  rows.map((row, index) => (
-                    <TableRow
-                      hover
-                      key={row._id || row.id || index}
-                      sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
-                    >
-                      {columns.map((column) => (
-                        <TableCell
-                          key={`${row._id || row.id || index}-${column.field}`}
-                          align={column.type === 'number' ? 'right' : 'left'}
-                        >
-                          {column.render
-                            ? column.render(row)
-                            : row[column.field] !== undefined
-                            ? String(row[column.field])
-                            : ''}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))
+                  rows.map((row, index) => {
+                    const isRowSelected = isSelected(row._id || row.id);
+                    return (
+                      <TableRow
+                        hover
+                        key={row._id || row.id || index}
+                        sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
+                        onClick={(event) => handleRowClick(event, row._id || row.id)}
+                        role={onRowSelectionChange ? "checkbox" : undefined}
+                        aria-checked={isRowSelected}
+                        selected={isRowSelected}
+                      >
+                        {/* Checkbox column */}
+                        {onRowSelectionChange && (
+                          <TableCell padding="checkbox">
+                            <Checkbox
+                              color="primary"
+                              checked={isRowSelected}
+                              onChange={(event) => {
+                                event.stopPropagation();
+                                handleRowClick(event, row._id || row.id, true);
+                              }}
+                            />
+                          </TableCell>
+                        )}
+                        {columns.map((column) => (
+                          <TableCell
+                            key={`${row._id || row.id || index}-${column.field}`}
+                            align={column.type === 'number' ? 'right' : 'left'}
+                          >
+                            {column.render
+                              ? column.render(row)
+                              : row[column.field] !== undefined
+                              ? String(row[column.field])
+                              : ''}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    );
+                  })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={columns.length} align="center">
+                    <TableCell colSpan={columns.length + (onRowSelectionChange ? 1 : 0)} align="center">
                       No data available
                     </TableCell>
                   </TableRow>
@@ -335,10 +404,11 @@ const ProposalCustomTable = forwardRef(({
                 {showTotals && totalsData && rows.length > 0 && (
                   <>
                     <TableRow>
-                      <TableCell colSpan={columns.length} sx={{ borderBottom: '2px solid #000', padding: '8px' }}>
+                      <TableCell colSpan={columns.length + (onRowSelectionChange ? 1 : 0)} sx={{ borderBottom: '2px solid #000', padding: '8px' }}>
                       </TableCell>
                     </TableRow>
                     <TableRow sx={{ backgroundColor: '#f5f5f5', fontWeight: 'bold' }}>
+                      {onRowSelectionChange && <TableCell></TableCell>}
                       {columns.map((column) => (
                         <TableCell
                           key={`total-${column.field}`}
@@ -357,7 +427,7 @@ const ProposalCustomTable = forwardRef(({
                 )}
                 {loading && rows.length > 0 && (
                   <TableRow>
-                    <TableCell colSpan={columns.length} align="center">
+                    <TableCell colSpan={columns.length + (onRowSelectionChange ? 1 : 0)} align="center">
                       <CircularProgress size={24} />
                     </TableCell>
                   </TableRow>
@@ -390,6 +460,10 @@ ProposalCustomTable.propTypes = {
   hasDelete: PropTypes.bool,
   refreshData: PropTypes.func,
   groupBy: PropTypes.string,
+  showTotals: PropTypes.bool,
+  totalsData: PropTypes.object,
+  selectedRows: PropTypes.array,
+  onRowSelectionChange: PropTypes.func,
 };
 
 export default ProposalCustomTable;

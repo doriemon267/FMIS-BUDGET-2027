@@ -33,7 +33,7 @@ export function useUserRestrictions() {
  * Hook to check if current user has access to specific data
  */
 export function useAccessCheck() {
-  const { currentUser } = useContext(UserContext);
+  const { currentUser } = useUser();
 
   return {
     canAccessData: (budgetType, fiscalYear) => {

@@ -91,7 +91,7 @@ const App = () => {
           path="/employee"
           element={
             <ProtectedRoute
-              requiredPermissions={["EditAllProposals"]}
+              requiredPermissions={["ViewReports"]}
             >
               <EmployeeList />
             </ProtectedRoute>
@@ -183,7 +183,7 @@ const App = () => {
           path="/employeeBenefits"
           element={
             <ProtectedRoute
-              requiredPermissions={["EditAllProposals"]}
+              requiredPermissions={["ViewReports"]}
             >
               <EmployeeBenefitsPage />
             </ProtectedRoute>

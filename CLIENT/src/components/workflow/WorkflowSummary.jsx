@@ -26,18 +26,18 @@ const WorkflowSummary = ({ userInfo }) => {
 
       // Office users can see pending verifications and ready to submit
       if (userLevel === "OFFICE" && workflowRoles.includes("officeConsolidator")) {
-        endpoints = [
+        endpoints.push(
           { key: "pendingVerification", endpoint: "/api/submission-workflow/office/pending-verification" },
           { key: "readyToSubmit", endpoint: "/api/submission-workflow/office/ready-to-submit" }
-        ];
+        );
       }
 
       // Office users can see pending approvals and ready to finalize (combined department and region roles)
       if (userLevel === "OFFICE" && workflowRoles.includes("officeFinalVerifier")) {
-        endpoints = [
+        endpoints.push(
           { key: "pendingApproval", endpoint: "/api/submission-workflow/office/pending-approval" },
           { key: "readyToFinalize", endpoint: "/api/submission-workflow/office/ready-to-finalize" }
-        ];
+        );
       }
 
       const summaryData = {};

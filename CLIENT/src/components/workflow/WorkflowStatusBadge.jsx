@@ -13,7 +13,7 @@ const WorkflowStatusBadge = ({ status, className = "" }) => {
         return {
           color: "bg-gray-200 text-gray-800",
           icon: "📝",
-          step: "1/6"
+          step: "1/5"
         };
       case "Responsibility Center Submitted":
         return {
@@ -43,7 +43,7 @@ const WorkflowStatusBadge = ({ status, className = "" }) => {
         return {
           color: "bg-gray-200 text-gray-600",
           icon: "❓",
-          step: "0/6"
+          step: "0/5"
         };
     }
   };

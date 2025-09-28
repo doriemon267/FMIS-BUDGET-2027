@@ -73,7 +73,7 @@ const CustomSnackbar = ({
           severity={severity}
           variant="filled"
           elevation={6}
-          onClick={onClick ? (e) => { onClick(); handleClose(e); } : undefined}
+          onClick={onClick ? (e) => { onClick(e); handleClose(e); } : undefined}
           sx={{ width: '100%', minWidth: '288px', maxWidth: '500px', cursor: onClick ? 'pointer' : 'default' }}
         >
           {message}

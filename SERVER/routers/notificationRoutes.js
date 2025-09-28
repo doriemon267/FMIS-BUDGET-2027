@@ -55,9 +55,17 @@ router.get('/notifications', async (req, res) => {
       if (s) candidates = [s];
     }
 
-    const baseFilter = candidates.length
-      ? { recipientUserId: { $in: candidates } }
-      : { recipientUserId: String(req.user.id) };
+    // Also include role-based notifications
+    const userRoles = req.user.Roles || [];
+    const roleCandidates = userRoles.map(role => role.replace(/\s+/g, '_').toUpperCase());
+
+    const baseFilter = {
+      $or: [
+        { recipientUserId: { $in: candidates } },
+        { recipientUserId: { $in: roleCandidates } },
+        { recipientUserId: { $in: userRoles } }
+      ]
+    };
 
     const query = debugMode === 'all'
       ? baseFilter
@@ -86,10 +94,20 @@ router.post('/notifications/mark-read', async (req, res) => {
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ success: false, message: 'ids array is required' });
     }
+
     const candidates = getRecipientCandidates(req.user);
-    const filter = candidates.length
-      ? { _id: { $in: ids }, recipientUserId: { $in: candidates } }
-      : { _id: { $in: ids }, recipientUserId: String(req.user.id) };
+    const userRoles = req.user.Roles || [];
+    const roleCandidates = userRoles.map(role => role.replace(/\s+/g, '_').toUpperCase());
+
+    const filter = {
+      _id: { $in: ids },
+      $or: [
+        { recipientUserId: { $in: candidates } },
+        { recipientUserId: { $in: roleCandidates } },
+        { recipientUserId: { $in: userRoles } }
+      ]
+    };
+
     await Notification.updateMany(
       filter,
       { $set: { status: 'READ', readAt: new Date() } }

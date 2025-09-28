@@ -47,19 +47,74 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
   // Determine what actions are available based on user role and proposal status
   const getAvailableActions = () => {
     const actions = [];
-    const userRoles = userInfo?.roles || [];
+    const rawRoleSources = [
+      userInfo?.roles,
+      userInfo?.Roles,
+      userInfo?.role,
+      userInfo?.currentUser?.roles,
+      userInfo?.currentUser?.Roles,
+      userInfo?.currentUser?.role,
+      userInfo?.currentUser?.budgetRoles,
+      userInfo?.hierarchicalAccess?.roles,
+      userInfo?.hierarchicalAccess?.budgetRoles,
+      userInfo?.hierarchicalAccess?.userRoles,
+      userInfo?.hierarchicalAccess?.workflowRoles,
+      userInfo?.workflowRoles
+    ];
+
+    const normalizeRoleValue = (roleValue) => {
+      if (!roleValue) return null;
+      const stringValue = roleValue.toString().trim();
+      if (!stringValue) return null;
+
+      const camelCaseNormalized = stringValue
+        .replace(/([a-z0-9])([A-Z])/g, '$1_$2') // convert camelCase to snake_case
+        .replace(/[\s-]+/g, '_')
+        .replace(/__+/g, '_')
+        .toUpperCase();
+
+      const roleSynonyms = {
+        BUDGETOFFICER: 'BUDGET_OFFICER',
+        OFFICE_FINAL_VERIFIER: 'BUDGET_OFFICER',
+        OFFICE_APPROVER: 'BUDGET_OFFICER',
+        OFFICE_VERIFIER: 'BUDGET_OFFICER',
+        SUPERVISOR: 'BUDGET_OFFICER',
+        BUDGETMANAGER: 'BUDGET_MANAGER',
+        REGION_FINAL_VERIFIER: 'BUDGET_MANAGER',
+        DEPARTMENT_FINAL_VERIFIER: 'BUDGET_MANAGER'
+      };
+
+      return roleSynonyms[camelCaseNormalized] || camelCaseNormalized;
+    };
+
+    const rawRoles = rawRoleSources
+      .flatMap((value) => {
+        if (!value) return [];
+        if (Array.isArray(value)) return value;
+        return [value];
+      })
+      .filter((value) => typeof value === 'string' && value.trim().length > 0);
+
+    const normalizedRoles = Array.from(new Set(
+      rawRoles
+        .map((roleValue) => normalizeRoleValue(roleValue))
+        .filter(Boolean)
+    ));
+
     const status = proposal?.status;
 
     // Check if user has the required role for actions
-    const isBudgetAnalyst = userRoles.includes('BUDGET_ANALYST');
-    const isBudgetCoordinator = userRoles.includes('BUDGET_COORDINATOR');
-    const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
-    const isBudgetManager = userRoles.includes('BUDGET_MANAGER');
-    const isBudgetAdmin = userRoles.includes('BUDGET_ADMIN');
+    const isBudgetAnalyst = normalizedRoles.includes('BUDGET_ANALYST');
+    const isBudgetCoordinator = normalizedRoles.includes('BUDGET_COORDINATOR');
+    const isBudgetOfficer = normalizedRoles.includes('BUDGET_OFFICER');
+    const isBudgetManager = normalizedRoles.includes('BUDGET_MANAGER');
+    const isBudgetAdmin = normalizedRoles.includes('BUDGET_ADMIN');
 
     console.log('New WorkflowActions Debug:', {
       status,
-      userRoles,
+      rawRoleSources,
+      rawRoles,
+      normalizedRoles,
       isBudgetAnalyst,
       isBudgetCoordinator,
       isBudgetOfficer,
@@ -83,60 +138,53 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
 
     // BUDGET OFFICER Actions (Approval Level)
     if (isBudgetOfficer) {
-      if (status === "Draft" || status === "Submitted to Officer" || 
-          status === "Responsibility Center Submitted" || status === "Division Submitted") {
+      if (status === "Division Submitted" || status === "Office") {
         actions.push({
           label: "Approve",
           action: "officer-approve",
           color: "bg-green-500 hover:bg-green-600",
           icon: "✅",
-          description: "Approve the proposal submission"
+          description: "Approve the proposal submission",
+          requiresComment: true
         });
         actions.push({
           label: "Return",
           action: "officer-return",
           color: "bg-red-500 hover:bg-red-600",
           icon: "↩️",
-          description: "Return proposal to creator for revisions"
+          description: "Return proposal to creator for revisions",
+          requiresComment: true
         });
       }
-      if (status === "Officer Approved") {
+      if (status === "Office Approved") {
         actions.push({
           label: "Submit to Manager",
           action: "submit-to-manager",
           color: "bg-purple-500 hover:bg-purple-600",
           icon: "📋",
-          description: "Submit approved proposal to Budget Manager for finalization"
+          description: "Consolidate and submit approved proposals to Budget Manager"
         });
       }
     }
 
     // BUDGET MANAGER & BUDGET ADMIN Actions (Finalization Level)
     if (isBudgetManager || isBudgetAdmin) {
-      if (status === "Officer Approved" || status === "Submitted to Manager" ||
-          status === "Office Submitted" || status === "Department Submitted") {
+      if (status === "Office Submitted") {
         actions.push({
           label: "Approve",
           action: "manager-approve",
           color: "bg-teal-500 hover:bg-teal-600",
           icon: "✔",
-          description: "Approve proposal for finalization"
+          description: "Approve proposal for finalization",
+          requiresComment: true
         });
         actions.push({
           label: "Return",
           action: "manager-return",
           color: "bg-red-500 hover:bg-red-600",
           icon: "↩️",
-          description: "Return proposal to officer for revisions"
-        });
-      }
-      if (status === "Manager Approved" || status === "Office Approved" || status === "Region Approved") {
-        actions.push({
-          label: "Finalize",
-          action: "finalize",
-          color: "bg-emerald-500 hover:bg-emerald-600",
-          icon: "�",
-          description: "Finalize the proposal submission"
+          description: "Return proposal to officer for revisions",
+          requiresComment: true
         });
       }
     }
@@ -148,46 +196,36 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
   const executeWorkflowAction = async (action, noteValue) => {
     setLoading(true);
     
+    let endpoint = "";
+    let noteField = "";
+    let successMessage = "";
+    
     try {
-      let endpoint = "";
-      let noteField = "";
-      let successMessage = "";
 
       switch (action) {
         case "submit-to-officer":
-          endpoint = "/api/submission-workflow/responsibility-center/submit-to-office";
-          noteField = "submissionNote";
-          successMessage = "Successfully submitted to Budget Officer for approval";
+          endpoint = "/api/workflow/submit";
+          successMessage = "Proposal submitted to Budget Officer successfully";
           break;
         case "officer-approve":
-          endpoint = "/api/submission-workflow/office/verify-submission";
-          noteField = "verificationNote";
-          successMessage = "Successfully approved proposal";
+          endpoint = "/api/workflow/approve";
+          successMessage = "Proposal approved successfully";
           break;
         case "officer-return":
-          endpoint = "/api/submission-workflow/office/return-to-responsibility-center";
-          noteField = "returnReason";
-          successMessage = "Successfully returned proposal to creator for revisions";
+          endpoint = "/api/workflow/return";
+          successMessage = "Proposal returned successfully";
           break;
         case "submit-to-manager":
-          endpoint = "/api/submission-workflow/office/submit-own";
-          noteField = "approvalNote";
-          successMessage = "Successfully submitted to Budget Manager for finalization";
+          endpoint = "/api/workflow/consolidate";
+          successMessage = "Proposals consolidated and submitted to Budget Manager successfully";
           break;
         case "manager-approve":
-          endpoint = "/api/submission-workflow/office/approve-submission";
-          noteField = "officeApprovalNote";
-          successMessage = "Successfully approved proposal for finalization";
+          endpoint = "/api/workflow/approve";
+          successMessage = "Proposal approved by Budget Manager successfully";
           break;
         case "manager-return":
-          endpoint = "/api/submission-workflow/office/return-to-responsibility-center";
-          noteField = "returnReason";
-          successMessage = "Successfully returned proposal to officer for revisions";
-          break;
-        case "finalize":
-          endpoint = "/api/submission-workflow/office/finalize-submission";
-          noteField = "finalizationNote";
-          successMessage = "Successfully finalized proposal submission";
+          endpoint = "/api/workflow/return";
+          successMessage = "Proposal returned to Budget Officer successfully";
           break;
         // Legacy actions for backward compatibility
         case "responsibility-center-submit":
@@ -224,11 +262,26 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           throw new Error("Unknown workflow action");
       }
 
-      const response = await api.post(endpoint, {
-        ids: [proposal._id],
-        entity: getEntityType(proposal), // Dynamic entity type based on proposal
-        [noteField]: noteValue?.trim() || `Workflow action performed on ${new Date().toLocaleString()}`
-      });
+      // Prepare request data based on action
+      let requestData = { proposalId: proposal._id };
+
+      if (action === "submit-to-officer") {
+        requestData.comment = noteValue || "";
+      } else if (action === "officer-approve" || action === "manager-approve") {
+        requestData.comment = noteValue;
+      } else if (action === "officer-return" || action === "manager-return") {
+        requestData.comment = noteValue;
+      } else if (action === "submit-to-manager") {
+        // For consolidation, we need multiple proposal IDs and consolidated title
+        requestData = {
+          proposalIds: [proposal._id], // In a real implementation, this would be selected proposals
+          consolidatedTitle: `Consolidated Proposals - ${proposal.department || proposal.division}`,
+          fiscalYear: proposal.fiscalYear,
+          budgetType: proposal.budgetType
+        };
+      }
+
+      const response = await api.post(endpoint, requestData);
 
       console.log('Workflow API Call Debug:', {
         endpoint,
@@ -292,31 +345,32 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
   };
 
   // Confirmation dialog state
-  const [confirmState, setConfirmState] = useState({ open: false, action: null, label: '' });
-  const [returnReason, setReturnReason] = useState('');
-  const isReturnAction = confirmState.action === 'office-return' || confirmState.action === 'officer-return' || confirmState.action === 'manager-return';
+  const [confirmState, setConfirmState] = useState({ open: false, action: null, label: '', requiresComment: false });
+  const [comment, setComment] = useState('');
+  const requiresComment = confirmState.requiresComment || confirmState.action === 'officer-return' || confirmState.action === 'manager-return' ||
+                          confirmState.action === 'officer-approve' || confirmState.action === 'manager-approve';
 
   // Handle action click with MUI confirm dialog
-  const handleActionClick = (action, label) => {
+  const handleActionClick = (action, label, requiresComment = false) => {
     if (loading) return;
-    setConfirmState({ open: true, action, label });
+    setConfirmState({ open: true, action, label, requiresComment });
   };
 
   const handleConfirm = () => {
     if (!confirmState.action) return;
-    // For Return action, ensure a reason is provided
-    if ((confirmState.action === 'office-return' || confirmState.action === 'officer-return' || confirmState.action === 'manager-return') && !returnReason.trim()) {
-      toast.error('Please provide a return reason.');
+    // For actions that require comments, ensure a comment is provided
+    if (requiresComment && !comment.trim()) {
+      toast.error('Please provide a comment.');
       return;
     }
-    executeWorkflowAction(confirmState.action, returnReason);
-    setConfirmState({ open: false, action: null, label: '' });
-    setReturnReason('');
+    executeWorkflowAction(confirmState.action, comment);
+    setConfirmState({ open: false, action: null, label: '', requiresComment: false });
+    setComment('');
   };
 
   const handleClose = () => { 
-    setConfirmState({ open: false, action: null, label: '' });
-    setReturnReason('');
+    setConfirmState({ open: false, action: null, label: '', requiresComment: false });
+    setComment('');
   };
 
   const availableActions = getAvailableActions();
@@ -371,9 +425,9 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
   const menuOpen = Boolean(anchorEl);
   const handleMenuOpen = (event) => setAnchorEl(event.currentTarget);
   const handleMenuClose = () => setAnchorEl(null);
-  const handleMenuItemClick = (action, label) => {
+  const handleMenuItemClick = (action, label, requiresComment = false) => {
     handleMenuClose();
-    handleActionClick(action, label);
+    handleActionClick(action, label, requiresComment);
   };
 
   return (
@@ -450,7 +504,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           <ListItemText primary="View" secondary="Open proposal details" />
         </MenuItem>
         {availableActions.map((actionConfig, index) => (
-          <MenuItem key={index} onClick={() => handleMenuItemClick(actionConfig.action, actionConfig.label)}>
+          <MenuItem key={index} onClick={() => handleMenuItemClick(actionConfig.action, actionConfig.label, actionConfig.requiresComment)}>
             <ListItemIcon>
               {renderIcon(actionConfig.action)}
             </ListItemIcon>
@@ -477,22 +531,22 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           <Typography variant="body2" sx={{ mb: 1 }}>
             Are you sure you want to perform: <strong>{confirmState.label}</strong>?
           </Typography>
-          {isReturnAction && (
+          {requiresComment && (
             <TextField
               autoFocus
               multiline
               minRows={3}
               fullWidth
-              label="Return reason (required)"
-              placeholder="Explain why this submission is being returned"
-              value={returnReason}
-              onChange={(e) => setReturnReason(e.target.value)}
+              label="Comment (required)"
+              placeholder={confirmState.action.includes('approve') ? "Explain your approval decision" : "Explain why this is being returned"}
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
             />
           )}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleClose} disabled={loading}>Cancel</Button>
-          <Button onClick={handleConfirm} variant="contained" disabled={loading || (isReturnAction && !returnReason.trim())}>
+          <Button onClick={handleConfirm} variant="contained" disabled={loading || (requiresComment && !comment.trim())}>
             Confirm
           </Button>
         </DialogActions>
@@ -528,10 +582,10 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           {Array.isArray(proposal?.workflowHistory) && proposal.workflowHistory.length > 0 && (
             <Box sx={{ mt: 2 }}>
               <Typography variant="body2" color="text.secondary">
-                Latest: {proposal.workflowHistory[proposal.workflowHistory.length - 1]?.action} → {proposal.workflowHistory[proposal.workflowHistory.length - 1]?.toStatus}
+                Latest: {proposal.workflowHistory[proposal.workflowHistory.length - 1]?.action} → {proposal.workflowHistory[proposal.workflowHistory.length - 1]?.newStatus}
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                {new Date(proposal.workflowHistory[proposal.workflowHistory.length - 1]?.date).toLocaleString()} — {proposal.workflowHistory[proposal.workflowHistory.length - 1]?.byName}
+                {new Date(proposal.workflowHistory[proposal.workflowHistory.length - 1]?.timestamp).toLocaleString()} — {proposal.workflowHistory[proposal.workflowHistory.length - 1]?.userName}
               </Typography>
             </Box>
           )}
