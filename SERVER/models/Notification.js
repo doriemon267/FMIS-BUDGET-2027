@@ -4,7 +4,7 @@ const NotificationSchema = new mongoose.Schema({
   recipientUserId: { type: String, required: true, index: true },
   title: { type: String },
   message: { type: String },
-  entity: { type: String, enum: ['personnel','mooe','capital','income','budgetarySupport'], default: 'personnel' },
+  entity: { type: String, enum: ['personnel','mooe','capital','income','budgetarySupport','proposal'], default: 'personnel' },
   recordIds: [{ type: mongoose.Schema.Types.ObjectId }],
   org: {
     region: String,

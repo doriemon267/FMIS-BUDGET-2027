@@ -2,6 +2,10 @@ const mongoose = require('mongoose');
 const Proposal = require('../models/Proposal');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
+const PersonnelServices = require('../models/PersonnelServices');
+const CapitalOutlay = require('../models/CapitalOutlay');
+const mooeProposals = require('../models/mooeProposals');
+const Income = require('../models/Income');
 
 /**
  * Budget Role Access Control Middleware
@@ -274,6 +278,13 @@ exports.approveProposal = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Proposal not found' });
     }
 
+    console.log('=== WORKFLOW APPROVAL DEBUG ===');
+    console.log('Proposal ID:', proposal._id);
+    console.log('Current Status:', proposal.status);
+    console.log('User Roles:', userRoles);
+    console.log('User ID:', userId);
+    console.log('User Name:', userName);
+    
     const previousStatus = proposal.status;
     let newStatus;
     let approvalField;
@@ -282,15 +293,19 @@ exports.approveProposal = async (req, res) => {
       newStatus = 'Office Approved';
       approvalField = 'approvedByOfficer';
       proposal.workflowLevel = 'OFFICER';
+      console.log('✅ BUDGET_OFFICER approval - Status will change to:', newStatus);
     } else if (userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN')) {
       newStatus = 'Finalized';
       approvalField = 'approvedByManager';
       proposal.workflowLevel = 'FINALIZED';
+      console.log('✅ BUDGET_MANAGER approval - Status will change to:', newStatus);
     } else {
+      console.log('❌ No valid roles found for approval:', userRoles);
       return res.status(403).json({ success: false, message: 'Unauthorized to approve proposals' });
     }
 
     proposal.status = newStatus;
+    console.log('Status updated from', previousStatus, 'to', newStatus);
     proposal[approvalField] = {
       userId,
       userName,
@@ -309,7 +324,85 @@ exports.approveProposal = async (req, res) => {
       newStatus
     });
 
-    await proposal.save();
+    const savedProposal = await proposal.save();
+    console.log('✅ Proposal saved successfully');
+    console.log('Saved proposal status:', savedProposal.status);
+    console.log('Saved proposal workflowLevel:', savedProposal.workflowLevel);
+
+    // 🔄 UPDATE RELATED ENTITY RECORDS 
+    console.log('🔄 Updating related entity records...');
+    
+    // Build filter to find related entity records
+    const entityFilter = {
+      region: proposal.region,
+      department: proposal.department,
+      division: proposal.division || proposal.department,
+      fiscalYear: proposal.fiscalYear,
+      budgetType: proposal.budgetType,
+      processBy: proposal.processBy
+    };
+    
+    console.log('🔍 Entity filter criteria:', JSON.stringify(entityFilter, null, 2));
+    
+    // Map proposal status to entity status
+    // Entity models use different workflow: Draft → Division Submitted → Department Verified → Department Submitted → Region Approved → Finalized
+    let entityStatus, entityWorkflowLevel;
+    if (newStatus === 'Office Approved') {
+      entityStatus = 'Region Approved';      // Office Approved maps to Region Approved in entity workflow
+      entityWorkflowLevel = 'REGION';        // OFFICER maps to REGION in entity workflow
+    } else if (newStatus === 'Finalized') {
+      entityStatus = 'Finalized';
+      entityWorkflowLevel = 'FINALIZED';
+    }
+
+    const entityUpdate = {
+      $set: {
+        status: entityStatus,
+        workflowLevel: entityWorkflowLevel,
+        lastActionBy: userName,
+        lastActionDate: new Date()
+      }
+    };
+
+    try {
+      // First, let's count how many records match our filter
+      const psCount = await PersonnelServices.countDocuments(entityFilter);
+      const coCount = await CapitalOutlay.countDocuments(entityFilter);
+      const mooeCount = await mooeProposals.countDocuments(entityFilter);
+      const incomeCount = await Income.countDocuments(entityFilter);
+      
+      console.log(`🔍 Found potential matches: PS=${psCount}, CO=${coCount}, MOOE=${mooeCount}, Income=${incomeCount}`);
+      
+      // If we have matches, let's also check their current status
+      if (psCount > 0) {
+        const samplePS = await PersonnelServices.findOne(entityFilter);
+        console.log(`📋 Sample PersonnelServices record status: ${samplePS?.status}, division: ${samplePS?.division}`);
+      }
+      
+      // Update PersonnelServices records
+      const psResult = await PersonnelServices.updateMany(entityFilter, entityUpdate);
+      console.log(`📊 Updated ${psResult.matchedCount} PersonnelServices records (${psResult.modifiedCount} modified)`);
+      
+      // Update CapitalOutlay records
+      const coResult = await CapitalOutlay.updateMany(entityFilter, entityUpdate);
+      console.log(`📊 Updated ${coResult.matchedCount} CapitalOutlay records (${coResult.modifiedCount} modified)`);
+      
+      // Update MOOE Proposals records
+      const mooeResult = await mooeProposals.updateMany(entityFilter, entityUpdate);
+      console.log(`📊 Updated ${mooeResult.matchedCount} MOOE Proposals records (${mooeResult.modifiedCount} modified)`);
+      
+      // Update Income records (if they have status field)
+      const incomeResult = await Income.updateMany(entityFilter, entityUpdate);
+      console.log(`📊 Updated ${incomeResult.matchedCount} Income records (${incomeResult.modifiedCount} modified)`);
+      
+      const totalMatched = psResult.matchedCount + coResult.matchedCount + mooeResult.matchedCount + incomeResult.matchedCount;
+      const totalModified = psResult.modifiedCount + coResult.modifiedCount + mooeResult.modifiedCount + incomeResult.modifiedCount;
+      
+      console.log(`✅ Entity update summary: ${totalMatched} matched, ${totalModified} modified`);
+    } catch (entityUpdateError) {
+      console.error('⚠️ Error updating entity records:', entityUpdateError);
+      // Don't fail the whole operation if entity updates fail
+    }
 
     // Send notification to submitter
     const submitterMessage = `Your proposal "${proposal.title}" has been approved by ${userName} with comment: ${comment}`;
@@ -474,6 +567,47 @@ exports.bulkApproveProposals = async (req, res) => {
         title: proposal.title,
         status: proposal.status
       });
+
+      // 🔄 UPDATE RELATED ENTITY RECORDS FOR BULK APPROVE
+      console.log(`🔄 Updating entity records for proposal: ${proposal.title}`);
+      
+      const entityFilter = {
+        region: proposal.region,
+        department: proposal.department,
+        division: proposal.division || proposal.department,
+        fiscalYear: proposal.fiscalYear,
+        budgetType: proposal.budgetType,
+        processBy: proposal.processBy
+      };
+      
+      console.log(`🔍 Bulk approve entity filter:`, JSON.stringify(entityFilter, null, 2));
+      
+      const entityUpdate = {
+        $set: {
+          status: 'Region Approved',     // Office Approved maps to Region Approved in entity workflow
+          workflowLevel: 'REGION',       // OFFICER maps to REGION in entity workflow
+          lastActionBy: userName,
+          lastActionDate: new Date()
+        }
+      };
+
+      try {
+        const results = await Promise.all([
+          PersonnelServices.updateMany(entityFilter, entityUpdate),
+          CapitalOutlay.updateMany(entityFilter, entityUpdate),
+          mooeProposals.updateMany(entityFilter, entityUpdate),
+          Income.updateMany(entityFilter, entityUpdate)
+        ]);
+        
+        const [psResult, coResult, mooeResult, incomeResult] = results;
+        console.log(`📊 Bulk update results for ${proposal.title}:`);
+        console.log(`   PersonnelServices: ${psResult.matchedCount} matched, ${psResult.modifiedCount} modified`);
+        console.log(`   CapitalOutlay: ${coResult.matchedCount} matched, ${coResult.modifiedCount} modified`);
+        console.log(`   MOOE: ${mooeResult.matchedCount} matched, ${mooeResult.modifiedCount} modified`);
+        console.log(`   Income: ${incomeResult.matchedCount} matched, ${incomeResult.modifiedCount} modified`);
+      } catch (entityUpdateError) {
+        console.error(`⚠️ Error updating entity records for ${proposal.title}:`, entityUpdateError);
+      }
 
       // Send notification to submitter
       const submitterMessage = `Your proposal "${proposal.title}" has been approved by ${userName} with comment: ${comment}`;
