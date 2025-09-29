@@ -21,6 +21,16 @@ const personnelServicesSchema = new mongoose.Schema(
       ],
       default: "Draft"
     },
+        enum: [
+          "Draft",                    // Division working copy
+          "Division Submitted",       // Division → Department
+          "Department Verified",      // Department technical validation
+          "Department Submitted",     // Department → Region  
+          "Region Approved",         // Region administrative approval
+          "Office Approved",         // Office/Budget Officer approval (preferred)
+          "Finalized",               // Ready for execution
+          "Returned"                 // Rejected at any level
+        ],
     // Enhanced workflow tracking
     workflowLevel: {
       type: String,
@@ -136,28 +146,19 @@ const personnelServicesSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
-    medical: {
-      type: Number,
-    },
-    childrenAllowance: {
-      type: Number,
-    },
-    meal: {
-      type: Number,
-    },
-    cashGift: {
-      type: Number,
-      required: true,
-    },
-    subsistenceAllowanceMDS: {
-      type: Number, 
-    },
-    subsistenceAllowanceST: {
-      type: Number,
-    },
-    midyearBonus: {
-      type: Number,
-      required: true,
+    status: {
+      type: String,
+      enum: [
+        "Draft",                    // Division working copy
+        "Division Submitted",       // Division \u2192 Department
+        "Department Verified",      // Department technical validation
+        "Department Submitted",     // Department \u2192 Region  
+        "Region Approved",         // Region administrative approval (legacy)
+        "Office Approved",         // Office/Budget Officer approval (preferred)
+        "Finalized",               // Ready for execution
+        "Returned"                 // Rejected at any level
+      ],
+      default: "Draft"
     },
     yearEndBonus: {
       type: Number,

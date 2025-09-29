@@ -1,13 +1,13 @@
 const mongoose = require('mongoose');
-const Proposal = require('./models/Proposal');
-const PersonnelService = require('./models/personnelServices');
-const MooeProposal = require('./models/mooeProposals');
-const CapitalOutlay = require('./models/CapitalOutlay');
-const Income = require('./models/Income');
+const Proposal = require('../models/Proposal');
+const PersonnelService = require('../models/PersonnelServices');
+const MooeProposal = require('../models/mooeProposals');
+const CapitalOutlay = require('../models/CapitalOutlay');
+const Income = require('../models/Income');
 
 async function checkData() {
   try {
-    await mongoose.connect('mongodb://172.16.4.98:27017/fmis-budget-september');
+    await mongoose.connect('mongodb://172.16.4.98:27017/fmis_budget');
 
     console.log('=== CHECKING DATABASE CONNECTION ===');
     console.log('Connected to database:', mongoose.connection.db.databaseName);
@@ -124,7 +124,12 @@ async function checkData() {
       status: { $in: ['Division Submitted', 'DIVISION SUBMITTED'] }
     }).limit(3).toArray();
     console.log('Found', submittedMooe.length, 'Division Submitted MOOE records');
-
+//Checking for Region Submitted status in ALL Proposals
+console.log('\n10. Checking for Region Submitted status in ALL Proposals');
+const submittedAllProposals = await Proposal.find({
+  status: { $in: ['Region Submitted', 'REGION SUBMITTED'] }
+}).limit(3);
+console.log('Found', submittedAllProposals.length, 'Region Submitted Proposals');
     console.log('\n10. Checking for Division Submitted status in Personnel');
     const submittedPersonnel = await personnelCollection.find({
       status: { $in: ['Division Submitted', 'DIVISION SUBMITTED'] }

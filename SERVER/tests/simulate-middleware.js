@@ -49,7 +49,7 @@ async function simulateMiddleware() {
                       { status: { $in: ['Division Submitted', 'DIVISION SUBMITTED'] } },
                       { status: { $in: ['Department Verified', 'DEPARTMENT VERIFIED'] } },
                       { status: { $in: ['Department Submitted', 'DEPARTMENT SUBMITTED'] } },
-                      { status: { $in: ['Region Approved', 'REGION APPROVED'] } },
+                      { status: { $in: ['Region Approved', 'REGION APPROVED', 'Office Approved', 'OFFICE APPROVED'] } },
                       { status: 'Finalized' }
                     ]
                   }
@@ -66,7 +66,7 @@ async function simulateMiddleware() {
     console.log('Hierarchical:', JSON.stringify(hierarchicalFilters, null, 2));
 
     // Test the filter
-    const PersonnelService = require('./models/personnelServices');
+  const PersonnelService = require('./models/PersonnelServices');
     const result = await PersonnelService.find(submissionFilters).countDocuments();
     console.log(`\n✅ Query result: ${result} documents found`);
 

@@ -50,7 +50,8 @@ const incomeSchema = new mongoose.Schema(
         'Division Submitted',  // New standardized status
         'Department Verified',
         'Department Submitted', 
-        'Region Approved',
+      'Region Approved',
+      'Office Approved',
         'Finalized',
         'Returned'
       ],

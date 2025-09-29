@@ -20,13 +20,14 @@ const CapitalOutlaySchema = new mongoose.Schema(
     status: {
       type: String,
       enum: [
-        "Draft",                    // Division working copy
-        "Division Submitted",       // Division → Department
-        "Department Verified",      // Department technical validation
-        "Department Submitted",     // Department → Region  
-        "Region Approved",         // Region administrative approval
-        "Finalized",               // Ready for execution
-        "Returned"                 // Rejected at any level
+          "Draft",                    // Division working copy
+          "Division Submitted",       // Division → Department
+          "Department Verified",      // Department technical validation
+          "Department Submitted",     // Department → Region  
+          "Region Approved",         // Region administrative approval
+          "Office Approved",         // Office/Budget Officer approval (preferred)
+          "Finalized",               // Ready for execution
+          "Returned"                 // Rejected at any level
       ],
       default: "Draft"
     },

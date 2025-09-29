@@ -180,8 +180,8 @@ const AllProposalsPage = () => {
     try {
       setStats(prev => ({ ...prev, loading: true }));
 
-      // Use the same endpoint as the table to get aggregated data
-      const response = await api.get("/proposals?divisionOnly=true");
+  // Use the same endpoint as the table to get aggregated data
+  const response = await api.get("/proposals");
 
       if (response.data && response.data.proposals) {
         const proposals = response.data.proposals;
@@ -244,16 +244,17 @@ const AllProposalsPage = () => {
       customRender: (row) => {
         // For division-level submissions, show responsibility center
         const workflowLevel = (row.workflowLevel || row.originalLevel || '').toUpperCase();
+        // Prefer explicit fields, then fall back to consolidatedProposals[0] where available, then N/A
+        const consolidatedFirst = (row.consolidatedProposals && row.consolidatedProposals[0]) ? row.consolidatedProposals[0] : null;
         if (workflowLevel === 'DIVISION' || workflowLevel === 'RESPONSIBILITY_CENTER') {
-          // Try responsibilityCenter first, then division, then show N/A for missing data
-          return row.responsibilityCenter || row.division || "N/A";
+          return row.responsibilityCenter || row.division || (consolidatedFirst && (consolidatedFirst.division || consolidatedFirst.department)) || "N/A";
         }
         // For office-level submissions, show office/department
         else if (workflowLevel === 'OFFICE' || workflowLevel === 'DEPARTMENT') {
-          return row.office || row.department || "N/A";
+          return row.office || row.department || (consolidatedFirst && (consolidatedFirst.department || consolidatedFirst.division)) || "N/A";
         }
         // Default fallback
-        return row.responsibilityCenter || row.office || row.division || "N/A";
+        return row.responsibilityCenter || row.office || row.division || (consolidatedFirst && (consolidatedFirst.department || consolidatedFirst.division)) || "N/A";
       }
     },
     fiscalYear: {
@@ -361,7 +362,9 @@ const AllProposalsPage = () => {
           'Returned': { color: 'error', text: 'RETURNED', bgColor: 'error.light' },
           'Finalized': { color: 'success', text: 'FINALIZED', bgColor: 'success.light' },
         };
-        const { color = 'default', text = (row.status || 'Unknown'), bgColor = 'grey.100' } = map[row.status] || {};
+        // Display the raw status value; server now normalizes statuses to the canonical 'Office Approved'.
+        const displayStatus = row.status;
+        const { color = 'default', text = (displayStatus || 'Unknown'), bgColor = 'grey.100' } = map[displayStatus] || {};
         return (
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Box
@@ -600,7 +603,7 @@ const AllProposalsPage = () => {
             refreshData={refreshData}
             title="All Proposals"
             description="View and manage all submitted proposals"
-            apiPath="/proposals?divisionOnly=true"
+            apiPath="/proposals"
             groupBy={null} // No grouping - show individual entries
             showTotals={true}
             totalsData={stats}

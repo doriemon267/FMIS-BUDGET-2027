@@ -13,8 +13,6 @@
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const UserOrganizationalAssignment = require('../models/UserOrganizationalAssignment');
 const { hasFullAccess } = require('./securityMiddleware');
-const mongoose = require('mongoose');
-
 const submissionWorkflowControl = (operation = 'read', options = {}) => {
   const {
     strictMode = false,
@@ -303,7 +301,8 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                           { status: { $in: ['Division Submitted', 'DIVISION SUBMITTED'] } },
                           { status: { $in: ['Department Verified', 'DEPARTMENT VERIFIED'] } },
                           { status: { $in: ['Department Submitted', 'DEPARTMENT SUBMITTED'] } },
-                          { status: { $in: ['Region Approved', 'REGION APPROVED'] } },
+                          // Accept both legacy 'Region Approved' and the Office-level label 'Office Approved'
+                          { status: { $in: ['Region Approved', 'REGION APPROVED', 'Office Approved', 'OFFICE APPROVED', 'Finalized'] } },
                           // Newer labels (Responsibility Center/Office workflow)
                           { status: { $in: ['Responsibility Center Submitted', 'RESPONSIBILITY_CENTER_SUBMITTED'] } },
                           { status: { $in: ['Office Verified', 'OFFICE_VERIFIED'] } },
@@ -361,7 +360,8 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                         $or: [
                           // Legacy labels
                           { status: { $in: ['Department Submitted', 'DEPARTMENT SUBMITTED'] } },
-                          { status: { $in: ['Region Approved', 'REGION APPROVED'] } },
+                          // Allow either Region Approved (legacy entity label) or Office Approved (workflow label)
+                          { status: { $in: ['Region Approved', 'REGION APPROVED', 'Office Approved', 'OFFICE APPROVED', 'Finalized'] } },
                           // Newer labels
                           { status: { $in: ['Office Submitted', 'OFFICE_SUBMITTED'] } },
                           { status: { $in: ['Final Approved', 'FINAL_APPROVED'] } },
@@ -410,7 +410,8 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                       { status: { $in: ['Division Submitted','DIVISION SUBMITTED'] } },
                       { status: { $in: ['Department Verified','DEPARTMENT VERIFIED'] } },
                       { status: { $in: ['Department Submitted','DEPARTMENT SUBMITTED'] } },
-                      { status: { $in: ['Region Approved','REGION APPROVED'] } },
+                      // Ensure both naming variants are accepted
+                      { status: { $in: ['Region Approved','REGION APPROVED','Office Approved','OFFICE APPROVED'] } },
                       // Newer labels
                       { status: { $in: ['Responsibility Center Submitted','RESPONSIBILITY_CENTER_SUBMITTED'] } },
                       { status: { $in: ['Office Verified','OFFICE_VERIFIED'] } },
@@ -1366,7 +1367,7 @@ const submissionWorkflowTransitions = {
 const getModelByEntity = (entity) => {
   switch (entity) {
     case 'personnel':
-      return require('../models/personnelServices');
+      return require('../models/PersonnelServices');
     case 'mooe':
       return require('../models/mooeProposals');
     case 'capital':
@@ -1376,7 +1377,7 @@ const getModelByEntity = (entity) => {
     case 'budgetarySupport':
       return require('../models/BudgetarySupport');
     default:
-      return require('../models/personnelServices');
+      return require('../models/PersonnelServices');
   }
 };
 module.exports = {

@@ -1181,6 +1181,25 @@ exports.getProposals = async (req, res) => {
     const isDivisionOnly = String(req.query.divisionOnly) === 'true';
     // Define scope once for use throughout the function
     const scope = (req.hierarchicalAccessInfo?.scope || req.hierarchicalAccess?.scope || 'REGION').toUpperCase();
+    // Debug: when caller passes _debugFilters=true, print resolved filters and a small count
+    if (String(req.query._debugFilters) === 'true') {
+      try {
+        console.log('=== DEBUG /proposals filter dump ===');
+        console.log('User id:', req.user?.id);
+        console.log('User roles:', req.user?.Roles);
+        console.log('userHierarchicalAssignment:', JSON.stringify(req.userHierarchicalAssignment || {}, null, 2));
+        console.log('submissionWorkflowFilters:', JSON.stringify(req.submissionWorkflowFilters || {}, null, 2));
+        console.log('hierarchicalFilters:', JSON.stringify(req.hierarchicalFilters || {}, null, 2));
+        console.log('visibilityFilter (from budgetRoleAccessControl):', JSON.stringify(req.query.visibilityFilter || {}, null, 2));
+        // Small counts using the most specific available filter (visibilityFilter > submissionWorkflowFilters > hierarchicalFilters)
+        const debugFilter = req.query.visibilityFilter || req.submissionWorkflowFilters || req.hierarchicalFilters || {};
+        const sampleCount = await Proposal.countDocuments(debugFilter);
+        console.log('DEBUG matched proposal count (by resolved filter):', sampleCount);
+        console.log('=== END DEBUG ===');
+      } catch (dbgErr) {
+        console.error('DEBUG /proposals error:', dbgErr?.message || dbgErr);
+      }
+    }
     // Build the query
     let query = {};
     // Apply submission workflow filters first (these respect submission status)
@@ -1237,7 +1256,8 @@ exports.getProposals = async (req, res) => {
     // Submitted-only view for Department-level All Proposals
     if (String(req.query.submittedOnly) === 'true' && req.hierarchicalAccessInfo?.scope === 'DEPARTMENT') {
       // Show only division submissions that have been submitted/verified/submitted to region/approved/finalized
-      const submittedStatuses = ['Division Submitted','DIVISION SUBMITTED','Department Verified','DEPARTMENT VERIFIED','Department Submitted','DEPARTMENT SUBMITTED','Region Approved','REGION APPROVED','Finalized'];
+  // Treat 'Office Approved' as equivalent to 'Region Approved' for visibility
+  const submittedStatuses = ['Division Submitted','DIVISION SUBMITTED','Department Verified','DEPARTMENT VERIFIED','Department Submitted','DEPARTMENT SUBMITTED','Region Approved','REGION APPROVED','Office Approved','OFFICE APPROVED','Finalized'];
       query = {
         $and: [
           query,
@@ -1847,6 +1867,41 @@ exports.getProposals = async (req, res) => {
       });
     }
 
+    // Remove duplicate entity/aggregate rows when a consolidated Proposal exists for the same org unit + fiscalYear + budgetType
+    // This prevents showing both the consolidated proposal and the aggregated entity rows for the same submission.
+    try {
+      const makeConsolidationKey = (doc) => {
+        const unit = doc.division || doc.department || doc.region || 'UNKNOWN';
+        const fy = doc.fiscalYear || 'UNKNOWN';
+        const bt = doc.budgetType || 'UNKNOWN';
+        return `${unit}_${fy}_${bt}`.toString().toUpperCase();
+      };
+
+      const consolidatedKeys = new Set(
+        finalProposals
+          .filter(p => String(p.modelType || '').toLowerCase() === 'proposal')
+          .map(p => makeConsolidationKey(p))
+      );
+
+      if (consolidatedKeys.size > 0) {
+        finalProposals = finalProposals.filter(item => {
+          // Always keep consolidated Proposal model rows
+          if (String(item.modelType || '').toLowerCase() === 'proposal') return true;
+
+          // Build key for this item and hide it if a consolidated proposal exists
+          const key = makeConsolidationKey(item);
+          if (consolidatedKeys.has(key)) {
+            // Hide aggregated entity row because consolidated proposal will be shown instead
+            return false;
+          }
+          return true;
+        });
+      }
+
+    } catch (dedupeErr) {
+      console.error('Error during deduplication of proposals:', dedupeErr?.message || dedupeErr);
+    }
+
     // Sort combined results and apply pagination
     finalProposals.sort((a, b) => {
       const aValue = a[sort] || a.createdAt || new Date(0);
@@ -2016,7 +2071,7 @@ exports.updateProposal = async (req, res) => {
     // Guard: Prevent elevating status to Approved without proper permission
     if (req.body && typeof req.body.status === 'string') {
       const desiredStatus = req.body.status.trim();
-      const approvingStatuses = ['Approved', 'Region Approved', 'Finalized'];
+  const approvingStatuses = ['Approved', 'Region Approved', 'Office Approved', 'Finalized'];
       if (approvingStatuses.includes(desiredStatus)) {
         try {
           const assignment = await HierarchicalUserAssignment.getUserPermissions(req.user?.id);
@@ -2568,7 +2623,7 @@ exports.getAllUserProposals = async (req, res) => {
       'Division Submitted','DIVISION SUBMITTED',
       'Department Verified','DEPARTMENT VERIFIED',
       'Department Submitted','DEPARTMENT SUBMITTED',
-      'Region Approved','REGION APPROVED','Finalized'
+      'Region Approved','REGION APPROVED','Office Approved','OFFICE APPROVED','Finalized'
     ];
 
     let visibilityGate = {};
@@ -2612,7 +2667,8 @@ exports.getAllUserProposals = async (req, res) => {
       };
     } else if (scope === 'REGION' || scope === 'FULL') {
       // Region: own region-level drafts + submitted department/division items only
-      const depDivSubmitted = ['Department Submitted','DEPARTMENT SUBMITTED','Region Approved','REGION APPROVED','Finalized'];
+  // Include 'Office Approved' as acceptable approved state for department/division submissions
+  const depDivSubmitted = ['Department Submitted','DEPARTMENT SUBMITTED','Region Approved','REGION APPROVED','Office Approved','OFFICE APPROVED','Finalized'];
       visibilityGate = {
         $and: [
           baseQuery,

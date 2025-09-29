@@ -33,9 +33,22 @@ const budgetRoleAccessControl = (operation = 'read') => {
         // Build visibility filter based on role
         let visibilityFilter = {};
 
+        // Extract hierarchical assignment once so multiple roles can reuse it
+        const assignment = req.userHierarchicalAssignment || req.user?.hierarchicalAssignment || {};
+        const userDivision = assignment.divisionName || req.user?.division || null;
+
         if (isBudgetAnalyst) {
-          // Budget Analysts can only see their own proposals
-          visibilityFilter.createdByUserId = userId;
+          // Budget Analysts: prefer to show only own proposals, but also include other proposals
+          // from the same division so that approvals by the Officer don't make them disappear.
+          if (userDivision) {
+            visibilityFilter.$or = [
+              { createdByUserId: userId },
+              { division: userDivision }
+            ];
+          } else {
+            // Fallback: only show own proposals
+            visibilityFilter.createdByUserId = userId;
+          }
         } else if (isBudgetCoordinator) {
           // Budget Coordinators can see proposals from their department
           // This would need department matching logic
@@ -44,11 +57,12 @@ const budgetRoleAccessControl = (operation = 'read') => {
             { status: { $in: ['Division Submitted', 'Office', 'Office Approved', 'Office Submitted'] } }
           ];
         } else if (isBudgetOfficer) {
-          // Budget Officers can see submitted proposals for approval
-          visibilityFilter.status = { $in: ['Division Submitted', 'Office', 'Office Approved'] };
+          // Budget Officers can see division submissions, office-level items, and items that have been Office Approved or finalized
+          visibilityFilter.status = { $in: ['Division Submitted', 'Office', 'Office Approved', 'Finalized'] };
         } else if (isBudgetManager) {
-          // Budget Managers can only see consolidated proposals
-          visibilityFilter.status = 'Office Submitted';
+          // Budget Managers: primarily see items submitted to Manager (Office Submitted)
+          // Also allow viewing of items that reached 'Office Approved' or 'Finalized' so managers can review completed items
+          visibilityFilter.status = { $in: ['Office Submitted', 'Office Approved', 'Finalized'] };
         }
 
         // Apply the filter to the query
@@ -107,12 +121,14 @@ function checkProposalAccess(proposal, userId, userRoles) {
   }
 
   // Role-based access
-  if (isBudgetOfficer && ['Division Submitted', 'Office', 'Office Approved'].includes(proposal.status)) {
+  if (isBudgetOfficer && ['Division Submitted', 'Office', 'Office Approved', 'Finalized'].includes(proposal.status)) {
     return true;
   }
 
-  if (isBudgetManager && proposal.status === 'Office Submitted') {
-    return true;
+  if (isBudgetManager) {
+    // Managers only have access when the proposal has been submitted to them
+    if (['Office Submitted','Office Approved','Finalized'].includes(proposal.status)) return true;
+    return false;
   }
 
   return false;
@@ -345,11 +361,16 @@ exports.approveProposal = async (req, res) => {
     console.log('🔍 Entity filter criteria:', JSON.stringify(entityFilter, null, 2));
     
     // Map proposal status to entity status
-    // Entity models use different workflow: Draft → Division Submitted → Department Verified → Department Submitted → Region Approved → Finalized
+    // Historically entity models used 'Region Approved' for the final approval state
+    // but workflow-level labels at the proposal summary are 'Office Approved'.
+    // To keep entity records consistent with proposal summaries we now store
+    // 'Office Approved' on entity documents while keeping workflowLevel as 'REGION'.
     let entityStatus, entityWorkflowLevel;
     if (newStatus === 'Office Approved') {
-      entityStatus = 'Region Approved';      // Office Approved maps to Region Approved in entity workflow
-      entityWorkflowLevel = 'REGION';        // OFFICER maps to REGION in entity workflow
+      // Store the Office-level approval label on entities so the UI and filters
+      // can be consistent and we don't have to special-case 'Region Approved'.
+      entityStatus = 'Office Approved';
+      entityWorkflowLevel = 'REGION';
     } else if (newStatus === 'Finalized') {
       entityStatus = 'Finalized';
       entityWorkflowLevel = 'FINALIZED';
@@ -584,7 +605,7 @@ exports.bulkApproveProposals = async (req, res) => {
       
       const entityUpdate = {
         $set: {
-          status: 'Region Approved',     // Office Approved maps to Region Approved in entity workflow
+          status: 'Office Approved',     // Normalize entity records to use Office Approved
           workflowLevel: 'REGION',       // OFFICER maps to REGION in entity workflow
           lastActionBy: userName,
           lastActionDate: new Date()
@@ -690,7 +711,13 @@ exports.consolidateProposals = async (req, res) => {
         date: new Date()
       },
       createdByUserId: userId,
-      submittedDate: new Date()
+      submittedDate: new Date(),
+      // Track explicit submission metadata for manager visibility/audit
+      submittedToManagerAt: new Date(),
+      submittedToManagerBy: {
+        userId,
+        userName
+      }
     });
 
     // Add consolidation to workflow history
@@ -710,7 +737,13 @@ exports.consolidateProposals = async (req, res) => {
     await Proposal.updateMany(
       { _id: { $in: proposalIds } },
       {
-        $set: { isConsolidated: true },
+        $set: {
+          isConsolidated: true,
+          // Mark originals as submitted to manager for consistent visibility
+          status: 'Office Submitted',
+          submittedToManagerAt: new Date(),
+          submittedToManagerBy: { userId, userName }
+        },
         $push: {
           workflowHistory: {
             action: 'CONSOLIDATE',
@@ -719,11 +752,38 @@ exports.consolidateProposals = async (req, res) => {
             userName,
             timestamp: new Date(),
             previousStatus: 'Office Approved',
-            newStatus: 'Office Approved'
+            newStatus: 'Office Submitted'
           }
         }
       }
     );
+
+    // Also update entity-level collections (PersonnelServices, MooeProposal, CapitalOutlay, Income)
+    try {
+      const PersonnelServices = require(path.join(__dirname, '..', 'models', 'PersonnelServices'));
+      const MooeProposal = require(path.join(__dirname, '..', 'models', 'mooeProposals'));
+      const CapitalOutlay = require(path.join(__dirname, '..', 'models', 'CapitalOutlay'));
+      const Income = require(path.join(__dirname, '..', 'models', 'Income'));
+
+      // We assume the proposals array contains original proposal docs that have _id references
+      // and that these entity collections have a field linking back to a proposal id via `proposalId` or similar.
+      // To be safe, we'll update by matching on department/division/fiscalYear/budgetType and status = 'Office Approved'.
+      const dept = department;
+      const div = proposals[0].division;
+      const fy = fiscalYear;
+      const bt = budgetType;
+
+      const entityQuery = { department: dept, division: div, fiscalYear: fy, budgetType: bt, status: 'Office Approved' };
+
+      await Promise.all([
+        PersonnelServices.updateMany(entityQuery, { $set: { status: 'Office Submitted', submittedToManagerAt: new Date(), submittedToManagerBy: { userId, userName } } }),
+        MooeProposal.updateMany(entityQuery, { $set: { status: 'Office Submitted', submittedToManagerAt: new Date(), submittedToManagerBy: { userId, userName } } }),
+        CapitalOutlay.updateMany(entityQuery, { $set: { status: 'Office Submitted', submittedToManagerAt: new Date(), submittedToManagerBy: { userId, userName } } }),
+        Income.updateMany(entityQuery, { $set: { status: 'Office Submitted', submittedToManagerAt: new Date(), submittedToManagerBy: { userId, userName } } })
+      ]);
+    } catch (entErr) {
+      console.error('Warning: failed to update entity-level collections during consolidation:', entErr && entErr.message ? entErr.message : entErr);
+    }
 
     // Send notification to Budget Manager
     await sendNotification({
