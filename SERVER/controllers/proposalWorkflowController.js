@@ -734,29 +734,33 @@ exports.consolidateProposals = async (req, res) => {
     await consolidatedProposal.save();
 
     // Update original proposals to mark as consolidated
-    await Proposal.updateMany(
-      { _id: { $in: proposalIds } },
-      {
-        $set: {
-          isConsolidated: true,
-          // Mark originals as submitted to manager for consistent visibility
-          status: 'Office Submitted',
-          submittedToManagerAt: new Date(),
-          submittedToManagerBy: { userId, userName }
-        },
-        $push: {
-          workflowHistory: {
-            action: 'CONSOLIDATE',
-            comment: `Included in consolidated proposal: ${consolidatedTitle}`,
-            userId,
-            userName,
-            timestamp: new Date(),
-            previousStatus: 'Office Approved',
-            newStatus: 'Office Submitted'
-          }
-        }
-      }
-    );
+    // Idempotency: only set submittedToManagerAt/submittedToManagerBy if not already present
+    const now = new Date();
+    const originals = await Proposal.find({ _id: { $in: proposalIds } });
+    for (const orig of originals) {
+      const updates = {};
+      const push = {
+        action: 'CONSOLIDATE',
+        comment: `Included in consolidated proposal: ${consolidatedTitle}`,
+        userId,
+        userName,
+        timestamp: now,
+        previousStatus: orig.status || 'Office Approved',
+        newStatus: 'Office Submitted'
+      };
+
+      // Always mark as consolidated
+      updates.isConsolidated = true;
+
+      // Only set submittedToManager fields if missing
+      if (!orig.submittedToManagerAt) updates.submittedToManagerAt = now;
+      if (!orig.submittedToManagerBy) updates.submittedToManagerBy = { userId, userName };
+
+      // If status is not already Office Submitted, set it
+      if (orig.status !== 'Office Submitted') updates.status = 'Office Submitted';
+
+      await Proposal.updateOne({ _id: orig._id }, { $set: updates, $push: { workflowHistory: push } });
+    }
 
     // Also update entity-level collections (PersonnelServices, MooeProposal, CapitalOutlay, Income)
     try {

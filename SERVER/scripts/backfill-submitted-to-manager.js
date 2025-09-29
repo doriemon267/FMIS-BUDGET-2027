@@ -41,9 +41,20 @@ const MONGODB = process.env.MONGODB_BUDGET_URL || 'mongodb://localhost:27017/fmi
       console.log(`Consolidated ${cons._id} -> will ${apply ? 'update' : 'report'} ${candidates.length} originals`);
 
       if (apply) {
-        const updateResult = await Proposal.updateMany(
-          { _id: { $in: candidates.map(c => c._id) } },
-          {
+        // Perform per-document updates so we can audit old vs new values
+        const fs = require('fs');
+        const logsDir = path.join(__dirname, '..', 'logs');
+        if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+        const csvPath = path.join(logsDir, `backfill-submitted-to-manager-${new Date().toISOString().slice(0,10)}.csv`);
+        const csvHeader = 'proposalId,oldStatus,oldSubmittedAt,oldSubmittedBy,newStatus,newSubmittedAt,newSubmittedBy,sourceConsolidatedId,appliedAt\n';
+        if (!fs.existsSync(csvPath)) fs.writeFileSync(csvPath, csvHeader);
+
+        for (const cand of candidates) {
+          const oldStatus = cand.status || '';
+          const oldSubmittedAt = cand.submittedToManagerAt ? cand.submittedToManagerAt.toISOString() : '';
+          const oldSubmittedBy = cand.submittedToManagerBy ? (cand.submittedToManagerBy.userName || cand.submittedToManagerBy.name || '') : '';
+
+          const update = {
             $set: {
               status: 'Office Submitted',
               submittedToManagerAt: submittedAt,
@@ -56,14 +67,21 @@ const MONGODB = process.env.MONGODB_BUDGET_URL || 'mongodb://localhost:27017/fmi
                 userId: submittedBy?.userId || null,
                 userName: submittedBy?.userName || submittedBy?.name || null,
                 timestamp: new Date(),
-                previousStatus: 'Office Approved',
+                previousStatus: oldStatus || 'Office Approved',
                 newStatus: 'Office Submitted'
               }
             }
-          }
-        );
+          };
 
-        totalUpdated += updateResult.modifiedCount || 0;
+          const res = await Proposal.updateOne({ _id: cand._id, $or: [ { submittedToManagerAt: { $exists: false } }, { status: { $ne: 'Office Submitted' } } ] }, update);
+          if (res.modifiedCount && res.modifiedCount > 0) {
+            totalUpdated += 1;
+            const newSubmittedAt = submittedAt ? submittedAt.toISOString() : '';
+            const newSubmittedBy = submittedBy ? (submittedBy.userName || submittedBy.name || '') : '';
+            const row = `${cand._id},${oldStatus},${oldSubmittedAt},"${oldSubmittedBy}",Office Submitted,${newSubmittedAt},"${newSubmittedBy}",${cons._id},${new Date().toISOString()}\n`;
+            fs.appendFileSync(csvPath, row);
+          }
+        }
       }
     }
 
