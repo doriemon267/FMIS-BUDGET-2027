@@ -1288,6 +1288,17 @@ exports.getProposals = async (req, res) => {
         ]
       };
     }
+
+    // If caller specifically requests to include Office Approved / Finalized rows, widen the query
+    if (String(req.query.includeFinalized) === 'true') {
+      const includeStatuses = ['Office Approved', 'Finalized', 'OFFICE APPROVED', 'FINALIZED'];
+      if (Object.keys(query).length === 0) {
+        query.status = { $in: includeStatuses };
+      } else {
+        // Widen existing filters so either the original filters OR the approved/finalized statuses are returned
+        query = { $or: [ query, { status: { $in: includeStatuses } } ] };
+      }
+    }
     // First, let's check how many total proposals exist in the database
     const totalProposalsInDB = await Proposal.countDocuments();
     // Check what proposals exist for this user
@@ -1295,6 +1306,33 @@ exports.getProposals = async (req, res) => {
       const sampleProposals = await Proposal.find().limit(3);
       sampleProposals.forEach((proposal, index) => {
         });
+    }
+    // If caller filtered by office but that returns no proposals, try a department fallback
+    try {
+      if (req.hierarchicalFilters && req.hierarchicalFilters.office) {
+        const officeFilterQuery = { ...req.hierarchicalFilters };
+        // Build the initial query used earlier (submissionWorkflowFilters/visibilityFilter/hierarchicalFilters)
+        let initialQuery = {};
+        if (req.submissionWorkflowFilters) Object.assign(initialQuery, req.submissionWorkflowFilters);
+        if (req.query.visibilityFilter) initialQuery = Object.keys(initialQuery).length ? { $and: [initialQuery, req.query.visibilityFilter] } : req.query.visibilityFilter;
+        else if (req.hierarchicalFilters) Object.assign(initialQuery, req.hierarchicalFilters);
+        const sampleCount = await Proposal.countDocuments(initialQuery);
+        if (sampleCount === 0) {
+          console.log('▶ No proposals matched office-scoped filter; falling back to department for visibility');
+          // Replace office filter with department equal to office (common naming in DB)
+          if (!initialQuery.department) {
+            if (initialQuery.office) {
+              initialQuery.department = initialQuery.office;
+              delete initialQuery.office;
+            }
+          }
+          // use the fallback initialQuery for subsequent queries
+          // merge back to req.hierarchicalFilters so downstream code uses the fallback
+          req.hierarchicalFilters = initialQuery;
+        }
+      }
+    } catch (fbErr) {
+      console.error('Fallback check error:', fbErr?.message || fbErr);
     }
     // Get data from all proposal models
     const sortOrder = order === "asc" ? 1 : -1;
@@ -1413,6 +1451,11 @@ exports.getProposals = async (req, res) => {
         // Convert Set to array for serialization and map to plain objects
         return Array.from(psGroups.values()).map(rec => ({
           ...rec,
+          // UI expects proposedBudget / totalExpenses / totalIncome fields.
+          // Personnel aggregated records use `Total` internally; expose it on the expected fields
+          proposedBudget: Number(rec.Total || 0),
+          totalExpenses: Number(rec.Total || 0),
+          totalIncome: Number(rec.totalIncome || 0) || 0,
           statusTypes: Array.from(rec.statusTypes || [])
         }));
       })(),
@@ -1757,8 +1800,21 @@ exports.getProposals = async (req, res) => {
       // Create a map of org unit -> consolidated proposal
       const consolidatedMap = new Map();
       consolidatedProposals.forEach(cp => {
-        const key = `${cp.division || cp.department || cp.region}_${cp.fiscalYear}_${cp.budgetType}`;
-        consolidatedMap.set(key, cp);
+        const fy = cp.fiscalYear || '';
+        const bt = cp.budgetType || '';
+        // Register the consolidated proposal under multiple possible organizational keys
+        // so that mismatches between division vs department fields won't hide the consolidated row.
+        const units = [];
+        if (cp.division) units.push(cp.division);
+        if (cp.department) units.push(cp.department);
+        if (cp.region) units.push(cp.region);
+        // Always ensure there is at least one key
+        if (units.length === 0) units.push('UNKNOWN');
+        // Deduplicate unit list and register map entries
+        Array.from(new Set(units)).forEach(unit => {
+          const key = `${unit}_${fy}_${bt}`;
+          consolidatedMap.set(key, cp);
+        });
       });
 
       finalProposals.forEach((proposal) => {
@@ -2861,6 +2917,48 @@ exports.consolidateProposals = async (req, res) => {
     // Execute bulk operations
     if (bulkOps.length > 0) {
       const bulkResult = await Proposal.bulkWrite(bulkOps);
+      // After creating/upserting consolidated proposals, ensure original Proposal records
+      // that belong to these groups are marked as submitted to manager (idempotent).
+      try {
+        // For each bulk op we can derive the filter used; build a set of distinct filters
+        const updatePromises = [];
+        for (const op of bulkOps) {
+          const filter = op.updateOne.filter || {};
+          // Only update Proposal model originals that aren't already marked as Office Submitted
+          const origFilter = {
+            ...filter,
+            $or: [ { submittedToManagerAt: { $exists: false } }, { status: { $ne: 'Office Submitted' } } ]
+          };
+          const submittedAt = new Date();
+          const submittedBy = req.user ? { userId: req.user.id, userName: `${req.user.FirstName || req.user.name || ''} ${req.user.LastName || ''}`.trim() } : null;
+          const update = {
+            $set: {
+              status: 'Office Submitted',
+              submittedToManagerAt: submittedAt,
+              submittedToManagerBy: submittedBy
+            },
+            $push: {
+              workflowHistory: {
+                action: 'CONSOLIDATE',
+                comment: `Consolidated by ${submittedBy ? submittedBy.userName : 'system'}`,
+                userId: submittedBy?.userId || 'system',
+                userName: submittedBy?.userName || 'system',
+                timestamp: submittedAt,
+                previousStatus: 'Office Approved',
+                newStatus: 'Office Submitted'
+              }
+            }
+          };
+          updatePromises.push(Proposal.updateMany(origFilter, update));
+        }
+        const updResults = await Promise.all(updatePromises);
+        // log counts for debugging
+        const totalUpdated = updResults.reduce((sum, r) => sum + (r.modifiedCount || 0), 0);
+        console.log(`Backfilled ${totalUpdated} original proposals to Office Submitted during consolidation`);
+      } catch (updErr) {
+        console.error('Error updating original proposals after consolidation:', updErr?.message || updErr);
+      }
+
       res.status(200).json({
         message: `Successfully consolidated ${consolidatedCount} proposal categories`,
         details: {

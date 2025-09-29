@@ -25,6 +25,7 @@ const ProposalCustomPage = ({
   refreshData,
   tableRef,
   apiPath,
+  apiParams = {},
   groupBy = null, // Make sure this prop is defined
   showTotals = false,
   totalsData = null,
@@ -68,6 +69,7 @@ const ProposalCustomPage = ({
           ref={tableRef}
           columns={columns}
           apiPath={apiPath}
+          apiParams={apiParams}
           dataListName={dataListName}
           hasEdit={hasEdit}
           hasDelete={hasDelete}

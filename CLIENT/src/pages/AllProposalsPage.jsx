@@ -39,6 +39,7 @@ const AllProposalsPage = () => {
     totalProposedBudget: 0,
     loading: true
   });
+  const [includeFinalized, setIncludeFinalized] = useState(false);
 
   // Handle table row selection changes
   const handleRowSelectionChange = (selectedIds) => {
@@ -179,9 +180,8 @@ const AllProposalsPage = () => {
   const fetchStats = async () => {
     try {
       setStats(prev => ({ ...prev, loading: true }));
-
   // Use the same endpoint as the table to get aggregated data
-  const response = await api.get("/proposals");
+  const response = await api.get("/proposals", { params: { includeFinalized: includeFinalized || undefined } });
 
       if (response.data && response.data.proposals) {
         const proposals = response.data.proposals;
@@ -222,6 +222,12 @@ const AllProposalsPage = () => {
   useEffect(() => {
     fetchStats();
   }, []);
+
+  // When includeFinalized toggles, refresh table and stats
+  useEffect(() => {
+    if (tableRef.current?.refetch) tableRef.current.refetch();
+    fetchStats();
+  }, [includeFinalized]);
 
   // Debug function to test API access
   const testAPIAccess = async () => {
@@ -519,6 +525,23 @@ const AllProposalsPage = () => {
         </Box>
       )}
 
+      {/* Include Finalized Toggle */}
+      <Box sx={{ mb: 3, mx: 3 }}>
+        <Card sx={{ p: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Include Office Approved / Finalized</Typography>
+            <Button
+              variant={includeFinalized ? 'contained' : 'outlined'}
+              color={includeFinalized ? 'primary' : 'inherit'}
+              onClick={() => setIncludeFinalized(v => !v)}
+            >
+              {includeFinalized ? 'Included' : 'Exclude'}
+            </Button>
+            <Typography variant="body2" color="textSecondary">Toggle to include proposals with Office Approved/Finalized statuses in the table.</Typography>
+          </Box>
+        </Card>
+      </Box>
+
       {/* User Role Information — hidden per UI alignment */}
       {false && (
         <Box sx={{ mb: 3, mx: 3 }}>
@@ -604,6 +627,7 @@ const AllProposalsPage = () => {
             title="All Proposals"
             description="View and manage all submitted proposals"
             apiPath="/proposals"
+            apiParams={{ includeFinalized }}
             groupBy={null} // No grouping - show individual entries
             showTotals={true}
             totalsData={stats}

@@ -27,6 +27,7 @@ const ProposalCustomTable = forwardRef(({
   columns,
   ROWS_PER_PAGE = 10,
   apiPath,
+  apiParams = {},
   dataListName,
   additionalMenuOptions = [],
   hasEdit = true,
@@ -50,13 +51,13 @@ const ProposalCustomTable = forwardRef(({
   const fetchData = async () => {
     setLoading(true);
     try {
-      const response = await api.get(apiPath, {
-        params: {
-          page,
-          limit: rowsPerPage,
-          search: searchValue || undefined,
-        },
-      });
+      const params = {
+        page,
+        limit: rowsPerPage,
+        search: searchValue || undefined,
+        ...apiParams
+      };
+      const response = await api.get(apiPath, { params });
       
       // Handle different response formats based on the endpoint
       let extractedData = [];
@@ -156,7 +157,7 @@ const ProposalCustomTable = forwardRef(({
 
   useEffect(() => {
     fetchData();
-  }, [page, rowsPerPage, searchValue, apiPath]);
+  }, [page, rowsPerPage, searchValue, apiPath, JSON.stringify(apiParams)]);
 
   // Expose refetch method to parent components
   useImperativeHandle(ref, () => ({
