@@ -1,0 +1,175 @@
+/**
+ * 🔐 Budget Role Visibility Control Middleware
+ * 
+ * Implements role-based data visibility rules:
+ * - BUDGET_ANALYST: Can see own proposals and division proposals (all statuses)
+ * - BUDGET_OFFICER: Can see approved/submitted proposals only (no drafts from others)
+ * - BUDGET_MANAGER/ADMIN: Can see submitted proposals only (after officer submission)
+ */
+
+const { hasFullAccess } = require('./securityMiddleware');
+
+/**
+ * Apply budget role-based visibility filters
+ */
+const budgetRoleVisibilityControl = () => {
+  return async (req, res, next) => {
+    try {
+      const userId = req.user?.id;
+      const userRoles = req.user?.Roles || [];
+      
+      // Super admins bypass all filters
+      if (userRoles.includes('SUPER_ADMIN')) {
+        console.log('[budgetRoleVisibilityControl] SUPER_ADMIN detected, bypassing filters');
+        return next();
+      }
+
+      // Determine user's budget role (highest privilege takes precedence)
+      let budgetRole = null;
+      if (userRoles.includes('BUDGET_ADMIN')) {
+        budgetRole = 'BUDGET_ADMIN';
+      } else if (userRoles.includes('BUDGET_MANAGER')) {
+        budgetRole = 'BUDGET_MANAGER';
+      } else if (userRoles.includes('BUDGET_OFFICER')) {
+        budgetRole = 'BUDGET_OFFICER';
+      } else if (userRoles.includes('BUDGET_ANALYST')) {
+        budgetRole = 'BUDGET_ANALYST';
+      }
+
+      if (!budgetRole) {
+        // No budget role, skip filtering
+        console.log('[budgetRoleVisibilityControl] No budget role detected, skipping filters');
+        return next();
+      }
+
+      // Build visibility filters based on role
+      let visibilityFilter = {};
+
+      switch (budgetRole) {
+        case 'BUDGET_ANALYST':
+          // BUDGET_ANALYST can see:
+          // 1. Own proposals (any status including Draft)
+          // 2. Division proposals within their division (any status)
+          const analystAssignment = req.userHierarchicalAssignment;
+          if (analystAssignment && analystAssignment.divisionName) {
+            visibilityFilter = {
+              $or: [
+                // Own proposals (created by this user)
+                { createdByUserId: userId },
+                { processBy: userId },
+                // Division proposals (same division, any status)
+                {
+                  division: analystAssignment.divisionName,
+                  department: analystAssignment.departmentName || analystAssignment.officeName
+                }
+              ]
+            };
+          } else {
+            // If no division assignment, only show own proposals
+            visibilityFilter = {
+              $or: [
+                { createdByUserId: userId },
+                { processBy: userId }
+              ]
+            };
+          }
+          break;
+
+        case 'BUDGET_OFFICER':
+          // BUDGET_OFFICER can see:
+          // 1. Own proposals (any status)
+          // 2. Approved/Submitted/Finalized proposals from others (no Drafts)
+          visibilityFilter = {
+            $or: [
+              // Own proposals (any status)
+              { createdByUserId: userId },
+              { processBy: userId },
+              // Submitted/approved proposals from others
+              {
+                status: {
+                  $in: [
+                    'Division Submitted',
+                    'DIVISION SUBMITTED',
+                    'Department Verified',
+                    'DEPARTMENT VERIFIED',
+                    'Department Submitted',
+                    'DEPARTMENT SUBMITTED',
+                    'Responsibility Center Submitted',
+                    'RESPONSIBILITY_CENTER_SUBMITTED',
+                    'Office Verified',
+                    'OFFICE VERIFIED',
+                    'Office Submitted',
+                    'OFFICE SUBMITTED',
+                    'Office Approved',
+                    'OFFICE APPROVED',
+                    'Region Approved',
+                    'REGION APPROVED',
+                    'Final Approved',
+                    'FINAL_APPROVED',
+                    'Finalized',
+                    'Approved',
+                    'Submitted'
+                  ]
+                }
+              }
+            ]
+          };
+          break;
+
+        case 'BUDGET_MANAGER':
+        case 'BUDGET_ADMIN':
+          // BUDGET_MANAGER/ADMIN can see:
+          // Only submitted/approved/finalized proposals (no drafts from any level)
+          // This enforces that they only see proposals after officer submission
+          visibilityFilter = {
+            status: {
+              $in: [
+                'Division Submitted',
+                'DIVISION SUBMITTED',
+                'Department Verified',
+                'DEPARTMENT VERIFIED',
+                'Department Submitted',
+                'DEPARTMENT SUBMITTED',
+                'Responsibility Center Submitted',
+                'RESPONSIBILITY_CENTER_SUBMITTED',
+                'Office Verified',
+                'OFFICE VERIFIED',
+                'Office Submitted',
+                'OFFICE SUBMITTED',
+                'Office Approved',
+                'OFFICE APPROVED',
+                'Region Approved',
+                'REGION APPROVED',
+                'Final Approved',
+                'FINAL_APPROVED',
+                'Finalized',
+                'Approved',
+                'Submitted'
+              ]
+            }
+          };
+          break;
+
+        default:
+          // Unknown role, no additional filtering
+          break;
+      }
+
+      // Attach visibility filter to request for use in controllers
+      req.budgetRoleVisibilityFilter = visibilityFilter;
+      
+      next();
+    } catch (error) {
+      console.error('Error in budget role visibility control:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error applying role-based visibility',
+        error: error.message
+      });
+    }
+  };
+};
+
+module.exports = {
+  budgetRoleVisibilityControl
+};

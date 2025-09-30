@@ -10,6 +10,9 @@ router.use(checkToken);
 // Submit proposal to Budget Officer
 router.post('/submit', proposalWorkflowController.submitProposal);
 
+// Submit proposal directly to Budget Manager (BUDGET_ANALYST only)
+router.post('/submit-direct-to-manager', proposalWorkflowController.submitDirectToManager);
+
 // Approve proposal (Budget Officer or Budget Manager)
 router.post('/approve', proposalWorkflowController.approveProposal);
 

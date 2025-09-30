@@ -181,11 +181,12 @@ const budgetOfficerRoute = (allowedOperations = ['read']) => {
     checkToken,
     (req, res, next) => {
       const userRoles = req.user.Roles;
-      // Check if user has allowed privileges (restricted to admin/analyst/manager)
+      // Check if user has allowed privileges (includes BUDGET_OFFICER, ANALYST, MANAGER, ADMIN)
       const allowedRoles = [
         PERMISSION_LEVELS.BUDGET_ADMIN,
         PERMISSION_LEVELS.BUDGET_ANALYST,
-        PERMISSION_LEVELS.BUDGET_MANAGER
+        PERMISSION_LEVELS.BUDGET_MANAGER,
+        PERMISSION_LEVELS.BUDGET_OFFICER
       ];
       if (!hasRequiredRole(userRoles, allowedRoles)) {
         return res.status(403).json({

@@ -133,6 +133,17 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           icon: "📤",
           description: "Submit proposal to Budget Officer for approval"
         });
+        
+        // BUDGET ANALYST ONLY: Direct submit to Manager (bypass Officer review)
+        if (isBudgetAnalyst && !isBudgetCoordinator) {
+          actions.push({
+            label: "Submit to Manager (Direct)",
+            action: "submit-direct-to-manager",
+            color: "bg-purple-500 hover:bg-purple-600",
+            icon: "⚡",
+            description: "Submit proposal directly to Budget Manager (bypasses Officer review)"
+          });
+        }
       }
     }
 
@@ -206,6 +217,10 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
         case "submit-to-officer":
           endpoint = "/api/workflow/submit";
           successMessage = "Proposal submitted to Budget Officer successfully";
+          break;
+        case "submit-direct-to-manager":
+          endpoint = "/api/workflow/submit-direct-to-manager";
+          successMessage = "Proposal submitted directly to Budget Manager successfully";
           break;
         case "officer-approve":
           endpoint = "/api/workflow/approve";
@@ -398,11 +413,13 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
       'office-approve': 'secondary',
       'office-finalize': 'primary',
       'office-submit': 'secondary',
-      'responsibility-center-submit': 'info'
+      'responsibility-center-submit': 'info',
+      'submit-direct-to-manager': 'secondary'
     };
     const color = iconColorMap[action] || 'inherit';
     switch (action) {
       case 'submit-to-officer': return <SendIcon fontSize="small" color={color} />;
+      case 'submit-direct-to-manager': return <SendIcon fontSize="small" color={color} />;
       case 'officer-approve': return <CheckIcon fontSize="small" color={color} />;
       case 'officer-return': return <UndoIcon fontSize="small" color={color} />;
       case 'submit-to-manager': return <SendIcon fontSize="small" color={color} />;

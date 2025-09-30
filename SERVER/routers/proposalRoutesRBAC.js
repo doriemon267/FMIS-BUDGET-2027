@@ -41,6 +41,9 @@ const {
   logOrgSelection,
   validateOrgSelection
 } = require('../middleware/budgetManagerOrgSelection');
+const {
+  budgetRoleVisibilityControl
+} = require('../middleware/budgetRoleVisibilityControl');
 const proposalRBACRouter = Router();
 // 🔒 SECURED ROUTES WITH RBAC
 // Get all proposals summary (Admin only with full access)
@@ -53,6 +56,7 @@ proposalRBACRouter.get(
 proposalRBACRouter.get(
   "/proposals", 
   ...budgetOfficerRoute(['read']),
+  budgetRoleVisibilityControl(),  // ✅ APPLY ROLE-BASED VISIBILITY FIRST
   proposalAccessControl('read'),
   applyAccessFilters(),
   getProposals
@@ -208,4 +212,4 @@ proposalRBACRouter.get('/proposal-simple',
     }
   }
 );
-module.exports = proposalRBACRouter;
+module.exports = proposalRBACRouter;

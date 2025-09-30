@@ -58,7 +58,7 @@ const budgetRoleAccessControl = (operation = 'read') => {
           ];
         } else if (isBudgetOfficer) {
           // Budget Officers can see division submissions, office-level items, and items that have been Office Approved or finalized
-          visibilityFilter.status = { $in: ['Division Submitted', 'Office', 'Office Approved', 'Finalized'] };
+          visibilityFilter.status = { $in: ['Division Submitted', 'Office', 'Office Submitted', 'Office Approved', 'Finalized'] };
         } else if (isBudgetManager) {
           // Budget Managers: primarily see items submitted to Manager (Office Submitted)
           // Also allow viewing of items that reached 'Office Approved' or 'Finalized' so managers can review completed items
@@ -138,6 +138,100 @@ function checkProposalAccess(proposal, userId, userRoles) {
  * Budget Proposal Workflow Controller
  * Implements hierarchical workflow with mandatory comments and user tracking
  */
+
+// Submit proposal directly to Budget Manager (bypassing Officer)
+exports.submitDirectToManager = async (req, res) => {
+  try {
+    const { proposalId, comment } = req.body;
+    const userId = req.user.id;
+    const userName = req.user.FirstName + ' ' + req.user.LastName;
+    const userRoles = req.user.Roles || [];
+
+    // Only BUDGET_ANALYST can use this endpoint
+    if (!userRoles.includes('BUDGET_ANALYST')) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Only Budget Analysts can submit directly to Budget Manager' 
+      });
+    }
+
+    // Find the proposal
+    let proposal = await Proposal.findById(proposalId);
+
+    if (!proposal) {
+      return res.status(404).json({ success: false, message: 'Proposal not found' });
+    }
+
+    // Verify the analyst owns this proposal
+    if (proposal.createdByUserId !== userId) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'You can only submit your own proposals' 
+      });
+    }
+
+    // Verify the proposal is in Draft status
+    if (proposal.status !== 'Draft') {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Only Draft proposals can be submitted directly to Budget Manager' 
+      });
+    }
+
+    // Update proposal status - submit directly to Manager level
+    const previousStatus = proposal.status;
+    const newStatus = 'Office Submitted';
+    const workflowLevel = 'MANAGER';
+
+    proposal.status = newStatus;
+    proposal.workflowLevel = workflowLevel;
+    proposal.submittedByRole = 'BUDGET_ANALYST';
+    proposal.submittedDate = new Date();
+    proposal.directSubmissionToManager = true; // Flag to indicate this bypassed Officer review
+
+    // Add to workflow history
+    proposal.workflowHistory.push({
+      action: 'SUBMIT_DIRECT_TO_MANAGER',
+      comment: comment || 'Submitted directly to Budget Manager',
+      userId,
+      userName,
+      timestamp: new Date(),
+      previousStatus,
+      newStatus
+    });
+
+    await proposal.save();
+
+    // Send notification to Budget Manager
+    await sendNotification({
+      recipientRole: 'BUDGET_MANAGER',
+      title: 'New Proposal Submitted (Direct)',
+      message: `Proposal "${proposal.title}" submitted directly from ${proposal.division || proposal.department} by ${userName} (Budget Analyst)`,
+      entity: 'proposal',
+      recordIds: [proposal._id],
+      org: {
+        region: proposal.region,
+        department: proposal.department,
+        division: proposal.division
+      },
+      createdBy: { userId, name: userName }
+    });
+
+    res.json({
+      success: true,
+      message: 'Proposal submitted directly to Budget Manager successfully',
+      proposal: {
+        id: proposal._id,
+        status: proposal.status,
+        workflowLevel: proposal.workflowLevel
+      }
+    });
+
+  } catch (error) {
+    console.error('Error submitting proposal directly to manager:', error);
+    res.status(500).json({ success: false, message: 'Failed to submit proposal', error: error.message });
+  }
+};
 
 // Submit proposal to Budget Officer
 exports.submitProposal = async (req, res) => {

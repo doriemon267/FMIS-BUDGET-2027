@@ -1202,11 +1202,22 @@ exports.getProposals = async (req, res) => {
     }
     // Build the query
     let query = {};
-    // Apply submission workflow filters first (these respect submission status)
-    if (req.submissionWorkflowFilters) {
-      Object.assign(query, req.submissionWorkflowFilters);
+    
+    // Apply budget role visibility filters FIRST (most restrictive)
+    if (req.budgetRoleVisibilityFilter && Object.keys(req.budgetRoleVisibilityFilter).length > 0) {
+      query = { ...req.budgetRoleVisibilityFilter };
     }
-    // Apply budget role visibility filters
+    
+    // Apply submission workflow filters (combine with AND if both exist)
+    if (req.submissionWorkflowFilters) {
+      if (Object.keys(query).length > 0) {
+        query = { $and: [query, req.submissionWorkflowFilters] };
+      } else {
+        Object.assign(query, req.submissionWorkflowFilters);
+      }
+    }
+    
+    // Apply legacy visibility filters from query params
     if (req.query.visibilityFilter) {
       if (Object.keys(query).length > 0) {
         query = { $and: [query, req.query.visibilityFilter] };
@@ -1214,10 +1225,16 @@ exports.getProposals = async (req, res) => {
         query = req.query.visibilityFilter;
       }
     }
+    
     // Fallback to hierarchical filters if submission workflow not available
-    else if (req.hierarchicalFilters) {
-      Object.assign(query, req.hierarchicalFilters);
+    if (!req.submissionWorkflowFilters && req.hierarchicalFilters) {
+      if (Object.keys(query).length > 0) {
+        query = { $and: [query, req.hierarchicalFilters] };
+      } else {
+        Object.assign(query, req.hierarchicalFilters);
+      }
     }
+    
     // Add search condition if provided
     if (search) {
       const searchConditions = [
@@ -1785,6 +1802,101 @@ exports.getProposals = async (req, res) => {
     // If PS/MOOE/Capital entries were aggregated, keep aggregation but also aggregate approval info sensibly
     let finalProposals = allProposals.map(enrichOne);
 
+    // ============================================================================
+    // CONSOLIDATE DRAFT PROPOSALS - Combine separate entity rows into one virtual row
+    // ============================================================================
+    const consolidateDrafts = (proposals) => {
+      const draftMap = new Map();
+      const nonDraftProposals = [];
+      
+      proposals.forEach(proposal => {
+        const status = String(proposal.status || '').toUpperCase();
+        
+        // Only consolidate Draft proposals
+        if (status !== 'DRAFT') {
+          nonDraftProposals.push(proposal);
+          return;
+        }
+        
+        // Create consolidation key based on org unit + fiscal year + budget type
+        const unit = proposal.division || proposal.department || proposal.office || proposal.region || 'UNKNOWN';
+        const fy = proposal.fiscalYear || 'UNKNOWN';
+        const bt = proposal.budgetType || 'UNKNOWN';
+        const consolidationKey = `${unit}_${fy}_${bt}`.toUpperCase();
+        
+        if (draftMap.has(consolidationKey)) {
+          const existing = draftMap.get(consolidationKey);
+          
+          // Aggregate amounts from each model type
+          if (proposal.modelType === 'personnel') {
+            existing.personnelTotal = (existing.personnelTotal || 0) + Number(proposal.Total || 0);
+          } else if (proposal.modelType === 'mooe') {
+            existing.mooeTotal = (existing.mooeTotal || 0) + Number(proposal.amount || proposal.subsidy || 0);
+          } else if (proposal.modelType === 'capital') {
+            existing.capitalTotal = (existing.capitalTotal || 0) + Number(proposal.amount || proposal.cost || 0);
+          } else if (proposal.modelType === 'income') {
+            existing.incomeTotal = (existing.incomeTotal || 0) + Number(proposal.amount || 0);
+          }
+          
+          // Track which model types are included
+          existing.includedModels = existing.includedModels || [];
+          if (!existing.includedModels.includes(proposal.modelType)) {
+            existing.includedModels.push(proposal.modelType);
+          }
+          
+          // Keep latest createdAt date
+          if (proposal.createdAt && (!existing.createdAt || new Date(proposal.createdAt) > new Date(existing.createdAt))) {
+            existing.createdAt = proposal.createdAt;
+          }
+        } else {
+          // Create new consolidated draft entry
+          const consolidated = {
+            ...proposal,
+            modelType: 'consolidated-draft',
+            cobExpenditures: 'Combined Draft',
+            personnelTotal: proposal.modelType === 'personnel' ? Number(proposal.Total || 0) : 0,
+            mooeTotal: proposal.modelType === 'mooe' ? Number(proposal.amount || proposal.subsidy || 0) : 0,
+            capitalTotal: proposal.modelType === 'capital' ? Number(proposal.amount || proposal.cost || 0) : 0,
+            incomeTotal: proposal.modelType === 'income' ? Number(proposal.amount || 0) : 0,
+            includedModels: [proposal.modelType],
+            originalModelType: proposal.modelType
+          };
+          
+          draftMap.set(consolidationKey, consolidated);
+        }
+      });
+      
+      // Calculate combined totals for each consolidated draft
+      const consolidatedDrafts = Array.from(draftMap.values()).map(draft => {
+        const totalExpenses = (draft.personnelTotal || 0) + (draft.mooeTotal || 0) + (draft.capitalTotal || 0);
+        const totalIncome = draft.incomeTotal || 0;
+        
+        return {
+          ...draft,
+          totalExpenses,
+          totalIncome,
+          proposedBudget: totalExpenses + totalIncome,
+          Total: totalExpenses + totalIncome, // For display compatibility
+          // Create descriptive title showing what's included
+          aggregatedTitle: `Draft Budget (${draft.includedModels.length} categories)`,
+          particulars: draft.includedModels
+            .map(m => {
+              if (m === 'personnel') return 'Personnel Services';
+              if (m === 'mooe') return 'MOOE';
+              if (m === 'capital') return 'Capital Outlay';
+              if (m === 'income') return 'Corporate Income';
+              return m;
+            })
+            .join(' + ')
+        };
+      });
+      
+      return [...nonDraftProposals, ...consolidatedDrafts];
+    };
+    
+    finalProposals = consolidateDrafts(finalProposals);
+    // ============================================================================
+
     // For divisionOnly, aggregate by Division first (fallback to office/department/region) and compute proposedBudget
     if (isDivisionOnly) {
       const aggregatedByOrg = new Map();
@@ -1844,18 +1956,22 @@ exports.getProposals = async (req, res) => {
         // Normalize income/expenses per model type before aggregation
         // Important: Do NOT count raw Proposal model totals to avoid double-counting with PS/MOOE/Capital/Income
         const income = Number(
-          proposal.modelType === 'income'
-            ? (proposal.amount || 0)
-            : 0
+          proposal.modelType === 'consolidated-draft'
+            ? (proposal.totalIncome || 0)
+            : proposal.modelType === 'income'
+              ? (proposal.amount || 0)
+              : 0
         );
         const expenses = Number(
-          proposal.modelType === 'personnel'
-            ? (proposal.Total || 0)
-            : proposal.modelType === 'mooe'
-              ? ((proposal.amount ?? proposal.subsidy) || 0)
-              : proposal.modelType === 'capital'
-                ? ((proposal.amount ?? proposal.cost) || 0)
-                : 0
+          proposal.modelType === 'consolidated-draft'
+            ? (proposal.totalExpenses || 0)
+            : proposal.modelType === 'personnel'
+              ? (proposal.Total || 0)
+              : proposal.modelType === 'mooe'
+                ? ((proposal.amount ?? proposal.subsidy) || 0)
+                : proposal.modelType === 'capital'
+                  ? ((proposal.amount ?? proposal.cost) || 0)
+                  : 0
         );
         const computedProposed = income + expenses; // derive per-item proposed budget
 
@@ -2995,33 +3111,17 @@ exports.debugProposals = async (req, res) => {
     const regionStats = await Proposal.aggregate([
       { $group: { _id: '$region', count: { $sum: 1 } } }
     ]);
-    // Get processBy distribution
-    const processStats = await Proposal.aggregate([
-      { $group: { _id: '$processBy', count: { $sum: 1 } } }
-    ]);
-    const response = {
-      totalProposals,
+
+    res.status(200).json({
+      total: totalProposals,
+      recentProposals: allProposals,
       statusDistribution: statusStats,
-      regionDistribution: regionStats,
-      processDistribution: processStats,
-      sampleProposals: allProposals.map(p => ({
-        id: p._id,
-        processBy: p.processBy,
-        region: p.region,
-        status: p.status,
-        cobExpenditures: p.cobExpenditures,
-        fiscalYear: p.fiscalYear,
-        budgetType: p.budgetType,
-        submittedDate: p.submittedDate,
-        totalExpenses: p.totalExpenses,
-        totalIncome: p.totalIncome
-      }))
-    };
-    res.status(200).json(response);
+      regionDistribution: regionStats
+    });
   } catch (error) {
-    console.error("❌ Error in debugProposals:", error);
+    console.error('❌ Error in debugProposals:', error);
     res.status(500).json({
-      message: "Failed to debug proposals",
+      message: 'Failed to fetch debug info',
       error: error.message
     });
   }

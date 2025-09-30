@@ -48,6 +48,10 @@ describe('Role visibility - integration', () => {
   expect(resOfficer.body).toBeDefined();
   const foundOfficerApproved = (Array.isArray(resOfficer.body) ? resOfficer.body : []).some(p => p.title === 'TEST-ROLE-VIS-OFFICER');
     expect(foundOfficerApproved).toBe(true);
+  
+  // Ensure Officer CANNOT see Draft proposals from others
+  const foundAnalystDraft = (Array.isArray(resOfficer.body) ? resOfficer.body : []).some(p => p.title === 'TEST-ROLE-VIS-ANALYST');
+  expect(foundAnalystDraft).toBe(false);
 
     // 3) Manager request
   const reqManager = { query: {}, user: { id: 'user-manager', Roles: ['BUDGET_MANAGER'], FirstName: 'M', LastName: 'Manager' }, userHierarchicalAssignment: {}, hierarchicalFilters: {}, submissionWorkflowFilters: { $and: [ { status: { $in: ['Office Submitted','Office Approved','Finalized'] } } ] } };
@@ -56,5 +60,9 @@ describe('Role visibility - integration', () => {
   expect(resManager.body).toBeDefined();
   const foundManagerSubmitted = (Array.isArray(resManager.body) ? resManager.body : []).some(p => p.title === 'TEST-ROLE-VIS-MANAGER');
     expect(foundManagerSubmitted).toBe(true);
+  
+  // Ensure Manager CANNOT see Draft proposals
+  const foundManagerAnalystDraft = (Array.isArray(resManager.body) ? resManager.body : []).some(p => p.title === 'TEST-ROLE-VIS-ANALYST');
+  expect(foundManagerAnalystDraft).toBe(false);
   }, 20000);
 });

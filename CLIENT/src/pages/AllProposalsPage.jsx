@@ -625,7 +625,7 @@ const AllProposalsPage = () => {
             additionalMenuOptions={[ViewButton]}
             refreshData={refreshData}
             title="All Proposals"
-            description="View and manage all submitted proposals"
+            description="View and manage budget proposals based on your role"
             apiPath="/proposals"
             apiParams={{ includeFinalized }}
             groupBy={null} // No grouping - show individual entries
