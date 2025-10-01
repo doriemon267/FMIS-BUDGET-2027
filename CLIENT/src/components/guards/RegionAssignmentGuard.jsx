@@ -1,14 +1,92 @@
 import React from 'react';
 import { useUser } from '../../context/UserContext';
-import { Box, CircularProgress, Typography } from '@mui/material';
-import PendingRegionAssignmentPage from '../../pages/PendingRegionAssignmentPage';
-import { useLocation, Navigate } from 'react-router-dom';
+import {
+  Box,
+  CircularProgress,
+  Typography,
+  Paper,
+  Button,
+  Container,
+} from '@mui/material';
+import { useLocation } from 'react-router-dom';
+import LockIcon from '@mui/icons-material/Lock';
+import HomeIcon from '@mui/icons-material/Home';
 
-const RegionAssignmentGuard = ({ children }) => {
+// 🔑 Dynamic dashboard URL
+const dashboardUrl = window.location.hostname.includes("localhost")
+  ? "http://localhost:3000/dashboard"
+  : "https://fmis.nia.gov.ph/dashboard";
+
+const AccessRestrictedPage = () => {
+  return (
+    <Container maxWidth="md" sx={{ py: 10 }}>
+      <Paper
+        elevation={2}
+        sx={{
+          p: { xs: 4, md: 6 },
+          textAlign: 'center',
+          borderRadius: 2,
+          backgroundColor: (theme) => theme.palette.grey[50],
+        }}
+      >
+        {/* Icon */}
+        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'center' }}>
+          <LockIcon sx={{ fontSize: 60, color: 'error.main' }} />
+        </Box>
+
+        {/* Title */}
+        <Typography
+          variant="h5"
+          sx={{ fontWeight: 600, mb: 1, color: 'text.primary' }}
+        >
+          Access Restricted
+        </Typography>
+
+        {/* Message */}
+        <Typography
+          variant="body1"
+          sx={{ color: 'text.secondary', mb: 4 }}
+        >
+          You don’t have permission to view this page.
+          <br />
+          Please request access if you believe this is a mistake.
+        </Typography>
+
+        {/* Action button */}
+        <Button
+          variant="contained"
+          startIcon={<HomeIcon />}
+          href={dashboardUrl}   // ✅ Dynamic based on environment
+          sx={{
+            px: 4,
+            py: 1.5,
+            borderRadius: 2,
+            fontWeight: 600,
+            textTransform: 'none',
+          }}
+        >
+          Go to Dashboard
+        </Button>
+
+        {/* Footer */}
+        <Box sx={{ mt: 4 }}>
+          <Typography
+            variant="caption"
+            sx={{ color: 'text.disabled' }}
+          >
+            © 2025 FMIS Budget Management System
+          </Typography>
+        </Box>
+      </Paper>
+    </Container>
+  );
+};
+
+const AccessGuard = ({ children }) => {
   const { currentUser, loading } = useUser();
   const location = useLocation();
 
-  // Show loading while user data is being fetched
+  // Loading state
   if (loading || !currentUser) {
     return (
       <Box
@@ -18,7 +96,7 @@ const RegionAssignmentGuard = ({ children }) => {
           alignItems: 'center',
           justifyContent: 'center',
           flexDirection: 'column',
-          gap: 2
+          gap: 2,
         }}
       >
         <CircularProgress size={60} />
@@ -29,39 +107,27 @@ const RegionAssignmentGuard = ({ children }) => {
     );
   }
 
-  // Check hierarchical access first (preferred over legacy regions)
-  const access = currentUser?.hierarchicalAccess;
-  const hasHierarchicalAccess = Boolean(
-    access && (
-      access.scope === 'FULL' ||
-      (access.accessibleRegions && access.accessibleRegions.length > 0) ||
-      (access.accessibleDepartments && access.accessibleDepartments.length > 0) ||
-      (access.accessibleDivisions && access.accessibleDivisions.length > 0)
-    )
-  );
-  // Backwards compat: still consider legacy regions if present
-  const hasRegionAssignments = (currentUser.regions && currentUser.regions.length > 0) || hasHierarchicalAccess;
-
-  // Basic role helpers
+  // ✅ Check roles - Allow all Budget staff + SUPER ADMIN
   const roles = currentUser?.Roles || [];
-  const isAdminish = roles.includes('SUPER ADMIN') || roles.includes('BUDGET ADMIN') || roles.includes('BUDGET MANAGER');
+  
+  // Budget staff roles that should have access
+  const authorizedRoles = [
+    'SUPER ADMIN',
+    'SUPER_ADMIN',  // Handle underscore variant
+    'BUDGET ADMIN',
+    'BUDGET ANALYST',
+    'BUDGET COORDINATOR',
+    'BUDGET MANAGER',
+    'BUDGET OFFICER'
+  ];
+  
+  const isAuthorized = roles.some(role => authorizedRoles.includes(role));
 
-  // Allowlist of routes that should be reachable even when unassigned
-  const allowedWhenUnassigned = ['/region-selection', '/hierarchical-user-assignments'];
-  const onAllowedUnassignedRoute = allowedWhenUnassigned.some((p) => location.pathname.startsWith(p));
-
-  // If user has no region assignments, show the pending page
-  if (!hasRegionAssignments) {
-    // If user has elevated role, steer them to the assignment page instead of blocking the whole app
-    if (isAdminish) {
-      return onAllowedUnassignedRoute ? children : <Navigate to="/hierarchical-user-assignments" replace />;
-    }
-    // Non-admins see the pending page
-    return <PendingRegionAssignmentPage />;
+  if (!isAuthorized) {
+    return <AccessRestrictedPage />;
   }
 
-  // User has region assignments, allow access to the main application
   return children;
 };
 
-export default RegionAssignmentGuard;
+export default AccessGuard;

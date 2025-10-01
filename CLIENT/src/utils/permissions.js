@@ -3,31 +3,37 @@ export function hasPermission(currentUser, permissionKey) {
 
   const userRoles = currentUser.Roles || [];
 
-  // Role-based access control for menu permissions
-  if (permissionKey === 'ManageSettings') {
-    // Only BUDGET ADMIN can access Settings
-      // Only BUDGET ADMIN and SUPER ADMIN can access Settings
-      return userRoles.includes('BUDGET ADMIN') || userRoles.includes('SUPER ADMIN');
+  // 🔥 SUPER ADMIN - Access ALL (including Settings)
+  if (userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN')) {
+    return true;
   }
 
-  // For other permissions, BUDGET ADMIN gets all access
+  // 🔥 BUDGET ADMIN - Access ALL (including Settings)
   if (userRoles.includes('BUDGET ADMIN')) {
     return true;
   }
 
-  // BUDGET ANALYST, BUDGET COORDINATOR, BUDGET MANAGER, BUDGET OFFICER get all menus except Settings
-  const allowedRoles = ['BUDGET ANALYST', 'BUDGET COORDINATOR', 'BUDGET MANAGER', 'BUDGET OFFICER'];
-  if (allowedRoles.some(role => userRoles.includes(role))) {
-    return true;
+  // 🔥 ManageSettings & ManageUsers Permissions - RESTRICTED to SUPER ADMIN and BUDGET ADMIN only
+  if (permissionKey === 'ManageSettings' || permissionKey === 'ManageUsers') {
+    return false; // Already checked SUPER ADMIN and BUDGET ADMIN above
+  }
+
+  // 🔥 BUDGET ANALYST, BUDGET COORDINATOR, BUDGET MANAGER, BUDGET OFFICER
+  // Access ALL menus EXCEPT Settings
+  const budgetStaffRoles = ['BUDGET ANALYST', 'BUDGET COORDINATOR', 'BUDGET MANAGER', 'BUDGET OFFICER'];
+  if (budgetStaffRoles.some(role => userRoles.includes(role))) {
+    return true; // All permissions except ManageSettings (already filtered above)
   }
 
   // Fallback to hierarchical permissions for backward compatibility
   // Prefer hierarchicalFlags populated by middleware
   const flags = currentUser.hierarchicalFlags || {};
   if (typeof flags[permissionKey] === 'boolean') return flags[permissionKey];
+  
   // Fallback to hierarchicalAccess.rolePermissions when available
   const rolePerms = currentUser.hierarchicalAccess?.rolePermissions || {};
   if (typeof rolePerms[permissionKey] === 'boolean') return rolePerms[permissionKey];
+  
   // If permission is undefined, default to true (allow access) for consistency with ProtectedRoute
   return true;
 }
