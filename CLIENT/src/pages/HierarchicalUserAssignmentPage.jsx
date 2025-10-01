@@ -871,7 +871,8 @@ const HierarchicalUserAssignmentPage = () => {
                   label="User Name"
                   value={formData.userName}
                   onChange={(e) => handleFormChange('userName', e.target.value)}
-                  disabled={!!editingAssignment}
+                  // Make User Name non-editable in the Hierarchical User Assignments UI
+                  disabled={true}
                   required
                   helperText="User name will be auto-filled after entering User ID"
                   inputProps={{ 'aria-label': 'User Name' }}
@@ -911,102 +912,26 @@ const HierarchicalUserAssignmentPage = () => {
                   </Alert>
                 </Grid>
               )}
+              
+              {/* Show warning if editing and role doesn't match saved role */}
+              {editingAssignment && editingAssignment.userRole && formData.userRole !== editingAssignment.userRole && (
+                <Grid item xs={12}>
+                  <Alert severity="warning" sx={{ mb: 1 }}>
+                    <Typography variant="body2">
+                      <strong>Role Changed:</strong> The user's role was previously saved as <strong>{editingAssignment.userRole}</strong>, but the current value is <strong>{formData.userRole}</strong>.
+                    </Typography>
+                  </Alert>
+                </Grid>
+              )}
 
               <Grid item xs={12}>
-                <Autocomplete
-                  options={USER_ROLES}
-                  getOptionLabel={(option) => option.label || ''}
-                  value={USER_ROLES.find(role => role.value === formData.userRole) || null}
-                  onChange={(event, newValue) => {
-                    const newRole = newValue?.value || '';
-                    handleFormChange('userRole', newRole);
-                    
-                    // Auto-set assignment level and permissions based on role
-                    if (newRole === 'BUDGET_ANALYST') {
-                      handleFormChange('assignmentLevel', 'RESPONSIBILITY_CENTER');
-                      handleFormChange('rolePermissions', {
-                        CreateProposals: true,
-                        EditOwnProposals: true,
-                        EditAllProposals: false,
-                        DeleteProposals: false,
-                        ApproveProposals: false,
-                        ViewReports: true,
-                        ManageUsers: false,
-                        ManageSettings: false
-                      });
-                    } else if (newRole === 'BUDGET_COORDINATOR') {
-                      handleFormChange('assignmentLevel', 'OFFICE');
-                      handleFormChange('rolePermissions', {
-                        CreateProposals: true,
-                        EditOwnProposals: true,
-                        EditAllProposals: false,
-                        DeleteProposals: false,
-                        ApproveProposals: false,
-                        ViewReports: true,
-                        ManageUsers: false,
-                        ManageSettings: false
-                      });
-                    } else if (newRole === 'BUDGET_OFFICER') {
-                      handleFormChange('assignmentLevel', 'OFFICE');
-                      handleFormChange('rolePermissions', {
-                        CreateProposals: true,
-                        EditOwnProposals: true,
-                        EditAllProposals: true,
-                        DeleteProposals: false,
-                        ApproveProposals: true,
-                        ViewReports: true,
-                        ManageUsers: false,
-                        ManageSettings: false
-                      });
-                    } else if (newRole === 'BUDGET_MANAGER') {
-                      handleFormChange('assignmentLevel', 'FULL');
-                      handleFormChange('rolePermissions', {
-                        CreateProposals: true,
-                        EditOwnProposals: true,
-                        EditAllProposals: true,
-                        DeleteProposals: true,
-                        ApproveProposals: true,
-                        ViewReports: true,
-                        ManageUsers: true,
-                        ManageSettings: true
-                      });
-                    } else if (newRole === 'BUDGET_ADMIN') {
-                      handleFormChange('assignmentLevel', 'FULL');
-                      handleFormChange('rolePermissions', {
-                        CreateProposals: true,
-                        EditOwnProposals: true,
-                        EditAllProposals: true,
-                        DeleteProposals: true,
-                        ApproveProposals: true,
-                        ViewReports: true,
-                        ManageUsers: true,
-                        ManageSettings: true
-                      });
-                    }
-                  }}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="User Role"
-                      placeholder="Select user role..."
-                      fullWidth
-                    />
-                  )}
-                  renderOption={(props, option) => {
-                    const { key, ...otherProps } = props;
-                    return (
-                      <Box component="li" key={key} {...otherProps}>
-                        <Box>
-                          <Typography variant="body1">{option.label}</Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {option.description}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    );
-                  }}
-                  noOptionsText="No roles found"
+                <TextField
                   fullWidth
+                  label="User Role"
+                  value={formData.userRole || ''}
+                  onChange={(e) => handleFormChange('userRole', e.target.value)}
+                  helperText="Enter the user's role (e.g., BUDGET ANALYST, BUDGET OFFICER)"
+                  inputProps={{ 'aria-label': 'User Role' }}
                 />
               </Grid>
 
@@ -1164,7 +1089,32 @@ const HierarchicalUserAssignmentPage = () => {
                         ? `${option.name} - ${option.region}` 
                         : option.name || '';
                     }}
-                    value={organizationStructure?.availableUnits?.offices?.find(office => office.id === formData.officeId) || null}
+                    value={(() => {
+                      // ✅ Better matching: try different ID field combinations
+                      const offices = organizationStructure?.availableUnits?.offices || [];
+                      
+                      // First try exact ID match
+                      let matchedOffice = offices.find(office => office.id === formData.officeId);
+                      
+                      // If not found, try matching with composite ID (handle format: originalId_regionId)
+                      if (!matchedOffice && formData.officeId) {
+                        const baseId = formData.officeId.split('_')[0];
+                        matchedOffice = offices.find(office => 
+                          office.id === baseId || 
+                          office.id === formData.officeId ||
+                          office._id === formData.officeId ||
+                          office.id.startsWith(baseId + '_')
+                        );
+                      }
+                      
+                      console.log('🔍 Office matching:', {
+                        formDataOfficeId: formData.officeId,
+                        matchedOffice: matchedOffice ? matchedOffice.name : 'Not found',
+                        availableOffices: offices.map(o => ({ id: o.id, name: o.name }))
+                      });
+                      
+                      return matchedOffice || null;
+                    })()}
                     onChange={(event, newValue) => {
                       // Handle both object (selected option) and string (free text) cases
                       const officeId = (typeof newValue === 'object' && newValue?.id) ? newValue.id : '';
@@ -1180,6 +1130,9 @@ const HierarchicalUserAssignmentPage = () => {
                         label="Office"
                         placeholder="Search offices..."
                         fullWidth
+                        helperText={formData.officeId && !organizationStructure?.availableUnits?.offices?.find(o => o.id === formData.officeId) 
+                          ? `Current Office ID: ${formData.officeId} (May not match available offices)` 
+                          : ''}
                       />
                     )}
                     renderOption={(props, option) => {
@@ -1465,8 +1418,25 @@ const HierarchicalUserAssignmentPage = () => {
                             <Tooltip title="Edit Assignment">
                               <IconButton
                                 size="small"
-                                onClick={() => {
+                                onClick={async () => {
                                   setEditingAssignment(assignment);
+                                  
+                                  // ✅ Fetch user's actual role from database
+                                  let actualUserRole = assignment.userRole || '';
+                                  try {
+                                    if (!isTokenExpired(jwtToken)) {
+                                      const userRes = await api.get(`/api/hierarchical-rbac/user-lookup/${assignment.userId}`);
+                                      const userData = userRes.data?.data;
+                                      
+                                      // Get the first role from the user's actual roles array
+                                      if (userData?.roles && userData.roles.length > 0) {
+                                        actualUserRole = userData.roles[0]; // e.g., "BUDGET ANALYST"
+                                      }
+                                    }
+                                  } catch (error) {
+                                    console.log('Could not fetch user role, using saved role');
+                                  }
+                                  
                                   // Extract only the necessary form fields from the assignment
                                   const reverseAssignmentLevelMap = {
                                     'DIVISION': 'RESPONSIBILITY_CENTER',
@@ -1475,30 +1445,12 @@ const HierarchicalUserAssignmentPage = () => {
                                     'FULL': 'FULL',
                                     'OWN_ONLY': 'OWN_ONLY'
                                   };
+                                  
                                   const formFields = {
                                     userId: assignment.userId,
                                     userName: assignment.userName,
                                     email: assignment.email,
-                                    userRole: assignment.userRole || (() => {
-                                      const level = reverseAssignmentLevelMap[assignment.assignmentLevel] || assignment.assignmentLevel;
-                                      const perms = assignment.rolePermissions || {};
-                                      if (level === 'RESPONSIBILITY_CENTER') {
-                                        return 'BUDGET_ANALYST';
-                                      } else if (level === 'OFFICE') {
-                                        if (perms.ApproveProposals) {
-                                          return 'BUDGET_OFFICER';
-                                        } else {
-                                          return 'BUDGET_COORDINATOR';
-                                        }
-                                      } else if (level === 'FULL') {
-                                        if (perms.ManageSettings) {
-                                          return 'BUDGET_ADMIN';
-                                        } else {
-                                          return 'BUDGET_MANAGER';
-                                        }
-                                      }
-                                      return '';
-                                    })(),
+                                    userRole: actualUserRole,
                                     assignmentLevel: reverseAssignmentLevelMap[assignment.assignmentLevel] || assignment.assignmentLevel,
                                     officeId: assignment.officeId || assignment.departmentId || '', // Use officeId if available, otherwise departmentId
                                     responsibilityCenterName: assignment.divisionName || '',
@@ -1513,7 +1465,17 @@ const HierarchicalUserAssignmentPage = () => {
                                       ManageSettings: false
                                     }
                                   };
+                                  
                                   setFormData(formFields);
+                                  
+                                  console.log('📝 Edit form populated:', {
+                                    userId: formFields.userId,
+                                    userRole: formFields.userRole,
+                                    actualUserRole,
+                                    assignmentLevel: formFields.assignmentLevel,
+                                    officeId: formFields.officeId,
+                                    responsibilityCenter: formFields.responsibilityCenterName
+                                  });
                                 }}
                               >
                                 <EditIcon />
