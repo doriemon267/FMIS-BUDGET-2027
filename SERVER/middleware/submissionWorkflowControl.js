@@ -27,7 +27,8 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
       const userName = req.user.FirstName + ' ' + req.user.LastName;
 
       // For submission workflow reads, do not bypass even for FULL ACCESS if enforceSubmissionWorkflow=true
-      const isSuperAdmin = userRoles && userRoles.includes('SUPER_ADMIN');
+      // Check for both 'SUPER_ADMIN' (with underscore) and 'SUPER ADMIN' (with space) from database
+      const isSuperAdmin = userRoles && (userRoles.includes('SUPER_ADMIN') || userRoles.includes('SUPER ADMIN'));
       const hasFullAccessPrivileges = hasFullAccess(userRoles);
       if (isSuperAdmin || hasFullAccessPrivileges) {
         // FULL access users should bypass submission workflow controls entirely

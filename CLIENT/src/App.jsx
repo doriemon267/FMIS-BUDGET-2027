@@ -70,7 +70,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["CreateProposals", "EditOwnProposals"]}
-              requiredWorkflowRoles={["divisionCreator", "departmentCreator", "regionCreator"]}
+              requiredWorkflowRoles={["divisionCreator", "departmentCreator", "regionCreator", "superAdmin"]}
             >
               <Proposals />
             </ProtectedRoute>
@@ -81,7 +81,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["EditOwnProposals"]}
-              requiredWorkflowRoles={["divisionCreator", "departmentCreator", "regionCreator"]}
+              requiredWorkflowRoles={["divisionCreator", "departmentCreator", "regionCreator", "superAdmin"]}
             >
               <ProposalPage />
             </ProtectedRoute>
@@ -92,6 +92,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["ViewReports"]}
+              requiredWorkflowRoles={["superAdmin"]}
             >
               <EmployeeList />
             </ProtectedRoute>
@@ -105,7 +106,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["ManageSettings"]}
-              requiredWorkflowRoles={["regionCreator"]}
+              requiredWorkflowRoles={["regionCreator", "superAdmin"]}
             >
               <Categories />
             </ProtectedRoute>
@@ -116,7 +117,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["ManageSettings"]}
-              requiredWorkflowRoles={["regionCreator"]}
+              requiredWorkflowRoles={["regionCreator", "superAdmin"]}
             >
               <RataPage />
             </ProtectedRoute>
@@ -127,7 +128,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["ManageSettings"]}
-              requiredWorkflowRoles={["regionCreator"]}
+              requiredWorkflowRoles={["regionCreator", "superAdmin"]}
             >
               <FiscalYearSettingsPage />
             </ProtectedRoute>
@@ -138,7 +139,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["ManageSettings"]}
-              requiredWorkflowRoles={["regionCreator"]}
+              requiredWorkflowRoles={["regionCreator", "superAdmin"]}
             >
               <CompensationSettingsPage />
             </ProtectedRoute>
@@ -149,7 +150,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["ManageSettings"]}
-              requiredWorkflowRoles={["regionCreator"]}
+              requiredWorkflowRoles={["regionCreator", "superAdmin"]}
             >
               <SettingsManagement />
             </ProtectedRoute>
@@ -160,6 +161,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["ViewReports"]}
+              requiredWorkflowRoles={["superAdmin"]}
             >
               <AllProposalsPage />
             </ProtectedRoute>
@@ -170,6 +172,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["EditAllProposals"]}
+              requiredWorkflowRoles={["superAdmin"]}
             >
               <IncomeManagementPage />
             </ProtectedRoute>
@@ -184,6 +187,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["ViewReports"]}
+              requiredWorkflowRoles={["superAdmin"]}
             >
               <EmployeeBenefitsPage />
             </ProtectedRoute>
@@ -214,7 +218,7 @@ const App = () => {
           element={
             <ProtectedRoute 
               requiredPermissions={["ManageUsers"]}
-              requiredWorkflowRoles={["regionCreator"]}
+              requiredWorkflowRoles={["regionCreator", "superAdmin"]}
             >
               <HierarchicalUserAssignmentPage />
             </ProtectedRoute>
@@ -223,7 +227,7 @@ const App = () => {
         <Route
           path="/subsidy-monitoring"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredWorkflowRoles={["superAdmin"]}>
               <SubsidyMonitoringPage />
             </ProtectedRoute>
           }
@@ -235,6 +239,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["EditAllProposals"]}
+              requiredWorkflowRoles={["superAdmin"]}
             >
               <CorporateIncomeUploadPage />
             </ProtectedRoute>
@@ -245,6 +250,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["ViewReports"]}
+              requiredWorkflowRoles={["superAdmin"]}
             >
               <ConsolidatedCorporateIncomePage />
             </ProtectedRoute>
@@ -255,6 +261,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["EditAllProposals"]}
+              requiredWorkflowRoles={["superAdmin"]}
             >
               <MooeUploadPage />
             </ProtectedRoute>
@@ -265,6 +272,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["ViewReports"]}
+              requiredWorkflowRoles={["superAdmin"]}
             >
               <ConsolidatedReportsPage />
             </ProtectedRoute>
@@ -275,6 +283,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["ViewReports"]}
+              requiredWorkflowRoles={["superAdmin"]}
             >
               <ConsolidatedCapitalOutlayReportsPage />
             </ProtectedRoute>
@@ -285,6 +294,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["ViewReports"]}
+              requiredWorkflowRoles={["superAdmin"]}
             >
               <ConsolidatedPersonnelServicesReportsPage />
             </ProtectedRoute>
@@ -293,7 +303,7 @@ const App = () => {
         <Route
           path="/comprehensive-reports"
           element={
-            <ProtectedRoute requiredPermissions={["ViewReports"]}>
+            <ProtectedRoute requiredPermissions={["ViewReports"]} requiredWorkflowRoles={["superAdmin"]}>
               <ComprehensiveReportsPage />
             </ProtectedRoute>
           }

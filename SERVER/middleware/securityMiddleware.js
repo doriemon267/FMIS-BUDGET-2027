@@ -33,7 +33,9 @@ const hasRequiredRole = (userRoles, requiredRoles) => {
 const hasFullAccess = (userRoles) => {
   return hasRequiredRole(userRoles, [
     PERMISSION_LEVELS.SUPER_ADMIN,
+    'SUPER ADMIN',  // Support both 'SUPER_ADMIN' and 'SUPER ADMIN' (with space) from database
     PERMISSION_LEVELS.ADMIN,
+    'ADMIN',        // Support both variants
     PERMISSION_LEVELS.BUDGET_ADMIN,
     PERMISSION_LEVELS.BUDGET_ANALYST,
     PERMISSION_LEVELS.BUDGET_MANAGER,
@@ -45,7 +47,25 @@ const checkOrganizationalAccess = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const userRoles = req.user.Roles;
-    // Full access roles (SUPER_ADMIN, BUDGET_MANAGER) can choose any organizational unit
+    
+    // SUPER ADMIN has unrestricted access to all organizational units
+    if (userRoles.includes('SUPER ADMIN')) {
+      const { region, department, division } = req.body;
+      const queryRegion = req.query.region;
+      const queryDepartment = req.query.department;
+      const queryDivision = req.query.division;
+      req.selectedOrgContext = {
+        region: region || queryRegion,
+        department: department || queryDepartment,
+        division: division || queryDivision,
+        selectedBy: userId,
+        userRole: userRoles,
+        isSuperAdmin: true
+      };
+      return next();
+    }
+    
+    // Full access roles (BUDGET_MANAGER, BUDGET_ADMIN) can choose any organizational unit
     if (hasFullAccess(userRoles)) {
       // For Budget Managers, allow them to specify which org unit to transact with
       const { region, department, division } = req.body;
@@ -114,6 +134,13 @@ const dueDateProtectedRoute = (permissionLevel = PERMISSION_LEVELS.USER, accessS
   // Add role checking if permission level is specified
   if (permissionLevel !== PERMISSION_LEVELS.USER) {
     middleware.push((req, res, next) => {
+      const userRoles = req.user?.Roles || [];
+      
+      // SUPER ADMIN bypasses all role restrictions
+      if (userRoles.includes('SUPER ADMIN')) {
+        return next();
+      }
+      
       let requiredRoles = [];
       switch (permissionLevel) {
         case PERMISSION_LEVELS.ADMIN:
@@ -137,10 +164,8 @@ const dueDateProtectedRoute = (permissionLevel = PERMISSION_LEVELS.USER, accessS
           ];
           break;
         case PERMISSION_LEVELS.SUPER_ADMIN:
-          // Super Admin not part of allowed roles; block
-          requiredRoles = [
-            "__NO_ROLE__"
-          ];
+          // Super Admin has full access (handled above)
+          requiredRoles = [PERMISSION_LEVELS.SUPER_ADMIN];
           break;
         default:
           requiredRoles = [permissionLevel];
@@ -165,6 +190,12 @@ const ownerOnlyRoute = () => {
     (req, res, next) => {
       const userId = req.user.id;
       const userRoles = req.user.Roles;
+      
+      // SUPER ADMIN can view all records without restrictions
+      if (userRoles.includes('SUPER ADMIN')) {
+        return next();
+      }
+      
       // Full access roles can view all records
       if (hasFullAccess(userRoles)) {
         return next();
@@ -181,6 +212,12 @@ const budgetOfficerRoute = (allowedOperations = ['read']) => {
     checkToken,
     (req, res, next) => {
       const userRoles = req.user.Roles;
+      
+      // SUPER ADMIN bypasses all restrictions
+      if (userRoles.includes('SUPER ADMIN')) {
+        return next();
+      }
+      
       // Check if user has allowed privileges (includes BUDGET_OFFICER, ANALYST, MANAGER, ADMIN)
       const allowedRoles = [
         PERMISSION_LEVELS.BUDGET_ADMIN,

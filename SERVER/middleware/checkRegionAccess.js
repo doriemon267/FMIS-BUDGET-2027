@@ -20,6 +20,12 @@ const checkUserRegionAccess = async (userId, regionName) => {
 };
 const checkRegionAccess = async (req, res, next) => {
   try {
+    // SUPER ADMIN has access to all regions
+    const userRoles = req.user?.Roles || [];
+    if (userRoles.includes('SUPER ADMIN')) {
+      return next();
+    }
+    
     const userId = req.user.id;
     const region = req.body.region || req.query.region;
     // If no region in request, allow access
@@ -40,4 +46,4 @@ const checkRegionAccess = async (req, res, next) => {
   }
 };
 module.exports = checkRegionAccess;
-module.exports.checkUserRegionAccess = checkUserRegionAccess;
+module.exports.checkUserRegionAccess = checkUserRegionAccess;

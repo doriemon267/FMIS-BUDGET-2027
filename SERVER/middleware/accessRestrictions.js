@@ -16,12 +16,19 @@ const enforceAccessRestrictions = (options = {}) => {
   return async (req, res, next) => {
     try {
       const userId = req.user?.id;
+      const userRoles = req.user?.Roles || [];
+      
       if (!userId) {
         return res.status(401).json({
           success: false,
           message: 'User not authenticated',
           code: 'NOT_AUTHENTICATED'
         });
+      }
+
+      // SUPER ADMIN bypasses all restrictions
+      if (userRoles.includes('SUPER ADMIN')) {
+        return next();
       }
 
       // Get user's hierarchical assignment with restrictions

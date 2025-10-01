@@ -18,9 +18,9 @@ const budgetRoleVisibilityControl = () => {
       const userId = req.user?.id;
       const userRoles = req.user?.Roles || [];
       
-      // Super admins bypass all filters
-      if (userRoles.includes('SUPER_ADMIN')) {
-        console.log('[budgetRoleVisibilityControl] SUPER_ADMIN detected, bypassing filters');
+      // Super admins bypass all filters - check for both 'SUPER_ADMIN' (with underscore) and 'SUPER ADMIN' (with space)
+      if (userRoles.includes('SUPER_ADMIN') || userRoles.includes('SUPER ADMIN')) {
+        console.log('[budgetRoleVisibilityControl] SUPER ADMIN detected, bypassing filters');
         return next();
       }
 

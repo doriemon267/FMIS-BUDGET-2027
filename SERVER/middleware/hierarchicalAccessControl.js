@@ -34,6 +34,21 @@ const hierarchicalAccessControl = (operation = 'read', options = {}) => {
       }
       // Full access users no longer bypass hierarchical restrictions; they still follow assigned scope
       if (hasFullAccess(userRoles)) {
+        // SUPER ADMIN gets full access regardless of assignment
+        if (userRoles.includes('SUPER ADMIN')) {
+          req.hierarchicalAccess = {
+            scope: 'FULL',
+            canCreate: true,
+            canUpdate: true,
+            canDelete: true,
+            canRead: true,
+            canAccessAllRegions: true,
+            canAccessAllDepartments: true,
+            canAccessAllDivisions: true,
+            filters: {} // No filters for SUPER ADMIN
+          };
+          return next();
+        }
         if (logAccess) {
           // Logging removed as requested
         }
@@ -348,6 +363,35 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const userRoles = req.user.Roles;
+    
+    // 🔥 SUPER ADMIN gets FULL scope immediately - bypass all database checks
+    if (userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN')) {
+      req.hierarchicalAccessInfo = {
+        scope: 'FULL',
+        hasFullAccess: true,
+        canAccessAllRegions: true,
+        canAccessAllDepartments: true,
+        canAccessAllDivisions: true,
+        accessibleRegions: [],
+        accessibleDepartments: [],
+        accessibleDivisions: [],
+        consolidationInfo: null,
+        rolePermissions: {
+          CreateProposals: true,
+          EditOwnProposals: true,
+          EditAllProposals: true,
+          DeleteProposals: true,
+          ApproveProposals: true,
+          ViewReports: true,
+          ManageUsers: true,
+          ManageSettings: true
+        },
+        workflowRoles: ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier', 'regionCreator', 'superAdmin', 'regionFinalVerifier'],
+        restrictions: null
+      };
+      return next();
+    }
+    
     // Load the hierarchical assignment (single source of truth)
     let assignmentDoc = await HierarchicalUserAssignment
       .findOne({ userId, isActive: true })
@@ -395,7 +439,7 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
           } else if (userMainRoles.includes('BUDGET_MANAGER') || userMainRoles.includes('DEPARTMENT_HEAD')) {
             workflowRoles = ['departmentConsolidator', 'regionFinalVerifier'];
           } else if (userMainRoles.includes('BUDGET_ADMIN') || userMainRoles.includes('SUPER ADMIN') || userMainRoles.includes('ADMIN')) {
-            workflowRoles = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier', 'regionCreator', 'regionFinalVerifier'];
+            workflowRoles = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier', 'regionCreator', 'superAdmin','regionFinalVerifier'];
           }
           
           // Update the assignment document with auto-assigned workflow roles
@@ -449,8 +493,23 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
       let defaultRolePermissions = {};
       let defaultWorkflowRoles = [];
       
+      // Special handling for SUPER ADMIN - give them FULL scope and all permissions
+      if (userRoles.includes('SUPER ADMIN')) {
+        defaultScope = 'FULL';
+        defaultRolePermissions = {
+          CreateProposals: true,
+          EditOwnProposals: true,
+          EditAllProposals: true,
+          DeleteProposals: true,
+          ApproveProposals: true,
+          ViewReports: true,
+          ManageUsers: true,
+          ManageSettings: true
+        };
+        defaultWorkflowRoles = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier', 'regionCreator','superAdmin', 'regionFinalVerifier'];
+      }
       // Special handling for BUDGET_OFFICER - give them OFFICE scope and permissions
-      if (userRoles.includes('BUDGET_OFFICER') || userRoles.includes('SUPERVISOR')) {
+      else if (userRoles.includes('BUDGET_OFFICER') || userRoles.includes('SUPERVISOR')) {
         defaultScope = 'OFFICE';
         defaultRolePermissions = {
           CreateProposals: true,
@@ -468,6 +527,9 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
       req.hierarchicalAccessInfo = {
         scope: defaultScope,
         hasFullAccess: true,
+        canAccessAllRegions: defaultScope === 'FULL',
+        canAccessAllDepartments: defaultScope === 'FULL',
+        canAccessAllDivisions: defaultScope === 'FULL',
         accessibleRegions: [],
         accessibleDepartments: [],
         accessibleDivisions: [],
@@ -510,7 +572,7 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
       } else if (userMainRoles.includes('BUDGET_MANAGER') || userMainRoles.includes('DEPARTMENT_HEAD')) {
         workflowRoles = ['departmentConsolidator', 'regionFinalVerifier'];
       } else if (userMainRoles.includes('BUDGET_ADMIN') || userMainRoles.includes('SUPER ADMIN') || userMainRoles.includes('ADMIN')) {
-        workflowRoles = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier', 'regionCreator', 'regionFinalVerifier'];
+        workflowRoles = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier', 'regionCreator', 'superAdmin', 'regionFinalVerifier'];
       }
       
       // Update the assignment document with auto-assigned workflow roles
@@ -581,6 +643,13 @@ const enforceWorkflowTransition = (transition) => {
   return async (req, res, next) => {
     try {
       const userId = req.user.id;
+      const userRoles = req.user?.Roles || [];
+      
+      // SUPER ADMIN bypasses all workflow transition restrictions
+      if (userRoles.includes('SUPER ADMIN')) {
+        return next();
+      }
+      
       // Reuse same source of truth for assignments
       const assignment = await HierarchicalUserAssignment.getUserPermissions(userId);
       if (!assignment) {

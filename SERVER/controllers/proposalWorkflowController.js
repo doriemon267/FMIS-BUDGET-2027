@@ -22,10 +22,11 @@ const budgetRoleAccessControl = (operation = 'read') => {
       const isBudgetCoordinator = userRoles.includes('BUDGET_COORDINATOR');
       const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
       const isBudgetManager = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN');
-      const isSuperAdmin = userRoles.includes('SUPER_ADMIN');
+      // Check for both 'SUPER_ADMIN' (with underscore) and 'SUPER ADMIN' (with space) from database
+      const isSuperAdmin = userRoles.includes('SUPER_ADMIN') || userRoles.includes('SUPER ADMIN');
 
       // Super admin and budget admin can see everything
-      if (isSuperAdmin || userRoles.includes('BUDGET_ADMIN')) {
+      if (isSuperAdmin || userRoles.includes('BUDGET_ADMIN') || userRoles.includes('BUDGET ADMIN')) {
         return next();
       }
 
@@ -108,10 +109,11 @@ function checkProposalAccess(proposal, userId, userRoles) {
   const isBudgetCoordinator = userRoles.includes('BUDGET_COORDINATOR');
   const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
   const isBudgetManager = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN');
-  const isSuperAdmin = userRoles.includes('SUPER_ADMIN');
+  // Check for both 'SUPER_ADMIN' (with underscore) and 'SUPER ADMIN' (with space) from database
+  const isSuperAdmin = userRoles.includes('SUPER_ADMIN') || userRoles.includes('SUPER ADMIN');
 
   // Super admin and budget admin can access everything
-  if (isSuperAdmin || userRoles.includes('BUDGET_ADMIN')) {
+  if (isSuperAdmin || userRoles.includes('BUDGET_ADMIN') || userRoles.includes('BUDGET ADMIN')) {
     return true;
   }
 

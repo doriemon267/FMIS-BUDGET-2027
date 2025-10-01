@@ -3,6 +3,44 @@ const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment
 const getCurrentUserProfile = async (req, res) => {
   try {
     const userId = String(req.user.id);
+    const userRoles = req.user.Roles || [];
+    
+    // 🔥 SUPER ADMIN gets FULL scope immediately - bypass database checks
+    if (userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN')) {
+      const userProfile = {
+        ...req.user,
+        // Backward compat fields
+        regionAssignments: null,
+        regions: [],
+        departments: [],
+        // New hierarchical info with FULL access
+        hierarchicalAssignment: {
+          assignmentLevel: 'FULL',
+          regionId: null,
+          departmentId: null,
+          divisionName: null
+        },
+        hierarchicalAccess: {
+          scope: 'FULL',
+          accessibleRegions: [],
+          accessibleDepartments: [],
+          accessibleDivisions: [],
+          rolePermissions: {
+            CreateProposals: true,
+            EditOwnProposals: true,
+            EditAllProposals: true,
+            DeleteProposals: true,
+            ApproveProposals: true,
+            ViewReports: true,
+            ManageUsers: true,
+            ManageSettings: true
+          },
+          consolidationInfo: null
+        }
+      };
+      return res.status(200).json(userProfile);
+    }
+    
     const assignmentDoc = await HierarchicalUserAssignment
       .findOne({ userId, isActive: true })
       .populate('regionId', 'Region regionName RegionName _id')
@@ -61,4 +99,4 @@ const getCurrentUserProfile = async (req, res) => {
 };
 module.exports = {
   getCurrentUserProfile
-};
+};

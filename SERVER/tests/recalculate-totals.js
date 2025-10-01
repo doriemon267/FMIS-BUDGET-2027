@@ -1,15 +1,18 @@
 const mongoose = require('mongoose');
-const PersonnelServices = require('./models/PersonnelServices');
+const PersonnelServices = require('../models/PersonnelServices');
 
-// Connect to MongoDB
-mongoose.connect('mongodb://localhost:27017/fmis-budget', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-});
+// Load environment variables
+require('dotenv').config();
+
+// Connect to MongoDB using the same config as the main app
+const mongoConfig = require('../config/mongo_db');
 
 async function recalculateTotals() {
   try {
     console.log('Starting total recalculation...');
+
+    // Wait for database connection
+    await mongoConfig();
 
     const personnelRecords = await PersonnelServices.find({});
     console.log(`Found ${personnelRecords.length} personnel records`);

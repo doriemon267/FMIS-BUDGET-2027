@@ -521,7 +521,7 @@ const updateWorkflowRoles = async (req, res) => {
       'divisionCreator', 'divisionApprover',
       'departmentCreator', 'departmentConsolidator', 'departmentSubmission',
       'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier',
-      'regionCreator', 'regionFinalVerifier'
+      'regionCreator', 'regionFinalVerifier', 'superAdmin'
     ];
     if (!Array.isArray(workflowRoles)) {
       return res.status(400).json({ success: false, message: 'workflowRoles must be an array', code: 'INVALID_PAYLOAD' });
@@ -927,7 +927,7 @@ module.exports = {
 const APPROVAL_ENABLED_LEVELS = ['REGION', 'FULL', 'OFFICE'];
 const DEFAULT_WORKFLOW_ROLES_BY_LEVEL = {
   REGION: ['regionCreator', 'regionFinalVerifier', 'officeCreator', 'officeConsolidator', 'officeSubmission'],
-  FULL: ['regionCreator', 'regionFinalVerifier', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier'],
+  FULL: ['regionCreator', 'regionFinalVerifier', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier','superAdmin'],
   OFFICE: ['officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier'],
   DEPARTMENT: ['departmentCreator', 'departmentConsolidator', 'departmentSubmission'],
   DIVISION: ['divisionCreator', 'divisionApprover'],

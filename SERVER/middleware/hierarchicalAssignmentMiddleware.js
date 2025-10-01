@@ -14,6 +14,45 @@ const loadHierarchicalAssignment = async (req, res, next) => {
     if (!req.user || !req.user.id) {
       return next();
     }
+    // If user has SUPER ADMIN role, grant full hierarchical access unconditionally
+    const roles = req.user.Roles || req.user.roles || [];
+    if (Array.isArray(roles) && roles.includes('SUPER ADMIN')) {
+      // Synthetic assignment giving full access without DB entry
+      const synthetic = {
+        userId: req.user.id,
+        assignmentLevel: 'FULL',
+        regions: [],
+        departments: [],
+        divisions: [],
+        rolePermissions: {
+          CreateProposals: true,
+          EditOwnProposals: true,
+          EditAllProposals: true,
+          DeleteProposals: true,
+          ApproveProposals: true,
+          ViewReports: true,
+          ManageUsers: true,
+          ManageSettings: true
+        },
+        getConsolidationTarget: () => ({})
+      };
+      req.userHierarchicalAssignment = synthetic;
+      req.hierarchicalFlags = {
+        isFullAccess: true,
+        isRegionLevel: false,
+        isDepartmentLevel: false,
+        isDivisionLevel: false,
+        canCreateProposals: true,
+        canEditOwnProposals: true,
+        canEditAllProposals: true,
+        canDeleteProposals: true,
+        canApproveProposals: true,
+        canViewReports: true,
+        canManageUsers: true,
+        canManageSettings: true
+      };
+      return next();
+    }
     const userId = req.user.id;
     // Get the user's hierarchical assignment
     const assignment = await HierarchicalUserAssignment.getUserPermissions(userId);

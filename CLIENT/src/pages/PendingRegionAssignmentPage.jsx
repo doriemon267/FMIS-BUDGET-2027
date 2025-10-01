@@ -11,17 +11,22 @@ import {
 import { 
   Lock as LockIcon, 
   Schedule as ScheduleIcon,
-  ContactSupport as ContactIcon,
-  Refresh as RefreshIcon
+  Refresh as RefreshIcon,
+  Dashboard as DashboardIcon
 } from '@mui/icons-material';
 import { useUser } from '../context/UserContext';
 
-const PendingRegionAssignmentPage = () => {
+const PendingAccessPage = () => {
   const { currentUser, refetchUserProfile, loading } = useUser();
 
   const handleRefresh = () => {
     refetchUserProfile();
   };
+
+  // Dynamic dashboard URL based on environment
+  const dashboardUrl = window.location.hostname.includes("localhost")
+    ? "http://localhost:3000/dashboard"
+    : "https://fmis.nia.gov.ph/dashboard";
 
   return (
     <Box
@@ -50,7 +55,7 @@ const PendingRegionAssignmentPage = () => {
             Access Restricted
           </Typography>
           <Typography variant="h6" color="text.secondary">
-            Region Assignment Required
+            Account Pending Activation
           </Typography>
         </Box>
 
@@ -73,26 +78,10 @@ const PendingRegionAssignmentPage = () => {
           sx={{ mb: 3, textAlign: 'left' }}
         >
           <Typography variant="body2">
-            Your account is currently <strong>pending region assignment</strong>. 
-            You cannot access the FMIS Budget System until an administrator assigns you to a region.
+            Your account is currently <strong>pending activation</strong>.  
+            You will be able to use the system once your access is fully set up.
           </Typography>
         </Alert>
-
-        {/* Instructions */}
-        <Box sx={{ mb: 4, textAlign: 'left' }}>
-          <Typography variant="h6" gutterBottom>
-            What happens next?
-          </Typography>
-          <Typography variant="body2" paragraph>
-            1. <strong>Administrator Review:</strong> Your account needs to be assigned to a specific region (e.g., Central Office, CAR, Region I, etc.)
-          </Typography>
-          <Typography variant="body2" paragraph>
-            2. <strong>Region Assignment:</strong> Once assigned, you'll have access to budget data for your designated region
-          </Typography>
-          <Typography variant="body2" paragraph>
-            3. <strong>System Access:</strong> After assignment, refresh this page or log out and log back in
-          </Typography>
-        </Box>
 
         {/* Action Buttons */}
         <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -104,21 +93,21 @@ const PendingRegionAssignmentPage = () => {
           >
             {loading ? 'Checking...' : 'Check Status'}
           </Button>
-          
+
           <Button
             variant="outlined"
-            startIcon={<ContactIcon />}
-            href="mailto:admin@budget.gov.ph"
+            startIcon={<DashboardIcon />}
+            href={dashboardUrl}
           >
-            Contact Administrator
+            Go to Dashboard
           </Button>
         </Box>
 
         {/* Additional Information */}
         <Box sx={{ mt: 4, p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
           <Typography variant="caption" color="text.secondary">
-            <strong>Need immediate access?</strong><br />
-            Contact your system administrator with your User ID: {currentUser?.Username?.[0] || currentUser?.Id}
+            <strong>Note:</strong> Access will be available once your account setup is complete.  
+            User ID: {currentUser?.Username?.[0] || currentUser?.Id}
           </Typography>
         </Box>
 
@@ -127,9 +116,7 @@ const PendingRegionAssignmentPage = () => {
           <Box sx={{ mt: 3, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
             <Typography variant="caption" color="text.secondary">
               <strong>Debug Info:</strong><br />
-              Regions: {currentUser?.regions?.length || 0}<br />
-              Roles: {JSON.stringify(currentUser?.Roles)}<br />
-              Region Assignments: {JSON.stringify(currentUser?.regionAssignments)}
+              Roles: {JSON.stringify(currentUser?.Roles)}
             </Typography>
           </Box>
         )}
@@ -138,4 +125,4 @@ const PendingRegionAssignmentPage = () => {
   );
 };
 
-export default PendingRegionAssignmentPage;
+export default PendingAccessPage;

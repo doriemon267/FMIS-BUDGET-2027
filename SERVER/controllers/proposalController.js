@@ -2246,14 +2246,19 @@ exports.updateProposal = async (req, res) => {
   const approvingStatuses = ['Approved', 'Region Approved', 'Office Approved', 'Finalized'];
       if (approvingStatuses.includes(desiredStatus)) {
         try {
-          const assignment = await HierarchicalUserAssignment.getUserPermissions(req.user?.id);
-          const canApprove = assignment?.rolePermissions?.canApproveProposals === true;
-          if (!canApprove) {
-            return res.status(403).json({
-              success: false,
-              message: 'Permission denied: Can Approve Proposals is required to set status to an approved state',
-              code: 'INSUFFICIENT_PERMISSIONS'
-            });
+          const userRoles = req.user?.Roles || [];
+          
+          // SUPER ADMIN can always approve regardless of assignment
+          if (!userRoles.includes('SUPER ADMIN')) {
+            const assignment = await HierarchicalUserAssignment.getUserPermissions(req.user?.id);
+            const canApprove = assignment?.rolePermissions?.canApproveProposals === true;
+            if (!canApprove) {
+              return res.status(403).json({
+                success: false,
+                message: 'Permission denied: Can Approve Proposals is required to set status to an approved state',
+                code: 'INSUFFICIENT_PERMISSIONS'
+              });
+            }
           }
         } catch (e) {
           return res.status(500).json({ success: false, message: 'Error validating approval permission', error: e.message });
@@ -3103,25 +3108,16 @@ exports.debugProposals = async (req, res) => {
     const totalProposals = await Proposal.countDocuments();
     // Get all proposals
     const allProposals = await Proposal.find().sort({ createdAt: -1 }).limit(10);
-    // Get status distribution
-    const statusStats = await Proposal.aggregate([
-      { $group: { _id: '$status', count: { $sum: 1 } } }
-    ]);
-    // Get region distribution
-    const regionStats = await Proposal.aggregate([
-      { $group: { _id: '$region', count: { $sum: 1 } } }
-    ]);
-
     res.status(200).json({
-      total: totalProposals,
-      recentProposals: allProposals,
-      statusDistribution: statusStats,
-      regionDistribution: regionStats
+      success: true,
+      totalProposals,
+      recentProposals: allProposals
     });
   } catch (error) {
-    console.error('❌ Error in debugProposals:', error);
+    console.error("Error in debugProposals:", error);
     res.status(500).json({
-      message: 'Failed to fetch debug info',
+      success: false,
+      message: "Failed to debug proposals",
       error: error.message
     });
   }

@@ -22,10 +22,14 @@ exports.getMOOEData = async (req, res) => {
     // Check if user is authenticated and get user info
     if (req.user && req.user.id) {
       try {
+        const userRoles = req.user?.Roles || [];
         const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
         const assignment = await HierarchicalUserAssignment.getUserPermissions(req.user.id);
         
-        if (assignment && assignment.assignmentLevel === 'DEPARTMENT') {
+        // SUPER ADMIN can see all data without filtering
+        if (userRoles.includes('SUPER ADMIN')) {
+          // No additional filtering needed - keep base filter only
+        } else if (assignment && assignment.assignmentLevel === 'DEPARTMENT') {
           // Get department name from assignment
           const userDept = assignment.departments?.[0]?.departmentName;
           const userRegion = assignment.regions?.[0]?.regionName;

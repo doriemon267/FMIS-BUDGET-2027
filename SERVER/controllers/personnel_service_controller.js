@@ -2,11 +2,9 @@ const mongoose = require("mongoose");
 const PersonnelServices = require("../models/PersonnelServices");
 const EmployeeMaster = require("../models/EmployeeList");
 const Settings = require("../models/Settings");
-// Import MealAllowance and MedicalAllowance models safely
-const MealAllowance =
-  mongoose.models.MealAllowance || require("../models/mealAllowance");
-const MedicalAllowance =
-  mongoose.models.MedicalAllowance || require("../models/medicalAllowance");
+// Import ChildrenAllowance model safely
+const ChildrenAllowance =
+  mongoose.models.ChildrenAllowance || require("../models/childrenAllowance");
 const {
   numberFilter,
   dateFilter,
@@ -257,21 +255,24 @@ exports.getAllPersonnelServices = async (req, res) => {
     // Recalculate fields
     personnelServices = personnelServices.map((personnel) => {
       const recalculatedSubsistenceAllowanceMDS =
-        personnel.subsistenceAllowanceMDS;
+        personnel.subsistenceAllowanceMDS || 0;
       const recalculatedSubsistenceAllowanceST =
-        personnel.subsistenceAllowanceST;
-      const recalculatedLoyaltyAward = personnel.loyaltyAward;
-      const recalculatedOvertimePay = personnel.overtimePay;
+        personnel.subsistenceAllowanceST || 0;
+      const recalculatedLoyaltyAward = personnel.loyaltyAward || 0;
+      const recalculatedOvertimePay = personnel.overtimePay || 0;
       const recalculatedAnnualSalary = personnel.monthlySalary * 12;
       const recalculatedRATA = personnel.RATA;
       const recalculatedPERA = activeSettings.PERA * 12;
       const recalculatedUniform = activeSettings.uniformAllowance;
       const recalculatedProductivityIncentive =
         activeSettings.productivityIncentive;
+      const recalculatedMedical = personnel.medical || 0;
+      const recalculatedMeal = personnel.meal || 0;
+      const recalculatedChildrenAllowance = personnel.childrenAllowance || 0;
+      const recalculatedMidyearBonus = personnel.midyearBonus || personnel.monthlySalary || 0;
       const recalculatedCashGift = activeSettings.cashGift;
-      const recalculatedMidyearBonus = personnel.midyearBonus;
       const recalculatedYearEndBonus = personnel.yearEndBonus;
-      const recalculatedCourtAppearanceAmount = personnel.courtAppearance;
+      const recalculatedCourtAppearanceAmount = personnel.courtAppearance || 0;
       const recalculatedGsis =
         personnel.annualSalary * activeSettings.gsisPremium;
       // Calculate PhilHealth premium for 2025 per Circular 2019-0009
@@ -287,8 +288,8 @@ exports.getAllPersonnelServices = async (req, res) => {
       const recalculatedPhilhealth = (monthlyPhilhealthPremium * 12) / 2;
       const recalculatedPagibig = activeSettings.pagibigPremium * 12;
       const recalculatedEmpComp = activeSettings.employeeCompensation * 12;
-      const recalculatedTerminalLeave = personnel.terminalLeave;
-      const recalculatedearnedLeaves = personnel.earnedLeaves;
+      const recalculatedTerminalLeave = personnel.terminalLeave || 0;
+      const recalculatedearnedLeaves = personnel.earnedLeaves || 0;
       const recalculatedTotal =
         recalculatedAnnualSalary +
         recalculatedSubsistenceAllowanceMDS +
@@ -299,9 +300,9 @@ exports.getAllPersonnelServices = async (req, res) => {
         recalculatedPERA +
         recalculatedUniform +
         recalculatedProductivityIncentive +
-        personnel.medical +
-        personnel.meal +
-        personnel.childrenAllowance +
+        recalculatedMedical +
+        recalculatedMeal +
+        recalculatedChildrenAllowance +
         recalculatedCashGift +
         recalculatedMidyearBonus +
         recalculatedYearEndBonus +
@@ -323,6 +324,9 @@ exports.getAllPersonnelServices = async (req, res) => {
         PERA: recalculatedPERA,
         uniformALLOWANCE: recalculatedUniform,
         productivityIncentive: recalculatedProductivityIncentive,
+        medical: recalculatedMedical,
+        meal: recalculatedMeal,
+        childrenAllowance: recalculatedChildrenAllowance,
         cashGift: recalculatedCashGift,
         midyearBonus: recalculatedMidyearBonus,
         yearEndBonus: recalculatedYearEndBonus,
@@ -906,39 +910,72 @@ exports.getGrandTotalPermanent = async (req, res) => {
     if (region && !query.region) {
       query.region = region;
     }
+    // Fetch all matching personnel services and recalculate Totals using the
+    // same formulas used by the list endpoint so the grand total exactly
+    // matches the per-row Total values shown in the UI.
     const personnelServices = await PersonnelServices.find(query).lean();
-    const fieldsToSum = [
-      "annualSalary",
-      "RATA",
-      "PERA",
-      "uniformALLOWANCE",
-      "productivityIncentive",
-      "medical",
-      "childrenAllowance",
-      "meal",
-      "cashGift",
-      "subsistenceAllowanceMDS",
-      "subsistenceAllowanceST",
-      "midyearBonus",
-      "yearEndBonus",
-      "gsisPremium",
-      "philhealthPremium",
-      "pagibigPremium",
-      "employeeCompensation",
-      "loyaltyAward",
-      "overtimePay",
-      "earnedLeaves",
-      "retirementBenefits",
-      "terminalLeave",
-      "courtAppearance",
-    ];
-    const grandTotal = personnelServices.reduce((acc, curr) => {
-      const subtotal = fieldsToSum.reduce(
-        (sum, field) => sum + (Number(curr[field]) || 0),
-        0
-      );
+
+    const grandTotal = personnelServices.reduce((acc, personnel) => {
+      const recalculatedSubsistenceAllowanceMDS = personnel.subsistenceAllowanceMDS || 0;
+      const recalculatedSubsistenceAllowanceST = personnel.subsistenceAllowanceST || 0;
+      const recalculatedLoyaltyAward = personnel.loyaltyAward || 0;
+      const recalculatedOvertimePay = personnel.overtimePay || 0;
+      const recalculatedAnnualSalary = (personnel.monthlySalary || 0) * 12;
+      const recalculatedRATA = personnel.RATA || 0;
+      const recalculatedPERA = (activeSettings.PERA || 0) * 12;
+      const recalculatedUniform = activeSettings.uniformAllowance || 0;
+      const recalculatedProductivityIncentive = activeSettings.productivityIncentive || 0;
+      const recalculatedMedical = personnel.medical || 0;
+      const recalculatedMeal = personnel.meal || 0;
+      const recalculatedChildrenAllowance = personnel.childrenAllowance || 0;
+      const recalculatedMidyearBonus = personnel.midyearBonus || personnel.monthlySalary || 0;
+      const recalculatedCashGift = activeSettings.cashGift || 0;
+      const recalculatedYearEndBonus = personnel.yearEndBonus || 0;
+      const recalculatedCourtAppearanceAmount = personnel.courtAppearance || 0;
+      const recalculatedGsis = recalculatedAnnualSalary * (activeSettings.gsisPremium || 0);
+      // PhilHealth calculation (same rules as list endpoint)
+      const monthlySalary = personnel.monthlySalary || 0;
+      let monthlyPhilhealthPremium;
+      if (monthlySalary <= 10000) {
+        monthlyPhilhealthPremium = 500;
+      } else if (monthlySalary >= 100000) {
+        monthlyPhilhealthPremium = 5000;
+      } else {
+        monthlyPhilhealthPremium = monthlySalary * 0.05;
+      }
+      const recalculatedPhilhealth = (monthlyPhilhealthPremium * 12) / 2;
+      const recalculatedPagibig = (activeSettings.pagibigPremium || 0) * 12;
+      const recalculatedEmpComp = (activeSettings.employeeCompensation || 0) * 12;
+      const recalculatedTerminalLeave = personnel.terminalLeave || 0;
+      const recalculatedearnedLeaves = personnel.earnedLeaves || 0;
+
+      const subtotal =
+        recalculatedAnnualSalary +
+        recalculatedSubsistenceAllowanceMDS +
+        recalculatedSubsistenceAllowanceST +
+        recalculatedLoyaltyAward +
+        recalculatedOvertimePay +
+        recalculatedRATA +
+        recalculatedPERA +
+        recalculatedUniform +
+        recalculatedProductivityIncentive +
+        recalculatedMedical +
+        recalculatedMeal +
+        recalculatedChildrenAllowance +
+        recalculatedCashGift +
+        recalculatedMidyearBonus +
+        recalculatedYearEndBonus +
+        recalculatedCourtAppearanceAmount +
+        recalculatedGsis +
+        recalculatedPhilhealth +
+        recalculatedPagibig +
+        recalculatedearnedLeaves +
+        recalculatedTerminalLeave +
+        recalculatedEmpComp;
+
       return acc + subtotal;
     }, 0);
+
     return res.json({ fiscalYear, grandTotal });
   } catch (error) {
     console.error("Error in getGrandTotalPermanent:", error.stack);
