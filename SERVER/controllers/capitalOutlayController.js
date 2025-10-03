@@ -3,57 +3,8 @@ const CapitalOutlay = require("../models/CapitalOutlay");
 const ChartOfAccounts = require('../models/chartOfAccounts');
 const Category = require("../models/Category");
 const Settings = require("../models/Settings");
-// Function to seed Capital Outlay Chart of Accounts
-const seedCapitalOutlayChartOfAccounts = async () => {
-  try {
-    // Check if Capital Outlay entries already exist
-    const existingEntries = await ChartOfAccounts.find({
-      uacsCode: { $regex: /^5-01/ }
-    });
-    if (existingEntries.length > 0) {
-      // return;
-    }
-    const capitalOutlayEntries = [
-      // Infrastructure Outlay
-      { sublineItem: "Infrastructure Outlay", accountingTitle: "Infrastructure Outlay - Roads and Bridges", uacsCode: "5-01-01-010" },
-      { sublineItem: "Infrastructure Outlay", accountingTitle: "Infrastructure Outlay - Flood Control Systems", uacsCode: "5-01-01-020" },
-      { sublineItem: "Infrastructure Outlay", accountingTitle: "Infrastructure Outlay - Water Supply Systems", uacsCode: "5-01-01-030" },
-      { sublineItem: "Infrastructure Outlay", accountingTitle: "Infrastructure Outlay - Irrigation Systems", uacsCode: "5-01-01-040" },
-      { sublineItem: "Infrastructure Outlay", accountingTitle: "Infrastructure Outlay - Other Infrastructure", uacsCode: "5-01-01-990" },
-      // Building and Other Structures
-      { sublineItem: "Building and Other Structures", accountingTitle: "Buildings", uacsCode: "5-01-02-010" },
-      { sublineItem: "Building and Other Structures", accountingTitle: "School Buildings", uacsCode: "5-01-02-020" },
-      { sublineItem: "Building and Other Structures", accountingTitle: "Hospitals and Health Centers", uacsCode: "5-01-02-030" },
-      { sublineItem: "Building and Other Structures", accountingTitle: "Markets", uacsCode: "5-01-02-040" },
-      { sublineItem: "Building and Other Structures", accountingTitle: "Slaughterhouses", uacsCode: "5-01-02-050" },
-      { sublineItem: "Building and Other Structures", accountingTitle: "Hostels and Dormitories", uacsCode: "5-01-02-060" },
-      { sublineItem: "Building and Other Structures", accountingTitle: "Other Structures", uacsCode: "5-01-02-990" },
-      // Machinery and Equipment Outlay
-      { sublineItem: "Machinery and Equipment Outlay", accountingTitle: "Office Equipment", uacsCode: "5-01-03-010" },
-      { sublineItem: "Machinery and Equipment Outlay", accountingTitle: "Information and Communications Technology Equipment", uacsCode: "5-01-03-020" },
-      { sublineItem: "Machinery and Equipment Outlay", accountingTitle: "Agricultural and Forestry Equipment", uacsCode: "5-01-03-030" },
-      { sublineItem: "Machinery and Equipment Outlay", accountingTitle: "Military, Police and Security Equipment", uacsCode: "5-01-03-040" },
-      { sublineItem: "Machinery and Equipment Outlay", accountingTitle: "Medical Equipment", uacsCode: "5-01-03-050" },
-      { sublineItem: "Machinery and Equipment Outlay", accountingTitle: "Printing Equipment", uacsCode: "5-01-03-060" },
-      { sublineItem: "Machinery and Equipment Outlay", accountingTitle: "Sports Equipment", uacsCode: "5-01-03-070" },
-      { sublineItem: "Machinery and Equipment Outlay", accountingTitle: "Technical and Scientific Equipment", uacsCode: "5-01-03-080" },
-      { sublineItem: "Machinery and Equipment Outlay", accountingTitle: "Other Machinery and Equipment", uacsCode: "5-01-03-990" },
-      // Transportation Equipment Outlay
-      { sublineItem: "Transportation Equipment Outlay", accountingTitle: "Motor Vehicles", uacsCode: "5-01-04-010" },
-      { sublineItem: "Transportation Equipment Outlay", accountingTitle: "Aircraft", uacsCode: "5-01-04-020" },
-      { sublineItem: "Transportation Equipment Outlay", accountingTitle: "Watercrafts", uacsCode: "5-01-04-030" },
-      { sublineItem: "Transportation Equipment Outlay", accountingTitle: "Other Transportation Equipment", uacsCode: "5-01-04-990" },
-      // Furniture, Fixtures and Books Outlay
-      { sublineItem: "Furniture, Fixtures and Books Outlay", accountingTitle: "Furniture and Fixtures", uacsCode: "5-01-05-010" },
-      { sublineItem: "Furniture, Fixtures and Books Outlay", accountingTitle: "Books", uacsCode: "5-01-05-020" }
-    ];
-    await ChartOfAccounts.insertMany(capitalOutlayEntries);
-  } catch (error) {
-    console.error("Error seeding Capital Outlay chart of accounts:", error);
-  }
-};
-// Call the seeding function when the module is loaded (commented out to avoid repeated seeding)
-// seedCapitalOutlayChartOfAccounts();
+// All Chart of Accounts entries are read straight from the FMIS main database via MONGODB_MAIN_URL.
+// We intentionally avoid local file-based seeding so the data always mirrors the source system.
 // Helper function to get the active fiscal year
 const getActiveFiscalYear = async () => {
   const activeSettings = await Settings.findOne({ isActive: true });
@@ -179,6 +130,17 @@ exports.addCapitalOutlay = async (req, res) => {
             "Missing fields: cost, category, sublineItem, accountingTitle, uacsCode, and region are all required.",
         });
     }
+    
+    // ─── VALIDATION: Check if UACS code is valid for Capital Outlay ───
+    // Capital Outlay UACS codes should start with "5-01-" or "5-02-"
+    if (!uacsCode.startsWith('5-01-') && !uacsCode.startsWith('5-02-')) {
+      return res
+        .status(400)
+        .json({
+          error: `Invalid UACS code for Capital Outlay: "${uacsCode}". Capital Outlay items must have UACS codes starting with "5-01-" or "5-02-". The item "${accountingTitle}" (${uacsCode}) is not a valid Capital Outlay subline item.`,
+        });
+    }
+    
     // Fetch active settings
     const activeSettings = await Settings.findOne({ isActive: true });
     if (!activeSettings) {
@@ -384,104 +346,38 @@ exports.getAccountingTitles = async (req, res) => {
     const { sublineItem } = req.query;
     // // Debugging
     // First try to get from database
-    let accountingTitles = await ChartOfAccounts.find({ sublineItem }).select("accountingTitle uacsCode");
-    // If no entries found in database, provide default Capital Outlay chart of accounts
+    const accountingTitleDocs = await ChartOfAccounts.find({ sublineItem }).select("accountingTitle uacsCode");
+    const accountingTitles = accountingTitleDocs.map((doc) => ({
+      accountingTitle: doc.accountingTitle,
+      uacsCode: doc.uacsCode,
+    }));
+
     if (accountingTitles.length === 0) {
-      // // Default Capital Outlay Chart of Accounts
-      const defaultCapitalOutlayChartOfAccounts = {
-        // Infrastructure Outlay
-        "Infrastructure Outlay": [
-          { accountingTitle: "Infrastructure Outlay - Roads and Bridges", uacsCode: "5-01-01-010" },
-          { accountingTitle: "Infrastructure Outlay - Flood Control Systems", uacsCode: "5-01-01-020" },
-          { accountingTitle: "Infrastructure Outlay - Water Supply Systems", uacsCode: "5-01-01-030" },
-          { accountingTitle: "Infrastructure Outlay - Irrigation Systems", uacsCode: "5-01-01-040" },
-          { accountingTitle: "Infrastructure Outlay - Other Infrastructure", uacsCode: "5-01-01-990" }
-        ],
-        // Building and Other Structures
-        "Building and Other Structures": [
-          { accountingTitle: "Buildings", uacsCode: "5-01-02-010" },
-          { accountingTitle: "School Buildings", uacsCode: "5-01-02-020" },
-          { accountingTitle: "Hospitals and Health Centers", uacsCode: "5-01-02-030" },
-          { accountingTitle: "Markets", uacsCode: "5-01-02-040" },
-          { accountingTitle: "Slaughterhouses", uacsCode: "5-01-02-050" },
-          { accountingTitle: "Hostels and Dormitories", uacsCode: "5-01-02-060" },
-          { accountingTitle: "Other Structures", uacsCode: "5-01-02-990" }
-        ],
-        // Buildings and Other Structures (alternative naming)
-        "Buildings and Other Structures": [
-          { accountingTitle: "Buildings", uacsCode: "5-01-02-010" },
-          { accountingTitle: "School Buildings", uacsCode: "5-01-02-020" },
-          { accountingTitle: "Hospitals and Health Centers", uacsCode: "5-01-02-030" },
-          { accountingTitle: "Markets", uacsCode: "5-01-02-040" },
-          { accountingTitle: "Slaughterhouses", uacsCode: "5-01-02-050" },
-          { accountingTitle: "Hostels and Dormitories", uacsCode: "5-01-02-060" },
-          { accountingTitle: "Other Structures", uacsCode: "5-01-02-990" }
-        ],
-        // Repairs and Maintenance
-        "Repairs and Maintenance": [
-          { accountingTitle: "Repairs and Maintenance - Buildings and Other Structures", uacsCode: "5-02-13-010" },
-          { accountingTitle: "Repairs and Maintenance - Machinery and Equipment", uacsCode: "5-02-13-020" },
-          { accountingTitle: "Repairs and Maintenance - Transportation Equipment", uacsCode: "5-02-13-030" },
-          { accountingTitle: "Repairs and Maintenance - Other Property, Plant and Equipment", uacsCode: "5-02-13-990" }
-        ],
-        // Machinery and Equipment Outlay
-        "Machinery and Equipment Outlay": [
-          { accountingTitle: "Office Equipment", uacsCode: "5-01-03-010" },
-          { accountingTitle: "Information and Communications Technology Equipment", uacsCode: "5-01-03-020" },
-          { accountingTitle: "Agricultural and Forestry Equipment", uacsCode: "5-01-03-030" },
-          { accountingTitle: "Military, Police and Security Equipment", uacsCode: "5-01-03-040" },
-          { accountingTitle: "Medical Equipment", uacsCode: "5-01-03-050" },
-          { accountingTitle: "Printing Equipment", uacsCode: "5-01-03-060" },
-          { accountingTitle: "Sports Equipment", uacsCode: "5-01-03-070" },
-          { accountingTitle: "Technical and Scientific Equipment", uacsCode: "5-01-03-080" },
-          { accountingTitle: "Other Machinery and Equipment", uacsCode: "5-01-03-990" }
-        ],
-        // Machinery and Equipment (alternative naming)
-        "Machinery and Equipment": [
-          { accountingTitle: "Office Equipment", uacsCode: "5-01-03-010" },
-          { accountingTitle: "Information and Communications Technology Equipment", uacsCode: "5-01-03-020" },
-          { accountingTitle: "Agricultural and Forestry Equipment", uacsCode: "5-01-03-030" },
-          { accountingTitle: "Military, Police and Security Equipment", uacsCode: "5-01-03-040" },
-          { accountingTitle: "Medical Equipment", uacsCode: "5-01-03-050" },
-          { accountingTitle: "Printing Equipment", uacsCode: "5-01-03-060" },
-          { accountingTitle: "Sports Equipment", uacsCode: "5-01-03-070" },
-          { accountingTitle: "Technical and Scientific Equipment", uacsCode: "5-01-03-080" },
-          { accountingTitle: "Other Machinery and Equipment", uacsCode: "5-01-03-990" }
-        ],
-        // Transportation Equipment Outlay
-        "Transportation Equipment Outlay": [
-          { accountingTitle: "Motor Vehicles", uacsCode: "5-01-04-010" },
-          { accountingTitle: "Aircraft", uacsCode: "5-01-04-020" },
-          { accountingTitle: "Watercrafts", uacsCode: "5-01-04-030" },
-          { accountingTitle: "Other Transportation Equipment", uacsCode: "5-01-04-990" }
-        ],
-        // Furniture, Fixtures and Books Outlay
-        "Furniture, Fixtures and Books Outlay": [
-          { accountingTitle: "Furniture and Fixtures", uacsCode: "5-01-05-010" },
-          { accountingTitle: "Books", uacsCode: "5-01-05-020" }
-        ],
-        // Furniture Fixture and Books (alternative naming)
-        "Furniture Fixture and Books": [
-          { accountingTitle: "Furniture and Fixtures", uacsCode: "5-01-05-010" },
-          { accountingTitle: "Books", uacsCode: "5-01-05-020" }
-        ],
-        // Land
-        "Land": [
-          { accountingTitle: "Land", uacsCode: "5-01-06-010" },
-          { accountingTitle: "Land Rights", uacsCode: "5-01-06-020" }
-        ],
-        // Land Improvements
-        "Land Improvements": [
-          { accountingTitle: "Land Improvements", uacsCode: "5-01-07-010" },
-          { accountingTitle: "Site Development", uacsCode: "5-01-07-020" },
-          { accountingTitle: "Landscaping", uacsCode: "5-01-07-030" }
-        ]
-      };
-      // Get the matching entries for the subline item
-      accountingTitles = defaultCapitalOutlayChartOfAccounts[sublineItem] || [];
+      const message = `No Chart of Accounts entries found for "${sublineItem}". Please verify the FMIS main database (MONGODB_MAIN_URL) contains the expected Chart of Accounts records.`;
+
+      console.warn(`[CapitalOutlay] ${message}`);
+
+      return res.status(200).json({
+        accountingTitles: [],
+        message,
+      });
     }
-    // // Debugging
-    res.status(200).json({ accountingTitles });
+
+    const nonCapitalOutlayCodes = accountingTitles
+      .filter(({ uacsCode }) => !(typeof uacsCode === 'string' && /^(5-01|5-02)-/.test(uacsCode.trim())))
+      .map(({ uacsCode }) => uacsCode)
+      .filter(Boolean);
+
+    const responsePayload = { accountingTitles };
+
+    if (nonCapitalOutlayCodes.length > 0) {
+      responsePayload.message = `Returned ${nonCapitalOutlayCodes.length} accounting title(s) whose UACS codes are outside the usual Capital Outlay prefixes (5-01 or 5-02). Review the source data if this is unexpected.`;
+      console.warn(
+        `[CapitalOutlay] Subline "${sublineItem}" includes non-capital-outlay UACS codes: ${nonCapitalOutlayCodes.join(", ")}`
+      );
+    }
+
+    res.status(200).json(responsePayload);
   } catch (error) {
     console.error("Error fetching accounting titles:", error);
     res.status(500).json({ error: "Failed to retrieve accounting titles." });

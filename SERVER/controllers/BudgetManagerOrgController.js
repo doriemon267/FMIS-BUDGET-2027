@@ -193,7 +193,7 @@ const testOrganizationalSegregation = async (req, res) => {
       });
     }
     // Import models for real data testing
-    const PersonnelServices = require('../models/PersonnelServices');
+    const PersonnelServices = require('../models/personnelServices');
     const MooeProposal = require('../models/mooeProposals');
     const CapitalOutlay = require('../models/CapitalOutlay');
     const COSPersonnel = require('../models/COSPersonnel');
@@ -292,4 +292,4 @@ module.exports = {
   validateOrganizationalSelection,
   getOrganizationalStats,
   testOrganizationalSegregation
-};
+};

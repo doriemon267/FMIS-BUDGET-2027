@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import PropTypes from "prop-types";
 import {
   Dialog,
   DialogTitle,
@@ -33,6 +34,9 @@ import { toast } from "react-toastify";
 import { useUser } from "../../context/UserContext";
 import { useRegion } from "../../context/RegionContext";
 
+const isValidCapitalOutlayUacs = (code) =>
+  typeof code === "string" && /^(5-01|5-02)-/i.test(code.trim());
+
 // Custom number format component for currency inputs
 const NumberFormatCustom = React.forwardRef(function NumberFormatCustom(props, ref) {
   const { onChange, name, ...other } = props;
@@ -58,13 +62,18 @@ const NumberFormatCustom = React.forwardRef(function NumberFormatCustom(props, r
   );
 });
 
+NumberFormatCustom.propTypes = {
+  onChange: PropTypes.func.isRequired,
+  name: PropTypes.string.isRequired,
+};
+
 const CapitalOutlayDetailsModal = ({
   open,
   onClose,
-  capitalOutlayId,
-  accountingTitle,
+  capitalOutlayId = null,
+  accountingTitle = "",
   onSave,
-  temporaryItem, // New prop for temporary items that aren't saved yet
+  temporaryItem = null, // New prop for temporary items that aren't saved yet
 }) => {
   const [details, setDetails] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -82,17 +91,7 @@ const CapitalOutlayDetailsModal = ({
     isNew: true,
   });
 
-  // Load existing details when modal opens
-  useEffect(() => {
-    if (open && capitalOutlayId && !temporaryItem) {
-      loadDetails();
-    } else if (open && (temporaryItem || !capitalOutlayId)) {
-      // New capital outlay or temporary item - start with one empty row
-      setDetails([initializeEmptyRow()]);
-    }
-  }, [open, capitalOutlayId, temporaryItem]);
-
-  const loadDetails = async () => {
+  const loadDetails = useCallback(async () => {
     setLoading(true);
     try {
       const response = await api.get(`/api/capital-outlay/${capitalOutlayId}/details`);
@@ -111,7 +110,21 @@ const CapitalOutlayDetailsModal = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [capitalOutlayId]);
+
+  // Load existing details when modal opens
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    if (capitalOutlayId && !temporaryItem) {
+      loadDetails();
+    } else {
+      // New capital outlay or temporary item - start with one empty row
+      setDetails([initializeEmptyRow()]);
+    }
+  }, [open, capitalOutlayId, temporaryItem, loadDetails]);
 
   const handleAddRow = () => {
     setDetails((prev) => [...prev, initializeEmptyRow()]);
@@ -203,6 +216,13 @@ const CapitalOutlayDetailsModal = ({
   const handleSave = async () => {
     if (!validateDetails()) {
       toast.error("Please fix the validation errors before saving");
+      return;
+    }
+
+    if (temporaryItem?.uacsCode && !isValidCapitalOutlayUacs(temporaryItem.uacsCode)) {
+      toast.error(
+        `The selected UACS code "${temporaryItem.uacsCode}" is not valid for Capital Outlay. Please choose a code that starts with 5-01 or 5-02.`
+      );
       return;
     }
 
@@ -520,38 +540,67 @@ const CapitalOutlayDetailsModal = ({
 
             <Divider sx={{ my: 2 }} />
 
-            {/* Totals Section */}
-            <Box>
-              <Typography variant="h6" gutterBottom>
-                Running Totals
+            {/* Totals Section - Enhanced */}
+            <Paper 
+              elevation={3} 
+              sx={{ 
+                p: 3, 
+                background: 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)',
+                borderRadius: 2
+              }}
+            >
+              <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', color: '#1b5e20', mb: 2 }}>
+                💰 Running Totals
               </Typography>
               <Box display="flex" gap={4} flexWrap="wrap">
-                <Box>
-                  <Typography variant="body2" color="textSecondary">
-                    Total Income Amount
+                <Box sx={{ 
+                  flex: 1, 
+                  minWidth: '200px',
+                  p: 2,
+                  backgroundColor: 'white',
+                  borderRadius: 2,
+                  boxShadow: 1
+                }}>
+                  <Typography variant="caption" color="textSecondary" sx={{ fontWeight: 'bold' }}>
+                    Income Amount
                   </Typography>
-                  <Typography variant="h6" color="primary">
+                  <Typography variant="h5" color="primary" sx={{ fontWeight: 'bold', mt: 0.5 }}>
                     {formatCurrency(totals.income)}
                   </Typography>
                 </Box>
-                <Box>
-                  <Typography variant="body2" color="textSecondary">
-                    Total Subsidy Amount
+                <Box sx={{ 
+                  flex: 1, 
+                  minWidth: '200px',
+                  p: 2,
+                  backgroundColor: 'white',
+                  borderRadius: 2,
+                  boxShadow: 1
+                }}>
+                  <Typography variant="caption" color="textSecondary" sx={{ fontWeight: 'bold' }}>
+                    Subsidy Amount
                   </Typography>
-                  <Typography variant="h6" color="secondary">
+                  <Typography variant="h5" color="secondary" sx={{ fontWeight: 'bold', mt: 0.5 }}>
                     {formatCurrency(totals.subsidy)}
                   </Typography>
                 </Box>
-                <Box>
-                  <Typography variant="body2" color="textSecondary">
-                    Grand Total
+                <Box sx={{ 
+                  flex: 1, 
+                  minWidth: '200px',
+                  p: 2,
+                  backgroundColor: '#4caf50',
+                  color: 'white',
+                  borderRadius: 2,
+                  boxShadow: 2
+                }}>
+                  <Typography variant="caption" sx={{ fontWeight: 'bold', opacity: 0.9 }}>
+                    GRAND TOTAL
                   </Typography>
-                  <Typography variant="h6" color="success.main">
+                  <Typography variant="h4" sx={{ fontWeight: 'bold', mt: 0.5 }}>
                     {formatCurrency(totals.total)}
                   </Typography>
                 </Box>
               </Box>
-            </Box>
+            </Paper>
 
             {Object.keys(errors).length > 0 && (
               <Alert severity="error" sx={{ mt: 2 }}>
@@ -577,6 +626,27 @@ const CapitalOutlayDetailsModal = ({
       </DialogActions>
     </Dialog>
   );
+};
+
+CapitalOutlayDetailsModal.propTypes = {
+  open: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  capitalOutlayId: PropTypes.string,
+  accountingTitle: PropTypes.string,
+  onSave: PropTypes.func,
+  temporaryItem: PropTypes.shape({
+    isTemporary: PropTypes.bool,
+    sublineItem: PropTypes.string,
+    accountingTitle: PropTypes.string,
+    uacsCode: PropTypes.string,
+    particulars: PropTypes.string,
+    tempCategoryId: PropTypes.oneOfType([
+      PropTypes.string,
+      PropTypes.shape({ _id: PropTypes.string }),
+    ]),
+    fiscalYear: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    budgetType: PropTypes.string,
+  }),
 };
 
 export default CapitalOutlayDetailsModal;

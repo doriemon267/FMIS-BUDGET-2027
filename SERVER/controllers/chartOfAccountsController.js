@@ -177,79 +177,7 @@ exports.getAccountingTitles = async (req, res) => {
     const { sublineItem } = req.query;
     // First try to get from database
     let accountingTitles = await ChartOfAccounts.find({ sublineItem }).select("accountingTitle uacsCode");
-    // If no results from database, use default mappings
-    if (accountingTitles.length === 0) {
-      // Default Capital Outlay Chart of Accounts
-      const defaultCapitalOutlayChartOfAccounts = {
-        // Infrastructure Outlay
-        "Infrastructure Outlay": [
-          { accountingTitle: "Infrastructure Outlay - Roads and Bridges", uacsCode: "5-01-01-010" },
-          { accountingTitle: "Infrastructure Outlay - Flood Control Systems", uacsCode: "5-01-01-020" },
-          { accountingTitle: "Infrastructure Outlay - Water Supply Systems", uacsCode: "5-01-01-030" },
-          { accountingTitle: "Infrastructure Outlay - Irrigation Systems", uacsCode: "5-01-01-040" },
-          { accountingTitle: "Infrastructure Outlay - Other Infrastructure", uacsCode: "5-01-01-990" }
-        ],
-        // Building and Other Structures
-        "Building and Other Structures": [
-          { accountingTitle: "Buildings", uacsCode: "5-01-02-010" },
-          { accountingTitle: "School Buildings", uacsCode: "5-01-02-020" },
-          { accountingTitle: "Hospitals and Health Centers", uacsCode: "5-01-02-030" },
-          { accountingTitle: "Markets", uacsCode: "5-01-02-040" },
-          { accountingTitle: "Slaughterhouses", uacsCode: "5-01-02-050" },
-          { accountingTitle: "Hostels and Dormitories", uacsCode: "5-01-02-060" },
-          { accountingTitle: "Other Structures", uacsCode: "5-01-02-990" }
-        ],
-        // Buildings and Other Structures (alternative naming)
-        "Buildings and Other Structures": [
-          { accountingTitle: "Buildings", uacsCode: "5-01-02-010" },
-          { accountingTitle: "School Buildings", uacsCode: "5-01-02-020" },
-          { accountingTitle: "Hospitals and Health Centers", uacsCode: "5-01-02-030" },
-          { accountingTitle: "Markets", uacsCode: "5-01-02-040" },
-          { accountingTitle: "Slaughterhouses", uacsCode: "5-01-02-050" },
-          { accountingTitle: "Hostels and Dormitories", uacsCode: "5-01-02-060" },
-          { accountingTitle: "Other Structures", uacsCode: "5-01-02-990" }
-        ],
-        // Machinery and Equipment Outlay
-        "Machinery and Equipment Outlay": [
-          { accountingTitle: "Office Equipment", uacsCode: "5-01-03-010" },
-          { accountingTitle: "Information and Communications Technology Equipment", uacsCode: "5-01-03-020" },
-          { accountingTitle: "Technical and Scientific Equipment", uacsCode: "5-01-03-030" },
-          { accountingTitle: "Machinery", uacsCode: "5-01-03-040" },
-          { accountingTitle: "Other Machinery and Equipment", uacsCode: "5-01-03-990" }
-        ],
-        // Transportation Equipment Outlay
-        "Transportation Equipment Outlay": [
-          { accountingTitle: "Motor Vehicles", uacsCode: "5-01-04-010" },
-          { accountingTitle: "Trains", uacsCode: "5-01-04-020" },
-          { accountingTitle: "Aircraft and Aircrafts Ground Equipment", uacsCode: "5-01-04-030" },
-          { accountingTitle: "Watercrafts", uacsCode: "5-01-04-040" },
-          { accountingTitle: "Other Transportation Equipment", uacsCode: "5-01-04-990" }
-        ],
-        // Furniture, Fixtures and Books Outlay
-        "Furniture, Fixtures and Books Outlay": [
-          { accountingTitle: "Furniture and Fixtures", uacsCode: "5-01-05-010" },
-          { accountingTitle: "Books", uacsCode: "5-01-05-020" }
-        ],
-        // Furniture Fixture and Books (alternative naming)
-        "Furniture Fixture and Books": [
-          { accountingTitle: "Furniture and Fixtures", uacsCode: "5-01-05-010" },
-          { accountingTitle: "Books", uacsCode: "5-01-05-020" }
-        ],
-        // Land
-        "Land": [
-          { accountingTitle: "Land", uacsCode: "5-01-06-010" },
-          { accountingTitle: "Land Rights", uacsCode: "5-01-06-020" }
-        ],
-        // Land Improvements
-        "Land Improvements": [
-          { accountingTitle: "Land Improvements", uacsCode: "5-01-07-010" },
-          { accountingTitle: "Site Development", uacsCode: "5-01-07-020" },
-          { accountingTitle: "Landscaping", uacsCode: "5-01-07-030" }
-        ]
-      };
-      // Get the matching entries for the subline item
-      accountingTitles = defaultCapitalOutlayChartOfAccounts[sublineItem] || [];
-    }
+    
     res.status(200).json({ accountingTitles });
   } catch (error) {
     console.error("Error fetching accounting titles:", error);
@@ -266,4 +194,4 @@ exports.getSublineItems = async (req, res) => {
     console.error("Error fetching subline items:", error);
     res.status(500).json({ error: "Failed to retrieve subline items." });
   }
-};
+};
