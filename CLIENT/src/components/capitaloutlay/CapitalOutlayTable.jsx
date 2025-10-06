@@ -152,6 +152,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
   // Enhanced state management
   const [searchTerm, setSearchTerm] = useState("");
   const [filterAnchorEl, setFilterAnchorEl] = useState(null);
+  const [addMenuAnchorEl, setAddMenuAnchorEl] = useState(null);
   const [selectedFilters, setSelectedFilters] = useState({
     categories: [],
     sublineItems: [],
@@ -357,42 +358,44 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
 
   // Callback when details are saved - refresh the details and update the main table
   const handleDetailsSaved = useCallback(async (capitalOutlayId, totals) => {
-    // Refresh the details for this item
     try {
-      const response = await api.get(`/api/capital-outlay/${capitalOutlayId}/details`);
+      // Fetch the updated details
+      const detailsResponse = await api.get(`/api/capital-outlay/${capitalOutlayId}/details`);
+      const details = detailsResponse.data.details || [];
+      
       setCapitalOutlayDetails(prev => ({
         ...prev,
-        [capitalOutlayId]: response.data.details || []
+        [capitalOutlayId]: details
       }));
+
+      // Extract particulars from the details - combine all particulars from breakdown items
+      const particularsFromDetails = details
+        .map(d => d.particulars)
+        .filter(Boolean)
+        .join('; ');
+
+      // Update the main capital outlay record with new totals and particulars
+      setCapitalOutlays(prev => {
+        const updatedOutlays = prev.map(item => 
+          item._id === capitalOutlayId 
+            ? { 
+                ...item, 
+                income: totals.income, 
+                subsidy: totals.subsidy, 
+                cost: totals.cost,
+                particulars: particularsFromDetails || item.particulars // Update particulars from details
+              }
+            : item
+        );
+        
+        // Notify parent component of data change
+        onDataChange?.(updatedOutlays);
+        return updatedOutlays;
+      });
     } catch (error) {
       console.error("Error fetching capital outlay details:", error);
     }
-    
-    // Update the main capital outlay record with new totals
-    setCapitalOutlays(prev => prev.map(item => 
-      item._id === capitalOutlayId 
-        ? { 
-            ...item, 
-            income: totals.income, 
-            subsidy: totals.subsidy, 
-            cost: totals.cost 
-          }
-        : item
-    ));
-    
-    // Notify parent component of data change
-    const updatedOutlays = capitalOutlays.map(item => 
-      item._id === capitalOutlayId 
-        ? { 
-            ...item, 
-            income: totals.income, 
-            subsidy: totals.subsidy, 
-            cost: totals.cost 
-          }
-        : item
-    );
-    onDataChange?.(updatedOutlays);
-  }, [capitalOutlays, onDataChange]);
+  }, [onDataChange]);
 
   const handleDetailsModalSave = async (totals) => {
     if (totals.isNewItem && totals.newItem) {
@@ -1196,6 +1199,50 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
           Filters
         </Button>
 
+        {/* Add Item Button - Quick access to add items to any category */}
+        <Menu
+          anchorEl={addMenuAnchorEl}
+          open={Boolean(addMenuAnchorEl)}
+          onClose={() => setAddMenuAnchorEl(null)}
+        >
+          {categories.map((category) => (
+            <MenuItem
+              key={category._id}
+              onClick={() => {
+                setAddingCategoryId(category._id);
+                setNewOutlays((prev) => ({
+                  ...prev,
+                  [category._id]: {
+                    income: "",
+                    subsidy: "",
+                    particulars: "",
+                  },
+                }));
+                fetchSublineItems(category.categoryName, true, category._id);
+                setAddMenuAnchorEl(null);
+                // Scroll to the category
+                setTimeout(() => {
+                  const categoryElement = document.querySelector(`[data-category-id="${category._id}"]`);
+                  if (categoryElement) {
+                    categoryElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }
+                }, 100);
+              }}
+            >
+              {category.categoryName}
+            </MenuItem>
+          ))}
+        </Menu>
+        <Button
+          variant="contained"
+          color="success"
+          startIcon={<Add />}
+          onClick={(e) => setAddMenuAnchorEl(e.currentTarget)}
+          sx={{ minWidth: 120 }}
+        >
+          Add Item
+        </Button>
+
         {/* Results counter */}
         <Typography variant="body2" color="text.secondary">
           Showing {filteredData.length} of {capitalOutlays.length} items
@@ -1591,7 +1638,10 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
             const isExpanded = expandedCategories.includes(group.categoryId);
 
             return (
-              <Box key={group.categoryId}>
+              <Box 
+                key={group.categoryId}
+                data-category-id={group.categoryId}
+              >
                 <Box
                   sx={{
                     mb: compactView ? 2 : 4,
@@ -2096,33 +2146,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                       </TableRow>
                     )}
                     
-                    {addingCategoryId !== group.categoryId && (
-                      <TableRow>
-                        <TableCell colSpan={9} sx={{ textAlign: "center", py: 1 }}>
-                          <Button
-                            variant="contained"
-                            color="success"
-                            startIcon={<Add />}
-                            onClick={() => {
-                              setAddingCategoryId(group.categoryId);
-                              setNewOutlays((prev) => ({
-                                ...prev,
-                                [group.categoryId]: {
-                                  income: "",
-                                  subsidy: "",
-                                  particulars: "",
-                                },
-                              }));
-                              fetchSublineItems(group.categoryName, true, group.categoryId);
-                            }}
-                            size="small"
-                            sx={{ borderRadius: 4, px: 2, my: 1 }}
-                          >
-                            Add Item
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    )}
+                    {/* Old add button removed - now using toolbar Add Item button */}
                     
                     <TableRow sx={{ backgroundColor: "#f0f7f0" }}>
                       <TableCell colSpan={6}>
@@ -2197,13 +2221,17 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
           </Box>
         )}
 
-        {/* Grand Total Section */}
+        {/* Grand Total Section - Sticky Footer */}
         <TableContainer sx={{
+          position: 'sticky',
+          bottom: 0,
+          zIndex: 10,
           mt: 2,
           mb: 2,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+          boxShadow: '0 -4px 16px rgba(0,0,0,0.15)',
           borderRadius: 2,
           overflow: "hidden",
+          backgroundColor: '#fff',
         }}>
             <Table>
               <TableHead>

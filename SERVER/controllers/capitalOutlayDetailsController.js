@@ -25,23 +25,37 @@ exports.saveCapitalOutlayDetails = async (req, res) => {
   try {
     const { capitalOutlayId } = req.params;
     const { details, processBy } = req.body;
+    
+    console.log("=== SAVE CAPITAL OUTLAY DETAILS ===");
+    console.log("Capital Outlay ID:", capitalOutlayId);
+    console.log("Process By:", processBy);
+    console.log("Details count:", details?.length);
+    console.log("Details:", JSON.stringify(details, null, 2));
+    
     if (!mongoose.Types.ObjectId.isValid(capitalOutlayId)) {
+      console.error("Invalid capital outlay ID format:", capitalOutlayId);
       return res.status(400).json({ error: "Invalid capital outlay ID" });
     }
     if (!Array.isArray(details)) {
+      console.error("Details is not an array:", typeof details);
       return res.status(400).json({ error: "Details must be an array" });
     }
     // Validate each detail item
     for (const detail of details) {
       if (!detail.particulars || detail.particulars.trim() === "") {
+        console.error("Validation failed: Missing particulars in detail:", detail);
         return res.status(400).json({ error: "Particulars is required for all items" });
       }
       if (detail.income_amount < 0 || detail.subsidy_amount < 0) {
+        console.error("Validation failed: Negative amounts in detail:", detail);
         return res.status(400).json({ error: "Amounts cannot be negative" });
       }
     }
     // Delete existing details for this capital outlay
-    await CapitalOutlayDetails.deleteMany({ capital_outlay_id: capitalOutlayId });
+    console.log("Deleting existing details for capital outlay:", capitalOutlayId);
+    const deleteResult = await CapitalOutlayDetails.deleteMany({ capital_outlay_id: capitalOutlayId });
+    console.log("Deleted", deleteResult.deletedCount, "existing details");
+    
     // Insert new details
     const detailsToInsert = details.map((detail) => ({
       capital_outlay_id: capitalOutlayId,
@@ -51,7 +65,11 @@ exports.saveCapitalOutlayDetails = async (req, res) => {
       processBy: processBy || "System",
       processDate: new Date(),
     }));
+    
+    console.log("Inserting", detailsToInsert.length, "new details");
     const savedDetails = await CapitalOutlayDetails.insertMany(detailsToInsert);
+    console.log("Successfully inserted", savedDetails.length, "details");
+    
     // Calculate totals
     const totalIncome = detailsToInsert.reduce(
       (sum, detail) => sum + detail.income_amount,
@@ -62,8 +80,12 @@ exports.saveCapitalOutlayDetails = async (req, res) => {
       0
     );
     const totalCost = totalIncome + totalSubsidy;
+    
+    console.log("Calculated totals - Income:", totalIncome, "Subsidy:", totalSubsidy, "Cost:", totalCost);
+    
     // Update the main capital outlay record with calculated totals
-    await CapitalOutlay.findByIdAndUpdate(
+    console.log("Updating main capital outlay record:", capitalOutlayId);
+    const updatedCapitalOutlay = await CapitalOutlay.findByIdAndUpdate(
       capitalOutlayId,
       {
         income: totalIncome,
@@ -72,6 +94,15 @@ exports.saveCapitalOutlayDetails = async (req, res) => {
       },
       { new: true }
     );
+    
+    if (!updatedCapitalOutlay) {
+      console.error("Capital outlay not found:", capitalOutlayId);
+      return res.status(404).json({ error: "Capital outlay not found" });
+    }
+    
+    console.log("Successfully updated capital outlay");
+    console.log("=== SAVE COMPLETE ===");
+    
     res.status(200).json({
       success: true,
       message: "Capital outlay details saved successfully",
@@ -83,8 +114,10 @@ exports.saveCapitalOutlayDetails = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error saving capital outlay details:", error);
-    res.status(500).json({ error: "Failed to save capital outlay details" });
+    console.error("=== ERROR SAVING CAPITAL OUTLAY DETAILS ===");
+    console.error("Error:", error);
+    console.error("Stack:", error.stack);
+    res.status(500).json({ error: "Failed to save capital outlay details", details: error.message });
   }
 };
 // Delete a specific detail item

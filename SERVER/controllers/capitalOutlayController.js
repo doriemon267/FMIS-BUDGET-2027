@@ -100,6 +100,9 @@ exports.getAllCapitalOutlays = async (req, res) => {
 // Add a new capital outlay
 exports.addCapitalOutlay = async (req, res) => {
   try {
+    console.log("=== ADD CAPITAL OUTLAY ===");
+    console.log("Request body:", JSON.stringify(req.body, null, 2));
+    
     const {
       particulars,
       cost,
@@ -114,6 +117,17 @@ exports.addCapitalOutlay = async (req, res) => {
       accountingTitle,
       uacsCode,
     } = req.body;
+    
+    console.log("Extracted fields:");
+    console.log("- Category:", category);
+    console.log("- SublineItem:", sublineItem);
+    console.log("- AccountingTitle:", accountingTitle);
+    console.log("- UacsCode:", uacsCode);
+    console.log("- Region:", region);
+    console.log("- Income:", income);
+    console.log("- Subsidy:", subsidy);
+    console.log("- Cost:", cost);
+    
     // ─── VALIDATION: lahat ng fields ay required ───
     if (
       cost == null ||
@@ -123,6 +137,7 @@ exports.addCapitalOutlay = async (req, res) => {
       !uacsCode ||
       !region // Ensure region is required
     ) {
+      console.error("Validation failed: Missing required fields");
       return res
         .status(400)
         .json({
@@ -131,24 +146,24 @@ exports.addCapitalOutlay = async (req, res) => {
         });
     }
     
-    // ─── VALIDATION: Check if UACS code is valid for Capital Outlay ───
-    // Capital Outlay UACS codes should start with "5-01-" or "5-02-"
-    if (!uacsCode.startsWith('5-01-') && !uacsCode.startsWith('5-02-')) {
-      return res
-        .status(400)
-        .json({
-          error: `Invalid UACS code for Capital Outlay: "${uacsCode}". Capital Outlay items must have UACS codes starting with "5-01-" or "5-02-". The item "${accountingTitle}" (${uacsCode}) is not a valid Capital Outlay subline item.`,
-        });
-    }
+    // ─── UACS CODE VALIDATION REMOVED ───
+    // Previous validation required codes starting with "5-01-" or "5-02-"
+    // However, the chart_of_accounts table contains codes starting with "1-"
+    // Validation removed to accept all UACS codes from chart_of_accounts
+    console.log("UACS code check skipped - accepting all codes from chart_of_accounts:", uacsCode);
     
     // Fetch active settings
+    console.log("Fetching active settings...");
     const activeSettings = await Settings.findOne({ isActive: true });
     if (!activeSettings) {
+      console.error("Active settings not found");
       return res
         .status(400)
         .json({ error: "Active settings not found" });
     }
+    console.log("Active settings found:", activeSettings.fiscalYear, activeSettings.budgetType);
     // Duplicate check before saving
+    console.log("Checking for duplicates...");
     const duplicate = await CapitalOutlay.findOne({
       uacsCode,
       region,
@@ -156,8 +171,11 @@ exports.addCapitalOutlay = async (req, res) => {
       sublineItem
     });
     if (duplicate) {
+      console.error("Duplicate found:", duplicate._id);
       return res.status(400).json({ error: "Duplicate entry: This Capital Outlay already exists for this region, year, and subline item." });
     }
+    console.log("No duplicates found");
+    
     // Normalize organizational ownership using submission workflow data
     const workflowData = req.submissionWorkflowData || {};
     const userLevel = workflowData.userLevel;
@@ -165,6 +183,8 @@ exports.addCapitalOutlay = async (req, res) => {
     const ownerDepartment = workflowData.department ?? req.body.department ?? null;
     // Clear division for department-origin records to avoid leaking into division scope
     const ownerDivision = userLevel === 'DEPARTMENT' ? null : (workflowData.division ?? req.body.division ?? null);
+    
+    console.log("Creating new capital outlay...");
     const newOutlay = new CapitalOutlay({
       particulars,
       cost,
@@ -186,16 +206,23 @@ exports.addCapitalOutlay = async (req, res) => {
       workflowLevel: workflowData.workflowLevel || (userLevel === 'DIVISION' ? 'DIVISION' : userLevel === 'DEPARTMENT' ? 'DEPARTMENT' : userLevel === 'REGION' ? 'REGION' : null),
       status: req.body.status || 'Draft'
     });
+    
+    console.log("Saving capital outlay to database...");
     await newOutlay.save();
+    console.log("Capital outlay saved successfully:", newOutlay._id);
+    console.log("=== ADD CAPITAL OUTLAY COMPLETE ===");
+    
     return res.status(201).json({
       message: "Capital outlay added successfully",
       capitalOutlay: newOutlay
     });
   } catch (error) {
-    console.error("Error adding capital outlay:", error);
+    console.error("=== ERROR ADDING CAPITAL OUTLAY ===");
+    console.error("Error:", error);
+    console.error("Stack:", error.stack);
     return res
       .status(500)
-      .json({ error: "Internal server error" });
+      .json({ error: "Internal server error", details: error.message });
   }
 };
 // Edit an existing capital outlay

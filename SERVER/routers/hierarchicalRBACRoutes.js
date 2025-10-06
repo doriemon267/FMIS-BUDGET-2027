@@ -521,7 +521,7 @@ router.get(
               deptMappings.forEach((mapping, mappingIndex) => {
                 const region = regions.find(r => r._id.toString() === mapping.regionId.toString());
                 if (region) {
-                  const regionName = region.Region || region.name || region.regionName || 'NCR';
+                  const regionName = region.Region || region.name || region.regionName;
                   const officeId = `${dept._id}_${mapping.regionId}`; // Create unique ID for each regional office
 
                   officesMap.set(officeId, {
@@ -537,7 +537,7 @@ router.get(
               });
             } else {
               // Normal processing for other departments
-              let regionName = 'NCR'; // Default
+              let regionName = null; // No default region
               let regionId = null;
 
               if (deptMappings.length > 0) {
@@ -563,7 +563,7 @@ router.get(
                   if (firstMapping.regionId) {
                     const region = regions.find(r => r._id.toString() === firstMapping.regionId.toString());
                     if (region) {
-                      regionName = region.Region || region.name || region.regionName || 'NCR';
+                      regionName = region.Region || region.name || region.regionName;
                       regionId = region._id;
                     }
                   }
@@ -589,7 +589,15 @@ router.get(
 
                   mappings.forEach((mapping) => {
                     if (mapping.divisions && mapping.divisions.length > 0) {
-                      const officeId = mapping.departmentId;
+                      // Check if this department is split by region
+                      const departmentsToSplit = ['REGIONAL OFFICE', 'IRRIGATION MANAGEMENT OFFICE', 'HEAD OFFICE', 'DIVISION I', 'DIVISION II', 'DIVISION III', 'DIVISION IV'];
+                      const dept = departments.find(d => d._id.toString() === mapping.departmentId.toString());
+                      const isSplitDepartment = dept && departmentsToSplit.includes(dept.Department);
+                      
+                      // For split departments, use composite officeId; otherwise use departmentId
+                      const officeId = isSplitDepartment && mapping.regionId 
+                        ? `${mapping.departmentId}_${mapping.regionId}` 
+                        : mapping.departmentId;
                       const office = officesMap.get(officeId?.toString());
 
                       // Check if this is a central office
@@ -690,67 +698,101 @@ router.get(
                         const regionIMOs = provincialIMOs[regionName] || [];
 
                         regionIMOs.forEach((provincialIMO, imoIndex) => {
+                          // Skip if office is not found (prevents "Unknown Office" entries)
+                          if (!office || !office.name) {
+                            return;
+                          }
+
                           const rcId = `rc_${officeId}_${mapping.regionId}_${imoIndex}`;
                           const rcName = provincialIMO.name;
 
-                          responsibilityCentersMap.set(rcId, {
+                          const rcData = {
                             id: rcId,
                             name: rcName,
                             code: `RC${imoIndex + 1}`,
                             officeId: officeId,
-                            officeName: office?.name || 'Unknown Office',
+                            officeName: office.name,
                             region: regionName,
                             regionId: mapping.regionId,
                             departmentId: mapping.departmentId,
                             departmentName: mapping.departmentName,
                             provincialIMO: provincialIMO.name
+                          };
+                          
+                          console.log('📍 Creating RC for central office (Provincial IMO):', {
+                            rcName: rcData.name,
+                            officeId: rcData.officeId,
+                            officeName: rcData.officeName,
+                            region: rcData.region,
+                            isCentral: true
                           });
+                          
+                          responsibilityCentersMap.set(rcId, rcData);
                         });
                       } else {
                         // For regular offices, create responsibility centers as before
                         mapping.divisions.forEach((division, divIndex) => {
+                          // Skip if office is not found (prevents "Unknown Office" entries)
+                          if (!office || !office.name) {
+                            return;
+                          }
+
                           const rcId = `rc_${mapping._id || mappingIndex}_${divIndex}`;
 
-                          responsibilityCentersMap.set(rcId, {
+                          const rcData = {
                             id: rcId,
                             name: division.name || `Responsibility Center ${divIndex + 1}`,
                             code: division.code || `RC${divIndex + 1}`,
                             officeId: officeId,
-                            officeName: office?.name || 'Unknown Office',
-                            region: office?.region || 'NCR',
-                            regionId: office?.regionId || null,
+                            officeName: office.name,
+                            region: office.region,
+                            regionId: office.regionId || null,
                             departmentId: mapping.departmentId,
                             departmentName: mapping.departmentName
-                          });
+                          };
+                          
+                          // Debug logging for split departments
+                          if (isSplitDepartment) {
+                            console.log('📍 Creating RC for split department:', {
+                              rcName: rcData.name,
+                              officeId: rcData.officeId,
+                              officeName: rcData.officeName,
+                              region: rcData.region,
+                              isSplit: isSplitDepartment
+                            });
+                          }
+                          
+                          responsibilityCentersMap.set(rcId, rcData);
                         });
                       }
                     }
                   });
-                }        // If no data from old structure, create default NIA offices and responsibility centers
-        if (officesMap.size === 0) {
-          // Create default offices based on NIA structure
-          const defaultOffices = [
-            { id: 'office_regional', name: 'Regional Office', code: 'RO', region: 'NCR' },
-            { id: 'office_engineering', name: 'Engineering & Operations Division', code: 'EOD', region: 'NCR' },
-            { id: 'office_admin', name: 'Administrative & Finance Division', code: 'AFD', region: 'NCR' },
-            { id: 'office_imo', name: 'Irrigation Management Office', code: 'IMO', region: 'NCR' }
-          ];
+                }        // Don't create default offices and responsibility centers if no data exists
+        // This prevents showing NCR entries when there's no actual data in the database
+        // if (officesMap.size === 0) {
+        //   // Create default offices based on NIA structure
+        //   const defaultOffices = [
+        //     { id: 'office_regional', name: 'Regional Office', code: 'RO', region: 'NCR' },
+        //     { id: 'office_engineering', name: 'Engineering & Operations Division', code: 'EOD', region: 'NCR' },
+        //     { id: 'office_admin', name: 'Administrative & Finance Division', code: 'AFD', region: 'NCR' },
+        //     { id: 'office_imo', name: 'Irrigation Management Office', code: 'IMO', region: 'NCR' }
+        //   ];
 
-          defaultOffices.forEach(office => officesMap.set(office.id, office));
+        //   defaultOffices.forEach(office => officesMap.set(office.id, office));
 
-          // Create default responsibility centers based on NIA divisions (NOT sections)
-          const defaultResponsibilityCenters = [
-            { id: 'rc_construction', name: 'Construction Management Division', code: 'CMD', officeId: 'office_engineering', officeName: 'Engineering & Operations Division' },
-            { id: 'rc_planning', name: 'Planning & Design Division', code: 'PDD', officeId: 'office_engineering', officeName: 'Engineering & Operations Division' },
-            { id: 'rc_operations', name: 'Operations Division', code: 'OD', officeId: 'office_engineering', officeName: 'Engineering & Operations Division' },
-            { id: 'rc_finance', name: 'Finance Division', code: 'FD', officeId: 'office_admin', officeName: 'Administrative & Finance Division' },
-            { id: 'rc_admin', name: 'Administrative Division', code: 'AD', officeId: 'office_admin', officeName: 'Administrative & Finance Division' },
-            { id: 'rc_institutional', name: 'Institutional Development Division', code: 'IDD', officeId: 'office_engineering', officeName: 'Engineering & Operations Division' },
-            { id: 'rc_equipment', name: 'Equipment Management Division', code: 'EMD', officeId: 'office_engineering', officeName: 'Engineering & Operations Division' }
-          ];
+        //   // Create default responsibility centers based on NIA divisions (NOT sections)
+        //   const defaultResponsibilityCenters = [
+        //     { id: 'rc_construction', name: 'Construction Management Division', code: 'CMD', officeId: 'office_engineering', officeName: 'Engineering & Operations Division' },
+        //     { id: 'rc_planning', name: 'Planning & Design Division', code: 'PDD', officeId: 'office_engineering', officeName: 'Engineering & Operations Division' },
+        //     { id: 'rc_operations', name: 'Operations Division', code: 'OD', officeId: 'office_engineering', officeName: 'Engineering & Operations Division' },
+        //     { id: 'rc_finance', name: 'Finance Division', code: 'FD', officeId: 'office_admin', officeName: 'Administrative & Finance Division' },
+        //     { id: 'rc_admin', name: 'Administrative Division', code: 'AD', officeId: 'office_admin', officeName: 'Administrative & Finance Division' },
+        //     { id: 'rc_institutional', name: 'Institutional Development Division', code: 'IDD', officeId: 'office_engineering', officeName: 'Engineering & Operations Division' },
+        //     { id: 'rc_equipment', name: 'Equipment Management Division', code: 'EMD', officeId: 'office_engineering', officeName: 'Engineering & Operations Division' }
+        //   ];
 
-          defaultResponsibilityCenters.forEach(rc => responsibilityCentersMap.set(rc.id, rc));
-        }
+        //   defaultResponsibilityCenters.forEach(rc => responsibilityCentersMap.set(rc.id, rc));
+        // }
 
         const formattedOffices = Array.from(officesMap.values());
         const formattedResponsibilityCenters = Array.from(responsibilityCentersMap.values());

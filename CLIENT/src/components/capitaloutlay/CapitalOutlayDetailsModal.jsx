@@ -170,6 +170,9 @@ const CapitalOutlayDetailsModal = ({
     const MINIMUM_AMOUNT = 50000; // ₱50,000 minimum requirement
 
     details.forEach((detail, index) => {
+      console.log(`--- Validating detail ${index} ---`);
+      console.log("Raw detail:", detail);
+      
       // Validate particulars
       if (!detail.particulars || detail.particulars.trim() === "") {
         newErrors[`particulars_${index}`] = "Particulars is required";
@@ -179,6 +182,7 @@ const CapitalOutlayDetailsModal = ({
       // Validate amounts (must be non-negative)
       const incomeAmount = parseFloat(detail.income_amount) || 0;
       const subsidyAmount = parseFloat(detail.subsidy_amount) || 0;
+      console.log(`Parsed amounts - Income: ${incomeAmount}, Subsidy: ${subsidyAmount}`);
 
       if (incomeAmount < 0) {
         newErrors[`income_amount_${index}`] = "Income amount cannot be negative";
@@ -210,22 +214,33 @@ const CapitalOutlayDetailsModal = ({
     });
 
     setErrors(newErrors);
+    console.log("=== VALIDATION COMPLETE ===");
+    console.log("New errors found:", newErrors);
+    console.log("Is valid:", isValid);
+    console.log("Error count:", Object.keys(newErrors).length);
     return isValid;
   };
 
   const handleSave = async () => {
-    if (!validateDetails()) {
+    console.log("=== HANDLE SAVE CLICKED ===");
+    console.log("Details:", details);
+    console.log("Temporary Item:", temporaryItem);
+    console.log("Capital Outlay ID:", capitalOutlayId);
+    
+    const validationResult = validateDetails();
+    console.log("Validation result:", validationResult);
+    console.log("OLD validation errors (from state - may be outdated):", errors);
+    
+    if (!validationResult) {
+      console.log("Validation failed, showing error toast");
       toast.error("Please fix the validation errors before saving");
       return;
     }
 
-    if (temporaryItem?.uacsCode && !isValidCapitalOutlayUacs(temporaryItem.uacsCode)) {
-      toast.error(
-        `The selected UACS code "${temporaryItem.uacsCode}" is not valid for Capital Outlay. Please choose a code that starts with 5-01 or 5-02.`
-      );
-      return;
-    }
-
+    // UACS validation removed - not applicable for this database
+    // All chart_of_accounts codes start with "1-", not "5-"
+    console.log("UACS code check skipped - accepting all codes from chart_of_accounts");
+    console.log("All validations passed, starting save process");
     setSaving(true);
     try {
       // Debug logging
@@ -234,6 +249,7 @@ const CapitalOutlayDetailsModal = ({
       
       if (!currentUser) {
         toast.error("User session expired. Please refresh and try again.");
+        setSaving(false);
         return;
       }
 
@@ -522,14 +538,16 @@ const CapitalOutlayDetailsModal = ({
                       </TableCell>
                       <TableCell align="center">
                         <Tooltip title="Remove Row">
-                          <IconButton
-                            onClick={() => handleRemoveRow(index)}
-                            size="small"
-                            color="error"
-                            disabled={details.length === 1}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
+                          <span>
+                            <IconButton
+                              onClick={() => handleRemoveRow(index)}
+                              size="small"
+                              color="error"
+                              disabled={details.length === 1}
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </span>
                         </Tooltip>
                       </TableCell>
                     </TableRow>
@@ -616,7 +634,10 @@ const CapitalOutlayDetailsModal = ({
           Cancel
         </Button>
         <Button
-          onClick={handleSave}
+          onClick={() => {
+            console.log("Save button clicked! Disabled:", saving || loading);
+            handleSave();
+          }}
           variant="contained"
           startIcon={saving ? <CircularProgress size={16} /> : <SaveIcon />}
           disabled={saving || loading}

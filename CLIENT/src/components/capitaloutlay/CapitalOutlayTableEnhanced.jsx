@@ -466,38 +466,60 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
   // Callback when details are saved
   const handleDetailsSaved = useCallback(async (capitalOutlayId, totals) => {
     try {
-      const response = await api.get(`/api/capital-outlay/${capitalOutlayId}/details`);
+      // Fetch the updated details
+      const detailsResponse = await api.get(`/api/capital-outlay/${capitalOutlayId}/details`);
+      const details = detailsResponse.data.details || [];
+      
       setCapitalOutlayDetails(prev => ({
         ...prev,
-        [capitalOutlayId]: response.data.details || []
+        [capitalOutlayId]: details
       }));
+
+      // Extract particulars from the details - combine all particulars from breakdown items
+      const particularsFromDetails = details
+        .map(d => d.particulars)
+        .filter(Boolean)
+        .join('; ');
+
+      // Fetch the complete capital outlay item to get updated accountingTitle, uacsCode, etc.
+      // We need to refetch from the list since there's no single-item endpoint
+      const params = new URLSearchParams();
+      if (fiscalYear) params.append('fiscalYear', fiscalYear);
+      if (budgetType) params.append('budgetType', budgetType);
+      if (regionFilter) params.append('region', regionFilter);
+      
+      const outlaysResponse = await api.get(`/capital-outlays?${params.toString()}`);
+      const allOutlays = outlaysResponse.data.capitalOutlays || [];
+      const updatedItem = allOutlays.find(item => item._id === capitalOutlayId);
+
+      // Update the capital outlays array with the fresh data
+      setCapitalOutlays(prev => {
+        const updatedOutlays = prev.map(item => 
+          item._id === capitalOutlayId 
+            ? { 
+                ...item,
+                // Update with data from the refetched item if available
+                ...(updatedItem ? {
+                  accountingTitle: updatedItem.accountingTitle,
+                  uacsCode: updatedItem.uacsCode,
+                  sublineItem: updatedItem.sublineItem,
+                } : {}),
+                // Update totals from the save response
+                income: totals.income, 
+                subsidy: totals.subsidy, 
+                cost: totals.cost,
+                // Update particulars from details
+                particulars: particularsFromDetails || item.particulars
+              }
+            : item
+        );
+        onDataChange?.(updatedOutlays);
+        return updatedOutlays;
+      });
     } catch (error) {
       console.error("Error fetching capital outlay details:", error);
     }
-    
-    setCapitalOutlays(prev => prev.map(item => 
-      item._id === capitalOutlayId 
-        ? { 
-            ...item, 
-            income: totals.income, 
-            subsidy: totals.subsidy, 
-            cost: totals.cost 
-          }
-        : item
-    ));
-    
-    const updatedOutlays = capitalOutlays.map(item => 
-      item._id === capitalOutlayId 
-        ? { 
-            ...item, 
-            income: totals.income, 
-            subsidy: totals.subsidy, 
-            cost: totals.cost 
-          }
-        : item
-    );
-    onDataChange?.(updatedOutlays);
-  }, [capitalOutlays, onDataChange]);
+  }, [onDataChange, fiscalYear, budgetType, regionFilter]);
 
   // Validation function
   const validateInput = useCallback((data, isNew = false) => {
@@ -1470,7 +1492,8 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
                     color: "white",
                     fontWeight: "bold",
                     fontSize: compactView ? '0.85rem' : '0.95rem',
-                    width: "120px"
+                    minWidth: "140px",
+                    width: "140px"
                   }}
                 >
                   UACS Code
@@ -1613,7 +1636,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
                           </TableCell>
                           
                           {/* UACS Code */}
-                          <TableCell>
+                          <TableCell sx={{ minWidth: '140px', width: '140px' }}>
                             {item.uacsCode || "—"}
                           </TableCell>
                           
@@ -1833,7 +1856,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
                         </TableCell>
 
                         {/* UACS Code */}
-                        <TableCell>
+                        <TableCell sx={{ minWidth: '140px', width: '140px' }}>
                           <Box>
                             <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'text.secondary', mb: 0.5, display: 'block' }}>
                               UACS Code
@@ -1844,13 +1867,14 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
                               disabled
                               sx={{ 
                                 backgroundColor: '#f5f5f5',
+                                width: '140px',
                                 '& .MuiInputBase-input.Mui-disabled': {
                                   WebkitTextFillColor: '#333',
-                                  fontWeight: 'medium'
+                                  fontWeight: 'medium',
+                                  fontSize: '0.875rem'
                                 }
                               }}
-                              fullWidth
-                              placeholder="Auto-filled from title"
+                              placeholder="Auto-filled"
                             />
                             {errors.uacsCode && <FormHelperText error>{errors.uacsCode}</FormHelperText>}
                           </Box>
@@ -1860,31 +1884,23 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
                         <TableCell colSpan={4}>
                           <Box sx={{ 
                             backgroundColor: '#e3f2fd', 
-                            p: 2, 
+                            p: 1.5, 
                             borderRadius: 1,
                             border: '2px dashed #2196f3',
                             display: 'flex',
-                            flexDirection: 'column',
                             alignItems: 'center',
-                            gap: 1.5
+                            justifyContent: 'space-between',
+                            gap: 2
                           }}>
-                            <Box sx={{ textAlign: 'center' }}>
-                              <Typography variant="body2" color="primary" sx={{ fontWeight: 'bold' }}>
+                            <Box sx={{ flex: 1 }}>
+                              <Typography variant="body2" color="primary" sx={{ fontWeight: 'bold', mb: 0.5 }}>
                                 💡 Breakdown details will be entered in the next step
                               </Typography>
-                              <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', display: 'block', mt: 0.5 }}>
-                                Complete the required fields above, then click Continue to add item details
-                              </Typography>
-                              {!fiscalYear && (
-                                <Typography variant="caption" color="warning.main" sx={{ fontWeight: 'bold', display: 'block', mt: 1 }}>
-                                  ⏳ Loading fiscal year settings...
-                                </Typography>
-                              )}
-                              {fiscalYear && (
-                                <Typography variant="caption" color="success.main" sx={{ display: 'block', mt: 1 }}>
+                              {/* {fiscalYear && (
+                                <Typography variant="caption" color="success.main">
                                   ✓ Fiscal Year: {fiscalYear}
                                 </Typography>
-                              )}
+                              )} */}
                             </Box>
                             <Tooltip title={
                               !fiscalYear
@@ -1897,7 +1913,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
                                 <Button
                                   variant="contained"
                                   color="success"
-                                  size="large"
+                                  size="medium"
                                   startIcon={!fiscalYear ? <CircularProgress size={16} sx={{ color: 'white' }} /> : <Save />}
                                   onClick={() => {
                                     handleAddOutlay(group.categoryId, group.categoryName);
@@ -1905,17 +1921,8 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
                                   disabled={!fiscalYear || !newOutlays[group.categoryId]?.sublineItem || !newOutlays[group.categoryId]?.accountingTitle}
                                   sx={{
                                     fontWeight: 'bold',
-                                    px: 4,
-                                    py: 1,
-                                    boxShadow: 3,
-                                    '&:hover': {
-                                      boxShadow: 6,
-                                      transform: 'translateY(-2px)'
-                                    },
-                                    '&:disabled': {
-                                      backgroundColor: '#ccc'
-                                    },
-                                    transition: 'all 0.2s'
+                                    px: 3,
+                                    whiteSpace: 'nowrap'
                                   }}
                                 >
                                   {!fiscalYear ? 'Loading...' : 'Continue'}

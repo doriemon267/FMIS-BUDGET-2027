@@ -823,13 +823,17 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
         regions = rcRegionId ? [rcRegionId] : [];
         departments = [departmentId];
         divisions = [divisionName];
+        
+        // Get region name only if regionId exists
+        const rcRegionName = rcRegionId ? (await Region.findById(rcRegionId))?.Region : null;
+        
         hierarchicalStructure = {
           level: 'RESPONSIBILITY_CENTER',
           division: divisionName,
           department: rcDepartment.Department,
-          region: rcRegionId ? (await Region.findById(rcRegionId))?.Region : 'NCR',
+          region: rcRegionName,
           consolidatesTo: 'OFFICE',
-          ultimateRegion: rcRegionId ? (await Region.findById(rcRegionId))?.Region : 'NCR'
+          ultimateRegion: rcRegionName
         };
         break;
       case 'OFFICE':
@@ -864,12 +868,16 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
         regions = officeRegionId ? [officeRegionId] : [];
         departments = [departmentId];
         divisions = [];
+        
+        // Get region name only if regionId exists
+        const officeRegionName = officeRegionId ? (await Region.findById(officeRegionId))?.Region : null;
+        
         hierarchicalStructure = {
           level: 'OFFICE',
           department: officeDepartment.Department,
-          region: officeRegionId ? (await Region.findById(officeRegionId))?.Region : 'NCR',
+          region: officeRegionName,
           consolidatesTo: 'REGION',
-          ultimateRegion: officeRegionId ? (await Region.findById(officeRegionId))?.Region : 'NCR'
+          ultimateRegion: officeRegionName
         };
         break;
       default:

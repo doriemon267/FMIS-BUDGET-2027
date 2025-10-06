@@ -3,11 +3,15 @@ const checkDueDateWithRoleBypass = async (req, res, next) => {
   try {
     // Check if user has admin privileges
     const userRoles = req.user?.Roles || [];
-    const isAdmin = userRoles.some(role => 
-      role.toUpperCase().includes('ADMIN') || 
-      role.toUpperCase().includes('SUPER') ||
-      role.toUpperCase().includes('BUDGET ADMIN')
-    );
+    const isAdmin = userRoles.some((roleRaw) => {
+      const role = typeof roleRaw === 'string' ? roleRaw.toUpperCase().replace(/_/g, ' ') : '';
+      return (
+        role.includes('ADMIN') ||
+        role.includes('SUPER') ||
+        role.includes('BUDGET ADMIN') ||
+        role.includes('BUDGET ANALYST')
+      );
+    });
     // If user is admin, bypass due date check
     if (isAdmin) {
       return next();

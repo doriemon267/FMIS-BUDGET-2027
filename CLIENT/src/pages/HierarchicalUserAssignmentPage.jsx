@@ -1163,12 +1163,25 @@ const HierarchicalUserAssignmentPage = () => {
               {formData.assignmentLevel === 'RESPONSIBILITY_CENTER' && (
                 <Grid item xs={12}>
                   <Autocomplete
+                    disabled={!formData.officeId}
                     options={organizationStructure?.availableUnits?.responsibilityCenters
                       ?.filter(rc => {
-                        if (!formData.officeId) return true;
-                        // Handle composite officeId (originalDeptId_regionId)
-                        const originalDeptId = formData.officeId.includes('_') ? formData.officeId.split('_')[0] : formData.officeId;
-                        return rc.officeId === originalDeptId;
+                        if (!formData.officeId) return false; // Don't show any responsibility centers if no office is selected
+                        
+                        // Convert both to strings for comparison
+                        const rcOfficeId = String(rc.officeId || '');
+                        const selectedOfficeId = String(formData.officeId || '');
+                        
+                        // Debug logging
+                        console.log('Filtering RC:', {
+                          rcName: rc.name,
+                          rcOfficeId,
+                          selectedOfficeId,
+                          matches: rcOfficeId === selectedOfficeId
+                        });
+                        
+                        // Direct comparison - both should be composite IDs for split departments
+                        return rcOfficeId === selectedOfficeId;
                       }) || []}
                     getOptionLabel={(option) => {
                       if (typeof option === 'string') return option;
@@ -1189,6 +1202,9 @@ const HierarchicalUserAssignmentPage = () => {
                         label="Responsibility Center"
                         placeholder="Search responsibility centers..."
                         fullWidth
+                        helperText={!formData.officeId 
+                          ? 'Please select an Office first to view available Responsibility Centers' 
+                          : ''}
                       />
                     )}
                     renderOption={(props, option) => {
@@ -1208,7 +1224,9 @@ const HierarchicalUserAssignmentPage = () => {
                         </Box>
                       );
                     }}
-                    noOptionsText="No responsibility centers found"
+                    noOptionsText={!formData.officeId 
+                      ? "Please select an Office first" 
+                      : "No responsibility centers found for selected office"}
                     loading={false}
                     fullWidth
                   />
