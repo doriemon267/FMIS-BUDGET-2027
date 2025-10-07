@@ -3252,6 +3252,7 @@ const CustomPage = ({
               {/* Conditional Rendering */}
               {useDataGridView ? (
                 <CapitalOutlayDataGrid
+                  fiscalYear={selectedFiscalYear || activeFiscalYear}
                   onDataChange={setCapitalOutlayData}
                   disableIncomeInputs={disableIncomeInputs}
                 />
