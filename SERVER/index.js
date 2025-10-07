@@ -79,6 +79,7 @@ const consolidatedCapitalOutlayRouter = require("./routers/consolidatedCapitalOu
 const consolidatedPersonnelServicesRouter = require("./routers/consolidatedPersonnelServicesRoutes");
 const comprehensiveReportsRouter = require("./routers/comprehensiveReportsRoutes");
 const databaseBackupRouter = require("./routers/databaseBackupRoutes");
+const budgetOfficerEditRouter = require("./routers/budgetOfficerEditRoutes");
 const checkToken = require('./middleware/checkToken');
 const enforceOrgAccess = require('./middleware/enforceOrgAccess');
 const { initializeCleanupScheduler } = require("./utils/backupCleanup");
@@ -277,6 +278,8 @@ app.use("/api", capitalOutlayDetailsRouter);
 app.use(categoryRouter);
 app.use(proposalRouter);
 app.use(proposalRBACRouter);
+// Budget Officer Edit Routes
+app.use('/api/budget-officer-edits', budgetOfficerEditRouter);
 // Workflow-specific endpoints
 app.use('/api/workflow', require('./routers/proposalWorkflowRoutes'));
 // 🔄 Submission Workflow Routes - Controls data visibility based on submission status

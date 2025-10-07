@@ -334,16 +334,41 @@ const CapitalOutlayDetailsModal = ({
         if (detailsResponse.data.success) {
           toast.success("Capital outlay item and breakdown details saved successfully!");
           if (onSave) {
-            // If createdCapitalOutlay exists, inform parent to add it; otherwise, update existing by ID
+            const totalsData = detailsResponse.data.totals || {};
+            const savedDetails = detailsResponse.data.details || detailsPayload.details || [];
+            const computedTotals = {
+              income: parseFloat(totalsData.income ?? totalIncome) || 0,
+              subsidy: parseFloat(totalsData.subsidy ?? totalSubsidy) || 0,
+              cost: parseFloat(totalsData.cost ?? totalsData.total ?? totalIncome + totalSubsidy) || 0,
+              total: parseFloat(totalsData.total ?? totalsData.cost ?? totalIncome + totalSubsidy) || 0,
+            };
+            const particularsFromDetails = savedDetails
+              .map((detail) => detail.particulars)
+              .filter(Boolean)
+              .join('; ');
+
             if (createdCapitalOutlay) {
               onSave({
-                ...detailsResponse.data.totals,
-                newItem: createdCapitalOutlay,
+                ...computedTotals,
+                details: savedDetails,
+                particulars: particularsFromDetails,
+                newItem: {
+                  ...createdCapitalOutlay,
+                  income: computedTotals.income,
+                  subsidy: computedTotals.subsidy,
+                  cost: computedTotals.cost,
+                  particulars:
+                    createdCapitalOutlay?.particulars && createdCapitalOutlay.particulars.trim() !== ''
+                      ? createdCapitalOutlay.particulars
+                      : particularsFromDetails,
+                },
                 isNewItem: true,
               });
             } else {
               onSave({
-                ...detailsResponse.data.totals,
+                ...computedTotals,
+                details: savedDetails,
+                particulars: particularsFromDetails,
                 capitalOutlayId: newCapitalOutlayId,
                 isNewItem: false,
               });
@@ -369,7 +394,24 @@ const CapitalOutlayDetailsModal = ({
         if (response.data.success) {
           toast.success("Details saved successfully");
           if (onSave) {
-            onSave(response.data.totals);
+            const totalsData = response.data.totals || {};
+            const savedDetails = response.data.details || detailsPayload.details || [];
+            const computedTotals = {
+              income: parseFloat(totalsData.income ?? totals.income) || 0,
+              subsidy: parseFloat(totalsData.subsidy ?? totals.subsidy) || 0,
+              cost: parseFloat(totalsData.cost ?? totalsData.total ?? totals.total) || 0,
+              total: parseFloat(totalsData.total ?? totalsData.cost ?? totals.total) || 0,
+            };
+            const particularsFromDetails = savedDetails
+              .map((detail) => detail.particulars)
+              .filter(Boolean)
+              .join('; ');
+
+            onSave({
+              ...computedTotals,
+              details: savedDetails,
+              particulars: particularsFromDetails,
+            });
           }
           onClose();
         }

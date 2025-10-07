@@ -1,0 +1,214 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Box,
+  Tabs,
+  Tab,
+  Button,
+  Alert,
+  CircularProgress,
+  Typography
+} from '@mui/material';
+import SaveIcon from '@mui/icons-material/Save';
+import SendIcon from '@mui/icons-material/Send';
+import toast from 'react-hot-toast';
+import { saveDraftEdit, submitEdit } from '../../services/budgetOfficerEditService';
+import EditableIncomeTable from './tables/EditableIncomeTable';
+import EditablePersonnelTable from './tables/EditablePersonnelTable';
+import EditableMOOETable from './tables/EditableMOOETable';
+import EditableCapitalOutlayTable from './tables/EditableCapitalOutlayTable';
+
+const BudgetOfficerEditView = ({ proposalData, proposal, onSaveSuccess }) => {
+  const [activeTab, setActiveTab] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  
+  // State for each table
+  const [incomeData, setIncomeData] = useState([]);
+  const [personnelData, setPersonnelData] = useState([]);
+  const [mooeData, setMooeData] = useState([]);
+  const [capitalOutlayData, setCapitalOutlayData] = useState([]);
+
+  useEffect(() => {
+    if (proposalData) {
+      console.log('BudgetOfficerEditView - proposalData:', proposalData);
+      console.log('BudgetOfficerEditView - capitalOutlay data:', proposalData.capitalOutlay);
+      console.log('BudgetOfficerEditView - hasExistingEdit:', proposalData.hasExistingEdit);
+      console.log('BudgetOfficerEditView - editedData:', proposalData.editedData);
+      
+      // If there's existing edited data, use it but merge with fresh data to get categoryName and details
+      if (proposalData.hasExistingEdit && proposalData.editedData) {
+        // Merge edited data with fresh data for Capital Outlay
+        const mergedCapitalOutlay = (proposalData.editedData.capitalOutlay || []).map(editedItem => {
+          // Find the corresponding fresh item by originalId or _id
+          const freshItem = (proposalData.capitalOutlay || []).find(
+            fresh => fresh._id.toString() === (editedItem.originalId || editedItem._id).toString()
+          );
+          
+          // Merge: keep edited values but add categoryName, details, and combined particulars from fresh data
+          const merged = {
+            ...editedItem,
+            categoryName: freshItem?.categoryName || editedItem.categoryName,
+            details: freshItem?.details || editedItem.details || [],
+            category: freshItem?.category || editedItem.category
+          };
+          
+          // If particulars wasn't edited by user, use the fresh combined particulars
+          // (Check if editedItem.particulars is different from original, if not, use fresh)
+          if (freshItem && (!editedItem.particulars || editedItem.particulars === freshItem.particulars)) {
+            merged.particulars = freshItem.particulars;
+          }
+          
+          return merged;
+        });
+        
+        console.log('BudgetOfficerEditView - merged capitalOutlay:', mergedCapitalOutlay);
+        
+        setIncomeData(proposalData.editedData.income || []);
+        setPersonnelData(proposalData.editedData.personnelServices || []);
+        setMooeData(proposalData.editedData.mooe || []);
+        setCapitalOutlayData(mergedCapitalOutlay);
+      } else {
+        // No existing edit, use fresh data
+        setIncomeData(proposalData.income || []);
+        setPersonnelData(proposalData.personnelServices || []);
+        setMooeData(proposalData.mooe || []);
+        setCapitalOutlayData(proposalData.capitalOutlay || []);
+      }
+    }
+  }, [proposalData]);
+
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
+  };
+
+  const prepareEditData = () => {
+    return {
+      proposalId: proposal._id,
+      income: incomeData,
+      personnelServices: personnelData,
+      mooe: mooeData,
+      capitalOutlay: capitalOutlayData
+    };
+  };
+
+  const handleSaveDraft = async () => {
+    setSaving(true);
+    try {
+      const editData = prepareEditData();
+      await saveDraftEdit(editData);
+      toast.success('Draft saved successfully');
+    } catch (error) {
+      console.error('Error saving draft:', error);
+      toast.error(error.response?.data?.message || 'Failed to save draft');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    try {
+      const editData = prepareEditData();
+      await submitEdit(editData);
+      toast.success('Edits submitted for approval successfully');
+      onSaveSuccess?.();
+    } catch (error) {
+      console.error('Error submitting edits:', error);
+      toast.error(error.response?.data?.message || 'Failed to submit edits');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const hasChanges = () => {
+    // Check if any data has been modified
+    return incomeData.some(item => item.changeType && item.changeType !== 'unchanged') ||
+           personnelData.some(item => item.changeType && item.changeType !== 'unchanged') ||
+           mooeData.some(item => item.changeType && item.changeType !== 'unchanged') ||
+           capitalOutlayData.some(item => item.changeType && item.changeType !== 'unchanged');
+  };
+
+  return (
+    <Box>
+      <Alert severity="info" sx={{ mb: 2 }}>
+        <Typography variant="body2">
+          <strong>Budget Officer Edit Mode:</strong> You can edit all four tables below. 
+          Changes will be tracked and sent to Budget Analysts for review after approval.
+        </Typography>
+      </Alert>
+
+      {/* Tabs for different expenditure types */}
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+        <Tabs value={activeTab} onChange={handleTabChange}>
+          <Tab 
+            label={`Income (${incomeData.length})`} 
+            sx={{ fontWeight: activeTab === 0 ? 'bold' : 'normal' }}
+          />
+          <Tab 
+            label={`Personnel Services (${personnelData.length})`}
+            sx={{ fontWeight: activeTab === 1 ? 'bold' : 'normal' }}
+          />
+          <Tab 
+            label={`MOOE (${mooeData.length})`}
+            sx={{ fontWeight: activeTab === 2 ? 'bold' : 'normal' }}
+          />
+          <Tab 
+            label={`Capital Outlay (${capitalOutlayData.length})`}
+            sx={{ fontWeight: activeTab === 3 ? 'bold' : 'normal' }}
+          />
+        </Tabs>
+      </Box>
+
+      {/* Table Content */}
+      <Box sx={{ minHeight: 400, mb: 3 }}>
+        {activeTab === 0 && (
+          <EditableIncomeTable 
+            data={incomeData} 
+            onChange={setIncomeData}
+          />
+        )}
+        {activeTab === 1 && (
+          <EditablePersonnelTable 
+            data={personnelData} 
+            onChange={setPersonnelData}
+          />
+        )}
+        {activeTab === 2 && (
+          <EditableMOOETable 
+            data={mooeData} 
+            onChange={setMooeData}
+          />
+        )}
+        {activeTab === 3 && (
+          <EditableCapitalOutlayTable 
+            data={capitalOutlayData} 
+            onChange={setCapitalOutlayData}
+          />
+        )}
+      </Box>
+
+      {/* Action Buttons */}
+      <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 3 }}>
+        <Button
+          variant="outlined"
+          startIcon={saving ? <CircularProgress size={20} /> : <SaveIcon />}
+          onClick={handleSaveDraft}
+          disabled={saving || submitting}
+        >
+          {saving ? 'Saving...' : 'Save Draft'}
+        </Button>
+        <Button
+          variant="contained"
+          color="primary"
+          startIcon={submitting ? <CircularProgress size={20} /> : <SendIcon />}
+          onClick={handleSubmit}
+          disabled={saving || submitting || !hasChanges()}
+        >
+          {submitting ? 'Submitting...' : 'Submit for Approval'}
+        </Button>
+      </Box>
+    </Box>
+  );
+};
+
+export default BudgetOfficerEditView;

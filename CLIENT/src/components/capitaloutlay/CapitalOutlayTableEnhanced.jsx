@@ -773,11 +773,45 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
     });
   }, [disableIncomeInputs]);
 
-  const handleDetailsModalSave = async (totals) => {
-    if (totals.isNewItem && totals.newItem) {
+  const normalizeTotals = useCallback((data = {}) => {
+    const income = parseFloat(data.income ?? data.totalIncome ?? 0) || 0;
+    const subsidy = parseFloat(data.subsidy ?? data.totalSubsidy ?? 0) || 0;
+    const cost = parseFloat(data.cost ?? data.total ?? income + subsidy) || 0;
+    return { income, subsidy, cost };
+  }, []);
+
+  const handleDetailsModalSave = async (result) => {
+    const totals = normalizeTotals(result);
+    const detailsList = Array.isArray(result?.details) ? result.details : [];
+    const particularsFromDetails = result?.particulars || detailsList
+      .map(detail => detail?.particulars)
+      .filter(Boolean)
+      .join('; ');
+
+    if (result.isNewItem && result.newItem) {
+      const responseItem = result.newItem;
+      const categoryId = responseItem?.category?._id || responseItem?.category || selectedCapitalOutlay?.tempCategoryId;
+      const matchedCategory = categories.find(cat => {
+        const catId = cat._id?.toString() || cat._id;
+        return catId === (categoryId?.toString?.() ?? categoryId);
+      });
+
+      const resolvedCategory = typeof responseItem?.category === 'object' && responseItem.category !== null
+        ? responseItem.category
+        : matchedCategory
+          ? { _id: matchedCategory._id, categoryName: matchedCategory.categoryName }
+          : categoryId
+            ? { _id: categoryId, categoryName: "Uncategorized" }
+            : null;
+
       const newItem = {
-        ...totals.newItem,
+        ...responseItem,
         status: "Not Submitted",
+        income: totals.income,
+        subsidy: totals.subsidy,
+        cost: totals.cost,
+        particulars: responseItem?.particulars?.trim?.() ? responseItem.particulars : particularsFromDetails,
+        ...(resolvedCategory ? { category: resolvedCategory } : {}),
       };
       
       const updatedData = [...capitalOutlays, newItem];
@@ -785,7 +819,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
       
       setCapitalOutlayDetails(prev => ({
         ...prev,
-        [newItem._id]: []
+        [newItem._id]: detailsList
       }));
       
       if (selectedCapitalOutlay?.tempCategoryId) {
@@ -794,15 +828,32 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
       }
       
       setErrors({});
-      
       onDataChange?.(updatedData);
       setNewlyAddedItemId(newItem._id);
-      
+
+      // Ensure freshly created item reflects saved details/totals without reload
+      await handleDetailsSaved(newItem._id, {
+        ...totals,
+        particulars: newItem.particulars,
+      });
+
       toast.success("Capital outlay item created successfully with breakdown details!");
-    } else if (totals.capitalOutlayId) {
-      await handleDetailsSaved(totals.capitalOutlayId, totals);
+    } else if (result.capitalOutlayId) {
+      if (detailsList.length > 0) {
+        setCapitalOutlayDetails(prev => ({
+          ...prev,
+          [result.capitalOutlayId]: detailsList
+        }));
+      }
+      await handleDetailsSaved(result.capitalOutlayId, totals);
       toast.success("Capital outlay details saved to existing item successfully");
     } else if (selectedCapitalOutlay && selectedCapitalOutlay._id) {
+      if (detailsList.length > 0) {
+        setCapitalOutlayDetails(prev => ({
+          ...prev,
+          [selectedCapitalOutlay._id]: detailsList
+        }));
+      }
       await handleDetailsSaved(selectedCapitalOutlay._id, totals);
       toast.success("Capital outlay details updated successfully");
     }
@@ -1561,12 +1612,13 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
                           sx={{ 
                             fontWeight: 'bold',
                             fontSize: compactView ? '0.85rem' : '0.95rem',
-                            verticalAlign: 'top',
+                            verticalAlign: 'middle',
                             borderRight: '2px solid #e0e0e0',
                             backgroundColor: '#ffffff',
                             position: 'sticky',
                             left: 0,
-                            zIndex: 2
+                            zIndex: 2,
+                            textAlign: 'center'
                           }}
                         >
                           {group.categoryName.toUpperCase()}
@@ -1600,12 +1652,13 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
                               sx={{ 
                                 fontWeight: 'bold',
                                 fontSize: compactView ? '0.85rem' : '0.95rem',
-                                verticalAlign: 'top',
+                                verticalAlign: 'middle',
                                 borderRight: '2px solid #e0e0e0',
                                 backgroundColor: '#ffffff',
                                 position: 'sticky',
                                 left: 0,
-                                zIndex: 2
+                                zIndex: 2,
+                                textAlign: 'center'
                               }}
                             >
                               {group.categoryName.toUpperCase()}

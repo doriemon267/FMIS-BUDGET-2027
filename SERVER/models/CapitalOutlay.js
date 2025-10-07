@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const CapitalOutlaySchema = new mongoose.Schema(
   {
-    particulars: { type: String },
+    particulars: { type: String},
     cost: { type: Number, required: true },
     income: { type: Number, default: 0 }, // <-- Add this line
     subsidy: { type: Number, default: 0 }, // Added subsidy field
@@ -10,6 +10,7 @@ const CapitalOutlaySchema = new mongoose.Schema(
       ref: "Category",
       required: true,
     }, // Reference to Category model
+   
     date_process: { type: Date, default: Date.now },
     department: String,
     division: String, // added to store division-level ownership when applicable

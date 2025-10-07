@@ -23,51 +23,34 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import api from "../../config/api";
 import toast from "react-hot-toast";
-import ViewReportDialog from "../reports/ViewReportDialog";
+import ProposalDetailsDialog from "./ProposalDetailsDialog";
 import { goTo } from "../../global/navigation";
 
 export function ViewMenuItem({ row, parentClose }) {
   const [open, setOpen] = useState(false);
-  const [reportData, setReportData] = useState(null);
-  const [loading, setLoading] = useState(false);
 
-  const handleView = async () => {
-    setLoading(true);
-    try {
-      const res = await api.get("/consolidated-summary", {
-        params: {
-          region: row.region,
-          department: row.department,
-          fiscalYear: row.fiscalYear,
-        },
-      });
-      setReportData(res.data);
-      setOpen(true);
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to load report.");
-    } finally {
-      setLoading(false);
-      // Removed parentClose() here
-    }
+  const handleView = () => {
+    setOpen(true);
+  };
+
+  const handleClose = () => {
+    setOpen(false);
   };
 
   return (
     <>
-      <MenuItem onClick={handleView} disabled={loading}>
+      <MenuItem onClick={handleView}>
         <ListItemIcon>
           <VisibilityIcon fontSize="small" />
         </ListItemIcon>
-        <ListItemText>View</ListItemText>
+        <ListItemText>View Details</ListItemText>
       </MenuItem>
 
-      {reportData && (
-        <ViewReportDialog
-          open={open}
-          onClose={() => setOpen(false)}
-          data={reportData}
-        />
-      )}
+      <ProposalDetailsDialog
+        open={open}
+        onClose={handleClose}
+        proposal={row}
+      />
     </>
   );
 }

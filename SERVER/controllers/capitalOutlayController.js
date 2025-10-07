@@ -186,6 +186,7 @@ exports.addCapitalOutlay = async (req, res) => {
     
     console.log("Creating new capital outlay...");
     const newOutlay = new CapitalOutlay({
+   
       particulars,
       cost,
       income: income || 0, // <-- Add this line

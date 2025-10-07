@@ -397,12 +397,36 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
     }
   }, [onDataChange]);
 
-  const handleDetailsModalSave = async (totals) => {
-    if (totals.isNewItem && totals.newItem) {
+  const normalizeTotals = useCallback((data = {}) => {
+    const income = parseFloat(data.income ?? 0) || 0;
+    const subsidy = parseFloat(data.subsidy ?? 0) || 0;
+    const cost = parseFloat(
+      data.cost ?? data.total ?? income + subsidy
+    ) || 0;
+
+    return { income, subsidy, cost };
+  }, []);
+
+  const handleDetailsModalSave = async (result) => {
+    const totals = normalizeTotals(result);
+    const detailsList = Array.isArray(result?.details) ? result.details : [];
+    const particularsFromDetails = result?.particulars || detailsList
+      .map((detail) => detail?.particulars)
+      .filter(Boolean)
+      .join('; ');
+
+    if (result.isNewItem && result.newItem) {
       // Handle newly created item
       const newItem = {
-        ...totals.newItem,
+        ...result.newItem,
         status: "Not Submitted",
+        income: totals.income,
+        subsidy: totals.subsidy,
+        cost: totals.cost,
+        particulars:
+          result.newItem?.particulars && result.newItem.particulars.trim() !== ""
+            ? result.newItem.particulars
+            : particularsFromDetails,
       };
       
       const updatedData = [...capitalOutlays, newItem];
@@ -410,8 +434,8 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
       
       // Initialize empty details for the new item
       setCapitalOutlayDetails(prev => ({
-        ...prev,
-        [newItem._id]: []
+          ...prev,
+          [newItem._id]: detailsList
       }));
       
       // Clear the form for the category
@@ -430,13 +454,28 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
       // Set this as newly added for highlighting
       setNewlyAddedItemId(newItem._id);
       
+      // Ensure the main table reflects the saved totals & particulars
+      await handleDetailsSaved(newItem._id, totals);
+
       toast.success("Capital outlay item created successfully with breakdown details!");
-    } else if (totals.capitalOutlayId) {
+    } else if (result.capitalOutlayId) {
       // Fallback path: details were saved to an existing item we attached to
-      await handleDetailsSaved(totals.capitalOutlayId, totals);
+      if (detailsList.length > 0) {
+        setCapitalOutlayDetails(prev => ({
+          ...prev,
+          [result.capitalOutlayId]: detailsList
+        }));
+      }
+      await handleDetailsSaved(result.capitalOutlayId, totals);
       toast.success("Capital outlay details saved to existing item successfully");
     } else if (selectedCapitalOutlay && selectedCapitalOutlay._id) {
       // Handle existing item update
+      if (detailsList.length > 0) {
+        setCapitalOutlayDetails(prev => ({
+          ...prev,
+          [selectedCapitalOutlay._id]: detailsList
+        }));
+      }
       await handleDetailsSaved(selectedCapitalOutlay._id, totals);
       toast.success("Capital outlay details updated successfully");
     }
