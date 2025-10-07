@@ -20,6 +20,7 @@ import PSCasualServiceTable from "../pscasual/PersonnelServicesPage";
 import Mooe from "../mooe/MooeTable";
 // import CapitalOutlayTable from "../capitaloutlay/CapitalOutlayTable";
 import CapitalOutlayTable from "../capitaloutlay/CapitalOutlayTableEnhanced";
+import CapitalOutlayDataGrid from "../capitaloutlay/CapitalOutlayDataGrid";
 import PSCOSCustomPageTable from "../jocos/PersonnelServicesPage";
 import IncomeTable from "../corporateincome/IncomeTable";
 import ErrorBoundary from "../../global/components/ErrorBoundary";
@@ -144,6 +145,9 @@ const CustomPage = ({
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [speedDialOpen, setSpeedDialOpen] = useState(false);
+  
+  // Capital Outlay view toggle (true = new DataGrid, false = old table)
+  const [useDataGridView, setUseDataGridView] = useState(true);
 
   // Use canCreate from the hook, but keep canEditOwn from permissions
   const canEditOwn = hasPermission(currentUser, PERMISSIONS.EDIT_OWN);
@@ -3227,10 +3231,36 @@ const CustomPage = ({
           {activeTab === "Capital Outlay" && (
             <Suspense fallback={<CircularProgress />}>
               {import.meta.env.VITE_HIDE_INCOME_LOCK_BANNER === 'true' ? null : <IncomeLockedBanner />}
-              <CapitalOutlayTable
-                data={capitalOutlayData}
-                disableIncomeInputs={disableIncomeInputs}
-              />
+              
+              {/* View Toggle Button */}
+              <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                <Chip
+                  label={useDataGridView ? "DataGrid View (New)" : "Table View (Old)"}
+                  color={useDataGridView ? "primary" : "default"}
+                  variant={useDataGridView ? "filled" : "outlined"}
+                />
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => setUseDataGridView(!useDataGridView)}
+                  startIcon={<TableChartIcon />}
+                >
+                  Switch to {useDataGridView ? "Old Table" : "New DataGrid"}
+                </Button>
+              </Box>
+
+              {/* Conditional Rendering */}
+              {useDataGridView ? (
+                <CapitalOutlayDataGrid
+                  onDataChange={setCapitalOutlayData}
+                  disableIncomeInputs={disableIncomeInputs}
+                />
+              ) : (
+                <CapitalOutlayTable
+                  data={capitalOutlayData}
+                  disableIncomeInputs={disableIncomeInputs}
+                />
+              )}
             </Suspense>
           )}
           {activeTab === "COS/JO" && (
