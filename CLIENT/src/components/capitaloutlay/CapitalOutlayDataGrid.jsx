@@ -217,12 +217,12 @@ const CapitalOutlayDataGrid = ({ onDataChange, disableIncomeInputs = false }) =>
       setLoading(true);
       setError(null);
 
-      const params = {
+      const params = new URLSearchParams({
         region: activeRegion,
-        fiscalYear: new Date().getFullYear(),
-      };
+        fiscalYear: fiscalYear || new Date().getFullYear(),
+      });
 
-      const response = await api.get("/api/capital-outlay", { params });
+      const response = await api.get(`/capital-outlays?${params.toString()}`);
       const data = response.data.capitalOutlays || [];
 
       setCapitalOutlays(data);
@@ -234,12 +234,12 @@ const CapitalOutlayDataGrid = ({ onDataChange, disableIncomeInputs = false }) =>
     } finally {
       setLoading(false);
     }
-  }, [activeRegion, onDataChange]);
+  }, [activeRegion, fiscalYear, onDataChange]);
 
   // Fetch categories
   const fetchCategories = useCallback(async () => {
     try {
-      const response = await api.get("/api/categories");
+      const response = await api.get("/categories");
       setCategories(response.data || []);
     } catch (err) {
       console.error("Error fetching categories:", err);
@@ -290,7 +290,7 @@ const CapitalOutlayDataGrid = ({ onDataChange, disableIncomeInputs = false }) =>
     if (!itemToDelete) return;
 
     try {
-      await api.delete(`/api/capital-outlay/${itemToDelete}`);
+      await api.delete(`/capital-outlays/${itemToDelete}`);
       toast.success("Capital outlay deleted successfully");
       fetchCapitalOutlays();
       setDeleteDialogOpen(false);
