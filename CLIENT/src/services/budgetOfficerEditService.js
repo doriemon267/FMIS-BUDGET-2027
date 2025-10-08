@@ -9,9 +9,12 @@ import api from '../config/api';
  * @param {string} proposalId - The proposal ID
  * @returns {Promise} API response with all table data
  */
-export const getProposalForEdit = async (proposalId) => {
+export const getProposalForEdit = async (proposalId, options = {}) => {
+  const { signal, params: extraParams, ...restOptions } = options || {};
   const response = await api.get('/api/budget-officer-edits/proposal-for-edit', {
-    params: { proposalId }
+    params: { proposalId, ...(extraParams || {}) },
+    signal,
+    ...restOptions
   });
   return response.data;
 };
@@ -41,8 +44,12 @@ export const submitEdit = async (editData) => {
  * @param {string} proposalId - The proposal ID
  * @returns {Promise} API response with comparison data
  */
-export const getComparisonData = async (proposalId) => {
-  const response = await api.get(`/api/budget-officer-edits/comparison/${proposalId}`);
+export const getComparisonData = async (proposalId, options = {}) => {
+  const { signal, ...restOptions } = options || {};
+  const response = await api.get(`/api/budget-officer-edits/comparison/${proposalId}`, {
+    signal,
+    ...restOptions
+  });
   return response.data;
 };
 

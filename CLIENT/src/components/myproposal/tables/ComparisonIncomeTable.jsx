@@ -97,7 +97,7 @@ const ComparisonIncomeTable = ({ data }) => {
               </TableRow>
             ) : (
               data.map((item, index) => (
-                <TableRow key={index}>
+                <TableRow key={item._id || item.id || index}>
                   {renderComparisonCell(item, 'source')}
                   {renderComparisonCell(item, 'description')}
                   {renderComparisonCell(item, 'amount')}

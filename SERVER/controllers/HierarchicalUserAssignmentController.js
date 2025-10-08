@@ -681,7 +681,7 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
     let divisions = [];
     let hierarchicalStructure = {};
     switch (assignmentLevel) {
-      case 'DIVISION':
+      case 'DIVISION': {
         // Division assignment requires region, department, and division
         if (!regionId || !departmentId || !divisionName) {
           return {
@@ -712,7 +712,8 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
           ultimateRegion: region.Region
         };
         break;
-      case 'DEPARTMENT':
+      }
+      case 'DEPARTMENT': {
         // Department assignment requires region and department
         if (!regionId || !departmentId) {
           return {
@@ -741,7 +742,8 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
           ultimateRegion: deptRegion.Region
         };
         break;
-      case 'REGION':
+      }
+      case 'REGION': {
         // Region assignment requires only region
         if (!regionId) {
           return {
@@ -768,7 +770,8 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
           ultimateRegion: assignedRegion.Region
         };
         break;
-      case 'FULL':
+      }
+      case 'FULL': {
         // Full access - no specific assignments needed
         regions = [];
         departments = [];
@@ -779,6 +782,7 @@ const buildHierarchicalAssignment = async ({ assignmentLevel, regionId, departme
           hasFullAccess: true
         };
         break;
+      }
       case 'OWN_ONLY':
         // Own only access - no organizational assignments
         regions = [];

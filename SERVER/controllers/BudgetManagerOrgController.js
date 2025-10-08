@@ -1,5 +1,6 @@
 const Region = require('../models/Region');
 const Department = require('../models/Department');
+const DepartmentDivisionMapping = require('../models/OrganizationStructure');
 const { hasFullAccess } = require('../middleware/securityMiddleware');
 // Get all available organizational units for Budget Manager selection
 const getAvailableOrganizationalUnits = async (req, res) => {
@@ -15,16 +16,26 @@ const getAvailableOrganizationalUnits = async (req, res) => {
     const regions = await Region.find({}).select('Region _id').lean();
     // Get all departments  
     const departments = await Department.find({}).select('Department _id').lean();
-    // Get divisions (placeholder - enhance based on your division model)
-    const divisions = [
-      { name: 'Administrative Division', id: 'admin' },
-      { name: 'Finance Division', id: 'finance' },
-      { name: 'Operations Division', id: 'operations' },
-      { name: 'Planning Division', id: 'planning' },
-      { name: 'Engineering Division', id: 'engineering' },
-      { name: 'Human Resources Division', id: 'hr' },
-      { name: 'Information Technology Division', id: 'it' }
-    ];
+    // Get divisions from organization structure
+    const orgStructure = await DepartmentDivisionMapping.getCompleteOrganizationStructure();
+    const divisions = [];
+    const divisionSet = new Set();
+    
+    // Collect all unique divisions from all departments
+    orgStructure.departments.forEach(dept => {
+      if (dept.divisions && dept.divisions.length > 0) {
+        dept.divisions.forEach(div => {
+          if (!divisionSet.has(div.name)) {
+            divisionSet.add(div.name);
+            divisions.push({
+              name: div.name,
+              code: div.code,
+              id: div.code || div.name.toLowerCase().replace(/\s+/g, '_')
+            });
+          }
+        });
+      }
+    });
     const organizationalUnits = {
       regions: regions.map(r => ({
         id: r._id,
@@ -39,6 +50,7 @@ const getAvailableOrganizationalUnits = async (req, res) => {
       divisions: divisions.map(div => ({
         id: div.id,
         name: div.name,
+        code: div.code,
         type: 'division'
       })),
       userInfo: {
@@ -193,7 +205,7 @@ const testOrganizationalSegregation = async (req, res) => {
       });
     }
     // Import models for real data testing
-    const PersonnelServices = require('../models/personnelServices');
+    const PersonnelServices = require('../models/PersonnelServices');
     const MooeProposal = require('../models/mooeProposals');
     const CapitalOutlay = require('../models/CapitalOutlay');
     const COSPersonnel = require('../models/COSPersonnel');

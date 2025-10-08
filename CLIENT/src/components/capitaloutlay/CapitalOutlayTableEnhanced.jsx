@@ -2,7 +2,6 @@ import React, { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { NumericFormat } from "react-number-format";
 import PropTypes from "prop-types";
 import api from "../../config/api";
-import { useRegion } from "../../context/RegionContext";
 import {
   Box,
   Typography,
@@ -63,6 +62,8 @@ import { useUser } from "../../context/UserContext";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import CapitalOutlayDetailsModal from "./CapitalOutlayDetailsModal";
+import { useCapitalOutlayData } from "./useCapitalOutlayData";
+import CapitalOutlayFilters from "./CapitalOutlayFilters";
 
 // Error Boundary Component with reset capability
 class ErrorBoundary extends React.Component {
@@ -149,69 +150,42 @@ const defaultFilterState = {
 };
 
 const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false }) => {
-  // Basic state
-  const [capitalOutlays, setCapitalOutlays] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [sublineItems, setSublineItems] = useState({});
-  const [accountingTitles, setAccountingTitles] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [newOutlays, setNewOutlays] = useState({});
-  const [addingCategoryId, setAddingCategoryId] = useState(null);
-  const [fiscalYear, setFiscalYear] = useState("");
-  const [budgetType, setBudgetType] = useState("");
   const { currentUser } = useUser();
-  const { activeRegion } = useRegion();
-  const [regionFilter, setRegionFilter] = useState("");
-  const [status, setStatus] = useState("");
-  const [errors, setErrors] = useState({});
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState(null);
-  const tableContainerRef = useRef(null);
-  const scrollPositionRef = useRef(0);
 
-  // Enhanced state management
+  // Filter state
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedFilters, setSelectedFilters] = useState(() => ({
-    ...defaultFilterState,
-    amountRange: { ...defaultFilterState.amountRange },
+    categories: [],
+    sublineItems: [],
+    amountRange: { min: "", max: "" },
+    hasValues: false,
+    emptyValues: false,
   }));
-  const [showColumnTotals, setShowColumnTotals] = useState(true);
-
-  // Pagination state
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(25);
-
-  // View state
-  const [compactView, setCompactView] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  
-  // Due date status
-  const [dueDateStatus, setDueDateStatus] = useState(null);
 
-  // Modal state for capital outlay details
-  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
-  const [selectedCapitalOutlay, setSelectedCapitalOutlay] = useState(null);
-  const [newlyAddedItemId, setNewlyAddedItemId] = useState(null);
-  
-  // State to store details for each capital outlay item
-  const [capitalOutlayDetails, setCapitalOutlayDetails] = useState({});
+  // Use the custom hook for data management
+  const {
+    capitalOutlays,
+    categories,
+    accountingTitles,
+    loading,
+    error,
+    fiscalYear,
+    budgetType,
+    regionFilter,
+    status,
+    dueDateStatus,
+    capitalOutlayDetails,
+    setCapitalOutlays,
+    setCategories,
+    setAccountingTitles,
+    setCapitalOutlayDetails,
+    refreshData,
+    handleDetailsSaved,
+    fetchAllCapitalOutlayDetails,
+  } = useCapitalOutlayData(onDataChange);
 
-  // Actions menu state
-  const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
-  const [actionsMenuRow, setActionsMenuRow] = useState(null);
-
-  const activeFilterCount = useMemo(() => {
-    let count = 0;
-    if (selectedFilters.categories.length) count += selectedFilters.categories.length;
-    if (selectedFilters.sublineItems.length) count += selectedFilters.sublineItems.length;
-    if (selectedFilters.amountRange.min) count += 1;
-    if (selectedFilters.amountRange.max) count += 1;
-    if (selectedFilters.hasValues) count += 1;
-    if (selectedFilters.emptyValues) count += 1;
-    return count;
-  }, [selectedFilters]);
-
+  // Filter validation
   const amountRangeValidation = useMemo(() => {
     const min = selectedFilters.amountRange.min !== ""
       ? parseFloat(selectedFilters.amountRange.min)
@@ -231,15 +205,6 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
 
   const { min: filterMinAmount, max: filterMaxAmount, isInvalid: isAmountRangeInvalid } = amountRangeValidation;
 
-  const categoryOptions = useMemo(() => {
-    return [...categories]
-      .map((category) => ({
-        id: category._id?.toString() || category._id,
-        name: category.categoryName,
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [categories]);
-
   const availableSublineItems = useMemo(() => {
     const items = new Set();
     capitalOutlays.forEach((item) => {
@@ -250,15 +215,59 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
     return Array.from(items).sort((a, b) => a.localeCompare(b));
   }, [capitalOutlays]);
 
-  // Check if user can delete items (admin users)
+  const categoryOptions = useMemo(() => {
+    return [...categories]
+      .map((category) => ({
+        id: category._id?.toString() || category._id,
+        name: category.name,
+      }))
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }, [categories]);
+
   const canDeleteItems = useMemo(() => {
-    if (!currentUser || !currentUser.Roles) return false;
-    return currentUser.Roles.some(role => 
-      role.toUpperCase().includes('ADMIN') || 
-      role.toUpperCase().includes('SUPER') ||
-      role.toUpperCase().includes('BUDGET ADMIN')
-    );
+    return currentUser?.userRoles?.includes('SUPER_ADMIN') ||
+           currentUser?.userRoles?.includes('BUDGET_ADMIN') ||
+           currentUser?.userRoles?.includes('BUDGET_ANALYST');
   }, [currentUser]);
+
+  // Other state
+  const [newOutlays, setNewOutlays] = useState({});
+  const [addingCategoryId, setAddingCategoryId] = useState(null);
+  const [errors, setErrors] = useState({});
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
+  const tableContainerRef = useRef(null);
+  const scrollPositionRef = useRef(0);
+
+  // Enhanced state management
+  const [showColumnTotals, setShowColumnTotals] = useState(true);
+
+  // Pagination state
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(25);
+
+  // View state
+  const [compactView, setCompactView] = useState(false);
+  
+  // Modal state for capital outlay details
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+  const [selectedCapitalOutlay, setSelectedCapitalOutlay] = useState(null);
+  const [newlyAddedItemId, setNewlyAddedItemId] = useState(null);
+  
+  // Actions menu state
+  const [actionsMenuAnchor, setActionsMenuAnchor] = useState(null);
+  const [actionsMenuRow, setActionsMenuRow] = useState(null);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedFilters.categories.length) count += selectedFilters.categories.length;
+    if (selectedFilters.sublineItems.length) count += selectedFilters.sublineItems.length;
+    if (selectedFilters.amountRange.min) count += 1;
+    if (selectedFilters.amountRange.max) count += 1;
+    if (selectedFilters.hasValues) count += 1;
+    if (selectedFilters.emptyValues) count += 1;
+    return count;
+  }, [selectedFilters]);
 
   // Enhanced filtering and search
   const filteredData = useMemo(() => {
@@ -463,64 +472,6 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
     }
   };
 
-  // Callback when details are saved
-  const handleDetailsSaved = useCallback(async (capitalOutlayId, totals) => {
-    try {
-      // Fetch the updated details
-      const detailsResponse = await api.get(`/api/capital-outlay/${capitalOutlayId}/details`);
-      const details = detailsResponse.data.details || [];
-      
-      setCapitalOutlayDetails(prev => ({
-        ...prev,
-        [capitalOutlayId]: details
-      }));
-
-      // Extract particulars from the details - combine all particulars from breakdown items
-      const particularsFromDetails = details
-        .map(d => d.particulars)
-        .filter(Boolean)
-        .join('; ');
-
-      // Fetch the complete capital outlay item to get updated accountingTitle, uacsCode, etc.
-      // We need to refetch from the list since there's no single-item endpoint
-      const params = new URLSearchParams();
-      if (fiscalYear) params.append('fiscalYear', fiscalYear);
-      if (budgetType) params.append('budgetType', budgetType);
-      if (regionFilter) params.append('region', regionFilter);
-      
-      const outlaysResponse = await api.get(`/capital-outlays?${params.toString()}`);
-      const allOutlays = outlaysResponse.data.capitalOutlays || [];
-      const updatedItem = allOutlays.find(item => item._id === capitalOutlayId);
-
-      // Update the capital outlays array with the fresh data
-      setCapitalOutlays(prev => {
-        const updatedOutlays = prev.map(item => 
-          item._id === capitalOutlayId 
-            ? { 
-                ...item,
-                // Update with data from the refetched item if available
-                ...(updatedItem ? {
-                  accountingTitle: updatedItem.accountingTitle,
-                  uacsCode: updatedItem.uacsCode,
-                  sublineItem: updatedItem.sublineItem,
-                } : {}),
-                // Update totals from the save response
-                income: totals.income, 
-                subsidy: totals.subsidy, 
-                cost: totals.cost,
-                // Update particulars from details
-                particulars: particularsFromDetails || item.particulars
-              }
-            : item
-        );
-        onDataChange?.(updatedOutlays);
-        return updatedOutlays;
-      });
-    } catch (error) {
-      console.error("Error fetching capital outlay details:", error);
-    }
-  }, [onDataChange, fiscalYear, budgetType, regionFilter]);
-
   // Validation function
   const validateInput = useCallback((data, isNew = false) => {
     const newErrors = {};
@@ -561,10 +512,11 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
 
         if (normalizedUacs) {
           const outlayUacs = (outlay.uacsCode || "").trim().toLowerCase();
-          return outlayUacs === normalizedUacs;
+          return outlayUacs && outlayUacs === normalizedUacs;
+        } else {
+          const outlayUacs = (outlay.uacsCode || "").trim().toLowerCase();
+          return !outlayUacs;
         }
-
-        return true;
       });
       if (isDuplicate) {
         newErrors.accountingTitle = "This accounting title already exists for this category";
@@ -858,94 +810,6 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
       toast.success("Capital outlay details updated successfully");
     }
   };
-
-  // Function to fetch details for all capital outlays
-  const fetchAllCapitalOutlayDetails = useCallback(async (outlays) => {
-    const detailsPromises = outlays.map(async (outlay) => {
-      try {
-        const response = await api.get(`/api/capital-outlay/${outlay._id}/details`);
-        setCapitalOutlayDetails(prev => ({
-          ...prev,
-          [outlay._id]: response.data.details || []
-        }));
-      } catch (error) {
-        console.error(`Error fetching details for outlay ${outlay._id}:`, error);
-      }
-    });
-    await Promise.allSettled(detailsPromises);
-  }, []);
-
-  // Update region filter when active region changes
-  useEffect(() => {
-    if (activeRegion) {
-      const regionName = activeRegion.name || activeRegion.regionName;
-      setRegionFilter(regionName);
-    } else {
-      setRegionFilter("");
-    }
-  }, [activeRegion]);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        
-        const params = new URLSearchParams();
-        if (regionFilter) {
-          params.append('region', regionFilter);
-        }
-        
-        const [outlaysRes, categoriesRes, dueDateRes] = await Promise.all([
-          api.get(`/capital-outlays?${params.toString()}`),
-          api.get("/categories"),
-          api.get("/due-date-status").catch(err => {
-            console.warn("Could not fetch due date status:", err);
-            return null;
-          })
-        ]);
-
-        const outlaysWithStatus = outlaysRes.data.capitalOutlays.map((item) => ({
-          ...item,
-          status: item.status || "Not Submitted",
-        }));
-
-        setCapitalOutlays(outlaysWithStatus);
-        const categoriesData = categoriesRes.data.categories || [];
-        setCategories(categoriesData);
-
-        if (dueDateRes && dueDateRes.data) {
-          setDueDateStatus(dueDateRes.data);
-        }
-
-        await fetchAllCapitalOutlayDetails(outlaysWithStatus);
-
-        setStatus(outlaysRes.data.status || "Not Submitted");
-        onDataChange?.(outlaysWithStatus);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        setError("Failed to retrieve data.");
-        toast.error("Failed to retrieve data.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    const fetchFiscalYear = async () => {
-      try {
-        const response = await api.get("/settings/active");
-        if (response.data && response.data.fiscalYear) {
-          setFiscalYear(response.data.fiscalYear);
-          setBudgetType(response.data.budgetType);
-        }
-      } catch (error) {
-        console.error("Error fetching active fiscal year:", error);
-        toast.error("Error fetching active fiscal year.");
-      }
-    };
-
-    fetchData();
-    fetchFiscalYear();
-  }, [onDataChange, regionFilter, fetchAllCapitalOutlayDetails]);
 
   const handleDeleteClick = (itemId) => {
     setItemToDelete(itemId);
@@ -1372,7 +1236,6 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
       </Paper>
     </Collapse>
   );
-
   // Render loading state
   if (loading && capitalOutlays.length === 0) {
     return (
@@ -1444,7 +1307,15 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
         {renderEnhancedToolbar()}
 
   {/* Filters */}
-  {renderFilterControls()}
+        <CapitalOutlayFilters
+          showFilters={showFilters}
+          selectedFilters={selectedFilters}
+          onFiltersChange={setSelectedFilters}
+          onResetFilters={handleResetFilters}
+          categories={categories}
+          availableSublineItems={availableSublineItems}
+          isAmountRangeInvalid={isAmountRangeInvalid}
+        />
 
         {/* Main Table */}
         <TableContainer

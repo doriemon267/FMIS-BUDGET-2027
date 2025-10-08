@@ -13,6 +13,29 @@ import {
 } from '@mui/material';
 
 const ComparisonMOOETable = ({ data }) => {
+  const isEqual = (a, b) => {
+    if (a === b) return true;
+    if (a == null || b == null) return a === b;
+    if (typeof a === 'number' && typeof b === 'string') return a === Number(b);
+    if (typeof a === 'string' && typeof b === 'number') return Number(a) === b;
+    if (Array.isArray(a) && Array.isArray(b)) {
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        if (!isEqual(a[i], b[i])) return false;
+      }
+      return true;
+    }
+    if (typeof a === 'object' && typeof b === 'object') {
+      const keysA = Object.keys(a);
+      const keysB = Object.keys(b);
+      if (keysA.length !== keysB.length) return false;
+      for (const key of keysA) {
+        if (!keysB.includes(key) || !isEqual(a[key], b[key])) return false;
+      }
+      return true;
+    }
+    return false;
+  };
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-PH', {
       style: 'currency',
@@ -29,7 +52,7 @@ const ComparisonMOOETable = ({ data }) => {
       if (field === 'amount') {
         if (newValue > oldValue) return { backgroundColor: '#e8f5e9', fontWeight: 'bold' };
         if (newValue < oldValue) return { backgroundColor: '#ffebee', fontWeight: 'bold' };
-      } else if (oldValue !== newValue) {
+      } else if (!isEqual(oldValue, newValue)) {
         return { backgroundColor: '#fff3e0' };
       }
     }

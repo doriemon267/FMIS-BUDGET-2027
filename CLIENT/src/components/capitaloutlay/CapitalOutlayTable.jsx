@@ -455,7 +455,11 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
       setNewlyAddedItemId(newItem._id);
       
       // Ensure the main table reflects the saved totals & particulars
-      await handleDetailsSaved(newItem._id, totals);
+      try {
+        await handleDetailsSaved(newItem._id, totals);
+      } catch (error) {
+        console.error("Error saving details for new item:", error);
+      }
 
       toast.success("Capital outlay item created successfully with breakdown details!");
     } else if (result.capitalOutlayId) {
@@ -466,7 +470,11 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
           [result.capitalOutlayId]: detailsList
         }));
       }
-      await handleDetailsSaved(result.capitalOutlayId, totals);
+      try {
+        await handleDetailsSaved(result.capitalOutlayId, totals);
+      } catch (error) {
+        console.error("Error saving details for existing item:", error);
+      }
       toast.success("Capital outlay details saved to existing item successfully");
     } else if (selectedCapitalOutlay && selectedCapitalOutlay._id) {
       // Handle existing item update
@@ -476,7 +484,11 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
           [selectedCapitalOutlay._id]: detailsList
         }));
       }
-      await handleDetailsSaved(selectedCapitalOutlay._id, totals);
+      try {
+        await handleDetailsSaved(selectedCapitalOutlay._id, totals);
+      } catch (error) {
+        console.error("Error updating details for existing item:", error);
+      }
       toast.success("Capital outlay details updated successfully");
     }
   };

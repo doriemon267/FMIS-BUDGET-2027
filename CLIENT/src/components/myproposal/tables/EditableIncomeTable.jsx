@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Table,
   TableBody,
@@ -11,13 +11,64 @@ import {
   IconButton,
   Chip,
   Box,
-  Button
+  Button,
+  TablePagination
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import RestoreIcon from '@mui/icons-material/Restore';
+import { NumericFormat } from 'react-number-format';
 
-const EditableIncomeTable = ({ data, onChange }) => {
+const NumericFormatInput = React.forwardRef(function NumericFormatInput(props, ref) {
+  const { onChange, name, ...other } = props;
+
+  return (
+    <NumericFormat
+      {...other}
+      getInputRef={ref}
+      thousandSeparator
+      decimalScale={2}
+      fixedDecimalScale
+      allowNegative={false}
+      onValueChange={(values) => {
+        onChange({
+          target: {
+            name,
+            value: values.value
+          }
+        });
+      }}
+    />
+  );
+});
+
+const EditableIncomeTable = ({ data = [], onChange }) => {
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
+  const totalCount = data.length;
+  const pageStart = rowsPerPage === -1 ? 0 : page * rowsPerPage;
+
+  useEffect(() => {
+    if (rowsPerPage === -1) {
+      if (page !== 0) {
+        setPage(0);
+      }
+      return;
+    }
+    const maxPage = totalCount === 0 ? 0 : Math.max(0, Math.ceil(totalCount / rowsPerPage) - 1);
+    if (page > maxPage) {
+      setPage(maxPage);
+    }
+  }, [page, rowsPerPage, totalCount]);
+
+  const paginatedData = useMemo(() => {
+    if (rowsPerPage === -1) {
+      return data;
+    }
+    return data.slice(pageStart, pageStart + rowsPerPage);
+  }, [data, pageStart, rowsPerPage]);
+
   const handleFieldChange = (index, field, value) => {
     const newData = [...data];
     newData[index] = {
@@ -32,6 +83,19 @@ const EditableIncomeTable = ({ data, onChange }) => {
     const numValue = parseFloat(value) || 0;
     handleFieldChange(index, 'amount', numValue);
   };
+
+  const handleChangePage = useCallback((event, newPage) => {
+    if (rowsPerPage === -1) {
+      return;
+    }
+    setPage(newPage);
+  }, [rowsPerPage]);
+
+  const handleChangeRowsPerPage = useCallback((event) => {
+    const nextValue = parseInt(event.target.value, 10);
+    setRowsPerPage(nextValue);
+    setPage(0);
+  }, []);
 
   const handleDelete = (index) => {
     const newData = [...data];
@@ -126,12 +190,14 @@ const EditableIncomeTable = ({ data, onChange }) => {
                 </TableCell>
               </TableRow>
             ) : (
-              data.map((item, index) => (
-                <TableRow key={index} sx={getRowStyle(item)}>
+              paginatedData.map((item, offset) => {
+                const actualIndex = rowsPerPage === -1 ? offset : pageStart + offset;
+                return (
+                  <TableRow key={actualIndex} sx={getRowStyle(item)}>
                   <TableCell>
                     <TextField
                       value={item.source || ''}
-                      onChange={(e) => handleFieldChange(index, 'source', e.target.value)}
+                        onChange={(e) => handleFieldChange(actualIndex, 'source', e.target.value)}
                       size="small"
                       fullWidth
                       disabled={item.changeType === 'deleted'}
@@ -140,7 +206,7 @@ const EditableIncomeTable = ({ data, onChange }) => {
                   <TableCell>
                     <TextField
                       value={item.description || ''}
-                      onChange={(e) => handleFieldChange(index, 'description', e.target.value)}
+                        onChange={(e) => handleFieldChange(actualIndex, 'description', e.target.value)}
                       size="small"
                       fullWidth
                       multiline
@@ -149,19 +215,20 @@ const EditableIncomeTable = ({ data, onChange }) => {
                   </TableCell>
                   <TableCell>
                     <TextField
-                      type="number"
                       value={item.amount || 0}
-                      onChange={(e) => handleAmountChange(index, e.target.value)}
+                        onChange={(e) => handleAmountChange(actualIndex, e.target.value)}
                       size="small"
                       fullWidth
                       disabled={item.changeType === 'deleted'}
-                      inputProps={{ step: 0.01, min: 0 }}
+                        InputProps={{ inputComponent: NumericFormatInput }}
+                        inputProps={{ name: 'amount' }}
+                        sx={{ '& .MuiInputBase-input': { textAlign: 'right' } }}
                     />
                   </TableCell>
                   <TableCell>
                     <TextField
                       value={item.department || ''}
-                      onChange={(e) => handleFieldChange(index, 'department', e.target.value)}
+                        onChange={(e) => handleFieldChange(actualIndex, 'department', e.target.value)}
                       size="small"
                       fullWidth
                       disabled={item.changeType === 'deleted'}
@@ -178,7 +245,7 @@ const EditableIncomeTable = ({ data, onChange }) => {
                       <IconButton
                         size="small"
                         color="primary"
-                        onClick={() => handleRestore(index)}
+                          onClick={() => handleRestore(actualIndex)}
                         title="Restore"
                       >
                         <RestoreIcon fontSize="small" />
@@ -187,19 +254,34 @@ const EditableIncomeTable = ({ data, onChange }) => {
                       <IconButton
                         size="small"
                         color="error"
-                        onClick={() => handleDelete(index)}
+                          onClick={() => handleDelete(actualIndex)}
                         title="Delete"
                       >
                         <DeleteIcon fontSize="small" />
                       </IconButton>
                     )}
                   </TableCell>
-                </TableRow>
-              ))
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
       </TableContainer>
+      {totalCount > 0 && (
+        <TablePagination
+          component="div"
+          count={totalCount}
+          page={rowsPerPage === -1 ? 0 : page}
+          onPageChange={handleChangePage}
+          rowsPerPage={rowsPerPage}
+          onRowsPerPageChange={handleChangeRowsPerPage}
+          rowsPerPageOptions={[5, 10, 25, { value: -1, label: 'All' }]}
+          labelRowsPerPage="Rows per page"
+          showFirstButton
+          showLastButton
+        />
+      )}
     </Box>
   );
 };

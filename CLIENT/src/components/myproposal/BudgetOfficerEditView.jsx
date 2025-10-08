@@ -97,6 +97,7 @@ const BudgetOfficerEditView = ({ proposalData, proposal, onSaveSuccess }) => {
       const editData = prepareEditData();
       await saveDraftEdit(editData);
       toast.success('Draft saved successfully');
+      onSaveSuccess?.();
     } catch (error) {
       console.error('Error saving draft:', error);
       toast.error(error.response?.data?.message || 'Failed to save draft');

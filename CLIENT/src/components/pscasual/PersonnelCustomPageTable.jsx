@@ -477,7 +477,7 @@ const PSCasualCustomPageTable = ({
   </style>
 </head>
 <body>
-  <div class="watermark">CONFIDENTIAL</div>
+  <div class="watermark">CONFIDENTIAL - NIA PROPERTY</div>
   <div class="header">
     <h1>NATIONAL IRRIGATION ADMINISTRATION</h1>
     <h2>CASUAL PERSONNEL SERVICES REPORT</h2>

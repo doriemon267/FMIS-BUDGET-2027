@@ -9,6 +9,34 @@ const CapitalOutlayDetails = require('../models/CapitalOutlayDetails');
 const { createNotification } = require('./notificationController');
 
 /**
+ * Deep equality comparison function
+ * Handles type coercion for numbers/strings and nested objects/arrays
+ */
+const isEqual = (a, b) => {
+  if (a === b) return true;
+  if (a == null || b == null) return a === b;
+  if (typeof a === 'number' && typeof b === 'string') return a === Number(b);
+  if (typeof a === 'string' && typeof b === 'number') return Number(a) === b;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!isEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  if (typeof a === 'object' && typeof b === 'object') {
+    const keysA = Object.keys(a);
+    const keysB = Object.keys(b);
+    if (keysA.length !== keysB.length) return false;
+    for (const key of keysA) {
+      if (!keysB.includes(key) || !isEqual(a[key], b[key])) return false;
+    }
+    return true;
+  }
+  return false;
+};
+
+/**
  * Get proposal data for Budget Officer to edit
  * This fetches all 4 tables: Income, Personnel Services, MOOE, Capital Outlay
  */
@@ -56,7 +84,7 @@ exports.getProposalForEdit = async (req, res) => {
       Income.find(queryParams).lean(),
       PersonnelServices.find(queryParams).lean(),
       MOOE.find(queryParams).lean(),
-      CapitalOutlay.find(queryParams).populate('category', 'name').lean()
+  CapitalOutlay.find(queryParams).populate('category', 'categoryName sublineItems').lean()
     ]);
     
     // Fetch CapitalOutlayDetails for each CapitalOutlay item
@@ -83,8 +111,8 @@ exports.getProposalForEdit = async (req, res) => {
           particulars: combinedParticulars || '',
           income: totalIncome || co.income || 0,
           subsidy: totalSubsidy || co.subsidy || 0,
-          cost: totalIncome + totalSubsidy || co.cost || 0,
-          categoryName: co.category?.name || ''
+          cost: totalIncome + totalSubsidy,
+          categoryName: co.category?.categoryName || co.categoryName || ''
         };
         
         console.log('Capital Outlay merged data:', {
@@ -234,7 +262,22 @@ exports.saveDraftEdit = async (req, res) => {
     res.json({
       success: true,
       message: 'Draft saved successfully',
-      data: budgetOfficerEdit
+      data: {
+        _id: budgetOfficerEdit._id,
+        proposalId: budgetOfficerEdit.proposalId,
+        fiscalYear: budgetOfficerEdit.fiscalYear,
+        budgetType: budgetOfficerEdit.budgetType,
+        region: budgetOfficerEdit.region,
+        department: budgetOfficerEdit.department,
+        division: budgetOfficerEdit.division,
+        processBy: budgetOfficerEdit.processBy,
+        cobExpenditures: budgetOfficerEdit.cobExpenditures,
+        status: budgetOfficerEdit.status,
+        editedBy: budgetOfficerEdit.editedBy,
+        createdAt: budgetOfficerEdit.createdAt,
+        updatedAt: budgetOfficerEdit.updatedAt,
+        changeSummary: budgetOfficerEdit.getChangeSummary()
+      }
     });
     
   } catch (error) {
@@ -377,7 +420,21 @@ exports.submitEdit = async (req, res) => {
     res.json({
       success: true,
       message: 'Edits submitted successfully',
-      data: budgetOfficerEdit
+      data: {
+        _id: budgetOfficerEdit._id,
+        proposalId: budgetOfficerEdit.proposalId,
+        fiscalYear: budgetOfficerEdit.fiscalYear,
+        budgetType: budgetOfficerEdit.budgetType,
+        region: budgetOfficerEdit.region,
+        department: budgetOfficerEdit.department,
+        division: budgetOfficerEdit.division,
+        processBy: budgetOfficerEdit.processBy,
+        cobExpenditures: budgetOfficerEdit.cobExpenditures,
+        status: budgetOfficerEdit.status,
+        editedBy: budgetOfficerEdit.editedBy,
+        submittedAt: budgetOfficerEdit.submittedAt,
+        changeSummary: budgetOfficerEdit.getChangeSummary()
+      }
     });
     
   } catch (error) {
@@ -410,7 +467,25 @@ exports.getEditById = async (req, res) => {
     
     res.json({
       success: true,
-      data: edit
+      data: {
+        _id: edit._id,
+        proposalId: edit.proposalId,
+        fiscalYear: edit.fiscalYear,
+        budgetType: edit.budgetType,
+        region: edit.region,
+        department: edit.department,
+        division: edit.division,
+        processBy: edit.processBy,
+        cobExpenditures: edit.cobExpenditures,
+        status: edit.status,
+        editedBy: edit.editedBy,
+        submittedAt: edit.submittedAt,
+        approvedAt: edit.approvedAt,
+        approvedBy: edit.approvedBy,
+        createdAt: edit.createdAt,
+        updatedAt: edit.updatedAt,
+        changeSummary: edit.getChangeSummary()
+      }
     });
     
   } catch (error) {
@@ -517,7 +592,7 @@ exports.getComparisonData = async (req, res) => {
           particulars: combinedParticulars || '',
           income: totalIncome || co.income || 0,
           subsidy: totalSubsidy || co.subsidy || 0,
-          cost: totalIncome + totalSubsidy || co.cost || 0,
+          cost: totalIncome + totalSubsidy,
           categoryName: co.category?.name || ''
         };
       })
@@ -548,7 +623,7 @@ exports.getComparisonData = async (req, res) => {
           const changes = {};
           Object.keys(editedItem).forEach(key => {
             if (key !== '_id' && key !== 'originalId' && key !== 'changeType' && key !== 'originalValues') {
-              if (JSON.stringify(editedItem[key]) !== JSON.stringify(originalItem[key])) {
+              if (!isEqual(editedItem[key], originalItem[key])) {
                 changes[key] = {
                   old: originalItem[key],
                   new: editedItem[key],
@@ -641,10 +716,11 @@ exports.approveEdit = async (req, res) => {
     
     // Apply changes to original collections
     // This is a complex operation that should be done in a transaction
-    const session = await BudgetOfficerEdit.startSession();
-    session.startTransaction();
-    
+    let session;
     try {
+      session = await BudgetOfficerEdit.startSession();
+      session.startTransaction();
+      
       // Apply Income changes
       for (const item of edit.editedIncome) {
         if (item.changeType === 'added') {
@@ -778,14 +854,34 @@ exports.approveEdit = async (req, res) => {
       res.json({
         success: true,
         message: 'Edits approved and applied successfully',
-        data: edit
+        data: {
+          _id: edit._id,
+          proposalId: edit.proposalId,
+          fiscalYear: edit.fiscalYear,
+          budgetType: edit.budgetType,
+          region: edit.region,
+          department: edit.department,
+          division: edit.division,
+          processBy: edit.processBy,
+          cobExpenditures: edit.cobExpenditures,
+          status: edit.status,
+          editedBy: edit.editedBy,
+          submittedAt: edit.submittedAt,
+          approvedAt: edit.approvedAt,
+          approvedBy: edit.approvedBy,
+          changeSummary: edit.getChangeSummary()
+        }
       });
       
     } catch (error) {
-      await session.abortTransaction();
+      if (session) {
+        await session.abortTransaction();
+      }
       throw error;
     } finally {
-      session.endSession();
+      if (session) {
+        session.endSession();
+      }
     }
     
   } catch (error) {
