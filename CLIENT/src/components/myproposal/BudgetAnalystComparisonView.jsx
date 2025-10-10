@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Box,
   Tabs,
@@ -12,8 +12,60 @@ import ComparisonPersonnelTable from './tables/ComparisonPersonnelTable';
 import ComparisonMOOETable from './tables/ComparisonMOOETable';
 import ComparisonCapitalOutlayTable from './tables/ComparisonCapitalOutlayTable';
 
+const normalizeComparisonEntries = (entries = []) => {
+  if (!Array.isArray(entries)) return [];
+
+  return entries
+    .map((entry) => {
+      if (!entry) return null;
+
+      const { type, edited, original, changes } = entry;
+      const detectedChangeType = edited?.changeType || type || 'unchanged';
+      const changeType = ['added', 'modified', 'deleted', 'unchanged'].includes(detectedChangeType)
+        ? detectedChangeType
+        : 'unchanged';
+
+      const baseRecord = changeType === 'deleted'
+        ? { ...(original || {}) }
+        : { ...(original || {}), ...(edited || {}) };
+
+      const originalValues = edited?.originalValues
+        ? { ...edited.originalValues }
+        : (original ? { ...original } : null);
+
+      return {
+        ...baseRecord,
+        changeType,
+        originalValues,
+        comparisonOriginal: original || null,
+        comparisonEdited: edited || null,
+        comparisonChanges: changes || null
+      };
+    })
+    .filter(Boolean);
+};
+
 const BudgetAnalystComparisonView = ({ comparisonData, proposal }) => {
   const [activeTab, setActiveTab] = useState(0);
+
+  const normalizedData = useMemo(() => {
+    if (!comparisonData) {
+      return {
+        income: [],
+        personnelServices: [],
+        mooe: [],
+        capitalOutlay: []
+      };
+    }
+
+    return {
+      ...comparisonData,
+      income: normalizeComparisonEntries(comparisonData.income),
+      personnelServices: normalizeComparisonEntries(comparisonData.personnelServices),
+      mooe: normalizeComparisonEntries(comparisonData.mooe),
+      capitalOutlay: normalizeComparisonEntries(comparisonData.capitalOutlay)
+    };
+  }, [comparisonData]);
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -29,10 +81,10 @@ const BudgetAnalystComparisonView = ({ comparisonData, proposal }) => {
     }, { added: 0, modified: 0, deleted: 0, unchanged: 0 });
   };
 
-  const incomeChanges = getChangeCounts(comparisonData?.income);
-  const personnelChanges = getChangeCounts(comparisonData?.personnelServices);
-  const mooeChanges = getChangeCounts(comparisonData?.mooe);
-  const capitalOutlayChanges = getChangeCounts(comparisonData?.capitalOutlay);
+  const incomeChanges = getChangeCounts(normalizedData.income);
+  const personnelChanges = getChangeCounts(normalizedData.personnelServices);
+  const mooeChanges = getChangeCounts(normalizedData.mooe);
+  const capitalOutlayChanges = getChangeCounts(normalizedData.capitalOutlay);
 
   const renderChangeChips = (changes) => (
     <Box sx={{ display: 'flex', gap: 0.5, ml: 1 }}>
@@ -64,7 +116,7 @@ const BudgetAnalystComparisonView = ({ comparisonData, proposal }) => {
           <Tab 
             label={
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <span>Income ({comparisonData?.income?.length || 0})</span>
+                <span>Income ({normalizedData.income.length})</span>
                 {renderChangeChips(incomeChanges)}
               </Box>
             }
@@ -73,7 +125,7 @@ const BudgetAnalystComparisonView = ({ comparisonData, proposal }) => {
           <Tab 
             label={
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <span>Personnel Services ({comparisonData?.personnelServices?.length || 0})</span>
+                <span>Personnel Services ({normalizedData.personnelServices.length})</span>
                 {renderChangeChips(personnelChanges)}
               </Box>
             }
@@ -82,7 +134,7 @@ const BudgetAnalystComparisonView = ({ comparisonData, proposal }) => {
           <Tab 
             label={
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <span>MOOE ({comparisonData?.mooe?.length || 0})</span>
+                <span>MOOE ({normalizedData.mooe.length})</span>
                 {renderChangeChips(mooeChanges)}
               </Box>
             }
@@ -91,7 +143,7 @@ const BudgetAnalystComparisonView = ({ comparisonData, proposal }) => {
           <Tab 
             label={
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <span>Capital Outlay ({comparisonData?.capitalOutlay?.length || 0})</span>
+                <span>Capital Outlay ({normalizedData.capitalOutlay.length})</span>
                 {renderChangeChips(capitalOutlayChanges)}
               </Box>
             }
@@ -103,16 +155,16 @@ const BudgetAnalystComparisonView = ({ comparisonData, proposal }) => {
       {/* Comparison Tables */}
       <Box sx={{ minHeight: 400 }}>
         {activeTab === 0 && (
-          <ComparisonIncomeTable data={comparisonData?.income || []} />
+          <ComparisonIncomeTable data={normalizedData.income} />
         )}
         {activeTab === 1 && (
-          <ComparisonPersonnelTable data={comparisonData?.personnelServices || []} />
+          <ComparisonPersonnelTable data={normalizedData.personnelServices} />
         )}
         {activeTab === 2 && (
-          <ComparisonMOOETable data={comparisonData?.mooe || []} />
+          <ComparisonMOOETable data={normalizedData.mooe} />
         )}
         {activeTab === 3 && (
-          <ComparisonCapitalOutlayTable data={comparisonData?.capitalOutlay || []} />
+          <ComparisonCapitalOutlayTable data={normalizedData.capitalOutlay} />
         )}
       </Box>
 

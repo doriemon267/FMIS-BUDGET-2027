@@ -580,20 +580,30 @@ const HierarchicalUserAssignmentPage = () => {
       return;
     }
 
+    // Build payload with conditional fields based on assignment level
     const payload = {
       userId: formData.userId,
       userName: formData.userName,
       email: formData.email,
       assignmentLevel: normalizedLevel,
       accessScope: normalizedLevel,
-      // Map officeId to departmentId and responsibilityCenterName to divisionName for server compatibility
-      // Handle composite officeId for regional offices (format: originalDeptId_regionId)
-      departmentId: formData.officeId.includes('_') ? formData.officeId.split('_')[0] : formData.officeId,
-      divisionName: formData.responsibilityCenterName,
-      officeId: formData.officeId,
-      responsibilityCenterName: formData.responsibilityCenterName,
       rolePermissions: formData.rolePermissions
     };
+
+    // Only include organizational fields when they have values
+    // Map officeId to departmentId and responsibilityCenterName to divisionName for server compatibility
+    if (formData.officeId && formData.officeId.trim()) {
+      // Handle composite officeId for regional offices (format: originalDeptId_regionId)
+      payload.departmentId = formData.officeId.includes('_') 
+        ? formData.officeId.split('_')[0] 
+        : formData.officeId;
+      payload.officeId = formData.officeId;
+    }
+
+    if (formData.responsibilityCenterName && formData.responsibilityCenterName.trim()) {
+      payload.divisionName = formData.responsibilityCenterName;
+      payload.responsibilityCenterName = formData.responsibilityCenterName;
+    }
 
     createOrUpdateMutation.mutate(payload);
   };
@@ -928,9 +938,13 @@ const HierarchicalUserAssignmentPage = () => {
                 <TextField
                   fullWidth
                   label="User Role"
-                  value={formData.userRole || ''}
-                  onChange={(e) => handleFormChange('userRole', e.target.value)}
-                  helperText="Enter the user's role (e.g., BUDGET ANALYST, BUDGET OFFICER)"
+                  value={(() => {
+                    // Display the role label based on the role value
+                    const role = USER_ROLES.find(r => r.value === formData.userRole);
+                    return role ? role.label : formData.userRole || '';
+                  })()}
+                  disabled={true}
+                  helperText="Role is automatically determined by Assignment Level and permissions"
                   inputProps={{ 'aria-label': 'User Role' }}
                 />
               </Grid>
@@ -947,6 +961,7 @@ const HierarchicalUserAssignmentPage = () => {
                     // Clear office and responsibility center when assignment level changes
                     handleFormChange('officeId', '');
                     handleFormChange('responsibilityCenterName', '');
+                    
                     // Enforce role applicability (Option A: strict disable)
                     const nextRoles = { ...(formData.workflowRoles || {}) };
                     const isRC = newLevel === 'RESPONSIBILITY_CENTER';
@@ -971,6 +986,8 @@ const HierarchicalUserAssignmentPage = () => {
                         ManageUsers: false,
                         ManageSettings: false
                       });
+                      // Update user role
+                      handleFormChange('userRole', 'BUDGET_ANALYST');
                     } else if (isRC) {
                       // Only RC roles allowed
                       setRole('divisionCreator', !!nextRoles.divisionCreator);
@@ -992,6 +1009,8 @@ const HierarchicalUserAssignmentPage = () => {
                           ManageSettings: false
                         });
                       }
+                      // Update user role
+                      handleFormChange('userRole', 'BUDGET_ANALYST');
                     } else if (isOffice) {
                       // Office roles allowed; RC creator optional -> keep selection
                       setRole('officeCreator', !!nextRoles.officeCreator);
@@ -1014,6 +1033,8 @@ const HierarchicalUserAssignmentPage = () => {
                           ManageSettings: false
                         });
                       }
+                      // Update user role - default to BUDGET_COORDINATOR, will be updated based on permissions
+                      handleFormChange('userRole', 'BUDGET_COORDINATOR');
                     } else if (isFull) {
                       // All roles permitted; automatically grant all workflow roles for FULL access
                       Object.keys(nextRoles).forEach(k => { nextRoles[k] = true; });
@@ -1028,6 +1049,8 @@ const HierarchicalUserAssignmentPage = () => {
                         ManageUsers: true,
                         ManageSettings: true
                       });
+                      // Update user role - FULL with ManageSettings = BUDGET_ADMIN
+                      handleFormChange('userRole', 'BUDGET_ADMIN');
                     }
 
                     handleFormChange('workflowRoles', nextRoles);
@@ -1439,20 +1462,25 @@ const HierarchicalUserAssignmentPage = () => {
                                 onClick={async () => {
                                   setEditingAssignment(assignment);
                                   
-                                  // ✅ Fetch user's actual role from database
-                                  let actualUserRole = assignment.userRole || '';
-                                  try {
-                                    if (!isTokenExpired(jwtToken)) {
-                                      const userRes = await api.get(`/api/hierarchical-rbac/user-lookup/${assignment.userId}`);
-                                      const userData = userRes.data?.data;
-                                      
-                                      // Get the first role from the user's actual roles array
-                                      if (userData?.roles && userData.roles.length > 0) {
-                                        actualUserRole = userData.roles[0]; // e.g., "BUDGET ANALYST"
-                                      }
+                                  // ✅ Infer role from assignment level and permissions (same logic as table display)
+                                  let inferredRole = '';
+                                  const level = assignment.assignmentLevel;
+                                  const perms = assignment.rolePermissions || {};
+                                  
+                                  if (level === 'RESPONSIBILITY_CENTER' || level === 'DIVISION') {
+                                    inferredRole = 'BUDGET_ANALYST';
+                                  } else if (level === 'OFFICE' || level === 'DEPARTMENT') {
+                                    if (perms.ApproveProposals) {
+                                      inferredRole = 'BUDGET_OFFICER';
+                                    } else {
+                                      inferredRole = 'BUDGET_COORDINATOR';
                                     }
-                                  } catch (error) {
-                                    console.log('Could not fetch user role, using saved role');
+                                  } else if (level === 'FULL') {
+                                    if (perms.ManageSettings) {
+                                      inferredRole = 'BUDGET_ADMIN';
+                                    } else {
+                                      inferredRole = 'BUDGET_MANAGER';
+                                    }
                                   }
                                   
                                   // Extract only the necessary form fields from the assignment
@@ -1468,7 +1496,7 @@ const HierarchicalUserAssignmentPage = () => {
                                     userId: assignment.userId,
                                     userName: assignment.userName,
                                     email: assignment.email,
-                                    userRole: actualUserRole,
+                                    userRole: inferredRole,
                                     assignmentLevel: reverseAssignmentLevelMap[assignment.assignmentLevel] || assignment.assignmentLevel,
                                     officeId: assignment.officeId || assignment.departmentId || '', // Use officeId if available, otherwise departmentId
                                     responsibilityCenterName: assignment.divisionName || '',

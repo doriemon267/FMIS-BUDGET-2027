@@ -6,7 +6,8 @@ import {
   Button,
   Alert,
   CircularProgress,
-  Typography
+  Typography,
+  TextField
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
 import SendIcon from '@mui/icons-material/Send';
@@ -21,6 +22,7 @@ const BudgetOfficerEditView = ({ proposalData, proposal, onSaveSuccess }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [comments, setComments] = useState('');
   
   // State for each table
   const [incomeData, setIncomeData] = useState([]);
@@ -67,12 +69,14 @@ const BudgetOfficerEditView = ({ proposalData, proposal, onSaveSuccess }) => {
         setPersonnelData(proposalData.editedData.personnelServices || []);
         setMooeData(proposalData.editedData.mooe || []);
         setCapitalOutlayData(mergedCapitalOutlay);
+        setComments(proposalData.editComments || ''); // Load existing comments
       } else {
         // No existing edit, use fresh data
         setIncomeData(proposalData.income || []);
         setPersonnelData(proposalData.personnelServices || []);
         setMooeData(proposalData.mooe || []);
         setCapitalOutlayData(proposalData.capitalOutlay || []);
+        setComments(''); // Clear comments for new edit
       }
     }
   }, [proposalData]);
@@ -84,10 +88,11 @@ const BudgetOfficerEditView = ({ proposalData, proposal, onSaveSuccess }) => {
   const prepareEditData = () => {
     return {
       proposalId: proposal._id,
-      income: incomeData,
-      personnelServices: personnelData,
-      mooe: mooeData,
-      capitalOutlay: capitalOutlayData
+      editedIncome: incomeData,
+      editedPersonnelServices: personnelData,
+      editedMOOE: mooeData,
+      editedCapitalOutlay: capitalOutlayData,
+      comments: comments.trim() || undefined // Optional comments field
     };
   };
 
@@ -186,6 +191,21 @@ const BudgetOfficerEditView = ({ proposalData, proposal, onSaveSuccess }) => {
             onChange={setCapitalOutlayData}
           />
         )}
+      </Box>
+
+      {/* Comments Section */}
+      <Box sx={{ mt: 3 }}>
+        <TextField
+          fullWidth
+          multiline
+          rows={3}
+          label="Comments (Optional)"
+          placeholder="Add any notes or comments about your edits..."
+          value={comments}
+          onChange={(e) => setComments(e.target.value)}
+          variant="outlined"
+          helperText="These comments will be visible to Budget Analysts when reviewing your edits"
+        />
       </Box>
 
       {/* Action Buttons */}

@@ -234,6 +234,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
   const [newOutlays, setNewOutlays] = useState({});
   const [addingCategoryId, setAddingCategoryId] = useState(null);
   const [errors, setErrors] = useState({});
+  const [sublineItems, setSublineItems] = useState({});
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState(null);
   const tableContainerRef = useRef(null);

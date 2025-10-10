@@ -489,17 +489,30 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
                   IsBudgetOfficer={isBudgetOfficer ? 'Yes' : 'No'}, 
                   IsBudgetAnalyst={isBudgetAnalyst ? 'Yes' : 'No'},
                   HasProposalData={proposalData ? 'Yes' : 'No'},
-                  HasComparisonData={comparisonData ? 'Yes' : 'No'}
+                  HasComparisonData={comparisonData ? 'Yes' : 'No'},
+                  ProposalStatus={proposal?.status}
                 </Typography>
               </Alert>
             )}
 
-            {isBudgetOfficer && proposalData && (
+            {/* Show edit view only if Budget Officer AND proposal is not already approved */}
+            {isBudgetOfficer && proposalData && proposal?.status !== 'Office Approved' && proposal?.status !== 'Approved' && (
               <BudgetOfficerEditView 
                 proposalData={proposalData}
                 proposal={proposal}
                 onSaveSuccess={handleClose}
               />
+            )}
+
+            {/* Show message if Budget Officer but proposal is already approved */}
+            {isBudgetOfficer && proposalData && (proposal?.status === 'Office Approved' || proposal?.status === 'Approved') && (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                  <strong>This proposal has already been approved and cannot be edited.</strong>
+                  <br />
+                  Status: {proposal?.status}
+                </Typography>
+              </Alert>
             )}
 
             {isBudgetAnalyst && comparisonData && (

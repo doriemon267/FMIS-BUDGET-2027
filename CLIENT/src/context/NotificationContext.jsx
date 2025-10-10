@@ -1,7 +1,6 @@
-import React, { createContext, useContext } from "react";
+import React, { createContext, useContext, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../config/api";
-import { useNavigate } from "react-router-dom";
 
 const NotificationContext = createContext({
   notifications: [],
@@ -9,11 +8,10 @@ const NotificationContext = createContext({
 });
 
 export const NotificationProvider = ({ children }) => {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   // Fetch notifications using useQuery
-  const { data: notifications = [], error } = useQuery({
+  const { data: response } = useQuery({
     queryKey: ["notifications"],
     queryFn: async () => {
       const response = await api.get("/notifications");
@@ -21,14 +19,37 @@ export const NotificationProvider = ({ children }) => {
     },
   });
 
+  const normalizedNotifications = useMemo(() => {
+    if (!response) return { contract: [] };
+
+    const rawList = Array.isArray(response)
+      ? response
+      : Array.isArray(response.data)
+        ? response.data
+        : Array.isArray(response?.data?.data)
+          ? response.data.data
+          : Array.isArray(response?.contract)
+            ? response.contract
+            : [];
+
+    const contract = rawList.map((item) => ({
+      ...item,
+      _id: item._id || item.id,
+      isRead: String(item.status || "").toUpperCase() === "READ",
+      message: item.message || item.title || "",
+      payor: item.payor || item.title || "",
+    }));
+
+    return { contract };
+  }, [response]);
+
   // Mark notification as read using useMutation
   const { mutate: markNotificationAsRead } = useMutation({
     mutationFn: async (id) => {
-      return await api.get(`/notifications/${id}`);
+      await api.post("/notifications/mark-read", { ids: [id] });
+      return id;
     },
-    onSuccess: (res) => {
-      navigate(`?_id=${res.data.contract_id}`, { replace: true });
-      // Invalidate the query to refresh the data
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
     onError: (error) => {
@@ -39,7 +60,7 @@ export const NotificationProvider = ({ children }) => {
   return (
     <NotificationContext.Provider
       value={{
-        notifications,
+        notifications: normalizedNotifications,
         markNotificationAsRead,
       }}
     >
