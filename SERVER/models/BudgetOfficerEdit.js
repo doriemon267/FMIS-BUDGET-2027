@@ -34,7 +34,8 @@ const budgetOfficerEditSchema = new mongoose.Schema({
   },
   cobExpenditures: {
     type: String,
-    required: true
+    required: false,
+    default: ''
   },
   
   // Status of the edit

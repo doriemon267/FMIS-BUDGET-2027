@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const { resolveUserIdentity, getClientIp } = require("../utils/requestContext");
 module.exports = async (req, res, next) => {
   try {
     // Allow CORS preflight to pass through
@@ -15,6 +16,8 @@ module.exports = async (req, res, next) => {
     if (!payload) {
       return res.status(401).json({ error: "Access denied." });
     }
+    // Capture client IP early for downstream logging
+    req.clientIp = getClientIp(req);
     // Extract access token (if needed)
     const accessToken = payload.accessToken;
     // Check if ACCOUNT_USER_API_URL is defined
@@ -95,6 +98,23 @@ module.exports = async (req, res, next) => {
         Roles: userRoles,
         name: payload.name || payload.username || String(userId)
       };
+      const identity = await resolveUserIdentity({ req });
+      req.identity = identity;
+      if (req.user) {
+        if (identity.userId && identity.userId !== req.user.userId) {
+          req.user.userId = identity.userId;
+          req.user.id = identity.userId;
+        }
+        if (identity.displayName) {
+          req.user.displayName = identity.displayName;
+          req.user.fullName = identity.displayName;
+          req.user.name = identity.displayName;
+        }
+        if (identity.email && !req.user.email) {
+          req.user.email = identity.email;
+        }
+        req.user.identitySource = identity.source;
+      }
       return next();
     }
     // Fetch user data from external API
@@ -106,6 +126,23 @@ module.exports = async (req, res, next) => {
     }
     const user = await userRes.json();
     req.user = user; // Attach user to request
+    const identity = await resolveUserIdentity({ req });
+    req.identity = identity;
+    if (req.user) {
+      if (identity.userId) {
+        req.user.userId = identity.userId;
+        req.user.id = identity.userId;
+      }
+      if (identity.displayName) {
+        req.user.displayName = identity.displayName;
+        req.user.fullName = identity.displayName;
+        req.user.name = identity.displayName;
+      }
+      if (identity.email && !req.user.email) {
+        req.user.email = identity.email;
+      }
+      req.user.identitySource = identity.source;
+    }
     next();
   } catch (error) {
     console.error("❌ Auth Middleware Error:", error.message);

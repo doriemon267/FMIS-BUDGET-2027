@@ -151,8 +151,9 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
     // Handle backward compatibility: map new field names to old ones
     const effectiveAssignmentLevel = assignmentLevel || accessScope;
     const normalizedEffectiveLevel = (effectiveAssignmentLevel || '').toUpperCase();
-    const effectiveDepartmentId = departmentId || officeId;
-    const effectiveDivisionName = divisionName || responsibilityCenterName;
+    // Only use non-empty values for organizational fields
+    const effectiveDepartmentId = (departmentId && departmentId.trim()) || (officeId && officeId.trim()) || null;
+    const effectiveDivisionName = (divisionName && divisionName.trim()) || (responsibilityCenterName && responsibilityCenterName.trim()) || null;
 
     // Map new assignment levels to old model enum values
     let modelAssignmentLevel = normalizedEffectiveLevel;
@@ -187,31 +188,60 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
         code: 'INVALID_REGION_ID'
       });
     }
-    if (effectiveDepartmentId && typeof effectiveDepartmentId === 'string' && effectiveDepartmentId.trim() && !mongoose.Types.ObjectId.isValid(effectiveDepartmentId)) {
+    if (effectiveDepartmentId && !mongoose.Types.ObjectId.isValid(effectiveDepartmentId)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid departmentId format',
+        message: 'Invalid departmentId/officeId format',
         code: 'INVALID_DEPARTMENT_ID'
       });
     }
     // Build hierarchical assignment based on level
+    console.log('🔍 Building hierarchical assignment with:', {
+      assignmentLevel: normalizedEffectiveLevel,
+      regionId,
+      departmentId: effectiveDepartmentId,
+      divisionName: effectiveDivisionName
+    });
+    
     const assignmentData = await buildHierarchicalAssignment({
       assignmentLevel: normalizedEffectiveLevel,
       regionId,
       departmentId: effectiveDepartmentId,
       divisionName: effectiveDivisionName
     });
+    
     if (!assignmentData.success) {
+      console.error('❌ Failed to build hierarchical assignment:', assignmentData);
       return res.status(400).json(assignmentData);
     }
+    
+    console.log('✅ Hierarchical assignment built successfully:', assignmentData);
     // Find existing assignment or create new one
     let assignment = await HierarchicalUserAssignment.findOne({ userId, isActive: true });
 
     const approvalLevels = ['REGION', 'FULL', 'OFFICE', 'RESPONSIBILITY_CENTER'];
+    
+    // Define valid workflow roles based on schema enum
+    const VALID_WORKFLOW_ROLES = [
+      'divisionCreator', 'divisionApprover',
+      'departmentCreator', 'departmentConsolidator', 'departmentSubmission',
+      'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier',
+      'regionCreator', 'regionFinalVerifier'
+    ];
+    
     const hasExplicitWorkflowRoles = Array.isArray(req.body.workflowRoles);
     const sanitizedWorkflowRoles = hasExplicitWorkflowRoles
-      ? (req.body.workflowRoles || []).filter(role => typeof role === 'string' && role.trim())
+      ? (req.body.workflowRoles || [])
+          .filter(role => typeof role === 'string' && role.trim())
+          .filter(role => VALID_WORKFLOW_ROLES.includes(role)) // Filter out invalid roles
       : [];
+    
+    console.log('🔍 Workflow roles sanitization:', {
+      received: req.body.workflowRoles,
+      sanitized: sanitizedWorkflowRoles,
+      hasExplicit: hasExplicitWorkflowRoles
+    });
+    
     const assignmentPayload = {
       userId,
       userName,
@@ -244,6 +274,22 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
     if (assignment) {
       // Update existing assignment
       Object.assign(assignment, assignmentPayload);
+      
+      // Clean up any invalid workflow roles from existing assignment
+      if (Array.isArray(assignment.workflowRoles)) {
+        const originalRoles = [...assignment.workflowRoles];
+        assignment.workflowRoles = assignment.workflowRoles.filter(role => 
+          VALID_WORKFLOW_ROLES.includes(role)
+        );
+        
+        if (originalRoles.length !== assignment.workflowRoles.length) {
+          console.log('🧹 Cleaned up invalid workflow roles:', {
+            original: originalRoles,
+            cleaned: assignment.workflowRoles,
+            removed: originalRoles.filter(r => !VALID_WORKFLOW_ROLES.includes(r))
+          });
+        }
+      }
     } else {
       // Create new assignment
       assignmentPayload.createdBy = adminUserId;
@@ -251,10 +297,28 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
     }
 
     // Auto-configure workflow roles and approval flag based on assignment level
-    applyOfficeDefaults(assignment, sanitizedWorkflowRoles, normalizedEffectiveLevel, hasExplicitWorkflowRoles);
-    ensureApprovalFlagConsistency(assignment, sanitizedWorkflowRoles, normalizedEffectiveLevel, hasExplicitWorkflowRoles);
-    await assignment.save();
+    try {
+      applyOfficeDefaults(assignment, sanitizedWorkflowRoles, normalizedEffectiveLevel, hasExplicitWorkflowRoles);
+      ensureApprovalFlagConsistency(assignment, sanitizedWorkflowRoles, normalizedEffectiveLevel, hasExplicitWorkflowRoles);
+      
+      console.log('💾 Saving assignment:', {
+        userId: assignment.userId,
+        assignmentLevel: assignment.assignmentLevel,
+        regionId: assignment.regionId,
+        departmentId: assignment.departmentId,
+        divisionName: assignment.divisionName
+      });
+      
+      await assignment.save();
+      console.log('✅ Assignment saved successfully');
+    } catch (saveError) {
+      console.error('❌ Error saving assignment:', saveError);
+      throw saveError;
+    }
 
+    // Get consolidation info before converting to lean object
+    const consolidationInfo = assignment.getConsolidationTarget();
+    
     // Populate the result for response
     const populatedAssignment = await HierarchicalUserAssignment
       .findById(assignment._id)
@@ -284,15 +348,29 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       success: true,
       message: `Hierarchical assignment ${assignment.isNew ? 'created' : 'updated'} successfully`,
       assignment: populatedAssignment,
-      consolidationInfo: assignment.getConsolidationTarget(),
+      consolidationInfo: consolidationInfo,
       hierarchicalStructure: assignmentData.hierarchicalStructure
     });
   } catch (error) {
     console.error('🚨 Error managing hierarchical assignment:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Request body:', req.body);
+    
+    // Provide more specific error messages
+    let errorMessage = 'Error managing hierarchical assignment';
+    if (error.name === 'ValidationError') {
+      errorMessage = 'Validation error: ' + Object.values(error.errors).map(e => e.message).join(', ');
+    } else if (error.name === 'CastError') {
+      errorMessage = `Invalid ${error.path}: ${error.value}`;
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    
     return res.status(500).json({
       success: false,
-      message: 'Error managing hierarchical assignment',
-      error: error.message
+      message: errorMessage,
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 };
@@ -939,7 +1017,7 @@ module.exports = {
 const APPROVAL_ENABLED_LEVELS = ['REGION', 'FULL', 'OFFICE'];
 const DEFAULT_WORKFLOW_ROLES_BY_LEVEL = {
   REGION: ['regionCreator', 'regionFinalVerifier', 'officeCreator', 'officeConsolidator', 'officeSubmission'],
-  FULL: ['regionCreator', 'regionFinalVerifier', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier','superAdmin'],
+  FULL: ['regionCreator', 'regionFinalVerifier', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier'],
   OFFICE: ['officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier'],
   DEPARTMENT: ['departmentCreator', 'departmentConsolidator', 'departmentSubmission'],
   DIVISION: ['divisionCreator', 'divisionApprover'],

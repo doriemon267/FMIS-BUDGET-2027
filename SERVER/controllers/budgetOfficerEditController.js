@@ -7,6 +7,44 @@ const MOOE = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const CapitalOutlayDetails = require('../models/CapitalOutlayDetails');
 const { createNotification } = require('./notificationController');
+const { resolveUserIdentity, getClientIp } = require('../utils/requestContext');
+
+const buildRequestAuditContext = async (req) => {
+  const user = req.user || {};
+  const identity = req.identity || await resolveUserIdentity({ req });
+
+  const usernameArray = Array.isArray(user.Username)
+    ? user.Username
+    : user.Username
+    ? [user.Username]
+    : [];
+
+  const candidateIds = [
+    identity?.userId,
+    user.userId,
+    user.id,
+    user.Id,
+    user.userCode,
+    usernameArray[0],
+    user.username,
+    user.name
+  ].filter(Boolean);
+
+  const userId = candidateIds.length ? String(candidateIds[0]).trim() : null;
+  const userName = (identity?.displayName || user.displayName || user.fullName || user.name || user.username || userId || 'Unknown user').toString();
+  const email = identity?.email || user.email || null;
+  const ipAddress = req.clientIp || getClientIp(req);
+  const roles = Array.isArray(user.Roles) ? user.Roles : user.Roles ? [user.Roles] : [];
+
+  return {
+    userId,
+    userName,
+    email,
+    ipAddress,
+    roles,
+    identitySource: identity?.source || user.identitySource || null
+  };
+};
 
 /**
  * Deep equality comparison function
@@ -63,6 +101,15 @@ exports.getProposalForEdit = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Proposal not found'
+      });
+    }
+    
+    // Check if proposal is already approved - prevent further editing
+    if (proposal.status === 'Office Approved' || proposal.status === 'Approved') {
+      return res.status(403).json({
+        success: false,
+        message: 'This proposal has already been approved and cannot be edited',
+        proposalStatus: proposal.status
       });
     }
     
@@ -173,6 +220,11 @@ exports.getProposalForEdit = async (req, res) => {
  */
 exports.saveDraftEdit = async (req, res) => {
   try {
+    console.log('=== Save Draft Edit Request ===');
+    console.log('Request body keys:', Object.keys(req.body));
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    console.log('User object:', req.user);
+    
     const {
       proposalId,
       editedIncome,
@@ -182,9 +234,28 @@ exports.saveDraftEdit = async (req, res) => {
       comments
     } = req.body;
     
-    const userId = req.user.userId;
-    const userName = req.user.name || req.user.username;
-    const userEmail = req.user.email;
+    console.log('Extracted data:', {
+      proposalId,
+      editedIncomeLength: editedIncome?.length,
+      editedPersonnelServicesLength: editedPersonnelServices?.length,
+      editedMOOELength: editedMOOE?.length,
+      editedCapitalOutlayLength: editedCapitalOutlay?.length,
+      comments
+    });
+    
+    const auditContext = await buildRequestAuditContext(req);
+    
+    if (!auditContext.userId) {
+      console.error('ERROR: Unable to resolve user identity for request');
+      return res.status(401).json({
+        success: false,
+        message: 'User authentication required'
+      });
+    }
+    
+  const { userId, userName, email: userEmail, ipAddress, roles } = auditContext;
+    
+    console.log('User info:', { userId, userName, userEmail, ipAddress });
     
     // Find the proposal
     const proposal = await Proposal.findById(proposalId);
@@ -194,6 +265,26 @@ exports.saveDraftEdit = async (req, res) => {
         message: 'Proposal not found'
       });
     }
+    
+    // Check if proposal is already approved - prevent further editing
+    if (proposal.status === 'Office Approved' || proposal.status === 'Approved') {
+      return res.status(403).json({
+        success: false,
+        message: 'This proposal has already been approved and cannot be edited',
+        proposalStatus: proposal.status
+      });
+    }
+    
+    console.log('Proposal found:', {
+      _id: proposal._id,
+      fiscalYear: proposal.fiscalYear,
+      budgetType: proposal.budgetType,
+      region: proposal.region,
+      department: proposal.department,
+      division: proposal.division,
+      processBy: proposal.processBy,
+      cobExpenditures: proposal.cobExpenditures
+    });
     
     // Check if there's an existing draft
     let budgetOfficerEdit = await BudgetOfficerEdit.findOne({
@@ -219,7 +310,7 @@ exports.saveDraftEdit = async (req, res) => {
         department: proposal.department,
         division: proposal.division,
         processBy: proposal.processBy,
-        cobExpenditures: proposal.cobExpenditures,
+        cobExpenditures: proposal.cobExpenditures || '',
         status: 'Draft',
         editedIncome: editedIncome || [],
         editedPersonnelServices: editedPersonnelServices || [],
@@ -233,6 +324,13 @@ exports.saveDraftEdit = async (req, res) => {
         }
       });
     }
+    
+    console.log('BudgetOfficerEdit object created/updated:', {
+      _id: budgetOfficerEdit._id,
+      proposalId: budgetOfficerEdit.proposalId,
+      status: budgetOfficerEdit.status,
+      cobExpenditures: budgetOfficerEdit.cobExpenditures
+    });
     
     await budgetOfficerEdit.save();
     
@@ -251,11 +349,11 @@ exports.saveDraftEdit = async (req, res) => {
         userId,
         userName,
         email: userEmail,
-        role: 'BUDGET_OFFICER'
+        role: roles && roles.length ? roles[0] : 'BUDGET_OFFICER'
       },
       summary: 'Saved draft edits',
       comments,
-      ipAddress: req.ip,
+      ipAddress,
       userAgent: req.get('user-agent')
     });
     
@@ -281,11 +379,21 @@ exports.saveDraftEdit = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error saving draft edit:', error);
+    console.error('=== Error saving draft edit ===');
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    if (error.errors) {
+      console.error('Validation errors:', error.errors);
+    }
     res.status(500).json({
       success: false,
       message: 'Failed to save draft',
-      error: error.message
+      error: error.message,
+      details: error.errors ? Object.keys(error.errors).map(key => ({
+        field: key,
+        message: error.errors[key].message
+      })) : undefined
     });
   }
 };
@@ -304,9 +412,15 @@ exports.submitEdit = async (req, res) => {
       comments
     } = req.body;
     
-    const userId = req.user.userId;
-    const userName = req.user.name || req.user.username;
-    const userEmail = req.user.email;
+    const auditContext = await buildRequestAuditContext(req);
+    if (!auditContext.userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'User authentication required'
+      });
+    }
+    
+    const { userId, userName, email: userEmail, ipAddress, roles } = auditContext;
     
     // Find the proposal
     const proposal = await Proposal.findById(proposalId);
@@ -314,6 +428,29 @@ exports.submitEdit = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Proposal not found'
+      });
+    }
+    
+    // Check if proposal is already approved - prevent further editing
+    if (proposal.status === 'Office Approved' || proposal.status === 'Approved') {
+      return res.status(403).json({
+        success: false,
+        message: 'This proposal has already been approved and cannot be submitted again',
+        proposalStatus: proposal.status
+      });
+    }
+    
+    // Check if there's already a submitted or approved edit for this proposal
+    const existingSubmittedEdit = await BudgetOfficerEdit.findOne({
+      proposalId,
+      status: { $in: ['Submitted', 'Approved'] }
+    });
+    
+    if (existingSubmittedEdit) {
+      return res.status(400).json({
+        success: false,
+        message: 'This proposal already has a submitted edit. Cannot submit again.',
+        existingEditStatus: existingSubmittedEdit.status
       });
     }
     
@@ -342,7 +479,7 @@ exports.submitEdit = async (req, res) => {
         department: proposal.department,
         division: proposal.division,
         processBy: proposal.processBy,
-        cobExpenditures: proposal.cobExpenditures,
+        cobExpenditures: proposal.cobExpenditures || '',
         status: 'Submitted',
         editedIncome: editedIncome || [],
         editedPersonnelServices: editedPersonnelServices || [],
@@ -390,11 +527,11 @@ exports.submitEdit = async (req, res) => {
         userId,
         userName,
         email: userEmail,
-        role: 'BUDGET_OFFICER'
+        role: roles && roles.length ? roles[0] : 'BUDGET_OFFICER'
       },
       summary: 'Submitted edits for approval',
       comments,
-      ipAddress: req.ip,
+      ipAddress,
       userAgent: req.get('user-agent')
     });
     
@@ -566,7 +703,7 @@ exports.getComparisonData = async (req, res) => {
       Income.find(queryParams).lean(),
       PersonnelServices.find(queryParams).lean(),
       MOOE.find(queryParams).lean(),
-      CapitalOutlay.find(queryParams).populate('category', 'name').lean()
+  CapitalOutlay.find(queryParams).populate('category', 'categoryName name sublineItems').lean()
     ]);
     
     // Fetch CapitalOutlayDetails for comparison
@@ -593,81 +730,142 @@ exports.getComparisonData = async (req, res) => {
           income: totalIncome || co.income || 0,
           subsidy: totalSubsidy || co.subsidy || 0,
           cost: totalIncome + totalSubsidy,
-          categoryName: co.category?.name || ''
+          categoryName: co.category?.categoryName || co.categoryName || co.category?.name || ''
         };
       })
     );
     
     // Helper function to compare and highlight changes
-    const compareData = (original, edited) => {
+    const compareData = (original = [], edited = []) => {
       const comparison = [];
-      
-      // Create a map of original items by ID
-      const originalMap = new Map(original.map(item => [item._id.toString(), item]));
-      
-      // Process edited items
+      const originalMap = new Map();
+      const processedOriginalIds = new Set();
+
+      original.forEach(item => {
+        if (item?._id) {
+          originalMap.set(item._id.toString(), item);
+        }
+      });
+
+      const sanitizeKey = (key) => (
+        ['_id', 'originalId', 'changeType', 'originalValues', '__v', 'createdAt', 'updatedAt'].includes(key)
+      );
+
       edited.forEach(editedItem => {
-        const originalItem = editedItem.originalId 
-          ? originalMap.get(editedItem.originalId.toString())
-          : null;
-        
-        if (!originalItem) {
-          // New item
+        const changeType = editedItem?.changeType || (editedItem?.originalId ? 'modified' : 'added');
+        let matchKey = null;
+        let originalItem = null;
+
+        if (editedItem?.originalId) {
+          matchKey = editedItem.originalId.toString();
+          originalItem = originalMap.get(matchKey) || null;
+        }
+
+        if (!originalItem && editedItem?._id) {
+          const fallbackKey = editedItem._id.toString();
+          if (originalMap.has(fallbackKey)) {
+            matchKey = fallbackKey;
+            originalItem = originalMap.get(fallbackKey) || null;
+            if (!editedItem.originalId) {
+              editedItem.originalId = fallbackKey;
+            }
+          }
+        }
+
+        if ((changeType === 'added' && !originalItem) || (!originalItem && !matchKey)) {
           comparison.push({
             type: 'added',
             edited: editedItem,
             original: null
           });
-        } else {
-          // Modified item - find changed fields
-          const changes = {};
-          Object.keys(editedItem).forEach(key => {
-            if (key !== '_id' && key !== 'originalId' && key !== 'changeType' && key !== 'originalValues') {
-              if (!isEqual(editedItem[key], originalItem[key])) {
-                changes[key] = {
-                  old: originalItem[key],
-                  new: editedItem[key],
-                  increased: typeof editedItem[key] === 'number' && typeof originalItem[key] === 'number' 
-                    ? editedItem[key] > originalItem[key]
-                    : null
-                };
-              }
-            }
-          });
-          
+          return;
+        }
+
+        if (changeType === 'deleted' && originalItem) {
           comparison.push({
-            type: editedItem.changeType || 'modified',
-            edited: editedItem,
-            original: originalItem,
-            changes
+            type: 'deleted',
+            edited: null,
+            original: originalItem
           });
-          
-          // Remove from map
-          originalMap.delete(editedItem.originalId.toString());
+          if (matchKey) {
+            processedOriginalIds.add(matchKey);
+            originalMap.delete(matchKey);
+          }
+          return;
+        }
+
+        if (!originalItem) {
+          // If we couldn't match the original but changeType isn't added/deleted, treat as added fallback
+          comparison.push({
+            type: 'added',
+            edited: editedItem,
+            original: null
+          });
+          return;
+        }
+
+        // Prepare original values for comparison if not provided
+        if (!editedItem.originalValues) {
+          editedItem.originalValues = { ...originalItem };
+        }
+
+        const changes = {};
+        const allKeys = new Set([
+          ...Object.keys(originalItem || {}),
+          ...Object.keys(editedItem || {})
+        ]);
+
+        allKeys.forEach(key => {
+          if (sanitizeKey(key)) return;
+          const newValue = editedItem[key];
+          const oldValue = originalItem[key];
+          if (!isEqual(newValue, oldValue)) {
+            changes[key] = {
+              old: oldValue,
+              new: newValue,
+              increased: typeof newValue === 'number' && typeof oldValue === 'number'
+                ? newValue > oldValue
+                : null
+            };
+          }
+        });
+
+        const hasChanges = Object.keys(changes).length > 0;
+        const entryType = changeType === 'unchanged' || !hasChanges ? 'unchanged' : 'modified';
+
+        comparison.push({
+          type: entryType,
+          edited: editedItem,
+          original: originalItem,
+          changes: hasChanges ? changes : undefined
+        });
+
+        if (matchKey) {
+          processedOriginalIds.add(matchKey);
+          originalMap.delete(matchKey);
         }
       });
-      
-      // Remaining items in originalMap are deleted
-      originalMap.forEach(item => {
+
+      // Remaining originals that weren't explicitly processed should be marked as unchanged
+      originalMap.forEach((item, id) => {
+        if (processedOriginalIds.has(id)) return;
         comparison.push({
-          type: 'deleted',
+          type: 'unchanged',
           edited: null,
           original: item
         });
       });
-      
+
       return comparison;
     };
     
     const comparisonData = {
       proposal: proposal.toObject(),
       edit: edit.toObject(),
-      comparisons: {
-        income: compareData(originalIncome, edit.editedIncome),
-        personnelServices: compareData(originalPS, edit.editedPersonnelServices),
-        mooe: compareData(originalMOOE, edit.editedMOOE),
-        capitalOutlay: compareData(originalCO, edit.editedCapitalOutlay)
-      },
+      income: compareData(originalIncome, edit.editedIncome),
+      personnelServices: compareData(originalPS, edit.editedPersonnelServices),
+      mooe: compareData(originalMOOE, edit.editedMOOE),
+      capitalOutlay: compareData(originalCO, edit.editedCapitalOutlay),
       changeSummary: edit.getChangeSummary()
     };
     
@@ -695,9 +893,14 @@ exports.approveEdit = async (req, res) => {
     const { id } = req.params;
     const { comments } = req.body;
     
-    const userId = req.user.userId;
-    const userName = req.user.name || req.user.username;
-    const userEmail = req.user.email;
+    const auditContext = await buildRequestAuditContext(req);
+    if (!auditContext.userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'User authentication required'
+      });
+    }
+    const { userId, userName, email: userEmail, ipAddress, roles } = auditContext;
     
     const edit = await BudgetOfficerEdit.findById(id);
     if (!edit) {
@@ -833,11 +1036,11 @@ exports.approveEdit = async (req, res) => {
           userId,
           userName,
           email: userEmail,
-          role: 'BUDGET_MANAGER'
+          role: roles && roles.length ? roles[0] : 'BUDGET_MANAGER'
         },
         summary: 'Approved Budget Officer edits',
         comments,
-        ipAddress: req.ip,
+        ipAddress,
         userAgent: req.get('user-agent')
       });
       
