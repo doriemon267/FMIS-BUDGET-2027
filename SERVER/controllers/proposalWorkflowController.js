@@ -160,6 +160,34 @@ exports.submitDirectToManager = async (req, res) => {
     // Find the proposal
     let proposal = await Proposal.findById(proposalId);
 
+    // If not found and proposalId looks like a personnel service ID, try to find the consolidated proposal
+    if (!proposal) {
+      console.log('SubmitDirectToManager: Proposal not found by ID, checking if this is a personnel service ID:', proposalId);
+
+      // Check if this ID belongs to a personnel service with Draft status
+      const PersonnelServices = require('../models/PersonnelServices');
+      const personnelRecord = await PersonnelServices.findById(proposalId);
+
+      if (personnelRecord && personnelRecord.status === 'Draft') {
+        console.log('SubmitDirectToManager: Found personnel service record with Draft status, looking for consolidated proposal');
+
+        // Find the consolidated proposal based on organizational criteria
+        proposal = await Proposal.findOne({
+          division: personnelRecord.division,
+          fiscalYear: personnelRecord.fiscalYear,
+          budgetType: personnelRecord.budgetType,
+          region: personnelRecord.region,
+          status: 'Draft'
+        });
+
+        if (proposal) {
+          console.log('SubmitDirectToManager: Found consolidated proposal:', proposal._id);
+        } else {
+          console.log('SubmitDirectToManager: No consolidated proposal found for personnel service criteria');
+        }
+      }
+    }
+
     if (!proposal) {
       return res.status(404).json({ success: false, message: 'Proposal not found' });
     }
@@ -250,12 +278,12 @@ exports.submitProposal = async (req, res) => {
     if (!proposal) {
       console.log('Submit: Proposal not found by ID, checking if this is a personnel service ID:', proposalId);
 
-      // Check if this ID belongs to a personnel service with Division Submitted status
+      // Check if this ID belongs to a personnel service with Draft status
       const PersonnelServices = require('../models/PersonnelServices');
       const personnelRecord = await PersonnelServices.findById(proposalId);
 
-      if (personnelRecord && personnelRecord.status === 'Division Submitted') {
-        console.log('Submit: Found personnel service record, looking for consolidated proposal');
+      if (personnelRecord && personnelRecord.status === 'Draft') {
+        console.log('Submit: Found personnel service record with Draft status, looking for consolidated proposal');
 
         // Find the consolidated proposal based on organizational criteria
         proposal = await Proposal.findOne({
@@ -263,7 +291,7 @@ exports.submitProposal = async (req, res) => {
           fiscalYear: personnelRecord.fiscalYear,
           budgetType: personnelRecord.budgetType,
           region: personnelRecord.region,
-          status: 'Division Submitted'
+          status: 'Draft'
         });
 
         if (proposal) {
@@ -637,6 +665,90 @@ exports.returnProposal = async (req, res) => {
   }
 };
 
+// Verify proposal (Budget Officer only) - marks as verified without changing status
+exports.verifyProposal = async (req, res) => {
+  try {
+    const { proposalId, comment } = req.body;
+    const userId = req.user.id;
+    const userName = req.user.FirstName + ' ' + req.user.LastName;
+    const userRoles = req.user.Roles || [];
+
+    if (!userRoles.includes('BUDGET_OFFICER')) {
+      return res.status(403).json({ success: false, message: 'Only Budget Officers can verify proposals' });
+    }
+
+    if (!comment || comment.trim() === '') {
+      return res.status(400).json({ success: false, message: 'Comment is required for verification' });
+    }
+
+    const proposal = await Proposal.findById(proposalId);
+    if (!proposal) {
+      return res.status(404).json({ success: false, message: 'Proposal not found' });
+    }
+
+    // Verify proposal is in correct status
+    if (!['Division Submitted', 'Office'].includes(proposal.status)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Only proposals with status "Division Submitted" or "Office" can be verified' 
+      });
+    }
+
+    const previousStatus = proposal.status;
+
+    // Mark as verified but keep the same status
+    proposal.verifiedByOfficer = {
+      userId,
+      userName,
+      date: new Date(),
+      comment
+    };
+
+    // Add to workflow history
+    proposal.workflowHistory.push({
+      action: 'VERIFY',
+      comment,
+      userId,
+      userName,
+      timestamp: new Date(),
+      previousStatus,
+      newStatus: previousStatus  // Status remains the same
+    });
+
+    await proposal.save();
+
+    // Send notification to submitter
+    const submitterMessage = `Your proposal "${proposal.title}" has been verified by ${userName} with comment: ${comment}`;
+    await sendNotification({
+      recipientUserId: proposal.createdByUserId,
+      title: 'Proposal Verified',
+      message: submitterMessage,
+      entity: 'proposal',
+      recordIds: [proposal._id],
+      org: {
+        region: proposal.region,
+        department: proposal.department,
+        division: proposal.division
+      },
+      createdBy: { userId, name: userName }
+    });
+
+    res.json({
+      success: true,
+      message: 'Proposal verified successfully',
+      proposal: {
+        id: proposal._id,
+        status: proposal.status,
+        verifiedByOfficer: proposal.verifiedByOfficer
+      }
+    });
+
+  } catch (error) {
+    console.error('Error verifying proposal:', error);
+    res.status(500).json({ success: false, message: 'Failed to verify proposal', error: error.message });
+  }
+};
+
 // Bulk approve proposals (Budget Officer only)
 exports.bulkApproveProposals = async (req, res) => {
   try {
@@ -783,6 +895,10 @@ exports.consolidateProposals = async (req, res) => {
     const department = proposals[0].department;
     const region = proposals[0].region;
 
+    // Get Budget Officer's office/department assignment for consolidatedOrigin
+    const userAssignment = req.userHierarchicalAssignment || req.user?.hierarchicalAssignment || {};
+    const officeName = userAssignment.officeName || userAssignment.departmentName || department;
+
     // Create consolidated proposal
     const consolidatedProposal = new Proposal({
       title: consolidatedTitle,
@@ -795,6 +911,7 @@ exports.consolidateProposals = async (req, res) => {
       status: 'Office Submitted',
       workflowLevel: 'MANAGER',
       isConsolidated: true,
+      consolidatedOrigin: officeName,  // Set origin to OFFICE name
       consolidatedProposals: proposals.map(p => ({
         proposalId: p._id,
         title: p.title,

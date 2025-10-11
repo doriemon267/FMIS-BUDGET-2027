@@ -159,6 +159,25 @@ if (typeof saveDraftProposal === 'function') {
 }
 // Manual consolidation route for fixing missing proposals
 proposalRouter.post('/consolidate-proposals', applyHierarchicalFilters, consolidateProposals);
+// Auto-consolidate Draft items into Proposals
+const { consolidateAllDrafts } = require('../utils/autoConsolidateDrafts');
+proposalRouter.post('/consolidate-drafts', async (req, res) => {
+  try {
+    const results = await consolidateAllDrafts();
+    res.status(200).json({
+      success: true,
+      message: `Consolidated ${results.length} Draft proposals`,
+      proposals: results
+    });
+  } catch (error) {
+    console.error('Error consolidating drafts:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to consolidate drafts',
+      error: error.message
+    });
+  }
+});
 // Debug route to check database content
 proposalRouter.get('/debug-proposals', debugProposals);
 module.exports = proposalRouter;

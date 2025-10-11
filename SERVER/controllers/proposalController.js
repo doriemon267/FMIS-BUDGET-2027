@@ -1804,8 +1804,9 @@ exports.getProposals = async (req, res) => {
 
     // ============================================================================
     // CONSOLIDATE DRAFT PROPOSALS - Combine separate entity rows into one virtual row
+    // AND AUTO-CREATE PROPOSAL DOCUMENTS IN DATABASE
     // ============================================================================
-    const consolidateDrafts = (proposals) => {
+    const consolidateDrafts = async (proposals) => {
       const draftMap = new Map();
       const nonDraftProposals = [];
       
@@ -1818,11 +1819,13 @@ exports.getProposals = async (req, res) => {
           return;
         }
         
-        // Create consolidation key based on org unit + fiscal year + budget type
-        const unit = proposal.division || proposal.department || proposal.office || proposal.region || 'UNKNOWN';
+        // Create consolidation key based on org unit + fiscal year + budget type + processBy + region
+        const unit = proposal.division || proposal.department || proposal.office || 'UNKNOWN';
+        const region = proposal.region || 'UNKNOWN';
+        const processBy = proposal.processBy || 'UNKNOWN';
         const fy = proposal.fiscalYear || 'UNKNOWN';
         const bt = proposal.budgetType || 'UNKNOWN';
-        const consolidationKey = `${unit}_${fy}_${bt}`.toUpperCase();
+        const consolidationKey = `${processBy}_${region}_${unit}_${fy}_${bt}`.toUpperCase();
         
         if (draftMap.has(consolidationKey)) {
           const existing = draftMap.get(consolidationKey);
@@ -1866,35 +1869,78 @@ exports.getProposals = async (req, res) => {
         }
       });
       
-      // Calculate combined totals for each consolidated draft
-      const consolidatedDrafts = Array.from(draftMap.values()).map(draft => {
-        const totalExpenses = (draft.personnelTotal || 0) + (draft.mooeTotal || 0) + (draft.capitalTotal || 0);
-        const totalIncome = draft.incomeTotal || 0;
-        
-        return {
-          ...draft,
-          totalExpenses,
-          totalIncome,
-          proposedBudget: totalExpenses + totalIncome,
-          Total: totalExpenses + totalIncome, // For display compatibility
-          // Create descriptive title showing what's included
-          aggregatedTitle: `Draft Budget (${draft.includedModels.length} categories)`,
-          particulars: draft.includedModels
-            .map(m => {
-              if (m === 'personnel') return 'Personnel Services';
-              if (m === 'mooe') return 'MOOE';
-              if (m === 'capital') return 'Capital Outlay';
-              if (m === 'income') return 'Corporate Income';
-              return m;
-            })
-            .join(' + ')
-        };
-      });
+      // Calculate combined totals and AUTO-CREATE Proposal documents in database
+      const consolidatedDrafts = await Promise.all(
+        Array.from(draftMap.values()).map(async (draft) => {
+          const totalExpenses = (draft.personnelTotal || 0) + (draft.mooeTotal || 0) + (draft.capitalTotal || 0);
+          const totalIncome = draft.incomeTotal || 0;
+          
+          // Build filter to find/create Proposal document
+          const proposalFilter = {
+            fiscalYear: draft.fiscalYear,
+            budgetType: draft.budgetType,
+            processBy: draft.processBy,
+            region: draft.region,
+            status: 'Draft'
+          };
+          
+          if (draft.division) proposalFilter.division = draft.division;
+          if (draft.department) proposalFilter.department = draft.department;
+          if (draft.office) proposalFilter.office = draft.office;
+          
+          // Find existing or create new Proposal document
+          let proposalDoc = await Proposal.findOne(proposalFilter);
+          
+          if (!proposalDoc) {
+            // Auto-create Proposal document for this Draft group
+            const unit = draft.division || draft.department || draft.office || 'Unknown Unit';
+            const title = `${unit} - ${draft.fiscalYear} ${draft.budgetType} Budget`;
+            
+            proposalDoc = await Proposal.create({
+              ...proposalFilter,
+              title: title,
+              description: `Auto-consolidated draft proposal for ${unit}`,
+              personnelTotal: draft.personnelTotal || 0,
+              mooeTotal: draft.mooeTotal || 0,
+              capitalOutlayTotal: draft.capitalTotal || 0,
+              incomeTotal: draft.incomeTotal || 0,
+              totalExpenses: totalExpenses,
+              totalIncome: totalIncome,
+              proposedBudget: totalExpenses + totalIncome,
+              submittedBy: draft.submittedBy,
+              submittedAt: new Date(),
+              createdAt: draft.createdAt || new Date(),
+              updatedAt: new Date()
+            });
+            console.log(`✅ Auto-created Proposal document: ${proposalDoc._id} for ${unit} - "${title}"`);
+          }
+          
+          return {
+            ...draft,
+            _id: proposalDoc._id, // Use Proposal ID from database
+            proposalId: proposalDoc._id,
+            totalExpenses,
+            totalIncome,
+            proposedBudget: totalExpenses + totalIncome,
+            Total: totalExpenses + totalIncome,
+            aggregatedTitle: `Draft Budget (${draft.includedModels.length} categories)`,
+            particulars: draft.includedModels
+              .map(m => {
+                if (m === 'personnel') return 'Personnel Services';
+                if (m === 'mooe') return 'MOOE';
+                if (m === 'capital') return 'Capital Outlay';
+                if (m === 'income') return 'Corporate Income';
+                return m;
+              })
+              .join(' + ')
+          };
+        })
+      );
       
       return [...nonDraftProposals, ...consolidatedDrafts];
     };
     
-    finalProposals = consolidateDrafts(finalProposals);
+    finalProposals = await consolidateDrafts(finalProposals);
     // ============================================================================
 
     // For divisionOnly, aggregate by Division first (fallback to office/department/region) and compute proposedBudget

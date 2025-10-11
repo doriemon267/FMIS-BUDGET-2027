@@ -74,14 +74,36 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
         .toUpperCase();
 
       const roleSynonyms = {
+        // BUDGET ANALYST - Division level creators
+        DIVISION_CREATOR: 'BUDGET_ANALYST',
+        DIVISION_ANALYST: 'BUDGET_ANALYST',
+        DIVISION_ENCODER: 'BUDGET_ANALYST',
+        DIVISION_STAFF: 'BUDGET_ANALYST',
+        // Temporary: Legacy role support (to be migrated)
+        DIVISION_APPROVER: 'BUDGET_ANALYST', // TODO: Migrate to divisionCreator in database
+        
+        // BUDGET COORDINATOR - Department/Region level creators
+        DEPARTMENT_CREATOR: 'BUDGET_COORDINATOR',
+        DEPARTMENT_COORDINATOR: 'BUDGET_COORDINATOR',
+        REGION_CREATOR: 'BUDGET_COORDINATOR',
+        REGION_COORDINATOR: 'BUDGET_COORDINATOR',
+        
+        // BUDGET OFFICER - Department/Region level verifiers
         BUDGETOFFICER: 'BUDGET_OFFICER',
-        OFFICE_FINAL_VERIFIER: 'BUDGET_OFFICER',
-        OFFICE_APPROVER: 'BUDGET_OFFICER',
+        DEPARTMENT_VERIFIER: 'BUDGET_OFFICER',
+        DEPARTMENT_APPROVER: 'BUDGET_OFFICER',
+        REGION_VERIFIER: 'BUDGET_OFFICER',
+        REGION_APPROVER: 'BUDGET_OFFICER',
         OFFICE_VERIFIER: 'BUDGET_OFFICER',
-        SUPERVISOR: 'BUDGET_OFFICER',
+        OFFICE_APPROVER: 'BUDGET_OFFICER',
+        OFFICE_HEAD: 'BUDGET_OFFICER',
+        
+        // BUDGET MANAGER - Budget Office final approvers
         BUDGETMANAGER: 'BUDGET_MANAGER',
-        REGION_FINAL_VERIFIER: 'BUDGET_MANAGER',
-        DEPARTMENT_FINAL_VERIFIER: 'BUDGET_MANAGER'
+        BUDGET_MANAGER: 'BUDGET_MANAGER',
+        BUDGET_OFFICE_HEAD: 'BUDGET_MANAGER',
+        BUDGET_DIRECTOR: 'BUDGET_MANAGER',
+        FINAL_APPROVER: 'BUDGET_MANAGER'
       };
 
       return roleSynonyms[camelCaseNormalized] || camelCaseNormalized;
@@ -95,6 +117,11 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
       })
       .filter((value) => typeof value === 'string' && value.trim().length > 0);
 
+    const roleMapping = rawRoles.map(role => ({
+      original: role,
+      normalized: normalizeRoleValue(role)
+    }));
+
     const normalizedRoles = Array.from(new Set(
       rawRoles
         .map((roleValue) => normalizeRoleValue(roleValue))
@@ -102,6 +129,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
     ));
 
     const status = proposal?.status;
+    const normalizedStatus = String(status || '').toUpperCase().trim();
 
     // Check if user has the required role for actions
     const isBudgetAnalyst = normalizedRoles.includes('BUDGET_ANALYST');
@@ -110,22 +138,29 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
     const isBudgetManager = normalizedRoles.includes('BUDGET_MANAGER');
     const isBudgetAdmin = normalizedRoles.includes('BUDGET_ADMIN');
 
-    console.log('New WorkflowActions Debug:', {
+    console.log('🔍 WorkflowActions Debug:', {
       status,
+      normalizedStatus,
       rawRoleSources,
       rawRoles,
+      roleMapping,
       normalizedRoles,
       isBudgetAnalyst,
       isBudgetCoordinator,
       isBudgetOfficer,
       isBudgetManager,
       isBudgetAdmin,
-      proposalId: proposal?._id
+      proposalId: proposal?._id,
+      userInfo: {
+        roles: userInfo?.roles,
+        Roles: userInfo?.Roles,
+        role: userInfo?.role
+      }
     });
 
     // BUDGET ANALYST & BUDGET COORDINATOR Actions (Creation Level)
     if (isBudgetAnalyst || isBudgetCoordinator) {
-      if (status === "Draft") {
+      if (normalizedStatus === "DRAFT" || status === "Draft") {
         actions.push({
           label: "Submit to Officer",
           action: "submit-to-officer",
@@ -134,22 +169,29 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           description: "Submit proposal to Budget Officer for approval"
         });
         
-        // BUDGET ANALYST ONLY: Direct submit to Manager (bypass Officer review)
-        if (isBudgetAnalyst && !isBudgetCoordinator) {
-          actions.push({
-            label: "Submit to Manager (Direct)",
-            action: "submit-direct-to-manager",
-            color: "bg-purple-500 hover:bg-purple-600",
-            icon: "⚡",
-            description: "Submit proposal directly to Budget Manager (bypasses Officer review)"
-          });
-        }
+        // BUDGET ANALYST & BUDGET COORDINATOR: Direct submit to Manager (bypass Officer review)
+        actions.push({
+          label: "Submit to Manager (Direct)",
+          action: "submit-direct-to-manager",
+          color: "bg-purple-500 hover:bg-purple-600",
+          icon: "⚡",
+          description: "Submit proposal directly to Budget Manager (bypasses Officer review)"
+        });
       }
     }
 
     // BUDGET OFFICER Actions (Approval Level)
     if (isBudgetOfficer) {
-      if (status === "Division Submitted" || status === "Office") {
+      if (normalizedStatus === "DIVISION SUBMITTED" || normalizedStatus === "OFFICE" || 
+          status === "Division Submitted" || status === "Office") {
+        actions.push({
+          label: "Verify",
+          action: "officer-verify",
+          color: "bg-blue-500 hover:bg-blue-600",
+          icon: "✓",
+          description: "Verify the proposal (marks as verified without changing status)",
+          requiresComment: true
+        });
         actions.push({
           label: "Approve",
           action: "officer-approve",
@@ -167,7 +209,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           requiresComment: true
         });
       }
-      if (status === "Office Approved") {
+      if (normalizedStatus === "OFFICE APPROVED" || status === "Office Approved") {
         actions.push({
           label: "Submit to Manager",
           action: "submit-to-manager",
@@ -180,7 +222,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
 
     // BUDGET MANAGER & BUDGET ADMIN Actions (Finalization Level)
     if (isBudgetManager || isBudgetAdmin) {
-      if (status === "Office Submitted") {
+      if (normalizedStatus === "OFFICE SUBMITTED" || status === "Office Submitted") {
         actions.push({
           label: "Approve",
           action: "manager-approve",
@@ -199,6 +241,8 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
         });
       }
     }
+
+    console.log('🎯 Available Actions:', actions.length, actions.map(a => a.label));
 
     return actions;
   };
@@ -221,6 +265,10 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
         case "submit-direct-to-manager":
           endpoint = "/api/workflow/submit-direct-to-manager";
           successMessage = "Proposal submitted directly to Budget Manager successfully";
+          break;
+        case "officer-verify":
+          endpoint = "/api/workflow/verify";
+          successMessage = "Proposal verified successfully";
           break;
         case "officer-approve":
           endpoint = "/api/workflow/approve";
@@ -282,6 +330,8 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
 
       if (action === "submit-to-officer") {
         requestData.comment = noteValue || "";
+      } else if (action === "officer-verify") {
+        requestData.comment = noteValue;
       } else if (action === "officer-approve" || action === "manager-approve") {
         requestData.comment = noteValue;
       } else if (action === "officer-return" || action === "manager-return") {
@@ -535,14 +585,28 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           </ListItemIcon>
           <ListItemText primary="View" secondary="Open proposal details" />
         </MenuItem>
-        {availableActions.map((actionConfig, index) => (
-          <MenuItem key={index} onClick={() => handleMenuItemClick(actionConfig.action, actionConfig.label, actionConfig.requiresComment)}>
-            <ListItemIcon>
-              {renderIcon(actionConfig.action)}
-            </ListItemIcon>
-            <ListItemText primary={actionConfig.label} secondary={actionConfig.description} />
+        
+        {availableActions.length > 0 && <Divider sx={{ my: 0.5 }} />}
+        
+        {availableActions.length === 0 ? (
+          <MenuItem disabled>
+            <ListItemText 
+              primary="No workflow actions available" 
+              secondary={`Status: ${proposal?.status || 'Unknown'}`}
+              primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
+            />
           </MenuItem>
-        ))}
+        ) : (
+          availableActions.map((actionConfig, index) => (
+            <MenuItem key={index} onClick={() => handleMenuItemClick(actionConfig.action, actionConfig.label, actionConfig.requiresComment)}>
+              <ListItemIcon>
+                {renderIcon(actionConfig.action)}
+              </ListItemIcon>
+              <ListItemText primary={actionConfig.label} secondary={actionConfig.description} />
+            </MenuItem>
+          ))
+        )}
+        
         {showTrackInMenu && (
           <>
             <Divider sx={{ my: 0.5 }} />

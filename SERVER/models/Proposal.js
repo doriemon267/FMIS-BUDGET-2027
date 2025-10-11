@@ -58,13 +58,13 @@ const proposalSchema = new mongoose.Schema({
   workflowHistory: [{
     action: {
       type: String,
-      enum: ["SUBMIT", "APPROVE", "RETURN", "CONSOLIDATE", "EDIT"],
+      enum: ["SUBMIT", "APPROVE", "RETURN", "CONSOLIDATE", "EDIT", "VERIFY", "SUBMIT_DIRECT_TO_MANAGER"],
       required: true
     },
     comment: {
       type: String,
       required: function() {
-        return ["APPROVE", "RETURN"].includes(this.action);
+        return ["APPROVE", "RETURN", "VERIFY"].includes(this.action);
       }
     },
     userId: {
@@ -101,6 +101,12 @@ const proposalSchema = new mongoose.Schema({
     userName: String,
     date: Date
   },
+  verifiedByOfficer: {
+    userId: String,
+    userName: String,
+    date: Date,
+    comment: String
+  },
   approvedByManager: {
     userId: String,
     userName: String,
@@ -117,6 +123,9 @@ const proposalSchema = new mongoose.Schema({
   isConsolidated: {
     type: Boolean,
     default: false
+  },
+  consolidatedOrigin: {
+    type: String  // OFFICE/DEPARTMENT name after consolidation by Budget Officer
   },
   consolidatedProposals: [{
     proposalId: mongoose.Schema.Types.ObjectId,

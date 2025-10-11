@@ -22,6 +22,7 @@ import { getProposalForEdit, getComparisonData } from '../../services/budgetOffi
 import BudgetOfficerEditView from './BudgetOfficerEditView';
 import BudgetAnalystComparisonView from './BudgetAnalystComparisonView';
 import BudgetManagerSubmissionView from './BudgetManagerSubmissionView';
+import WorkflowActions from '../workflow/WorkflowActions';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import PublicIcon from '@mui/icons-material/Public';
@@ -31,6 +32,7 @@ import MoneyIcon from '@mui/icons-material/Money';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import ApartmentIcon from '@mui/icons-material/Apartment';
 import BusinessCenterIcon from '@mui/icons-material/BusinessCenter';
+import VerifiedIcon from '@mui/icons-material/Verified';
 
 const CACHE_TTL = 60 * 1000; // 1 minute cache for proposal details
 
@@ -515,6 +517,58 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
               </Grid>
             </Paper>
 
+            {/* Verification and Consolidation Status */}
+            {(proposal?.verifiedByOfficer || proposal?.consolidatedOrigin) && (
+              <Paper elevation={2} sx={{ p: 2, mb: 3, backgroundColor: '#f5f5f5' }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+                  Workflow Status
+                </Typography>
+                <Grid container spacing={2}>
+                  {proposal?.verifiedByOfficer && (
+                    <Grid item xs={12} md={6}>
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                        <VerifiedIcon color="success" />
+                        <Box>
+                          <Typography variant="body2" sx={{ fontWeight: 600, color: 'success.main' }}>
+                            Verified by Budget Officer
+                          </Typography>
+                          <Typography variant="caption" display="block">
+                            Officer: {proposal.verifiedByOfficer.userName || 'N/A'}
+                          </Typography>
+                          <Typography variant="caption" display="block">
+                            Date: {formatDate(proposal.verifiedByOfficer.date)}
+                          </Typography>
+                          {proposal.verifiedByOfficer.comment && (
+                            <Typography variant="caption" display="block" sx={{ mt: 0.5, fontStyle: 'italic' }}>
+                              Comment: {proposal.verifiedByOfficer.comment}
+                            </Typography>
+                          )}
+                        </Box>
+                      </Box>
+                    </Grid>
+                  )}
+                  {proposal?.consolidatedOrigin && (
+                    <Grid item xs={12} md={6}>
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                        <BusinessCenterIcon color="primary" />
+                        <Box>
+                          <Typography variant="body2" sx={{ fontWeight: 600, color: 'primary.main' }}>
+                            Consolidated at Office Level
+                          </Typography>
+                          <Typography variant="caption" display="block">
+                            Office: {proposal.consolidatedOrigin}
+                          </Typography>
+                          <Typography variant="caption" display="block" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
+                            This proposal has been consolidated from division level
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Grid>
+                  )}
+                </Grid>
+              </Paper>
+            )}
+
             <Divider sx={{ my: 2 }} />
 
             {/* Detailed Records Section */}
@@ -600,10 +654,24 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
         )}
       </DialogContent>
 
-      <DialogActions>
+      <DialogActions sx={{ justifyContent: 'space-between', px: 3, py: 2 }}>
         <Button onClick={handleClose} variant="outlined">
           Close
         </Button>
+        
+        {/* Workflow Actions - Show only if user has appropriate role and proposal is not in final state */}
+        {proposal && userInfo && !['Approved', 'Finalized'].includes(proposal.status) && (
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <WorkflowActions
+              proposal={proposal}
+              userInfo={userInfo}
+              onRefresh={() => loadData(true)}
+              onView={() => {}}
+              showHeader={false}
+              showTrackInMenu={false}
+            />
+          </Box>
+        )}
       </DialogActions>
     </Dialog>
   );
