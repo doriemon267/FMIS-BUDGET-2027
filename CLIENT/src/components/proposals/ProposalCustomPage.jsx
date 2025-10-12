@@ -364,8 +364,24 @@ const CustomPage = ({
     budgetarySupportData,
   ]);
 
-  // When there are no Draft/Returned (or similar) items, lock editing across the page
-  const submissionLocked = useMemo(() => !anyNotSubmitted, [anyNotSubmitted]);
+  // Detect if there are any proposals at all for the currently selected fiscal year
+  const hasAnyProposalsForFY = useMemo(() => {
+    const counts = [
+      Array.isArray(personnelData) ? personnelData.length : 0,
+      Array.isArray(mooeData) ? mooeData.length : 0,
+      Array.isArray(capitalOutlayData) ? capitalOutlayData.length : 0,
+      Array.isArray(incomeData) ? incomeData.length : 0,
+      Array.isArray(budgetarySupportData) ? budgetarySupportData.length : 0,
+    ];
+    return counts.reduce((a, b) => a + b, 0) > 0;
+  }, [personnelData, mooeData, capitalOutlayData, incomeData, budgetarySupportData]);
+
+  // Lock only when there ARE proposals for this FY and none of them are editable (i.e., not Draft/Returned/Not Submitted)
+  // If there are NO proposals for the selected FY, keep it unlocked so users can start creating.
+  const submissionLocked = useMemo(() => {
+    if (!hasAnyProposalsForFY) return false;
+    return !anyNotSubmitted;
+  }, [hasAnyProposalsForFY, anyNotSubmitted]);
 
   // Auto-save functionality (moved here after anyNotSubmitted is declared)
   useEffect(() => {
