@@ -583,16 +583,17 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
     return '';
   };
   const statusChipColor = (status) => {
-    switch (status) {
-      case 'Draft': return 'default';
-      case 'Submitted to Officer': return 'info';
-      case 'Office Submitted': return 'secondary';
-      case 'Officer Approved': return 'success';
-      case 'Manager Approved': return 'secondary';
-      case 'Finalized': return 'primary';
-      case 'Office Approved': return 'success';
-      default: return 'default';
-    }
+    const s = String(status || '').toLowerCase();
+    if (!s) return 'default';
+    // Normalize synonyms and map to a consistent palette
+    if (s.includes('draft')) return 'default';
+    if (s.includes('submitted to officer') || s.includes('division submitted') || s.includes('responsibility center submitted') || s.includes('office submitted')) return 'info';
+    if (s.includes('verified')) return 'info';
+    if (s.includes('officer approved') || s === 'office approved') return 'success';
+    if (s.includes('manager approved')) return 'secondary';
+    if (s.includes('returned')) return 'error';
+    if (s.includes('finalized') || s.includes('approved')) return 'primary';
+    return 'default';
   };
 
   // Icons to show inside step markers

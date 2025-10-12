@@ -395,6 +395,11 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
     ['Office Approved', 'Manager Approved', 'Approved', 'Finalized']
   ), []);
   const isReadOnlyMode = useMemo(() => readOnlyStatuses.includes(proposal?.status), [proposal?.status, readOnlyStatuses]);
+  // Collapsible Summary: collapsed by default in read-only mode
+  const [summaryCollapsed, setSummaryCollapsed] = useState(false);
+  useEffect(() => {
+    setSummaryCollapsed(isReadOnlyMode);
+  }, [isReadOnlyMode]);
 
   return (
     <Dialog 
@@ -443,7 +448,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
           <Alert severity="error">{error}</Alert>
         ) : (
           <>
-            {/* Summary Section */}
+            {/* Summary Section (collapsible) */}
             <Paper
               elevation={1}
               sx={(theme) => ({
@@ -516,7 +521,14 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
                 </Box>
               </Box>
 
-              <Grid container spacing={1.5} sx={{ mt: 1.5 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                <Button size="small" variant="outlined" onClick={() => setSummaryCollapsed(v => !v)} sx={{ color: 'inherit', borderColor: 'rgba(255,255,255,0.4)' }}>
+                  {summaryCollapsed ? 'Expand Summary' : 'Collapse Summary'}
+                </Button>
+              </Box>
+
+              {!summaryCollapsed && (
+                <Grid container spacing={1.5} sx={{ mt: 1.5 }}>
                 {summaryMetrics.map((metric) => {
                   const IconComponent = metric.icon;
                   return (
@@ -563,7 +575,8 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
                     </Grid>
                   );
                 })}
-              </Grid>
+                </Grid>
+              )}
             </Paper>
 
             {/* Verification and Consolidation Status */}
