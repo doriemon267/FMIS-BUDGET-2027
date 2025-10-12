@@ -3180,26 +3180,7 @@ const CustomPage = ({
         {/* Activity Log Dialog */}
         <ActivityLogDialog />
 
-        <Box sx={{ position: 'relative' }}>
-          {/* When locked, block interactions and show a subtle overlay message */}
-          {submissionLocked && (
-            <Box
-              sx={{
-                position: 'absolute',
-                inset: 0,
-                zIndex: 2,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                bgcolor: 'rgba(255,255,255,0.6)',
-                borderRadius: '8px',
-                textAlign: 'center',
-                px: 2
-              }}
-            >
-              <Chip color="warning" label="View only — editing is allowed only for Draft or Returned proposals." />
-            </Box>
-          )}
+        <Box>
           <div
             className="tab-content"
             style={{
@@ -3207,9 +3188,7 @@ const CustomPage = ({
               borderRadius: "8px",
               padding: isMobile ? "8px" : "16px",
               boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-              minHeight: "300px",
-              pointerEvents: submissionLocked ? 'none' : 'auto',
-              opacity: submissionLocked ? 0.75 : 1
+              minHeight: "300px"
             }}
           >
           {activeTab === "PSPermanent" && (
@@ -3250,6 +3229,7 @@ const CustomPage = ({
                 addMutation={addMooeMutation}
                 queryClient={queryClient}
                 queryKey={QUERY_KEYS.mooe}
+                locked={submissionLocked}
               />
             </Suspense>
           )}
@@ -3280,11 +3260,13 @@ const CustomPage = ({
                   fiscalYear={selectedFiscalYear || activeFiscalYear}
                   onDataChange={setCapitalOutlayData}
                   disableIncomeInputs={disableIncomeInputs}
+                  locked={submissionLocked}
                 />
               ) : (
                 <CapitalOutlayTable
                   data={capitalOutlayData}
                   disableIncomeInputs={disableIncomeInputs}
+                  locked={submissionLocked}
                 />
               )}
             </Suspense>
@@ -3309,6 +3291,7 @@ const CustomPage = ({
                   data={incomeData}
                   onGrandTotalUpdate={handleIncomeGrandTotalUpdate}
                   onGroupedItemsUpdate={setGroupedItems}
+                  locked={submissionLocked}
                 />
               </Suspense>
             </ErrorBoundary>

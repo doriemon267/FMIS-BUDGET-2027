@@ -199,13 +199,13 @@ const CustomDrawer = ({ collapsed = false }) => {
               {
                 link: "/fysettings",
                 name: "Set Cut-Off",
-                isAllow: hasPermission(currentUser, 'ManageSettings'),
+                isAllow: hasPermission(currentUser, 'ManageSettings') || isBudgetManager,
                 icon: <IoSettingsOutline />,
               },
               {
                 link: "/compsettings",
                 name: "Compensation Settings",
-                isAllow: hasPermission(currentUser, 'ManageSettings'),
+                isAllow: hasPermission(currentUser, 'ManageSettings') || isBudgetManager,
                 icon: <IoSettingsOutline />,
               },
               // {
@@ -216,21 +216,21 @@ const CustomDrawer = ({ collapsed = false }) => {
               {
                 link: "/rata",
                 name: "RATA",
-                isAllow: hasPermission(currentUser, 'ManageSettings'),
+                isAllow: hasPermission(currentUser, 'ManageSettings') || isBudgetManager,
                 icon: <IoSettingsOutline />,
               },
 
               {
                 link: "/categories",
                 name: "Capital Outlay",
-                isAllow: hasPermission(currentUser, 'ManageSettings'),
+                isAllow: hasPermission(currentUser, 'ManageSettings') || isBudgetManager,
                 icon: <IoSettingsOutline />,
               },
 
               {
                 link: "/income-management",
                 name: "Income Management",
-                isAllow: hasPermission(currentUser, 'ManageSettings'),
+                isAllow: hasPermission(currentUser, 'ManageSettings') || isBudgetManager,
                 icon: <TbCategory />,
               },
               

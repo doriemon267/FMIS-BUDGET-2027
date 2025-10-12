@@ -149,7 +149,7 @@ const defaultFilterState = {
   emptyValues: false,
 };
 
-const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false }) => {
+const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false, locked = false }) => {
   const { currentUser } = useUser();
 
   // Filter state
@@ -1627,7 +1627,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
                     })}
                     
                     {/* Add New Item Row (Form) */}
-                    {addingCategoryId === group.categoryId && (
+                    {!locked && addingCategoryId === group.categoryId && (
                       <TableRow sx={{
                         backgroundColor: '#f0f8f0',
                         borderTop: '2px dashed #4caf50',
@@ -1860,7 +1860,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false 
                     )}
                     
                     {/* Add New Item Button - Compact Icon Style */}
-                    {addingCategoryId !== group.categoryId && (
+                    {!locked && addingCategoryId !== group.categoryId && (
                       <TableRow>
                         <TableCell 
                           colSpan={9} 

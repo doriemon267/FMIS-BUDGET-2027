@@ -87,7 +87,7 @@ const formatNumber = (number) => {
 };
 
 // Custom Toolbar
-function CustomToolbar({ onRefresh, onAddNew, loading }) {
+function CustomToolbar({ onRefresh, onAddNew, loading, locked = false }) {
   return (
     <Toolbar 
       sx={{ 
@@ -122,6 +122,7 @@ function CustomToolbar({ onRefresh, onAddNew, loading }) {
         variant="contained"
         startIcon={<Add />}
         onClick={onAddNew}
+        disabled={locked}
         sx={{ 
           bgcolor: "white", 
           color: "#667eea",
@@ -149,7 +150,6 @@ function DetailRow({ detail, onEdit, canEdit }) {
           borderLeft: "4px solid #4caf50",
           borderRadius: 1,
           display: "flex",
-          alignItems: "center",
           gap: 2,
           transition: "all 0.2s",
           "&:hover": {
@@ -896,7 +896,7 @@ function AddNewDialog({ open, onClose, categories = [], capitalOutlays = [], onS
 }
 
 // Main Component
-const CapitalOutlayDataGrid = ({ fiscalYear, onDataChange, disableIncomeInputs = false }) => {
+const CapitalOutlayDataGrid = ({ fiscalYear, onDataChange, disableIncomeInputs = false, locked = false }) => {
   // State
   const [capitalOutlays, setCapitalOutlays] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -1176,9 +1176,10 @@ const CapitalOutlayDataGrid = ({ fiscalYear, onDataChange, disableIncomeInputs =
   return (
     <Paper sx={{ width: "100%", overflow: "hidden", borderRadius: 2, boxShadow: 3 }}>
       <CustomToolbar 
-        onRefresh={fetchCapitalOutlays} 
+        onRefresh={fetchCapitalOutlays}
         onAddNew={() => setAddDialogOpen(true)}
         loading={loading}
+        locked={locked} // Pass the locked prop here
       />
       
       <Box sx={{ maxHeight: 600, overflow: "auto" }}>
