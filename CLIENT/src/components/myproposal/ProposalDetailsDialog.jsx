@@ -18,6 +18,7 @@ import {
   Avatar
 } from '@mui/material';
 import { getUserInfo } from '../../utils/auth';
+import api from '../../config/api';
 import { getProposalForEdit, getComparisonData } from '../../services/budgetOfficerEditService';
 import BudgetOfficerEditView from './BudgetOfficerEditView';
 import BudgetAnalystComparisonView from './BudgetAnalystComparisonView';
@@ -49,17 +50,22 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
   const proposalKey = proposal?._id || null;
 
   const normalizedAssignmentLevel = useMemo(() => {
-    return String(userInfo?.assignmentLevel || '').toUpperCase();
+    const direct = String(userInfo?.assignmentLevel || '').toUpperCase();
+    const hier = String(userInfo?.hierarchicalAccess?.scope || '').toUpperCase();
+    return direct || hier;
   }, [userInfo]);
 
   const normalizedWorkflowRoles = useMemo(() => {
-    return (userInfo?.workflowRoles || []).map((role) => String(role || '').toLowerCase());
+    const a = (userInfo?.workflowRoles || []).map((role) => String(role || '').toLowerCase());
+    const b = (userInfo?.hierarchicalAccess?.workflowRoles || []).map((role) => String(role || '').toLowerCase());
+    return Array.from(new Set([...(a || []), ...(b || [])]));
   }, [userInfo]);
 
   const normalizedPrimaryRoles = useMemo(() => {
     const collected = [];
     if (Array.isArray(userInfo?.roles)) collected.push(...userInfo.roles);
     if (Array.isArray(userInfo?.Roles)) collected.push(...userInfo.Roles);
+    if (Array.isArray(userInfo?.hierarchicalAccess?.roles)) collected.push(...userInfo.hierarchicalAccess.roles);
     if (userInfo?.role) collected.push(userInfo.role);
     if (userInfo?.primaryRole) collected.push(userInfo.primaryRole);
     return collected.map((role) => String(role || '').toUpperCase());
@@ -67,12 +73,11 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
 
   const isManagerLevel = useMemo(() => {
     if (!userInfo) return false;
-    if (normalizedAssignmentLevel === 'REGION' || normalizedAssignmentLevel === 'FULL') {
-      return true;
-    }
-    if (normalizedPrimaryRoles.some((role) => role.includes('BUDGET MANAGER') || role.includes('BUDGET ADMIN'))) {
-      return true;
-    }
+    const scope = normalizedAssignmentLevel;
+    const canApprove = userInfo?.hierarchicalFlags?.canApproveProposals === true || userInfo?.hierarchicalAccess?.rolePermissions?.canApproveProposals === true;
+    if (scope === 'REGION' || scope === 'FULL') return true;
+    if (canApprove && (scope === 'OFFICE' || scope === 'DEPARTMENT' || scope === 'REGION' || scope === 'FULL')) return true;
+    if (normalizedPrimaryRoles.some((role) => role.includes('BUDGET MANAGER') || role.includes('BUDGET ADMIN'))) return true;
     return normalizedWorkflowRoles.some((role) => (
       role === 'regionfinalverifier' ||
       role === 'regionalfinalverifier' ||
@@ -134,7 +139,10 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
       return;
     }
 
-    if (!isBudgetOfficer && !isBudgetAnalyst && !isManagerLevel) {
+    // Allow fetching for read-only final statuses even if role detection says no
+  const requiresReadOnlyData = isReadOnlyMode;
+
+    if (!isBudgetOfficer && !isBudgetAnalyst && !isManagerLevel && !requiresReadOnlyData) {
       setLoading(false);
       setRefreshing(false);
       return;
@@ -160,17 +168,53 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
     try {
       const requests = [];
 
-      if (isBudgetOfficer || isManagerLevel) {
+      if (isBudgetOfficer || isManagerLevel || requiresReadOnlyData) {
         requests.push(
-          getProposalForEdit(proposalKey, { signal: controller.signal }).then((response) => {
-            const data = response?.data || response;
-            setProposalData(data);
-            cacheUpdate.proposalData = data;
-          })
+          (async () => {
+            try {
+              const response = await getProposalForEdit(proposalKey, { signal: controller.signal });
+              const data = response?.data || response;
+              setProposalData(data);
+              cacheUpdate.proposalData = data;
+            } catch (err) {
+              // Fallback to read-only submission datasets if forbidden or read-only statuses
+              const status = err?.response?.status;
+              if (status === 403 || requiresReadOnlyData) {
+                const params = {
+                  fiscalYear: proposal?.fiscalYear,
+                  budgetType: proposal?.budgetType,
+                  processBy: proposal?.processBy,
+                  region: proposal?.region
+                };
+                try {
+                  const [incomeResp, psResp, mooeResp, coResp] = await Promise.all([
+                    api.get('/income/getByParams', { params, signal: controller.signal }),
+                    api.get('/getpersonnels/byParams', { params, signal: controller.signal }),
+                    api.get('/mooe/getByParams', { params, signal: controller.signal }),
+                    api.get('/capital-outlay/getByParams', { params, signal: controller.signal })
+                  ]);
+                  const normalize = (r) => Array.isArray(r?.data) ? r.data : (r?.data?.data || []);
+                  const fallbackData = {
+                    income: normalize(incomeResp),
+                    personnelServices: normalize(psResp),
+                    mooe: normalize(mooeResp),
+                    capitalOutlay: normalize(coResp)
+                  };
+                  setProposalData(fallbackData);
+                  cacheUpdate.proposalData = fallbackData;
+                } catch (fallbackErr) {
+                  throw fallbackErr;
+                }
+              } else {
+                throw err;
+              }
+            }
+          })()
         );
       }
 
-      if (isBudgetAnalyst) {
+      // Prefetch comparison data for all roles (helps quick view toggles)
+      if (isBudgetAnalyst || requiresReadOnlyData || true) {
         requests.push(
           getComparisonData(proposalKey, { signal: controller.signal }).then((response) => {
             const data = response?.data || response;
@@ -335,6 +379,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
     switch (status) {
       case 'Approved': return 'success';
       case 'Office Approved': return 'info';
+      case 'Office Submitted': return 'secondary';
       case 'Submitted': return 'warning';
       case 'Returned': return 'error';
       case 'Draft': return 'default';
@@ -342,10 +387,22 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
     }
   };
 
+  // Manager can edit when Office Submitted (per requirement)
+  const managerCanEditNow = isManagerLevel && (proposal?.status === 'Office Submitted');
+
+  // Read-only statuses (view mode)
+  const readOnlyStatuses = useMemo(() => (
+    ['Office Approved', 'Manager Approved', 'Approved', 'Finalized']
+  ), []);
+  const isReadOnlyMode = useMemo(() => readOnlyStatuses.includes(proposal?.status), [proposal?.status, readOnlyStatuses]);
+
   return (
     <Dialog 
       open={open} 
-      onClose={handleClose} 
+      onClose={(event, reason) => {
+        if (reason === 'backdropClick') return; // ignore outside clicks
+        handleClose();
+      }} 
       maxWidth="xl" 
       fullWidth
       PaperProps={{
@@ -388,14 +445,14 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
           <>
             {/* Summary Section */}
             <Paper
-              elevation={3}
+              elevation={1}
               sx={(theme) => ({
-                p: 3,
-                mb: 3,
-                borderRadius: 3,
+                p: 2,
+                mb: 2,
+                borderRadius: 2,
                 position: 'relative',
                 overflow: 'hidden',
-                background: `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 55%, ${theme.palette.success.main} 100%)`,
+                background: `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 55%)`,
                 color: theme.palette.common.white
               })}
             >
@@ -410,31 +467,23 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
                   backgroundColor: 'rgba(255,255,255,0.12)'
                 }}
               />
-              <Box
-                sx={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  flexWrap: 'wrap',
-                  gap: 3
-                }}
-              >
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
                 <Box>
                   <Typography
                     variant="overline"
-                    sx={{ letterSpacing: 2, textTransform: 'uppercase', opacity: 0.8 }}
+                    sx={{ letterSpacing: 1, textTransform: 'uppercase', opacity: 0.8 }}
                   >
                     Summary
                   </Typography>
-                  <Typography variant="h4" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.1 }}>
                     Budget Snapshot
                   </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, opacity: 0.85, mt: 1 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, opacity: 0.85, mt: 0.5 }}>
                     <AccessTimeIcon fontSize="small" />
                     <Typography variant="body2">{timelineLabel}</Typography>
                   </Box>
                 </Box>
-                <Box sx={{ textAlign: { xs: 'left', md: 'right' } }}>
+                <Box sx={{ textAlign: { xs: 'left', md: 'right' }, minWidth: 260 }}>
                   <Box
                     sx={{
                       display: 'flex',
@@ -449,7 +498,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
                       Total Amount
                     </Typography>
                   </Box>
-                  <Typography variant="h3" sx={{ fontWeight: 700, lineHeight: 1.1 }}>
+                  <Typography variant="h4" sx={{ fontWeight: 700, lineHeight: 1.1 }}>
                     {totalAmount}
                   </Typography>
                   {proposal?.budgetType && (
@@ -457,7 +506,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
                       label={proposal.budgetType}
                       variant="outlined"
                       sx={{
-                        mt: 1,
+                        mt: 0.5,
                         borderColor: 'rgba(255,255,255,0.4)',
                         color: 'inherit',
                         fontWeight: 500
@@ -467,7 +516,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
                 </Box>
               </Box>
 
-              <Grid container spacing={2} sx={{ mt: 3 }}>
+              <Grid container spacing={1.5} sx={{ mt: 1.5 }}>
                 {summaryMetrics.map((metric) => {
                   const IconComponent = metric.icon;
                   return (
@@ -476,21 +525,21 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
                         sx={{
                           display: 'flex',
                           alignItems: 'center',
-                          gap: 2,
-                          p: 2,
-                          minHeight: 92,
-                          borderRadius: 2,
+                          gap: 1.5,
+                          p: 1.5,
+                          minHeight: 72,
+                          borderRadius: 1.5,
                           backgroundColor: 'rgba(255,255,255,0.16)',
                           border: '1px solid rgba(255,255,255,0.2)',
-                          backdropFilter: 'blur(3px)'
+                          backdropFilter: 'blur(2px)'
                         }}
                       >
                         <Avatar
                           variant="rounded"
                           sx={{
                             bgcolor: 'rgba(0,0,0,0.18)',
-                            width: 48,
-                            height: 48
+                            width: 40,
+                            height: 40
                           }}
                         >
                           <IconComponent />
@@ -500,13 +549,13 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
                             variant="caption"
                             sx={{
                               textTransform: 'uppercase',
-                              letterSpacing: 1.4,
+                              letterSpacing: 1.1,
                               opacity: 0.75
                             }}
                           >
                             {metric.label}
                           </Typography>
-                          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
                             {metric.value}
                           </Typography>
                         </Box>
@@ -574,49 +623,51 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
             {/* Detailed Records Section */}
             <Typography variant="h6" gutterBottom>Detailed Records</Typography>
 
-            {/* Debug info - remove after testing */}
-            {import.meta.env.DEV && (
-              <Alert severity="info" sx={{ mb: 2 }}>
-                <Typography variant="caption">
-                  Debug: Role={userInfo?.role}, AssignmentLevel={userInfo?.assignmentLevel}, 
-                  IsBudgetOfficer={isBudgetOfficer ? 'Yes' : 'No'}, 
-                  IsBudgetAnalyst={isBudgetAnalyst ? 'Yes' : 'No'},
-                  IsManagerLevel={isManagerLevel ? 'Yes' : 'No'},
-                  HasProposalData={proposalData ? 'Yes' : 'No'},
-                  HasComparisonData={comparisonData ? 'Yes' : 'No'},
-                  ProposalStatus={proposal?.status}
-                </Typography>
-              </Alert>
+            {/* Debug info removed for cleaner UI */}
+
+            {/* Show edit view for Budget Officer; also allow Budget Manager to edit when Office Submitted */}
+            {(isBudgetOfficer || managerCanEditNow) && proposalData && proposal?.status !== 'Office Approved' && proposal?.status !== 'Approved' && (
+              <>
+                {managerCanEditNow && (
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    <Typography variant="body2">
+                      You are in Budget Manager edit mode (status: Office Submitted). Apply necessary changes below, then use Approve in the footer.
+                    </Typography>
+                  </Alert>
+                )}
+                <BudgetOfficerEditView 
+                  proposal={proposal}
+                  proposalData={proposalData}
+                  onSaveSuccess={() => loadData(true)}
+                  variant={managerCanEditNow ? 'manager' : 'officer'}
+                  allowSubmit={!managerCanEditNow}
+                />
+              </>
             )}
 
-            {/* Show edit view only if Budget Officer AND proposal is not already approved */}
-            {isBudgetOfficer && !isManagerLevel && proposalData && proposal?.status !== 'Office Approved' && proposal?.status !== 'Approved' && (
-              <BudgetOfficerEditView 
-                proposalData={proposalData}
-                proposal={proposal}
-                onSaveSuccess={handleClose}
-              />
+            {/* Approved warning removed in view-only mode */}
+
+            {/* View-only mode: show a single comparison view for all roles; fallback to submission view if comparison not ready */}
+            {isReadOnlyMode && !managerCanEditNow && (
+              <>
+                {comparisonData ? (
+                  <BudgetAnalystComparisonView 
+                    comparisonData={comparisonData}
+                    proposal={proposal}
+                  />
+                ) : (
+                  proposalData && (
+                    <BudgetManagerSubmissionView 
+                      proposalData={proposalData}
+                      proposal={proposal}
+                    />
+                  )
+                )}
+              </>
             )}
 
-            {/* Show message if Budget Officer but proposal is already approved */}
-            {isBudgetOfficer && !isManagerLevel && proposalData && (proposal?.status === 'Office Approved' || proposal?.status === 'Approved') && (
-              <Alert severity="warning" sx={{ mb: 2 }}>
-                <Typography variant="body2">
-                  <strong>This proposal has already been approved and cannot be edited.</strong>
-                  <br />
-                  Status: {proposal?.status}
-                </Typography>
-              </Alert>
-            )}
-
-            {isManagerLevel && proposalData && (
-              <BudgetManagerSubmissionView 
-                proposalData={proposalData}
-                proposal={proposal}
-              />
-            )}
-
-            {isBudgetAnalyst && comparisonData && (
+            {/* Analyst-only comparison in non-read-only statuses */}
+            {!isReadOnlyMode && isBudgetAnalyst && comparisonData && (
               <BudgetAnalystComparisonView 
                 comparisonData={comparisonData}
                 proposal={proposal}
@@ -641,7 +692,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
               </Alert>
             )}
 
-            {!isBudgetOfficer && !isBudgetAnalyst && (
+            {!isBudgetOfficer && !isBudgetAnalyst && !isManagerLevel && (
               <Alert severity="info">
                 You do not have permission to view detailed records for this proposal.
                 <br />
@@ -660,15 +711,16 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
         </Button>
         
         {/* Workflow Actions - Show only if user has appropriate role and proposal is not in final state */}
-        {proposal && userInfo && !['Approved', 'Finalized'].includes(proposal.status) && (
-          <Box sx={{ display: 'flex', gap: 1 }}>
+        {proposal && userInfo && !['Approved', 'Finalized', 'Office Approved', 'Manager Approved'].includes(proposal.status) && (
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
             <WorkflowActions
               proposal={proposal}
               userInfo={userInfo}
               onRefresh={() => loadData(true)}
               onView={() => {}}
-              showHeader={false}
+              showHeader={true}
               showTrackInMenu={false}
+              showViewInMenu={false}
             />
           </Box>
         )}

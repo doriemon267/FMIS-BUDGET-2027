@@ -18,7 +18,7 @@ import EditablePersonnelTable from './tables/EditablePersonnelTable';
 import EditableMOOETable from './tables/EditableMOOETable';
 import EditableCapitalOutlayTable from './tables/EditableCapitalOutlayTable';
 
-const BudgetOfficerEditView = ({ proposalData, proposal, onSaveSuccess }) => {
+const BudgetOfficerEditView = ({ proposalData, proposal, onSaveSuccess, variant = 'officer', allowSubmit = true }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -136,10 +136,10 @@ const BudgetOfficerEditView = ({ proposalData, proposal, onSaveSuccess }) => {
 
   return (
     <Box>
-      <Alert severity="info" sx={{ mb: 2 }}>
+      <Alert severity={variant === 'manager' ? 'warning' : 'info'} sx={{ mb: 2 }}>
         <Typography variant="body2">
-          <strong>Budget Officer Edit Mode:</strong> You can edit all four tables below. 
-          Changes will be tracked and sent to Budget Analysts for review after approval.
+          <strong>{variant === 'manager' ? 'Budget Manager Edit Mode' : 'Budget Officer Edit Mode'}:</strong> You can edit all four tables below.
+          {variant === 'manager' ? ' After reviewing your changes, use Approve in the dialog footer to proceed.' : ' Changes will be tracked and sent to Budget Analysts for review after approval.'}
         </Typography>
       </Alert>
 
@@ -216,17 +216,19 @@ const BudgetOfficerEditView = ({ proposalData, proposal, onSaveSuccess }) => {
           onClick={handleSaveDraft}
           disabled={saving || submitting}
         >
-          {saving ? 'Saving...' : 'Save Draft'}
+          {saving ? 'Saving...' : (variant === 'manager' ? 'Save Changes' : 'Save Draft')}
         </Button>
-        <Button
-          variant="contained"
-          color="primary"
-          startIcon={submitting ? <CircularProgress size={20} /> : <SendIcon />}
-          onClick={handleSubmit}
-          disabled={saving || submitting || !hasChanges()}
-        >
-          {submitting ? 'Submitting...' : 'Submit for Approval'}
-        </Button>
+        {allowSubmit && (
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={submitting ? <CircularProgress size={20} /> : <SendIcon />}
+            onClick={handleSubmit}
+            disabled={saving || submitting}
+          >
+            {submitting ? 'Submitting...' : 'Submit for Manager Approval'}
+          </Button>
+        )}
       </Box>
     </Box>
   );

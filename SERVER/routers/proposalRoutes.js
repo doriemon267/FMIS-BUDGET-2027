@@ -59,6 +59,7 @@ proposalRouter.get("/proposals",
 // Get all proposals for the current user including drafts
 proposalRouter.get("/myproposals/all", 
   submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }), 
+  budgetRoleAccessControl('read'),
   getAllUserProposals
 );
 // Get proposal details - IMPORTANT: Place this BEFORE the /:id route

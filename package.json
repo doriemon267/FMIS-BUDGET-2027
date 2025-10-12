@@ -4,9 +4,9 @@
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "mongoose": "^8.18.1"
-  }
-  ,
+  },
   "scripts": {
-    "organize-utils": "node SERVER/utils/organize-utils.js"
+    "organize-utils": "node SERVER/utils/organize-utils.js",
+    "backfill:co-particulars": "node SERVER/scripts/backfill-capitaloutlay-particulars.js"
   }
 }

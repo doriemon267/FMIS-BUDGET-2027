@@ -104,8 +104,25 @@ exports.getProposalForEdit = async (req, res) => {
       });
     }
     
-    // Check if proposal is already approved - prevent further editing
-    if (proposal.status === 'Office Approved' || proposal.status === 'Approved') {
+    // Get user roles
+    const userRoles = req.user?.Roles || [];
+    const isBudgetManager = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN');
+    const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
+    
+    // Check if proposal is already submitted or approved - prevent further editing
+    // BUDGET_MANAGER can view "Office Submitted" proposals (to approve/reject)
+    // BUDGET_OFFICER cannot edit "Office Submitted", "Office Approved", or "Approved" proposals
+    if (proposal.status === 'Office Submitted') {
+      // Allow BUDGET_MANAGER to view, block BUDGET_OFFICER
+      if (isBudgetOfficer && !isBudgetManager) {
+        return res.status(403).json({
+          success: false,
+          message: 'This proposal has already been submitted to Budget Manager and cannot be edited',
+          proposalStatus: proposal.status
+        });
+      }
+    } else if (proposal.status === 'Office Approved' || proposal.status === 'Approved') {
+      // Block everyone from editing approved proposals
       return res.status(403).json({
         success: false,
         message: 'This proposal has already been approved and cannot be edited',
@@ -266,8 +283,25 @@ exports.saveDraftEdit = async (req, res) => {
       });
     }
     
-    // Check if proposal is already approved - prevent further editing
-    if (proposal.status === 'Office Approved' || proposal.status === 'Approved') {
+    // Get user roles
+    const userRoles = req.user?.Roles || [];
+    const isBudgetManager = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN');
+    const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
+    
+    // Check if proposal is already submitted or approved - prevent further editing
+    // BUDGET_MANAGER can view "Office Submitted" proposals (to approve/reject)
+    // BUDGET_OFFICER cannot edit "Office Submitted", "Office Approved", or "Approved" proposals
+    if (proposal.status === 'Office Submitted') {
+      // Allow BUDGET_MANAGER to view, block BUDGET_OFFICER
+      if (isBudgetOfficer && !isBudgetManager) {
+        return res.status(403).json({
+          success: false,
+          message: 'This proposal has already been submitted to Budget Manager and cannot be edited',
+          proposalStatus: proposal.status
+        });
+      }
+    } else if (proposal.status === 'Office Approved' || proposal.status === 'Approved') {
+      // Block everyone from editing approved proposals
       return res.status(403).json({
         success: false,
         message: 'This proposal has already been approved and cannot be edited',
@@ -431,8 +465,25 @@ exports.submitEdit = async (req, res) => {
       });
     }
     
-    // Check if proposal is already approved - prevent further editing
-    if (proposal.status === 'Office Approved' || proposal.status === 'Approved') {
+    // Get user roles
+    const userRoles = req.user?.Roles || [];
+    const isBudgetManager = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN');
+    const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
+    
+    // Check if proposal is already submitted or approved - prevent further editing
+    // BUDGET_MANAGER can view "Office Submitted" proposals (to approve/reject)
+    // BUDGET_OFFICER cannot submit "Office Submitted", "Office Approved", or "Approved" proposals
+    if (proposal.status === 'Office Submitted') {
+      // Allow BUDGET_MANAGER to view, block BUDGET_OFFICER from submitting
+      if (isBudgetOfficer && !isBudgetManager) {
+        return res.status(403).json({
+          success: false,
+          message: 'This proposal has already been submitted to Budget Manager and cannot be submitted again',
+          proposalStatus: proposal.status
+        });
+      }
+    } else if (proposal.status === 'Office Approved' || proposal.status === 'Approved') {
+      // Block everyone from submitting approved proposals
       return res.status(403).json({
         success: false,
         message: 'This proposal has already been approved and cannot be submitted again',
@@ -498,7 +549,7 @@ exports.submitEdit = async (req, res) => {
     await budgetOfficerEdit.save();
     
     // Update proposal status
-    proposal.status = 'Office Approved';
+    proposal.status = 'Office Submitted';
     proposal.workflowLevel = 'OFFICER';
     proposal.workflowHistory.push({
       action: 'EDIT',
@@ -507,7 +558,7 @@ exports.submitEdit = async (req, res) => {
       userName,
       timestamp: new Date(),
       previousStatus: proposal.status,
-      newStatus: 'Office Approved'
+      newStatus: 'Office Submitted'
     });
     
     await proposal.save();

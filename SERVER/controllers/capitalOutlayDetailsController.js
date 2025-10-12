@@ -20,6 +20,23 @@ exports.getCapitalOutlayDetails = async (req, res) => {
     res.status(500).json({ error: "Failed to fetch capital outlay details" });
   }
 };
+// Helper to build a concise particulars summary for the main CapitalOutlay
+const buildParticularsSummary = (detailsArr = []) => {
+  try {
+    const parts = (detailsArr || [])
+      .map(d => (d && (d.particulars || '').toString().trim()))
+      .filter(Boolean);
+    if (parts.length === 0) return '';
+    const uniq = Array.from(new Set(parts));
+    const first = uniq.slice(0, 3).join(' • ');
+    const more = uniq.length > 3 ? ` (+${uniq.length - 3} more)` : '';
+    const summary = `${first}${more}`;
+    return summary.length > 200 ? summary.slice(0, 197) + '…' : summary;
+  } catch (e) {
+    return '';
+  }
+};
+
 // Save/Update details for a capital outlay
 exports.saveCapitalOutlayDetails = async (req, res) => {
   try {
@@ -83,11 +100,15 @@ exports.saveCapitalOutlayDetails = async (req, res) => {
     
     console.log("Calculated totals - Income:", totalIncome, "Subsidy:", totalSubsidy, "Cost:", totalCost);
     
-    // Update the main capital outlay record with calculated totals
+    // Compute a concise particulars summary for the main record
+    const particularsSummary = buildParticularsSummary(detailsToInsert);
+
+    // Update the main capital outlay record with calculated totals and particulars summary
     console.log("Updating main capital outlay record:", capitalOutlayId);
     const updatedCapitalOutlay = await CapitalOutlay.findByIdAndUpdate(
       capitalOutlayId,
       {
+        particulars: particularsSummary,
         income: totalIncome,
         subsidy: totalSubsidy,
         cost: totalCost,
@@ -153,10 +174,13 @@ exports.deleteCapitalOutlayDetail = async (req, res) => {
         0
       );
       const totalCost = totalIncome + totalSubsidy;
+      // Build particulars summary from remaining details
+      const particularsSummary = buildParticularsSummary(remainingDetails);
       // Update the main capital outlay record
       await CapitalOutlay.findByIdAndUpdate(
         capitalOutlayId,
         {
+          particulars: particularsSummary,
           income: totalIncome,
           subsidy: totalSubsidy,
           cost: totalCost,

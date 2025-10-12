@@ -2835,22 +2835,33 @@ exports.getAllUserProposals = async (req, res) => {
     // Base query
     const baseQuery = { processBy, region };
 
-    // Determine user scope from middleware/assignment
-    const assignment = req.userHierarchicalAssignment || {};
-    const scope = (req.hierarchicalAccessInfo?.scope || assignment.assignmentLevel || 'NONE').toUpperCase();
-    const departmentName = assignment?.departmentId?.Department || assignment?.departments?.[0]?.departmentName || null;
-    const divisionName = assignment?.divisionName || assignment?.divisions?.[0] || null;
-
-    // Visibility gates to prevent lower-level draft leakage
-    const submittedStatuses = [
-      'Division Submitted','DIVISION SUBMITTED',
-      'Department Verified','DEPARTMENT VERIFIED',
-      'Department Submitted','DEPARTMENT SUBMITTED',
-      'Region Approved','REGION APPROVED','Office Approved','OFFICE APPROVED','Finalized'
-    ];
-
     let visibilityGate = {};
-    if (scope === 'DIVISION') {
+    
+    // PRIORITY: Check if budget role visibility filter is set (for BUDGET_MANAGER, BUDGET_OFFICER, etc.)
+    if (req.budgetRoleVisibilityFilter && Object.keys(req.budgetRoleVisibilityFilter).length > 0) {
+      // Use budget role filter combined with base query
+      visibilityGate = {
+        $and: [
+          baseQuery,
+          req.budgetRoleVisibilityFilter
+        ]
+      };
+    } else {
+      // FALLBACK: Use hierarchical scope-based visibility
+      const assignment = req.userHierarchicalAssignment || {};
+      const scope = (req.hierarchicalAccessInfo?.scope || assignment.assignmentLevel || 'NONE').toUpperCase();
+      const departmentName = assignment?.departmentId?.Department || assignment?.departments?.[0]?.departmentName || null;
+      const divisionName = assignment?.divisionName || assignment?.divisions?.[0] || null;
+
+      // Visibility gates to prevent lower-level draft leakage
+      const submittedStatuses = [
+        'Division Submitted','DIVISION SUBMITTED',
+        'Department Verified','DEPARTMENT VERIFIED',
+        'Department Submitted','DEPARTMENT SUBMITTED',
+        'Region Approved','REGION APPROVED','Office Approved','OFFICE APPROVED','Finalized'
+      ];
+
+      if (scope === 'DIVISION') {
       // Division: only own division items (any status)
       visibilityGate = {
         $and: [
@@ -2916,9 +2927,10 @@ exports.getAllUserProposals = async (req, res) => {
           }
         ]
       };
-    } else {
-      // Fallback: just base query
-      visibilityGate = baseQuery;
+      } else {
+        // Fallback: just base query
+        visibilityGate = baseQuery;
+      }
     }
 
     // Query all collections with the same visibility gate

@@ -203,6 +203,14 @@ const ComparisonMOOETable = ({ data }) => {
     return groupedData.slice(pageStart, pageStart + rowsPerPage);
   }, [groupedData, pageStart, rowsPerPage]);
 
+
+  // Determine which organizational column to display (Division preferred for Analyst context)
+  const orgColumnLabel = useMemo(() => {
+    if (Array.isArray(data) && data.some(d => d && d.division)) return 'Division';
+    if (Array.isArray(data) && data.some(d => d && d.department)) return 'Department';
+    return 'Organization';
+  }, [data]);
+
   const toggleGroup = useCallback((groupKey) => {
     setExpandedGroups((prev) => ({
       ...prev,
@@ -263,7 +271,7 @@ const ComparisonMOOETable = ({ data }) => {
               <TableCell align="right"><strong>Income</strong></TableCell>
               <TableCell align="right"><strong>Subsidy</strong></TableCell>
               <TableCell align="right"><strong>Amount</strong></TableCell>
-              <TableCell><strong>Department</strong></TableCell>
+                  <TableCell><strong>{orgColumnLabel}</strong></TableCell>
               <TableCell><strong>Change Status</strong></TableCell>
             </TableRow>
           </TableHead>
@@ -317,7 +325,9 @@ const ComparisonMOOETable = ({ data }) => {
                           {renderComparisonCell(item, 'income', { isCurrency: true, align: 'right' })}
                           {renderComparisonCell(item, 'subsidy', { isCurrency: true, align: 'right' })}
                           {renderComparisonCell(item, 'amount', { isCurrency: true, align: 'right' })}
-                          {renderComparisonCell(item, 'department')}
+                        <TableCell>
+                                                    {item.division || item.department || '—'}
+                                                  </TableCell>
                           <TableCell>
                             {item.changeType === 'added' && <Chip label="Added" size="small" color="success" />}
                             {item.changeType === 'modified' && <Chip label="Modified" size="small" color="warning" />}

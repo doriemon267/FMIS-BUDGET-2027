@@ -17,7 +17,7 @@ import TimelineIcon from "@mui/icons-material/Timeline";
  * Provides action buttons for the role-based workflow based on user role and current status:
  * Draft → Submitted to Officer → Officer Approved/Returned → Submitted to Manager → Manager Approved/Returned → Finalized
  */
-const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = true, showTrackInMenu = true }) => {
+const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = true, showTrackInMenu = true, showViewInMenu = true }) => {
   const [loading, setLoading] = useState(false);
 
   // Top-level render log to confirm component renders
@@ -103,7 +103,14 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
         BUDGET_MANAGER: 'BUDGET_MANAGER',
         BUDGET_OFFICE_HEAD: 'BUDGET_MANAGER',
         BUDGET_DIRECTOR: 'BUDGET_MANAGER',
-        FINAL_APPROVER: 'BUDGET_MANAGER'
+        FINAL_APPROVER: 'BUDGET_MANAGER',
+        MANAGER_APPROVER: 'BUDGET_MANAGER',
+        MANAGERAPPROVER: 'BUDGET_MANAGER',
+        REGION_FINAL_VERIFIER: 'BUDGET_MANAGER',
+        REGIONAL_FINAL_VERIFIER: 'BUDGET_MANAGER',
+        REGION_MANAGER: 'BUDGET_MANAGER',
+        // Budget admin
+        BUDGETADMIN: 'BUDGET_ADMIN'
       };
 
       return roleSynonyms[camelCaseNormalized] || camelCaseNormalized;
@@ -222,7 +229,14 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
 
     // BUDGET MANAGER & BUDGET ADMIN Actions (Finalization Level)
     if (isBudgetManager || isBudgetAdmin) {
-      if (normalizedStatus === "OFFICE SUBMITTED" || status === "Office Submitted") {
+      const managerStatuses = [
+        'OFFICE SUBMITTED',
+        'SUBMITTED TO MANAGER',
+        'OFFICER APPROVED'
+      ];
+
+      if (managerStatuses.includes(normalizedStatus) ||
+          ['Office Submitted', 'Submitted to Manager', 'Officer Approved'].includes(status)) {
         actions.push({
           label: "Approve",
           action: "manager-approve",
@@ -383,7 +397,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
         toast.success(successMessage);
         try {
           if (typeof window !== 'undefined' && window.showSuccess) {
-            window.showSuccess(`${successMessage}. Click to view All Proposals.`, 8000, () => {
+            window.showSuccess(successMessage + ' — Click to open All Proposals', 8000, () => {
               goTo('/AllProposals');
             });
           }
@@ -419,6 +433,11 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
       }
 
       toast.error(errorMessage);
+      try {
+        if (typeof window !== 'undefined' && window.showError) {
+          window.showError(errorMessage, 8000);
+        }
+      } catch (_) {}
     } finally {
       setLoading(false);
     }
@@ -578,15 +597,17 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
       )}
 
       <Menu anchorEl={anchorEl} open={menuOpen} onClose={handleMenuClose} elevation={3}>
-        {/* View action at top */}
-        <MenuItem onClick={() => { handleMenuClose(); onView?.(); }}>
-          <ListItemIcon>
-            <VisibilityIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText primary="View" secondary="Open proposal details" />
-        </MenuItem>
+        {/* View action at top (optional) */}
+        {showViewInMenu && (
+          <MenuItem onClick={() => { handleMenuClose(); onView?.(); }}>
+            <ListItemIcon>
+              <VisibilityIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText primary="View" secondary="Open proposal details" />
+          </MenuItem>
+        )}
         
-        {availableActions.length > 0 && <Divider sx={{ my: 0.5 }} />}
+        {showViewInMenu && availableActions.length > 0 && <Divider sx={{ my: 0.5 }} />}
         
         {availableActions.length === 0 ? (
           <MenuItem disabled>

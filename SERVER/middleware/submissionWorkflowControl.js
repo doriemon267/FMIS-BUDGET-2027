@@ -35,6 +35,21 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
         return next();
       }
 
+      // Check if user has budget role - budget roles use budgetRoleAccessControl middleware instead
+      const hasBudgetRole = userRoles && (
+        userRoles.includes('BUDGET_ADMIN') ||
+        userRoles.includes('BUDGET_MANAGER') ||
+        userRoles.includes('BUDGET_OFFICER') ||
+        userRoles.includes('BUDGET_ANALYST')
+      );
+      
+      if (hasBudgetRole) {
+        // Budget role users bypass submission workflow control
+        // They will be filtered by budgetRoleAccessControl middleware instead
+        console.log(`[submissionWorkflowControl] User has budget role, bypassing submission workflow control`);
+        return next();
+      }
+
       // Try to get user's assignment from new model first, fallback to old model
       let assignment = null;
       let isNewStructure = false;

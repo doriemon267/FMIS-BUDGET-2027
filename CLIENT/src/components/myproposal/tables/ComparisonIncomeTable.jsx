@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Table,
   TableBody,
@@ -10,18 +10,18 @@ import {
   Chip,
   Box,
   Typography,
-  IconButton
-} from '@mui/material';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
+  IconButton,
+} from "@mui/material";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 
 const ComparisonIncomeTable = ({ data }) => {
   const [expandedCategories, setExpandedCategories] = useState({});
 
   const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-PH', {
-      style: 'currency',
-      currency: 'PHP'
+    return new Intl.NumberFormat("en-PH", {
+      style: "currency",
+      currency: "PHP",
     }).format(amount ?? 0);
   };
 
@@ -29,24 +29,26 @@ const ComparisonIncomeTable = ({ data }) => {
     if (!entry) return undefined;
 
     switch (field) {
-      case 'category': {
+      case "category": {
         const category = entry.category ?? entry.categoryName ?? entry.Category;
-        if (typeof category === 'object') {
-          return category?.categoryName ?? category?.name ?? category?.label ?? '';
+        if (typeof category === "object") {
+          return (
+            category?.categoryName ?? category?.name ?? category?.label ?? ""
+          );
         }
-        return category ?? '';
+        return category ?? "";
       }
-      case 'subCategory':
-      case 'subcategory': {
+      case "subCategory":
+      case "subcategory": {
         return (
           entry.subCategory ??
           entry.subcategory ??
-          entry['sub-category'] ??
+          entry["sub-category"] ??
           entry.subCategoryName ??
-          ''
+          ""
         );
       }
-      case 'amount':
+      case "amount":
         return Number(entry.amount ?? entry.Amount ?? 0);
       default:
         return entry[field];
@@ -54,37 +56,45 @@ const ComparisonIncomeTable = ({ data }) => {
   };
 
   const getDisplayValue = (entry, field) => {
-    if (!entry) return '';
+    if (!entry) return "";
     const value = getFieldRawValue(entry, field);
     if (value === undefined || value === null) {
-      return '';
+      return "";
     }
-    if (field === 'amount') {
+    if (field === "amount") {
       return formatCurrency(value);
     }
     return value;
   };
 
   const getCellStyle = (item, field) => {
-    if (item.changeType === 'added') {
-      return { backgroundColor: '#e8f5e9', fontWeight: 'bold' };
+    if (item.changeType === "added") {
+      return { backgroundColor: "#e8f5e9", fontWeight: "bold" };
     }
-    if (item.changeType === 'deleted') {
-      return { backgroundColor: '#ffebee', textDecoration: 'line-through', opacity: 0.7 };
+    if (item.changeType === "deleted") {
+      return {
+        backgroundColor: "#ffebee",
+        textDecoration: "line-through",
+        opacity: 0.7,
+      };
     }
-    if (item.changeType === 'modified') {
+    if (item.changeType === "modified") {
       const oldValue = getFieldRawValue(item.originalValues, field);
       const newValue = getFieldRawValue(item, field);
 
-      if (field === 'amount') {
+      if (field === "amount") {
         if (newValue > oldValue) {
-          return { backgroundColor: '#e8f5e9', fontWeight: 'bold' };
+          return { backgroundColor: "#e8f5e9", fontWeight: "bold" };
         }
         if (newValue < oldValue) {
-          return { backgroundColor: '#ffebee', fontWeight: 'bold' };
+          return { backgroundColor: "#ffebee", fontWeight: "bold" };
         }
-      } else if (oldValue !== undefined && newValue !== undefined && oldValue !== newValue) {
-        return { backgroundColor: '#fff3e0' };
+      } else if (
+        oldValue !== undefined &&
+        newValue !== undefined &&
+        oldValue !== newValue
+      ) {
+        return { backgroundColor: "#fff3e0" };
       }
     }
     return {};
@@ -94,34 +104,40 @@ const ComparisonIncomeTable = ({ data }) => {
     const { alignRight = false, bold = false, sx: extraSx } = options;
     const cellStyle = {
       ...getCellStyle(item, field),
-      ...(alignRight ? { textAlign: 'right' } : {}),
-      ...(bold ? { fontWeight: 'bold' } : {}),
-      ...(extraSx || {})
+      ...(alignRight ? { textAlign: "right" } : {}),
+      ...(bold ? { fontWeight: "bold" } : {}),
+      ...(extraSx || {}),
     };
-    const textAlign = alignRight ? 'right' : 'left';
+    const textAlign = alignRight ? "right" : "left";
 
     const currentValue = getFieldRawValue(item, field);
     const originalValue = getFieldRawValue(item?.originalValues, field);
     const hasDelta =
-      item.changeType === 'modified' &&
+      item.changeType === "modified" &&
       originalValue !== undefined &&
       originalValue !== currentValue;
 
     if (hasDelta) {
-      const displayCurrent = field === 'amount'
-        ? formatCurrency(currentValue)
-        : getDisplayValue(item, field) || '—';
-      const displayOld = field === 'amount'
-        ? formatCurrency(originalValue)
-        : getDisplayValue(item.originalValues, field) || '—';
+      const displayCurrent =
+        field === "amount"
+          ? formatCurrency(currentValue)
+          : getDisplayValue(item, field) || "—";
+      const displayOld =
+        field === "amount"
+          ? formatCurrency(originalValue)
+          : getDisplayValue(item.originalValues, field) || "—";
 
       return (
         <TableCell sx={cellStyle}>
           <Box>
-            <Typography variant="body2" sx={{ fontWeight: 'bold', textAlign }}>
+            <Typography variant="body2" sx={{ fontWeight: "bold", textAlign }}>
               {displayCurrent}
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ textDecoration: 'line-through' }}>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ textDecoration: "line-through" }}
+            >
               Was: {displayOld}
             </Typography>
           </Box>
@@ -129,13 +145,17 @@ const ComparisonIncomeTable = ({ data }) => {
       );
     }
 
-    const displayValue = field === 'amount'
-      ? formatCurrency(currentValue)
-      : getDisplayValue(item, field) || '—';
+    const displayValue =
+      field === "amount"
+        ? formatCurrency(currentValue)
+        : getDisplayValue(item, field) || "—";
 
     return (
       <TableCell sx={cellStyle}>
-        <Typography variant="body2" sx={{ fontWeight: bold ? 'bold' : undefined, textAlign }}>
+        <Typography
+          variant="body2"
+          sx={{ fontWeight: bold ? "bold" : undefined, textAlign }}
+        >
           {displayValue}
         </Typography>
       </TableCell>
@@ -147,7 +167,7 @@ const ComparisonIncomeTable = ({ data }) => {
     const lookup = new Map();
 
     (data || []).forEach((item, index) => {
-      const categoryName = getDisplayValue(item, 'category') || 'No category';
+      const categoryName = getDisplayValue(item, "category") || "No category";
       if (!lookup.has(categoryName)) {
         const group = { category: categoryName, items: [] };
         lookup.set(categoryName, group);
@@ -183,18 +203,21 @@ const ComparisonIncomeTable = ({ data }) => {
   }, [groupedData]);
 
   const getOriginalAmount = (item) => {
-    const original = getFieldRawValue(item.originalValues, 'amount');
+    const original = getFieldRawValue(item.originalValues, "amount");
     if (original !== undefined && original !== null) {
       return Number(original) || 0;
     }
-    const comparisonOriginal = getFieldRawValue(item.comparisonOriginal, 'amount');
+    const comparisonOriginal = getFieldRawValue(
+      item.comparisonOriginal,
+      "amount"
+    );
     if (comparisonOriginal !== undefined && comparisonOriginal !== null) {
       return Number(comparisonOriginal) || 0;
     }
-    if ((item.changeType || '').toLowerCase() === 'added') {
+    if ((item.changeType || "").toLowerCase() === "added") {
       return 0;
     }
-    return Number(getFieldRawValue(item, 'amount')) || 0;
+    return Number(getFieldRawValue(item, "amount")) || 0;
   };
 
   const categorySummaries = useMemo(() => {
@@ -206,27 +229,37 @@ const ComparisonIncomeTable = ({ data }) => {
       const changeTypes = new Set();
 
       items.forEach((item) => {
-        const changeType = item.changeType || 'unchanged';
+        const changeType = item.changeType || "unchanged";
         changeTypes.add(changeType);
 
-        const currentAmount = changeType === 'deleted' ? 0 : Number(getFieldRawValue(item, 'amount')) || 0;
+        const currentAmount =
+          changeType === "deleted"
+            ? 0
+            : Number(getFieldRawValue(item, "amount")) || 0;
         currentTotal += currentAmount;
 
         originalTotal += getOriginalAmount(item);
       });
 
-      let categoryChangeType = 'unchanged';
+      let categoryChangeType = "unchanged";
       if (changeTypes.size === 1) {
-        categoryChangeType = changeTypes.values().next().value || 'unchanged';
+        categoryChangeType = changeTypes.values().next().value || "unchanged";
       } else {
-        const meaningfulChanges = [...changeTypes].filter((type) => type && type !== 'unchanged');
-        categoryChangeType = meaningfulChanges.length === 0 ? 'unchanged' : (meaningfulChanges.length === 1 ? meaningfulChanges[0] : 'mixed');
+        const meaningfulChanges = [...changeTypes].filter(
+          (type) => type && type !== "unchanged"
+        );
+        categoryChangeType =
+          meaningfulChanges.length === 0
+            ? "unchanged"
+            : meaningfulChanges.length === 1
+            ? meaningfulChanges[0]
+            : "mixed";
       }
 
       summary[category] = {
         currentTotal,
         originalTotal,
-        changeType: categoryChangeType
+        changeType: categoryChangeType,
       };
     });
 
@@ -237,10 +270,10 @@ const ComparisonIncomeTable = ({ data }) => {
     const rows = [];
     groupedData.forEach(({ category, items }) => {
       const expanded = expandedCategories[category] !== false;
-      rows.push({ type: 'category', category, items, expanded });
+      rows.push({ type: "category", category, items, expanded });
       if (expanded) {
         items.forEach((item) => {
-          rows.push({ type: 'item', category, item });
+          rows.push({ type: "item", category, item });
         });
       }
     });
@@ -250,50 +283,71 @@ const ComparisonIncomeTable = ({ data }) => {
   const toggleCategory = (category) => {
     setExpandedCategories((prev) => ({
       ...prev,
-      [category]: !(prev[category] !== false)
+      [category]: !(prev[category] !== false),
     }));
   };
 
   const renderChangeChip = (changeType) => {
-    const normalized = changeType || 'unchanged';
-    if (normalized === 'added') {
+    const normalized = changeType || "unchanged";
+    if (normalized === "added") {
       return <Chip label="Added" size="small" color="success" />;
     }
-    if (normalized === 'modified') {
+    if (normalized === "modified") {
       return <Chip label="Modified" size="small" color="warning" />;
     }
-    if (normalized === 'deleted') {
+    if (normalized === "deleted") {
       return <Chip label="Deleted" size="small" color="error" />;
     }
-    if (normalized === 'mixed') {
-      return <Chip label="Mixed" size="small" color="info" variant="outlined" />;
+    if (normalized === "mixed") {
+      return (
+        <Chip label="Mixed" size="small" color="info" variant="outlined" />
+      );
     }
     return <Chip label="Unchanged" size="small" />;
   };
 
+  // Determine which organizational column to display (Division preferred for Analyst context)
+  const orgColumnLabel = useMemo(() => {
+    if (Array.isArray(data) && data.some((d) => d && d.division))
+      return "Division";
+    if (Array.isArray(data) && data.some((d) => d && d.department))
+      return "Department";
+    return "Organization";
+  }, [data]);
+
   const renderCategoryAmountCell = (category) => {
-    const summary = categorySummaries[category] || { currentTotal: 0, originalTotal: 0, changeType: 'unchanged' };
+    const summary = categorySummaries[category] || {
+      currentTotal: 0,
+      originalTotal: 0,
+      changeType: "unchanged",
+    };
     const { currentTotal, originalTotal, changeType } = summary;
     const hasDelta = Math.abs(currentTotal - originalTotal) > 0.005;
 
-    let sx = { textAlign: 'right', fontWeight: 'bold' };
-    if (changeType === 'added' || (hasDelta && currentTotal > originalTotal)) {
-      sx = { ...sx, backgroundColor: '#e8f5e9' };
-    } else if (changeType === 'deleted' || (hasDelta && currentTotal < originalTotal)) {
-      sx = { ...sx, backgroundColor: '#ffebee' };
+    let sx = { textAlign: "right", fontWeight: "bold" };
+    if (changeType === "added" || (hasDelta && currentTotal > originalTotal)) {
+      sx = { ...sx, backgroundColor: "#e8f5e9" };
+    } else if (
+      changeType === "deleted" ||
+      (hasDelta && currentTotal < originalTotal)
+    ) {
+      sx = { ...sx, backgroundColor: "#ffebee" };
     }
 
     return (
       <TableCell sx={sx}>
         <Box>
-          <Typography variant="body2" sx={{ fontWeight: 'bold', textAlign: 'right' }}>
+          <Typography
+            variant="body2"
+            sx={{ fontWeight: "bold", textAlign: "right" }}
+          >
             {formatCurrency(currentTotal)}
           </Typography>
           {hasDelta && (
             <Typography
               variant="caption"
               color="text.secondary"
-              sx={{ textDecoration: 'line-through', display: 'block' }}
+              sx={{ textDecoration: "line-through", display: "block" }}
             >
               Was: {formatCurrency(originalTotal)}
             </Typography>
@@ -309,48 +363,80 @@ const ComparisonIncomeTable = ({ data }) => {
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell><strong>Category</strong></TableCell>
-              <TableCell><strong>Sub-Category</strong></TableCell>
-              <TableCell align="right"><strong>Amount</strong></TableCell>
-              <TableCell><strong>Department</strong></TableCell>
-              <TableCell><strong>Change Status</strong></TableCell>
+              <TableCell>
+                <strong>Category</strong>
+              </TableCell>
+              <TableCell>
+                <strong>Sub-Category</strong>
+              </TableCell>
+              <TableCell align="right">
+                <strong>Amount</strong>
+              </TableCell>
+              <TableCell>
+                <strong>{orgColumnLabel}</strong>
+              </TableCell>
+              <TableCell>
+                <strong>Change Status</strong>
+              </TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {flattenedData.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} align="center">
-                  <Box sx={{ py: 3, color: 'text.secondary' }}>
+                  <Box sx={{ py: 3, color: "text.secondary" }}>
                     No income entries found.
                   </Box>
                 </TableCell>
               </TableRow>
             ) : (
               flattenedData.map((row, index) => {
-                if (row.type === 'category') {
+                if (row.type === "category") {
                   return (
                     <TableRow
                       key={`category-${row.category}-${index}`}
-                      sx={{ backgroundColor: 'grey.100', '&:hover': { backgroundColor: 'grey.200' } }}
+                      sx={{
+                        backgroundColor: "grey.100",
+                        "&:hover": { backgroundColor: "grey.200" },
+                      }}
                     >
-                      <TableCell sx={{ fontWeight: 'bold', fontSize: '1rem' }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <TableCell sx={{ fontWeight: "bold", fontSize: "1rem" }}>
+                        <Box
+                          sx={{ display: "flex", alignItems: "center", gap: 1 }}
+                        >
                           <IconButton
                             size="small"
                             onClick={() => toggleCategory(row.category)}
-                            aria-label={row.expanded ? 'Collapse category' : 'Expand category'}
+                            aria-label={
+                              row.expanded
+                                ? "Collapse category"
+                                : "Expand category"
+                            }
                           >
-                            {row.expanded ? <KeyboardArrowDownIcon /> : <KeyboardArrowRightIcon />}
+                            {row.expanded ? (
+                              <KeyboardArrowDownIcon />
+                            ) : (
+                              <KeyboardArrowRightIcon />
+                            )}
                           </IconButton>
-                          <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                          <Typography
+                            variant="subtitle2"
+                            sx={{ fontWeight: "bold" }}
+                          >
                             {row.category}
                           </Typography>
                         </Box>
                       </TableCell>
                       {renderCategoryAmountCell(row.category)}
-                      <TableCell sx={{ color: 'text.disabled', fontStyle: 'italic' }}>—</TableCell>
+                      <TableCell
+                        sx={{ color: "text.disabled", fontStyle: "italic" }}
+                      >
+                        —
+                      </TableCell>
                       <TableCell>
-                        {renderChangeChip(categorySummaries[row.category]?.changeType)}
+                        {renderChangeChip(
+                          categorySummaries[row.category]?.changeType
+                        )}
                       </TableCell>
                     </TableRow>
                   );
@@ -362,11 +448,18 @@ const ComparisonIncomeTable = ({ data }) => {
                 return (
                   <TableRow key={key}>
                     <TableCell></TableCell>
-                    {renderComparisonCell(item, 'subCategory', { sx: { pl: 4 } })}
-                    {renderComparisonCell(item, 'amount', { alignRight: true, bold: true })}
-                    {renderComparisonCell(item, 'department')}
+                    {renderComparisonCell(item, "subCategory", {
+                      sx: { pl: 4 },
+                    })}
+                    {renderComparisonCell(item, "amount", {
+                      alignRight: true,
+                      bold: true,
+                    })}
                     <TableCell>
-                      {renderChangeChip(item.changeType || 'unchanged')}
+                      {item.division || item.department || "—"}
+                    </TableCell>
+                    <TableCell>
+                      {renderChangeChip(item.changeType || "unchanged")}
                     </TableCell>
                   </TableRow>
                 );

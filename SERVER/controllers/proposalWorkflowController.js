@@ -137,6 +137,73 @@ function checkProposalAccess(proposal, userId, userRoles) {
 }
 
 /**
+ * Helper function to sync proposal status to all related budget items
+ * Updates status and workflowLevel for PersonnelServices, CapitalOutlay, mooeProposals, and Income
+ */
+async function syncBudgetItemsStatus(proposal) {
+  try {
+    const { status, workflowLevel, region, department, division, fiscalYear, budgetType } = proposal;
+    
+    // Build filter criteria to match related budget items
+    const filterCriteria = {
+      region,
+      department,
+      division,
+      fiscalYear,
+      budgetType
+    };
+
+    console.log('🔄 Syncing budget items status:', {
+      proposalId: proposal._id,
+      newStatus: status,
+      newWorkflowLevel: workflowLevel,
+      criteria: filterCriteria
+    });
+
+    // Update all related budget items in parallel
+    const updatePromises = [
+      PersonnelServices.updateMany(filterCriteria, { 
+        $set: { status, workflowLevel } 
+      }),
+      CapitalOutlay.updateMany(filterCriteria, { 
+        $set: { status, workflowLevel } 
+      }),
+      mooeProposals.updateMany(filterCriteria, { 
+        $set: { status, workflowLevel } 
+      }),
+      Income.updateMany(filterCriteria, { 
+        $set: { status, workflowLevel } 
+      })
+    ];
+
+    const results = await Promise.all(updatePromises);
+    
+    console.log('✅ Budget items status synced:', {
+      personnelServices: results[0].modifiedCount,
+      capitalOutlay: results[1].modifiedCount,
+      mooeProposals: results[2].modifiedCount,
+      income: results[3].modifiedCount
+    });
+
+    return {
+      success: true,
+      updated: {
+        personnelServices: results[0].modifiedCount,
+        capitalOutlay: results[1].modifiedCount,
+        mooeProposals: results[2].modifiedCount,
+        income: results[3].modifiedCount
+      }
+    };
+  } catch (error) {
+    console.error('❌ Error syncing budget items status:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+/**
  * Budget Proposal Workflow Controller
  * Implements hierarchical workflow with mandatory comments and user tracking
  */
@@ -231,6 +298,9 @@ exports.submitDirectToManager = async (req, res) => {
     });
 
     await proposal.save();
+
+    // Sync status to all related budget items
+    await syncBudgetItemsStatus(proposal);
 
     // Send notification to Budget Manager
     await sendNotification({
@@ -340,6 +410,9 @@ exports.submitProposal = async (req, res) => {
 
     await proposal.save();
 
+    // Sync status to all related budget items
+    await syncBudgetItemsStatus(proposal);
+
     // Send notification to Budget Officer
     await sendNotification({
       recipientRole: 'BUDGET_OFFICER',
@@ -429,19 +502,41 @@ exports.approveProposal = async (req, res) => {
     let newStatus;
     let approvalField;
 
-    if (userRoles.includes('BUDGET_OFFICER')) {
-      newStatus = 'Office Approved';
-      approvalField = 'approvedByOfficer';
+    // Determine the appropriate workflow action based on CURRENT STATUS and user roles
+    // This prevents users with multiple roles from skipping workflow steps
+    
+    if (previousStatus === 'Division Submitted' && userRoles.includes('BUDGET_OFFICER')) {
+      // BUDGET_OFFICER submitting to BUDGET_MANAGER
+      newStatus = 'Office Submitted';
+      approvalField = 'submittedByOfficer';
       proposal.workflowLevel = 'OFFICER';
-      console.log('✅ BUDGET_OFFICER approval - Status will change to:', newStatus);
-    } else if (userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN')) {
-      newStatus = 'Finalized';
+      console.log('✅ BUDGET_OFFICER submission (Division Submitted → Office Submitted)');
+    } else if (previousStatus === 'Office Submitted' && (userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN'))) {
+      // BUDGET_MANAGER approving submission from BUDGET_OFFICER
+      newStatus = 'Office Approved';
       approvalField = 'approvedByManager';
-      proposal.workflowLevel = 'FINALIZED';
-      console.log('✅ BUDGET_MANAGER approval - Status will change to:', newStatus);
+      proposal.workflowLevel = 'MANAGER';
+      console.log('✅ BUDGET_MANAGER approval (Office Submitted → Office Approved)');
+    } else if (previousStatus === 'Division Submitted' && (userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN')) && !userRoles.includes('BUDGET_OFFICER')) {
+      // BUDGET_MANAGER directly approving (only if they don't have BUDGET_OFFICER role)
+      newStatus = 'Office Approved';
+      approvalField = 'approvedByManager';
+      proposal.workflowLevel = 'MANAGER';
+      console.log('✅ BUDGET_MANAGER direct approval (Division Submitted → Office Approved)');
     } else {
-      console.log('❌ No valid roles found for approval:', userRoles);
-      return res.status(403).json({ success: false, message: 'Unauthorized to approve proposals' });
+      console.log('❌ Invalid workflow transition:', {
+        currentStatus: previousStatus,
+        userRoles,
+        message: 'Cannot approve proposal at this stage'
+      });
+      return res.status(403).json({ 
+        success: false, 
+        message: `Cannot approve proposal with status "${previousStatus}". Expected status: ${
+          userRoles.includes('BUDGET_OFFICER') ? 'Division Submitted' : 
+          userRoles.includes('BUDGET_MANAGER') ? 'Office Submitted' : 
+          'Unknown'
+        }` 
+      });
     }
 
     proposal.status = newStatus;
@@ -485,16 +580,17 @@ exports.approveProposal = async (req, res) => {
     console.log('🔍 Entity filter criteria:', JSON.stringify(entityFilter, null, 2));
     
     // Map proposal status to entity status
-    // Historically entity models used 'Region Approved' for the final approval state
-    // but workflow-level labels at the proposal summary are 'Office Approved'.
-    // To keep entity records consistent with proposal summaries we now store
-    // 'Office Approved' on entity documents while keeping workflowLevel as 'REGION'.
+    // BUDGET_OFFICER submits → 'Office Submitted' (pending MANAGER approval)
+    // BUDGET_MANAGER approves → 'Office Approved' (approved by manager)
     let entityStatus, entityWorkflowLevel;
-    if (newStatus === 'Office Approved') {
-      // Store the Office-level approval label on entities so the UI and filters
-      // can be consistent and we don't have to special-case 'Region Approved'.
+    if (newStatus === 'Office Submitted') {
+      // BUDGET_OFFICER submitted to BUDGET_MANAGER for approval
+      entityStatus = 'Office Submitted';
+      entityWorkflowLevel = 'OFFICER';
+    } else if (newStatus === 'Office Approved') {
+      // BUDGET_MANAGER approved the submission
       entityStatus = 'Office Approved';
-      entityWorkflowLevel = 'REGION';
+      entityWorkflowLevel = 'MANAGER';
     } else if (newStatus === 'Finalized') {
       entityStatus = 'Finalized';
       entityWorkflowLevel = 'FINALIZED';
@@ -633,6 +729,9 @@ exports.returnProposal = async (req, res) => {
 
     await proposal.save();
 
+    // Sync status to all related budget items
+    await syncBudgetItemsStatus(proposal);
+
     // Send notification to submitter
     const submitterMessage = `Your proposal "${proposal.title}" has been returned by ${userName} with comment: ${comment}`;
     await sendNotification({
@@ -770,9 +869,9 @@ exports.bulkApproveProposals = async (req, res) => {
 
     for (const proposal of proposals) {
       const previousStatus = proposal.status;
-      proposal.status = 'Office Approved';
+      proposal.status = 'Office Submitted';
       proposal.workflowLevel = 'OFFICER';
-      proposal.approvedByOfficer = {
+      proposal.submittedByOfficer = {
         userId,
         userName,
         date: new Date(),
@@ -781,13 +880,13 @@ exports.bulkApproveProposals = async (req, res) => {
 
       // Add to workflow history
       proposal.workflowHistory.push({
-        action: 'APPROVE',
+        action: 'SUBMIT',
         comment,
         userId,
         userName,
         timestamp: new Date(),
         previousStatus,
-        newStatus: 'Office Approved'
+        newStatus: 'Office Submitted'
       });
 
       await proposal.save();
@@ -813,8 +912,8 @@ exports.bulkApproveProposals = async (req, res) => {
       
       const entityUpdate = {
         $set: {
-          status: 'Office Approved',     // Normalize entity records to use Office Approved
-          workflowLevel: 'REGION',       // OFFICER maps to REGION in entity workflow
+          status: 'Office Submitted',    // BUDGET_OFFICER submits to BUDGET_MANAGER
+          workflowLevel: 'OFFICER',      // Submitted by OFFICER, pending MANAGER approval
           lastActionBy: userName,
           lastActionDate: new Date()
         }

@@ -1,3 +1,95 @@
+# Implementation Summary – Updates as of Oct 12, 2025
+
+This section documents the latest UI and server changes completed before push.
+
+## Highlights
+
+- View-only dialog uses a single comparison table
+  - For statuses: Office Approved, Manager Approved, Approved, Finalized
+  - Renders the Budget Analyst-style comparison for all roles
+  - Fallback to submission view only if comparison data isn’t ready yet
+
+- Comparison prefetch for everyone
+  - Comparison data is prefetched for all roles to speed up dialog rendering
+
+- Cleaner UI (banners removed)
+  - Removed debug info banner
+  - Removed “already approved and cannot be edited” banner
+  - Removed the green info banner in the comparison view
+
+- Summary header made compact
+  - Less padding and smaller typography to reduce vertical space
+
+- Capital Outlay particulars propagation
+  - When saving/deleting Capital Outlay details, parent `CapitalOutlay.particulars` is updated with a concise summary
+  - Added backfill script to populate missing particulars for existing records
+
+## Files of interest
+
+- Client
+  - `CLIENT/src/components/myproposal/ProposalDetailsDialog.jsx`
+    - Prefetch comparison for all roles; render single comparison table in view-only
+    - Removed debug and approved-warning banners
+    - Compact Summary header styling
+  - `CLIENT/src/components/myproposal/BudgetAnalystComparisonView.jsx`
+    - Removed green info banner
+  - `CLIENT/src/components/myproposal/tables/ComparisonCapitalOutlayTable.jsx`
+    - Dynamic org column: shows Division when available, else Department
+
+- Server
+  - `SERVER/controllers/capitalOutlayDetailsController.js`
+    - On save/delete of details: update parent totals and `particulars` summary
+  - `SERVER/scripts/backfill-capitaloutlay-particulars.js`
+    - Script to populate missing `CapitalOutlay.particulars` from details
+  - `package.json`
+    - Added script: `backfill:co-particulars`
+
+## Verification checklist
+
+1) View-only dialog
+   - Open a proposal with Office Approved/Manager Approved/Approved/Finalized
+   - Expect only the comparison table (no duplicate tables)
+   - No debug banner; no approved-warning banner; no green info banner
+
+2) Comparison tabs
+   - Tabs show counts and change chips (+, ~, -)
+   - Capital Outlay shows Division when present; otherwise Department
+
+3) Summary header
+   - Card height is reduced but still shows Processed By, Division/Origin, Fiscal Year, Budget Type
+
+4) Capital Outlay particulars
+   - After saving details, parent `CapitalOutlay.particulars` is populated with a concise summary
+
+## Optional: Backfill existing particulars
+
+PowerShell (Windows):
+
+```pwsh
+# If needed, set DB URL first
+$env:MONGODB_BUDGET_URL="mongodb://<host>:<port>/<db>"
+
+# Run backfill
+npm run backfill:co-particulars
+```
+
+## Push instructions (after review)
+
+Optional commands if you want me to do it:
+
+```pwsh
+# Stage changes
+git add -A
+
+# Commit with message
+git commit -m "Dialog: single comparison view in read-only + compact summary; CO particulars propagation + backfill script; banners removed"
+
+# Push current branch
+git push
+```
+
+---
+
 # Capital Outlay Details Feature - Implementation Summary
 
 ## ✅ COMPLETED IMPLEMENTATION

@@ -102,13 +102,6 @@ const BudgetAnalystComparisonView = ({ comparisonData, proposal }) => {
 
   return (
     <Box>
-      <Alert severity="success" sx={{ mb: 2 }}>
-        <Typography variant="body2">
-          <strong>Budget Analyst View:</strong> This shows your original submission alongside the approved version. 
-          <span style={{ color: '#2e7d32', fontWeight: 'bold' }}> Green highlights</span> indicate increased values, 
-          <span style={{ color: '#d32f2f', fontWeight: 'bold' }}> red highlights</span> indicate decreased values.
-        </Typography>
-      </Alert>
 
       {/* Tabs with change indicators */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
