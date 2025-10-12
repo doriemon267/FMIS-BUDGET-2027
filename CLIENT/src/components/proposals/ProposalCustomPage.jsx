@@ -364,6 +364,9 @@ const CustomPage = ({
     budgetarySupportData,
   ]);
 
+  // When there are no Draft/Returned (or similar) items, lock editing across the page
+  const submissionLocked = useMemo(() => !anyNotSubmitted, [anyNotSubmitted]);
+
   // Auto-save functionality (moved here after anyNotSubmitted is declared)
   useEffect(() => {
     if (
@@ -3177,16 +3180,38 @@ const CustomPage = ({
         {/* Activity Log Dialog */}
         <ActivityLogDialog />
 
-        <div
-          className="tab-content"
-          style={{
-            backgroundColor: "#f9f9f9",
-            borderRadius: "8px",
-            padding: isMobile ? "8px" : "16px",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-            minHeight: "300px",
-          }}
-        >
+        <Box sx={{ position: 'relative' }}>
+          {/* When locked, block interactions and show a subtle overlay message */}
+          {submissionLocked && (
+            <Box
+              sx={{
+                position: 'absolute',
+                inset: 0,
+                zIndex: 2,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                bgcolor: 'rgba(255,255,255,0.6)',
+                borderRadius: '8px',
+                textAlign: 'center',
+                px: 2
+              }}
+            >
+              <Chip color="warning" label="View only — editing is allowed only for Draft or Returned proposals." />
+            </Box>
+          )}
+          <div
+            className="tab-content"
+            style={{
+              backgroundColor: "#f9f9f9",
+              borderRadius: "8px",
+              padding: isMobile ? "8px" : "16px",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+              minHeight: "300px",
+              pointerEvents: submissionLocked ? 'none' : 'auto',
+              opacity: submissionLocked ? 0.75 : 1
+            }}
+          >
           {activeTab === "PSPermanent" && (
             <Suspense fallback={<CircularProgress />}>
               <PSPermanentServiceTable
@@ -3300,7 +3325,8 @@ const CustomPage = ({
               </Suspense>
             </ErrorBoundary>
           )}
-        </div>
+          </div>
+        </Box>
       </StyledBox>
 
       <Dialog

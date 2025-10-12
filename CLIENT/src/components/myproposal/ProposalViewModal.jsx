@@ -52,6 +52,8 @@ const ProposalViewModal = ({ open, onClose, proposal, onRefresh }) => {
   const [fullProposal, setFullProposal] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Allow editing only for Draft or Returned statuses
+  const isEditableStatus = (status) => status === 'Draft' || status === 'Returned';
 
   // Add a state for categories
   const [categories, setCategories] = useState([]);
