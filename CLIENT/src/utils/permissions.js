@@ -18,9 +18,10 @@ export function hasPermission(currentUser, permissionKey) {
     return false; // Already checked SUPER ADMIN and BUDGET ADMIN above
   }
 
-  // ✅ Allow BUDGET MANAGER to access Settings (ManageSettings) without full admin
-  if (permissionKey === 'ManageSettings' && userRoles.includes('BUDGET MANAGER')) {
-    return true;
+  // ✅ Settings access: allow only BUDGET MANAGER (admins already allowed above);
+  // explicitly deny for other budget staff (analyst/coordinator/officer)
+  if (permissionKey === 'ManageSettings') {
+    return userRoles.includes('BUDGET MANAGER');
   }
 
   // 🔥 BUDGET ANALYST, BUDGET COORDINATOR, BUDGET MANAGER, BUDGET OFFICER
