@@ -73,6 +73,7 @@ const PSCOSCustomPageTable = ({
   customEditElement = null,
   additionalMenuOptions = [],
   ROWS_PER_PAGE = 20,
+  locked = false,
 }) => {
   const [openDialog, setOpenDialog] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -318,7 +319,7 @@ const PSCOSCustomPageTable = ({
                 },
               }}
               startIcon={<PersonAddIcon />}
-              disabled={!fiscalYear}
+              disabled={!fiscalYear || locked}
             >
               Add COS Personnel
             </Button>

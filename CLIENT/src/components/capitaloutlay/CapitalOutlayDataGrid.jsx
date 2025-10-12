@@ -1177,7 +1177,10 @@ const CapitalOutlayDataGrid = ({ fiscalYear, onDataChange, disableIncomeInputs =
     <Paper sx={{ width: "100%", overflow: "hidden", borderRadius: 2, boxShadow: 3 }}>
       <CustomToolbar 
         onRefresh={fetchCapitalOutlays}
-        onAddNew={() => setAddDialogOpen(true)}
+        onAddNew={() => {
+          if (locked) return;
+          setAddDialogOpen(true);
+        }}
         loading={loading}
         locked={locked} // Pass the locked prop here
       />

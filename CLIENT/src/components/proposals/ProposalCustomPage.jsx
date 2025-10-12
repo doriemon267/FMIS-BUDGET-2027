@@ -3201,6 +3201,7 @@ const CustomPage = ({
                       )
                     : []
                 }
+                locked={submissionLocked}
                 addMutation={addPersonnelMutation}
                 queryClient={queryClient}
                 queryKey={QUERY_KEYS.personnel}
@@ -3217,6 +3218,7 @@ const CustomPage = ({
                       )
                     : []
                 }
+                locked={submissionLocked}
               />
             </Suspense>
           )}
@@ -3281,6 +3283,7 @@ const CustomPage = ({
                       )
                     : []
                 }
+                locked={submissionLocked}
               />
             </Suspense>
           )}

@@ -100,7 +100,7 @@ import BarChartIcon from "@mui/icons-material/BarChart";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 
-const Mooe = ({ onDataChange }) => {
+const Mooe = ({ onDataChange, locked = false }) => {
   const { currentUser } = useUser();
   const { activeRegion } = useRegion(); // Get the active region from context
   const queryClient = useQueryClient();
@@ -1131,7 +1131,7 @@ const Mooe = ({ onDataChange }) => {
 
   const isEditable = ["Not Submitted", "Returned", "Draft"].includes(
     data?.status
-  );
+  ) && !locked;
 
   // Enhanced export functionality with multiple formats
   const handleExportToExcel = () => {
@@ -1396,6 +1396,7 @@ const Mooe = ({ onDataChange }) => {
               <IconButton
                 onClick={handleBulkEdit}
                 color={bulkEditMode ? "primary" : "default"}
+                disabled={!isEditable}
               >
                 <EditIcon />
               </IconButton>

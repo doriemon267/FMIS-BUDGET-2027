@@ -65,7 +65,7 @@ const NumberFormatCustom = React.forwardRef(function NumberFormatCustom(props, r
   );
 });
 
-const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate }) => {
+const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false }) => {
   const queryClient = useQueryClient();
   const { currentUser } = useUser();
   const { activeRegion } = useRegion();
@@ -189,13 +189,17 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate }) => {
     }
   });
 
-  const handleOpenDiscountSettings = () => setDiscountSettingsOpen(true);
+  const handleOpenDiscountSettings = () => {
+    if (locked) return;
+    setDiscountSettingsOpen(true);
+  };
   const handleCloseDiscountSettings = () => setDiscountSettingsOpen(false);
   const handleDiscountTypeChange = (event) => setDiscountType(event.target.value);
   const handleDiscountValueChange = (event) => setDiscountValue(Number(event.target.value));
   const handleApplyDiscountChange = (event) => setApplyDiscount(event.target.checked);
 
   const handleSaveDiscountSettings = () => {
+    if (locked) return;
     if (!regionFilter) {
       toast.warning("Please select a region before saving discount settings");
       return;
@@ -835,7 +839,7 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate }) => {
               variant="contained"
               startIcon={<SaveIcon />}
               onClick={handleSaveAll}
-              disabled={!hasUnsavedChanges}
+              disabled={locked || !hasUnsavedChanges}
               sx={{ minWidth: 120 }}
             >
               {hasUnsavedChanges ? 'Save Changes' : 'Saved'}
@@ -844,7 +848,7 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate }) => {
               variant="outlined"
               startIcon={<CancelIcon />}
               onClick={handleClearUnsaved}
-              disabled={!hasUnsavedChanges}
+              disabled={locked || !hasUnsavedChanges}
               sx={{ minWidth: 120 }}
             >
               Clear Changes
@@ -854,6 +858,7 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate }) => {
                 <Switch
                   checked={autoSave}
                   onChange={(e) => {
+                    if (locked) return;
                     setAutoSave(e.target.checked);
                     toast.info(`Auto-save ${e.target.checked ? 'enabled' : 'disabled'}`, { autoClose: 3000 });
                   }}
@@ -1144,13 +1149,14 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate }) => {
                                     <TextField
                                       size="small"
                                       value={amount}
-                                      onChange={(e) => handleSubcategoryAmountChange(category.categoryId, cleanSubcategoryName, e.target.value)}
-                                      onBlur={() => autoSave && userModifiedFields[key] && amount && parseFloat(amount) > 0 &&
+                                      onChange={(e) => !locked && handleSubcategoryAmountChange(category.categoryId, cleanSubcategoryName, e.target.value)}
+                                      onBlur={() => !locked && autoSave && userModifiedFields[key] && amount && parseFloat(amount) > 0 &&
                                         handleSaveSubcategoryAmount(category, cleanSubcategoryName)}
                                       InputProps={{
                                         inputComponent: NumberFormatCustom,
                                         inputProps: { style: { textAlign: 'right' } }
                                       }}
+                                      disabled={locked}
                                       sx={{ width: '120px', '& .MuiInputBase-root': { display: 'flex', justifyContent: 'flex-end' } }}
                                     />
                                   </Box>
@@ -1173,10 +1179,10 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate }) => {
                               </TableCell>
                               <TableCell align="right">
                                 <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                  <IconButton color="primary" onClick={() => handleSaveNewSubcategory(category.categoryId)} size="small">
+                                  <IconButton color="primary" onClick={() => !locked && handleSaveNewSubcategory(category.categoryId)} size="small" disabled={locked}>
                                     <SaveIcon />
                                   </IconButton>
-                                  <IconButton color="secondary" onClick={() => handleCancelAddSubcategory(category.categoryId)} size="small">
+                                  <IconButton color="secondary" onClick={() => handleCancelAddSubcategory(category.categoryId)} size="small" disabled={locked}>
                                     <CancelIcon />
                                   </IconButton>
                                 </Box>

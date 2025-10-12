@@ -54,6 +54,7 @@ const PSPCustomPageTable = ({
   customEditElement = null,
   additionalMenuOptions = [],
   ROWS_PER_PAGE = 20,
+  locked = false,
 }) => {
   const [rows, setRows] = useState([]);
   const [filteredRows, setFilteredRows] = useState([]);
@@ -741,6 +742,7 @@ const PSPCustomPageTable = ({
               variant="contained"
               color="primary"
               onClick={handleOpenDialog}
+              disabled={locked}
               sx={{
                 background: "#009688",
                 color: "#fff",

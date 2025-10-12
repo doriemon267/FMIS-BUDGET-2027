@@ -67,6 +67,7 @@ const PSCasualCustomPageTable = ({
   customEditElement = null,
   additionalMenuOptions = [],
   ROWS_PER_PAGE = 20,
+  locked = false,
 }) => {
   const [rows, setRows] = useState([]);
   const [filteredRows, setFilteredRows] = useState([]);
@@ -233,7 +234,10 @@ const PSCasualCustomPageTable = ({
     }
   }, [fiscalYear, budgetType, PERA, RATA, compensation, currentUser, fetchData, queryClient, dataListName]);
 
-  const handleOpenDialog = () => setOpenDialog(true);
+  const handleOpenDialog = () => {
+    if (locked) return;
+    setOpenDialog(true);
+  };
   const handleCloseDialog = () => setOpenDialog(false);
 
   // New function to handle view details
@@ -438,10 +442,11 @@ const PSCasualCustomPageTable = ({
       }).join('');
 
     return `<!DOCTYPE html>
-<html>
+            <Button
 <head>
   <title>Casual Personnel Services Report</title>
   <style>
+              disabled={locked}
     @page {
       size: A4 landscape;
       margin: 0.5in;
@@ -667,6 +672,7 @@ const PSCasualCustomPageTable = ({
               variant="contained"
               color="primary"
               onClick={handleOpenDialog}
+              disabled={locked}
               sx={{
                 background: "#009688",
                 color: "#fff",
