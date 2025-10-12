@@ -505,21 +505,114 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
     }
   };
 
-  // Step metadata for progress tracking - Simplified role-based workflow
-  const steps = [
-    { key: 'Draft', label: 'Draft' },
-    { key: 'Submitted to Officer', label: 'Officer Review', ts: 'submittedToOfficerAt', by: 'submittedToOfficerBy' },
-    { key: 'Officer Approved', label: 'Manager Review', ts: 'officerApprovedAt', by: 'officerApprovedBy' },
-    { key: 'Manager Approved', label: 'Final Review', ts: 'managerApprovedAt', by: 'managerApprovedBy' },
-    { key: 'Finalized', label: 'Finalized', ts: 'finalizedAt', by: 'finalizedBy' }
-  ];
+  // Determine if this proposal has a manager phase (submitted to manager / manager approved / finalized entries)
+  const hasManagerPhase = (() => {
+    const directFlags = Boolean(
+      proposal?.submittedToManagerAt ||
+      proposal?.managerApprovedAt ||
+      proposal?.finalizedAt
+    );
+    const historyFlags = Array.isArray(proposal?.workflowHistory) && proposal.workflowHistory.some(h => {
+      const ns = String(h?.newStatus || h?.status || '').toLowerCase();
+      return (
+        ns.includes('submitted to manager') ||
+        ns.includes('manager approved') ||
+        ns.includes('manager returned') ||
+        ns.includes('finalized')
+      );
+    });
+    return directFlags || historyFlags;
+  })();
 
-  const currentStepIndex = steps.findIndex(s => s.key === (proposal?.status || 'Draft'));
+  // Step metadata for progress tracking - adapt to whether there's a manager phase
+  const steps = hasManagerPhase
+    ? [
+        { key: 'Draft', label: 'Draft' },
+        { key: 'Submitted to Officer', label: 'Officer Review', ts: 'submittedToOfficerAt', by: 'submittedToOfficerBy' },
+        { key: 'Officer Approved', label: 'Manager Review', ts: 'officerApprovedAt', by: 'officerApprovedBy' },
+        { key: 'Manager Approved', label: 'Final Review', ts: 'managerApprovedAt', by: 'managerApprovedBy' },
+        { key: 'Finalized', label: 'Finalized', ts: 'finalizedAt', by: 'finalizedBy' }
+      ]
+    : [
+        { key: 'Draft', label: 'Draft' },
+        { key: 'Submitted to Officer', label: 'Officer Review', ts: 'submittedToOfficerAt', by: 'submittedToOfficerBy' },
+        // In flows without manager phase, treat Office Approved as the final step and surface its audit fields
+        { key: 'Finalized', label: 'Office Approved', ts: 'officerApprovedAt', by: 'officerApprovedBy' }
+      ];
+
+  // Map alternate status labels to step keys
+  const stepKeySynonyms = {
+    'Office Submitted': 'Submitted to Officer',
+    // If no manager phase, map Office Approved directly to Finalized for indicator purposes
+    'Office Approved': hasManagerPhase ? 'Officer Approved' : 'Finalized'
+  };
+  const normalizedStatusForStep = stepKeySynonyms[proposal?.status] || proposal?.status || 'Draft';
+  const currentStepIndex = Math.max(steps.findIndex(s => s.key === normalizedStatusForStep), 0);
 
   // Dialog state for progress tracker
   const [trackOpen, setTrackOpen] = useState(false);
   const openTrack = () => setTrackOpen(true);
   const closeTrack = () => setTrackOpen(false);
+
+  // Helpers: safer formatting for timestamps and user display names
+  const formatDateTime = (ts) => {
+    if (!ts) return '';
+    try { return new Date(ts).toLocaleString(); } catch { return ''; }
+  };
+  const resolveUserDisplay = (by) => {
+    if (!by) return '';
+    if (typeof by === 'string') {
+      const s = by.trim();
+      if (!s || s.toLowerCase() === 'undefined' || s.toLowerCase() === 'null') return '';
+      if (s.toLowerCase().includes('undefined')) return '';
+      return s;
+    }
+    if (typeof by === 'object') {
+      // Try common shapes
+      const primary = by.userName || by.username || by.name || by.fullName || (by.user && (by.user.name || by.user.userName));
+      if (primary && typeof primary === 'string') return primary;
+      // Combine first/last-style fields if present
+      const first = by.firstName || by.givenName || by.f_name || by.first_name;
+      const last = by.lastName || by.familyName || by.l_name || by.last_name;
+      const combined = [first, last].filter(v => typeof v === 'string' && v.trim() && v.toLowerCase() !== 'undefined').join(' ').trim();
+      if (combined) return combined;
+      // Fallback to ids
+      const idish = by.userId || by.id;
+      return typeof idish === 'string' ? idish : '';
+    }
+    return '';
+  };
+  const statusChipColor = (status) => {
+    switch (status) {
+      case 'Draft': return 'default';
+      case 'Submitted to Officer': return 'info';
+      case 'Office Submitted': return 'secondary';
+      case 'Officer Approved': return 'success';
+      case 'Manager Approved': return 'secondary';
+      case 'Finalized': return 'primary';
+      case 'Office Approved': return 'success';
+      default: return 'default';
+    }
+  };
+
+  // Icons to show inside step markers
+  const getStepIcon = (key, { active, completed } = {}) => {
+    const color = completed ? 'success' : active ? 'primary' : 'disabled';
+    switch (key) {
+      case 'Draft':
+        return <TimelineIcon fontSize="small" color={color} />;
+      case 'Submitted to Officer':
+        return <SendIcon fontSize="small" color={color} />;
+      case 'Officer Approved':
+        return <CheckIcon fontSize="small" color={color} />;
+      case 'Manager Approved':
+        return <CheckIcon fontSize="small" color={color} />;
+      case 'Finalized':
+        return <VerifiedIcon fontSize="small" color={color} />;
+      default:
+        return <TimelineIcon fontSize="small" color={color} />;
+    }
+  };
 
   // Compact actions menu (icon + dropdown)
   const [anchorEl, setAnchorEl] = useState(null);
@@ -673,23 +766,44 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
       <Dialog open={trackOpen} onClose={closeTrack} maxWidth="sm" fullWidth>
         <DialogTitle>Workflow Progress</DialogTitle>
         <DialogContent>
+          {/* Status summary */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+            <Typography variant="body2" color="text.secondary">Current Status</Typography>
+            <Chip size="small" variant="outlined" color={statusChipColor(proposal?.status)} label={proposal?.status || 'Draft'} />
+          </Box>
+
           <Stepper activeStep={Math.max(currentStepIndex, 0)} alternativeLabel>
             {steps.map((s, idx) => {
               const ts = s.ts && proposal?.[s.ts];
-              const by = s.by && proposal?.[s.by];
+              const rawBy = s.by && proposal?.[s.by];
+              const by = resolveUserDisplay(rawBy);
+              const isActive = idx === currentStepIndex;
+              const isCompleted = idx < currentStepIndex;
+              const iconNode = getStepIcon(s.key, { active: isActive, completed: isCompleted });
+              const hasDetail = Boolean(ts || by);
+              const detail = (
+                <Box>
+                  <Typography variant="caption" display="block"><strong>{s.label}</strong></Typography>
+                  <Typography variant="caption" display="block">{formatDateTime(ts) || '—'}</Typography>
+                  <Typography variant="caption" display="block">{by ? `By: ${by}` : 'By: —'}</Typography>
+                </Box>
+              );
               return (
                 <Step key={s.key} completed={idx < currentStepIndex}>
-                  <StepLabel
-                    optional={
-                      ts ? (
-                        <Typography variant="caption">
-                          {new Date(ts).toLocaleString()} {by ? `— ${by}` : ''}
-                        </Typography>
-                      ) : undefined
-                    }
-                  >
-                    {s.label}
-                  </StepLabel>
+                  <Tooltip title={hasDetail ? detail : s.label} arrow>
+                    <StepLabel
+                      icon={iconNode}
+                      optional={
+                        ts ? (
+                          <Typography variant="caption">
+                            {formatDateTime(ts)}{by ? ` — ${by}` : ''}
+                          </Typography>
+                        ) : undefined
+                      }
+                    >
+                      {s.label}
+                    </StepLabel>
+                  </Tooltip>
                 </Step>
               );
             })}
@@ -702,7 +816,12 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
                 Latest: {proposal.workflowHistory[proposal.workflowHistory.length - 1]?.action} → {proposal.workflowHistory[proposal.workflowHistory.length - 1]?.newStatus}
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                {new Date(proposal.workflowHistory[proposal.workflowHistory.length - 1]?.timestamp).toLocaleString()} — {proposal.workflowHistory[proposal.workflowHistory.length - 1]?.userName}
+                {formatDateTime(proposal.workflowHistory[proposal.workflowHistory.length - 1]?.timestamp)}
+                {(() => {
+                  const last = proposal.workflowHistory[proposal.workflowHistory.length - 1];
+                  const name = resolveUserDisplay(last?.userName || last?.user || last?.performedBy || last?.by);
+                  return name ? ` — ${name}` : '';
+                })()}
               </Typography>
             </Box>
           )}
