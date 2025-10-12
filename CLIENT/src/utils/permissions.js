@@ -13,9 +13,14 @@ export function hasPermission(currentUser, permissionKey) {
     return true;
   }
 
-  // 🔥 ManageSettings & ManageUsers Permissions - RESTRICTED to SUPER ADMIN and BUDGET ADMIN only
-  if (permissionKey === 'ManageSettings' || permissionKey === 'ManageUsers') {
+  // 🔥 ManageUsers - RESTRICTED to SUPER ADMIN and BUDGET ADMIN only
+  if (permissionKey === 'ManageUsers') {
     return false; // Already checked SUPER ADMIN and BUDGET ADMIN above
+  }
+
+  // ✅ Allow BUDGET MANAGER to access Settings (ManageSettings) without full admin
+  if (permissionKey === 'ManageSettings' && userRoles.includes('BUDGET MANAGER')) {
+    return true;
   }
 
   // 🔥 BUDGET ANALYST, BUDGET COORDINATOR, BUDGET MANAGER, BUDGET OFFICER

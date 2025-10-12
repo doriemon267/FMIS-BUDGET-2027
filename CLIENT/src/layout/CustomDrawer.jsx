@@ -34,7 +34,11 @@ import { hasPermission } from "../utils/permissions";
 import { useUser } from "../context/UserContext";
 const CustomDrawer = ({ collapsed = false }) => {
   const [openSettings, setOpenSettings] = useState(false);
-const {currentUser} =  useUser();
+  const { currentUser } = useUser();
+  // Simple role flags
+  const roles = (currentUser?.Roles || []).map(String);
+  const isBudgetManager = roles.includes('BUDGET MANAGER');
+  const isBudgetOfficer = roles.includes('BUDGET OFFICER');
   return (
     <Box
       sx={{
@@ -69,7 +73,7 @@ const {currentUser} =  useUser();
               {
                 link: "/proposal",
                 name: "Create Proposal",
-                isAllow: hasPermission(currentUser, 'CreateProposals') || hasPermission(currentUser, 'EditOwnProposals'),
+                isAllow: (hasPermission(currentUser, 'CreateProposals') || hasPermission(currentUser, 'EditOwnProposals')) && !isBudgetManager && !isBudgetOfficer,
                 icon: <FaFileAlt />,
               },
 
@@ -83,7 +87,7 @@ const {currentUser} =  useUser();
               {
                 link: "/myProposals",
                 name: "My Proposals",
-                isAllow: hasPermission(currentUser, 'EditOwnProposals'),
+                isAllow: hasPermission(currentUser, 'EditOwnProposals') && !isBudgetManager && !isBudgetOfficer,
                 icon: <FaClipboardList />,
               },
               // {
@@ -172,7 +176,7 @@ const {currentUser} =  useUser();
             icon={<FiUsers />}
             name="Employee List"
             link="/Employee"
-            isAllow={hasPermission(currentUser, 'EditAllProposals')}
+            isAllow={hasPermission(currentUser, 'EditAllProposals') && !isBudgetManager && !isBudgetOfficer}
             collapsed={collapsed}
           />
 
@@ -180,7 +184,7 @@ const {currentUser} =  useUser();
             icon={<FaBriefcase />}
             name="Employee Benefits"
             link="/employeeBenefits"
-            isAllow={hasPermission(currentUser, 'EditAllProposals')}
+            isAllow={hasPermission(currentUser, 'EditAllProposals') && !isBudgetManager && !isBudgetOfficer}
             collapsed={collapsed}
           />
 
@@ -188,7 +192,7 @@ const {currentUser} =  useUser();
           <LinkTo
             icon={<IoSettingsOutline />}
             name="Settings"
-             isAllow={hasPermission(currentUser, 'ManageSettings')}
+             isAllow={hasPermission(currentUser, 'ManageSettings') || isBudgetManager}
             collapsed={collapsed}
             iconRight={<FaChevronCircleDown />}
             subLinks={[
