@@ -38,27 +38,27 @@ const proposalSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: [
-      "Draft",                    // Initial state
-      "Division Submitted",       // Division → Budget Officer
-      "Office",                   // Department-level proposal
-      "Office Approved",          // Budget Officer approved
-      "Office Submitted",         // Budget Officer → Budget Manager
+      "Draft",                    // Initial state - BUDGET_ANALYST creating
+      "Division Submitted",       // BUDGET_ANALYST → BUDGET_COORDINATOR
+      "Office",                   // BUDGET_COORDINATOR → BUDGET_OFFICER (optional)
+      "Office Approved",          // BUDGET_COORDINATOR approved
+      "Office Submitted",         // BUDGET_COORDINATOR/BUDGET_OFFICER → BUDGET_MANAGER
       "Returned",                 // Rejected at any level
-      "Finalized"                 // Completed after manager approval
+      "Finalized"                 // BUDGET_MANAGER final approval
     ],
     default: "Draft"
   },
   // Enhanced workflow tracking for budget roles
   workflowLevel: {
     type: String,
-    enum: ["DIVISION", "DEPARTMENT", "OFFICER", "MANAGER", "FINALIZED"],
-    default: "DIVISION"
+    enum: ["ANALYST", "COORDINATOR", "OFFICER", "MANAGER", "FINALIZED"],
+    default: "ANALYST"
   },
   // Workflow history with comments and user tracking
   workflowHistory: [{
     action: {
       type: String,
-      enum: ["SUBMIT", "APPROVE", "RETURN", "CONSOLIDATE", "EDIT", "VERIFY", "SUBMIT_DIRECT_TO_MANAGER"],
+      enum: ["SUBMIT", "APPROVE", "RETURN", "CONSOLIDATE", "EDIT", "VERIFY", "SUBMIT_DIRECT_TO_MANAGER", "COORDINATOR_APPROVE", "COORDINATOR_RETURN", "COORDINATOR_SUBMIT_TO_OFFICER", "COORDINATOR_SUBMIT_TO_MANAGER"],
       required: true
     },
     comment: {
@@ -84,6 +84,20 @@ const proposalSchema = new mongoose.Schema({
   }],
   // Budget role specific tracking
   submittedByRole: String, // BUDGET_ANALYST, BUDGET_COORDINATOR
+  // BUDGET_COORDINATOR tracking
+  approvedByCoordinator: {
+    userId: String,
+    userName: String,
+    date: Date,
+    comment: String
+  },
+  returnedByCoordinator: {
+    userId: String,
+    userName: String,
+    date: Date,
+    comment: String
+  },
+  // BUDGET_OFFICER tracking
   approvedByOfficer: {
     userId: String,
     userName: String,
@@ -107,6 +121,7 @@ const proposalSchema = new mongoose.Schema({
     date: Date,
     comment: String
   },
+  // BUDGET_MANAGER tracking
   approvedByManager: {
     userId: String,
     userName: String,
@@ -119,6 +134,24 @@ const proposalSchema = new mongoose.Schema({
     date: Date,
     comment: String
   },
+  // Track if proposal bypassed officer review
+  bypassedOfficerReview: {
+    type: Boolean,
+    default: false
+  },
+  // Track version for edit history
+  version: {
+    type: Number,
+    default: 1
+  },
+  editHistory: [{
+    version: Number,
+    editedBy: String,
+    editedByName: String,
+    editedAt: Date,
+    reason: String,
+    previousStatus: String
+  }],
   // Consolidation tracking
   isConsolidated: {
     type: Boolean,

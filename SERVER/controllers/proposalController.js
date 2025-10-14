@@ -2835,7 +2835,9 @@ exports.getAllUserProposals = async (req, res) => {
     // Base query
     const baseQuery = { processBy, region };
 
-    let visibilityGate = {};
+  let visibilityGate = {};
+  // Ensure scope is always defined for response payload
+  let resolvedScope = 'UNKNOWN';
     
     // PRIORITY: Check if budget role visibility filter is set (for BUDGET_MANAGER, BUDGET_OFFICER, etc.)
     if (req.budgetRoleVisibilityFilter && Object.keys(req.budgetRoleVisibilityFilter).length > 0) {
@@ -2846,6 +2848,9 @@ exports.getAllUserProposals = async (req, res) => {
           req.budgetRoleVisibilityFilter
         ]
       };
+      // When role-based visibility is applied, reflect user's hierarchical scope if available,
+      // otherwise label as ROLE_FILTER to indicate role-driven filtering
+      resolvedScope = (req.hierarchicalAccessInfo?.scope || 'ROLE_FILTER').toUpperCase();
     } else {
       // FALLBACK: Use hierarchical scope-based visibility
       const assignment = req.userHierarchicalAssignment || {};
@@ -2931,6 +2936,7 @@ exports.getAllUserProposals = async (req, res) => {
         // Fallback: just base query
         visibilityGate = baseQuery;
       }
+      resolvedScope = scope;
     }
 
     // Query all collections with the same visibility gate
@@ -2951,7 +2957,7 @@ exports.getAllUserProposals = async (req, res) => {
       budgetarySupport,
       drafts,
       filters: { region, processBy },
-      scope
+      scope: resolvedScope
     });
   } catch (error) {
     console.error("Error getting all user proposals:", error);

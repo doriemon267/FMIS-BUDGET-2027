@@ -139,6 +139,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       userId,
       userName,
       email,
+      userRole,
       assignmentLevel, // 'DIVISION', 'DEPARTMENT', 'REGION', 'FULL'
       accessScope, // NEW: Alternative field name for backward compatibility
       regionId,
@@ -246,6 +247,8 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       userId,
       userName,
       email,
+      // Persist the requested role if provided, so the UI doesn't "downgrade" coordinator at RC level
+      userRole: userRole || undefined,
       assignmentLevel: modelAssignmentLevel,
       regionId: assignmentData.regions?.[0] || null,
       departmentId: assignmentData.departments?.[0] || null,

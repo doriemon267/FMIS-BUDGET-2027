@@ -11,11 +11,24 @@ router.use(checkToken);
 // Normalize roles after authentication
 router.use(normalizeRoles);
 
-// Submit proposal to Budget Officer
+// Submit proposal to Budget Officer (BUDGET_ANALYST submits to BUDGET_COORDINATOR)
 router.post('/submit', proposalWorkflowController.submitProposal);
 
-// Submit proposal directly to Budget Manager (BUDGET_ANALYST only)
+// Submit proposal directly to Budget Manager (BUDGET_ANALYST only - DEPRECATED, use coordinator routes)
 router.post('/submit-direct-to-manager', proposalWorkflowController.submitDirectToManager);
+
+// === NEW COORDINATOR WORKFLOW ROUTES ===
+// BUDGET_COORDINATOR approves proposal from BUDGET_ANALYST
+router.post('/coordinator/approve', proposalWorkflowController.coordinatorApproveProposal);
+
+// BUDGET_COORDINATOR returns proposal to BUDGET_ANALYST
+router.post('/coordinator/return', proposalWorkflowController.coordinatorReturnProposal);
+
+// BUDGET_COORDINATOR submits to BUDGET_OFFICER for verification
+router.post('/coordinator/submit-to-officer', proposalWorkflowController.coordinatorSubmitToOfficer);
+
+// BUDGET_COORDINATOR submits directly to BUDGET_MANAGER (bypassing officer)
+router.post('/coordinator/submit-to-manager', proposalWorkflowController.coordinatorSubmitToManager);
 
 // Verify proposal (Budget Officer only) - marks as verified without changing status
 router.post('/verify', proposalWorkflowController.verifyProposal);

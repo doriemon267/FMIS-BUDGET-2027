@@ -51,15 +51,29 @@ const budgetRoleAccessControl = (operation = 'read') => {
             visibilityFilter.createdByUserId = userId;
           }
         } else if (isBudgetCoordinator) {
-          // Budget Coordinators can see proposals from their department
-          // This would need department matching logic
-          visibilityFilter.$or = [
-            { createdByUserId: userId },
-            { status: { $in: ['Division Submitted', 'Office', 'Office Approved', 'Office Submitted'] } }
-          ];
+          // Budget Coordinators can see:
+          // 1. Proposals submitted by analysts in their division/department (Division Submitted)
+          // 2. Proposals they have approved and are routing (Office Approved)
+          // 3. Proposals they submitted to officer or manager (Office, Office Submitted)
+          // 4. Their own proposals
+          if (userDivision) {
+            visibilityFilter.$or = [
+              { createdByUserId: userId },
+              { division: userDivision, status: { $in: ['Division Submitted', 'Office Approved', 'Office', 'Office Submitted', 'Finalized'] } }
+            ];
+          } else {
+            // Fallback: show proposals needing coordinator action
+            visibilityFilter.$or = [
+              { createdByUserId: userId },
+              { status: { $in: ['Division Submitted', 'Office Approved', 'Office', 'Office Submitted'] } }
+            ];
+          }
         } else if (isBudgetOfficer) {
-          // Budget Officers can see division submissions, office-level items, and items that have been Office Approved or finalized
-          visibilityFilter.status = { $in: ['Division Submitted', 'Office', 'Office Submitted', 'Office Approved', 'Finalized'] };
+          // Budget Officers can see:
+          // 1. Proposals submitted to them by coordinators (Office)
+          // 2. Proposals they have approved and forwarded (Office Submitted)
+          // 3. Finalized proposals for reference
+          visibilityFilter.status = { $in: ['Office', 'Office Submitted', 'Finalized'] };
         } else if (isBudgetManager) {
           // Budget Managers: primarily see items submitted to Manager (Office Submitted)
           // Also allow viewing of items that reached 'Office Approved' or 'Finalized' so managers can review completed items
@@ -505,24 +519,32 @@ exports.approveProposal = async (req, res) => {
     // Determine the appropriate workflow action based on CURRENT STATUS and user roles
     // This prevents users with multiple roles from skipping workflow steps
     
-    if (previousStatus === 'Division Submitted' && userRoles.includes('BUDGET_OFFICER')) {
-      // BUDGET_OFFICER submitting to BUDGET_MANAGER
+    if (previousStatus === 'Office' && userRoles.includes('BUDGET_OFFICER')) {
+      // BUDGET_OFFICER verifying and submitting to BUDGET_MANAGER (from COORDINATOR)
+      newStatus = 'Office Submitted';
+      approvalField = 'verifiedByOfficer';
+      proposal.workflowLevel = 'OFFICER';
+      proposal.submittedByRole = 'BUDGET_OFFICER';
+      console.log('✅ BUDGET_OFFICER verification and submission (Office → Office Submitted)');
+    } else if (previousStatus === 'Division Submitted' && userRoles.includes('BUDGET_OFFICER')) {
+      // Legacy: BUDGET_OFFICER submitting to BUDGET_MANAGER (old flow)
       newStatus = 'Office Submitted';
       approvalField = 'submittedByOfficer';
       proposal.workflowLevel = 'OFFICER';
+      proposal.submittedByRole = 'BUDGET_OFFICER';
       console.log('✅ BUDGET_OFFICER submission (Division Submitted → Office Submitted)');
     } else if (previousStatus === 'Office Submitted' && (userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN'))) {
-      // BUDGET_MANAGER approving submission from BUDGET_OFFICER
-      newStatus = 'Office Approved';
+      // BUDGET_MANAGER final approval
+      newStatus = 'Finalized';
       approvalField = 'approvedByManager';
-      proposal.workflowLevel = 'MANAGER';
-      console.log('✅ BUDGET_MANAGER approval (Office Submitted → Office Approved)');
+      proposal.workflowLevel = 'FINALIZED';
+      console.log('✅ BUDGET_MANAGER final approval (Office Submitted → Finalized)');
     } else if (previousStatus === 'Division Submitted' && (userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN')) && !userRoles.includes('BUDGET_OFFICER')) {
       // BUDGET_MANAGER directly approving (only if they don't have BUDGET_OFFICER role)
-      newStatus = 'Office Approved';
+      newStatus = 'Finalized';
       approvalField = 'approvedByManager';
-      proposal.workflowLevel = 'MANAGER';
-      console.log('✅ BUDGET_MANAGER direct approval (Division Submitted → Office Approved)');
+      proposal.workflowLevel = 'FINALIZED';
+      console.log('✅ BUDGET_MANAGER direct approval (Division Submitted → Finalized)');
     } else {
       console.log('❌ Invalid workflow transition:', {
         currentStatus: previousStatus,
@@ -532,7 +554,7 @@ exports.approveProposal = async (req, res) => {
       return res.status(403).json({ 
         success: false, 
         message: `Cannot approve proposal with status "${previousStatus}". Expected status: ${
-          userRoles.includes('BUDGET_OFFICER') ? 'Division Submitted' : 
+          userRoles.includes('BUDGET_OFFICER') ? 'Office' : 
           userRoles.includes('BUDGET_MANAGER') ? 'Office Submitted' : 
           'Unknown'
         }` 
@@ -697,13 +719,50 @@ exports.returnProposal = async (req, res) => {
     const previousStatus = proposal.status;
     const newStatus = 'Returned';
     let returnField;
+    let returnToLevel;
+    let notificationRecipient;
+    let notificationMessage;
 
+    // Determine return path based on current status and user role
     if (userRoles.includes('BUDGET_OFFICER')) {
-      returnField = 'returnedByOfficer';
-      proposal.workflowLevel = 'DIVISION';
+      // BUDGET_OFFICER returns to BUDGET_COORDINATOR
+      if (proposal.status === 'Office') {
+        returnField = 'returnedByOfficer';
+        proposal.workflowLevel = 'COORDINATOR';
+        returnToLevel = 'COORDINATOR';
+        notificationMessage = `Proposal "${proposal.title}" has been returned by ${userName} (Budget Officer) for revisions. Reason: ${comment}`;
+        // Notify coordinator or analyst based on who submitted
+        notificationRecipient = proposal.createdByUserId;
+      } else {
+        return res.status(400).json({ 
+          success: false, 
+          message: `Cannot return proposal with status "${proposal.status}". Expected status: Office` 
+        });
+      }
     } else if (userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN')) {
-      returnField = 'returnedByManager';
-      proposal.workflowLevel = 'OFFICER';
+      // BUDGET_MANAGER returns based on who submitted
+      if (proposal.status === 'Office Submitted') {
+        returnField = 'returnedByManager';
+        
+        // Check if proposal bypassed officer review
+        if (proposal.bypassedOfficerReview || proposal.submittedByRole === 'BUDGET_COORDINATOR') {
+          // Return to COORDINATOR
+          proposal.workflowLevel = 'COORDINATOR';
+          returnToLevel = 'COORDINATOR';
+          notificationMessage = `Proposal "${proposal.title}" has been returned by ${userName} (Budget Manager) for revisions. Reason: ${comment}`;
+        } else {
+          // Return to OFFICER
+          proposal.workflowLevel = 'OFFICER';
+          returnToLevel = 'OFFICER';
+          notificationMessage = `Proposal "${proposal.title}" has been returned by ${userName} (Budget Manager) to Budget Officer for revisions. Reason: ${comment}`;
+        }
+        notificationRecipient = proposal.createdByUserId;
+      } else {
+        return res.status(400).json({ 
+          success: false, 
+          message: `Cannot return proposal with status "${proposal.status}". Expected status: Office Submitted` 
+        });
+      }
     } else {
       return res.status(403).json({ success: false, message: 'Unauthorized to return proposals' });
     }
@@ -724,7 +783,8 @@ exports.returnProposal = async (req, res) => {
       userName,
       timestamp: new Date(),
       previousStatus,
-      newStatus
+      newStatus,
+      returnToLevel
     });
 
     await proposal.save();
@@ -732,12 +792,11 @@ exports.returnProposal = async (req, res) => {
     // Sync status to all related budget items
     await syncBudgetItemsStatus(proposal);
 
-    // Send notification to submitter
-    const submitterMessage = `Your proposal "${proposal.title}" has been returned by ${userName} with comment: ${comment}`;
+    // Send notification to appropriate recipient
     await sendNotification({
-      recipientUserId: proposal.createdByUserId,
+      recipientUserId: notificationRecipient,
       title: 'Proposal Returned',
-      message: submitterMessage,
+      message: notificationMessage,
       entity: 'proposal',
       recordIds: [proposal._id],
       org: {
@@ -1151,6 +1210,370 @@ exports.getProposalHistory = async (req, res) => {
   } catch (error) {
     console.error('Error getting proposal history:', error);
     res.status(500).json({ success: false, message: 'Failed to get proposal history', error: error.message });
+  }
+};
+
+/**
+ * BUDGET_COORDINATOR WORKFLOW FUNCTIONS
+ * New flexible workflow implementation
+ */
+
+// BUDGET_COORDINATOR approves proposal from BUDGET_ANALYST
+exports.coordinatorApproveProposal = async (req, res) => {
+  try {
+    const { proposalId, comment } = req.body;
+    const userId = req.user.id;
+    const userName = req.user.FirstName + ' ' + req.user.LastName;
+    const userRoles = req.user.Roles || [];
+
+    // Verify user is BUDGET_COORDINATOR
+    if (!userRoles.includes('BUDGET_COORDINATOR')) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Only Budget Coordinators can approve proposals' 
+      });
+    }
+
+    if (!comment || comment.trim() === '') {
+      return res.status(400).json({ success: false, message: 'Comment is required for approval' });
+    }
+
+    // Find the proposal
+    let proposal = await Proposal.findById(proposalId);
+    if (!proposal) {
+      return res.status(404).json({ success: false, message: 'Proposal not found' });
+    }
+
+    // Verify proposal is in correct status
+    if (proposal.status !== 'Division Submitted') {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Cannot approve proposal with status "${proposal.status}". Expected status: Division Submitted` 
+      });
+    }
+
+    const previousStatus = proposal.status;
+    const newStatus = 'Office Approved';
+
+    // Update proposal
+    proposal.status = newStatus;
+    proposal.workflowLevel = 'COORDINATOR';
+    proposal.approvedByCoordinator = {
+      userId,
+      userName,
+      date: new Date(),
+      comment
+    };
+
+    // Add to workflow history
+    proposal.workflowHistory.push({
+      action: 'COORDINATOR_APPROVE',
+      comment,
+      userId,
+      userName,
+      timestamp: new Date(),
+      previousStatus,
+      newStatus
+    });
+
+    await proposal.save();
+
+    // Sync status to all related budget items
+    await syncBudgetItemsStatus(proposal);
+
+    // Send notification to BUDGET_ANALYST (creator)
+    await sendNotification({
+      recipientUserId: proposal.createdByUserId,
+      title: 'Proposal Approved by Coordinator',
+      message: `Your proposal "${proposal.title}" has been approved by ${userName} (Budget Coordinator). Comment: ${comment}`,
+      entity: 'proposal',
+      recordIds: [proposal._id],
+      org: {
+        region: proposal.region,
+        department: proposal.department,
+        division: proposal.division
+      },
+      createdBy: { userId, name: userName }
+    });
+
+    res.json({
+      success: true,
+      message: 'Proposal approved by coordinator successfully',
+      proposal: {
+        id: proposal._id,
+        status: proposal.status,
+        workflowLevel: proposal.workflowLevel
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in coordinator approve:', error);
+    res.status(500).json({ success: false, message: 'Failed to approve proposal', error: error.message });
+  }
+};
+
+// BUDGET_COORDINATOR returns proposal to BUDGET_ANALYST
+exports.coordinatorReturnProposal = async (req, res) => {
+  try {
+    const { proposalId, comment } = req.body;
+    const userId = req.user.id;
+    const userName = req.user.FirstName + ' ' + req.user.LastName;
+    const userRoles = req.user.Roles || [];
+
+    // Verify user is BUDGET_COORDINATOR
+    if (!userRoles.includes('BUDGET_COORDINATOR')) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Only Budget Coordinators can return proposals' 
+      });
+    }
+
+    if (!comment || comment.trim() === '') {
+      return res.status(400).json({ success: false, message: 'Comment is required for return' });
+    }
+
+    // Find the proposal
+    let proposal = await Proposal.findById(proposalId);
+    if (!proposal) {
+      return res.status(404).json({ success: false, message: 'Proposal not found' });
+    }
+
+    // Verify proposal is in correct status
+    if (proposal.status !== 'Division Submitted') {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Cannot return proposal with status "${proposal.status}". Expected status: Division Submitted` 
+      });
+    }
+
+    const previousStatus = proposal.status;
+    const newStatus = 'Returned';
+
+    // Update proposal
+    proposal.status = newStatus;
+    proposal.workflowLevel = 'ANALYST';
+    proposal.returnedByCoordinator = {
+      userId,
+      userName,
+      date: new Date(),
+      comment
+    };
+
+    // Add to workflow history
+    proposal.workflowHistory.push({
+      action: 'COORDINATOR_RETURN',
+      comment,
+      userId,
+      userName,
+      timestamp: new Date(),
+      previousStatus,
+      newStatus
+    });
+
+    await proposal.save();
+
+    // Sync status to all related budget items
+    await syncBudgetItemsStatus(proposal);
+
+    // Send notification to BUDGET_ANALYST (creator)
+    await sendNotification({
+      recipientUserId: proposal.createdByUserId,
+      title: 'Proposal Returned by Coordinator',
+      message: `Your proposal "${proposal.title}" has been returned by ${userName} (Budget Coordinator) for revisions. Reason: ${comment}`,
+      entity: 'proposal',
+      recordIds: [proposal._id],
+      org: {
+        region: proposal.region,
+        department: proposal.department,
+        division: proposal.division
+      },
+      createdBy: { userId, name: userName }
+    });
+
+    res.json({
+      success: true,
+      message: 'Proposal returned to analyst successfully',
+      proposal: {
+        id: proposal._id,
+        status: proposal.status,
+        workflowLevel: proposal.workflowLevel
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in coordinator return:', error);
+    res.status(500).json({ success: false, message: 'Failed to return proposal', error: error.message });
+  }
+};
+
+// BUDGET_COORDINATOR submits to BUDGET_OFFICER (optional path)
+exports.coordinatorSubmitToOfficer = async (req, res) => {
+  try {
+    const { proposalId, comment } = req.body;
+    const userId = req.user.id;
+    const userName = req.user.FirstName + ' ' + req.user.LastName;
+    const userRoles = req.user.Roles || [];
+
+    // Verify user is BUDGET_COORDINATOR
+    if (!userRoles.includes('BUDGET_COORDINATOR')) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Only Budget Coordinators can submit to Budget Officer' 
+      });
+    }
+
+    // Find the proposal
+    let proposal = await Proposal.findById(proposalId);
+    if (!proposal) {
+      return res.status(404).json({ success: false, message: 'Proposal not found' });
+    }
+
+    // Verify proposal is in correct status (must be coordinator approved)
+    if (proposal.status !== 'Office Approved') {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Cannot submit to officer. Proposal must be approved by coordinator first. Current status: "${proposal.status}"` 
+      });
+    }
+
+    const previousStatus = proposal.status;
+    const newStatus = 'Office';
+
+    // Update proposal
+    proposal.status = newStatus;
+    proposal.workflowLevel = 'OFFICER';
+    proposal.submittedByRole = 'BUDGET_COORDINATOR';
+
+    // Add to workflow history
+    proposal.workflowHistory.push({
+      action: 'COORDINATOR_SUBMIT_TO_OFFICER',
+      comment: comment || 'Submitted to Budget Officer for verification',
+      userId,
+      userName,
+      timestamp: new Date(),
+      previousStatus,
+      newStatus
+    });
+
+    await proposal.save();
+
+    // Sync status to all related budget items
+    await syncBudgetItemsStatus(proposal);
+
+    // Send notification to BUDGET_OFFICER
+    await sendNotification({
+      recipientRole: 'BUDGET_OFFICER',
+      title: 'New Proposal for Verification',
+      message: `Proposal "${proposal.title}" submitted by ${userName} (Budget Coordinator) from ${proposal.division || proposal.department} for verification`,
+      entity: 'proposal',
+      recordIds: [proposal._id],
+      org: {
+        region: proposal.region,
+        department: proposal.department,
+        division: proposal.division
+      },
+      createdBy: { userId, name: userName }
+    });
+
+    res.json({
+      success: true,
+      message: 'Proposal submitted to Budget Officer successfully',
+      proposal: {
+        id: proposal._id,
+        status: proposal.status,
+        workflowLevel: proposal.workflowLevel
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in coordinator submit to officer:', error);
+    res.status(500).json({ success: false, message: 'Failed to submit proposal', error: error.message });
+  }
+};
+
+// BUDGET_COORDINATOR submits directly to BUDGET_MANAGER (bypass officer)
+exports.coordinatorSubmitToManager = async (req, res) => {
+  try {
+    const { proposalId, comment } = req.body;
+    const userId = req.user.id;
+    const userName = req.user.FirstName + ' ' + req.user.LastName;
+    const userRoles = req.user.Roles || [];
+
+    // Verify user is BUDGET_COORDINATOR
+    if (!userRoles.includes('BUDGET_COORDINATOR')) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Only Budget Coordinators can submit to Budget Manager' 
+      });
+    }
+
+    // Find the proposal
+    let proposal = await Proposal.findById(proposalId);
+    if (!proposal) {
+      return res.status(404).json({ success: false, message: 'Proposal not found' });
+    }
+
+    // Verify proposal is in correct status (must be coordinator approved)
+    if (proposal.status !== 'Office Approved') {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Cannot submit to manager. Proposal must be approved by coordinator first. Current status: "${proposal.status}"` 
+      });
+    }
+
+    const previousStatus = proposal.status;
+    const newStatus = 'Office Submitted';
+
+    // Update proposal
+    proposal.status = newStatus;
+    proposal.workflowLevel = 'MANAGER';
+    proposal.submittedByRole = 'BUDGET_COORDINATOR';
+    proposal.bypassedOfficerReview = true; // Flag that this skipped officer review
+
+    // Add to workflow history
+    proposal.workflowHistory.push({
+      action: 'COORDINATOR_SUBMIT_TO_MANAGER',
+      comment: comment || 'Submitted directly to Budget Manager',
+      userId,
+      userName,
+      timestamp: new Date(),
+      previousStatus,
+      newStatus
+    });
+
+    await proposal.save();
+
+    // Sync status to all related budget items
+    await syncBudgetItemsStatus(proposal);
+
+    // Send notification to BUDGET_MANAGER
+    await sendNotification({
+      recipientRole: 'BUDGET_MANAGER',
+      title: 'New Proposal for Final Approval',
+      message: `Proposal "${proposal.title}" submitted by ${userName} (Budget Coordinator) from ${proposal.division || proposal.department} for final approval`,
+      entity: 'proposal',
+      recordIds: [proposal._id],
+      org: {
+        region: proposal.region,
+        department: proposal.department,
+        division: proposal.division
+      },
+      createdBy: { userId, name: userName }
+    });
+
+    res.json({
+      success: true,
+      message: 'Proposal submitted to Budget Manager successfully',
+      proposal: {
+        id: proposal._id,
+        status: proposal.status,
+        workflowLevel: proposal.workflowLevel
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in coordinator submit to manager:', error);
+    res.status(500).json({ success: false, message: 'Failed to submit proposal', error: error.message });
   }
 };
 

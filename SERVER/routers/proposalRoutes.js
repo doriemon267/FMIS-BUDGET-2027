@@ -66,6 +66,7 @@ proposalRouter.get("/myproposals/all",
 if (typeof getProposalDetails === 'function') {
   proposalRouter.get('/proposals/details', 
     submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), 
+    budgetRoleAccessControl('read'),
     getProposalDetails
   );
 }

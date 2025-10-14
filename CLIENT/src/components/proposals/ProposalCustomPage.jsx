@@ -3025,7 +3025,7 @@ const CustomPage = ({
                   }
                 >
                   <span style={{ display: "inline-block" }}>
-                    <Button
+                    {/* <Button
                       variant="contained"
                       color="primary"
                       onClick={handleOpenDialog}
@@ -3048,7 +3048,7 @@ const CustomPage = ({
                       }}
                     >
                       Submit All Proposals
-                    </Button>
+                    </Button> */}
                   </span>
                 </Tooltip>
                 <Tooltip
@@ -3066,7 +3066,7 @@ const CustomPage = ({
                   arrow
                 >
                   <span style={{ display: "inline-block" }}>
-                    <Button
+                    {/* <Button
                       variant="outlined"
                       color="success"
                       onClick={() => handleSaveAsDraft()}
@@ -3103,7 +3103,7 @@ const CustomPage = ({
                       }}
                     >
                       {saveStatus === "saving" ? "Saving..." : "Save as Draft"}
-                    </Button>
+                    </Button> */}
                   </span>
                 </Tooltip>
               </>

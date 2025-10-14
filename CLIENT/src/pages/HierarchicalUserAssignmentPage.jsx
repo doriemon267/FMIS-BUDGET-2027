@@ -585,6 +585,7 @@ const HierarchicalUserAssignmentPage = () => {
       userId: formData.userId,
       userName: formData.userName,
       email: formData.email,
+      userRole: formData.userRole,
       assignmentLevel: normalizedLevel,
       accessScope: normalizedLevel,
       rolePermissions: formData.rolePermissions
@@ -987,7 +988,9 @@ const HierarchicalUserAssignmentPage = () => {
                         ManageSettings: false
                       });
                       // Update user role
-                      handleFormChange('userRole', 'BUDGET_ANALYST');
+                      // Preserve existing explicit coordinator if already set
+                      const nextUserRole = formData.userRole === 'BUDGET_COORDINATOR' ? 'BUDGET_COORDINATOR' : 'BUDGET_ANALYST';
+                      handleFormChange('userRole', nextUserRole);
                     } else if (isRC) {
                       // Only RC roles allowed
                       setRole('divisionCreator', !!nextRoles.divisionCreator);
@@ -1009,8 +1012,9 @@ const HierarchicalUserAssignmentPage = () => {
                           ManageSettings: false
                         });
                       }
-                      // Update user role
-                      handleFormChange('userRole', 'BUDGET_ANALYST');
+                      // Update user role: allow Budget Coordinator at RC level if explicitly chosen
+                      const nextUserRole = formData.userRole === 'BUDGET_COORDINATOR' ? 'BUDGET_COORDINATOR' : 'BUDGET_ANALYST';
+                      handleFormChange('userRole', nextUserRole);
                     } else if (isOffice) {
                       // Office roles allowed; RC creator optional -> keep selection
                       setRole('officeCreator', !!nextRoles.officeCreator);
@@ -1033,8 +1037,8 @@ const HierarchicalUserAssignmentPage = () => {
                           ManageSettings: false
                         });
                       }
-                      // Update user role - default to BUDGET_COORDINATOR, will be updated based on permissions
-                      handleFormChange('userRole', 'BUDGET_COORDINATOR');
+                      // Update user role - default to BUDGET_COORDINATOR for Office, preserve any explicit choice
+                      handleFormChange('userRole', formData.userRole || 'BUDGET_COORDINATOR');
                     } else if (isFull) {
                       // All roles permitted; automatically grant all workflow roles for FULL access
                       Object.keys(nextRoles).forEach(k => { nextRoles[k] = true; });
@@ -1496,7 +1500,7 @@ const HierarchicalUserAssignmentPage = () => {
                                     userId: assignment.userId,
                                     userName: assignment.userName,
                                     email: assignment.email,
-                                    userRole: inferredRole,
+                                    userRole: assignment.userRole || inferredRole,
                                     assignmentLevel: reverseAssignmentLevelMap[assignment.assignmentLevel] || assignment.assignmentLevel,
                                     officeId: assignment.officeId || assignment.departmentId || '', // Use officeId if available, otherwise departmentId
                                     responsibilityCenterName: assignment.divisionName || '',

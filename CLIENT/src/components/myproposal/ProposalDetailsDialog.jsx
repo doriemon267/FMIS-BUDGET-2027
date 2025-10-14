@@ -107,6 +107,20 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
     return normalizedWorkflowRoles.some((role) => role === 'divisioncreator' || role === 'divisionpreparer');
   }, [userInfo, isManagerLevel, normalizedAssignmentLevel, normalizedWorkflowRoles]);
 
+  // Budget Coordinator: Can view proposals from their division (Department level)
+  const isBudgetCoordinator = useMemo(() => {
+    if (!userInfo) return false;
+    // Check primary roles for BUDGET_COORDINATOR
+    if (normalizedPrimaryRoles.some((role) => role.includes('BUDGET_COORDINATOR') || role.includes('BUDGET COORDINATOR'))) {
+      return true;
+    }
+    // Check if user has department-level access with coordinator workflow role
+    if (normalizedAssignmentLevel === 'DEPARTMENT') {
+      return normalizedWorkflowRoles.some((role) => role === 'departmentconsolidator' || role === 'coordinator');
+    }
+    return false;
+  }, [userInfo, normalizedPrimaryRoles, normalizedAssignmentLevel, normalizedWorkflowRoles]);
+
   useEffect(() => {
     const fetchUserInfo = async () => {
       try {
@@ -142,7 +156,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
     // Allow fetching for read-only final statuses even if role detection says no
   const requiresReadOnlyData = isReadOnlyMode;
 
-    if (!isBudgetOfficer && !isBudgetAnalyst && !isManagerLevel && !requiresReadOnlyData) {
+    if (!isBudgetOfficer && !isBudgetAnalyst && !isBudgetCoordinator && !isManagerLevel && !requiresReadOnlyData) {
       setLoading(false);
       setRefreshing(false);
       return;
@@ -168,7 +182,39 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
     try {
       const requests = [];
 
-      if (isBudgetOfficer || isManagerLevel || requiresReadOnlyData) {
+      // Budget Coordinator and Analyst should fetch raw proposal data, not Budget Officer Edit records
+      if (isBudgetCoordinator || isBudgetAnalyst) {
+        requests.push(
+          (async () => {
+            try {
+              const params = {
+                fiscalYear: proposal?.fiscalYear,
+                budgetType: proposal?.budgetType,
+                processBy: proposal?.processBy,
+                region: proposal?.region
+              };
+              const [incomeResp, psResp, mooeResp, coResp] = await Promise.all([
+                api.get('/income/getByParams', { params, signal: controller.signal }),
+                api.get('/getpersonnels/byParams', { params, signal: controller.signal }),
+                api.get('/mooe/getByParams', { params, signal: controller.signal }),
+                api.get('/capital-outlay/getByParams', { params, signal: controller.signal })
+              ]);
+              const normalize = (r) => Array.isArray(r?.data) ? r.data : (r?.data?.data || []);
+              const rawData = {
+                income: normalize(incomeResp),
+                personnelServices: normalize(psResp),
+                mooe: normalize(mooeResp),
+                capitalOutlay: normalize(coResp)
+              };
+              setProposalData(rawData);
+              cacheUpdate.proposalData = rawData;
+            } catch (err) {
+              console.error('Error fetching raw proposal data:', err);
+              throw err;
+            }
+          })()
+        );
+      } else if (isBudgetOfficer || isManagerLevel || requiresReadOnlyData) {
         requests.push(
           (async () => {
             try {
@@ -245,7 +291,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
         setRefreshing(false);
       }
     }
-  }, [proposalKey, userInfo, isBudgetOfficer, isBudgetAnalyst, isManagerLevel]);
+  }, [proposalKey, userInfo, isBudgetOfficer, isBudgetAnalyst, isBudgetCoordinator, isManagerLevel]);
 
   useEffect(() => {
     if (open && proposalKey && userInfo) {
@@ -705,7 +751,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
               </Alert>
             )}
 
-            {!isBudgetOfficer && !isBudgetAnalyst && !isManagerLevel && (
+            {!isBudgetOfficer && !isBudgetAnalyst && !isBudgetCoordinator && !isManagerLevel && (
               <Alert severity="info">
                 You do not have permission to view detailed records for this proposal.
                 <br />

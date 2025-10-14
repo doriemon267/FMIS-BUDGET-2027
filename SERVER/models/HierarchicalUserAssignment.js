@@ -18,6 +18,13 @@ const HierarchicalUserAssignmentSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  // Persist the user's intended budget role to avoid UI re-inference flipping roles
+  userRole: {
+    type: String,
+    enum: ['BUDGET_ANALYST', 'BUDGET_COORDINATOR', 'BUDGET_OFFICER', 'BUDGET_MANAGER', 'BUDGET_ADMIN'],
+    required: false,
+    default: undefined
+  },
   assignmentLevel: {
     type: String,
     enum: ['DIVISION', 'DEPARTMENT', 'REGION', 'FULL', 'RESPONSIBILITY_CENTER', 'OFFICE'],
