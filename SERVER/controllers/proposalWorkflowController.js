@@ -1749,10 +1749,14 @@ exports.coordinatorApproveAndForwardToOfficer = async (req, res) => {
       createdBy: { userId, name: userName }
     });
 
+    // Reload proposal with fresh data for frontend
+    const updatedProposal = await Proposal.findById(proposal._id).lean();
+
     res.json({
       success: true,
       message: 'Proposal approved and forwarded to Budget Officer successfully',
-      proposal: {
+      proposal: updatedProposal, // Return full proposal for real-time UI update
+      shortProposal: {
         id: proposal._id,
         status: proposal.status,
         workflowLevel: proposal.workflowLevel

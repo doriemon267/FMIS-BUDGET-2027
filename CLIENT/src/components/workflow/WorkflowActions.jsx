@@ -337,9 +337,8 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
         });
       }
       
-      // After approval, officer can submit to manager
-      if (normalizedStatus === "OFFICER APPROVED" || status === "Officer Approved" ||
-          normalizedStatus === "UNDER REVIEW BY OFFICER" || status === "Under Review by Officer") {
+      // After approval, officer can submit to manager (ONLY when already approved)
+      if (normalizedStatus === "OFFICER APPROVED" || status === "Officer Approved") {
         actions.push({
           label: "Submit to Manager",
           action: "officer-submit-to-manager",
@@ -713,12 +712,12 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           }
         } catch (_) {}
         
-        // Add a small delay to ensure backend processing is complete before refresh
-        console.log('✅ Workflow action successful, refreshing data in 500ms...');
-        setTimeout(() => {
-          console.log('🔄 Calling onRefresh after workflow success');
-          onRefresh(); // Refresh the proposals list
-        }, 500);
+        // Immediate refresh to show updated status in real-time
+        console.log('✅ Workflow action successful, triggering immediate refresh...');
+        console.log('📦 Response contains updated proposal:', response.data.proposal ? 'YES' : 'NO');
+        
+        // Trigger immediate refresh - no delay needed
+        onRefresh(); // Refresh the proposals list immediately
       } else {
         throw new Error(response.data.message || "Workflow action failed");
       }

@@ -201,6 +201,62 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
       capitalOutlay: `${results.capitalOutlay.modified} modified`
     });
 
+    // Recalculate proposal totals after applying edits
+    try {
+      const proposal = await Proposal.findById(budgetOfficerEdit.proposalId);
+      if (proposal) {
+        // Aggregate totals from all budget items
+        const filterCriteria = {
+          region: proposal.region,
+          department: proposal.department,
+          division: proposal.division,
+          fiscalYear: proposal.fiscalYear,
+          budgetType: proposal.budgetType
+        };
+
+        const [incomeTotal, psTotal, mooeTotal, coTotal] = await Promise.all([
+          Income.aggregate([
+            { $match: filterCriteria },
+            { $group: { _id: null, total: { $sum: '$amount' } } }
+          ]),
+          PersonnelServices.aggregate([
+            { $match: filterCriteria },
+            { $group: { _id: null, total: { $sum: '$total' } } }
+          ]),
+          require('../models/mooeProposals').aggregate([
+            { $match: filterCriteria },
+            { $group: { _id: null, total: { $sum: '$amount' } } }
+          ]),
+          CapitalOutlay.aggregate([
+            { $match: filterCriteria },
+            { $group: { _id: null, total: { $sum: '$total' } } }
+          ])
+        ]);
+
+        const newTotal = (
+          (incomeTotal[0]?.total || 0) +
+          (psTotal[0]?.total || 0) +
+          (mooeTotal[0]?.total || 0) +
+          (coTotal[0]?.total || 0)
+        );
+
+        console.log('📊 Recalculated proposal totals after edits:', {
+          proposalId: proposal._id,
+          income: incomeTotal[0]?.total || 0,
+          personnelServices: psTotal[0]?.total || 0,
+          mooe: mooeTotal[0]?.total || 0,
+          capitalOutlay: coTotal[0]?.total || 0,
+          grandTotal: newTotal
+        });
+
+        results.proposalTotalRecalculated = true;
+        results.newProposalTotal = newTotal;
+      }
+    } catch (error) {
+      console.error('❌ Error recalculating proposal totals:', error);
+      // Don't throw - edits were already applied successfully
+    }
+
     return results;
   } catch (error) {
     console.error('❌ Error applying edits to original documents:', error);
