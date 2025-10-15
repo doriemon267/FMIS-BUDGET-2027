@@ -472,35 +472,6 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
     icon: resolvedOrigin?.icon || PublicIcon
   };
 
-  const summaryMetrics = [
-    {
-      key: 'process-by',
-      label: 'Processed By',
-      value: proposal?.processBy || '—',
-      icon: PersonOutlineIcon
-    },
-    originMetric,
-    {
-      key: 'fiscal-year',
-      label: 'Fiscal Year',
-      value: proposal?.fiscalYear || '—',
-      icon: CalendarMonthIcon
-    },
-    {
-      key: 'budget-type',
-      label: 'Budget Type',
-      value: proposal?.budgetType || '—',
-      icon: AccountBalanceWalletIcon
-    }
-  ];
-
-  const totalAmount = formatCurrency(proposal?.totalExpenses || 0);
-  const timelineLabel = proposal?.updatedAt
-    ? `Last updated ${formatDate(proposal.updatedAt)}`
-    : proposal?.createdAt
-      ? `Created ${formatDate(proposal.createdAt)}`
-      : 'Awaiting recent activity';
-
   const getStatusColor = (status) => {
     switch (status) {
       case 'Approved':
@@ -539,12 +510,6 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
     proposal?.status === 'Division Submitted' ||
     proposal?.status === 'Under Review by Coordinator'
   );
-
-  // Collapsible Summary: collapsed by default in read-only mode
-  const [summaryCollapsed, setSummaryCollapsed] = useState(false);
-  useEffect(() => {
-    setSummaryCollapsed(isReadOnlyMode);
-  }, [isReadOnlyMode]);
 
   return (
     <Dialog 
@@ -593,137 +558,6 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
           <Alert severity="error">{error}</Alert>
         ) : (
           <>
-            {/* Summary Section (collapsible) */}
-            <Paper
-              elevation={1}
-              sx={(theme) => ({
-                p: 2,
-                mb: 2,
-                borderRadius: 2,
-                position: 'relative',
-                overflow: 'hidden',
-                background: `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 55%)`,
-                color: theme.palette.common.white
-              })}
-            >
-              <Box
-                sx={{
-                  position: 'absolute',
-                  top: -60,
-                  right: -40,
-                  width: 200,
-                  height: 200,
-                  borderRadius: '50%',
-                  backgroundColor: 'rgba(255,255,255,0.12)'
-                }}
-              />
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                <Box>
-                  <Typography
-                    variant="overline"
-                    sx={{ letterSpacing: 1, textTransform: 'uppercase', opacity: 0.8 }}
-                  >
-                    Summary
-                  </Typography>
-                  <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.1 }}>
-                    Budget Snapshot
-                  </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, opacity: 0.85, mt: 0.5 }}>
-                    <AccessTimeIcon fontSize="small" />
-                    <Typography variant="body2">{timelineLabel}</Typography>
-                  </Box>
-                </Box>
-                <Box sx={{ textAlign: { xs: 'left', md: 'right' }, minWidth: 260 }}>
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: { xs: 'flex-start', md: 'flex-end' },
-                      gap: 1,
-                      opacity: 0.85
-                    }}
-                  >
-                    <MoneyIcon fontSize="small" />
-                    <Typography variant="overline" sx={{ letterSpacing: 1.5 }}>
-                      Total Amount
-                    </Typography>
-                  </Box>
-                  <Typography variant="h4" sx={{ fontWeight: 700, lineHeight: 1.1 }}>
-                    {totalAmount}
-                  </Typography>
-                  {proposal?.budgetType && (
-                    <Chip
-                      label={proposal.budgetType}
-                      variant="outlined"
-                      sx={{
-                        mt: 0.5,
-                        borderColor: 'rgba(255,255,255,0.4)',
-                        color: 'inherit',
-                        fontWeight: 500
-                      }}
-                    />
-                  )}
-                </Box>
-              </Box>
-
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-                <Button size="small" variant="outlined" onClick={() => setSummaryCollapsed(v => !v)} sx={{ color: 'inherit', borderColor: 'rgba(255,255,255,0.4)' }}>
-                  {summaryCollapsed ? 'Expand Summary' : 'Collapse Summary'}
-                </Button>
-              </Box>
-
-              {!summaryCollapsed && (
-                <Grid container spacing={1.5} sx={{ mt: 1.5 }}>
-                {summaryMetrics.map((metric) => {
-                  const IconComponent = metric.icon;
-                  return (
-                    <Grid item xs={12} sm={6} md={3} key={metric.key}>
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 1.5,
-                          p: 1.5,
-                          minHeight: 72,
-                          borderRadius: 1.5,
-                          backgroundColor: 'rgba(255,255,255,0.16)',
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          backdropFilter: 'blur(2px)'
-                        }}
-                      >
-                        <Avatar
-                          variant="rounded"
-                          sx={{
-                            bgcolor: 'rgba(0,0,0,0.18)',
-                            width: 40,
-                            height: 40
-                          }}
-                        >
-                          <IconComponent />
-                        </Avatar>
-                        <Box>
-                          <Typography
-                            variant="caption"
-                            sx={{
-                              textTransform: 'uppercase',
-                              letterSpacing: 1.1,
-                              opacity: 0.75
-                            }}
-                          >
-                            {metric.label}
-                          </Typography>
-                          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                            {metric.value}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </Grid>
-                  );
-                })}
-                </Grid>
-              )}
-            </Paper>
-
             {/* Verification and Consolidation Status */}
             {(proposal?.verifiedByOfficer || proposal?.consolidatedOrigin) && (
               <Paper elevation={2} sx={{ p: 2, mb: 3, backgroundColor: '#f5f5f5' }}>
@@ -786,34 +620,6 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
 
             {/* Detailed Records Section */}
             <Typography variant="h6" gutterBottom>Detailed Records</Typography>
-
-            {/* DEBUG: Show role detection status */}
-            {process.env.NODE_ENV === 'development' && (
-              <Alert severity="info" sx={{ mb: 2 }}>
-                <Typography variant="caption" component="div" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
-                  <strong>DEBUG - Role Detection:</strong><br />
-                  isBudgetCoordinator: {String(isBudgetCoordinator)}<br />
-                  isBudgetOfficer: {String(isBudgetOfficer)}<br />
-                  isBudgetAnalyst: {String(isBudgetAnalyst)}<br />
-                  isOfficeCreator: {String(isOfficeCreator)}<br />
-                  isManagerLevel: {String(isManagerLevel)}<br />
-                  isReadOnlyMode: {String(isReadOnlyMode)}<br />
-                  coordinatorCanEditNow: {String(coordinatorCanEditNow)}<br />
-                  analystCanEditNow: {String(analystCanEditNow)}<br />
-                  managerCanEditNow: {String(managerCanEditNow)}<br />
-                  proposalData exists: {String(Boolean(proposalData))}<br />
-                  comparisonData exists: {String(Boolean(comparisonData))}<br />
-                  status: {proposal?.status}<br />
-                  <br />
-                  <strong>User Info:</strong><br />
-                  assignmentLevel: {normalizedAssignmentLevel}<br />
-                  primaryRoles: {JSON.stringify(normalizedPrimaryRoles)}<br />
-                  workflowRoles: {JSON.stringify(normalizedWorkflowRoles)}<br />
-                  role: {userInfo?.role}<br />
-                  primaryRole: {userInfo?.primaryRole}
-                </Typography>
-              </Alert>
-            )}
 
             {/* INFO: Show user's current role and workflow status */}
             {(isBudgetAnalyst || isBudgetCoordinator || isBudgetOfficer || isManagerLevel) && (

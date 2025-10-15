@@ -1017,17 +1017,6 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
       {showHeader && (
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1, flexWrap: 'wrap', rowGap: 1 }}>
           <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap', rowGap: 1 }}>
-            <Tooltip
-              title={currentStepTooltip || currentStepLabel}
-              disableHoverListener={!currentStepTooltip}
-            >
-              <Chip
-                size="small"
-                label={`Step: ${currentStepLabel}`}
-                variant="outlined"
-              />
-            </Tooltip>
-
             <Chip
               size="small"
               label={proposal?.status || 'Draft'}
