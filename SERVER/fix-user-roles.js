@@ -19,6 +19,24 @@ async function fixUserRoles() {
     await mongoose.connect(MONGODB_URI);
     console.log('✅ Connected to MongoDB\n');
 
+    // Fix Joshua Demafelez - BUDGET ANALYST
+    console.log('👤 Fixing Joshua Demafelez (BUDGET ANALYST)...');
+    const joshua = await HierarchicalUserAssignment.findOne({ 
+      userId: '345220', 
+      isActive: true 
+    });
+    
+    if (joshua) {
+      const oldRoles = [...joshua.workflowRoles];
+      joshua.workflowRoles = ['divisionCreator'];
+      await joshua.save();
+      console.log(`   Old roles: ${oldRoles.join(', ')}`);
+      console.log(`   New roles: ${joshua.workflowRoles.join(', ')}`);
+      console.log('   ✅ Updated to BUDGET ANALYST\n');
+    } else {
+      console.log('   ❌ User not found\n');
+    }
+
     // Fix Andrie Barrameda - BUDGET OFFICER
     console.log('👤 Fixing Andrie Barrameda (BUDGET OFFICER)...');
     const andrie = await HierarchicalUserAssignment.findOne({ 
