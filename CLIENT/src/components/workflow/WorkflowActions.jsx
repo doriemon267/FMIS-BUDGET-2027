@@ -284,11 +284,11 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           allowOptionalComment: true
         });
         actions.push({
-          label: 'Approve for Routing',
-          action: 'coordinator-approve',
+          label: 'Approve & Forward to Officer',
+          action: 'coordinator-approve-forward-officer',
           color: 'bg-green-500 hover:bg-green-600',
           icon: '✅',
-          description: 'Approve analyst submission and prepare for forwarding',
+          description: 'Approve and forward to Budget Officer for verification',
           requiresComment: true
         });
         actions.push({
@@ -297,27 +297,6 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           color: 'bg-red-500 hover:bg-red-600',
           icon: '↩️',
           description: 'Send back to analyst for revisions',
-          requiresComment: true
-        });
-      }
-
-      // After approval, coordinator can forward to Officer or Manager
-      if (normalizedStatus === 'COORDINATOR APPROVED' || status === 'Coordinator Approved' ||
-          normalizedStatus === 'OFFICE APPROVED' || status === 'Office Approved') {
-        actions.push({
-          label: 'Forward to Officer',
-          action: 'coordinator-forward-officer',
-          color: 'bg-blue-500 hover:bg-blue-600',
-          icon: '📬',
-          description: 'Forward proposal to Budget Officer for verification',
-          requiresComment: true
-        });
-        actions.push({
-          label: 'Forward to Manager',
-          action: 'coordinator-forward-manager',
-          color: 'bg-purple-500 hover:bg-purple-600',
-          icon: '🚀',
-          description: 'Send proposal directly to Budget Manager for approval',
           requiresComment: true
         });
       }
@@ -557,6 +536,10 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           endpoint = "/api/workflow/coordinator/approve";
           successMessage = "Proposal approved by Budget Coordinator successfully";
           break;
+        case "coordinator-approve-forward-officer":
+          endpoint = "/api/workflow/coordinator/approve-and-forward-to-officer";
+          successMessage = "Proposal approved and forwarded to Budget Officer successfully";
+          break;
         case "coordinator-return":
           endpoint = "/api/workflow/coordinator/return";
           successMessage = "Proposal returned to Budget Analyst successfully";
@@ -657,6 +640,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
         "submit-to-coordinator",
         "submit-direct-to-manager",
         "coordinator-approve",
+        "coordinator-approve-forward-officer",
         "coordinator-return",
         "coordinator-forward-officer",
         "coordinator-forward-manager",

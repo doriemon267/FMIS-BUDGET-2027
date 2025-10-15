@@ -1611,6 +1611,137 @@ exports.coordinatorApproveProposal = async (req, res) => {
   }
 };
 
+/**
+ * BUDGET_COORDINATOR: Approve AND forward to BUDGET_OFFICER in one action
+ * Combines coordinatorApproveProposal + coordinatorSubmitToOfficer
+ */
+exports.coordinatorApproveAndForwardToOfficer = async (req, res) => {
+  try {
+    const { proposalId, comment } = req.body;
+    const userId = req.user.id;
+    const userName = req.user.FirstName + ' ' + req.user.LastName;
+    const userRoles = req.user.Roles || [];
+
+    // Verify user is BUDGET_COORDINATOR
+    if (!userRoles.includes('BUDGET_COORDINATOR')) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Only Budget Coordinators can approve and forward proposals' 
+      });
+    }
+
+    if (!comment || comment.trim() === '') {
+      return res.status(400).json({ success: false, message: 'Comment is required for approval' });
+    }
+
+    // Find the proposal
+    let proposal = await Proposal.findById(proposalId);
+    if (!proposal) {
+      return res.status(404).json({ success: false, message: 'Proposal not found' });
+    }
+
+    // Verify proposal is in correct status
+    const validStatuses = ['Division Submitted', 'Under Review by Coordinator'];
+    if (!validStatuses.includes(proposal.status)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Cannot approve proposal with status "${proposal.status}". Expected status: ${validStatuses.join(' or ')}` 
+      });
+    }
+
+    const previousStatus = proposal.status;
+    const newStatus = 'Forwarded to Officer';
+
+    // Update proposal - directly to Forwarded to Officer (skip "Coordinator Approved" intermediate status)
+    proposal.status = newStatus;
+    proposal.workflowLevel = 'OFFICER';
+    proposal.submittedByRole = 'BUDGET_COORDINATOR';
+    proposal.approvedByCoordinator = {
+      userId,
+      userName,
+      date: new Date(),
+      comment
+    };
+    proposal.bypassedOfficerReview = false;
+
+    updateAssignment(proposal, {
+      step: 'OFFICER_REVIEW',
+      assigneeRole: 'BUDGET_OFFICER',
+      pendingRoles: ['BUDGET_OFFICER']
+    });
+
+    // Record TWO events: approval + forward
+    recordWorkflowEvent(proposal, {
+      action: 'COORDINATOR_APPROVE',
+      comment: comment,
+      userId,
+      userName,
+      previousStatus,
+      newStatus: 'Coordinator Approved',
+      targetRole: 'BUDGET_COORDINATOR'
+    });
+
+    recordWorkflowEvent(proposal, {
+      action: 'COORDINATOR_SUBMIT_TO_OFFICER',
+      comment: 'Approved and forwarded to Budget Officer',
+      userId,
+      userName,
+      previousStatus: 'Coordinator Approved',
+      newStatus,
+      targetRole: 'BUDGET_OFFICER'
+    });
+
+    await proposal.save();
+
+    // Sync status to all related budget items
+    await syncBudgetItemsStatus(proposal);
+
+    // Send notification to BUDGET_ANALYST (creator)
+    await sendNotification({
+      recipientUserId: proposal.createdByUserId,
+      title: 'Proposal Approved and Forwarded',
+      message: `Your proposal "${proposal.title}" has been approved by ${userName} (Budget Coordinator) and forwarded to Budget Officer. Comment: ${comment}`,
+      entity: 'proposal',
+      recordIds: [proposal._id],
+      org: {
+        region: proposal.region,
+        department: proposal.department,
+        division: proposal.division
+      },
+      createdBy: { userId, name: userName }
+    });
+
+    // Send notification to BUDGET_OFFICER
+    await sendNotification({
+      recipientRole: 'BUDGET_OFFICER',
+      title: 'New Proposal for Verification',
+      message: `Proposal "${proposal.title}" approved and forwarded by ${userName} (Budget Coordinator) from ${proposal.division || proposal.department} for verification. Comment: ${comment}`,
+      entity: 'proposal',
+      recordIds: [proposal._id],
+      org: {
+        region: proposal.region,
+        department: proposal.department,
+        division: proposal.division
+      },
+      createdBy: { userId, name: userName }
+    });
+
+    res.json({
+      success: true,
+      message: 'Proposal approved and forwarded to Budget Officer successfully',
+      proposal: {
+        id: proposal._id,
+        status: proposal.status,
+        workflowLevel: proposal.workflowLevel
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in coordinator approve and forward:', error);
+    res.status(500).json({ success: false, message: 'Failed to approve and forward proposal', error: error.message });
+  }
+};
+
 // BUDGET_COORDINATOR returns proposal to BUDGET_ANALYST
 exports.coordinatorReturnProposal = async (req, res) => {
   try {

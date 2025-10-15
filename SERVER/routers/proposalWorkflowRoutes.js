@@ -24,6 +24,9 @@ router.post('/submit-direct-to-manager', proposalWorkflowController.submitDirect
 // BUDGET_COORDINATOR approves proposal from BUDGET_ANALYST
 router.post('/coordinator/approve', proposalWorkflowController.coordinatorApproveProposal);
 
+// BUDGET_COORDINATOR approves AND forwards to BUDGET_OFFICER in one action
+router.post('/coordinator/approve-and-forward-to-officer', proposalWorkflowController.coordinatorApproveAndForwardToOfficer);
+
 // BUDGET_COORDINATOR returns proposal to BUDGET_ANALYST
 router.post('/coordinator/return', proposalWorkflowController.coordinatorReturnProposal);
 
