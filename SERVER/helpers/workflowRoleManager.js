@@ -1,16 +1,26 @@
 /**
  * 🎭 Workflow Role Assignment Helper
  * 
- * This module provides functions to assign and manage workflow roles for the submission process:
- * - Division Approvers: Can approve division submissions
- * - Department Approvers: Can approve department submissions  
- * - Region Approvers: Can provide final approval
+ * This module provides functions to assign and manage workflow roles for the submission process.
+ * 
+ * WORKFLOW HIERARCHY (October 2025):
+ * - BUDGET ANALYST (Creator): divisioncreator (RC/Division) OR officecreator (Office)
+ * - BUDGET COORDINATOR (Approver): divisionapprover only
+ * - BUDGET OFFICER (Verifier): officeverifier/officeconsolidator/officefinalverifier
+ * - BUDGET MANAGER (Final Approver): managerapprover/regionfinalverifier
+ * 
+ * WORKFLOW PATHS:
+ * Division Level: ANALYST (divisioncreator) → COORDINATOR (divisionapprover) → OFFICER → MANAGER
+ * Office Level:   ANALYST (officecreator) → OFFICER (direct, skip coordinator) → MANAGER
  */
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 /**
  * Assign workflow roles to users based on their organizational level
- * - If roles argument is OMITTED, auto-assign defaults based on level
+ * - If roles argument is OMITTED, auto-assign defaults based on level (CREATOR roles only)
  * - If roles argument is PROVIDED (even []), honor it exactly (no auto-assignment)
+ * 
+ * NOTE: Approver roles should be manually assigned to separate users to maintain
+ * separation of duties between creators and approvers.
  */
 const assignWorkflowRoles = async (userId, assignmentLevel, workflowRoles) => {
   try {
@@ -22,20 +32,43 @@ const assignWorkflowRoles = async (userId, assignmentLevel, workflowRoles) => {
     let rolesToSave = Array.isArray(workflowRoles) ? [...workflowRoles] : [];
 
     if (!rolesArgProvided) {
-      // Auto-assign default workflow roles based on assignment level
+      // Auto-assign default CREATOR workflow roles based on assignment level
+      // APPROVER roles must be assigned manually
       switch (assignmentLevel) {
+        case 'RESPONSIBILITY_CENTER':
         case 'DIVISION':
-          rolesToSave = ['divisionCreator']; // Can create division-level data
+          // Division/RC Level: Budget Analyst creator role only
+          // Submits to COORDINATOR → OFFICER → MANAGER
+          rolesToSave = ['divisionCreator'];
+          break;
+        case 'OFFICE':
+          // Office Level: Budget Analyst creator role only
+          // Submits DIRECTLY to OFFICER (skip coordinator) → MANAGER
+          rolesToSave = ['officeCreator'];
           break;
         case 'DEPARTMENT':
-          rolesToSave = ['departmentCreator', 'departmentConsolidator']; // Can create and approve division submissions
+          // Department Level: Typically coordinator/consolidator roles
+          // Should be manually assigned based on actual function
+          rolesToSave = ['departmentConsolidator'];
           break;
         case 'REGION':
-          rolesToSave = ['regionCreator', 'regionFinalVerifier']; // Can create and provide final approval
+          // Regional Level: Final verifier/approver roles
+          rolesToSave = ['regionFinalVerifier'];
           break;
         case 'FULL':
-          rolesToSave = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'regionCreator', 'regionFinalVerifier'];
+          // Full access: All creator and approver roles
+          rolesToSave = [
+            'divisionCreator', 
+            'officeCreator',
+            'divisionApprover',
+            'officeFinalVerifier',
+            'regionFinalVerifier',
+            'managerapprover'
+          ];
           break;
+        default:
+          // Unknown level: no auto-assignment
+          rolesToSave = [];
       }
     }
 

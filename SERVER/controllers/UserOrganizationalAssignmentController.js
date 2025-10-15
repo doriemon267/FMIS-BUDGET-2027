@@ -104,14 +104,28 @@ const createOrUpdateOrganizationalAssignment = async (req, res) => {
     };
 
     // Auto-assign workflow roles based on access scope
+    // NEW WORKFLOW RULES (October 2025):
+    // - BUDGET ANALYST (Creator): divisioncreator (RC level) OR officecreator (Office level)
+    // - BUDGET COORDINATOR (Approver): divisionapprover only - MUST BE ASSIGNED SEPARATELY
+    // - BUDGET OFFICER (Verifier): officeverifier/officeconsolidator - MUST BE ASSIGNED SEPARATELY
+    // - BUDGET MANAGER (Final Approver): managerapprover/regionfinalverifier - MUST BE ASSIGNED SEPARATELY
     const autoAssignedWorkflowRoles = [];
     if (accessScope === 'OFFICE') {
-      autoAssignedWorkflowRoles.push('officeCreator', 'officeApprover');
+      // Office Level: Auto-assign officecreator for BUDGET ANALYST role
+      // User submits DIRECTLY to BUDGET OFFICER (skip coordinator)
+      autoAssignedWorkflowRoles.push('officeCreator');
     } else if (accessScope === 'RESPONSIBILITY_CENTER') {
-      autoAssignedWorkflowRoles.push('divisionCreator', 'divisionApprover');
+      // RC/Division Level: Auto-assign divisioncreator for BUDGET ANALYST role
+      // User submits to BUDGET COORDINATOR → BUDGET OFFICER → BUDGET MANAGER
+      autoAssignedWorkflowRoles.push('divisionCreator');
     } else if (accessScope === 'FULL') {
-      autoAssignedWorkflowRoles.push('officeCreator', 'officeApprover', 'officeFinalVerifier');
+      // Full Access: System admin or manager level
+      autoAssignedWorkflowRoles.push('officeCreator', 'officeFinalVerifier', 'regionFinalVerifier');
     }
+    
+    // NOTE: Approver roles (divisionapprover, officeverifier, managerapprover) 
+    // should be assigned manually via workflowRoles parameter to separate 
+    // CREATOR roles from APPROVER roles as per October 2025 workflow clarification
 
     // Merge auto-assigned workflow roles with provided roles (provided roles take precedence)
     const finalWorkflowRoles = Array.isArray(workflowRoles)
