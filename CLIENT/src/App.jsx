@@ -217,7 +217,7 @@ const App = () => {
           path="/hierarchical-user-assignments"
           element={
             <ProtectedRoute 
-              requiredPermissions={["ManageUsers"]}
+              requiredPermissions={["ManageSettings"]}
               requiredWorkflowRoles={["regionCreator", "superAdmin"]}
             >
               <HierarchicalUserAssignmentPage />

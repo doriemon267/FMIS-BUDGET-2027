@@ -38,13 +38,21 @@ const proposalSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: [
-      "Draft",                    // Initial state - BUDGET_ANALYST creating
-      "Division Submitted",       // BUDGET_ANALYST → BUDGET_COORDINATOR
-      "Office",                   // BUDGET_COORDINATOR → BUDGET_OFFICER (optional)
-      "Office Approved",          // BUDGET_COORDINATOR approved
-      "Office Submitted",         // BUDGET_COORDINATOR/BUDGET_OFFICER → BUDGET_MANAGER
-      "Returned",                 // Rejected at any level
-      "Finalized"                 // BUDGET_MANAGER final approval
+      "Draft",                          // Initial state - BUDGET_ANALYST creating
+      "Division Submitted",             // BUDGET_ANALYST → BUDGET_COORDINATOR
+      "Under Review by Coordinator",    // BUDGET_COORDINATOR editing/reviewing
+      "Coordinator Approved",           // BUDGET_COORDINATOR approved (ready to forward)
+      "Forwarded to Officer",           // BUDGET_COORDINATOR → BUDGET_OFFICER
+      "Under Review by Officer",        // BUDGET_OFFICER editing/reviewing
+      "Officer Approved",               // BUDGET_OFFICER approved (ready to forward)
+      "Forwarded to Manager",           // BUDGET_COORDINATOR/BUDGET_OFFICER → BUDGET_MANAGER
+      "Under Review by Manager",        // BUDGET_MANAGER editing/reviewing
+      "Returned",                       // Rejected at any level
+      "Finalized",                      // BUDGET_MANAGER final approval
+      // Legacy statuses (for backward compatibility)
+      "Office",                         // Legacy: BUDGET_COORDINATOR → BUDGET_OFFICER
+      "Office Approved",                // Legacy: BUDGET_COORDINATOR approved
+      "Office Submitted"                // Legacy: Submitted to BUDGET_MANAGER
     ],
     default: "Draft"
   },
@@ -54,17 +62,86 @@ const proposalSchema = new mongoose.Schema({
     enum: ["ANALYST", "COORDINATOR", "OFFICER", "MANAGER", "FINALIZED"],
     default: "ANALYST"
   },
+  currentStep: {
+    type: String,
+    enum: [
+      "ANALYST_DRAFT",
+      "COORDINATOR_REVIEW",
+      "OFFICER_REVIEW",
+      "MANAGER_REVIEW",
+      "RETURNED",
+      "FINALIZED"
+    ],
+    default: "ANALYST_DRAFT"
+  },
+  currentAssigneeRole: {
+    type: String,
+    enum: [
+      "BUDGET_ANALYST",
+      "BUDGET_COORDINATOR",
+      "BUDGET_OFFICER",
+      "BUDGET_MANAGER",
+      "BUDGET_ADMIN"
+    ],
+    default: "BUDGET_ANALYST"
+  },
+  pendingWithRoles: {
+    type: [String],
+    default: function() {
+      return ["BUDGET_ANALYST"];
+    }
+  },
   // Workflow history with comments and user tracking
   workflowHistory: [{
     action: {
       type: String,
-      enum: ["SUBMIT", "APPROVE", "RETURN", "CONSOLIDATE", "EDIT", "VERIFY", "SUBMIT_DIRECT_TO_MANAGER", "COORDINATOR_APPROVE", "COORDINATOR_RETURN", "COORDINATOR_SUBMIT_TO_OFFICER", "COORDINATOR_SUBMIT_TO_MANAGER"],
+      enum: [
+        "SUBMIT",
+        "APPROVE",
+        "RETURN",
+        "CONSOLIDATE",
+        "EDIT",
+        "VERIFY",
+        "SUBMIT_DIRECT_TO_MANAGER",
+        "COORDINATOR_APPROVE",
+        "COORDINATOR_RETURN",
+        "COORDINATOR_SUBMIT_TO_OFFICER",
+        "COORDINATOR_SUBMIT_TO_MANAGER",
+        "COORDINATOR_SAVE_EDITS",
+        "OFFICER_APPROVE",
+        "OFFICER_RETURN",
+        "OFFICER_SUBMIT_TO_MANAGER",
+        "OFFICER_SAVE_EDITS",
+        "MANAGER_APPROVE",
+        "MANAGER_RETURN",
+        "MANAGER_SAVE_EDITS",
+        "ANALYST_SUBMIT_TO_COORDINATOR",
+        "SAVE_DRAFT",
+        "AUTO_SYNC"
+      ],
       required: true
     },
     comment: {
       type: String,
       required: function() {
-        return ["APPROVE", "RETURN", "VERIFY"].includes(this.action);
+        const actionsRequiringComment = [
+          "SUBMIT",
+          "APPROVE",
+          "RETURN",
+          "VERIFY",
+          "SUBMIT_DIRECT_TO_MANAGER",
+          "COORDINATOR_APPROVE",
+          "COORDINATOR_RETURN",
+          "COORDINATOR_SUBMIT_TO_OFFICER",
+          "COORDINATOR_SUBMIT_TO_MANAGER",
+          "OFFICER_APPROVE",
+          "OFFICER_RETURN",
+          "OFFICER_SUBMIT_TO_MANAGER",
+          "MANAGER_APPROVE",
+          "MANAGER_RETURN",
+          "ANALYST_SUBMIT_TO_COORDINATOR"
+        ];
+        return actionsRequiringComment.includes(this.action);
       }
     },
     userId: {
@@ -80,7 +157,9 @@ const proposalSchema = new mongoose.Schema({
       default: Date.now
     },
     previousStatus: String,
-    newStatus: String
+    newStatus: String,
+    targetRole: String,
+    metadata: mongoose.Schema.Types.Mixed
   }],
   // Budget role specific tracking
   submittedByRole: String, // BUDGET_ANALYST, BUDGET_COORDINATOR
@@ -139,6 +218,12 @@ const proposalSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  draftState: {
+    lastSavedBy: String,
+    lastSavedByName: String,
+    lastSavedAt: Date,
+    note: String
+  },
   // Track version for edit history
   version: {
     type: Number,
@@ -148,10 +233,32 @@ const proposalSchema = new mongoose.Schema({
     version: Number,
     editedBy: String,
     editedByName: String,
+    editedByRole: String,
     editedAt: Date,
     reason: String,
-    previousStatus: String
+    previousStatus: String,
+    newStatus: String,
+    changesDescription: String
   }],
+  // Track edits made by each role
+  editedByCoordinator: {
+    userId: String,
+    userName: String,
+    date: Date,
+    changesDescription: String
+  },
+  editedByOfficer: {
+    userId: String,
+    userName: String,
+    date: Date,
+    changesDescription: String
+  },
+  editedByManager: {
+    userId: String,
+    userName: String,
+    date: Date,
+    changesDescription: String
+  },
   // Consolidation tracking
   isConsolidated: {
     type: Boolean,

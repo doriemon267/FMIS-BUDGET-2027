@@ -1,6 +1,6 @@
-import { TbCategory } from "react-icons/tb"; 
-import { BiChild } from "react-icons/bi"; 
-import { AiFillMedicineBox } from "react-icons/ai"; 
+import { TbCategory } from "react-icons/tb";
+import { BiChild } from "react-icons/bi";
+import { AiFillMedicineBox } from "react-icons/ai";
 import { FaFileUpload } from "react-icons/fa";
 import { useState } from "react";
 import { Box, Divider, List, Toolbar, Typography } from "@mui/material";
@@ -29,7 +29,11 @@ import { GiMeal } from "react-icons/gi";
 import { BiSolidShieldPlus } from "react-icons/bi";
 import { FaAward } from "react-icons/fa6";
 import { BiData } from "react-icons/bi";
-import { isBudgetAdmin, isBudgetAnalyst, isSuperAdmin } from "../utils/checkRole";
+import {
+  isBudgetAdmin,
+  isBudgetAnalyst,
+  isSuperAdmin,
+} from "../utils/checkRole";
 import { hasPermission } from "../utils/permissions";
 import { useUser } from "../context/UserContext";
 const CustomDrawer = ({ collapsed = false }) => {
@@ -37,8 +41,9 @@ const CustomDrawer = ({ collapsed = false }) => {
   const { currentUser } = useUser();
   // Simple role flags
   const roles = (currentUser?.Roles || []).map(String);
-  const isBudgetManager = roles.includes('BUDGET MANAGER');
-  const isBudgetOfficer = roles.includes('BUDGET OFFICER');
+  const isBudgetManager = roles.includes("BUDGET MANAGER");
+  const isBudgetOfficer = roles.includes("BUDGET OFFICER");
+  const isBudgetCoordinator = roles.includes("BUDGET COORDINATOR");
   return (
     <Box
       sx={{
@@ -73,23 +78,27 @@ const CustomDrawer = ({ collapsed = false }) => {
               {
                 link: "/proposal",
                 name: "Create Proposal",
-                isAllow: (hasPermission(currentUser, 'CreateProposals') || hasPermission(currentUser, 'EditOwnProposals')) && !isBudgetManager && !isBudgetOfficer,
+                isAllow:
+                  (hasPermission(currentUser, "CreateProposals") ||
+                    hasPermission(currentUser, "EditOwnProposals")) &&
+                  !isBudgetManager &&
+                  !isBudgetOfficer &&
+                  !isBudgetCoordinator,
                 icon: <FaFileAlt />,
               },
 
               {
                 link: "/AllProposals",
                 name: "Proposals",
-                isAllow: hasPermission(currentUser, 'ViewReports'),
-                icon: <FaClipboardList />,
-       
-              },
-              {
-                link: "/myProposals",
-                name: "My Proposals",
-                isAllow: hasPermission(currentUser, 'EditOwnProposals') && !isBudgetManager && !isBudgetOfficer,
+                isAllow: hasPermission(currentUser, "ViewReports"),
                 icon: <FaClipboardList />,
               },
+              // {
+              //   link: "/myProposals",
+              //   name: "My Proposals",
+              //   isAllow: hasPermission(currentUser, 'EditOwnProposals') && !isBudgetManager && !isBudgetOfficer,
+              //   icon: <FaClipboardList />,
+              // },
               // {
               //   link: "/annexis",
               //   name: "Annex",
@@ -102,7 +111,7 @@ const CustomDrawer = ({ collapsed = false }) => {
           <LinkTo
             icon={<TbReportAnalytics />}
             name="Reports & Analytics"
-            isAllow={hasPermission(currentUser, 'ViewReports')}
+            isAllow={hasPermission(currentUser, "ViewReports")}
             collapsed={collapsed}
             iconRight={<FaChevronCircleDown />}
             subLinks={[
@@ -114,31 +123,31 @@ const CustomDrawer = ({ collapsed = false }) => {
               {
                 link: "/consolidated-corporate-income",
                 name: "Consolidated Corporate Income",
-                isAllow: hasPermission(currentUser, 'ViewReports'),
+                isAllow: hasPermission(currentUser, "ViewReports"),
                 icon: <FaRegMoneyBillAlt />,
               },
               {
                 link: "/consolidated-reports",
                 name: "Consolidated MOOE",
-                isAllow: hasPermission(currentUser, 'ViewReports'),
+                isAllow: hasPermission(currentUser, "ViewReports"),
                 icon: <TbReportAnalytics />,
               },
               {
                 link: "/consolidated-capital-outlay-reports",
                 name: "Consolidated Capital Outlay Reports",
-                isAllow: hasPermission(currentUser, 'ViewReports'),
+                isAllow: hasPermission(currentUser, "ViewReports"),
                 icon: <FaRegMoneyBillAlt />,
               },
               {
                 link: "/consolidated-personnel-services-reports",
                 name: "Consolidated Personnel Services Reports",
-                isAllow: hasPermission(currentUser, 'ViewReports'),
+                isAllow: hasPermission(currentUser, "ViewReports"),
                 icon: <FiUsers />,
               },
               {
                 link: "/comprehensive-reports",
                 name: "Comprehensive Budget Report",
-                isAllow: hasPermission(currentUser, 'ViewReports'),
+                isAllow: hasPermission(currentUser, "ViewReports"),
                 icon: <FaRegChartBar />,
               },
               // {
@@ -176,7 +185,11 @@ const CustomDrawer = ({ collapsed = false }) => {
             icon={<FiUsers />}
             name="Employee List"
             link="/Employee"
-            isAllow={hasPermission(currentUser, 'EditAllProposals') && !isBudgetManager && !isBudgetOfficer}
+            isAllow={
+              hasPermission(currentUser, "EditAllProposals") &&
+              !isBudgetManager &&
+              !isBudgetOfficer
+            }
             collapsed={collapsed}
           />
 
@@ -184,7 +197,11 @@ const CustomDrawer = ({ collapsed = false }) => {
             icon={<FaBriefcase />}
             name="Employee Benefits"
             link="/employeeBenefits"
-            isAllow={hasPermission(currentUser, 'EditAllProposals') && !isBudgetManager && !isBudgetOfficer}
+            isAllow={
+              hasPermission(currentUser, "EditAllProposals") &&
+              !isBudgetManager &&
+              !isBudgetOfficer
+            }
             collapsed={collapsed}
           />
 
@@ -192,20 +209,26 @@ const CustomDrawer = ({ collapsed = false }) => {
           <LinkTo
             icon={<IoSettingsOutline />}
             name="Settings"
-             isAllow={hasPermission(currentUser, 'ManageSettings') || isBudgetManager}
+            isAllow={
+              hasPermission(currentUser, "ManageSettings") || isBudgetManager
+            }
             collapsed={collapsed}
             iconRight={<FaChevronCircleDown />}
             subLinks={[
               {
                 link: "/fysettings",
                 name: "Set Cut-Off",
-                isAllow: hasPermission(currentUser, 'ManageSettings') || isBudgetManager,
+                isAllow:
+                  hasPermission(currentUser, "ManageSettings") ||
+                  isBudgetManager,
                 icon: <IoSettingsOutline />,
               },
               {
                 link: "/compsettings",
                 name: "Compensation Settings",
-                isAllow: hasPermission(currentUser, 'ManageSettings') || isBudgetManager,
+                isAllow:
+                  hasPermission(currentUser, "ManageSettings") ||
+                  isBudgetManager,
                 icon: <IoSettingsOutline />,
               },
               // {
@@ -216,49 +239,49 @@ const CustomDrawer = ({ collapsed = false }) => {
               {
                 link: "/rata",
                 name: "RATA",
-                isAllow: hasPermission(currentUser, 'ManageSettings') || isBudgetManager,
+                isAllow:
+                  hasPermission(currentUser, "ManageSettings") ||
+                  isBudgetManager,
                 icon: <IoSettingsOutline />,
               },
 
               {
                 link: "/categories",
                 name: "Capital Outlay",
-                isAllow: hasPermission(currentUser, 'ManageSettings') || isBudgetManager,
+                isAllow:
+                  hasPermission(currentUser, "ManageSettings") ||
+                  isBudgetManager,
                 icon: <IoSettingsOutline />,
               },
 
               {
                 link: "/income-management",
                 name: "Income Management",
-                isAllow: hasPermission(currentUser, 'ManageSettings') || isBudgetManager,
+                isAllow:
+                  hasPermission(currentUser, "ManageSettings") ||
+                  isBudgetManager,
                 icon: <TbCategory />,
               },
-              
+
               // {
               //   link: "/corporate-income-upload",
               //   name: "Corporate Income Upload",
               //   icon: <FaFileUpload />,
               // },
 
-
               {
-                
                 link: "/hierarchical-user-assignments",
                 name: "Hierarchical User Assignments",
-                isAllow: hasPermission(currentUser, 'ManageUsers'),
+                isAllow: hasPermission(currentUser, "ManageSettings"),
                 icon: <IoSettingsOutline />,
-                
-              }
-
+              },
 
               // {
               //   link: "/database-backup",
               //   name: "Database Backup",
               //   icon: <BiData />,
               // }
-
             ]}
-           
           />
 
           {/* <LinkTo icon={<FiUsers />} name="Uploader" link="/uploader" isAllow /> */}

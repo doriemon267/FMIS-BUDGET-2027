@@ -17,7 +17,10 @@ export const setupRegionInterceptor = () => {
         '/comprehensive-reports/available-regions-comprehensive',
         '/comprehensive-reports/available-fiscal-years',
         '/comprehensive-reports/available-budget-types',
-        '/comprehensive-reports/active-settings'
+        '/comprehensive-reports/active-settings',
+        '/api/hierarchical-rbac/assignments',
+        '/api/hierarchical-rbac/my-access',
+        '/api/hierarchical-rbac/user-lookup'
       ];
 
       // Check if the current request URL matches any excluded endpoint

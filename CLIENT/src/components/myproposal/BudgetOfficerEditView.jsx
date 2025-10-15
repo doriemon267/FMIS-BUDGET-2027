@@ -138,8 +138,16 @@ const BudgetOfficerEditView = ({ proposalData, proposal, onSaveSuccess, variant 
     <Box>
       <Alert severity={variant === 'manager' ? 'warning' : 'info'} sx={{ mb: 2 }}>
         <Typography variant="body2">
-          <strong>{variant === 'manager' ? 'Budget Manager Edit Mode' : 'Budget Officer Edit Mode'}:</strong> You can edit all four tables below.
-          {variant === 'manager' ? ' After reviewing your changes, use Approve in the dialog footer to proceed.' : ' Changes will be tracked and sent to Budget Analysts for review after approval.'}
+          <strong>
+            {variant === 'manager' ? 'Budget Manager Edit Mode' : 
+             variant === 'coordinator' ? 'Budget Coordinator Edit Mode' : 
+             variant === 'analyst' ? 'Budget Analyst Edit Mode' :
+             'Budget Officer Edit Mode'}:
+          </strong> You can edit all four tables below.
+          {variant === 'manager' ? ' After reviewing your changes, use Approve in the dialog footer to proceed.' : 
+           variant === 'coordinator' ? ' Changes will be tracked and sent for further review after submission.' :
+           variant === 'analyst' ? ' Make necessary updates and submit for coordinator review.' :
+           ' Changes will be tracked and sent to Budget Analysts for review after approval.'}
         </Typography>
       </Alert>
 
@@ -204,7 +212,13 @@ const BudgetOfficerEditView = ({ proposalData, proposal, onSaveSuccess, variant 
           value={comments}
           onChange={(e) => setComments(e.target.value)}
           variant="outlined"
-          helperText="These comments will be visible to Budget Analysts when reviewing your edits"
+          helperText={
+            variant === 'analyst' 
+              ? 'These comments will be visible to Budget Coordinators when reviewing your submission'
+              : variant === 'coordinator'
+              ? 'These comments will be visible to Budget Officers when reviewing your edits'
+              : 'These comments will be visible to Budget Analysts when reviewing your edits'
+          }
         />
       </Box>
 
@@ -226,7 +240,10 @@ const BudgetOfficerEditView = ({ proposalData, proposal, onSaveSuccess, variant 
             onClick={handleSubmit}
             disabled={saving || submitting}
           >
-            {submitting ? 'Submitting...' : 'Submit for Manager Approval'}
+            {submitting ? 'Submitting...' : 
+             variant === 'analyst' ? 'Submit for Coordinator Review' :
+             variant === 'coordinator' ? 'Submit for Officer Review' :
+             'Submit for Manager Approval'}
           </Button>
         )}
       </Box>

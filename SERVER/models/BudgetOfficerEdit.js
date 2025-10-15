@@ -145,7 +145,12 @@ const budgetOfficerEditSchema = new mongoose.Schema({
       type: String,
       required: true
     },
-    email: String
+    email: String,
+    role: {
+      type: String,
+      enum: ['BUDGET_COORDINATOR', 'BUDGET_OFFICER', 'BUDGET_MANAGER'],
+      default: 'BUDGET_OFFICER'
+    }
   },
   
   // Comments from Budget Officer

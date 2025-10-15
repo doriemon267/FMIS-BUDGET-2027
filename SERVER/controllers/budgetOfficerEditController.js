@@ -130,11 +130,24 @@ exports.getProposalForEdit = async (req, res) => {
       });
     }
     
-    // Check if there's an existing draft edit
-    const existingEdit = await BudgetOfficerEdit.findOne({
-      proposalId: proposal._id,
-      status: 'Draft'
-    });
+    // Check if there's an existing edit
+    // Budget Manager should ONLY see edits submitted by Budget Officer (not Budget Coordinator)
+    // Budget Officer should see their own Draft or edits from Budget Coordinator
+    let existingEdit;
+    if (isBudgetManager && !isBudgetOfficer) {
+      // Budget Manager: Only show edits submitted by BUDGET_OFFICER
+      existingEdit = await BudgetOfficerEdit.findOne({
+        proposalId: proposal._id,
+        status: 'Submitted',
+        'editedBy.role': 'BUDGET_OFFICER'
+      }).sort({ updatedAt: -1 });
+    } else {
+      // Budget Officer: Show Draft or Submitted edits (including from Budget Coordinator)
+      existingEdit = await BudgetOfficerEdit.findOne({
+        proposalId: proposal._id,
+        status: { $in: ['Draft', 'Submitted'] }
+      }).sort({ updatedAt: -1 });
+    }
     
     // Fetch all data for the proposal
     const queryParams = {
@@ -326,6 +339,13 @@ exports.saveDraftEdit = async (req, res) => {
       status: 'Draft'
     });
     
+    // Determine the role of the editor
+    const editorRole = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN')
+      ? 'BUDGET_MANAGER'
+      : userRoles.includes('BUDGET_OFFICER')
+      ? 'BUDGET_OFFICER'
+      : 'BUDGET_COORDINATOR';
+    
     if (budgetOfficerEdit) {
       // Update existing draft
       budgetOfficerEdit.editedIncome = editedIncome || [];
@@ -334,6 +354,8 @@ exports.saveDraftEdit = async (req, res) => {
       budgetOfficerEdit.editedCapitalOutlay = editedCapitalOutlay || [];
       budgetOfficerEdit.comments = comments;
       budgetOfficerEdit.updatedAt = new Date();
+      // Update the role if it changed
+      budgetOfficerEdit.editedBy.role = editorRole;
     } else {
       // Create new draft
       budgetOfficerEdit = new BudgetOfficerEdit({
@@ -354,7 +376,8 @@ exports.saveDraftEdit = async (req, res) => {
         editedBy: {
           userId,
           userName,
-          email: userEmail
+          email: userEmail,
+          role: editorRole
         }
       });
     }
@@ -505,6 +528,13 @@ exports.submitEdit = async (req, res) => {
       });
     }
     
+    // Determine the role of the editor
+    const editorRole = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN')
+      ? 'BUDGET_MANAGER'
+      : userRoles.includes('BUDGET_OFFICER')
+      ? 'BUDGET_OFFICER'
+      : 'BUDGET_COORDINATOR';
+    
     // Check if there's an existing draft
     let budgetOfficerEdit = await BudgetOfficerEdit.findOne({
       proposalId,
@@ -520,6 +550,8 @@ exports.submitEdit = async (req, res) => {
       budgetOfficerEdit.comments = comments;
       budgetOfficerEdit.status = 'Submitted';
       budgetOfficerEdit.submittedAt = new Date();
+      // Update the role if it changed
+      budgetOfficerEdit.editedBy.role = editorRole;
     } else {
       // Create and submit new edit
       budgetOfficerEdit = new BudgetOfficerEdit({
@@ -540,7 +572,8 @@ exports.submitEdit = async (req, res) => {
         editedBy: {
           userId,
           userName,
-          email: userEmail
+          email: userEmail,
+          role: editorRole
         },
         submittedAt: new Date()
       });

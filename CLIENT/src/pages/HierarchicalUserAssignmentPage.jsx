@@ -1521,7 +1521,7 @@ const HierarchicalUserAssignmentPage = () => {
                                   console.log('📝 Edit form populated:', {
                                     userId: formFields.userId,
                                     userRole: formFields.userRole,
-                                    actualUserRole,
+                                    // actualUserRole,
                                     assignmentLevel: formFields.assignmentLevel,
                                     officeId: formFields.officeId,
                                     responsibilityCenter: formFields.responsibilityCenterName

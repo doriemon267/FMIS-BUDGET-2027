@@ -53,12 +53,9 @@ const EditableIncomeTable = ({ data = [], onChange }) => {
   const { currentUser } = useUser();
 
   const canEditAmount = useMemo(() => {
+    // Check primary roles
     const rawRoles = currentUser?.Roles;
     const rolesArray = Array.isArray(rawRoles) ? rawRoles : rawRoles ? [rawRoles] : [];
-
-    if (rolesArray.length === 0) {
-      return false;
-    }
 
     const normalizedRoles = rolesArray.map((role) => {
       if (typeof role === 'string') {
@@ -71,9 +68,18 @@ const EditableIncomeTable = ({ data = [], onChange }) => {
       return '';
     });
 
-    return normalizedRoles.some((role) =>
-      role.includes('BUDGET OFFICER') || role.includes('BUDGET MANAGER')
+    const hasRolePermission = normalizedRoles.some((role) =>
+      role.includes('BUDGET OFFICER') || role.includes('BUDGET MANAGER') || role.includes('BUDGET COORDINATOR') || role.includes('BUDGET ANALYST')
     );
+
+    // Also check workflow roles for Budget Coordinators (divisionapprover) and Budget Analysts (divisioncreator)
+    const workflowRoles = currentUser?.workflowRoles || [];
+    const normalizedWorkflowRoles = workflowRoles.map(r => String(r || '').toLowerCase());
+    const hasWorkflowPermission = normalizedWorkflowRoles.some(role => 
+      role === 'divisionapprover' || role === 'divisioncreator' || role === 'officeconsolidator' || role === 'departmentconsolidator'
+    );
+
+    return hasRolePermission || hasWorkflowPermission;
   }, [currentUser]);
 
   // Initialize changeType for data items that don't have it

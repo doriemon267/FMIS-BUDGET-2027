@@ -11,6 +11,9 @@ router.use(checkToken);
 // Normalize roles after authentication
 router.use(normalizeRoles);
 
+// Save draft progress
+router.post('/draft/save', proposalWorkflowController.saveDraft);
+
 // Submit proposal to Budget Officer (BUDGET_ANALYST submits to BUDGET_COORDINATOR)
 router.post('/submit', proposalWorkflowController.submitProposal);
 
@@ -29,6 +32,32 @@ router.post('/coordinator/submit-to-officer', proposalWorkflowController.coordin
 
 // BUDGET_COORDINATOR submits directly to BUDGET_MANAGER (bypassing officer)
 router.post('/coordinator/submit-to-manager', proposalWorkflowController.coordinatorSubmitToManager);
+
+// BUDGET_COORDINATOR saves edits without forwarding
+router.post('/coordinator/save-edits', proposalWorkflowController.coordinatorSaveEdits);
+
+// === BUDGET OFFICER WORKFLOW ROUTES ===
+// BUDGET_OFFICER approves proposal
+router.post('/officer/approve', proposalWorkflowController.officerApproveProposal);
+
+// BUDGET_OFFICER returns proposal to BUDGET_COORDINATOR
+router.post('/officer/return', proposalWorkflowController.officerReturnProposal);
+
+// BUDGET_OFFICER submits to BUDGET_MANAGER
+router.post('/officer/submit-to-manager', proposalWorkflowController.officerSubmitToManager);
+
+// BUDGET_OFFICER saves edits without forwarding
+router.post('/officer/save-edits', proposalWorkflowController.officerSaveEdits);
+
+// === BUDGET MANAGER WORKFLOW ROUTES ===
+// BUDGET_MANAGER approves proposal (final approval)
+router.post('/manager/approve', proposalWorkflowController.managerApproveProposal);
+
+// BUDGET_MANAGER returns proposal
+router.post('/manager/return', proposalWorkflowController.managerReturnProposal);
+
+// BUDGET_MANAGER saves edits without forwarding
+router.post('/manager/save-edits', proposalWorkflowController.managerSaveEdits);
 
 // Verify proposal (Budget Officer only) - marks as verified without changing status
 router.post('/verify', proposalWorkflowController.verifyProposal);

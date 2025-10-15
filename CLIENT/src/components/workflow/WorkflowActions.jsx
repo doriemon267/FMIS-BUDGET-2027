@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import api from "../../config/api";
 import { goTo } from "../../global/navigation";
-import { Button, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions, Typography, TextField, Menu, MenuItem, ListItemIcon, ListItemText, Chip, Divider, Stepper, Step, StepLabel, Box, Stack } from "@mui/material";
+import { Button, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions, Typography, TextField, Menu, MenuItem, ListItemIcon, ListItemText, Chip, Divider, Stepper, Step, StepLabel, Box, Stack, List, ListItem, Alert } from "@mui/material";
 import CheckIcon from "@mui/icons-material/Check";
 import UndoIcon from "@mui/icons-material/Undo";
 import SendIcon from "@mui/icons-material/Send";
@@ -10,6 +10,7 @@ import VerifiedIcon from "@mui/icons-material/Verified";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import TimelineIcon from "@mui/icons-material/Timeline";
+import SaveIcon from "@mui/icons-material/Save";
 
 /**
  * Workflow Actions Component
@@ -19,6 +20,67 @@ import TimelineIcon from "@mui/icons-material/Timeline";
  */
 const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = true, showTrackInMenu = true, showViewInMenu = true }) => {
   const [loading, setLoading] = useState(false);
+  const [historyItems, setHistoryItems] = useState(Array.isArray(proposal?.workflowHistory) ? proposal.workflowHistory : []);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(null);
+  const [historyFetchedAt, setHistoryFetchedAt] = useState(null);
+  const proposalId = proposal?._id;
+  const historyMetaRef = useRef({
+    fetchedAt: historyFetchedAt,
+    itemsLength: historyItems.length
+  });
+
+  useEffect(() => {
+    historyMetaRef.current.itemsLength = historyItems.length;
+  }, [historyItems.length]);
+
+  useEffect(() => {
+    historyMetaRef.current.fetchedAt = historyFetchedAt;
+  }, [historyFetchedAt]);
+
+  useEffect(() => {
+    if (Array.isArray(proposal?.workflowHistory)) {
+      setHistoryItems(proposal.workflowHistory);
+    } else if (!proposalId) {
+      setHistoryItems([]);
+    }
+  }, [proposalId, proposal?.workflowHistory]);
+
+  const fetchHistory = useCallback(async ({ force = false } = {}) => {
+    if (!proposalId) return;
+    const now = Date.now();
+    const lastFetched = historyMetaRef.current.fetchedAt;
+    const hasCached = historyMetaRef.current.itemsLength > 0;
+    if (!force && lastFetched && (now - lastFetched < 15000) && hasCached) {
+      return;
+    }
+
+    setHistoryLoading(true);
+    setHistoryError(null);
+
+    try {
+      const response = await api.get(`/api/workflow/history/${proposalId}`);
+      const payload = response?.data?.history || response?.data?.workflowHistory || response?.data;
+      const normalized = Array.isArray(payload) ? payload : [];
+      setHistoryItems(normalized);
+      setHistoryFetchedAt(now);
+      historyMetaRef.current = {
+        fetchedAt: now,
+        itemsLength: normalized.length
+      };
+    } catch (error) {
+      console.error('Failed to load workflow history:', error);
+      setHistoryError(error?.response?.data?.message || error.message || 'Unable to load workflow history');
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [proposalId]);
+
+  useEffect(() => {
+    if (proposalId) {
+      fetchHistory({ force: true });
+    }
+  }, [proposalId, fetchHistory]);
 
   // Top-level render log to confirm component renders
   console.log('WorkflowActions Render:', {
@@ -82,9 +144,11 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
         // Temporary: Legacy role support (to be migrated)
         DIVISION_APPROVER: 'BUDGET_ANALYST', // TODO: Migrate to divisionCreator in database
         
-        // BUDGET COORDINATOR - Department/Region level creators
+  // BUDGET COORDINATOR - Department/Region level creators
         DEPARTMENT_CREATOR: 'BUDGET_COORDINATOR',
         DEPARTMENT_COORDINATOR: 'BUDGET_COORDINATOR',
+  DIVISION_COORDINATOR: 'BUDGET_COORDINATOR',
+  COORDINATOR: 'BUDGET_COORDINATOR',
         REGION_CREATOR: 'BUDGET_COORDINATOR',
         REGION_COORDINATOR: 'BUDGET_COORDINATOR',
         
@@ -165,39 +229,116 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
       }
     });
 
-    // BUDGET ANALYST & BUDGET COORDINATOR Actions (Creation Level)
-    if (isBudgetAnalyst || isBudgetCoordinator) {
-      if (normalizedStatus === "DRAFT" || status === "Draft") {
+    // BUDGET ANALYST Actions (Draft control & submission)
+    if (isBudgetAnalyst) {
+      const isDraft = normalizedStatus === 'DRAFT' || status === 'Draft';
+      const isReturnedToAnalyst = normalizedStatus === 'RETURNED' || (status === 'Returned' && proposal?.workflowLevel === 'ANALYST');
+
+      if (isDraft || isReturnedToAnalyst) {
         actions.push({
-          label: "Submit to Officer",
-          action: "submit-to-officer",
-          color: "bg-blue-500 hover:bg-blue-600",
-          icon: "📤",
-          description: "Submit proposal to Budget Officer for approval"
+          label: 'Save Draft',
+          action: 'save-draft',
+          color: 'bg-slate-500 hover:bg-slate-600',
+          icon: '💾',
+          description: 'Save current changes without routing',
+          requiresComment: false,
+          allowOptionalComment: true
         });
-        
-        // BUDGET ANALYST & BUDGET COORDINATOR: Direct submit to Manager (bypass Officer review)
+
         actions.push({
-          label: "Submit to Manager (Direct)",
-          action: "submit-direct-to-manager",
-          color: "bg-purple-500 hover:bg-purple-600",
-          icon: "⚡",
-          description: "Submit proposal directly to Budget Manager (bypasses Officer review)"
+          label: 'Submit to Coordinator',
+          action: 'submit-to-coordinator',
+          color: 'bg-blue-500 hover:bg-blue-600',
+          icon: '📤',
+          description: 'Forward proposal to Budget Coordinator for review',
+          requiresComment: true
+        });
+
+        // Optional escalation path if organization allows analyst direct submission
+  if (isBudgetCoordinator) {
+          actions.push({
+            label: 'Submit to Manager (Direct)',
+            action: 'submit-direct-to-manager',
+            color: 'bg-purple-500 hover:bg-purple-600',
+            icon: '⚡',
+            description: 'Submit proposal directly to Budget Manager (bypasses Officer review)',
+            requiresComment: true
+          });
+        }
+      }
+    }
+
+    // BUDGET COORDINATOR Actions (Review & routing)
+    if (isBudgetCoordinator) {
+      // Can review and edit proposals submitted by analysts
+      if (normalizedStatus === 'DIVISION SUBMITTED' || status === 'Division Submitted' || 
+          normalizedStatus === 'UNDER REVIEW BY COORDINATOR' || status === 'Under Review by Coordinator' ||
+          normalizedStatus === 'RESPONSIBILITY CENTER SUBMITTED') {
+        actions.push({
+          label: 'Save Edits',
+          action: 'coordinator-save-edits',
+          color: 'bg-gray-500 hover:bg-gray-600',
+          icon: '💾',
+          description: 'Save changes without forwarding (status: Under Review)',
+          requiresComment: false,
+          allowOptionalComment: true
+        });
+        actions.push({
+          label: 'Approve for Routing',
+          action: 'coordinator-approve',
+          color: 'bg-green-500 hover:bg-green-600',
+          icon: '✅',
+          description: 'Approve analyst submission and prepare for forwarding',
+          requiresComment: true
+        });
+        actions.push({
+          label: 'Return to Analyst',
+          action: 'coordinator-return',
+          color: 'bg-red-500 hover:bg-red-600',
+          icon: '↩️',
+          description: 'Send back to analyst for revisions',
+          requiresComment: true
+        });
+      }
+
+      // After approval, coordinator can forward to Officer or Manager
+      if (normalizedStatus === 'COORDINATOR APPROVED' || status === 'Coordinator Approved' ||
+          normalizedStatus === 'OFFICE APPROVED' || status === 'Office Approved') {
+        actions.push({
+          label: 'Forward to Officer',
+          action: 'coordinator-forward-officer',
+          color: 'bg-blue-500 hover:bg-blue-600',
+          icon: '📬',
+          description: 'Forward proposal to Budget Officer for verification',
+          requiresComment: true
+        });
+        actions.push({
+          label: 'Forward to Manager',
+          action: 'coordinator-forward-manager',
+          color: 'bg-purple-500 hover:bg-purple-600',
+          icon: '🚀',
+          description: 'Send proposal directly to Budget Manager for approval',
+          requiresComment: true
         });
       }
     }
 
     // BUDGET OFFICER Actions (Approval Level)
     if (isBudgetOfficer) {
-      if (normalizedStatus === "DIVISION SUBMITTED" || normalizedStatus === "OFFICE" || 
-          status === "Division Submitted" || status === "Office") {
+      // Can review and edit proposals forwarded by coordinator
+      if (normalizedStatus === "FORWARDED TO OFFICER" || status === "Forwarded to Officer" ||
+          normalizedStatus === "UNDER REVIEW BY OFFICER" || status === "Under Review by Officer" ||
+          normalizedStatus === "OFFICER APPROVED" || status === "Officer Approved" ||
+          normalizedStatus === "OFFICE" || status === "Office" ||
+          normalizedStatus === "DIVISION SUBMITTED" || status === "Division Submitted") {
         actions.push({
-          label: "Verify",
-          action: "officer-verify",
-          color: "bg-blue-500 hover:bg-blue-600",
-          icon: "✓",
-          description: "Verify the proposal (marks as verified without changing status)",
-          requiresComment: true
+          label: "Save Edits",
+          action: "officer-save-edits",
+          color: "bg-gray-500 hover:bg-gray-600",
+          icon: "💾",
+          description: "Save changes without forwarding (status: Under Review)",
+          requiresComment: false,
+          allowOptionalComment: true
         });
         actions.push({
           label: "Approve",
@@ -208,21 +349,25 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           requiresComment: true
         });
         actions.push({
-          label: "Return",
+          label: "Return to Coordinator",
           action: "officer-return",
           color: "bg-red-500 hover:bg-red-600",
           icon: "↩️",
-          description: "Return proposal to creator for revisions",
+          description: "Return proposal to coordinator for revisions",
           requiresComment: true
         });
       }
-      if (normalizedStatus === "OFFICE APPROVED" || status === "Office Approved") {
+      
+      // After approval, officer can submit to manager
+      if (normalizedStatus === "OFFICER APPROVED" || status === "Officer Approved" ||
+          normalizedStatus === "UNDER REVIEW BY OFFICER" || status === "Under Review by Officer") {
         actions.push({
           label: "Submit to Manager",
-          action: "submit-to-manager",
+          action: "officer-submit-to-manager",
           color: "bg-purple-500 hover:bg-purple-600",
           icon: "📋",
-          description: "Consolidate and submit approved proposals to Budget Manager"
+          description: "Submit approved proposal to Budget Manager",
+          requiresComment: true
         });
       }
     }
@@ -230,15 +375,26 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
     // BUDGET MANAGER & BUDGET ADMIN Actions (Finalization Level)
     if (isBudgetManager || isBudgetAdmin) {
       const managerStatuses = [
+        'FORWARDED TO MANAGER',
+        'UNDER REVIEW BY MANAGER',
         'OFFICE SUBMITTED',
         'SUBMITTED TO MANAGER',
         'OFFICER APPROVED'
       ];
 
       if (managerStatuses.includes(normalizedStatus) ||
-          ['Office Submitted', 'Submitted to Manager', 'Officer Approved'].includes(status)) {
+          ['Forwarded to Manager', 'Under Review by Manager', 'Office Submitted', 'Submitted to Manager', 'Officer Approved'].includes(status)) {
         actions.push({
-          label: "Approve",
+          label: "Save Edits",
+          action: "manager-save-edits",
+          color: "bg-gray-500 hover:bg-gray-600",
+          icon: "💾",
+          description: "Save changes without finalizing (status: Under Review)",
+          requiresComment: false,
+          allowOptionalComment: true
+        });
+        actions.push({
+          label: "Finalize",
           action: "manager-approve",
           color: "bg-teal-500 hover:bg-teal-600",
           icon: "✔",
@@ -250,7 +406,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           action: "manager-return",
           color: "bg-red-500 hover:bg-red-600",
           icon: "↩️",
-          description: "Return proposal to officer for revisions",
+          description: "Return proposal for revisions",
           requiresComment: true
         });
       }
@@ -260,6 +416,119 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
 
     return actions;
   };
+
+  const roleLabelMap = useMemo(() => ({
+    BUDGET_ANALYST: 'Budget Analyst',
+    BUDGET_COORDINATOR: 'Budget Coordinator',
+    BUDGET_OFFICER: 'Budget Officer',
+    BUDGET_MANAGER: 'Budget Manager',
+    BUDGET_ADMIN: 'Budget Admin'
+  }), []);
+
+  const formatRoleLabel = useCallback((role) => {
+    if (!role) return 'Unassigned';
+    const normalized = String(role).toUpperCase().trim();
+    return roleLabelMap[normalized] || normalized.replace(/_/g, ' ');
+  }, [roleLabelMap]);
+
+  const formatActionLabel = useCallback((action) => {
+    if (!action) return '';
+    return action
+      .toString()
+      .toLowerCase()
+      .split('_')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  }, []);
+
+  const stepLabelMap = useMemo(() => ({
+    ANALYST_DRAFT: { label: 'Analyst Draft', tooltip: 'Draft in progress with Analyst' },
+    COORDINATOR_REVIEW: { label: 'Coordinator Review', tooltip: 'Awaiting Budget Coordinator action' },
+    OFFICER_REVIEW: { label: 'Officer Review', tooltip: 'Awaiting Budget Officer verification' },
+    MANAGER_REVIEW: { label: 'Manager Review', tooltip: 'Awaiting Budget Manager decision' },
+    RETURNED: { label: 'Returned', tooltip: 'Returned for revisions' },
+    FINALIZED: { label: 'Finalized', tooltip: 'Workflow completed' }
+  }), []);
+
+  const formatStepLabel = useCallback((step) => {
+    if (!step) return 'Draft';
+    const normalized = String(step).toUpperCase().trim();
+    return stepLabelMap[normalized]?.label || normalized.replace(/_/g, ' ');
+  }, [stepLabelMap]);
+
+  const stepTooltip = useCallback((step) => {
+    if (!step) return null;
+    const normalized = String(step).toUpperCase().trim();
+    return stepLabelMap[normalized]?.tooltip || null;
+  }, [stepLabelMap]);
+
+  // Determine if this proposal has a manager phase (submitted to manager / manager approved / finalized entries)
+  const hasManagerPhase = (() => {
+    const directFlags = Boolean(
+      proposal?.submittedToManagerAt ||
+      proposal?.managerApprovedAt ||
+      proposal?.finalizedAt
+    );
+    const historyFlags = Array.isArray(proposal?.workflowHistory) && proposal.workflowHistory.some(h => {
+      const ns = String(h?.newStatus || h?.status || '').toLowerCase();
+      return (
+        ns.includes('submitted to manager') ||
+        ns.includes('manager approved') ||
+        ns.includes('manager returned') ||
+        ns.includes('finalized')
+      );
+    });
+    return directFlags || historyFlags;
+  })();
+
+  // Derive step/assignee/pending from status when new fields are not yet present on older records
+  const deriveFromStatus = useCallback((status) => {
+    const s = String(status || '').toUpperCase();
+    const derived = { step: 'ANALYST_DRAFT', assignee: 'BUDGET_ANALYST', pending: ['BUDGET_ANALYST'] };
+    if (s.includes('DIVISION SUBMITTED') || s.includes('RESPONSIBILITY CENTER SUBMITTED')) {
+      derived.step = 'COORDINATOR_REVIEW';
+      derived.assignee = 'BUDGET_COORDINATOR';
+      derived.pending = ['BUDGET_COORDINATOR'];
+    } else if (s === 'OFFICE' || s.includes('OFFICE REVIEW')) {
+      derived.step = 'OFFICER_REVIEW';
+      derived.assignee = 'BUDGET_OFFICER';
+      derived.pending = ['BUDGET_OFFICER'];
+    } else if (s.includes('OFFICE APPROVED')) {
+      // If a manager phase exists, this typically precedes submission to manager
+      derived.step = hasManagerPhase ? 'MANAGER_REVIEW' : 'FINALIZED';
+      derived.assignee = hasManagerPhase ? 'BUDGET_MANAGER' : 'BUDGET_ADMIN';
+      derived.pending = hasManagerPhase ? ['BUDGET_MANAGER'] : [];
+    } else if (s.includes('OFFICE SUBMITTED') || s.includes('SUBMITTED TO MANAGER')) {
+      derived.step = 'MANAGER_REVIEW';
+      derived.assignee = 'BUDGET_MANAGER';
+      derived.pending = ['BUDGET_MANAGER'];
+    } else if (s.includes('RETURNED')) {
+      derived.step = 'RETURNED';
+      // We can't reliably know target; default to analyst
+      derived.assignee = 'BUDGET_ANALYST';
+      derived.pending = ['BUDGET_ANALYST'];
+    } else if (s.includes('FINALIZED')) {
+      derived.step = 'FINALIZED';
+      derived.assignee = 'BUDGET_ADMIN';
+      derived.pending = [];
+    }
+    return derived;
+  }, [hasManagerPhase]);
+
+  // Pick the newest workflow event by timestamp to avoid ordering assumptions
+  const latestEvent = useMemo(() => {
+    if (!Array.isArray(historyItems) || historyItems.length === 0) return null;
+    let newest = historyItems[0];
+    let newestTs = newest?.timestamp ? new Date(newest.timestamp).getTime() : 0;
+    for (let i = 1; i < historyItems.length; i++) {
+      const ts = historyItems[i]?.timestamp ? new Date(historyItems[i].timestamp).getTime() : 0;
+      if (ts > newestTs) {
+        newest = historyItems[i];
+        newestTs = ts;
+      }
+    }
+    return newest;
+  }, [historyItems]);
 
   // Execute workflow action
   const executeWorkflowAction = async (action, noteValue) => {
@@ -272,37 +541,73 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
     try {
 
       switch (action) {
-        case "submit-to-officer":
+        case "save-draft":
+          endpoint = "/api/workflow/draft/save";
+          successMessage = "Draft saved successfully";
+          break;
+        case "submit-to-coordinator":
           endpoint = "/api/workflow/submit";
-          successMessage = "Proposal submitted to Budget Officer successfully";
+          successMessage = "Proposal submitted to Budget Coordinator successfully";
           break;
         case "submit-direct-to-manager":
           endpoint = "/api/workflow/submit-direct-to-manager";
           successMessage = "Proposal submitted directly to Budget Manager successfully";
+          break;
+        case "coordinator-approve":
+          endpoint = "/api/workflow/coordinator/approve";
+          successMessage = "Proposal approved by Budget Coordinator successfully";
+          break;
+        case "coordinator-return":
+          endpoint = "/api/workflow/coordinator/return";
+          successMessage = "Proposal returned to Budget Analyst successfully";
+          break;
+        case "coordinator-forward-officer":
+          endpoint = "/api/workflow/coordinator/submit-to-officer";
+          successMessage = "Proposal forwarded to Budget Officer successfully";
+          break;
+        case "coordinator-forward-manager":
+          endpoint = "/api/workflow/coordinator/submit-to-manager";
+          successMessage = "Proposal forwarded to Budget Manager successfully";
+          break;
+        case "coordinator-save-edits":
+          endpoint = "/api/workflow/coordinator/save-edits";
+          successMessage = "Changes saved successfully (Under Review by Coordinator)";
           break;
         case "officer-verify":
           endpoint = "/api/workflow/verify";
           successMessage = "Proposal verified successfully";
           break;
         case "officer-approve":
-          endpoint = "/api/workflow/approve";
-          successMessage = "Proposal approved successfully";
+          endpoint = "/api/workflow/officer/approve";
+          successMessage = "Proposal approved by Budget Officer successfully";
           break;
         case "officer-return":
-          endpoint = "/api/workflow/return";
-          successMessage = "Proposal returned successfully";
+          endpoint = "/api/workflow/officer/return";
+          successMessage = "Proposal returned to Coordinator successfully";
+          break;
+        case "officer-submit-to-manager":
+          endpoint = "/api/workflow/officer/submit-to-manager";
+          successMessage = "Proposal submitted to Budget Manager successfully";
+          break;
+        case "officer-save-edits":
+          endpoint = "/api/workflow/officer/save-edits";
+          successMessage = "Changes saved successfully (Under Review by Officer)";
           break;
         case "submit-to-manager":
           endpoint = "/api/workflow/consolidate";
           successMessage = "Proposals consolidated and submitted to Budget Manager successfully";
           break;
         case "manager-approve":
-          endpoint = "/api/workflow/approve";
-          successMessage = "Proposal approved by Budget Manager successfully";
+          endpoint = "/api/workflow/manager/approve";
+          successMessage = "Proposal finalized by Budget Manager successfully";
           break;
         case "manager-return":
-          endpoint = "/api/workflow/return";
-          successMessage = "Proposal returned to Budget Officer successfully";
+          endpoint = "/api/workflow/manager/return";
+          successMessage = "Proposal returned for further review";
+          break;
+        case "manager-save-edits":
+          endpoint = "/api/workflow/manager/save-edits";
+          successMessage = "Changes saved successfully (Under Review by Manager)";
           break;
         // Legacy actions for backward compatibility
         case "responsibility-center-submit":
@@ -342,13 +647,29 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
       // Prepare request data based on action
       let requestData = { proposalId: proposal._id };
 
-      if (action === "submit-to-officer") {
-        requestData.comment = noteValue || "";
-      } else if (action === "officer-verify") {
-        requestData.comment = noteValue;
-      } else if (action === "officer-approve" || action === "manager-approve") {
-        requestData.comment = noteValue;
-      } else if (action === "officer-return" || action === "manager-return") {
+      if (action === "save-draft") {
+        requestData = {
+          proposalId: proposal._id,
+          comment: noteValue || "",
+          updates: {}
+        };
+      } else if ([
+        "submit-to-coordinator",
+        "submit-direct-to-manager",
+        "coordinator-approve",
+        "coordinator-return",
+        "coordinator-forward-officer",
+        "coordinator-forward-manager",
+        "coordinator-save-edits",
+        "officer-verify",
+        "officer-approve",
+        "officer-return",
+        "officer-submit-to-manager",
+        "officer-save-edits",
+        "manager-approve",
+        "manager-return",
+        "manager-save-edits"
+      ].includes(action)) {
         requestData.comment = noteValue;
       } else if (action === "submit-to-manager") {
         // For consolidation, we need multiple proposal IDs and consolidated title
@@ -362,13 +683,17 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
 
       const response = await api.post(endpoint, requestData);
 
+      const debugPayload = {
+        ids: [proposal._id],
+        entity: getEntityType(proposal)
+      };
+      if (noteField) {
+        debugPayload[noteField] = noteValue?.trim() || `Workflow action performed on ${new Date().toLocaleString()}`;
+      }
+
       console.log('Workflow API Call Debug:', {
         endpoint,
-        requestData: {
-          ids: [proposal._id],
-          entity: getEntityType(proposal),
-          [noteField]: noteValue?.trim() || `Workflow action performed on ${new Date().toLocaleString()}`
-        },
+        requestData: debugPayload,
         proposal: {
           _id: proposal._id,
           modelType: proposal.modelType,
@@ -395,6 +720,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
 
       if (isSuccess) {
         toast.success(successMessage);
+        fetchHistory({ force: true }).catch(() => {});
         try {
           if (typeof window !== 'undefined' && window.showSuccess) {
             window.showSuccess(successMessage + ' — Click to open All Proposals', 8000, () => {
@@ -444,15 +770,29 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
   };
 
   // Confirmation dialog state
-  const [confirmState, setConfirmState] = useState({ open: false, action: null, label: '', requiresComment: false });
+  const [confirmState, setConfirmState] = useState({ open: false, action: null, label: '', requiresComment: false, allowOptionalComment: false });
   const [comment, setComment] = useState('');
-  const requiresComment = confirmState.requiresComment || confirmState.action === 'officer-return' || confirmState.action === 'manager-return' ||
-                          confirmState.action === 'officer-approve' || confirmState.action === 'manager-approve';
+  const forcedCommentActions = new Set([
+    'submit-to-coordinator',
+    'submit-direct-to-manager',
+    'coordinator-approve',
+    'coordinator-return',
+    'coordinator-forward-officer',
+    'coordinator-forward-manager',
+    'officer-verify',
+    'officer-approve',
+    'officer-return',
+    'officer-submit-to-manager',
+    'manager-approve',
+    'manager-return'
+  ]);
+  const requiresComment = confirmState.requiresComment || forcedCommentActions.has(confirmState.action);
+  const showCommentField = requiresComment || confirmState.allowOptionalComment;
 
   // Handle action click with MUI confirm dialog
-  const handleActionClick = (action, label, requiresComment = false) => {
+  const handleActionClick = (action, label, requiresComment = false, allowOptionalComment = false) => {
     if (loading) return;
-    setConfirmState({ open: true, action, label, requiresComment });
+    setConfirmState({ open: true, action, label, requiresComment, allowOptionalComment });
   };
 
   const handleConfirm = () => {
@@ -463,12 +803,12 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
       return;
     }
     executeWorkflowAction(confirmState.action, comment);
-    setConfirmState({ open: false, action: null, label: '', requiresComment: false });
+    setConfirmState({ open: false, action: null, label: '', requiresComment: false, allowOptionalComment: false });
     setComment('');
   };
 
   const handleClose = () => { 
-    setConfirmState({ open: false, action: null, label: '', requiresComment: false });
+    setConfirmState({ open: false, action: null, label: '', requiresComment: false, allowOptionalComment: false });
     setComment('');
   };
 
@@ -487,13 +827,23 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
     };
     const color = iconColorMap[action] || 'inherit';
     switch (action) {
-      case 'submit-to-officer': return <SendIcon fontSize="small" color={color} />;
-      case 'submit-direct-to-manager': return <SendIcon fontSize="small" color={color} />;
-      case 'officer-approve': return <CheckIcon fontSize="small" color={color} />;
-      case 'officer-return': return <UndoIcon fontSize="small" color={color} />;
-      case 'submit-to-manager': return <SendIcon fontSize="small" color={color} />;
-      case 'manager-approve': return <CheckIcon fontSize="small" color={color} />;
-      case 'manager-return': return <UndoIcon fontSize="small" color={color} />;
+      case 'save-draft':
+        return <SaveIcon fontSize="small" color={color} />;
+      case 'submit-to-coordinator':
+      case 'coordinator-forward-officer':
+      case 'coordinator-forward-manager':
+      case 'submit-to-manager':
+      case 'submit-direct-to-manager':
+        return <SendIcon fontSize="small" color={color} />;
+      case 'coordinator-approve':
+      case 'officer-verify':
+      case 'officer-approve':
+      case 'manager-approve':
+        return <CheckIcon fontSize="small" color={color} />;
+      case 'coordinator-return':
+      case 'officer-return':
+      case 'manager-return':
+        return <UndoIcon fontSize="small" color={color} />;
       case 'finalize': return <VerifiedIcon fontSize="small" color={color} />;
       // Legacy actions for backward compatibility
       case 'office-verify': return <CheckIcon fontSize="small" color={color} />;
@@ -505,24 +855,24 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
     }
   };
 
-  // Determine if this proposal has a manager phase (submitted to manager / manager approved / finalized entries)
-  const hasManagerPhase = (() => {
-    const directFlags = Boolean(
-      proposal?.submittedToManagerAt ||
-      proposal?.managerApprovedAt ||
-      proposal?.finalizedAt
-    );
-    const historyFlags = Array.isArray(proposal?.workflowHistory) && proposal.workflowHistory.some(h => {
-      const ns = String(h?.newStatus || h?.status || '').toLowerCase();
-      return (
-        ns.includes('submitted to manager') ||
-        ns.includes('manager approved') ||
-        ns.includes('manager returned') ||
-        ns.includes('finalized')
-      );
-    });
-    return directFlags || historyFlags;
-  })();
+  const renderHistoryIcon = (action) => {
+    const normalized = String(action || '').toUpperCase();
+    if (normalized.includes('APPROVE') || normalized.includes('VERIFY')) {
+      return <CheckIcon fontSize="small" color="success" />;
+    }
+    if (normalized.includes('RETURN')) {
+      return <UndoIcon fontSize="small" color="error" />;
+    }
+    if (normalized.includes('SUBMIT') || normalized.includes('CONSOLIDATE')) {
+      return <SendIcon fontSize="small" color="primary" />;
+    }
+    if (normalized.includes('SAVE')) {
+      return <SaveIcon fontSize="small" color="info" />;
+    }
+    return <TimelineIcon fontSize="small" color="disabled" />;
+  };
+
+  
 
   // Step metadata for progress tracking - adapt to whether there's a manager phase
   const steps = hasManagerPhase
@@ -551,7 +901,10 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
 
   // Dialog state for progress tracker
   const [trackOpen, setTrackOpen] = useState(false);
-  const openTrack = () => setTrackOpen(true);
+  const openTrack = () => {
+    setTrackOpen(true);
+    fetchHistory();
+  };
   const closeTrack = () => setTrackOpen(false);
 
   // Helpers: safer formatting for timestamps and user display names
@@ -582,6 +935,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
     }
     return '';
   };
+
   const statusChipColor = (status) => {
     const s = String(status || '').toLowerCase();
     if (!s) return 'default';
@@ -595,6 +949,38 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
     if (s.includes('finalized') || s.includes('approved')) return 'primary';
     return 'default';
   };
+
+  const derived = deriveFromStatus(proposal?.status);
+  const effectiveStep = proposal?.currentStep || derived.step;
+  const effectiveAssignee = proposal?.currentAssigneeRole || derived.assignee;
+  const effectivePending = Array.isArray(proposal?.pendingWithRoles) && proposal.pendingWithRoles.length > 0
+    ? proposal.pendingWithRoles
+    : derived.pending;
+
+  const currentStepLabel = formatStepLabel(effectiveStep);
+  const currentStepTooltip = stepTooltip(effectiveStep);
+  const currentAssigneeLabel = formatRoleLabel(effectiveAssignee);
+  const pendingRolesDisplay = Array.isArray(effectivePending) && effectivePending.length > 0
+    ? effectivePending.map(formatRoleLabel).join(', ')
+    : null;
+  const latestEventAction = latestEvent ? formatActionLabel(latestEvent.action) : null;
+  const latestEventStatus = latestEvent?.newStatus || latestEvent?.status || null;
+  const latestEventByRaw = latestEvent?.userName || latestEvent?.performedBy || latestEvent?.by || proposal?.lastActionBy || '';
+  const latestEventBy = (() => {
+    const s = String(latestEventByRaw || '').trim();
+    if (!s) return '';
+    if (s.toLowerCase() === 'undefined' || s.toLowerCase() === 'null') return '';
+    return s.replace(/undefined/gi, '').trim();
+  })();
+
+  const latestEventTooltip = useMemo(() => {
+    if (!latestEvent) return '';
+    const parts = [];
+    if (latestEvent.comment) parts.push(latestEvent.comment);
+    if (latestEvent.timestamp) parts.push(formatDateTime(latestEvent.timestamp));
+    if (latestEventBy) parts.push(`By: ${latestEventBy}`);
+    return parts.join(' • ');
+  }, [latestEvent, latestEventBy]);
 
   // Icons to show inside step markers
   const getStepIcon = (key, { active, completed } = {}) => {
@@ -620,55 +1006,77 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
   const menuOpen = Boolean(anchorEl);
   const handleMenuOpen = (event) => setAnchorEl(event.currentTarget);
   const handleMenuClose = () => setAnchorEl(null);
-  const handleMenuItemClick = (action, label, requiresComment = false) => {
+  const handleMenuItemClick = (action, label, requiresComment = false, allowOptionalComment = false) => {
     handleMenuClose();
-    handleActionClick(action, label, requiresComment);
+    handleActionClick(action, label, requiresComment, allowOptionalComment);
   };
 
   return (
     <>
       {/* Status header with track + actions */}
       {showHeader && (
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1, flexWrap: 'wrap' }}>
-          {/* <Chip
-            size="small"
-            label={proposal?.status || 'Draft'}
-            color={(() => {
-              switch (proposal?.status) {
-                case 'Responsibility Center Submitted':
-                case 'RESPONSIBILITY_CENTER_SUBMITTED':
-                  return 'info';
-                case 'Office Verified':
-                case 'OFFICE_VERIFIED':
-                  return 'success';
-                case 'Office Submitted':
-                case 'OFFICE_SUBMITTED':
-                  return 'secondary';
-                case 'Office Approved':
-                case 'OFFICE_APPROVED':
-                  return 'success';
-                case 'Finalized':
-                  return 'primary';
-                default:
-                  return 'default';
-              }
-            })()}
-            variant="outlined"
-          /> */}
-
-          {/* <Tooltip title="Track progress" arrow>
-            <span>
-              <Button
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1, flexWrap: 'wrap', rowGap: 1 }}>
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+            <Tooltip
+              title={currentStepTooltip || currentStepLabel}
+              disableHoverListener={!currentStepTooltip}
+            >
+              <Chip
                 size="small"
-                variant="text"
-                startIcon={<TimelineIcon fontSize="small" />}
-                onClick={openTrack}
-                sx={{ textTransform: 'none' }}
+                label={`Step: ${currentStepLabel}`}
+                variant="outlined"
+              />
+            </Tooltip>
+
+            <Chip
+              size="small"
+              label={proposal?.status || 'Draft'}
+              color={statusChipColor(proposal?.status)}
+              variant="outlined"
+            />
+
+            <Tooltip title="Current assignment">
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`Assigned: ${currentAssigneeLabel}`}
+              />
+            </Tooltip>
+
+            {pendingRolesDisplay && (
+              <Tooltip title={`Awaiting action from: ${pendingRolesDisplay}`}>
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  label={`Pending: ${pendingRolesDisplay}`}
+                />
+              </Tooltip>
+            )}
+
+            {latestEventAction && (
+              <Tooltip
+                title={latestEventTooltip || 'Latest workflow event'}
+                disableHoverListener={!latestEventTooltip}
               >
-                Track
-              </Button>
-            </span>
-          </Tooltip> */}
+                <Chip
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                  label={`${latestEventAction}${latestEventStatus ? ` → ${latestEventStatus}` : ''}`}
+                />
+              </Tooltip>
+            )}
+          </Stack>
+
+          {latestEvent && (
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ width: '100%' }}
+            >
+              Last action {formatDateTime(latestEvent.timestamp) || '—'}{latestEventBy ? ` • ${latestEventBy}` : ''}
+            </Typography>
+          )}
 
           <Box sx={{ flexGrow: 1 }} />
 
@@ -713,7 +1121,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           </MenuItem>
         ) : (
           availableActions.map((actionConfig, index) => (
-            <MenuItem key={index} onClick={() => handleMenuItemClick(actionConfig.action, actionConfig.label, actionConfig.requiresComment)}>
+            <MenuItem key={index} onClick={() => handleMenuItemClick(actionConfig.action, actionConfig.label, actionConfig.requiresComment, actionConfig.allowOptionalComment)}>
               <ListItemIcon>
                 {renderIcon(actionConfig.action)}
               </ListItemIcon>
@@ -742,14 +1150,16 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           <Typography variant="body2" sx={{ mb: 1 }}>
             Are you sure you want to perform: <strong>{confirmState.label}</strong>?
           </Typography>
-          {requiresComment && (
+          {showCommentField && (
             <TextField
               autoFocus
               multiline
               minRows={3}
               fullWidth
-              label="Comment (required)"
-              placeholder={confirmState.action.includes('approve') ? "Explain your approval decision" : "Explain why this is being returned"}
+              label={requiresComment ? "Comment (required)" : "Comment (optional)"}
+              placeholder={confirmState.action && confirmState.action.includes('approve')
+                ? "Explain your approval decision"
+                : "Add notes for this workflow action"}
               value={comment}
               onChange={(e) => setComment(e.target.value)}
             />
@@ -810,22 +1220,61 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
             })}
           </Stepper>
 
-          {/* Latest audit entry (if present) */}
-          {Array.isArray(proposal?.workflowHistory) && proposal.workflowHistory.length > 0 && (
-            <Box sx={{ mt: 2 }}>
+          <Box sx={{ mt: 2 }}>
+            {historyLoading && (
               <Typography variant="body2" color="text.secondary">
-                Latest: {proposal.workflowHistory[proposal.workflowHistory.length - 1]?.action} → {proposal.workflowHistory[proposal.workflowHistory.length - 1]?.newStatus}
+                Loading workflow history…
               </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {formatDateTime(proposal.workflowHistory[proposal.workflowHistory.length - 1]?.timestamp)}
-                {(() => {
-                  const last = proposal.workflowHistory[proposal.workflowHistory.length - 1];
-                  const name = resolveUserDisplay(last?.userName || last?.user || last?.performedBy || last?.by);
-                  return name ? ` — ${name}` : '';
-                })()}
+            )}
+
+            {historyError && (
+              <Alert severity="warning" sx={{ mb: historyItems.length ? 1 : 0 }}>
+                {historyError}
+              </Alert>
+            )}
+
+            {!historyLoading && !historyError && historyItems.length === 0 && (
+              <Typography variant="body2" color="text.secondary">
+                No workflow events recorded yet.
               </Typography>
-            </Box>
-          )}
+            )}
+
+            {historyItems.length > 0 && (
+              <>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  Timeline
+                </Typography>
+                <List dense disablePadding>
+                  {historyItems.slice().reverse().map((event, index) => {
+                    const actor = resolveUserDisplay(event?.userName || event?.user || event?.performedBy || event?.by);
+                    return (
+                      <ListItem key={`${event?.timestamp || index}-${index}`} alignItems="flex-start" sx={{ py: 0.5 }}>
+                        <ListItemIcon sx={{ minWidth: 32 }}>
+                          {renderHistoryIcon(event?.action)}
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={`${formatActionLabel(event?.action) || 'Update'}${event?.newStatus ? ` → ${event.newStatus}` : ''}`}
+                          secondary={
+                            <>
+                              <Typography variant="caption" display="block">
+                                {formatDateTime(event?.timestamp) || '—'}{actor ? ` • ${actor}` : ''}
+                                {event?.targetRole ? ` • Target: ${formatRoleLabel(event.targetRole)}` : ''}
+                              </Typography>
+                              {event?.comment && (
+                                <Typography variant="caption" color="text.secondary" display="block">
+                                  {event.comment}
+                                </Typography>
+                              )}
+                            </>
+                          }
+                        />
+                      </ListItem>
+                    );
+                  })}
+                </List>
+              </>
+            )}
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={closeTrack}>Close</Button>
