@@ -1035,11 +1035,44 @@ function applyOfficeDefaults(assignmentDoc, sanitizedWorkflowRoles, normalizedLe
   if (!assignmentDoc) return;
 
   const level = normalizedLevel || assignmentDoc.assignmentLevel || '';
-  const levelDefaults = DEFAULT_WORKFLOW_ROLES_BY_LEVEL[level];
-  if (!hasExplicitWorkflowRoles && Array.isArray(levelDefaults)) {
-    assignmentDoc.workflowRoles = [...levelDefaults];
-  } else if (hasExplicitWorkflowRoles) {
+  const userRole = assignmentDoc.userRole;
+  
+  // If explicit workflow roles provided, use them
+  if (hasExplicitWorkflowRoles) {
     assignmentDoc.workflowRoles = sanitizedWorkflowRoles;
+  } else if (userRole) {
+    // NEW LOGIC: Auto-assign based on userRole instead of level
+    console.log('🔍 Auto-assigning workflow roles based on userRole:', { userRole, level });
+    
+    if (userRole === 'BUDGET_ANALYST') {
+      // BUDGET ANALYST: Creator only, based on assignment level
+      if (level === 'OFFICE' || level === 'DEPARTMENT') {
+        assignmentDoc.workflowRoles = ['officeCreator'];
+      } else if (level === 'RESPONSIBILITY_CENTER' || level === 'DIVISION') {
+        assignmentDoc.workflowRoles = ['divisionCreator'];
+      }
+    } else if (userRole === 'BUDGET_COORDINATOR') {
+      // BUDGET COORDINATOR: Division approver only (no creator role)
+      assignmentDoc.workflowRoles = ['divisionApprover'];
+    } else if (userRole === 'BUDGET_OFFICER') {
+      // BUDGET OFFICER: Office consolidator and verifier (no creator role)
+      assignmentDoc.workflowRoles = ['officeConsolidator', 'officeFinalVerifier'];
+    } else if (userRole === 'BUDGET_MANAGER') {
+      // BUDGET MANAGER: Regional verifier (no creator role)
+      assignmentDoc.workflowRoles = ['regionFinalVerifier'];
+    } else if (userRole === 'BUDGET_ADMIN') {
+      // BUDGET ADMIN: All roles for administrative purposes
+      assignmentDoc.workflowRoles = ['regionCreator', 'regionFinalVerifier', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier'];
+    }
+    
+    console.log('✅ Auto-assigned workflow roles:', assignmentDoc.workflowRoles);
+  } else {
+    // FALLBACK: Old logic using level defaults (for backward compatibility)
+    const levelDefaults = DEFAULT_WORKFLOW_ROLES_BY_LEVEL[level];
+    if (Array.isArray(levelDefaults)) {
+      console.log('⚠️ Using fallback level defaults (no userRole):', levelDefaults);
+      assignmentDoc.workflowRoles = [...levelDefaults];
+    }
   }
 
   ensureApprovalFlagConsistency(assignmentDoc, sanitizedWorkflowRoles, normalizedLevel, hasExplicitWorkflowRoles);
