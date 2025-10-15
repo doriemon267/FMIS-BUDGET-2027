@@ -43,46 +43,67 @@ async function migrateWorkflowRoles() {
     for (const assignment of assignments) {
       const roles = assignment.workflowRoles || [];
       
-      // Check for conflicting roles (creator + approver)
-      const hasCreatorRole = roles.some(r => 
-        r === 'divisionCreator' || 
-        r === 'officeCreator' ||
-        r === 'divisioncreator' ||
-        r === 'officecreator'
-      );
+      // Check for conflicting roles (creator + approver/verifier/consolidator)
+      const hasCreatorRole = roles.some(r => {
+        const normalized = r.toLowerCase();
+        return normalized.includes('creator');
+      });
       
-      const hasApproverRole = roles.some(r => 
-        r === 'divisionApprover' || 
-        r === 'officeApprover' ||
-        r === 'divisionapprover' ||
-        r === 'officeapprover'
-      );
+      const hasNonCreatorRole = roles.some(r => {
+        const normalized = r.toLowerCase();
+        return normalized.includes('approver') || 
+               normalized.includes('verifier') ||
+               normalized.includes('consolidator') ||
+               normalized.includes('submission');
+      });
 
-      if (hasCreatorRole && hasApproverRole) {
+      if (hasCreatorRole && hasNonCreatorRole) {
         conflictingAssignments.push({
           userId: assignment.userId,
           userName: assignment.userName,
           email: assignment.email,
           accessScope: assignment.accessScope,
+          assignmentLevel: assignment.assignmentLevel,
           originalRoles: [...roles]
         });
 
-        // Remove approver roles, keep creator roles only
-        const newRoles = roles.filter(r => {
-          const normalized = r.toLowerCase();
-          return !(normalized.includes('approver') || normalized.includes('verifier'));
-        });
+        // Strategy: Keep creator roles if assignmentLevel suggests analyst role
+        // Remove all approver/verifier/consolidator roles
+        // Exception: FULL access users keep all roles (they're admins/managers)
+        
+        let newRoles;
+        if (assignment.assignmentLevel === 'FULL') {
+          // FULL access users are admins/managers - keep all roles
+          console.log(`   ℹ️  Skipping ${assignment.userName} - FULL access (admin/manager)`);
+          newRoles = roles; // Keep all roles for FULL access
+        } else {
+          // For non-FULL users: Remove approver/verifier/consolidator roles, keep creator only
+          newRoles = roles.filter(r => {
+            const normalized = r.toLowerCase();
+            // Remove: approver, verifier, consolidator, submission roles
+            // Keep: creator roles only
+            return !(
+              normalized.includes('approver') || 
+              normalized.includes('verifier') ||
+              normalized.includes('consolidator') ||
+              normalized.includes('submission')
+            );
+          });
+        }
 
-        // Update the assignment
-        assignment.workflowRoles = newRoles;
-        await assignment.save();
+        // Only update if roles actually changed
+        if (JSON.stringify(roles.sort()) !== JSON.stringify(newRoles.sort())) {
+          assignment.workflowRoles = newRoles;
+          await assignment.save();
 
-        fixedAssignments.push({
-          userId: assignment.userId,
-          userName: assignment.userName,
-          originalRoles: roles,
-          newRoles
-        });
+          fixedAssignments.push({
+            userId: assignment.userId,
+            userName: assignment.userName,
+            assignmentLevel: assignment.assignmentLevel,
+            originalRoles: roles,
+            newRoles
+          });
+        }
       }
     }
 
@@ -97,6 +118,7 @@ async function migrateWorkflowRoles() {
       console.log('==========================================');
       fixedAssignments.forEach(fix => {
         console.log(`\n👤 ${fix.userName} (${fix.userId})`);
+        console.log(`   Assignment Level: ${fix.assignmentLevel}`);
         console.log(`   Original roles: ${fix.originalRoles.join(', ')}`);
         console.log(`   New roles:      ${fix.newRoles.join(', ')}`);
       });
