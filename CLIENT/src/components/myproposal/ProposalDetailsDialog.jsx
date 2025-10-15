@@ -99,34 +99,47 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
     return normalizedWorkflowRoles.some((role) => role === 'divisionapprover');
   }, [userInfo, normalizedWorkflowRoles]);
 
-  // Budget Analyst: Division creators (divisioncreator) - STRICT workflow role check only
+  // Budget Analyst: Division creators (divisioncreator) OR Office creators (officecreator)
+  // - divisioncreator = Responsibility Center/Division Level → submits to BUDGET COORDINATOR
+  // - officecreator = Office Level → submits DIRECTLY to BUDGET OFFICER (skip coordinator)
   const isBudgetAnalyst = useMemo(() => {
     if (!userInfo || isManagerLevel) return false;
-    // ONLY check for 'divisioncreator' or 'divisionpreparer' workflow role - no assignmentLevel fallback
-    return normalizedWorkflowRoles.some((role) => role === 'divisioncreator' || role === 'divisionpreparer');
+    // Check for divisioncreator, divisionpreparer, OR officecreator workflow roles
+    return normalizedWorkflowRoles.some((role) => 
+      role === 'divisioncreator' || 
+      role === 'divisionpreparer' ||
+      role === 'officecreator'
+    );
   }, [userInfo, isManagerLevel, normalizedWorkflowRoles]);
 
-  // Budget Officer: Can edit proposals (Department/Office level consolidators)
+  // Check if Budget Analyst is Office-level (officecreator) - they skip coordinator
+  const isOfficeCreator = useMemo(() => {
+    if (!isBudgetAnalyst) return false;
+    return normalizedWorkflowRoles.some((role) => role === 'officecreator');
+  }, [isBudgetAnalyst, normalizedWorkflowRoles]);
+
+  // Budget Officer: Approver/Verifier ONLY (NOT a creator)
+  // Receives proposals from:
+  // - BUDGET COORDINATOR (division-level proposals)
+  // - BUDGET ANALYST with officecreator (office-level proposals - direct)
   const isBudgetOfficer = useMemo(() => {
     if (!userInfo || isManagerLevel) return false;
-    // Exclude users who are Budget Coordinator or Budget Analyst
-    if (normalizedWorkflowRoles.some((role) => role === 'divisionapprover' || role === 'divisioncreator' || role === 'divisionpreparer')) {
+    // Exclude users who are Budget Coordinator or Budget Analyst (creators)
+    if (normalizedWorkflowRoles.some((role) => 
+      role === 'divisionapprover' || 
+      role === 'divisioncreator' || 
+      role === 'divisionpreparer' ||
+      role === 'officecreator'
+    )) {
       return false;
     }
-    if (normalizedAssignmentLevel === 'OFFICE') {
-      return true;
-    }
-    // For DEPARTMENT level, only return true if NOT a coordinator
-    if (normalizedAssignmentLevel === 'DEPARTMENT') {
-      const isCoordinator = normalizedWorkflowRoles.some((role) => role === 'coordinator');
-      if (isCoordinator) return false;
-      return normalizedWorkflowRoles.some((role) => role === 'departmentconsolidator');
-    }
+    // Officer is strictly a verifier/approver role
     return normalizedWorkflowRoles.some((role) => (
       role === 'officeconsolidator' ||
-      role === 'officefinalverifier'
+      role === 'officefinalverifier' ||
+      role === 'officeverifier'
     ));
-  }, [userInfo, isManagerLevel, normalizedAssignmentLevel, normalizedWorkflowRoles]);
+  }, [userInfo, isManagerLevel, normalizedWorkflowRoles]);
 
   // Read-only statuses (view mode) - MUST BE DEFINED BEFORE loadData callback
   const readOnlyStatuses = useMemo(() => (
@@ -773,6 +786,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
                   isBudgetCoordinator: {String(isBudgetCoordinator)}<br />
                   isBudgetOfficer: {String(isBudgetOfficer)}<br />
                   isBudgetAnalyst: {String(isBudgetAnalyst)}<br />
+                  isOfficeCreator: {String(isOfficeCreator)}<br />
                   isManagerLevel: {String(isManagerLevel)}<br />
                   isReadOnlyMode: {String(isReadOnlyMode)}<br />
                   coordinatorCanEditNow: {String(coordinatorCanEditNow)}<br />
