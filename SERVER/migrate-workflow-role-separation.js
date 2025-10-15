@@ -24,12 +24,13 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const HierarchicalUserAssignment = require('./models/HierarchicalUserAssignment');
 
-const MONGODB_MAIN_URL = process.env.MONGODB_MAIN_URL;
+// MongoDB connection string - hierarchicaluserassignments is in fmis_budget database
+const MONGODB_URI = process.env.MONGODB_BUDGET_URL;
 
 async function migrateWorkflowRoles() {
   try {
-    console.log('🔌 Connecting to MongoDB (MAIN)...');
-    await mongoose.connect(MONGODB_MAIN_URL);
+    console.log('🔌 Connecting to MongoDB (BUDGET - fmis_budget)...');
+    await mongoose.connect(MONGODB_URI);
     console.log('✅ Connected to MongoDB\n');
 
     // Find all active user assignments
