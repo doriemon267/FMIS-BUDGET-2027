@@ -75,6 +75,140 @@ const isEqual = (a, b) => {
 };
 
 /**
+ * Apply Budget Officer/Coordinator edits to the original proposal documents
+ * This updates the actual Income, PS, MOOE, and CO documents with the edited values
+ * @param {Object} budgetOfficerEdit - The BudgetOfficerEdit document containing the edits
+ * @returns {Promise<Object>} - Summary of applied changes
+ */
+const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
+  console.log('🔄 Applying edits to original documents...', {
+    proposalId: budgetOfficerEdit.proposalId,
+    editId: budgetOfficerEdit._id,
+    role: budgetOfficerEdit.editedBy?.role
+  });
+
+  const results = {
+    income: { modified: 0, errors: [] },
+    personnelServices: { modified: 0, errors: [] },
+    mooe: { modified: 0, errors: [] },
+    capitalOutlay: { modified: 0, errors: [] }
+  };
+
+  try {
+    // Apply Income edits
+    if (budgetOfficerEdit.editedIncome && budgetOfficerEdit.editedIncome.length > 0) {
+      for (const edit of budgetOfficerEdit.editedIncome) {
+        try {
+          if (edit._id && edit.changeType === 'modified') {
+            const updateData = {};
+            if (edit.amount !== undefined) updateData.amount = edit.amount;
+            if (edit.category !== undefined) updateData.category = edit.category;
+            if (edit.subcategory !== undefined) updateData.subcategory = edit.subcategory;
+            if (edit.particulars !== undefined) updateData.particulars = edit.particulars;
+            
+            const result = await Income.findByIdAndUpdate(
+              edit._id,
+              { $set: updateData },
+              { new: true }
+            );
+            if (result) results.income.modified++;
+          }
+        } catch (error) {
+          console.error(`❌ Error updating Income ${edit._id}:`, error);
+          results.income.errors.push({ id: edit._id, error: error.message });
+        }
+      }
+    }
+
+    // Apply Personnel Services edits
+    if (budgetOfficerEdit.editedPersonnelServices && budgetOfficerEdit.editedPersonnelServices.length > 0) {
+      for (const edit of budgetOfficerEdit.editedPersonnelServices) {
+        try {
+          if (edit._id && edit.changeType === 'modified') {
+            const updateData = {};
+            if (edit.salaryGrade !== undefined) updateData.salaryGrade = edit.salaryGrade;
+            if (edit.step !== undefined) updateData.step = edit.step;
+            if (edit.monthlySalary !== undefined) updateData.monthlySalary = edit.monthlySalary;
+            if (edit.annualSalary !== undefined) updateData.annualSalary = edit.annualSalary;
+            if (edit.total !== undefined) updateData.total = edit.total;
+            
+            const result = await PersonnelServices.findByIdAndUpdate(
+              edit._id,
+              { $set: updateData },
+              { new: true }
+            );
+            if (result) results.personnelServices.modified++;
+          }
+        } catch (error) {
+          console.error(`❌ Error updating PersonnelServices ${edit._id}:`, error);
+          results.personnelServices.errors.push({ id: edit._id, error: error.message });
+        }
+      }
+    }
+
+    // Apply MOOE edits
+    if (budgetOfficerEdit.editedMOOE && budgetOfficerEdit.editedMOOE.length > 0) {
+      for (const edit of budgetOfficerEdit.editedMOOE) {
+        try {
+          if (edit._id && edit.changeType === 'modified') {
+            const updateData = {};
+            if (edit.amount !== undefined) updateData.amount = edit.amount;
+            if (edit.generalType !== undefined) updateData.generalType = edit.generalType;
+            if (edit.category !== undefined) updateData.category = edit.category;
+            if (edit.particulars !== undefined) updateData.particulars = edit.particulars;
+            
+            const result = await MOOE.findByIdAndUpdate(
+              edit._id,
+              { $set: updateData },
+              { new: true }
+            );
+            if (result) results.mooe.modified++;
+          }
+        } catch (error) {
+          console.error(`❌ Error updating MOOE ${edit._id}:`, error);
+          results.mooe.errors.push({ id: edit._id, error: error.message });
+        }
+      }
+    }
+
+    // Apply Capital Outlay edits
+    if (budgetOfficerEdit.editedCapitalOutlay && budgetOfficerEdit.editedCapitalOutlay.length > 0) {
+      for (const edit of budgetOfficerEdit.editedCapitalOutlay) {
+        try {
+          if (edit._id && edit.changeType === 'modified') {
+            const updateData = {};
+            if (edit.ppmpCode !== undefined) updateData.ppmpCode = edit.ppmpCode;
+            if (edit.total !== undefined) updateData.total = edit.total;
+            
+            const result = await CapitalOutlay.findByIdAndUpdate(
+              edit._id,
+              { $set: updateData },
+              { new: true }
+            );
+            if (result) results.capitalOutlay.modified++;
+          }
+        } catch (error) {
+          console.error(`❌ Error updating CapitalOutlay ${edit._id}:`, error);
+          results.capitalOutlay.errors.push({ id: edit._id, error: error.message });
+        }
+      }
+    }
+
+    console.log('✅ Edits applied to original documents:', {
+      income: `${results.income.modified} modified`,
+      personnelServices: `${results.personnelServices.modified} modified`,
+      mooe: `${results.mooe.modified} modified`,
+      capitalOutlay: `${results.capitalOutlay.modified} modified`
+    });
+
+    return results;
+  } catch (error) {
+    console.error('❌ Error applying edits to original documents:', error);
+    throw error;
+  }
+};
+
+/**
  * Get proposal data for Budget Officer to edit
  * This fetches all 4 tables: Income, Personnel Services, MOOE, Capital Outlay
  */
@@ -581,12 +715,29 @@ exports.submitEdit = async (req, res) => {
     
     await budgetOfficerEdit.save();
     
+    // Apply the edits to the original documents BEFORE updating status
+    // This ensures that when Budget Officer loads the proposal, they see the Coordinator's changes
+    console.log('📝 Applying edits to original documents before status update...', {
+      editorRole: editorRole,
+      proposalId: proposalId,
+      editId: budgetOfficerEdit._id
+    });
+    
+    try {
+      const applyResults = await applyEditsToOriginalDocuments(budgetOfficerEdit);
+      console.log('✅ Edits successfully applied:', applyResults);
+    } catch (applyError) {
+      console.error('❌ Error applying edits to original documents:', applyError);
+      // Continue with status update even if some edits failed
+      // The edits are still stored in budgetofficeredits for comparison view
+    }
+    
     // Update proposal status
     proposal.status = 'Office Submitted';
     proposal.workflowLevel = 'OFFICER';
     proposal.workflowHistory.push({
       action: 'EDIT',
-      comment: comments || 'Budget Officer submitted edits',
+      comment: comments || `${editorRole} submitted edits`,
       userId,
       userName,
       timestamp: new Date(),
