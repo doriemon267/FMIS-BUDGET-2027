@@ -32,6 +32,7 @@ const createOrUpdateOrganizationalAssignment = async (req, res) => {
       userId,
       userName,
       email,
+      userRole, // 'BUDGET_ANALYST', 'BUDGET_COORDINATOR', 'BUDGET_OFFICER', 'BUDGET_MANAGER', 'BUDGET_ADMIN'
       accessScope, // 'RESPONSIBILITY_CENTER', 'OFFICE', 'FULL', 'OWN_ONLY'
       officeId,
       responsibilityCenterName,
@@ -103,29 +104,46 @@ const createOrUpdateOrganizationalAssignment = async (req, res) => {
       ...rolePermissions
     };
 
-    // Auto-assign workflow roles based on access scope
+    // Auto-assign workflow roles based on userRole and accessScope
     // NEW WORKFLOW RULES (October 2025):
     // - BUDGET ANALYST (Creator): divisioncreator (RC level) OR officecreator (Office level)
-    // - BUDGET COORDINATOR (Approver): divisionapprover only - MUST BE ASSIGNED SEPARATELY
-    // - BUDGET OFFICER (Verifier): officeverifier/officeconsolidator - MUST BE ASSIGNED SEPARATELY
-    // - BUDGET MANAGER (Final Approver): managerapprover/regionfinalverifier - MUST BE ASSIGNED SEPARATELY
+    // - BUDGET_COORDINATOR (Approver): divisionapprover only
+    // - BUDGET OFFICER (Verifier): officeconsolidator, officeFinalVerifier
+    // - BUDGET MANAGER (Final Approver): managerapprover, regionfinalverifier
+    // - BUDGET ADMIN (Full Access): all roles for administrative purposes
     const autoAssignedWorkflowRoles = [];
-    if (accessScope === 'OFFICE') {
-      // Office Level: Auto-assign officecreator for BUDGET ANALYST role
-      // User submits DIRECTLY to BUDGET OFFICER (skip coordinator)
-      autoAssignedWorkflowRoles.push('officeCreator');
-    } else if (accessScope === 'RESPONSIBILITY_CENTER') {
-      // RC/Division Level: Auto-assign divisioncreator for BUDGET ANALYST role
-      // User submits to BUDGET COORDINATOR → BUDGET OFFICER → BUDGET MANAGER
-      autoAssignedWorkflowRoles.push('divisionCreator');
-    } else if (accessScope === 'FULL') {
-      // Full Access: System admin or manager level
+    
+    if (userRole === 'BUDGET_ANALYST') {
+      // BUDGET ANALYST: Creator only, based on assignment level
+      if (accessScope === 'OFFICE') {
+        // Office Level: User submits DIRECTLY to BUDGET OFFICER (skip coordinator)
+        autoAssignedWorkflowRoles.push('officeCreator');
+      } else if (accessScope === 'RESPONSIBILITY_CENTER') {
+        // RC/Division Level: User submits to BUDGET COORDINATOR → BUDGET OFFICER → BUDGET MANAGER
+        autoAssignedWorkflowRoles.push('divisionCreator');
+      }
+    } else if (userRole === 'BUDGET_COORDINATOR') {
+      // BUDGET COORDINATOR: Division approver only (no creator role)
+      autoAssignedWorkflowRoles.push('divisionApprover');
+    } else if (userRole === 'BUDGET_OFFICER') {
+      // BUDGET OFFICER: Office consolidator and verifier (no creator role)
+      autoAssignedWorkflowRoles.push('officeConsolidator', 'officeFinalVerifier');
+    } else if (userRole === 'BUDGET_MANAGER') {
+      // BUDGET MANAGER: Final approver and regional verifier (no creator role)
+      autoAssignedWorkflowRoles.push('managerapprover', 'regionFinalVerifier');
+    } else if (userRole === 'BUDGET_ADMIN' || accessScope === 'FULL') {
+      // BUDGET ADMIN or FULL access: All roles for administrative purposes
       autoAssignedWorkflowRoles.push('officeCreator', 'officeFinalVerifier', 'regionFinalVerifier');
+    } else {
+      // Fallback: If no userRole specified, use old logic based on accessScope only
+      if (accessScope === 'OFFICE') {
+        autoAssignedWorkflowRoles.push('officeCreator');
+      } else if (accessScope === 'RESPONSIBILITY_CENTER') {
+        autoAssignedWorkflowRoles.push('divisionCreator');
+      }
     }
     
-    // NOTE: Approver roles (divisionapprover, officeverifier, managerapprover) 
-    // should be assigned manually via workflowRoles parameter to separate 
-    // CREATOR roles from APPROVER roles as per October 2025 workflow clarification
+    // NOTE: workflowRoles can still be manually provided to override/supplement auto-assignment
 
     // Merge auto-assigned workflow roles with provided roles (provided roles take precedence)
     const finalWorkflowRoles = Array.isArray(workflowRoles)

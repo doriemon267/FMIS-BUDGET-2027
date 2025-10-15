@@ -52,11 +52,36 @@ const ACCESS_LEVELS = [
 ];
 
 const USER_ROLES = [
-  { value: 'BUDGET_ANALYST', label: 'Budget Analyst', description: 'Division/Responsibility Center Level - Creates and prepares proposals' },
-  { value: 'BUDGET_COORDINATOR', label: 'Budget Coordinator', description: 'Department/Office Level - Creates and prepares proposals' },
-  { value: 'BUDGET_OFFICER', label: 'Budget Officer', description: 'Department/Office Level - Approves/returns proposals, consolidates and submits to Budget Manager' },
-  { value: 'BUDGET_MANAGER', label: 'Budget Manager', description: 'Full access - Approves/returns proposals, consolidates all submissions' },
-  { value: 'BUDGET_ADMIN', label: 'Budget Admin', description: 'Full administrative access - Approves/returns proposals, consolidates all submissions, manages system settings' }
+  { 
+    value: 'BUDGET_ANALYST', 
+    label: 'Budget Analyst', 
+    description: 'Creates and prepares budget proposals (divisionCreator or officeCreator based on assignment level)',
+    workflowRoles: 'divisionCreator (RC) or officeCreator (Office)'
+  },
+  { 
+    value: 'BUDGET_COORDINATOR', 
+    label: 'Budget Coordinator', 
+    description: 'Reviews and approves division-level proposals before forwarding to Budget Officer',
+    workflowRoles: 'divisionApprover'
+  },
+  { 
+    value: 'BUDGET_OFFICER', 
+    label: 'Budget Officer', 
+    description: 'Verifies and consolidates proposals from divisions/offices, forwards to Budget Manager',
+    workflowRoles: 'officeConsolidator, officeFinalVerifier'
+  },
+  { 
+    value: 'BUDGET_MANAGER', 
+    label: 'Budget Manager', 
+    description: 'Final approval authority for all budget proposals',
+    workflowRoles: 'managerapprover, regionFinalVerifier'
+  },
+  { 
+    value: 'BUDGET_ADMIN', 
+    label: 'Budget Admin', 
+    description: 'Full administrative access - manages all proposals, users, and system settings',
+    workflowRoles: 'All workflow roles (full system access)'
+  }
 ];
 
 const HierarchicalUserAssignmentPage = () => {
