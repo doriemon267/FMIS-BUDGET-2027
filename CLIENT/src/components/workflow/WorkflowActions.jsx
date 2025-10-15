@@ -1015,60 +1015,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
     <>
       {/* Status header with track + actions */}
       {showHeader && (
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1, flexWrap: 'wrap', rowGap: 1 }}>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap', rowGap: 1 }}>
-            <Chip
-              size="small"
-              label={proposal?.status || 'Draft'}
-              color={statusChipColor(proposal?.status)}
-              variant="outlined"
-            />
-
-            <Tooltip title="Current assignment">
-              <Chip
-                size="small"
-                variant="outlined"
-                label={`Assigned: ${currentAssigneeLabel}`}
-              />
-            </Tooltip>
-
-            {pendingRolesDisplay && (
-              <Tooltip title={`Awaiting action from: ${pendingRolesDisplay}`}>
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  label={`Pending: ${pendingRolesDisplay}`}
-                />
-              </Tooltip>
-            )}
-
-            {latestEventAction && (
-              <Tooltip
-                title={latestEventTooltip || 'Latest workflow event'}
-                disableHoverListener={!latestEventTooltip}
-              >
-                <Chip
-                  size="small"
-                  color="primary"
-                  variant="outlined"
-                  label={`${latestEventAction}${latestEventStatus ? ` → ${latestEventStatus}` : ''}`}
-                />
-              </Tooltip>
-            )}
-          </Stack>
-
-          {latestEvent && (
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ width: '100%' }}
-            >
-              Last action {formatDateTime(latestEvent.timestamp) || '—'}{latestEventBy ? ` • ${latestEventBy}` : ''}
-            </Typography>
-          )}
-
-          <Box sx={{ flexGrow: 1 }} />
-
+        <Stack direction="row" spacing={1} alignItems="center" justifyContent="flex-end" sx={{ mb: 1 }}>
           <Tooltip title="Workflow actions" arrow>
             <span>
               <Button
