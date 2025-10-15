@@ -73,13 +73,31 @@ async function fixUserRoles() {
       console.log('   ❌ User not found\n');
     }
 
+    // Fix Reymund Edra - BUDGET MANAGER
+    console.log('👤 Fixing Reymund Edra (BUDGET MANAGER)...');
+    const reymund = await HierarchicalUserAssignment.findOne({ 
+      userId: '909549', 
+      isActive: true 
+    });
+    
+    if (reymund) {
+      const oldRoles = [...reymund.workflowRoles];
+      reymund.workflowRoles = ['regionFinalVerifier'];
+      await reymund.save();
+      console.log(`   Old roles: ${oldRoles.join(', ')}`);
+      console.log(`   New roles: ${reymund.workflowRoles.join(', ')}`);
+      console.log('   ✅ Updated to BUDGET MANAGER\n');
+    } else {
+      console.log('   ❌ User not found\n');
+    }
+
     console.log('✅ All user roles fixed successfully!');
     console.log('\n📋 Final Role Summary:');
     console.log('==========================================');
     console.log('Joshua Demafelez - BUDGET ANALYST (divisionCreator)');
     console.log('Andrie Barrameda - BUDGET OFFICER (officeConsolidator, officeFinalVerifier)');
     console.log('Nelson Eloso - BUDGET COORDINATOR (divisionApprover)');
-    console.log('Reymund Edra - BUDGET MANAGER (FULL access)');
+    console.log('Reymund Edra - BUDGET MANAGER (regionFinalVerifier)');
 
   } catch (error) {
     console.error('❌ Error:', error);
