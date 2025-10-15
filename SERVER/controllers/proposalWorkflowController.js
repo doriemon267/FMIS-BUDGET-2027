@@ -6,6 +6,8 @@ const PersonnelServices = require('../models/PersonnelServices');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const mooeProposals = require('../models/mooeProposals');
 const Income = require('../models/Income');
+const BudgetOfficerEdit = require('../models/BudgetOfficerEdit');
+const { applyEditsToOriginalDocuments } = require('./budgetOfficerEditController');
 
 /**
  * Budget Role Access Control Middleware
@@ -1652,6 +1654,27 @@ exports.coordinatorApproveAndForwardToOfficer = async (req, res) => {
     const previousStatus = proposal.status;
     const newStatus = 'Forwarded to Officer';
 
+    // Check if there are edits to apply
+    const budgetOfficerEdit = await BudgetOfficerEdit.findOne({ 
+      proposalId: proposal._id 
+    }).sort({ updatedAt: -1 }); // Get latest edit
+
+    if (budgetOfficerEdit) {
+      console.log('📝 Found edits to apply before forwarding to officer...', {
+        editId: budgetOfficerEdit._id,
+        editedBy: budgetOfficerEdit.editedBy
+      });
+      
+      try {
+        const applyResults = await applyEditsToOriginalDocuments(budgetOfficerEdit);
+        console.log('✅ Edits successfully applied to original documents:', applyResults);
+      } catch (applyError) {
+        console.error('❌ Error applying edits to original documents:', applyError);
+        // Continue with workflow even if edit application fails
+        // Edits are still stored in budgetofficeredits for manual recovery
+      }
+    }
+
     // Update proposal - directly to Forwarded to Officer (skip "Coordinator Approved" intermediate status)
     proposal.status = newStatus;
     proposal.workflowLevel = 'OFFICER';
@@ -2117,6 +2140,26 @@ exports.coordinatorSaveEdits = async (req, res) => {
 
     await proposal.save();
 
+    // Apply edits to original documents
+    const budgetOfficerEdit = await BudgetOfficerEdit.findOne({ 
+      proposalId: proposal._id 
+    }).sort({ updatedAt: -1 }); // Get latest edit
+
+    if (budgetOfficerEdit) {
+      console.log('📝 Applying coordinator edits to original documents...', {
+        editId: budgetOfficerEdit._id,
+        proposalId: proposal._id
+      });
+      
+      try {
+        const applyResults = await applyEditsToOriginalDocuments(budgetOfficerEdit);
+        console.log('✅ Coordinator edits successfully applied:', applyResults);
+      } catch (applyError) {
+        console.error('❌ Error applying coordinator edits:', applyError);
+        // Continue - edits are stored in budgetofficeredits for recovery
+      }
+    }
+
     // Sync status to all related budget items
     await syncBudgetItemsStatus(proposal);
 
@@ -2208,6 +2251,26 @@ exports.officerSaveEdits = async (req, res) => {
     });
 
     await proposal.save();
+
+    // Apply edits to original documents
+    const budgetOfficerEdit = await BudgetOfficerEdit.findOne({ 
+      proposalId: proposal._id 
+    }).sort({ updatedAt: -1 }); // Get latest edit
+
+    if (budgetOfficerEdit) {
+      console.log('📝 Applying officer edits to original documents...', {
+        editId: budgetOfficerEdit._id,
+        proposalId: proposal._id
+      });
+      
+      try {
+        const applyResults = await applyEditsToOriginalDocuments(budgetOfficerEdit);
+        console.log('✅ Officer edits successfully applied:', applyResults);
+      } catch (applyError) {
+        console.error('❌ Error applying officer edits:', applyError);
+        // Continue - edits are stored in budgetofficeredits for recovery
+      }
+    }
 
     // Sync status to all related budget items
     await syncBudgetItemsStatus(proposal);
@@ -2301,6 +2364,26 @@ exports.managerSaveEdits = async (req, res) => {
 
     await proposal.save();
 
+    // Apply edits to original documents
+    const budgetOfficerEdit = await BudgetOfficerEdit.findOne({ 
+      proposalId: proposal._id 
+    }).sort({ updatedAt: -1 }); // Get latest edit
+
+    if (budgetOfficerEdit) {
+      console.log('📝 Applying manager edits to original documents...', {
+        editId: budgetOfficerEdit._id,
+        proposalId: proposal._id
+      });
+      
+      try {
+        const applyResults = await applyEditsToOriginalDocuments(budgetOfficerEdit);
+        console.log('✅ Manager edits successfully applied:', applyResults);
+      } catch (applyError) {
+        console.error('❌ Error applying manager edits:', applyError);
+        // Continue - edits are stored in budgetofficeredits for recovery
+      }
+    }
+
     // Sync status to all related budget items
     await syncBudgetItemsStatus(proposal);
 
@@ -2362,6 +2445,26 @@ exports.officerApproveProposal = async (req, res) => {
 
     const previousStatus = proposal.status;
     const newStatus = 'Officer Approved';
+
+    // Apply edits to original documents before approving
+    const budgetOfficerEdit = await BudgetOfficerEdit.findOne({ 
+      proposalId: proposal._id 
+    }).sort({ updatedAt: -1 }); // Get latest edit
+
+    if (budgetOfficerEdit) {
+      console.log('📝 Applying officer edits before approval...', {
+        editId: budgetOfficerEdit._id,
+        proposalId: proposal._id
+      });
+      
+      try {
+        const applyResults = await applyEditsToOriginalDocuments(budgetOfficerEdit);
+        console.log('✅ Officer edits successfully applied before approval:', applyResults);
+      } catch (applyError) {
+        console.error('❌ Error applying officer edits:', applyError);
+        // Continue - edits are stored in budgetofficeredits for recovery
+      }
+    }
 
     // Update proposal
     proposal.status = newStatus;
@@ -2666,6 +2769,26 @@ exports.managerApproveProposal = async (req, res) => {
 
     const previousStatus = proposal.status;
     const newStatus = 'Finalized';
+
+    // Apply edits to original documents before finalizing
+    const budgetOfficerEdit = await BudgetOfficerEdit.findOne({ 
+      proposalId: proposal._id 
+    }).sort({ updatedAt: -1 }); // Get latest edit
+
+    if (budgetOfficerEdit) {
+      console.log('📝 Applying manager edits before finalization...', {
+        editId: budgetOfficerEdit._id,
+        proposalId: proposal._id
+      });
+      
+      try {
+        const applyResults = await applyEditsToOriginalDocuments(budgetOfficerEdit);
+        console.log('✅ Manager edits successfully applied before finalization:', applyResults);
+      } catch (applyError) {
+        console.error('❌ Error applying manager edits:', applyError);
+        // Continue - edits are stored in budgetofficeredits for recovery
+      }
+    }
 
     // Update proposal
     proposal.status = newStatus;

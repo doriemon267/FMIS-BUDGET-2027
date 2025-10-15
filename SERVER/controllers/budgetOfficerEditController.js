@@ -208,6 +208,9 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
   }
 };
 
+// Export for use in other controllers
+exports.applyEditsToOriginalDocuments = applyEditsToOriginalDocuments;
+
 /**
  * Get proposal data for Budget Officer to edit
  * This fetches all 4 tables: Income, Personnel Services, MOOE, Capital Outlay
