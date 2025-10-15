@@ -24,6 +24,7 @@ import BudgetOfficerEditView from './BudgetOfficerEditView';
 import BudgetAnalystComparisonView from './BudgetAnalystComparisonView';
 import BudgetManagerSubmissionView from './BudgetManagerSubmissionView';
 import WorkflowActions from '../workflow/WorkflowActions';
+import WorkflowStatusStepper from '../workflow/WorkflowStatusStepper';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import PublicIcon from '@mui/icons-material/Public';
@@ -34,6 +35,8 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import ApartmentIcon from '@mui/icons-material/Apartment';
 import BusinessCenterIcon from '@mui/icons-material/BusinessCenter';
 import VerifiedIcon from '@mui/icons-material/Verified';
+import InfoIcon from '@mui/icons-material/Info';
+import WarningIcon from '@mui/icons-material/Warning';
 
 const CACHE_TTL = 60 * 1000; // 1 minute cache for proposal details
 
@@ -775,6 +778,12 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
 
             <Divider sx={{ my: 2 }} />
 
+            {/* Workflow Status Visualization */}
+            <WorkflowStatusStepper 
+              proposal={proposal} 
+              isOfficeLevel={isOfficeCreator}
+            />
+
             {/* Detailed Records Section */}
             <Typography variant="h6" gutterBottom>Detailed Records</Typography>
 
@@ -806,15 +815,39 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
               </Alert>
             )}
 
-            {/* VALIDATION WARNING: User should not have both Budget Analyst AND Budget Coordinator roles */}
-            {isBudgetAnalyst && isBudgetCoordinator && (
-              <Alert severity="error" sx={{ mb: 2 }}>
+            {/* INFO: Show user's current role and workflow status */}
+            {(isBudgetAnalyst || isBudgetCoordinator || isBudgetOfficer || isManagerLevel) && (
+              <Alert 
+                severity={isBudgetAnalyst && isBudgetCoordinator ? "warning" : "info"} 
+                sx={{ mb: 2 }}
+                icon={isBudgetAnalyst && isBudgetCoordinator ? <WarningIcon /> : <InfoIcon />}
+              >
                 <Typography variant="body2">
-                  <strong>⚠️ Role Conflict Detected!</strong><br />
-                  Your account has BOTH Budget Analyst (divisioncreator) AND Budget Coordinator (divisionapprover) roles.
-                  This should not happen. Please contact your system administrator to fix your role assignment in FMIS-MAIN Hierarchical User Assignments.
-                  <br /><br />
-                  <strong>Current workflow roles:</strong> {JSON.stringify(normalizedWorkflowRoles)}
+                  <strong>Your Role:</strong>{' '}
+                  {isBudgetAnalyst && 'Budget Analyst (Creator)'}
+                  {isBudgetCoordinator && !isBudgetAnalyst && 'Budget Coordinator (Approver)'}
+                  {isBudgetOfficer && !isBudgetAnalyst && !isBudgetCoordinator && 'Budget Officer (Verifier)'}
+                  {isManagerLevel && !isBudgetAnalyst && !isBudgetCoordinator && !isBudgetOfficer && 'Budget Manager (Final Approver)'}
+                  <br />
+                  
+                  {isBudgetAnalyst && isBudgetCoordinator && (
+                    <>
+                      <strong>⚠️ Role Conflict:</strong> You have BOTH Analyst and Coordinator roles. 
+                      Please contact your administrator to correct your role assignment.
+                      <br />
+                    </>
+                  )}
+                  
+                  <strong>Current Status:</strong> {proposal?.status || 'Draft'}
+                  <br />
+                  
+                  <strong>What you can do:</strong>{' '}
+                  {isBudgetAnalyst && proposal?.status === 'Draft' && 'Create and edit proposals, then submit for approval'}
+                  {isBudgetAnalyst && proposal?.status === 'Division Submitted' && 'Waiting for Budget Coordinator review'}
+                  {isBudgetCoordinator && proposal?.status === 'Division Submitted' && 'Review and approve/return this proposal'}
+                  {isBudgetOfficer && (proposal?.status === 'Division Approved' || proposal?.status === 'Office Submitted') && 'Verify and consolidate, then submit to Budget Manager'}
+                  {isManagerLevel && proposal?.status === 'Office Submitted' && 'Final review and approval'}
+                  {proposal?.status === 'Approved' && 'This proposal has been finalized'}
                 </Typography>
               </Alert>
             )}
