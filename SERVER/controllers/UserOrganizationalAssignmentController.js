@@ -40,6 +40,15 @@ const createOrUpdateOrganizationalAssignment = async (req, res) => {
       rolePermissions = {}
     } = req.body;
 
+    // DEBUG: Log incoming request to see what's being sent
+    console.log('🔍 createOrUpdateOrganizationalAssignment - Incoming request:', {
+      userId,
+      userName,
+      userRole,
+      accessScope,
+      workflowRoles
+    });
+
     if (!userId || !userName || !email || !accessScope) {
       return res.status(400).json({
         success: false,
@@ -143,12 +152,23 @@ const createOrUpdateOrganizationalAssignment = async (req, res) => {
       }
     }
     
+    // DEBUG: Log auto-assigned roles
+    console.log('🔍 Auto-assigned workflow roles:', {
+      userRole,
+      accessScope,
+      autoAssignedWorkflowRoles,
+      providedWorkflowRoles: workflowRoles
+    });
+    
     // NOTE: workflowRoles can still be manually provided to override/supplement auto-assignment
 
     // Merge auto-assigned workflow roles with provided roles (provided roles take precedence)
     const finalWorkflowRoles = Array.isArray(workflowRoles)
       ? [...new Set([...autoAssignedWorkflowRoles, ...workflowRoles])]
       : autoAssignedWorkflowRoles;
+
+    // DEBUG: Log final workflow roles
+    console.log('🔍 Final workflow roles:', finalWorkflowRoles);
 
     // Get active fiscal year from settings instead of hardcoding current year
     let activeFiscalYear = new Date().getFullYear().toString(); // fallback
