@@ -162,7 +162,7 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                       }
                     ]
                   },
-                  // Responsibility Center data that has been submitted to office (Responsibility Center Submitted, Office Verified, or higher)
+                  // Responsibility Center data that has been submitted to office (Forwarded to Officer, Officer Approved, Forwarded to Manager, or Finalized)
                   {
                     $and: [
                       { department: { $exists: true, $ne: null, $ne: "" } },
@@ -171,10 +171,12 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                       {
                         $or: [
                           { status: { $in: ['Responsibility Center Submitted', 'RESPONSIBILITY_CENTER_SUBMITTED'] } },
+                          { status: { $in: ['Forwarded to Officer', 'Officer Approved'] } },
+                          { status: { $in: ['Forwarded to Manager', 'FORWARDED_TO_MANAGER'] } },
+                          { status: 'Finalized' },
+                          // Backward compatibility with legacy names
                           { status: { $in: ['Office Verified', 'OFFICE_VERIFIED'] } },
-                          { status: { $in: ['Office Submitted', 'OFFICE_SUBMITTED'] } },
-                          { status: { $in: ['Final Approved', 'FINAL_APPROVED'] } },
-                          { status: 'Finalized' }
+                          { status: { $in: ['Office Submitted', 'OFFICE_SUBMITTED', 'Office Approved', 'OFFICE APPROVED'] } }
                         ]
                       }
                     ]
@@ -217,10 +219,12 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                   {
                     $or: [
                       { status: { $in: ['Responsibility Center Submitted', 'RESPONSIBILITY_CENTER_SUBMITTED'] } },
+                      { status: { $in: ['Forwarded to Officer', 'Officer Approved'] } },
+                      { status: { $in: ['Forwarded to Manager', 'FORWARDED_TO_MANAGER'] } },
+                      { status: 'Finalized' },
+                      // Backward compatibility with legacy names
                       { status: { $in: ['Office Verified', 'OFFICE_VERIFIED'] } },
-                      { status: { $in: ['Office Submitted', 'OFFICE_SUBMITTED'] } },
-                      { status: { $in: ['Final Approved', 'FINAL_APPROVED'] } },
-                      { status: 'Finalized' }
+                      { status: { $in: ['Office Submitted', 'OFFICE_SUBMITTED', 'Final Approved', 'FINAL_APPROVED'] } }
                     ]
                   }
                 ]
@@ -317,14 +321,17 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                           { status: { $in: ['Division Submitted', 'DIVISION SUBMITTED'] } },
                           { status: { $in: ['Department Verified', 'DEPARTMENT VERIFIED'] } },
                           { status: { $in: ['Department Submitted', 'DEPARTMENT SUBMITTED'] } },
-                          // Accept both legacy 'Region Approved' and the Office-level label 'Office Approved'
-                          { status: { $in: ['Region Approved', 'REGION APPROVED', 'Office Approved', 'OFFICE APPROVED', 'Finalized'] } },
+                          // New workflow status names
+                          { status: { $in: ['Forwarded to Officer', 'Officer Approved'] } },
+                          { status: { $in: ['Forwarded to Manager', 'FORWARDED_TO_MANAGER'] } },
+                          { status: 'Finalized' },
                           // Newer labels (Responsibility Center/Office workflow)
                           { status: { $in: ['Responsibility Center Submitted', 'RESPONSIBILITY_CENTER_SUBMITTED'] } },
+                          // Backward compatibility with legacy names
+                          { status: { $in: ['Region Approved', 'REGION APPROVED', 'Office Approved', 'OFFICE APPROVED'] } },
                           { status: { $in: ['Office Verified', 'OFFICE_VERIFIED'] } },
                           { status: { $in: ['Office Submitted', 'OFFICE_SUBMITTED'] } },
-                          { status: { $in: ['Final Approved', 'FINAL_APPROVED'] } },
-                          { status: 'Finalized' }
+                          { status: { $in: ['Final Approved', 'FINAL_APPROVED'] } }
                         ]
                       }
                     ]
@@ -376,12 +383,14 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                         $or: [
                           // Legacy labels
                           { status: { $in: ['Department Submitted', 'DEPARTMENT SUBMITTED'] } },
-                          // Allow either Region Approved (legacy entity label) or Office Approved (workflow label)
-                          { status: { $in: ['Region Approved', 'REGION APPROVED', 'Office Approved', 'OFFICE APPROVED', 'Finalized'] } },
-                          // Newer labels
+                          // New workflow status names
+                          { status: { $in: ['Forwarded to Officer', 'Officer Approved'] } },
+                          { status: { $in: ['Forwarded to Manager', 'FORWARDED_TO_MANAGER'] } },
+                          { status: 'Finalized' },
+                          // Backward compatibility: accept both legacy and new status names
+                          { status: { $in: ['Region Approved', 'REGION APPROVED', 'Office Approved', 'OFFICE APPROVED'] } },
                           { status: { $in: ['Office Submitted', 'OFFICE_SUBMITTED'] } },
-                          { status: { $in: ['Final Approved', 'FINAL_APPROVED'] } },
-                          { status: 'Finalized' }
+                          { status: { $in: ['Final Approved', 'FINAL_APPROVED'] } }
                         ]
                       }
                     ]
@@ -426,14 +435,17 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
                       { status: { $in: ['Division Submitted','DIVISION SUBMITTED'] } },
                       { status: { $in: ['Department Verified','DEPARTMENT VERIFIED'] } },
                       { status: { $in: ['Department Submitted','DEPARTMENT SUBMITTED'] } },
-                      // Ensure both naming variants are accepted
-                      { status: { $in: ['Region Approved','REGION APPROVED','Office Approved','OFFICE APPROVED'] } },
+                      // New workflow status names
+                      { status: { $in: ['Forwarded to Officer', 'Officer Approved'] } },
+                      { status: { $in: ['Forwarded to Manager', 'FORWARDED_TO_MANAGER'] } },
+                      { status: 'Finalized' },
                       // Newer labels
                       { status: { $in: ['Responsibility Center Submitted','RESPONSIBILITY_CENTER_SUBMITTED'] } },
+                      // Backward compatibility - accept both naming variants
+                      { status: { $in: ['Region Approved','REGION APPROVED','Office Approved','OFFICE APPROVED'] } },
                       { status: { $in: ['Office Verified','OFFICE_VERIFIED'] } },
                       { status: { $in: ['Office Submitted','OFFICE_SUBMITTED'] } },
-                      { status: { $in: ['Final Approved','FINAL_APPROVED'] } },
-                      { status: 'Finalized' }
+                      { status: { $in: ['Final Approved','FINAL_APPROVED'] } }
                     ]
                   }
                 ]
@@ -778,11 +790,11 @@ const validateHierarchicalAccess = async (req, assignment, isNewStructure = fals
   }
 };
 /**
- * New 6-Step Submission Workflow:
- * Draft → Division Submitted → Department Verified → Department Submitted → Region Approved → Finalized
+ * 6-Step Submission Workflow:
+ * Draft → Division Submitted → Forwarded to Officer → Officer Approved → Forwarded to Manager → Finalized
  */
 const submissionWorkflowTransitions = {
-  // Step 1→2: Responsibility Center submits to Office (Draft → Responsibility Center Submitted)
+  // Step 1→2: Analyst submits to Coordinator (Draft → Division Submitted)
   responsibilityCenterSubmitToOffice: async (req, res) => {
     try {
       const { ids = [], entity = 'personnel', submissionNote } = req.body;
@@ -974,7 +986,7 @@ const submissionWorkflowTransitions = {
     }
   },
 
-  // Step 2→3: Office verifies responsibility center submission (Responsibility Center Submitted → Office Verified)
+  // Step 2→3: Coordinator approves responsibility center submission (Responsibility Center Submitted → Forwarded to Officer)
   officeVerifySubmission: async (req, res) => {
     try {
       const { ids = [], entity = 'personnel', verificationNote } = req.body;
@@ -1009,10 +1021,9 @@ const submissionWorkflowTransitions = {
               'Responsibility Center Submitted',
               'RESPONSIBILITY_CENTER SUBMITTED',
               'RESPONSIBILITY_CENTER_SUBMITTED',
-              // Office verified variants
-              'Office Verified',
-              'OFFICE VERIFIED',
-              'OFFICE_VERIFIED',
+              // Forwarded to Officer variants (new standard)
+              'Forwarded to Officer',
+              'FORWARDED_TO_OFFICER',
               // Legacy Division submissions
               'Division Submitted',
               'DIVISION_SUBMITTED'
@@ -1021,7 +1032,7 @@ const submissionWorkflowTransitions = {
         },
         {
           $set: {
-            status: 'Office Verified',
+            status: 'Forwarded to Officer',
             originalLevel: 'RESPONSIBILITY_CENTER', // Normalize level for legacy data
             verifiedByOfficeAt: new Date(),
             verifiedByOfficeBy: userId,
@@ -1031,8 +1042,8 @@ const submissionWorkflowTransitions = {
           },
           $push: {
             workflowHistory: {
-              action: 'OFFICE_VERIFY',
-              toStatus: 'Office Verified',
+              action: 'COORDINATOR_APPROVE',
+              toStatus: 'Forwarded to Officer',
               byUserId: userId,
               byName: (req.user?.FirstName && req.user?.LastName) ? `${req.user.FirstName} ${req.user.LastName}` : (req.user?.name || req.user?.username || 'system'),
               date: new Date(),
@@ -1044,13 +1055,13 @@ const submissionWorkflowTransitions = {
       if (!result.modifiedCount) {
         return res.status(404).json({
           success: false,
-          message: 'No matching record to verify. Ensure items are Responsibility Center level and status is Responsibility Center Submitted.',
-          code: 'NO_MATCH_VERIFY',
+          message: 'No matching record to forward. Ensure items are Responsibility Center level and status is Responsibility Center Submitted.',
+          code: 'NO_MATCH_FORWARD',
         });
       }
       return res.status(200).json({
         success: true,
-        message: 'Successfully verified responsibility center submissions',
+        message: 'Successfully forwarded responsibility center submissions to officer',
         modified: result.modifiedCount,
         matched: result.matchedCount
       });
@@ -1062,7 +1073,7 @@ const submissionWorkflowTransitions = {
     }
   },
 
-  // Step 3→4: Office submits own (Office Verified → Office Submitted)
+  // Step 4→5: Officer submits to manager (Officer Approved → Forwarded to Manager)
   officeSubmitOwn: async (req, res) => {
     try {
       const { ids = [], entity = 'personnel', approvalNote } = req.body;
@@ -1072,11 +1083,11 @@ const submissionWorkflowTransitions = {
         { 
           _id: { $in: ids },
           originalLevel: { $in: ['RESPONSIBILITY_CENTER', 'OFFICE'] },
-          status: { $in: ['Office Verified', 'OFFICE VERIFIED', 'Draft', 'DRAFT'] }
+          status: { $in: ['Officer Approved', 'OFFICER APPROVED', 'Forwarded to Officer', 'FORWARDED_TO_OFFICER'] }
         },
         { 
           $set: { 
-            status: 'Office Submitted',
+            status: 'Forwarded to Manager',
             approvedByOfficeAt: new Date(),
             approvedByOfficeBy: userId,
             approvedByOfficeName: (req.user?.FirstName && req.user?.LastName) ? `${req.user.FirstName} ${req.user.LastName}` : (req.user?.name || req.user?.username || 'system'),
@@ -1088,8 +1099,8 @@ const submissionWorkflowTransitions = {
           },
           $push: {
             workflowHistory: {
-              action: 'OFFICE_SUBMIT',
-              toStatus: 'Office Submitted',
+              action: 'OFFICER_SUBMIT',
+              toStatus: 'Forwarded to Manager',
               byUserId: userId,
               byName: (req.user?.FirstName && req.user?.LastName) ? `${req.user.FirstName} ${req.user.LastName}` : (req.user?.name || req.user?.username || 'system'),
               date: new Date(),
@@ -1101,7 +1112,7 @@ const submissionWorkflowTransitions = {
       if (!result.modifiedCount) {
         return res.status(404).json({
           success: false,
-          message: 'No matching record to submit. Ensure items are verified or drafts at Office level.',
+          message: 'No matching record to submit. Ensure items are Officer Approved.',
           code: 'NO_MATCH_SUBMIT',
         });
       }
@@ -1172,7 +1183,7 @@ const submissionWorkflowTransitions = {
     }
   },
 
-  // Step 4→5: Office approves submission (Office Submitted → Office Approved)
+  // Step 3→4: Officer approves submission (Forwarded to Officer → Officer Approved)
   officeApproveSubmission: async (req, res) => {
     try {
       const { ids = [], entity = 'personnel', officeApprovalNote } = req.body;
@@ -1182,11 +1193,11 @@ const submissionWorkflowTransitions = {
         { 
           _id: { $in: ids },
           originalLevel: { $in: ['RESPONSIBILITY_CENTER', 'OFFICE'] },
-          status: { $in: ['Office Submitted', 'OFFICE SUBMITTED'] }
+          status: { $in: ['Forwarded to Officer', 'FORWARDED_TO_OFFICER'] }
         },
         { 
           $set: { 
-            status: 'Office Approved',
+            status: 'Officer Approved',
             approvedByOfficeAt: new Date(),
             approvedByOfficeBy: userId,
             approvedByOfficeName: (req.user?.FirstName && req.user?.LastName) ? `${req.user.FirstName} ${req.user.LastName}` : (req.user?.name || req.user?.username || 'system'),
@@ -1195,8 +1206,8 @@ const submissionWorkflowTransitions = {
           },
           $push: {
             workflowHistory: {
-              action: 'OFFICE_APPROVE',
-              toStatus: 'Office Approved',
+              action: 'OFFICER_APPROVE',
+              toStatus: 'Officer Approved',
               byUserId: userId,
               byName: (req.user?.FirstName && req.user?.LastName) ? `${req.user.FirstName} ${req.user.LastName}` : (req.user?.name || req.user?.username || 'system'),
               date: new Date(),
@@ -1208,7 +1219,7 @@ const submissionWorkflowTransitions = {
       if (!result.modifiedCount) {
         return res.status(404).json({
           success: false,
-          message: 'No matching record to approve. Ensure items are Office Submitted.',
+          message: 'No matching record to approve. Ensure items are Forwarded to Officer.',
           code: 'NO_MATCH_APPROVE',
         });
       }
@@ -1279,7 +1290,7 @@ const submissionWorkflowTransitions = {
     }
   },
 
-  // Step 5→6: Final approval - Finalize submissions (Office Approved → Finalized)
+  // Step 5→6: Manager approves - Finalize submissions (Forwarded to Manager → Finalized)
   officeFinalizeSubmission: async (req, res) => {
     try {
       const { ids = [], entity = 'personnel', finalizationNote } = req.body;
@@ -1289,7 +1300,7 @@ const submissionWorkflowTransitions = {
         { 
           _id: { $in: ids },
           originalLevel: { $in: ['RESPONSIBILITY_CENTER', 'OFFICE'] },
-          status: { $in: ['Office Approved', 'OFFICE APPROVED', 'Office Submitted', 'OFFICE SUBMITTED'] }
+          status: { $in: ['Forwarded to Manager', 'FORWARDED_TO_MANAGER'] }
         },
         { 
           $set: { 
@@ -1302,7 +1313,7 @@ const submissionWorkflowTransitions = {
           },
           $push: {
             workflowHistory: {
-              action: 'OFFICE_FINALIZE',
+              action: 'MANAGER_APPROVE',
               toStatus: 'Finalized',
               byUserId: userId,
               byName: (req.user?.FirstName && req.user?.LastName) ? `${req.user.FirstName} ${req.user.LastName}` : (req.user?.name || req.user?.username || 'system'),
@@ -1315,7 +1326,7 @@ const submissionWorkflowTransitions = {
       if (!result.modifiedCount) {
         return res.status(404).json({
           success: false,
-          message: 'No matching record to finalize. Ensure items are Office Approved.',
+          message: 'No matching record to finalize. Ensure items are Forwarded to Manager.',
           code: 'NO_MATCH_FINALIZE',
         });
       }

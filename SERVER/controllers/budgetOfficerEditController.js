@@ -329,9 +329,9 @@ exports.getProposalForEdit = async (req, res) => {
     const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
     
     // Check if proposal is already submitted or approved - prevent further editing
-    // BUDGET_MANAGER can view "Office Submitted" proposals (to approve/reject)
-    // BUDGET_OFFICER cannot edit "Office Submitted", "Office Approved", or "Approved" proposals
-    if (proposal.status === 'Office Submitted') {
+    // BUDGET_MANAGER can view "Forwarded to Manager" proposals (to approve/reject)
+    // BUDGET_OFFICER cannot edit "Forwarded to Manager", "Officer Approved", or "Approved" proposals
+    if (proposal.status === 'Forwarded to Manager' || proposal.status === 'Office Submitted') {
       // Allow BUDGET_MANAGER to view, block BUDGET_OFFICER
       if (isBudgetOfficer && !isBudgetManager) {
         return res.status(403).json({
@@ -340,7 +340,7 @@ exports.getProposalForEdit = async (req, res) => {
           proposalStatus: proposal.status
         });
       }
-    } else if (proposal.status === 'Office Approved' || proposal.status === 'Approved') {
+    } else if (proposal.status === 'Officer Approved' || proposal.status === 'Office Approved' || proposal.status === 'Approved') {
       // Block everyone from editing approved proposals
       return res.status(403).json({
         success: false,
@@ -521,9 +521,9 @@ exports.saveDraftEdit = async (req, res) => {
     const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
     
     // Check if proposal is already submitted or approved - prevent further editing
-    // BUDGET_MANAGER can view "Office Submitted" proposals (to approve/reject)
-    // BUDGET_OFFICER cannot edit "Office Submitted", "Office Approved", or "Approved" proposals
-    if (proposal.status === 'Office Submitted') {
+    // BUDGET_MANAGER can view "Forwarded to Manager" proposals (to approve/reject)
+    // BUDGET_OFFICER cannot edit "Forwarded to Manager", "Officer Approved", or "Approved" proposals
+    if (proposal.status === 'Forwarded to Manager' || proposal.status === 'Office Submitted') {
       // Allow BUDGET_MANAGER to view, block BUDGET_OFFICER
       if (isBudgetOfficer && !isBudgetManager) {
         return res.status(403).json({
@@ -532,7 +532,7 @@ exports.saveDraftEdit = async (req, res) => {
           proposalStatus: proposal.status
         });
       }
-    } else if (proposal.status === 'Office Approved' || proposal.status === 'Approved') {
+    } else if (proposal.status === 'Officer Approved' || proposal.status === 'Office Approved' || proposal.status === 'Approved') {
       // Block everyone from editing approved proposals
       return res.status(403).json({
         success: false,
@@ -713,9 +713,9 @@ exports.submitEdit = async (req, res) => {
     const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
     
     // Check if proposal is already submitted or approved - prevent further editing
-    // BUDGET_MANAGER can view "Office Submitted" proposals (to approve/reject)
-    // BUDGET_OFFICER cannot submit "Office Submitted", "Office Approved", or "Approved" proposals
-    if (proposal.status === 'Office Submitted') {
+    // BUDGET_MANAGER can view "Forwarded to Manager" proposals (to approve/reject)
+    // BUDGET_OFFICER cannot submit "Forwarded to Manager", "Officer Approved", or "Approved" proposals
+    if (proposal.status === 'Forwarded to Manager' || proposal.status === 'Office Submitted') {
       // Allow BUDGET_MANAGER to view, block BUDGET_OFFICER from submitting
       if (isBudgetOfficer && !isBudgetManager) {
         return res.status(403).json({
@@ -724,7 +724,7 @@ exports.submitEdit = async (req, res) => {
           proposalStatus: proposal.status
         });
       }
-    } else if (proposal.status === 'Office Approved' || proposal.status === 'Approved') {
+    } else if (proposal.status === 'Officer Approved' || proposal.status === 'Office Approved' || proposal.status === 'Approved') {
       // Block everyone from submitting approved proposals
       return res.status(403).json({
         success: false,
@@ -818,7 +818,7 @@ exports.submitEdit = async (req, res) => {
     }
     
     // Update proposal status
-    proposal.status = 'Office Submitted';
+    proposal.status = 'Forwarded to Manager';
     proposal.workflowLevel = 'OFFICER';
     proposal.workflowHistory.push({
       action: 'EDIT',
@@ -827,7 +827,7 @@ exports.submitEdit = async (req, res) => {
       userName,
       timestamp: new Date(),
       previousStatus: proposal.status,
-      newStatus: 'Office Submitted'
+      newStatus: 'Forwarded to Manager'
     });
     
     await proposal.save();
@@ -1337,7 +1337,7 @@ exports.approveEdit = async (req, res) => {
         userName,
         timestamp: new Date(),
         previousStatus: proposal.status,
-        newStatus: 'Office Approved'
+        newStatus: 'Officer Approved'
       });
       await proposal.save({ session });
       

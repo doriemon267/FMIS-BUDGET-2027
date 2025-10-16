@@ -63,7 +63,7 @@ export function ApproveMenuItem({ row, parentClose, refreshData }) {
 
   const handleApprove = async () => {
     try {
-      await api.put(`/proposals/${row._id}`, { status: "Approved" });
+      await api.put(`/proposals/${row._id}`, { status: "Finalized" });
       toast.success("Proposal approved.");
       try {
         if (typeof window !== 'undefined' && window.showSuccess) {

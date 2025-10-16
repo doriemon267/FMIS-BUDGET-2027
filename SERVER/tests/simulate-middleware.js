@@ -49,8 +49,11 @@ async function simulateMiddleware() {
                       { status: { $in: ['Division Submitted', 'DIVISION SUBMITTED'] } },
                       { status: { $in: ['Department Verified', 'DEPARTMENT VERIFIED'] } },
                       { status: { $in: ['Department Submitted', 'DEPARTMENT SUBMITTED'] } },
-                      { status: { $in: ['Region Approved', 'REGION APPROVED', 'Office Approved', 'OFFICE APPROVED'] } },
-                      { status: 'Finalized' }
+                      { status: { $in: ['Forwarded to Officer', 'Officer Approved'] } },
+                      { status: { $in: ['Forwarded to Manager', 'FORWARDED_TO_MANAGER'] } },
+                      { status: 'Finalized' },
+                      // Backward compatibility with legacy names
+                      { status: { $in: ['Region Approved', 'REGION APPROVED', 'Office Approved', 'OFFICE APPROVED'] } }
                     ]
                   }
                 ]

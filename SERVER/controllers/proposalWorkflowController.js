@@ -55,31 +55,32 @@ const budgetRoleAccessControl = (operation = 'read') => {
         } else if (isBudgetCoordinator) {
           // Budget Coordinators can see:
           // 1. Proposals submitted by analysts in their division/department (Division Submitted)
-          // 2. Proposals they have approved and are routing (Office Approved)
-          // 3. Proposals they submitted to officer or manager (Office, Office Submitted)
+          // 2. Proposals they have forwarded to officer (Forwarded to Officer)
+          // 3. Finalized proposals for reference
           // 4. Their own proposals
           if (userDivision) {
             visibilityFilter.$or = [
               { createdByUserId: userId },
-              { division: userDivision, status: { $in: ['Division Submitted', 'Office Approved', 'Office', 'Office Submitted', 'Finalized'] } }
+              { division: userDivision, status: { $in: ['Division Submitted', 'Forwarded to Officer', 'Officer Approved', 'Forwarded to Manager', 'Finalized'] } }
             ];
           } else {
             // Fallback: show proposals needing coordinator action
             visibilityFilter.$or = [
               { createdByUserId: userId },
-              { status: { $in: ['Division Submitted', 'Office Approved', 'Office', 'Office Submitted'] } }
+              { status: { $in: ['Division Submitted', 'Forwarded to Officer', 'Officer Approved', 'Forwarded to Manager'] } }
             ];
           }
         } else if (isBudgetOfficer) {
           // Budget Officers can see:
-          // 1. Proposals submitted to them by coordinators (Office)
-          // 2. Proposals they have approved and forwarded (Office Submitted)
-          // 3. Finalized proposals for reference
-          visibilityFilter.status = { $in: ['Office', 'Office Submitted', 'Finalized'] };
+          // 1. Proposals forwarded to them by coordinators (Forwarded to Officer)
+          // 2. Proposals they have approved (Officer Approved)
+          // 3. Proposals they have forwarded to manager (Forwarded to Manager)
+          // 4. Finalized proposals for reference
+          visibilityFilter.status = { $in: ['Forwarded to Officer', 'Officer Approved', 'Forwarded to Manager', 'Finalized'] };
         } else if (isBudgetManager) {
-          // Budget Managers: primarily see items submitted to Manager (Office Submitted)
-          // Also allow viewing of items that reached 'Office Approved' or 'Finalized' so managers can review completed items
-          visibilityFilter.status = { $in: ['Office Submitted', 'Office Approved', 'Finalized'] };
+          // Budget Managers: primarily see items forwarded to them (Forwarded to Manager)
+          // Also allow viewing of items that reached 'Officer Approved' or 'Finalized' so managers can review completed items
+          visibilityFilter.status = { $in: ['Forwarded to Manager', 'Officer Approved', 'Finalized'] };
         }
 
         // Apply the filter to the query
@@ -139,13 +140,13 @@ function checkProposalAccess(proposal, userId, userRoles) {
   }
 
   // Role-based access
-  if (isBudgetOfficer && ['Division Submitted', 'Office', 'Office Approved', 'Finalized'].includes(proposal.status)) {
+  if (isBudgetOfficer && ['Division Submitted', 'Forwarded to Officer', 'Officer Approved', 'Forwarded to Manager', 'Finalized'].includes(proposal.status)) {
     return true;
   }
 
   if (isBudgetManager) {
-    // Managers only have access when the proposal has been submitted to them
-    if (['Office Submitted','Office Approved','Finalized'].includes(proposal.status)) return true;
+    // Managers only have access when the proposal has been forwarded to them
+    if (['Forwarded to Manager', 'Officer Approved', 'Finalized'].includes(proposal.status)) return true;
     return false;
   }
 
@@ -179,7 +180,11 @@ async function syncBudgetItemsStatus(proposal) {
       'Officer Approved': 'Department Submitted',
       'Forwarded to Manager': 'Region Approved',
       'Finalized': 'Finalized',
-      'Returned': 'Returned'
+      'Returned': 'Returned',
+      // Legacy mappings for backward compatibility
+      'Office': 'Department Verified',
+      'Office Approved': 'Department Submitted',
+      'Office Submitted': 'Region Approved'
     };
     
     const mappedStatus = statusMapping[status] || status;
@@ -401,7 +406,7 @@ exports.submitDirectToManager = async (req, res) => {
 
     // Update proposal status - submit directly to Manager level
     const previousStatus = proposal.status;
-    const newStatus = 'Office Submitted';
+    const newStatus = 'Forwarded to Manager';
     const workflowLevel = 'MANAGER';
 
     proposal.status = newStatus;
@@ -759,34 +764,34 @@ exports.approveProposal = async (req, res) => {
     // Determine the appropriate workflow action based on CURRENT STATUS and user roles
     // This prevents users with multiple roles from skipping workflow steps
     
-    if (previousStatus === 'Office' && userRoles.includes('BUDGET_OFFICER')) {
-      // BUDGET_OFFICER verifying and submitting to BUDGET_MANAGER (from COORDINATOR)
-      newStatus = 'Office Submitted';
-      approvalField = 'verifiedByOfficer';
-      proposal.workflowLevel = 'MANAGER';
-      proposal.submittedByRole = 'BUDGET_OFFICER';
-      console.log('✅ BUDGET_OFFICER verification and submission (Office → Office Submitted)');
-      nextAssigneeRole = 'BUDGET_MANAGER';
-      nextPendingRoles = ['BUDGET_MANAGER'];
-      nextStep = 'MANAGER_REVIEW';
-      targetRole = 'BUDGET_MANAGER';
-    } else if (previousStatus === 'Division Submitted' && userRoles.includes('BUDGET_OFFICER')) {
-      // Legacy: BUDGET_OFFICER submitting to BUDGET_MANAGER (old flow)
-      newStatus = 'Office Submitted';
+    if ((previousStatus === 'Forwarded to Officer' || previousStatus === 'Office') && userRoles.includes('BUDGET_OFFICER')) {
+      // BUDGET_OFFICER approves (from COORDINATOR) → Officer Approved
+      newStatus = 'Officer Approved';
+      approvalField = 'approvedByOfficer';
+      proposal.workflowLevel = 'OFFICER';
+      proposal.approvedByRole = 'BUDGET_OFFICER';
+      console.log('✅ BUDGET_OFFICER approval (Forwarded to Officer → Officer Approved)');
+      nextAssigneeRole = 'BUDGET_OFFICER';
+      nextPendingRoles = ['BUDGET_OFFICER'];
+      nextStep = 'OFFICER_REVIEW';
+      targetRole = 'BUDGET_OFFICER';
+    } else if (previousStatus === 'Officer Approved' && userRoles.includes('BUDGET_OFFICER')) {
+      // BUDGET_OFFICER submits to BUDGET_MANAGER → Forwarded to Manager
+      newStatus = 'Forwarded to Manager';
       approvalField = 'submittedByOfficer';
       proposal.workflowLevel = 'MANAGER';
       proposal.submittedByRole = 'BUDGET_OFFICER';
-      console.log('✅ BUDGET_OFFICER submission (Division Submitted → Office Submitted)');
+      console.log('✅ BUDGET_OFFICER submission to Manager (Officer Approved → Forwarded to Manager)');
       nextAssigneeRole = 'BUDGET_MANAGER';
       nextPendingRoles = ['BUDGET_MANAGER'];
       nextStep = 'MANAGER_REVIEW';
       targetRole = 'BUDGET_MANAGER';
-    } else if (previousStatus === 'Office Submitted' && (userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN'))) {
+    } else if ((previousStatus === 'Forwarded to Manager' || previousStatus === 'Office Submitted') && (userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN'))) {
       // BUDGET_MANAGER final approval
       newStatus = 'Finalized';
       approvalField = 'approvedByManager';
       proposal.workflowLevel = 'FINALIZED';
-      console.log('✅ BUDGET_MANAGER final approval (Office Submitted → Finalized)');
+      console.log('✅ BUDGET_MANAGER final approval (Forwarded to Manager → Finalized)');
       nextAssigneeRole = 'BUDGET_MANAGER';
       nextPendingRoles = [];
       nextStep = 'FINALIZED';
@@ -808,8 +813,8 @@ exports.approveProposal = async (req, res) => {
       return res.status(403).json({ 
         success: false, 
         message: `Cannot approve proposal with status "${previousStatus}". Expected status: ${
-          userRoles.includes('BUDGET_OFFICER') ? 'Office' : 
-          userRoles.includes('BUDGET_MANAGER') ? 'Office Submitted' : 
+          userRoles.includes('BUDGET_OFFICER') ? 'Officer Approved' : 
+          userRoles.includes('BUDGET_MANAGER') ? 'Forwarded to Manager' : 
           'Unknown'
         }` 
       });
@@ -861,16 +866,17 @@ exports.approveProposal = async (req, res) => {
     console.log('🔍 Entity filter criteria:', JSON.stringify(entityFilter, null, 2));
     
     // Map proposal status to entity status
-    // BUDGET_OFFICER submits → 'Office Submitted' (pending MANAGER approval)
-    // BUDGET_MANAGER approves → 'Office Approved' (approved by manager)
+    // BUDGET_OFFICER approves → 'Officer Approved' (approved by officer)
+    // BUDGET_OFFICER submits → 'Forwarded to Manager' (pending MANAGER approval)
+    // BUDGET_MANAGER approves → 'Finalized' (approved by manager)
     let entityStatus, entityWorkflowLevel;
-    if (newStatus === 'Office Submitted') {
-      // BUDGET_OFFICER submitted to BUDGET_MANAGER for approval
-      entityStatus = 'Office Submitted';
+    if (newStatus === 'Officer Approved') {
+      // BUDGET_OFFICER approved the proposal
+      entityStatus = 'Department Submitted';
       entityWorkflowLevel = 'OFFICER';
-    } else if (newStatus === 'Office Approved') {
-      // BUDGET_MANAGER approved the submission
-      entityStatus = 'Office Approved';
+    } else if (newStatus === 'Forwarded to Manager') {
+      // BUDGET_OFFICER submitted to BUDGET_MANAGER for approval
+      entityStatus = 'Region Approved';
       entityWorkflowLevel = 'MANAGER';
     } else if (newStatus === 'Finalized') {
       entityStatus = 'Finalized';
@@ -1017,12 +1023,12 @@ exports.returnProposal = async (req, res) => {
       } else {
         return res.status(400).json({ 
           success: false, 
-          message: `Cannot return proposal with status "${proposal.status}". Expected status: Office` 
+          message: `Cannot return proposal with status "${proposal.status}". Expected status: Officer Approved` 
         });
       }
     } else if (userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN')) {
       // BUDGET_MANAGER returns based on who submitted
-      if (proposal.status === 'Office Submitted') {
+      if (proposal.status === 'Forwarded to Manager' || proposal.status === 'Office Submitted') {
         returnField = 'returnedByManager';
         
         // Check if proposal bypassed officer review
@@ -1074,7 +1080,7 @@ exports.returnProposal = async (req, res) => {
       } else {
         return res.status(400).json({ 
           success: false, 
-          message: `Cannot return proposal with status "${proposal.status}". Expected status: Office Submitted` 
+          message: `Cannot return proposal with status "${proposal.status}". Expected status: Forwarded to Manager` 
         });
       }
     } else {
@@ -1176,10 +1182,10 @@ exports.verifyProposal = async (req, res) => {
     }
 
     // Verify proposal is in correct status
-    if (!['Division Submitted', 'Office'].includes(proposal.status)) {
+    if (!['Division Submitted', 'Forwarded to Officer'].includes(proposal.status)) {
       return res.status(400).json({ 
         success: false, 
-        message: 'Only proposals with status "Division Submitted" or "Office" can be verified' 
+        message: 'Only proposals with status "Division Submitted" or "Forwarded to Officer" can be verified' 
       });
     }
 
@@ -1267,7 +1273,7 @@ exports.bulkApproveProposals = async (req, res) => {
 
     for (const proposal of proposals) {
       const previousStatus = proposal.status;
-      proposal.status = 'Office Submitted';
+      proposal.status = 'Forwarded to Manager';
       proposal.workflowLevel = 'MANAGER';
       proposal.submittedByOfficer = {
         userId,
@@ -1283,12 +1289,12 @@ exports.bulkApproveProposals = async (req, res) => {
       });
 
       recordWorkflowEvent(proposal, {
-        action: 'APPROVE',
+        action: 'OFFICER_SUBMIT_TO_MANAGER',
         comment: sanitizedComment,
         userId,
         userName,
         previousStatus,
-        newStatus: 'Office Submitted',
+        newStatus: 'Forwarded to Manager',
         targetRole: 'BUDGET_MANAGER',
         metadata: {
           bulk: true
@@ -1318,7 +1324,7 @@ exports.bulkApproveProposals = async (req, res) => {
       
       const entityUpdate = {
         $set: {
-          status: 'Office Submitted',    // BUDGET_OFFICER submits to BUDGET_MANAGER
+          status: 'Region Approved',    // BUDGET_OFFICER submits to BUDGET_MANAGER
           workflowLevel: 'MANAGER',      // Pending MANAGER approval
           lastActionBy: userName,
           lastActionDate: new Date()
@@ -1387,7 +1393,7 @@ exports.consolidateProposals = async (req, res) => {
     const proposals = await Proposal.find({ _id: { $in: proposalIds } });
 
     // Validate all proposals are approved
-    const unapproved = proposals.filter(p => p.status !== 'Office Approved');
+    const unapproved = proposals.filter(p => p.status !== 'Officer Approved' && p.status !== 'Office Approved');
     if (unapproved.length > 0) {
       return res.status(400).json({
         success: false,
@@ -1413,7 +1419,7 @@ exports.consolidateProposals = async (req, res) => {
       region,
       department,
       processBy: userId,
-      status: 'Office Submitted',
+      status: 'Forwarded to Manager',
       workflowLevel: 'MANAGER',
       isConsolidated: true,
       consolidatedOrigin: officeName,  // Set origin to OFFICE name
@@ -1446,7 +1452,7 @@ exports.consolidateProposals = async (req, res) => {
       userName,
       timestamp: new Date(),
       previousStatus: 'Draft',
-      newStatus: 'Office Submitted'
+      newStatus: 'Forwarded to Manager'
     });
 
     await consolidatedProposal.save();
@@ -1463,8 +1469,8 @@ exports.consolidateProposals = async (req, res) => {
         userId,
         userName,
         timestamp: now,
-        previousStatus: orig.status || 'Office Approved',
-        newStatus: 'Office Submitted'
+        previousStatus: orig.status || 'Officer Approved',
+        newStatus: 'Forwarded to Manager'
       };
 
       // Always mark as consolidated
@@ -1474,8 +1480,8 @@ exports.consolidateProposals = async (req, res) => {
       if (!orig.submittedToManagerAt) updates.submittedToManagerAt = now;
       if (!orig.submittedToManagerBy) updates.submittedToManagerBy = { userId, userName };
 
-      // If status is not already Office Submitted, set it
-      if (orig.status !== 'Office Submitted') updates.status = 'Office Submitted';
+      // If status is not already Forwarded to Manager, set it (also check legacy 'Office Submitted')
+      if (orig.status !== 'Forwarded to Manager' && orig.status !== 'Office Submitted') updates.status = 'Forwarded to Manager';
 
       await Proposal.updateOne({ _id: orig._id }, { $set: updates, $push: { workflowHistory: push } });
     }
@@ -1489,19 +1495,19 @@ exports.consolidateProposals = async (req, res) => {
 
       // We assume the proposals array contains original proposal docs that have _id references
       // and that these entity collections have a field linking back to a proposal id via `proposalId` or similar.
-      // To be safe, we'll update by matching on department/division/fiscalYear/budgetType and status = 'Office Approved'.
+      // To be safe, we'll update by matching on department/division/fiscalYear/budgetType and status = 'Officer Approved'.
       const dept = department;
       const div = proposals[0].division;
       const fy = fiscalYear;
       const bt = budgetType;
 
-      const entityQuery = { department: dept, division: div, fiscalYear: fy, budgetType: bt, status: 'Office Approved' };
+      const entityQuery = { department: dept, division: div, fiscalYear: fy, budgetType: bt, status: 'Officer Approved' };
 
       await Promise.all([
-        PersonnelServices.updateMany(entityQuery, { $set: { status: 'Office Submitted', submittedToManagerAt: new Date(), submittedToManagerBy: { userId, userName } } }),
-        MooeProposal.updateMany(entityQuery, { $set: { status: 'Office Submitted', submittedToManagerAt: new Date(), submittedToManagerBy: { userId, userName } } }),
-        CapitalOutlay.updateMany(entityQuery, { $set: { status: 'Office Submitted', submittedToManagerAt: new Date(), submittedToManagerBy: { userId, userName } } }),
-        Income.updateMany(entityQuery, { $set: { status: 'Office Submitted', submittedToManagerAt: new Date(), submittedToManagerBy: { userId, userName } } })
+        PersonnelServices.updateMany(entityQuery, { $set: { status: 'Forwarded to Manager', submittedToManagerAt: new Date(), submittedToManagerBy: { userId, userName } } }),
+        MooeProposal.updateMany(entityQuery, { $set: { status: 'Forwarded to Manager', submittedToManagerAt: new Date(), submittedToManagerBy: { userId, userName } } }),
+        CapitalOutlay.updateMany(entityQuery, { $set: { status: 'Forwarded to Manager', submittedToManagerAt: new Date(), submittedToManagerBy: { userId, userName } } }),
+        Income.updateMany(entityQuery, { $set: { status: 'Forwarded to Manager', submittedToManagerAt: new Date(), submittedToManagerBy: { userId, userName } } })
       ]);
     } catch (entErr) {
       console.error('Warning: failed to update entity-level collections during consolidation:', entErr && entErr.message ? entErr.message : entErr);

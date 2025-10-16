@@ -55,7 +55,7 @@ router.post(
   submissionWorkflowTransitions.officeReturnToResponsibilityCenter
 );
 
-// Step 2→3: Office verifies responsibility center submissions (Responsibility Center Submitted → Office Verified)
+// Step 3→4: Coordinator approves and forwards to Officer (Division Submitted → Forwarded to Officer)
 router.post(
   '/office/verify-submission',
   submissionWorkflowControl('update'),
@@ -63,7 +63,7 @@ router.post(
   submissionWorkflowTransitions.officeVerifySubmission
 );
 
-// Step 3→4: Office submits own (Office Verified → Office Submitted)
+// Step 5→6: Officer submits to Manager (Officer Approved → Forwarded to Manager)
 router.post(
   '/office/submit-own',
   submissionWorkflowControl('update'),
@@ -129,9 +129,9 @@ router.post(
   }
 );
 /**
- * Office Level Routes (continued)
+ * Officer Level Routes (continued)
  */
-// Step 4→5: Office approves submissions (Office Submitted → Office Approved)
+// Step 3→4: Officer approves submissions (Forwarded to Officer → Officer Approved)
 router.post(
   '/office/approve-submission',
   submissionWorkflowControl('update'),
@@ -140,7 +140,7 @@ router.post(
   submissionWorkflowTransitions.officeApproveSubmission
 );
 
-// Step 5→6: Office finalizes submissions (Office Approved → Finalized)
+// Step 5→6: Manager approves and finalizes submissions (Forwarded to Manager → Finalized)
 router.post(
   '/office/finalize-submission',
   submissionWorkflowControl('update'),
@@ -237,7 +237,7 @@ router.get(
       const pendingSubmissions = await Model.find({
         ...req.submissionWorkflowFilters,
         originalLevel: { $in: ['RESPONSIBILITY_CENTER', 'OFFICE'] },
-        status: { $in: ['Office Submitted', 'Office Approved'] },
+        status: { $in: ['Forwarded to Manager', 'Officer Approved', 'FORWARDED_TO_MANAGER', 'OFFICER_APPROVED', 'Office Submitted', 'Office Approved'] },
         lastWorkflowTransition: { $in: ['OFFICE_TO_FINALIZE', 'OFFICE_APPROVAL'] }
       }).sort({ submittedToOfficeAt: -1, approvedByOfficeAt: -1 });
       res.status(200).json({
@@ -444,7 +444,7 @@ router.get(
 const getModelByEntity = (entity) => {
   switch (entity) {
     case 'personnel':
-      return require('../models/personnelServices');
+      return require('../models/PersonnelServices');
     case 'mooe':
       return require('../models/mooeProposals');
     case 'capital':
@@ -454,7 +454,7 @@ const getModelByEntity = (entity) => {
     case 'budgetarySupport':
       return require('../models/BudgetarySupport');
     default:
-      return require('../models/personnelServices');
+      return require('../models/PersonnelServices');
   }
 };
 module.exports = router;

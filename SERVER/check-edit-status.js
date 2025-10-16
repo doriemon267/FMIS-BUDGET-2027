@@ -1,6 +1,6 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
-const BudgetOfficerEdit = require('./models/budgetOfficerEdit');
+const BudgetOfficerEdit = require('./models/BudgetOfficerEdit');
 const Proposal = require('./models/Proposal');
 
 const MONGODB_BUDGET_URL = process.env.MONGODB_BUDGET_URL;

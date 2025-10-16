@@ -16,7 +16,7 @@ import SaveIcon from "@mui/icons-material/Save";
  * Workflow Actions Component
  * 
  * Provides action buttons for the role-based workflow based on user role and current status:
- * Draft → Submitted to Officer → Officer Approved/Returned → Submitted to Manager → Manager Approved/Returned → Finalized
+ * Draft → Division Submitted → Forwarded to Officer → Officer Approved → Forwarded to Manager → Finalized
  */
 const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = true, showTrackInMenu = true, showViewInMenu = true }) => {
   const [loading, setLoading] = useState(false);
@@ -272,14 +272,13 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
     if (isBudgetCoordinator) {
       // Can review and edit proposals submitted by analysts
       if (normalizedStatus === 'DIVISION SUBMITTED' || status === 'Division Submitted' || 
-          normalizedStatus === 'UNDER REVIEW BY COORDINATOR' || status === 'Under Review by Coordinator' ||
           normalizedStatus === 'RESPONSIBILITY CENTER SUBMITTED') {
         actions.push({
           label: 'Save Edits',
           action: 'coordinator-save-edits',
           color: 'bg-gray-500 hover:bg-gray-600',
           icon: '💾',
-          description: 'Save changes without forwarding (status: Under Review)',
+          description: 'Save changes without forwarding',
           requiresComment: false,
           allowOptionalComment: true
         });
@@ -306,16 +305,14 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
     if (isBudgetOfficer) {
       // Can review and edit proposals forwarded by coordinator
       if (normalizedStatus === "FORWARDED TO OFFICER" || status === "Forwarded to Officer" ||
-          normalizedStatus === "UNDER REVIEW BY OFFICER" || status === "Under Review by Officer" ||
           normalizedStatus === "OFFICER APPROVED" || status === "Officer Approved" ||
-          normalizedStatus === "OFFICE" || status === "Office" ||
           normalizedStatus === "DIVISION SUBMITTED" || status === "Division Submitted") {
         actions.push({
           label: "Save Edits",
           action: "officer-save-edits",
           color: "bg-gray-500 hover:bg-gray-600",
           icon: "💾",
-          description: "Save changes without forwarding (status: Under Review)",
+          description: "Save changes without forwarding",
           requiresComment: false,
           allowOptionalComment: true
         });
@@ -354,20 +351,17 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
     if (isBudgetManager || isBudgetAdmin) {
       const managerStatuses = [
         'FORWARDED TO MANAGER',
-        'UNDER REVIEW BY MANAGER',
-        'OFFICE SUBMITTED',
-        'SUBMITTED TO MANAGER',
         'OFFICER APPROVED'
       ];
 
       if (managerStatuses.includes(normalizedStatus) ||
-          ['Forwarded to Manager', 'Under Review by Manager', 'Office Submitted', 'Submitted to Manager', 'Officer Approved'].includes(status)) {
+          ['Forwarded to Manager', 'Officer Approved'].includes(status)) {
         actions.push({
           label: "Save Edits",
           action: "manager-save-edits",
           color: "bg-gray-500 hover:bg-gray-600",
           icon: "💾",
-          description: "Save changes without finalizing (status: Under Review)",
+          description: "Save changes without finalizing",
           requiresComment: false,
           allowOptionalComment: true
         });
@@ -463,35 +457,48 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
   const deriveFromStatus = useCallback((status) => {
     const s = String(status || '').toUpperCase();
     const derived = { step: 'ANALYST_DRAFT', assignee: 'BUDGET_ANALYST', pending: ['BUDGET_ANALYST'] };
+    
+    // 6-Step Workflow Mapping:
+    // 1. Draft → Analyst
+    // 2. Division Submitted → Coordinator Review
+    // 3. Forwarded to Officer → Officer Review
+    // 4. Officer Approved → Officer (approves, prepares submission)
+    // 5. Forwarded to Manager → Manager Review
+    // 6. Finalized → Admin
+    
     if (s.includes('DIVISION SUBMITTED') || s.includes('RESPONSIBILITY CENTER SUBMITTED')) {
+      // Step 2: Coordinator reviews
       derived.step = 'COORDINATOR_REVIEW';
       derived.assignee = 'BUDGET_COORDINATOR';
       derived.pending = ['BUDGET_COORDINATOR'];
-    } else if (s === 'OFFICE' || s.includes('OFFICE REVIEW')) {
+    } else if (s.includes('FORWARDED TO OFFICER') || s === 'OFFICE' || s.includes('OFFICE REVIEW') || s.includes('OFFICE SUBMITTED')) {
+      // Step 3: Officer reviews
       derived.step = 'OFFICER_REVIEW';
       derived.assignee = 'BUDGET_OFFICER';
       derived.pending = ['BUDGET_OFFICER'];
-    } else if (s.includes('OFFICE APPROVED')) {
-      // If a manager phase exists, this typically precedes submission to manager
-      derived.step = hasManagerPhase ? 'MANAGER_REVIEW' : 'FINALIZED';
-      derived.assignee = hasManagerPhase ? 'BUDGET_MANAGER' : 'BUDGET_ADMIN';
-      derived.pending = hasManagerPhase ? ['BUDGET_MANAGER'] : [];
-    } else if (s.includes('OFFICE SUBMITTED') || s.includes('SUBMITTED TO MANAGER')) {
+    } else if (s.includes('OFFICER APPROVED')) {
+      // Step 4: Officer approves and prepares for manager (always goes to manager in 6-step flow)
+      derived.step = 'OFFICER_APPROVAL';
+      derived.assignee = 'BUDGET_OFFICER';
+      derived.pending = ['BUDGET_OFFICER'];
+    } else if (s.includes('FORWARDED TO MANAGER') || s.includes('SUBMITTED TO MANAGER')) {
+      // Step 5: Manager reviews
       derived.step = 'MANAGER_REVIEW';
       derived.assignee = 'BUDGET_MANAGER';
       derived.pending = ['BUDGET_MANAGER'];
     } else if (s.includes('RETURNED')) {
+      // Return to analyst for revision
       derived.step = 'RETURNED';
-      // We can't reliably know target; default to analyst
       derived.assignee = 'BUDGET_ANALYST';
       derived.pending = ['BUDGET_ANALYST'];
     } else if (s.includes('FINALIZED')) {
+      // Step 6: Finalized
       derived.step = 'FINALIZED';
       derived.assignee = 'BUDGET_ADMIN';
       derived.pending = [];
     }
     return derived;
-  }, [hasManagerPhase]);
+  }, []);
 
   // Pick the newest workflow event by timestamp to avoid ordering assumptions
   const latestEvent = useMemo(() => {
@@ -554,7 +561,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
         //   break;
         case "coordinator-save-edits":
           endpoint = "/api/workflow/coordinator/save-edits";
-          successMessage = "Changes saved successfully (Under Review by Coordinator)";
+          successMessage = "Changes saved successfully";
           break;
         case "officer-verify":
           endpoint = "/api/workflow/verify";
@@ -574,7 +581,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           break;
         case "officer-save-edits":
           endpoint = "/api/workflow/officer/save-edits";
-          successMessage = "Changes saved successfully (Under Review by Officer)";
+          successMessage = "Changes saved successfully";
           break;
         case "submit-to-manager":
           endpoint = "/api/workflow/consolidate";
@@ -590,9 +597,15 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           break;
         case "manager-save-edits":
           endpoint = "/api/workflow/manager/save-edits";
-          successMessage = "Changes saved successfully (Under Review by Manager)";
+          successMessage = "Changes saved successfully";
           break;
-        // Legacy actions for backward compatibility
+        // Legacy actions for backward compatibility (deprecated - use standard 6-step workflow actions above)
+        // Note: These are kept for database queries and legacy data, but new workflows should use:
+        // analyst-submit → "Division Submitted" (step 2)
+        // coordinator-approve → "Forwarded to Officer" (step 3)
+        // officer-approve → "Officer Approved" (step 4)
+        // officer-submit-to-manager → "Forwarded to Manager" (step 5)
+        // manager-approve → "Finalized" (step 6)
         case "responsibility-center-submit":
           endpoint = "/api/submission-workflow/responsibility-center/submit-to-office";
           noteField = "submissionNote";
@@ -604,6 +617,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           successMessage = "Successfully verified responsibility center submission";
           break;
         case "office-submit":
+          // Deprecated: Use officer-submit-to-manager for moving Officer Approved → Forwarded to Manager
           endpoint = "/api/submission-workflow/office/submit-own";
           noteField = "approvalNote";
           successMessage = "Successfully submitted for finalization";
@@ -866,27 +880,25 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
 
   
 
-  // Step metadata for progress tracking - adapt to whether there's a manager phase
-  const steps = hasManagerPhase
-    ? [
-        { key: 'Draft', label: 'Draft' },
-        { key: 'Submitted to Officer', label: 'Officer Review', ts: 'submittedToOfficerAt', by: 'submittedToOfficerBy' },
-        { key: 'Officer Approved', label: 'Manager Review', ts: 'officerApprovedAt', by: 'officerApprovedBy' },
-        { key: 'Manager Approved', label: 'Final Review', ts: 'managerApprovedAt', by: 'managerApprovedBy' },
-        { key: 'Finalized', label: 'Finalized', ts: 'finalizedAt', by: 'finalizedBy' }
-      ]
-    : [
-        { key: 'Draft', label: 'Draft' },
-        { key: 'Submitted to Officer', label: 'Officer Review', ts: 'submittedToOfficerAt', by: 'submittedToOfficerBy' },
-        // In flows without manager phase, treat Office Approved as the final step and surface its audit fields
-        { key: 'Finalized', label: 'Office Approved', ts: 'officerApprovedAt', by: 'officerApprovedBy' }
-      ];
+  // Step metadata for 6-step workflow progress tracking
+  // 1. Draft → 2. Division Submitted → 3. Forwarded to Officer → 4. Officer Approved → 5. Forwarded to Manager → 6. Finalized
+  const steps = [
+    { key: 'Draft', label: 'Draft', stepNum: 1 },
+    { key: 'Division Submitted', label: 'Division Submitted', stepNum: 2, ts: 'divisionSubmittedAt', by: 'divisionSubmittedBy' },
+    { key: 'Forwarded to Officer', label: 'Forwarded to Officer', stepNum: 3, ts: 'forwardedToOfficerAt', by: 'forwardedToOfficerBy' },
+    { key: 'Officer Approved', label: 'Officer Approved', stepNum: 4, ts: 'officerApprovedAt', by: 'officerApprovedBy' },
+    { key: 'Forwarded to Manager', label: 'Forwarded to Manager', stepNum: 5, ts: 'forwardedToManagerAt', by: 'forwardedToManagerBy' },
+    { key: 'Finalized', label: 'Finalized', stepNum: 6, ts: 'finalizedAt', by: 'finalizedBy' }
+  ];
 
-  // Map alternate status labels to step keys
+  // Map alternate/legacy status labels to canonical step keys
   const stepKeySynonyms = {
-    'Office Submitted': 'Submitted to Officer',
-    // If no manager phase, map Office Approved directly to Finalized for indicator purposes
-    'Office Approved': hasManagerPhase ? 'Officer Approved' : 'Finalized'
+    'Submitted to Officer': 'Forwarded to Officer',
+    'Office Verified': 'Forwarded to Officer',
+    'Responsibility Center Submitted': 'Division Submitted',
+    'Forwarded to Manager': 'Forwarded to Manager',
+    'Officer Approved': 'Officer Approved',
+    'Submitted to Manager': 'Forwarded to Manager'
   };
   const normalizedStatusForStep = stepKeySynonyms[proposal?.status] || proposal?.status || 'Draft';
   const currentStepIndex = Math.max(steps.findIndex(s => s.key === normalizedStatusForStep), 0);
@@ -931,14 +943,13 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
   const statusChipColor = (status) => {
     const s = String(status || '').toLowerCase();
     if (!s) return 'default';
-    // Normalize synonyms and map to a consistent palette
+    // Map to 6-step workflow standard: Draft → Division Submitted → Forwarded to Officer → Officer Approved → Forwarded to Manager → Finalized
     if (s.includes('draft')) return 'default';
-    if (s.includes('submitted to officer') || s.includes('division submitted') || s.includes('responsibility center submitted') || s.includes('office submitted')) return 'info';
-    if (s.includes('verified')) return 'info';
-    if (s.includes('officer approved') || s === 'office approved') return 'success';
-    if (s.includes('manager approved')) return 'secondary';
+    if (s.includes('division submitted') || s.includes('responsibility center submitted') || s.includes('forwarded to officer')) return 'info';
+    if (s.includes('officer approved')) return 'success';
+    if (s.includes('forwarded to manager') || s.includes('submitted to manager')) return 'warning';
+    if (s.includes('manager approved') || s.includes('finalized')) return 'primary';
     if (s.includes('returned')) return 'error';
-    if (s.includes('finalized') || s.includes('approved')) return 'primary';
     return 'default';
   };
 
@@ -980,12 +991,14 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
     switch (key) {
       case 'Draft':
         return <TimelineIcon fontSize="small" color={color} />;
-      case 'Submitted to Officer':
+      case 'Division Submitted':
+        return <SendIcon fontSize="small" color={color} />;
+      case 'Forwarded to Officer':
         return <SendIcon fontSize="small" color={color} />;
       case 'Officer Approved':
         return <CheckIcon fontSize="small" color={color} />;
-      case 'Manager Approved':
-        return <CheckIcon fontSize="small" color={color} />;
+      case 'Forwarded to Manager':
+        return <SendIcon fontSize="small" color={color} />;
       case 'Finalized':
         return <VerifiedIcon fontSize="small" color={color} />;
       default:

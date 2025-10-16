@@ -171,7 +171,7 @@ const CustomCreateUpdateDialog = ({
         <MenuItem
           onClick={() => {
             // Check if the record has been submitted
-            const submittedStatuses = ["Submitted", "Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"];
+            const submittedStatuses = ["Submitted", "Division Submitted", "Forwarded to Officer", "Officer Approved", "Forwarded to Manager", "Finalized"];
             if (submittedStatuses.includes(row.status)) {
               toast.error("Cannot edit record that has been submitted or approved");
               return;

@@ -67,8 +67,8 @@ const ProposalDetails = ({ proposal }) => {
   // Get status color
   const getStatusColor = (status) => {
     switch (status) {
-      case "Approved": return "success";
-      case "Submitted": return "info";
+      case "Finalized": return "success";
+      case "Division Submitted": return "info";
       case "Returned": return "error";
       case "Draft": return "default";
       default: return "default";
@@ -398,14 +398,14 @@ const ProposalDetails = ({ proposal }) => {
         </Alert>
       )}
       
-      {/* Display approval details if approved */}
-      {safeProposal.status === "Approved" && (
+      {/* Display approval details if finalized */}
+      {safeProposal.status === "Finalized" && (
         <Alert severity="success" sx={{ mb: 2 }}>
           <Typography variant="subtitle1" fontWeight="bold">
-            Approved
+            Finalized
           </Typography>
           <Typography variant="body2">
-            <strong>Approved Date:</strong> {formatDate(safeProposal.approvedDate)}
+            <strong>Finalized Date:</strong> {formatDate(safeProposal.approvedDate)}
           </Typography>
         </Alert>
       )}

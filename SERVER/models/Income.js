@@ -47,11 +47,14 @@ const incomeSchema = new mongoose.Schema(
       enum: [
         'Draft',
         'Submitted',           // Legacy status
-        'Division Submitted',  // New standardized status
+        'Division Submitted',  // Analyst submits to Division
         'Department Verified',
-        'Department Submitted', 
-      'Region Approved',
-      'Office Approved',
+        'Department Submitted',
+        'Forwarded to Officer',  // Coordinator approves (new workflow)
+        'Officer Approved',      // Officer approves (new workflow)
+        'Forwarded to Manager',  // Officer submits to Manager (new workflow)
+        'Region Approved',       // Legacy status
+        'Office Approved',       // Legacy status
         'Finalized',
         'Returned'
       ],

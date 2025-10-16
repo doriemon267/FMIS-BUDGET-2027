@@ -116,13 +116,13 @@ export const OfficeVerifyButton = ({ row, refreshData, disabled }) => {
       console.log('✅ Verification successful:', response.data);
 
       if (response.data.modifiedCount > 0) {
-        const message = `✅ Successfully verified ${response.data.modifiedCount} proposal(s)! Status updated to: Office Verified`;
+        const message = `✅ Successfully verified ${response.data.modifiedCount} proposal(s)! Status updated to: Forwarded to Officer`;
         console.log('✅', message);
 
         // Show global clickable notification to open All Proposals
         try {
           if (typeof window !== 'undefined' && window.showSuccess) {
-            window.showSuccess('Office verified. Click to view All Proposals.', 8000, () => {
+            window.showSuccess('Forwarded to Officer. Click to view All Proposals.', 8000, () => {
               goTo('/AllProposals');
             });
           }
@@ -171,10 +171,10 @@ export const OfficeVerifyButton = ({ row, refreshData, disabled }) => {
   };
 
   // Only show verify button for proposals that need office verification
-  if (row.status !== 'Responsibility Center Submitted' && row.status !== 'Submitted') return null;
+  if (row.status !== 'Division Submitted' && row.status !== 'Submitted') return null;
 
-  // Hide if already verified
-  if (row.status === 'Office Verified' || row.status === 'Office Submitted') return null;
+  // Hide if already forwarded or in later stages
+  if (row.status === 'Forwarded to Officer' || row.status === 'Officer Approved') return null;
 
   return (
     <Tooltip title="Verify Proposal">
@@ -194,9 +194,9 @@ export const OfficeVerifyButton = ({ row, refreshData, disabled }) => {
 };
 
 /**
- * 📤 Submit Verified to Office Button (Office Level - Submit for Finalization)
+ * 📤 Submit Officer Approved to Manager Button (Officer Level - Submit for Manager Review)
  */
-export const SubmitVerifiedToOfficeButton = ({ row, refreshData, disabled }) => {
+export const SubmitOfficerApprovedToManagerButton = ({ row, refreshData, disabled }) => {
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
@@ -210,7 +210,7 @@ export const SubmitVerifiedToOfficeButton = ({ row, refreshData, disabled }) => 
 
       try {
         if (typeof window !== 'undefined' && window.showSuccess) {
-          window.showSuccess('Submitted to Office for Finalization. Click to view All Proposals.', 8000, () => {
+          window.showSuccess('Submitted to Manager for Review. Click to view All Proposals.', 8000, () => {
             goTo('/AllProposals');
           });
         }
@@ -218,16 +218,16 @@ export const SubmitVerifiedToOfficeButton = ({ row, refreshData, disabled }) => 
 
       if (refreshData) refreshData();
     } catch (error) {
-      console.error('Submit to Office error:', error);
+      console.error('Submit to Manager error:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  if (row.status !== 'Office Verified') return null;
+  if (row.status !== 'Officer Approved') return null;
 
   return (
-    <Tooltip title="Submit to Office for Finalization">
+    <Tooltip title="Submit Officer Approved Proposal to Manager for Review">
       <IconButton
         onClick={handleSubmit}
         disabled={disabled || loading}
@@ -274,7 +274,7 @@ export const OfficeFinalizeButton = ({ row, refreshData, disabled }) => {
     }
   };
 
-  if (row.status !== 'Office Submitted') return null;
+  if (row.status !== 'Forwarded to Manager') return null;
 
   return (
     <Tooltip title="Finalize Proposal">
@@ -302,8 +302,8 @@ export const RejectButton = ({ row, refreshData, disabled, userLevel }) => {
   const [loading, setLoading] = useState(false);
 
   const canReject = () => {
-    // Office can reject Responsibility Center submissions
-    if (userLevel === 'OFFICE' && (row.status === 'Responsibility Center Submitted' || row.status === 'Submitted')) return true;
+    // Office can reject Division Submitted and Forwarded to Officer proposals
+    if (userLevel === 'OFFICE' && (row.status === 'Division Submitted' || row.status === 'Forwarded to Officer' || row.status === 'Submitted')) return true;
     // Full access can reject at any level (except finalized)
     if (userLevel === 'FULL' && row.status !== 'Finalized' && row.status !== 'Draft') return true;
     return false;
@@ -409,7 +409,7 @@ export const WorkflowActionButtons = ({ row, refreshData, userAccess }) => {
       {(userLevel === 'OFFICE' || userLevel === 'FULL') && (
         <>
           <OfficeVerifyButton row={row} refreshData={refreshData} />
-          <SubmitVerifiedToOfficeButton row={row} refreshData={refreshData} />
+          <SubmitOfficerApprovedToManagerButton row={row} refreshData={refreshData} />
           <OfficeFinalizeButton row={row} refreshData={refreshData} />
         </>
       )}
@@ -440,7 +440,7 @@ const determineModelType = (row) => {
 export default {
   SubmitDraftToOfficeButton,
   OfficeVerifyButton,
-  SubmitVerifiedToOfficeButton,
+  SubmitOfficerApprovedToManagerButton,
   OfficeFinalizeButton,
   RejectButton,
   WorkflowActionButtons

@@ -146,7 +146,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
 
   // Read-only statuses (view mode) - MUST BE DEFINED BEFORE loadData callback
   const readOnlyStatuses = useMemo(() => (
-    ['Office Approved', 'Manager Approved', 'Approved', 'Finalized', 'Officer Approved', 'Coordinator Approved']
+    ['Finalized']
   ), []);
   const isReadOnlyMode = useMemo(() => readOnlyStatuses.includes(proposal?.status), [proposal?.status, readOnlyStatuses]);
 
@@ -474,41 +474,29 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'Approved':
-      case 'Finalized':
-      case 'Manager Approved': return 'success';
-      case 'Office Approved':
-      case 'Coordinator Approved':
+      case 'Finalized': return 'success';
       case 'Officer Approved': return 'info';
-      case 'Office Submitted':
-      case 'Forwarded to Officer':
-      case 'Forwarded to Manager': return 'secondary';
-      case 'Submitted':
-      case 'Division Submitted':
-      case 'Under Review by Coordinator':
-      case 'Under Review by Officer':
-      case 'Under Review by Manager': return 'warning';
+      case 'Forwarded to Manager':
+      case 'Forwarded to Officer': return 'secondary';
+      case 'Division Submitted': return 'warning';
       case 'Returned': return 'error';
       case 'Draft': return 'default';
       default: return 'default';
     }
   };
 
-  // Manager can edit when Office Submitted (per requirement)
-  const managerCanEditNow = isManagerLevel && (proposal?.status === 'Office Submitted');
+  // Manager can edit when Forwarded to Manager (per requirement)
+  const managerCanEditNow = isManagerLevel && proposal?.status === 'Forwarded to Manager';
 
   // Budget Analyst can edit when proposal is in Draft or Returned status
   const analystCanEditNow = isBudgetAnalyst && (
     proposal?.status === 'Draft' || 
-    proposal?.status === 'Division Draft' || 
-    proposal?.status === 'Returned' ||
-    proposal?.status === 'Returned to Division'
+    proposal?.status === 'Returned'
   );
 
   // Budget Coordinator can edit when proposal is Division Submitted (waiting for coordinator review)
   const coordinatorCanEditNow = isBudgetCoordinator && (
-    proposal?.status === 'Division Submitted' ||
-    proposal?.status === 'Under Review by Coordinator'
+    proposal?.status === 'Division Submitted'
   );
 
   return (
@@ -651,15 +639,15 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
                   {isBudgetAnalyst && proposal?.status === 'Draft' && 'Create and edit proposals, then submit for approval'}
                   {isBudgetAnalyst && proposal?.status === 'Division Submitted' && 'Waiting for Budget Coordinator review'}
                   {isBudgetCoordinator && proposal?.status === 'Division Submitted' && 'Review and approve/return this proposal'}
-                  {isBudgetOfficer && (proposal?.status === 'Division Approved' || proposal?.status === 'Office Submitted') && 'Verify and consolidate, then submit to Budget Manager'}
-                  {isManagerLevel && proposal?.status === 'Office Submitted' && 'Final review and approval'}
-                  {proposal?.status === 'Approved' && 'This proposal has been finalized'}
+                  {isBudgetOfficer && (proposal?.status === 'Forwarded to Officer' || proposal?.status === 'Officer Approved') && 'Verify and consolidate, then submit to Budget Manager'}
+                  {isManagerLevel && proposal?.status === 'Forwarded to Manager' && 'Final review and approval'}
+                  {proposal?.status === 'Finalized' && 'This proposal has been finalized'}
                 </Typography>
               </Alert>
             )}
 
             {/* Budget Officer: Show comparison view first if there are changes from Budget Coordinator */}
-            {!isReadOnlyMode && isBudgetOfficer && !isManagerLevel && comparisonData && !officerEditMode && proposal?.status === 'Office Submitted' && (
+            {!isReadOnlyMode && isBudgetOfficer && !isManagerLevel && comparisonData && !officerEditMode && proposal?.status === 'Forwarded to Officer' && (
               <>
                 <Alert severity="info" sx={{ mb: 2 }}>
                   <Typography variant="body2">
@@ -683,13 +671,13 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
               </>
             )}
 
-            {/* Show edit view for Budget Officer (when in edit mode), Budget Coordinator (when editable), Budget Analyst (when editable), and Budget Manager (when Office Submitted) */}
-            {!isReadOnlyMode && ((isBudgetOfficer && (officerEditMode || !comparisonData || proposal?.status !== 'Office Submitted')) || coordinatorCanEditNow || analystCanEditNow || managerCanEditNow) && proposalData && proposal?.status !== 'Office Approved' && proposal?.status !== 'Approved' && (
+            {/* Show edit view for Budget Officer (when in edit mode), Budget Coordinator (when editable), Budget Analyst (when editable), and Budget Manager (when Forwarded to Manager) */}
+            {!isReadOnlyMode && ((isBudgetOfficer && (officerEditMode || !comparisonData || proposal?.status !== 'Forwarded to Manager')) || coordinatorCanEditNow || analystCanEditNow || managerCanEditNow) && proposalData && proposal?.status !== 'Officer Approved' && proposal?.status !== 'Approved' && (
               <>
                 {managerCanEditNow && (
                   <Alert severity="info" sx={{ mb: 2 }}>
                     <Typography variant="body2">
-                      You are in Budget Manager edit mode (status: Office Submitted). Apply necessary changes below, then use Approve in the footer.
+                      You are in Budget Manager edit mode (status: Forwarded to Manager). Apply necessary changes below, then use Approve in the footer.
                     </Typography>
                   </Alert>
                 )}
@@ -805,7 +793,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
         </Button>
         
         {/* Workflow Actions - Show only if user has appropriate role and proposal is not in final state */}
-        {proposal && userInfo && !['Approved', 'Finalized', 'Office Approved', 'Manager Approved'].includes(proposal.status) && (
+        {proposal && userInfo && proposal.status !== 'Finalized' && (
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
             <WorkflowActions
               proposal={proposal}

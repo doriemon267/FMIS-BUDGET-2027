@@ -2038,10 +2038,18 @@ const CustomPage = ({
   const StatusChip = ({ status, count }) => {
     const getStatusColor = (status) => {
       switch (status) {
-        case "Submitted":
-          return "success";
         case "Draft":
+          return "default";
+        case "Division Submitted":
+          return "primary";
+        case "Forwarded to Officer":
+          return "info";
+        case "Officer Approved":
           return "warning";
+        case "Forwarded to Manager":
+          return "warning";
+        case "Finalized":
+          return "success";
         case "Returned":
           return "error";
         case "Not Submitted":
@@ -2053,10 +2061,18 @@ const CustomPage = ({
 
     const getStatusIcon = (status) => {
       switch (status) {
-        case "Submitted":
-          return <CheckCircleIcon fontSize="small" />;
         case "Draft":
           return <EditIcon fontSize="small" />;
+        case "Division Submitted":
+          return <CheckCircleIcon fontSize="small" />;
+        case "Forwarded to Officer":
+          return <CheckCircleIcon fontSize="small" />;
+        case "Officer Approved":
+          return <CheckCircleIcon fontSize="small" />;
+        case "Forwarded to Manager":
+          return <CheckCircleIcon fontSize="small" />;
+        case "Finalized":
+          return <CheckCircleIcon fontSize="small" />;
         case "Returned":
           return <ErrorIcon fontSize="small" />;
         case "Not Submitted":

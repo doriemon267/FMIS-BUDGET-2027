@@ -2,7 +2,7 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const Income = require('./models/Income');
 const Proposal = require('./models/Proposal');
-const BudgetOfficerEdit = require('./models/budgetOfficerEdit');
+const BudgetOfficerEdit = require('./models/BudgetOfficerEdit');
 
 const MONGODB_BUDGET_URL = process.env.MONGODB_BUDGET_URL;
 

@@ -38,21 +38,21 @@ const proposalSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: [
-      "Draft",                          // Initial state - BUDGET_ANALYST creating
-      "Division Submitted",             // BUDGET_ANALYST → BUDGET_COORDINATOR
-      "Under Review by Coordinator",    // BUDGET_COORDINATOR editing/reviewing
-      "Coordinator Approved",           // BUDGET_COORDINATOR approved (ready to forward)
-      "Forwarded to Officer",           // BUDGET_COORDINATOR → BUDGET_OFFICER
-      "Under Review by Officer",        // BUDGET_OFFICER editing/reviewing
-      "Officer Approved",               // BUDGET_OFFICER approved (ready to forward)
-      "Forwarded to Manager",           // BUDGET_COORDINATOR/BUDGET_OFFICER → BUDGET_MANAGER
-      "Under Review by Manager",        // BUDGET_MANAGER editing/reviewing
+      "Draft",                          // ANALYST creates
+      "Division Submitted",             // ANALYST submits
+      "Forwarded to Officer",           // COORDINATOR approves and forwards to Officer
+      "Officer Approved",               // OFFICER approves
+      "Forwarded to Manager",           // OFFICER submits to Manager
+      "Finalized",                      // MANAGER approves
       "Returned",                       // Rejected at any level
-      "Finalized",                      // BUDGET_MANAGER final approval
-      // Legacy statuses (for backward compatibility)
-      "Office",                         // Legacy: BUDGET_COORDINATOR → BUDGET_OFFICER
-      "Office Approved",                // Legacy: BUDGET_COORDINATOR approved
-      "Office Submitted"                // Legacy: Submitted to BUDGET_MANAGER
+      // Legacy statuses (for backward compatibility during migration)
+      "Under Review by Coordinator",
+      "Coordinator Approved",
+      "Under Review by Officer",
+      "Under Review by Manager",
+      "Office",                         // Legacy: will be mapped to "Forwarded to Officer"
+      "Office Approved",                // Legacy: will be mapped to "Officer Approved"
+      "Office Submitted"                // Legacy: will be mapped to "Forwarded to Manager"
     ],
     default: "Draft"
   },

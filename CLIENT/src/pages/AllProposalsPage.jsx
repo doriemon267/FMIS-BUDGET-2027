@@ -363,12 +363,12 @@ const AllProposalsPage = () => {
           'Draft': { color: 'warning', text: 'DRAFT', bgColor: 'warning.light' },
           'Division Submitted': { color: 'info', text: 'DIVISION SUBMITTED', bgColor: 'info.light' },
           'Office': { color: 'info', text: 'DEPARTMENT PROPOSAL', bgColor: 'info.light' },
-          'Office Approved': { color: 'success', text: 'OFFICE APPROVED', bgColor: 'success.light' },
-          'Office Submitted': { color: 'secondary', text: 'OFFICE SUBMITTED', bgColor: 'secondary.light' },
+          'Officer Approved': { color: 'success', text: 'OFFICER APPROVED', bgColor: 'success.light' },
+          'Forwarded to Manager': { color: 'secondary', text: 'FORWARDED TO MANAGER', bgColor: 'secondary.light' },
           'Returned': { color: 'error', text: 'RETURNED', bgColor: 'error.light' },
           'Finalized': { color: 'success', text: 'FINALIZED', bgColor: 'success.light' },
         };
-        // Display the raw status value; server now normalizes statuses to the canonical 'Office Approved'.
+        // Display the raw status value; server normalizes to canonical 6-step statuses: Draft, Division Submitted, Forwarded to Officer, Officer Approved, Forwarded to Manager, Finalized
         const displayStatus = row.status;
         const { color = 'default', text = (displayStatus || 'Unknown'), bgColor = 'grey.100' } = map[displayStatus] || {};
         return (
@@ -529,7 +529,7 @@ const AllProposalsPage = () => {
       <Box sx={{ mb: 3, mx: 3 }}>
         <Card sx={{ p: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Include Office Approved / Finalized</Typography>
+            <Typography variant="body1" sx={{ fontWeight: 'bold' }}>Include Finalized Proposals</Typography>
             <Button
               variant={includeFinalized ? 'contained' : 'outlined'}
               color={includeFinalized ? 'primary' : 'inherit'}
@@ -537,7 +537,7 @@ const AllProposalsPage = () => {
             >
               {includeFinalized ? 'Included' : 'Exclude'}
             </Button>
-            <Typography variant="body2" color="textSecondary">Toggle to include proposals with Office Approved/Finalized statuses in the table.</Typography>
+            <Typography variant="body2" color="textSecondary">Toggle to include proposals with Finalized status in the table.</Typography>
           </Box>
         </Card>
       </Box>

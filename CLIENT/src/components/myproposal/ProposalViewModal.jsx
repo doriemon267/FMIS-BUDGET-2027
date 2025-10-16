@@ -379,9 +379,12 @@ const ProposalViewModal = ({ open, onClose, proposal, onRefresh }) => {
   const getStatusColor = (status) => {
     switch (status) {
       case "Draft": return "default";
-      case "Submitted": return "primary";
+      case "Division Submitted": return "primary";
+      case "Forwarded to Officer": return "info";
+      case "Officer Approved": return "warning";
+      case "Forwarded to Manager": return "warning";
+      case "Finalized": return "success";
       case "Returned": return "error";
-      case "Approved": return "success";
       default: return "default";
     }
   };
@@ -685,14 +688,14 @@ const ProposalViewModal = ({ open, onClose, proposal, onRefresh }) => {
                                             row={item}
                                             expenditureType={fullProposal.cobExpenditures}
                                             refreshData={refreshData}
-                                            disabled={fullProposal.status === "Approved" || fullProposal.status === "Rejected"}
+                                            disabled={fullProposal.status === "Finalized" || fullProposal.status === "Returned"}
                                           />
                                         ))}
                                         <ProposalDetailAddRow
                                           expenditureType={fullProposal.cobExpenditures}
                                           refreshData={refreshData}
                                           proposalId={fullProposal._id}
-                                          disabled={fullProposal.status === "Approved" || fullProposal.status === "Rejected"}
+                                          disabled={fullProposal.status === "Finalized" || fullProposal.status === "Returned"}
                                         />
                                       </>
                                     ) : (
@@ -731,14 +734,14 @@ const ProposalViewModal = ({ open, onClose, proposal, onRefresh }) => {
                                             row={item}
                                             expenditureType={fullProposal.cobExpenditures}
                                             refreshData={refreshData}
-                                            disabled={fullProposal.status === "Approved" || fullProposal.status === "Rejected"}
+                                            disabled={fullProposal.status === "Finalized" || fullProposal.status === "Returned"}
                                           />
                                         ))}
                                         <ProposalDetailAddRow
                                           expenditureType={fullProposal.cobExpenditures}
                                           refreshData={refreshData}
                                           proposalId={fullProposal._id}
-                                          disabled={fullProposal.status === "Approved" || fullProposal.status === "Rejected"}
+                                          disabled={fullProposal.status === "Finalized" || fullProposal.status === "Returned"}
                                         />
                                       </>
                                     ) : (
@@ -780,7 +783,7 @@ const ProposalViewModal = ({ open, onClose, proposal, onRefresh }) => {
                                             expenditureType={fullProposal.cobExpenditures}
                                             refreshData={refreshData}
                                             categories={categories}
-                                            disabled={fullProposal.status === "Approved" || fullProposal.status === "Rejected"}
+                                            disabled={fullProposal.status === "Finalized" || fullProposal.status === "Returned"}
                                           />
                                         ))}
                                         <ProposalDetailAddRow
@@ -788,7 +791,7 @@ const ProposalViewModal = ({ open, onClose, proposal, onRefresh }) => {
                                           refreshData={refreshData}
                                           proposalId={fullProposal._id}
                                           categories={categories}
-                                          disabled={fullProposal.status === "Approved" || fullProposal.status === "Rejected"}
+                                          disabled={fullProposal.status === "Finalized" || fullProposal.status === "Returned"}
                                         />
                                       </>
                                     ) : (
@@ -825,14 +828,14 @@ const ProposalViewModal = ({ open, onClose, proposal, onRefresh }) => {
                                             row={item}
                                             expenditureType={fullProposal.cobExpenditures}
                                             refreshData={refreshData}
-                                            disabled={fullProposal.status === "Approved" || fullProposal.status === "Rejected"}
+                                            disabled={fullProposal.status === "Finalized" || fullProposal.status === "Returned"}
                                           />
                                         ))}
                                         <ProposalDetailAddRow
                                           expenditureType={fullProposal.cobExpenditures}
                                           refreshData={refreshData}
                                           proposalId={fullProposal._id}
-                                          disabled={fullProposal.status === "Approved" || fullProposal.status === "Rejected"}
+                                          disabled={fullProposal.status === "Finalized" || fullProposal.status === "Returned"}
                                         />
                                       </>
                                     ) : (

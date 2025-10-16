@@ -37,14 +37,14 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
     },
     {
       label: 'Budget Officer',
-      role: 'Verifies & Consolidates',
-      statuses: ['Office Submitted'],
+      role: 'Approves & Submits',
+      statuses: ['Officer Approved', 'Forwarded to Manager'],
       icon: <VerifiedUserIcon />
     },
     {
       label: 'Budget Manager',
       role: 'Final Approval',
-      statuses: ['Approved', 'Office Approved'],
+      statuses: ['Finalized'],
       icon: <GavelIcon />
     }
   ] : [
@@ -56,20 +56,20 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
     },
     {
       label: 'Budget Coordinator',
-      role: 'Reviews & Approves',
-      statuses: ['Division Submitted'],
+      role: 'Reviews & Forwards',
+      statuses: ['Division Submitted', 'Forwarded to Officer'],
       icon: <GroupIcon />
     },
     {
       label: 'Budget Officer',
-      role: 'Verifies & Consolidates',
-      statuses: ['Division Approved', 'Office Submitted'],
+      role: 'Approves & Submits',
+      statuses: ['Officer Approved', 'Forwarded to Manager'],
       icon: <VerifiedUserIcon />
     },
     {
       label: 'Budget Manager',
       role: 'Final Approval',
-      statuses: ['Approved', 'Office Approved'],
+      statuses: ['Finalized'],
       icon: <GavelIcon />
     }
   ];
@@ -109,12 +109,11 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
       case 'Draft':
         return 'default';
       case 'Division Submitted':
-      case 'Office Submitted':
+      case 'Forwarded to Officer':
+      case 'Forwarded to Manager':
         return 'info';
-      case 'Division Approved':
-      case 'Office Approved':
-        return 'success';
-      case 'Approved':
+      case 'Officer Approved':
+      case 'Finalized':
         return 'success';
       case 'Returned':
         return 'warning';
@@ -176,7 +175,7 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
         ))}
       </Stepper>
 
-      {status === 'Approved' && (
+      {status === 'Finalized' && (
         <Box sx={{ mt: 2, p: 2, backgroundColor: 'success.light', borderRadius: 1 }}>
           <Typography variant="body2" sx={{ color: 'success.dark', fontWeight: 600 }}>
             ✅ This proposal has been finalized and approved!

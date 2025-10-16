@@ -42,8 +42,8 @@ describe('Role visibility - integration', () => {
     // Seed proposals
   const common = { processBy: 'system-test', region: 'R1', fiscalYear: 2026, budgetType: 'MOOE' };
   const analystProposal = await Proposal.create({ title: 'TEST-ROLE-VIS-ANALYST', createdByUserId: 'user-analyst', division: 'D1', department: 'DEP1', status: 'Draft', ...common });
-  const officerProposal = await Proposal.create({ title: 'TEST-ROLE-VIS-OFFICER', createdByUserId: 'user-officer', division: 'D1', department: 'DEP1', status: 'Office Approved', ...common });
-  const managerProposal = await Proposal.create({ title: 'TEST-ROLE-VIS-MANAGER', createdByUserId: 'user-manager', division: 'D1', department: 'DEP1', status: 'Office Submitted', ...common });
+  const officerProposal = await Proposal.create({ title: 'TEST-ROLE-VIS-OFFICER', createdByUserId: 'user-officer', division: 'D1', department: 'DEP1', status: 'Officer Approved', ...common });
+  const managerProposal = await Proposal.create({ title: 'TEST-ROLE-VIS-MANAGER', createdByUserId: 'user-manager', division: 'D1', department: 'DEP1', status: 'Forwarded to Manager', ...common });
 
     // 1) Analyst request (simulate req with user and hierarchical assignment)
   const reqAnalyst = { 

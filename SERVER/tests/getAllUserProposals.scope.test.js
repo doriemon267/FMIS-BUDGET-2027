@@ -17,7 +17,7 @@ describe('getAllUserProposals response contains scope', () => {
   test('sets scope from ROLE_FILTER when role filter present', async () => {
     const req = {
       query: { processBy: 'unit-test', region: 'CO' },
-      budgetRoleVisibilityFilter: { status: { $in: ['Office Approved', 'Finalized'] } },
+      budgetRoleVisibilityFilter: { status: { $in: ['Officer Approved', 'Finalized'] } },
       hierarchicalAccessInfo: undefined,
     };
     const res = makeRes();

@@ -147,7 +147,7 @@ export const ApproveButton = ({ row, refreshData }) => {
     // Prefetch affected record count
     setIdsPreviewLoading(true);
     try {
-      const ids = await fetchIdsForRow(row, 'Department Submitted');
+      const ids = await fetchIdsForRow(row, row.status || 'Division Submitted');
       setIdsPreviewCount(ids.length || 0);
     } catch (e) {
       setIdsPreviewCount(0);
@@ -166,9 +166,9 @@ export const ApproveButton = ({ row, refreshData }) => {
   const canApprove = (
     (scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && row.status === 'Division Submitted') ||
     (scope === 'OFFICE' && roles.includes('officeFinalVerifier') && canApprovePermission && 
-     ['Division Submitted', 'Responsibility Center Submitted', 'Submitted to Officer', 'Submitted'].includes(row.status)) ||
+     ['Forwarded to Officer'].includes(row.status)) ||
     ((scope === 'FULL' || scope === 'REGION') && canApprovePermission && 
-     ['Officer Approved', 'Submitted to Manager', 'Office Submitted'].includes(row.status))
+     ['Forwarded to Manager'].includes(row.status))
   );
   
   // Debug logging
@@ -178,9 +178,9 @@ export const ApproveButton = ({ row, refreshData }) => {
     rowStatus: row.status,
     canApprove,
     departmentCondition: scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && row.status === 'Division Submitted',
-    officeFinalCondition: (scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier') && canApprovePermission && row.status === 'Office Submitted',
+    officeFinalCondition: (scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier') && canApprovePermission && row.status === 'Forwarded to Officer',
     officeVerificationCondition: (scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier') && canApprovePermission && 
-                               ['Division Submitted', 'Responsibility Center Submitted', 'Submitted to Officer', 'Submitted'].includes(row.status),
+                               ['Forwarded to Officer'].includes(row.status),
     hasDepartmentConsolidator: roles.includes('departmentConsolidator'),
     hasOfficeFinalVerifier: roles.includes('officeFinalVerifier'),
     canApprovePermission
@@ -194,7 +194,7 @@ export const ApproveButton = ({ row, refreshData }) => {
       const entity = mapCobToEntity(row.cobExpenditures);
       
       if (scope === 'DEPARTMENT' && row.status === 'Division Submitted') {
-        // Department approval: Division Submitted → Department Verified
+        // Coordinator approval: Division Submitted → Forwarded to Officer
         const ids = await fetchIdsForRow(row, 'Division Submitted');
         if (ids.length === 0) throw new Error('No records to approve');
         
@@ -204,8 +204,8 @@ export const ApproveButton = ({ row, refreshData }) => {
           departmentVerificationNote: note || `Verified at Department on ${new Date().toLocaleString()}`
         });
         toast.success('Department verification successful');
-      } else if (scope === 'OFFICE' && ['Division Submitted', 'Responsibility Center Submitted', 'Submitted to Officer', 'Submitted'].includes(row.status)) {
-        // BUDGET_OFFICER approval: Division/RC Submitted → Officer Approved
+      } else if (scope === 'OFFICE' && ['Forwarded to Officer'].includes(row.status)) {
+        // BUDGET_OFFICER approval: Forwarded to Officer → Officer Approved
         const statusToUse = row.status;
         const ids = await fetchIdsForRow(row, statusToUse);
         if (ids.length === 0) throw new Error('No records to approve');
@@ -216,8 +216,8 @@ export const ApproveButton = ({ row, refreshData }) => {
           officeVerificationNote: note || `Approved by Officer on ${new Date().toLocaleString()}`
         });
         toast.success('Officer approval successful');
-      } else if ((scope === 'FULL' || scope === 'REGION') && ['Officer Approved', 'Submitted to Manager', 'Office Submitted'].includes(row.status)) {
-        // BUDGET_MANAGER/BUDGET_ADMIN approval: Officer Approved/Submitted to Manager → Manager Approved
+      } else if ((scope === 'FULL' || scope === 'REGION') && ['Officer Approved', 'Forwarded to Manager'].includes(row.status)) {
+        // BUDGET_MANAGER/BUDGET_ADMIN approval: Forwarded to Manager → Finalized
         const statusToUse = row.status;
         const ids = await fetchIdsForRow(row, statusToUse);
         if (ids.length === 0) throw new Error('No records to approve');
@@ -225,7 +225,7 @@ export const ApproveButton = ({ row, refreshData }) => {
         await api.post('/api/submission-workflow/office/approve-submission', {
           ids,
           entity,
-          managerApprovalNote: note || `Approved by Manager on ${new Date().toLocaleString()}`
+          managerApprovalNote: note || `Finalized on ${new Date().toLocaleString()}`
         });
         toast.success('Manager approval successful');
       }
@@ -250,12 +250,12 @@ export const ApproveButton = ({ row, refreshData }) => {
       </Tooltip>
       <Dialog open={open} onClose={() => !loading && setOpen(false)}>
         <DialogTitle>
-          {scope === 'DEPARTMENT' ? 'Verify Division Submission' : 'Approve Submission'}
+          {scope === 'DEPARTMENT' ? 'Forward to Officer' : 'Finalize'}
         </DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 1 }}>
             This will move records to <strong>
-              {scope === 'DEPARTMENT' ? 'Department Verified' : 'Region Approved'}
+              {scope === 'DEPARTMENT' ? 'Forwarded to Officer' : 'Finalized'}
             </strong>.
           </Typography>
           <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
@@ -281,8 +281,10 @@ export const ApproveButton = ({ row, refreshData }) => {
   );
 };
 
-// Submit to Office Button
+// Submit to Manager Button (Office Consolidator - Step 5 of 6)
 export const SubmitToOfficeButton = ({ row, refreshData }) => {
+  // Note: Despite the name (for backward compatibility), this button submits Officer Approved records to Manager
+  // Moving them from "Officer Approved" (step 4) → "Forwarded to Manager" (step 5)
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState('');
@@ -294,7 +296,7 @@ export const SubmitToOfficeButton = ({ row, refreshData }) => {
     setOpen(true);
     setIdsPreviewLoading(true);
     try {
-      const ids = await fetchIdsForRow(row, 'Department Verified');
+      const ids = await fetchIdsForRow(row, 'Officer Approved');
       setIdsPreviewCount(ids.length || 0);
     } catch (e) {
       setIdsPreviewCount(0);
@@ -305,14 +307,14 @@ export const SubmitToOfficeButton = ({ row, refreshData }) => {
 
   const scope = currentUser?.hierarchicalAccess?.scope;
   const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
-  const canSubmit = scope === 'OFFICE' && roles.includes('officeConsolidator') && row.status === 'Office Verified';
+  const canSubmit = scope === 'OFFICE' && roles.includes('officeConsolidator') && row.status === 'Officer Approved';
   if (!canSubmit) return null;
 
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      const ids = await fetchIdsForRow(row, 'Office Verified');
-      if (ids.length === 0) throw new Error('No verified records to submit');
+      const ids = await fetchIdsForRow(row, 'Officer Approved');
+      if (ids.length === 0) throw new Error('No Officer Approved records to submit to Manager');
       const entity = mapCobToEntity(row.cobExpenditures);
       await api.post('/api/submission-workflow/office/submit-own', {
         ids,
@@ -339,10 +341,10 @@ export const SubmitToOfficeButton = ({ row, refreshData }) => {
         </IconButton>
       </Tooltip>
       <Dialog open={open} onClose={() => !loading && setOpen(false)}>
-        <DialogTitle>Submit to Region</DialogTitle>
+        <DialogTitle>Submit to Manager</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 1 }}>
-            This will move records to <strong>Department Submitted</strong>.
+            This will move records to <strong>Forwarded to Manager</strong>.
           </Typography>
           <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
             {idsPreviewLoading ? 'Checking affected records…' : `Affected records: ${idsPreviewCount}`}
@@ -397,12 +399,12 @@ export const ReturnButton = ({ row, refreshData }) => {
   const scope = currentUser?.hierarchicalAccess?.scope;
   const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
   const canReturn = (
-    // Department users with departmentConsolidator role can return Division Submitted and Department Verified proposals
-    (scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && ['Division Submitted', 'Department Verified'].includes(row.status)) ||
-    // Office users can return various statuses
+    // Department users with departmentConsolidator role can return Division Submitted proposals
+    (scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && ['Division Submitted'].includes(row.status)) ||
+    // Office users can return Forwarded to Officer and Officer Approved proposals
     ((scope === 'OFFICE' && roles.includes('officeConsolidator')) ||
      ((scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier'))) &&
-    ['Responsibility Center Submitted','Office Verified','Office Submitted','Submitted'].includes(row.status)
+    ['Forwarded to Officer', 'Officer Approved'].includes(row.status)
   );
   
   // Debug logging
@@ -411,10 +413,10 @@ export const ReturnButton = ({ row, refreshData }) => {
     roles,
     rowStatus: row.status,
     canReturn,
-    departmentCondition: scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && ['Division Submitted', 'Department Verified'].includes(row.status),
+    departmentCondition: scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && ['Division Submitted'].includes(row.status),
     officeCondition: ((scope === 'OFFICE' && roles.includes('officeConsolidator')) ||
                      ((scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier'))) &&
-                    ['Responsibility Center Submitted','Office Verified','Office Submitted','Submitted'].includes(row.status),
+                    ['Forwarded to Officer', 'Officer Approved'].includes(row.status),
     hasDepartmentConsolidator: roles.includes('departmentConsolidator'),
     hasOfficeConsolidator: roles.includes('officeConsolidator'),
     hasOfficeFinalVerifier: roles.includes('officeFinalVerifier')
@@ -426,7 +428,7 @@ export const ReturnButton = ({ row, refreshData }) => {
     setOpen(true);
     setIdsPreviewLoading(true);
     try {
-      const ids = await fetchIdsForRow(row, row.status || 'Submitted');
+      const ids = await fetchIdsForRow(row, row.status || 'Draft');
       setIdsPreviewCount(ids.length || 0);
     } catch (e) {
       setIdsPreviewCount(0);
@@ -522,14 +524,14 @@ export const VerifyButton = ({ row, refreshData }) => {
 
   const scope = currentUser?.hierarchicalAccess?.scope;
   const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
-  const canVerify = scope === 'OFFICE' && roles.includes('officeConsolidator') && row.status === 'Responsibility Center Submitted';
+  const canVerify = scope === 'OFFICE' && roles.includes('officeConsolidator') && row.status === 'Division Submitted';
   if (!canVerify) return null;
 
   const handleOpen = async () => {
     setOpen(true);
     setIdsPreviewLoading(true);
     try {
-      const ids = await fetchIdsForRow(row, 'Responsibility Center Submitted');
+      const ids = await fetchIdsForRow(row, 'Division Submitted');
       setIdsPreviewCount(ids.length || 0);
     } catch (e) {
       setIdsPreviewCount(0);
@@ -541,7 +543,7 @@ export const VerifyButton = ({ row, refreshData }) => {
   const handleVerify = async () => {
     setLoading(true);
     try {
-      const ids = await fetchIdsForRow(row, 'Responsibility Center Submitted');
+      const ids = await fetchIdsForRow(row, 'Division Submitted');
       if (ids.length === 0) throw new Error('No matching records to verify');
       const entity = mapCobToEntity(row.cobExpenditures);
       await api.post('/api/submission-workflow/office/verify-submission', {
@@ -549,7 +551,7 @@ export const VerifyButton = ({ row, refreshData }) => {
         entity,
         verificationNote: note || `Verified on ${new Date().toLocaleString()}`
       });
-      toast.success('Responsibility Center submission verified');
+      toast.success('Division submission verified');
       await queryClient.invalidateQueries(['proposals']);
       refreshData?.();
       setOpen(false);
@@ -569,10 +571,10 @@ export const VerifyButton = ({ row, refreshData }) => {
         </IconButton>
       </Tooltip>
       <Dialog open={open} onClose={() => !loading && setOpen(false)}>
-        <DialogTitle>Verify Responsibility Center Submission</DialogTitle>
+        <DialogTitle>Verify Division Submission</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 1 }}>
-            This will move records to <strong>Department Verified</strong>.
+            This will move records to <strong>Forwarded to Officer</strong>.
           </Typography>
           <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
             {idsPreviewLoading ? 'Checking affected records…' : `Affected records: ${idsPreviewCount}`}
@@ -609,14 +611,14 @@ export const FinalizeButton = ({ row, refreshData }) => {
 
   const scope = currentUser?.hierarchicalAccess?.scope;
   const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
-  const canFinalize = (scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier') && (currentUser?.hierarchicalFlags?.canApproveProposals || currentUser?.hierarchicalAccess?.rolePermissions?.canApproveProposals) && row.status === 'Office Approved';
+  const canFinalize = (scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier') && (currentUser?.hierarchicalFlags?.canApproveProposals || currentUser?.hierarchicalAccess?.rolePermissions?.canApproveProposals) && row.status === 'Forwarded to Manager';
   if (!canFinalize) return null;
 
   const handleOpen = async () => {
     setOpen(true);
     setIdsPreviewLoading(true);
     try {
-      const ids = await fetchIdsForRow(row, 'Office Approved');
+      const ids = await fetchIdsForRow(row, 'Forwarded to Manager');
       setIdsPreviewCount(ids.length || 0);
     } catch (e) {
       setIdsPreviewCount(0);
@@ -628,7 +630,7 @@ export const FinalizeButton = ({ row, refreshData }) => {
   const handleFinalize = async () => {
     setLoading(true);
     try {
-      const ids = await fetchIdsForRow(row, 'Office Approved');
+      const ids = await fetchIdsForRow(row, 'Forwarded to Manager');
       if (ids.length === 0) throw new Error('No approved records to finalize');
       const entity = mapCobToEntity(row.cobExpenditures);
       await api.post('/api/submission-workflow/office/finalize-submission', {
