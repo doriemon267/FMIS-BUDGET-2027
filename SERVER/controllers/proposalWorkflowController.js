@@ -160,6 +160,30 @@ async function syncBudgetItemsStatus(proposal) {
   try {
     const { status, workflowLevel, region, department, division, fiscalYear, budgetType } = proposal;
     
+    // Map Proposal workflow to Budget Item workflow
+    // Proposal uses: COORDINATOR, OFFICER, MANAGER
+    // Budget Items use: DIVISION, DEPARTMENT, REGION, FINALIZED
+    const workflowMapping = {
+      'COORDINATOR': 'DIVISION',
+      'OFFICER': 'DEPARTMENT', 
+      'MANAGER': 'REGION',
+      'FINALIZED': 'FINALIZED'
+    };
+    
+    const mappedWorkflowLevel = workflowMapping[workflowLevel] || 'DIVISION';
+    
+    // Map Proposal status to Budget Item status
+    const statusMapping = {
+      'Division Submitted': 'Division Submitted',
+      'Forwarded to Officer': 'Department Verified',
+      'Officer Approved': 'Department Submitted',
+      'Forwarded to Manager': 'Region Approved',
+      'Finalized': 'Finalized',
+      'Returned': 'Returned'
+    };
+    
+    const mappedStatus = statusMapping[status] || status;
+    
     // Build filter criteria to match related budget items
     const filterCriteria = {
       region,
@@ -171,24 +195,53 @@ async function syncBudgetItemsStatus(proposal) {
 
     console.log('🔄 Syncing budget items status:', {
       proposalId: proposal._id,
-      newStatus: status,
-      newWorkflowLevel: workflowLevel,
+      proposalStatus: status,
+      mappedStatus: mappedStatus,
+      proposalWorkflowLevel: workflowLevel,
+      mappedWorkflowLevel: mappedWorkflowLevel,
       criteria: filterCriteria
+    });
+
+    // Count existing items before update for debugging
+    const [psCount, coCount, mooeCount, incomeCount] = await Promise.all([
+      PersonnelServices.countDocuments(filterCriteria),
+      CapitalOutlay.countDocuments(filterCriteria),
+      mooeProposals.countDocuments(filterCriteria),
+      Income.countDocuments(filterCriteria)
+    ]);
+
+    console.log('📊 Found budget items to update:', {
+      personnelServices: psCount,
+      capitalOutlay: coCount,
+      mooeProposals: mooeCount,
+      income: incomeCount
     });
 
     // Update all related budget items in parallel
     const updatePromises = [
       PersonnelServices.updateMany(filterCriteria, { 
-        $set: { status, workflowLevel } 
+        $set: { 
+          status: mappedStatus, 
+          workflowLevel: mappedWorkflowLevel 
+        } 
       }),
       CapitalOutlay.updateMany(filterCriteria, { 
-        $set: { status, workflowLevel } 
+        $set: { 
+          status: mappedStatus, 
+          workflowLevel: mappedWorkflowLevel 
+        } 
       }),
       mooeProposals.updateMany(filterCriteria, { 
-        $set: { status, workflowLevel } 
+        $set: { 
+          status: mappedStatus, 
+          workflowLevel: mappedWorkflowLevel 
+        } 
       }),
       Income.updateMany(filterCriteria, { 
-        $set: { status, workflowLevel } 
+        $set: { 
+          status: mappedStatus, 
+          workflowLevel: mappedWorkflowLevel 
+        } 
       })
     ];
 

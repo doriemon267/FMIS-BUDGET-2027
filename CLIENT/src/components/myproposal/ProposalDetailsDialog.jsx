@@ -810,7 +810,21 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
             <WorkflowActions
               proposal={proposal}
               userInfo={userInfo}
-              onRefresh={() => loadData(true)}
+              onRefresh={(updatedProposal) => {
+                if (updatedProposal) {
+                  // Instant update with fresh data from backend
+                  console.log('🔄 Received updated proposal from workflow action:', {
+                    status: updatedProposal.status,
+                    workflowLevel: updatedProposal.workflowLevel
+                  });
+                  setProposal(updatedProposal);
+                  // Also force re-fetch to ensure all related data is fresh
+                  loadData(true);
+                } else {
+                  // Fallback: force re-fetch
+                  loadData(true);
+                }
+              }}
               onView={() => {}}
               showHeader={true}
               showTrackInMenu={false}

@@ -246,16 +246,42 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
           personnelServices: psTotal[0]?.total || 0,
           mooe: mooeTotal[0]?.total || 0,
           capitalOutlay: coTotal[0]?.total || 0,
-          grandTotal: newTotal
+          oldTotal: proposal.totalAmount,
+          newTotal: newTotal
         });
+
+        // Update proposal with new totals
+        proposal.incomeTotal = incomeTotal[0]?.total || 0;
+        proposal.personnelServicesTotal = psTotal[0]?.total || 0;
+        proposal.mooeTotal = mooeTotal[0]?.total || 0;
+        proposal.capitalOutlayTotal = coTotal[0]?.total || 0;
+        proposal.totalAmount = newTotal;
+        
+        await proposal.save();
+        console.log('✅ Proposal totals updated and saved');
 
         results.proposalTotalRecalculated = true;
         results.newProposalTotal = newTotal;
+        results.proposalUpdated = true;
       }
     } catch (error) {
       console.error('❌ Error recalculating proposal totals:', error);
+      results.proposalTotalRecalculationError = error.message;
       // Don't throw - edits were already applied successfully
     }
+
+    // Mark the edit as Approved (successfully applied)
+    budgetOfficerEdit.status = 'Approved';
+    budgetOfficerEdit.appliedAt = new Date();
+    budgetOfficerEdit.appliedBy = {
+      userId: budgetOfficerEdit.editedBy?.userId || 'system',
+      userName: budgetOfficerEdit.editedBy?.userName || 'System',
+      role: budgetOfficerEdit.editedBy?.role || 'SYSTEM'
+    };
+    await budgetOfficerEdit.save();
+    console.log('✅ BudgetOfficerEdit marked as Approved (applied)');
+
+    results.editStatusUpdated = true;
 
     return results;
   } catch (error) {

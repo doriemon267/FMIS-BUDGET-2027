@@ -717,8 +717,16 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
         console.log('✅ Workflow action successful, triggering immediate refresh...');
         console.log('📦 Response contains updated proposal:', response.data.proposal ? 'YES' : 'NO');
         
-        // Trigger immediate refresh - no delay needed
-        onRefresh(); // Refresh the proposals list immediately
+        // If response contains updated proposal data, pass it to onRefresh for instant UI update
+        if (response.data.proposal) {
+          console.log('📤 Passing updated proposal to onRefresh callback:', {
+            status: response.data.proposal.status,
+            workflowLevel: response.data.proposal.workflowLevel
+          });
+          onRefresh(response.data.proposal); // Pass updated proposal for instant update
+        } else {
+          onRefresh(); // Fallback to force re-fetch
+        }
       } else {
         throw new Error(response.data.message || "Workflow action failed");
       }
