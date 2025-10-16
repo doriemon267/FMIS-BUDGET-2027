@@ -547,10 +547,11 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           endpoint = "/api/workflow/coordinator/submit-to-officer";
           successMessage = "Proposal forwarded to Budget Officer successfully";
           break;
-        case "coordinator-forward-manager":
-          endpoint = "/api/workflow/coordinator/submit-to-manager";
-          successMessage = "Proposal forwarded to Budget Manager successfully";
-          break;
+        // DEPRECATED: coordinator-forward-manager - Use coordinator-approve-forward-officer instead
+        // case "coordinator-forward-manager":
+        //   endpoint = "/api/workflow/coordinator/submit-to-manager";
+        //   successMessage = "Proposal forwarded to Budget Manager successfully";
+        //   break;
         case "coordinator-save-edits":
           endpoint = "/api/workflow/coordinator/save-edits";
           successMessage = "Changes saved successfully (Under Review by Coordinator)";
@@ -642,7 +643,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
         "coordinator-approve-forward-officer",
         "coordinator-return",
         "coordinator-forward-officer",
-        "coordinator-forward-manager",
+        // "coordinator-forward-manager", // DEPRECATED
         "coordinator-save-edits",
         "officer-verify",
         "officer-approve",
@@ -761,7 +762,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
     'coordinator-approve',
     'coordinator-return',
     'coordinator-forward-officer',
-    'coordinator-forward-manager',
+    // 'coordinator-forward-manager', // DEPRECATED
     'officer-verify',
     'officer-approve',
     'officer-return',
@@ -814,7 +815,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
         return <SaveIcon fontSize="small" color={color} />;
       case 'submit-to-coordinator':
       case 'coordinator-forward-officer':
-      case 'coordinator-forward-manager':
+      // case 'coordinator-forward-manager': // DEPRECATED
       case 'submit-to-manager':
       case 'submit-direct-to-manager':
         return <SendIcon fontSize="small" color={color} />;
