@@ -886,10 +886,11 @@ exports.submitEdit = async (req, res) => {
       });
     }
     
-    // Check if there's already a submitted or approved edit for this proposal
+    // Check if there's already a SUBMITTED (not yet processed) edit for this proposal
+    // "Approved" edits have been processed and should not block submissions
     const existingSubmittedEdit = await BudgetOfficerEdit.findOne({
       proposalId,
-      status: { $in: ['Submitted', 'Approved'] }
+      status: 'Submitted'
     });
     
     if (existingSubmittedEdit) {
