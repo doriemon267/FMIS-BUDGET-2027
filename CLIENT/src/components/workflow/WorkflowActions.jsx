@@ -554,11 +554,10 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           endpoint = "/api/workflow/coordinator/submit-to-officer";
           successMessage = "Proposal forwarded to Budget Officer successfully";
           break;
-        // DEPRECATED: coordinator-forward-manager - Use coordinator-approve-forward-officer instead
-        // case "coordinator-forward-manager":
-        //   endpoint = "/api/workflow/coordinator/submit-to-manager";
-        //   successMessage = "Proposal forwarded to Budget Manager successfully";
-        //   break;
+        case "coordinator-submit-to-manager":
+          endpoint = "/api/workflow/coordinator/submit-to-manager";
+          successMessage = "Proposal submitted directly to Budget Manager (bypassing Officer review)";
+          break;
         case "coordinator-save-edits":
           endpoint = "/api/workflow/coordinator/save-edits";
           successMessage = "Changes saved successfully";
@@ -657,7 +656,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
         "coordinator-approve-forward-officer",
         "coordinator-return",
         "coordinator-forward-officer",
-        // "coordinator-forward-manager", // DEPRECATED
+        "coordinator-submit-to-manager",
         "coordinator-save-edits",
         "officer-verify",
         "officer-approve",
@@ -708,38 +707,71 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
       console.log('Response Message:', response.data.message);
 
       // Check for success - be flexible with response format
+      // Success if: explicit success=true, or message says "successfully", or status is 200/201
       const isSuccess = response.data.success === true || 
+                       response.status === 200 ||
+                       response.status === 201 ||
                        response.data.modified > 0 || 
                        response.data.modifiedCount > 0 || 
                        (response.data.message && 
                         response.data.message.toLowerCase().includes('successfully'));
 
       console.log('🎯 SUCCESS CHECK RESULT:', isSuccess);
+      console.log('🎯 SUCCESS DETAILS:', {
+        success_field: response.data.success,
+        status_code: response.status,
+        message: response.data.message,
+        has_proposal: !!response.data.proposal
+      });
 
       if (isSuccess) {
+        console.log('✅ WORKFLOW ACTION SUCCESSFUL - Starting updates...');
+        
+        // Show success toast FIRST
         toast.success(successMessage);
-        fetchHistory({ force: true }).catch(() => {});
+        
+        // Fetch history in background (don't block on errors)
+        console.log('🔄 Fetching workflow history...');
+        fetchHistory({ force: true }).catch((histErr) => {
+          console.warn('⚠️ Failed to fetch history (non-blocking):', histErr.message);
+        });
+        
+        // Try to show window notification (non-blocking)
         try {
           if (typeof window !== 'undefined' && window.showSuccess) {
             window.showSuccess(successMessage + ' — Click to open All Proposals', 8000, () => {
               goTo('/AllProposals');
             });
           }
-        } catch (_) {}
+        } catch (windowErr) {
+          console.warn('⚠️ Failed to show window notification:', windowErr.message);
+        }
         
         // Immediate refresh to show updated status in real-time
         console.log('✅ Workflow action successful, triggering immediate refresh...');
         console.log('📦 Response contains updated proposal:', response.data.proposal ? 'YES' : 'NO');
         
-        // If response contains updated proposal data, pass it to onRefresh for instant UI update
-        if (response.data.proposal) {
-          console.log('📤 Passing updated proposal to onRefresh callback:', {
-            status: response.data.proposal.status,
-            workflowLevel: response.data.proposal.workflowLevel
-          });
-          onRefresh(response.data.proposal); // Pass updated proposal for instant update
-        } else {
-          onRefresh(); // Fallback to force re-fetch
+        // CRITICAL: Always pass true as second parameter to force cache invalidation
+        try {
+          if (response.data.proposal) {
+            console.log('📤 Passing updated proposal to onRefresh callback with FORCE flag:', {
+              status: response.data.proposal.status,
+              workflowLevel: response.data.proposal.workflowLevel
+            });
+            // Pass true to force refresh and ignore cache
+            onRefresh(response.data.proposal, true); // Pass updated proposal AND force flag for instant update
+          } else {
+            console.log('📤 No proposal in response, calling onRefresh with force=true');
+            onRefresh(null, true); // Fallback to force re-fetch without cache
+          }
+          console.log('✅ onRefresh callback completed successfully');
+        } catch (refreshErr) {
+          console.error('❌ Error in onRefresh callback:', refreshErr);
+          // Don't throw - just log it, we already showed the success toast
+          // Try a simple fallback refresh
+          try {
+            onRefresh(null, true);
+          } catch (_) {}
         }
       } else {
         throw new Error(response.data.message || "Workflow action failed");
@@ -784,7 +816,7 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
     'coordinator-approve',
     'coordinator-return',
     'coordinator-forward-officer',
-    // 'coordinator-forward-manager', // DEPRECATED
+    'coordinator-submit-to-manager',
     'officer-verify',
     'officer-approve',
     'officer-return',

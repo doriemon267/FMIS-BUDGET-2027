@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Box,
   Tabs,
@@ -18,7 +18,14 @@ import EditablePersonnelTable from './tables/EditablePersonnelTable';
 import EditableMOOETable from './tables/EditableMOOETable';
 import EditableCapitalOutlayTable from './tables/EditableCapitalOutlayTable';
 
-const BudgetOfficerEditView = ({ proposalData, proposal, onSaveSuccess, variant = 'officer', allowSubmit = true }) => {
+const BudgetOfficerEditView = ({
+  proposalData,
+  proposal,
+  onSaveSuccess,
+  variant = 'officer',
+  allowSubmit = true,
+  showTables = true
+}) => {
   const [activeTab, setActiveTab] = useState(0);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -126,13 +133,6 @@ const BudgetOfficerEditView = ({ proposalData, proposal, onSaveSuccess, variant 
     }
   };
 
-  const hasChanges = () => {
-    // Check if any data has been modified
-    return incomeData.some(item => item.changeType && item.changeType !== 'unchanged') ||
-           personnelData.some(item => item.changeType && item.changeType !== 'unchanged') ||
-           mooeData.some(item => item.changeType && item.changeType !== 'unchanged') ||
-           capitalOutlayData.some(item => item.changeType && item.changeType !== 'unchanged');
-  };
 
   return (
     <Box>
@@ -151,55 +151,59 @@ const BudgetOfficerEditView = ({ proposalData, proposal, onSaveSuccess, variant 
         </Typography>
       </Alert>
 
-      {/* Tabs for different expenditure types */}
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-        <Tabs value={activeTab} onChange={handleTabChange}>
-          <Tab 
-            label={`Income (${incomeData.length})`} 
-            sx={{ fontWeight: activeTab === 0 ? 'bold' : 'normal' }}
-          />
-          <Tab 
-            label={`Personnel Services (${personnelData.length})`}
-            sx={{ fontWeight: activeTab === 1 ? 'bold' : 'normal' }}
-          />
-          <Tab 
-            label={`MOOE (${mooeData.length})`}
-            sx={{ fontWeight: activeTab === 2 ? 'bold' : 'normal' }}
-          />
-          <Tab 
-            label={`Capital Outlay (${capitalOutlayData.length})`}
-            sx={{ fontWeight: activeTab === 3 ? 'bold' : 'normal' }}
-          />
-        </Tabs>
-      </Box>
+      {showTables && (
+        <>
+          {/* Tabs for different expenditure types */}
+          <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+            <Tabs value={activeTab} onChange={handleTabChange}>
+              <Tab 
+                label={`Income (${incomeData.length})`} 
+                sx={{ fontWeight: activeTab === 0 ? 'bold' : 'normal' }}
+              />
+              <Tab 
+                label={`Personnel Services (${personnelData.length})`}
+                sx={{ fontWeight: activeTab === 1 ? 'bold' : 'normal' }}
+              />
+              <Tab 
+                label={`MOOE (${mooeData.length})`}
+                sx={{ fontWeight: activeTab === 2 ? 'bold' : 'normal' }}
+              />
+              <Tab 
+                label={`Capital Outlay (${capitalOutlayData.length})`}
+                sx={{ fontWeight: activeTab === 3 ? 'bold' : 'normal' }}
+              />
+            </Tabs>
+          </Box>
 
-      {/* Table Content */}
-      <Box sx={{ minHeight: 400, mb: 3 }}>
-        {activeTab === 0 && (
-          <EditableIncomeTable 
-            data={incomeData} 
-            onChange={setIncomeData}
-          />
-        )}
-        {activeTab === 1 && (
-          <EditablePersonnelTable 
-            data={personnelData} 
-            onChange={setPersonnelData}
-          />
-        )}
-        {activeTab === 2 && (
-          <EditableMOOETable 
-            data={mooeData} 
-            onChange={setMooeData}
-          />
-        )}
-        {activeTab === 3 && (
-          <EditableCapitalOutlayTable 
-            data={capitalOutlayData} 
-            onChange={setCapitalOutlayData}
-          />
-        )}
-      </Box>
+          {/* Table Content */}
+          <Box sx={{ minHeight: 400, mb: 3 }}>
+            {activeTab === 0 && (
+              <EditableIncomeTable 
+                data={incomeData} 
+                onChange={setIncomeData}
+              />
+            )}
+            {activeTab === 1 && (
+              <EditablePersonnelTable 
+                data={personnelData} 
+                onChange={setPersonnelData}
+              />
+            )}
+            {activeTab === 2 && (
+              <EditableMOOETable 
+                data={mooeData} 
+                onChange={setMooeData}
+              />
+            )}
+            {activeTab === 3 && (
+              <EditableCapitalOutlayTable 
+                data={capitalOutlayData} 
+                onChange={setCapitalOutlayData}
+              />
+            )}
+          </Box>
+        </>
+      )}
 
       {/* Comments Section */}
       <Box sx={{ mt: 3 }}>

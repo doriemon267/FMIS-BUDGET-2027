@@ -88,10 +88,10 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
   });
 
   const results = {
-    income: { modified: 0, errors: [] },
-    personnelServices: { modified: 0, errors: [] },
-    mooe: { modified: 0, errors: [] },
-    capitalOutlay: { modified: 0, errors: [] }
+    income: { modified: 0, added: 0, deleted: 0, errors: [] },
+    personnelServices: { modified: 0, added: 0, deleted: 0, errors: [] },
+    mooe: { modified: 0, added: 0, deleted: 0, errors: [] },
+    capitalOutlay: { modified: 0, added: 0, deleted: 0, errors: [] }
   };
 
   try {
@@ -99,15 +99,41 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
     if (budgetOfficerEdit.editedIncome && budgetOfficerEdit.editedIncome.length > 0) {
       for (const edit of budgetOfficerEdit.editedIncome) {
         try {
-          if (edit._id && edit.changeType === 'modified') {
+          const targetId = edit.originalId || edit._id;
+
+          if (edit.changeType === 'added') {
+            const data = sanitizeEditPayload(edit);
+            if (data.amount !== undefined) data.amount = Number(data.amount);
+            const newIncome = new Income({
+              ...data,
+              fiscalYear: budgetOfficerEdit.fiscalYear,
+              budgetType: budgetOfficerEdit.budgetType,
+              region: budgetOfficerEdit.region,
+              department: budgetOfficerEdit.department,
+              division: budgetOfficerEdit.division,
+              processBy: budgetOfficerEdit.processBy
+            });
+            await newIncome.save();
+            results.income.added++;
+            continue;
+          }
+
+          if (edit.changeType === 'deleted' && targetId) {
+            await Income.findByIdAndDelete(targetId);
+            results.income.deleted++;
+            continue;
+          }
+
+          if (targetId && (edit.changeType === 'modified' || !edit.changeType || edit.changeType === 'changed')) {
             const updateData = {};
-            if (edit.amount !== undefined) updateData.amount = edit.amount;
+            if (edit.amount !== undefined) updateData.amount = Number(edit.amount);
+            if (edit.amount !== undefined) updateData.cost = Number(edit.amount);
             if (edit.category !== undefined) updateData.category = edit.category;
             if (edit.subcategory !== undefined) updateData.subcategory = edit.subcategory;
             if (edit.particulars !== undefined) updateData.particulars = edit.particulars;
             
             const result = await Income.findByIdAndUpdate(
-              edit._id,
+              targetId,
               { $set: updateData },
               { new: true }
             );
@@ -124,16 +150,43 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
     if (budgetOfficerEdit.editedPersonnelServices && budgetOfficerEdit.editedPersonnelServices.length > 0) {
       for (const edit of budgetOfficerEdit.editedPersonnelServices) {
         try {
-          if (edit._id && edit.changeType === 'modified') {
+          const targetId = edit.originalId || edit._id;
+
+          if (edit.changeType === 'added') {
+            const data = sanitizeEditPayload(edit);
+            if (data.monthlySalary !== undefined) data.monthlySalary = Number(data.monthlySalary);
+            if (data.annualSalary !== undefined) data.annualSalary = Number(data.annualSalary);
+            if (data.total !== undefined) data.total = Number(data.total);
+            const newPS = new PersonnelServices({
+              ...data,
+              fiscalYear: budgetOfficerEdit.fiscalYear,
+              budgetType: budgetOfficerEdit.budgetType,
+              region: budgetOfficerEdit.region,
+              department: budgetOfficerEdit.department,
+              division: budgetOfficerEdit.division,
+              processBy: budgetOfficerEdit.processBy
+            });
+            await newPS.save();
+            results.personnelServices.added++;
+            continue;
+          }
+
+          if (edit.changeType === 'deleted' && targetId) {
+            await PersonnelServices.findByIdAndDelete(targetId);
+            results.personnelServices.deleted++;
+            continue;
+          }
+
+          if (targetId && (edit.changeType === 'modified' || !edit.changeType || edit.changeType === 'changed')) {
             const updateData = {};
             if (edit.salaryGrade !== undefined) updateData.salaryGrade = edit.salaryGrade;
             if (edit.step !== undefined) updateData.step = edit.step;
-            if (edit.monthlySalary !== undefined) updateData.monthlySalary = edit.monthlySalary;
-            if (edit.annualSalary !== undefined) updateData.annualSalary = edit.annualSalary;
-            if (edit.total !== undefined) updateData.total = edit.total;
+            if (edit.monthlySalary !== undefined) updateData.monthlySalary = Number(edit.monthlySalary);
+            if (edit.annualSalary !== undefined) updateData.annualSalary = Number(edit.annualSalary);
+            if (edit.total !== undefined) updateData.total = Number(edit.total);
             
             const result = await PersonnelServices.findByIdAndUpdate(
-              edit._id,
+              targetId,
               { $set: updateData },
               { new: true }
             );
@@ -150,15 +203,40 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
     if (budgetOfficerEdit.editedMOOE && budgetOfficerEdit.editedMOOE.length > 0) {
       for (const edit of budgetOfficerEdit.editedMOOE) {
         try {
-          if (edit._id && edit.changeType === 'modified') {
+          const targetId = edit.originalId || edit._id;
+
+          if (edit.changeType === 'added') {
+            const data = sanitizeEditPayload(edit);
+            if (data.amount !== undefined) data.amount = Number(data.amount);
+            const newMooe = new MOOE({
+              ...data,
+              fiscalYear: budgetOfficerEdit.fiscalYear,
+              budgetType: budgetOfficerEdit.budgetType,
+              region: budgetOfficerEdit.region,
+              department: budgetOfficerEdit.department,
+              division: budgetOfficerEdit.division,
+              processBy: budgetOfficerEdit.processBy
+            });
+            await newMooe.save();
+            results.mooe.added++;
+            continue;
+          }
+
+          if (edit.changeType === 'deleted' && targetId) {
+            await MOOE.findByIdAndDelete(targetId);
+            results.mooe.deleted++;
+            continue;
+          }
+
+          if (targetId && (edit.changeType === 'modified' || !edit.changeType || edit.changeType === 'changed')) {
             const updateData = {};
-            if (edit.amount !== undefined) updateData.amount = edit.amount;
+            if (edit.amount !== undefined) updateData.amount = Number(edit.amount);
             if (edit.generalType !== undefined) updateData.generalType = edit.generalType;
             if (edit.category !== undefined) updateData.category = edit.category;
             if (edit.particulars !== undefined) updateData.particulars = edit.particulars;
             
             const result = await MOOE.findByIdAndUpdate(
-              edit._id,
+              targetId,
               { $set: updateData },
               { new: true }
             );
@@ -175,13 +253,33 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
     if (budgetOfficerEdit.editedCapitalOutlay && budgetOfficerEdit.editedCapitalOutlay.length > 0) {
       for (const edit of budgetOfficerEdit.editedCapitalOutlay) {
         try {
-          if (edit._id && edit.changeType === 'modified') {
+          const targetId = edit.originalId || edit._id;
+
+          if (edit.changeType === 'deleted' && targetId) {
+            await CapitalOutlay.findByIdAndDelete(targetId);
+            results.capitalOutlay.deleted++;
+            continue;
+          }
+
+          if (targetId && (edit.changeType === 'modified' || !edit.changeType || edit.changeType === 'changed')) {
             const updateData = {};
             if (edit.ppmpCode !== undefined) updateData.ppmpCode = edit.ppmpCode;
-            if (edit.total !== undefined) updateData.total = edit.total;
-            
+            if (edit.particulars !== undefined) updateData.particulars = edit.particulars;
+            if (edit.sublineItem !== undefined) updateData.sublineItem = edit.sublineItem;
+            if (edit.accountingTitle !== undefined) updateData.accountingTitle = edit.accountingTitle;
+            if (edit.uacsCode !== undefined) updateData.uacsCode = edit.uacsCode;
+            if (edit.income !== undefined) updateData.income = Number(edit.income);
+            if (edit.subsidy !== undefined) updateData.subsidy = Number(edit.subsidy);
+            if (edit.cost !== undefined) {
+              updateData.cost = Number(edit.cost);
+              updateData.total = Number(edit.cost);
+            } else if (edit.total !== undefined) {
+              updateData.cost = Number(edit.total);
+              updateData.total = Number(edit.total);
+            }
+
             const result = await CapitalOutlay.findByIdAndUpdate(
-              edit._id,
+              targetId,
               { $set: updateData },
               { new: true }
             );
@@ -195,10 +293,10 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
     }
 
     console.log('✅ Edits applied to original documents:', {
-      income: `${results.income.modified} modified`,
-      personnelServices: `${results.personnelServices.modified} modified`,
-      mooe: `${results.mooe.modified} modified`,
-      capitalOutlay: `${results.capitalOutlay.modified} modified`
+      income: `${results.income.modified} modified, ${results.income.added} added, ${results.income.deleted} deleted`,
+      personnelServices: `${results.personnelServices.modified} modified, ${results.personnelServices.added} added, ${results.personnelServices.deleted} deleted`,
+      mooe: `${results.mooe.modified} modified, ${results.mooe.added} added, ${results.mooe.deleted} deleted`,
+      capitalOutlay: `${results.capitalOutlay.modified} modified, ${results.capitalOutlay.added} added, ${results.capitalOutlay.deleted} deleted`
     });
 
     // Recalculate proposal totals after applying edits
@@ -229,33 +327,34 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
           ]),
           CapitalOutlay.aggregate([
             { $match: filterCriteria },
-            { $group: { _id: null, total: { $sum: '$total' } } }
+            { $group: { _id: null, total: { $sum: { $ifNull: ['$cost', { $ifNull: ['$total', 0] }] } } } }
           ])
         ]);
 
-        const newTotal = (
-          (incomeTotal[0]?.total || 0) +
-          (psTotal[0]?.total || 0) +
-          (mooeTotal[0]?.total || 0) +
-          (coTotal[0]?.total || 0)
-        );
+        const incomeSum = incomeTotal[0]?.total || 0;
+        const psSum = psTotal[0]?.total || 0;
+        const mooeSum = mooeTotal[0]?.total || 0;
+        const coSum = coTotal[0]?.total || 0;
+        const expenseSum = psSum + mooeSum + coSum;
+        const newTotal = incomeSum + expenseSum;
 
         console.log('📊 Recalculated proposal totals after edits:', {
           proposalId: proposal._id,
-          income: incomeTotal[0]?.total || 0,
-          personnelServices: psTotal[0]?.total || 0,
-          mooe: mooeTotal[0]?.total || 0,
-          capitalOutlay: coTotal[0]?.total || 0,
-          oldTotal: proposal.totalAmount,
+          income: incomeSum,
+          personnelServices: psSum,
+          mooe: mooeSum,
+          capitalOutlay: coSum,
+          oldTotalIncome: proposal.totalIncome,
+          oldTotalExpenses: proposal.totalExpenses,
           newTotal: newTotal
         });
 
         // Update proposal with new totals
-        proposal.incomeTotal = incomeTotal[0]?.total || 0;
-        proposal.personnelServicesTotal = psTotal[0]?.total || 0;
-        proposal.mooeTotal = mooeTotal[0]?.total || 0;
-        proposal.capitalOutlayTotal = coTotal[0]?.total || 0;
-        proposal.totalAmount = newTotal;
+        proposal.totalIncome = incomeSum;
+        proposal.totalExpenses = expenseSum;
+        proposal.proposedBudget = expenseSum;
+        proposal.projectedCorporateIncome = incomeSum;
+        proposal.updatedAt = new Date();
         
         await proposal.save();
         console.log('✅ Proposal totals updated and saved');
@@ -289,6 +388,60 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
     throw error;
   }
 };
+
+const WORKFLOW_STATUS_MAPPING = {
+  'Division Submitted': 'Division Submitted',
+  'Under Review by Coordinator': 'Division Submitted',
+  'Coordinator Approved': 'Division Submitted',
+  'Forwarded to Officer': 'Department Verified',
+  'Under Review by Officer': 'Department Verified',
+  'Officer Approved': 'Department Submitted',
+  'Forwarded to Manager': 'Region Approved',
+  'Under Review by Manager': 'Region Approved',
+  'Finalized': 'Finalized',
+  Returned: 'Returned'
+};
+
+const WORKFLOW_LEVEL_MAPPING = {
+  COORDINATOR: 'DIVISION',
+  OFFICER: 'DEPARTMENT',
+  MANAGER: 'REGION',
+  FINALIZED: 'FINALIZED'
+};
+
+async function syncRelatedBudgetItems(proposal) {
+  try {
+    const mappedStatus = WORKFLOW_STATUS_MAPPING[proposal.status] || proposal.status;
+    const mappedWorkflowLevel = WORKFLOW_LEVEL_MAPPING[proposal.workflowLevel] || 'DIVISION';
+
+    const criteria = {
+      region: proposal.region,
+      department: proposal.department,
+      division: proposal.division,
+      fiscalYear: proposal.fiscalYear,
+      budgetType: proposal.budgetType
+    };
+
+    await Promise.all([
+      Income.updateMany(criteria, { $set: { status: mappedStatus, workflowLevel: mappedWorkflowLevel } }),
+      PersonnelServices.updateMany(criteria, { $set: { status: mappedStatus, workflowLevel: mappedWorkflowLevel } }),
+      MOOE.updateMany(criteria, { $set: { status: mappedStatus, workflowLevel: mappedWorkflowLevel } }),
+      CapitalOutlay.updateMany(criteria, { $set: { status: mappedStatus, workflowLevel: mappedWorkflowLevel } })
+    ]);
+  } catch (error) {
+    console.error('❌ Failed to sync related budget items after workflow transition:', error);
+  }
+}
+
+function sanitizeEditPayload(edit) {
+  const clone = { ...edit };
+  ['_id', 'originalId', 'changeType', 'originalValues', 'original', '__v', 'createdAt', 'updatedAt', 'details'].forEach((key) => {
+    if (key in clone) {
+      delete clone[key];
+    }
+  });
+  return clone;
+}
 
 // Export for use in other controllers
 exports.applyEditsToOriginalDocuments = applyEditsToOriginalDocuments;
@@ -625,7 +778,7 @@ exports.saveDraftEdit = async (req, res) => {
         userId,
         userName,
         email: userEmail,
-        role: roles && roles.length ? roles[0] : 'BUDGET_OFFICER'
+        role: editorRole
       },
       summary: 'Saved draft edits',
       comments,
@@ -696,7 +849,7 @@ exports.submitEdit = async (req, res) => {
       });
     }
     
-    const { userId, userName, email: userEmail, ipAddress, roles } = auditContext;
+  const { userId, userName, email: userEmail, ipAddress } = auditContext;
     
     // Find the proposal
     const proposal = await Proposal.findById(proposalId);
@@ -817,21 +970,83 @@ exports.submitEdit = async (req, res) => {
       // The edits are still stored in budgetofficeredits for comparison view
     }
     
-    // Update proposal status
-    proposal.status = 'Forwarded to Manager';
-    proposal.workflowLevel = 'OFFICER';
+    const previousStatus = proposal.status;
+    const now = new Date();
+
+    let newStatus = previousStatus;
+    let newWorkflowLevel = proposal.workflowLevel || 'COORDINATOR';
+    let historyAction = 'EDIT';
+    let historyComment = comments || `${editorRole} submitted edits`;
+    let currentStep = proposal.currentStep;
+    let currentAssigneeRole = proposal.currentAssigneeRole;
+    let pendingRoles = Array.isArray(proposal.pendingWithRoles) ? [...proposal.pendingWithRoles] : [];
+
+    if (editorRole === 'BUDGET_COORDINATOR') {
+      newStatus = 'Forwarded to Officer';
+      newWorkflowLevel = 'OFFICER';
+      historyAction = 'COORDINATOR_SUBMIT_TO_OFFICER';
+      historyComment = comments || 'Budget Coordinator submitted edits to Budget Officer';
+      currentStep = 'OFFICER_REVIEW';
+      currentAssigneeRole = 'BUDGET_OFFICER';
+      pendingRoles = ['BUDGET_OFFICER'];
+      proposal.submittedByRole = 'BUDGET_COORDINATOR';
+      proposal.forwardedToOfficerAt = now;
+      proposal.forwardedToOfficerBy = { userId, userName };
+      proposal.bypassedOfficerReview = false;
+    } else if (editorRole === 'BUDGET_OFFICER') {
+      newStatus = 'Forwarded to Manager';
+      newWorkflowLevel = 'MANAGER';
+      historyAction = 'OFFICER_SUBMIT_TO_MANAGER';
+      historyComment = comments || 'Budget Officer submitted edits to Budget Manager';
+      currentStep = 'MANAGER_REVIEW';
+      currentAssigneeRole = 'BUDGET_MANAGER';
+      pendingRoles = ['BUDGET_MANAGER'];
+      proposal.submittedByRole = 'BUDGET_OFFICER';
+      proposal.forwardedToManagerAt = now;
+      proposal.forwardedToManagerBy = { userId, userName };
+    } else if (editorRole === 'BUDGET_MANAGER') {
+      newStatus = 'Finalized';
+      newWorkflowLevel = 'FINALIZED';
+      historyAction = 'MANAGER_FINALIZE_EDIT';
+      historyComment = comments || 'Budget Manager finalized proposal edits';
+      currentStep = 'FINALIZED';
+      currentAssigneeRole = 'BUDGET_MANAGER';
+      pendingRoles = [];
+      proposal.submittedByRole = 'BUDGET_MANAGER';
+      proposal.finalizedAt = now;
+      proposal.finalizedBy = { userId, userName };
+    }
+
+    proposal.status = newStatus;
+    proposal.workflowLevel = newWorkflowLevel;
+    proposal.currentStep = currentStep;
+    proposal.currentAssigneeRole = currentAssigneeRole;
+    proposal.pendingWithRoles = pendingRoles;
+    proposal.lastActionBy = userName;
+    proposal.lastActionDate = now;
+
     proposal.workflowHistory.push({
-      action: 'EDIT',
-      comment: comments || `${editorRole} submitted edits`,
+      action: historyAction,
+      comment: historyComment,
       userId,
       userName,
-      timestamp: new Date(),
-      previousStatus: proposal.status,
-      newStatus: 'Forwarded to Manager'
+      timestamp: now,
+      previousStatus,
+      newStatus
     });
-    
+
     await proposal.save();
+    await syncRelatedBudgetItems(proposal);
     
+    let logSummary = 'Submitted edits for approval';
+    if (editorRole === 'BUDGET_COORDINATOR') {
+      logSummary = 'Submitted edits to Budget Officer';
+    } else if (editorRole === 'BUDGET_OFFICER') {
+      logSummary = 'Submitted edits to Budget Manager';
+    } else if (editorRole === 'BUDGET_MANAGER') {
+      logSummary = 'Finalized proposal edits';
+    }
+
     // Log the action
     await ProposalEditLog.logChange({
       proposalId,
@@ -849,7 +1064,7 @@ exports.submitEdit = async (req, res) => {
         email: userEmail,
         role: roles && roles.length ? roles[0] : 'BUDGET_OFFICER'
       },
-      summary: 'Submitted edits for approval',
+  summary: logSummary,
       comments,
       ipAddress,
       userAgent: req.get('user-agent')

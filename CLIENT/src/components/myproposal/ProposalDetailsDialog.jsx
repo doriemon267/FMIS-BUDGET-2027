@@ -183,20 +183,35 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
       normalizedPrimaryRoles,
       normalizedAssignmentLevel,
       normalizedWorkflowRoles,
-      userInfo
+      userInfo,
+      forceRefresh
     });
 
     const cache = cacheRef.current;
+    
+    // CRITICAL FIX: If forceRefresh is true, immediately invalidate cache BEFORE anything else
+    if (forceRefresh) {
+      console.log('🔄 Force refresh requested - CLEARING all cache for proposal:', proposalKey);
+      // Clear all cached data completely
+      cache.clear();
+      // Also explicitly set state to null to force re-render
+      setProposalData(null);
+      setComparisonData(null);
+    }
+
+    // After clearing cache, get fresh entry (should be undefined)
     const cachedEntry = cache.get(proposalKey);
     const now = Date.now();
     const hasCache = Boolean(cachedEntry);
     const isFresh = cachedEntry?.timestamp && (now - cachedEntry.timestamp < CACHE_TTL);
 
-    if (hasCache) {
+    // Only restore from cache if NOT forcing a refresh
+    if (hasCache && !forceRefresh) {
       if (cachedEntry.proposalData) setProposalData(cachedEntry.proposalData);
       if (cachedEntry.comparisonData) setComparisonData(cachedEntry.comparisonData);
     }
 
+    // If forceRefresh, skip the cache freshness check - always fetch new data
     if (!forceRefresh && isFresh) {
       setLoading(false);
       setRefreshing(false);
@@ -499,6 +514,13 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
     proposal?.status === 'Division Submitted'
   );
 
+  const officerModeActive = !isReadOnlyMode && isBudgetOfficer && !isManagerLevel;
+  const officerReadOnlyTables = officerModeActive && Boolean(comparisonData) && !officerEditMode;
+  const officerShowTables = officerModeActive ? (!comparisonData || officerEditMode) : true;
+  const canRenderEditView = !isReadOnlyMode && proposalData && proposal?.status !== 'Officer Approved' && proposal?.status !== 'Approved' && (
+    (isBudgetOfficer && !isManagerLevel) || coordinatorCanEditNow || analystCanEditNow || managerCanEditNow
+  );
+
   return (
     <Dialog 
       open={open} 
@@ -651,7 +673,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
               <>
                 <Alert severity="info" sx={{ mb: 2 }}>
                   <Typography variant="body2">
-                    <strong>Budget Coordinator has submitted changes.</strong> Review the changes below, then click "Edit" to make additional modifications or submit to Budget Manager.
+                    <strong>Budget Coordinator has submitted changes.</strong> Review the changes below, then click the <strong>Edit</strong> button to make additional modifications or submit to Budget Manager.
                   </Typography>
                 </Alert>
                 <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end' }}>
@@ -672,7 +694,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
             )}
 
             {/* Show edit view for Budget Officer (when in edit mode), Budget Coordinator (when editable), Budget Analyst (when editable), and Budget Manager (when Forwarded to Manager) */}
-            {!isReadOnlyMode && ((isBudgetOfficer && (officerEditMode || !comparisonData || proposal?.status !== 'Forwarded to Manager')) || coordinatorCanEditNow || analystCanEditNow || managerCanEditNow) && proposalData && proposal?.status !== 'Officer Approved' && proposal?.status !== 'Approved' && (
+            {canRenderEditView && (
               <>
                 {managerCanEditNow && (
                   <Alert severity="info" sx={{ mb: 2 }}>
@@ -681,11 +703,18 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
                     </Typography>
                   </Alert>
                 )}
+                {isBudgetOfficer && officerReadOnlyTables && (
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    <Typography variant="body2">
+                      Review the comparison above. Select <strong>Edit Proposal</strong> if you need to modify any entries, or use the actions below to submit directly to the Budget Manager.
+                    </Typography>
+                  </Alert>
+                )}
                 {isBudgetOfficer && officerEditMode && comparisonData && (
                   <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Alert severity="info" sx={{ flex: 1, mr: 2 }}>
                       <Typography variant="body2">
-                        You are editing on top of Budget Coordinator's changes. The form below shows their submitted values.
+                        You are editing on top of Budget Coordinator&rsquo;s changes. The form below shows their submitted values.
                       </Typography>
                     </Alert>
                     <Button
@@ -705,6 +734,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
                   }}
                   variant={managerCanEditNow ? 'manager' : coordinatorCanEditNow ? 'coordinator' : analystCanEditNow ? 'analyst' : 'officer'}
                   allowSubmit={!managerCanEditNow}
+                  showTables={officerShowTables}
                 />
               </>
             )}
@@ -798,20 +828,23 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
             <WorkflowActions
               proposal={proposal}
               userInfo={userInfo}
-              onRefresh={(updatedProposal) => {
+              onRefresh={(updatedProposal, forceFlag) => {
+                console.log('🔄 onRefresh callback triggered:', {
+                  hasUpdatedProposal: !!updatedProposal,
+                  forceFlag,
+                  status: updatedProposal?.status
+                });
+                
+                // IMMEDIATE UPDATE: If we have the updated proposal, show it immediately
                 if (updatedProposal) {
-                  // Instant update with fresh data from backend
-                  console.log('🔄 Received updated proposal from workflow action:', {
-                    status: updatedProposal.status,
-                    workflowLevel: updatedProposal.workflowLevel
-                  });
-                  setProposal(updatedProposal);
-                  // Also force re-fetch to ensure all related data is fresh
-                  loadData(true);
-                } else {
-                  // Fallback: force re-fetch
-                  loadData(true);
+                  console.log('✅ Immediately updating UI with fresh proposal data');
+                  setProposalData(updatedProposal);
                 }
+                
+                // THEN: Force re-fetch in background to ensure all related data is fresh
+                // The forceFlag ensures cache is completely bypassed
+                // This will trigger loadData(true) which clears cache at the start
+                loadData(true);
               }}
               onView={() => {}}
               showHeader={true}

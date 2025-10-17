@@ -159,12 +159,13 @@ function checkProposalAccess(proposal, userId, userRoles) {
  */
 async function syncBudgetItemsStatus(proposal) {
   try {
-    const { status, workflowLevel, region, department, division, fiscalYear, budgetType } = proposal;
+    const { status, workflowLevel, region, department, division, fiscalYear, budgetType, processBy } = proposal;
     
     // Map Proposal workflow to Budget Item workflow
     // Proposal uses: COORDINATOR, OFFICER, MANAGER
     // Budget Items use: DIVISION, DEPARTMENT, REGION, FINALIZED
     const workflowMapping = {
+      'ANALYST': 'DIVISION',
       'COORDINATOR': 'DIVISION',
       'OFFICER': 'DEPARTMENT', 
       'MANAGER': 'REGION',
@@ -175,6 +176,7 @@ async function syncBudgetItemsStatus(proposal) {
     
     // Map Proposal status to Budget Item status
     const statusMapping = {
+      'Draft': 'Draft',
       'Division Submitted': 'Division Submitted',
       'Forwarded to Officer': 'Department Verified',
       'Officer Approved': 'Department Submitted',
@@ -189,8 +191,9 @@ async function syncBudgetItemsStatus(proposal) {
     
     const mappedStatus = statusMapping[status] || status;
     
-    // Build filter criteria to match related budget items
-    const filterCriteria = {
+    // Build MULTIPLE filter criteria to match related budget items
+    // Primary criteria - direct match
+    const primaryCriteria = {
       region,
       department,
       division,
@@ -198,54 +201,78 @@ async function syncBudgetItemsStatus(proposal) {
       budgetType
     };
 
+    // Also try matching by processBy if available (for consolidated proposals)
+    const processedByFilter = processBy ? {
+      processBy,
+      fiscalYear,
+      budgetType
+    } : null;
+
     console.log('🔄 Syncing budget items status:', {
       proposalId: proposal._id,
       proposalStatus: status,
       mappedStatus: mappedStatus,
       proposalWorkflowLevel: workflowLevel,
       mappedWorkflowLevel: mappedWorkflowLevel,
-      criteria: filterCriteria
+      primaryCriteria,
+      processedByFilter
     });
+
+    // Build combined filter - items must match EITHER primary criteria OR processBy
+    let combinedFilter = primaryCriteria;
+    if (processedByFilter) {
+      combinedFilter = {
+        $or: [
+          primaryCriteria,
+          processedByFilter
+        ]
+      };
+    }
 
     // Count existing items before update for debugging
     const [psCount, coCount, mooeCount, incomeCount] = await Promise.all([
-      PersonnelServices.countDocuments(filterCriteria),
-      CapitalOutlay.countDocuments(filterCriteria),
-      mooeProposals.countDocuments(filterCriteria),
-      Income.countDocuments(filterCriteria)
+      PersonnelServices.countDocuments(combinedFilter),
+      CapitalOutlay.countDocuments(combinedFilter),
+      mooeProposals.countDocuments(combinedFilter),
+      Income.countDocuments(combinedFilter)
     ]);
 
     console.log('📊 Found budget items to update:', {
       personnelServices: psCount,
       capitalOutlay: coCount,
       mooeProposals: mooeCount,
-      income: incomeCount
+      income: incomeCount,
+      filter: combinedFilter
     });
 
     // Update all related budget items in parallel
     const updatePromises = [
-      PersonnelServices.updateMany(filterCriteria, { 
+      PersonnelServices.updateMany(combinedFilter, { 
         $set: { 
           status: mappedStatus, 
-          workflowLevel: mappedWorkflowLevel 
+          workflowLevel: mappedWorkflowLevel,
+          updatedAt: new Date()
         } 
       }),
-      CapitalOutlay.updateMany(filterCriteria, { 
+      CapitalOutlay.updateMany(combinedFilter, { 
         $set: { 
           status: mappedStatus, 
-          workflowLevel: mappedWorkflowLevel 
+          workflowLevel: mappedWorkflowLevel,
+          updatedAt: new Date()
         } 
       }),
-      mooeProposals.updateMany(filterCriteria, { 
+      mooeProposals.updateMany(combinedFilter, { 
         $set: { 
           status: mappedStatus, 
-          workflowLevel: mappedWorkflowLevel 
+          workflowLevel: mappedWorkflowLevel,
+          updatedAt: new Date()
         } 
       }),
-      Income.updateMany(filterCriteria, { 
+      Income.updateMany(combinedFilter, { 
         $set: { 
           status: mappedStatus, 
-          workflowLevel: mappedWorkflowLevel 
+          workflowLevel: mappedWorkflowLevel,
+          updatedAt: new Date()
         } 
       })
     ];
@@ -256,7 +283,8 @@ async function syncBudgetItemsStatus(proposal) {
       personnelServices: results[0].modifiedCount,
       capitalOutlay: results[1].modifiedCount,
       mooeProposals: results[2].modifiedCount,
-      income: results[3].modifiedCount
+      income: results[3].modifiedCount,
+      totalModified: results.reduce((sum, r) => sum + r.modifiedCount, 0)
     });
 
     return {
@@ -1732,6 +1760,20 @@ exports.coordinatorApproveAndForwardToOfficer = async (req, res) => {
         // Continue with workflow even if edit application fails
         // Edits are still stored in budgetofficeredits for manual recovery
       }
+
+      // CRITICAL FIX: Mark the BudgetOfficerEdit as "Approved" so it won't block future submissions
+      // This allows the coordinator to forward to officer and officer to then submit to manager
+      budgetOfficerEdit.status = 'Approved';
+      budgetOfficerEdit.approvedAt = new Date();
+      budgetOfficerEdit.approvedBy = {
+        userId,
+        userName
+      };
+      await budgetOfficerEdit.save();
+      console.log('✅ Marked BudgetOfficerEdit as Approved:', {
+        editId: budgetOfficerEdit._id,
+        status: budgetOfficerEdit.status
+      });
     }
 
     // Update proposal - directly to Forwarded to Officer (skip "Coordinator Approved" intermediate status)
@@ -2010,14 +2052,13 @@ exports.coordinatorSubmitToOfficer = async (req, res) => {
       createdBy: { userId, name: userName }
     });
 
+    // Reload proposal with fresh data for frontend
+    const updatedProposal = await Proposal.findById(proposal._id).lean();
+
     res.json({
       success: true,
       message: 'Proposal submitted to Budget Officer successfully',
-      proposal: {
-        id: proposal._id,
-        status: proposal.status,
-        workflowLevel: proposal.workflowLevel
-      }
+      proposal: updatedProposal // Return full proposal for real-time UI update
     });
 
   } catch (error) {
@@ -2109,14 +2150,13 @@ exports.coordinatorSubmitToManager = async (req, res) => {
       createdBy: { userId, name: userName }
     });
 
+    // Reload proposal with fresh data for frontend
+    const updatedProposal = await Proposal.findById(proposal._id).lean();
+
     res.json({
       success: true,
       message: 'Proposal submitted to Budget Manager successfully',
-      proposal: {
-        id: proposal._id,
-        status: proposal.status,
-        workflowLevel: proposal.workflowLevel
-      }
+      proposal: updatedProposal // Return full proposal for real-time UI update
     });
 
   } catch (error) {
@@ -2527,6 +2567,20 @@ exports.officerApproveProposal = async (req, res) => {
         console.error('❌ Error applying officer edits:', applyError);
         // Continue - edits are stored in budgetofficeredits for recovery
       }
+
+      // CRITICAL FIX: Mark the BudgetOfficerEdit as "Approved" so it won't block future submissions
+      // This allows the officer to submit to manager after approval
+      budgetOfficerEdit.status = 'Approved';
+      budgetOfficerEdit.approvedAt = new Date();
+      budgetOfficerEdit.approvedBy = {
+        userId,
+        userName
+      };
+      await budgetOfficerEdit.save();
+      console.log('✅ Marked BudgetOfficerEdit as Approved:', {
+        editId: budgetOfficerEdit._id,
+        status: budgetOfficerEdit.status
+      });
     }
 
     // Update proposal
@@ -2575,14 +2629,13 @@ exports.officerApproveProposal = async (req, res) => {
       createdBy: { userId, name: userName }
     });
 
+    // Reload proposal with fresh data for frontend
+    const updatedProposal = await Proposal.findById(proposal._id).lean();
+
     res.json({
       success: true,
       message: 'Proposal approved by officer successfully',
-      proposal: {
-        id: proposal._id,
-        status: proposal.status,
-        workflowLevel: proposal.workflowLevel
-      }
+      proposal: updatedProposal // Return full proposal for real-time UI update
     });
 
   } catch (error) {
@@ -2774,14 +2827,13 @@ exports.officerSubmitToManager = async (req, res) => {
       createdBy: { userId, name: userName }
     });
 
+    // Reload proposal with fresh data for frontend
+    const updatedProposal = await Proposal.findById(proposal._id).lean();
+
     res.json({
       success: true,
       message: 'Proposal submitted to Budget Manager successfully',
-      proposal: {
-        id: proposal._id,
-        status: proposal.status,
-        workflowLevel: proposal.workflowLevel
-      }
+      proposal: updatedProposal // Return full proposal for real-time UI update
     });
 
   } catch (error) {
@@ -2851,6 +2903,20 @@ exports.managerApproveProposal = async (req, res) => {
         console.error('❌ Error applying manager edits:', applyError);
         // Continue - edits are stored in budgetofficeredits for recovery
       }
+
+      // CRITICAL FIX: Mark the BudgetOfficerEdit as "Approved" when finalizing
+      // This prevents future workflow issues if this proposal needs to be reopened/reprocessed
+      budgetOfficerEdit.status = 'Approved';
+      budgetOfficerEdit.approvedAt = new Date();
+      budgetOfficerEdit.approvedBy = {
+        userId,
+        userName
+      };
+      await budgetOfficerEdit.save();
+      console.log('✅ Marked BudgetOfficerEdit as Approved:', {
+        editId: budgetOfficerEdit._id,
+        status: budgetOfficerEdit.status
+      });
     }
 
     // Update proposal
@@ -2900,14 +2966,13 @@ exports.managerApproveProposal = async (req, res) => {
       createdBy: { userId, name: userName }
     });
 
+    // Reload proposal with fresh data for frontend
+    const updatedProposal = await Proposal.findById(proposal._id).lean();
+
     res.json({
       success: true,
       message: 'Proposal finalized successfully',
-      proposal: {
-        id: proposal._id,
-        status: proposal.status,
-        workflowLevel: proposal.workflowLevel
-      }
+      proposal: updatedProposal // Return full proposal for real-time UI update
     });
 
   } catch (error) {

@@ -31,7 +31,7 @@ const hasRequiredRole = (userRoles, requiredRoles) => {
 // Check if user has full system access
 // Note: Full access does NOT imply "FULL" hierarchical scope in UI; it only bypasses certain checks
 const hasFullAccess = (userRoles) => {
-  return hasRequiredRole(userRoles, [
+  const requiredRoles = [
     PERMISSION_LEVELS.SUPER_ADMIN,
     'SUPER ADMIN',  // Support both 'SUPER_ADMIN' and 'SUPER ADMIN' (with space) from database
     PERMISSION_LEVELS.ADMIN,
@@ -39,8 +39,22 @@ const hasFullAccess = (userRoles) => {
     PERMISSION_LEVELS.BUDGET_ADMIN,
     PERMISSION_LEVELS.BUDGET_ANALYST,
     PERMISSION_LEVELS.BUDGET_MANAGER,
-    PERMISSION_LEVELS.BUDGET_OFFICER  // Added BUDGET_OFFICER for approval permissions
-  ]);
+    PERMISSION_LEVELS.BUDGET_OFFICER,  // Added BUDGET_OFFICER for approval permissions
+    'BUDGET_COORDINATOR'  // NEW: Added BUDGET_COORDINATOR for assignment access
+  ];
+  const result = hasRequiredRole(userRoles, requiredRoles);
+  
+  // 🔍 DEBUG for BUDGET roles
+  if (Array.isArray(userRoles) && (userRoles.includes('BUDGET_OFFICER') || userRoles.includes('BUDGET_COORDINATOR'))) {
+    console.log('🔍 hasFullAccess check for BUDGET role:', {
+      userRoles,
+      requiredRoles,
+      result,
+      hasRequiredRoleDebug: userRoles.some(role => requiredRoles.includes(role))
+    });
+  }
+  
+  return result;
 };
 // Check organizational unit access with Budget Manager flexibility
 const checkOrganizationalAccess = async (req, res, next) => {

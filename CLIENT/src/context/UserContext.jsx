@@ -287,6 +287,19 @@ const UserProvider = ({ children }) => {
             if (devUserId) devHeaders['X-Dev-User-Id'] = String(devUserId);
             if (user?.Roles) devHeaders['X-Dev-Roles'] = (Array.isArray(user.Roles) ? user.Roles : [user.Roles]).join(',');
 
+            // 🔍 DEBUG: Log what's being sent to backend
+            console.log('🔍 Frontend Debug - Dev Headers being sent:', {
+              'X-Dev-User-Id': devHeaders['X-Dev-User-Id'],
+              'X-Dev-Roles': devHeaders['X-Dev-Roles'],
+              userObject: {
+                Id: user?.Id,
+                id: user?.id,
+                userId: user?.userId,
+                Username: user?.Username,
+                Roles: user?.Roles
+              }
+            });
+
             const haRes = await api.get("/api/hierarchical-rbac/my-access", { headers: devHeaders });
             const accessInfo = haRes?.data?.accessInfo;
 
@@ -295,13 +308,14 @@ const UserProvider = ({ children }) => {
             try {
               const userId = user?.Id || user?.id || user?.userId || (Array.isArray(user?.Username) ? user.Username[0] : user?.Username);
               if (userId) {
+                console.log('🔍 Fetching assignments for userId:', userId);
                 const assignmentRes = await api.get(`/api/hierarchical-rbac/assignments/${userId}`, { headers: devHeaders });
                 if (assignmentRes?.data?.assignment?.workflowRoles) {
                   userWorkflowRoles = assignmentRes.data.assignment.workflowRoles;
                 }
               }
             } catch (assignmentError) {
-              console.log('Could not load user assignment for workflow roles:', assignmentError.message);
+              console.log('❌ Could not load user assignment for workflow roles:', assignmentError.response?.status, assignmentError.response?.data || assignmentError.message);
             }
 
             if (accessInfo) {

@@ -33,8 +33,8 @@ router.post('/coordinator/return', proposalWorkflowController.coordinatorReturnP
 // BUDGET_COORDINATOR submits to BUDGET_OFFICER for verification
 router.post('/coordinator/submit-to-officer', proposalWorkflowController.coordinatorSubmitToOfficer);
 
-// LEGACY ROUTE DEPRECATED - Use approve-and-forward-to-officer instead
-// router.post('/coordinator/submit-to-manager', proposalWorkflowController.coordinatorSubmitToManager);
+// BUDGET_COORDINATOR submits directly to BUDGET_MANAGER (bypass Officer)
+router.post('/coordinator/submit-to-manager', proposalWorkflowController.coordinatorSubmitToManager);
 
 // BUDGET_COORDINATOR saves edits without forwarding
 router.post('/coordinator/save-edits', proposalWorkflowController.coordinatorSaveEdits);
