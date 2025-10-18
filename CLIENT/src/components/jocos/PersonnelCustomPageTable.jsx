@@ -245,23 +245,23 @@ const PSCOSCustomPageTable = ({
     ));
 
     // Add duplicate record option
-    options.push((props) => (
-      <MenuItem
-        key="duplicate-record"
-        onClick={() => {
-          const duplicateData = { ...props.row };
-          delete duplicateData._id;
-          delete duplicateData.createdAt;
-          delete duplicateData.updatedAt;
-          toast.info("Duplicate functionality to be implemented");
-          props.parentClose();
-        }}
-        sx={{ display: "flex", gap: 1 }}
-      >
-        <EditIcon fontSize="small" />
-        Duplicate Record
-      </MenuItem>
-    ));
+    // options.push((props) => (
+    //   <MenuItem
+    //     key="duplicate-record"
+    //     onClick={() => {
+    //       const duplicateData = { ...props.row };
+    //       delete duplicateData._id;
+    //       delete duplicateData.createdAt;
+    //       delete duplicateData.updatedAt;
+    //       toast.info("Duplicate functionality to be implemented");
+    //       props.parentClose();
+    //     }}
+    //     sx={{ display: "flex", gap: 1 }}
+    //   >
+    //     <EditIcon fontSize="small" />
+    //     Duplicate Record
+    //   </MenuItem>
+    // ));
 
     return options;
   }, [additionalMenuOptions, handleViewDetails]);

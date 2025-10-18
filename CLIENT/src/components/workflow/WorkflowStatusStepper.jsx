@@ -1,13 +1,10 @@
 import React from 'react';
 import {
   Box,
-  Stepper,
-  Step,
-  StepLabel,
-  StepContent,
   Typography,
   Chip,
-  Paper
+  Paper,
+  Tooltip
 } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
@@ -18,9 +15,10 @@ import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import GavelIcon from '@mui/icons-material/Gavel';
 
 /**
- * WorkflowStatusStepper - Visual representation of proposal workflow progress
+ * WorkflowStatusStepper - Compact horizontal workflow progress indicator
  * 
  * Shows the current status and next steps in the budget proposal workflow
+ * in a space-efficient horizontal layout
  */
 const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
   if (!proposal) return null;
@@ -31,44 +29,51 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
   const steps = isOfficeLevel ? [
     {
       label: 'Budget Analyst',
-      role: 'Creates Proposal',
+      role: 'Creates',
+      shortLabel: 'Analyst',
       statuses: ['Draft'],
       icon: <PersonIcon />
     },
     {
       label: 'Budget Officer',
-      role: 'Approves & Submits',
+      role: 'Approves',
+      shortLabel: 'Officer',
       statuses: ['Officer Approved', 'Forwarded to Manager'],
       icon: <VerifiedUserIcon />
     },
     {
       label: 'Budget Manager',
-      role: 'Final Approval',
+      role: 'Finalizes',
+      shortLabel: 'Manager',
       statuses: ['Finalized'],
       icon: <GavelIcon />
     }
   ] : [
     {
       label: 'Budget Analyst',
-      role: 'Creates Proposal',
+      role: 'Creates',
+      shortLabel: 'Analyst',
       statuses: ['Draft'],
       icon: <PersonIcon />
     },
     {
       label: 'Budget Coordinator',
-      role: 'Reviews & Forwards',
+      role: 'Reviews',
+      shortLabel: 'Coordinator',
       statuses: ['Division Submitted', 'Forwarded to Officer'],
       icon: <GroupIcon />
     },
     {
       label: 'Budget Officer',
-      role: 'Approves & Submits',
+      role: 'Approves',
+      shortLabel: 'Officer',
       statuses: ['Officer Approved', 'Forwarded to Manager'],
       icon: <VerifiedUserIcon />
     },
     {
       label: 'Budget Manager',
-      role: 'Final Approval',
+      role: 'Finalizes',
+      shortLabel: 'Manager',
       statuses: ['Finalized'],
       icon: <GavelIcon />
     }
@@ -96,12 +101,12 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
   const getStepIcon = (index) => {
     const stepStatus = getStepStatus(index);
     if (stepStatus === 'completed') {
-      return <CheckCircleIcon sx={{ color: 'success.main' }} />;
+      return <CheckCircleIcon sx={{ color: 'success.main', fontSize: '1.5rem' }} />;
     }
     if (stepStatus === 'active') {
-      return <PlayCircleFilledIcon sx={{ color: 'primary.main' }} />;
+      return <PlayCircleFilledIcon sx={{ color: 'primary.main', fontSize: '1.5rem' }} />;
     }
-    return <RadioButtonUncheckedIcon sx={{ color: 'text.disabled' }} />;
+    return <RadioButtonUncheckedIcon sx={{ color: 'text.disabled', fontSize: '1.5rem' }} />;
   };
 
   const getStatusChipColor = () => {
@@ -125,68 +130,117 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
   };
 
   return (
-    <Paper elevation={2} sx={{ p: 3, mb: 3, backgroundColor: 'background.paper' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+    <Paper elevation={1} sx={{ p: 2, mb: 2, backgroundColor: 'background.paper' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 600, fontSize: '0.85rem' }}>
           Workflow Progress
         </Typography>
         <Chip 
           label={status} 
           color={getStatusChipColor()} 
-          size="medium"
-          sx={{ fontWeight: 600 }}
+          size="small"
+          sx={{ fontWeight: 600, fontSize: '0.75rem', height: '24px' }}
         />
       </Box>
 
-      <Stepper activeStep={activeStep} orientation="vertical">
+      {/* Horizontal Timeline */}
+      <Box sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 0.5,
+        width: '100%'
+      }}>
         {steps.map((step, index) => (
-          <Step key={step.label} completed={getStepStatus(index) === 'completed'}>
-            <StepLabel
-              StepIconComponent={() => getStepIcon(index)}
-              sx={{
-                '& .MuiStepLabel-label': {
-                  fontWeight: getStepStatus(index) === 'active' ? 600 : 400,
-                  color: getStepStatus(index) === 'completed' ? 'success.main' : 
-                         getStepStatus(index) === 'active' ? 'primary.main' : 'text.secondary'
-                }
-              }}
-            >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                {step.icon}
-                <Typography variant="body1" sx={{ fontWeight: 'inherit' }}>
-                  {step.label}
+          <Box key={step.label} sx={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
+            {/* Step */}
+            <Tooltip title={step.label}>
+              <Box sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 0.5,
+                flex: 1,
+                minWidth: 0
+              }}>
+                <Box sx={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  backgroundColor: getStepStatus(index) === 'completed' ? 'success.light' :
+                                   getStepStatus(index) === 'active' ? 'primary.light' : 'action.disabledBackground',
+                  transition: 'all 0.3s ease'
+                }}>
+                  {getStepIcon(index)}
+                </Box>
+                <Typography 
+                  variant="caption" 
+                  sx={{
+                    textAlign: 'center',
+                    fontWeight: getStepStatus(index) === 'active' ? 600 : 500,
+                    fontSize: '0.65rem',
+                    lineHeight: 1,
+                    color: getStepStatus(index) === 'completed' ? 'success.main' :
+                           getStepStatus(index) === 'active' ? 'primary.main' : 'text.secondary',
+                    whiteSpace: 'normal',
+                    maxWidth: '50px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}
+                >
+                  {step.shortLabel}
                 </Typography>
+                {getStepStatus(index) === 'active' && (
+                  <Chip 
+                    label="Active" 
+                    size="mini" 
+                    color="primary" 
+                    sx={{
+                      height: '18px',
+                      fontSize: '0.6rem',
+                      '& .MuiChip-label': { px: '4px' }
+                    }}
+                  />
+                )}
               </Box>
-            </StepLabel>
-            <StepContent>
-              <Typography variant="body2" color="text.secondary">
-                {step.role}
-              </Typography>
-              {getStepStatus(index) === 'active' && (
-                <Chip 
-                  label="Current Step" 
-                  size="small" 
-                  color="primary" 
-                  sx={{ mt: 1 }}
-                />
-              )}
-            </StepContent>
-          </Step>
+            </Tooltip>
+
+            {/* Connector Line */}
+            {index < steps.length - 1 && (
+              <Box sx={{
+                flex: 0.5,
+                height: '2px',
+                backgroundColor: getStepStatus(index) === 'completed' ? 'success.main' :
+                                 getStepStatus(index + 1) === 'active' ? 'primary.main' : '#e0e0e0',
+                mx: 0.25,
+                transition: 'background-color 0.3s ease'
+              }} />
+            )}
+          </Box>
         ))}
-      </Stepper>
+      </Box>
 
-      {status === 'Finalized' && (
-        <Box sx={{ mt: 2, p: 2, backgroundColor: 'success.light', borderRadius: 1 }}>
-          <Typography variant="body2" sx={{ color: 'success.dark', fontWeight: 600 }}>
-            ✅ This proposal has been finalized and approved!
-          </Typography>
-        </Box>
-      )}
-
-      {status === 'Returned' && (
-        <Box sx={{ mt: 2, p: 2, backgroundColor: 'warning.light', borderRadius: 1 }}>
-          <Typography variant="body2" sx={{ color: 'warning.dark', fontWeight: 600 }}>
-            ⚠️ This proposal has been returned for revision.
+      {/* Status Messages */}
+      {(status === 'Finalized' || status === 'Returned') && (
+        <Box sx={{
+          mt: 1.5,
+          p: 1,
+          backgroundColor: status === 'Finalized' ? 'success.light' : 'warning.light',
+          borderRadius: 0.5,
+          borderLeft: `3px solid ${status === 'Finalized' ? '#4caf50' : '#ff9800'}`
+        }}>
+          <Typography 
+            variant="caption" 
+            sx={{
+              color: status === 'Finalized' ? 'success.dark' : 'warning.dark',
+              fontWeight: 600,
+              fontSize: '0.75rem'
+            }}
+          >
+            {status === 'Finalized' ? '✅ Finalized & Approved' : '⚠️ Returned for Revision'}
           </Typography>
         </Box>
       )}

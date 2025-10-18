@@ -608,68 +608,68 @@ const PSCasualCustomPageTable = ({
     ));
 
     // Add duplicate record option
-    options.push((props) => (
-      <MenuItem
-        key="duplicate-record"
-        onClick={() => {
-          const duplicateData = { ...props.row };
-          delete duplicateData._id;
-          delete duplicateData.createdAt;
-          delete duplicateData.updatedAt;
-          toast.info("Duplicate functionality to be implemented");
-          props.parentClose();
-        }}
-        sx={{ display: "flex", gap: 1 }}
-      >
-        <EditIcon fontSize="small" />
-        Duplicate Record
-      </MenuItem>
-    ));
+    // options.push((props) => (
+    //   <MenuItem
+    //     key="duplicate-record"
+    //     onClick={() => {
+    //       const duplicateData = { ...props.row };
+    //       delete duplicateData._id;
+    //       delete duplicateData.createdAt;
+    //       delete duplicateData.updatedAt;
+    //       toast.info("Duplicate functionality to be implemented");
+    //       props.parentClose();
+    //     }}
+    //     sx={{ display: "flex", gap: 1 }}
+    //   >
+    //     <EditIcon fontSize="small" />
+    //     Duplicate Record
+    //   </MenuItem>
+    // ));
 
     // Add print option
-    options.push((props) => (
-      <MenuItem
-        key="print-record"
-        onClick={() => {
-          const printWindow = window.open('', '_blank');
-          const printContent = `
-            <html>
-              <head>
-                <title>Casual Personnel Record - ${props.row.employeeFullName}</title>
-                <style>
-                  body { font-family: Arial, sans-serif; margin: 20px; }
-                  .header { text-align: center; margin-bottom: 30px; }
-                  .field { margin-bottom: 10px; }
-                  .label { font-weight: bold; display: inline-block; width: 200px; }
-                  .value { display: inline-block; }
-                </style>
-              </head>
-              <body>
-                <div class="header">
-                  <h2>Casual Personnel Record</h2>
-                  <h3>${props.row.employeeFullName}</h3>
-                </div>
-                ${Object.keys(schema).map(key =>
-                  schema[key].label && key !== 'action' ?
-                    `<div class="field">
-                      <span class="label">${schema[key].label}:</span>
-                      <span class="value">${props.row[key] || 'N/A'}</span>
-                    </div>` : ''
-                ).join('')}
-              </body>
-            </html>
-          `;
-          printWindow.document.write(printContent);
-          printWindow.document.close();
-          printWindow.print();
-          props.parentClose();
-        }}
-        sx={{ display: "flex", gap: 1 }}
-      >
-        <PrintIcon fontSize="small" />
-        Print Record
-      </MenuItem>
-    ));
+    // options.push((props) => (
+    //   <MenuItem
+    //     key="print-record"
+    //     onClick={() => {
+    //       const printWindow = window.open('', '_blank');
+    //       const printContent = `
+    //         <html>
+    //           <head>
+    //             <title>Casual Personnel Record - ${props.row.employeeFullName}</title>
+    //             <style>
+    //               body { font-family: Arial, sans-serif; margin: 20px; }
+    //               .header { text-align: center; margin-bottom: 30px; }
+    //               .field { margin-bottom: 10px; }
+    //               .label { font-weight: bold; display: inline-block; width: 200px; }
+    //               .value { display: inline-block; }
+    //             </style>
+    //           </head>
+    //           <body>
+    //             <div class="header">
+    //               <h2>Casual Personnel Record</h2>
+    //               <h3>${props.row.employeeFullName}</h3>
+    //             </div>
+    //             ${Object.keys(schema).map(key =>
+    //               schema[key].label && key !== 'action' ?
+    //                 `<div class="field">
+    //                   <span class="label">${schema[key].label}:</span>
+    //                   <span class="value">${props.row[key] || 'N/A'}</span>
+    //                 </div>` : ''
+    //             ).join('')}
+    //           </body>
+    //         </html>
+    //       `;
+    //       printWindow.document.write(printContent);
+    //       printWindow.document.close();
+    //       printWindow.print();
+    //       props.parentClose();
+    //     }}
+    //     sx={{ display: "flex", gap: 1 }}
+    //   >
+    //     <PrintIcon fontSize="small" />
+    //     Print Record
+    //   </MenuItem>
+    // ));
 
     return options;
   }, [additionalMenuOptions, schema, handleViewDetails]);
