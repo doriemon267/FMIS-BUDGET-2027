@@ -2089,8 +2089,8 @@ exports.coordinatorSubmitToManager = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Proposal not found' });
     }
 
-    // Verify proposal is in correct status (must be coordinator approved)
-    const validStatuses = ['Coordinator Approved', 'Office Approved']; // Support legacy status
+    // Verify proposal is in correct status (must be coordinator approved or forwarded to officer)
+    const validStatuses = ['Coordinator Approved', 'Forwarded to Officer', 'Division Submitted', 'Office Approved']; // Support legacy status
     if (!validStatuses.includes(proposal.status)) {
       return res.status(400).json({ 
         success: false, 

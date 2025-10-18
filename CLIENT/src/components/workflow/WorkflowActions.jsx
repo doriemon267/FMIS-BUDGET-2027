@@ -291,6 +291,14 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
           requiresComment: true
         });
         actions.push({
+          label: 'Submit to Manager (Skip Officer)',
+          action: 'coordinator-submit-to-manager',
+          color: 'bg-purple-500 hover:bg-purple-600',
+          icon: '⚡',
+          description: 'Submit proposal directly to Budget Manager (bypasses Officer review)',
+          requiresComment: true
+        });
+        actions.push({
           label: 'Return to Analyst',
           action: 'coordinator-return',
           color: 'bg-red-500 hover:bg-red-600',
