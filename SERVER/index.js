@@ -30,7 +30,8 @@ const excelUploadRouter = require("./routers/excelUpload");
 const capitalOutlayRouter = require("./routers/capitalOutlayRouter");
 const capitalOutlayDetailsRouter = require("./routers/capitalOutlayDetailsRouter");
 const categoryRouter = require("./routers/category");
-const proposalRouter = require("./routers/proposalRoutes");
+// ✅ FIXED: Removed duplicate router import
+// const proposalRouter = require("./routers/proposalRoutes");  // DISABLED - use proposalRBACRouter
 const proposalRBACRouter = require("./routers/proposalRoutesRBAC");
 const rataRoutes = require("./routers/RATARoutes");
 const regionRouter = require("./routers/RegionRoutes");
@@ -276,7 +277,9 @@ app.use("/api", excelUploadRouter); // Excel Upload Route
 app.use(capitalOutlayRouter);
 app.use("/api", capitalOutlayDetailsRouter);
 app.use(categoryRouter);
-app.use(proposalRouter);
+// ✅ FIXED: Disabled duplicate proposalRouter to prevent duplicate proposal creation
+// proposalRouter defined same routes as proposalRBACRouter causing POST /proposals to be called twice
+// app.use(proposalRouter);  // DISABLED - use proposalRBACRouter instead (has RBAC security)
 app.use(proposalRBACRouter);
 // Budget Officer Edit Routes
 app.use('/api/budget-officer-edits', budgetOfficerEditRouter);

@@ -1,7 +1,9 @@
 const mongoose = require('mongoose');
 const Proposal = require('../models/Proposal');
 const Notification = require('../models/Notification');
-const User = require('../models/User');
+const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+const Department = require('../models/Department');
+const Region = require('../models/Region');
 const PersonnelServices = require('../models/PersonnelServices');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const mooeProposals = require('../models/mooeProposals');
@@ -2713,11 +2715,27 @@ exports.officerReturnProposal = async (req, res) => {
     // Sync status to all related budget items
     await syncBudgetItemsStatus(proposal);
 
-    // Send notification to BUDGET_COORDINATOR (submitter)
+    const coordinatorRecipientId = proposal.approvedByCoordinator?.userId;
+
+    await sendNotification({
+      recipientUserId: coordinatorRecipientId || undefined,
+      recipientRole: coordinatorRecipientId ? undefined : 'BUDGET_COORDINATOR',
+      title: 'Proposal Returned by Officer',
+      message: `Proposal "${proposal.title}" has been returned by ${userName} (Budget Officer) for further review. Reason: ${comment}`,
+      entity: 'proposal',
+      recordIds: [proposal._id],
+      org: {
+        region: proposal.region,
+        department: proposal.department,
+        division: proposal.division
+      },
+      createdBy: { userId, name: userName }
+    });
+
     await sendNotification({
       recipientUserId: proposal.createdByUserId,
       title: 'Proposal Returned by Officer',
-      message: `Your proposal "${proposal.title}" has been returned by ${userName} (Budget Officer) for revisions. Reason: ${comment}`,
+      message: `Your proposal "${proposal.title}" has been returned by ${userName} (Budget Officer). Please coordinate with your approver. Reason: ${comment}`,
       entity: 'proposal',
       recordIds: [proposal._id],
       org: {
@@ -3063,11 +3081,19 @@ exports.managerReturnProposal = async (req, res) => {
     // Sync status to all related budget items
     await syncBudgetItemsStatus(proposal);
 
-    // Send notification to the target role
+    const targetRecipientUserId = targetRole === 'BUDGET_ANALYST'
+      ? proposal.createdByUserId
+      : targetRole === 'BUDGET_COORDINATOR'
+        ? proposal.approvedByCoordinator?.userId
+        : targetRole === 'BUDGET_OFFICER'
+          ? proposal.approvedByOfficer?.userId
+          : null;
+
     await sendNotification({
-      recipientUserId: proposal.createdByUserId,
+      recipientUserId: targetRecipientUserId || undefined,
+      recipientRole: targetRecipientUserId ? undefined : targetRole,
       title: 'Proposal Returned by Manager',
-      message: `Your proposal "${proposal.title}" has been returned by ${userName} (Budget Manager) for revisions. Reason: ${comment}`,
+      message: `Proposal "${proposal.title}" has been returned by ${userName} (Budget Manager) for revisions. Reason: ${comment}`,
       entity: 'proposal',
       recordIds: [proposal._id],
       org: {
@@ -3077,6 +3103,22 @@ exports.managerReturnProposal = async (req, res) => {
       },
       createdBy: { userId, name: userName }
     });
+
+    if (targetRole !== 'BUDGET_ANALYST') {
+      await sendNotification({
+        recipientUserId: proposal.createdByUserId,
+        title: 'Proposal Returned by Manager',
+        message: `Your proposal "${proposal.title}" has been returned by ${userName} (Budget Manager) to the ${targetRole.replace('BUDGET_', '').toLowerCase()} for revisions. Reason: ${comment}`,
+        entity: 'proposal',
+        recordIds: [proposal._id],
+        org: {
+          region: proposal.region,
+          department: proposal.department,
+          division: proposal.division
+        },
+        createdBy: { userId, name: userName }
+      });
+    }
 
     res.json({
       success: true,
@@ -3097,16 +3139,103 @@ exports.managerReturnProposal = async (req, res) => {
 // Helper function to send notifications
 async function sendNotification({ recipientUserId, recipientRole, title, message, entity, recordIds, org, createdBy }) {
   try {
-    let recipients = [];
+    const recipientIds = new Set();
 
-    if (recipientUserId) {
-      recipients = [recipientUserId];
-    } else if (recipientRole) {
-      // Store role in a format that can be queried
-      recipients = [recipientRole];
+    const addRecipient = (id) => {
+      if (!id) return;
+      const normalized = String(id).trim();
+      if (normalized) {
+        recipientIds.add(normalized);
+      }
+    };
+
+    if (Array.isArray(recipientUserId)) {
+      recipientUserId.forEach(addRecipient);
+    } else if (recipientUserId) {
+      addRecipient(recipientUserId);
     }
 
-    const notifications = recipients.map(recipientId => ({
+    if (recipientRole) {
+      const baseQuery = { userRole: recipientRole, isActive: true };
+      const queryVariants = [];
+
+      let regionDoc = null;
+      let departmentDoc = null;
+
+      if (org?.region) {
+        regionDoc = await Region.findOne({ Region: org.region }).lean();
+      }
+
+      if (org?.department) {
+        departmentDoc = await Department.findOne({ Department: org.department }).lean();
+      }
+
+      const specificQuery = { ...baseQuery };
+      if (org?.division) {
+        specificQuery.divisionName = org.division;
+      }
+      if (departmentDoc?._id) {
+        specificQuery.departmentId = departmentDoc._id;
+      }
+      if (regionDoc?._id) {
+        specificQuery.regionId = regionDoc._id;
+      }
+
+      // Prioritize most specific combinations first then progressively relax filters
+      queryVariants.push(specificQuery);
+
+      if (specificQuery.divisionName) {
+        const withoutDivision = { ...specificQuery };
+        delete withoutDivision.divisionName;
+        queryVariants.push(withoutDivision);
+      }
+
+      if (specificQuery.departmentId) {
+        const deptOnly = { ...baseQuery };
+        deptOnly.departmentId = specificQuery.departmentId;
+        if (specificQuery.regionId) {
+          deptOnly.regionId = specificQuery.regionId;
+        }
+        queryVariants.push(deptOnly);
+      }
+
+      if (specificQuery.regionId) {
+        const regionOnly = { ...baseQuery, regionId: specificQuery.regionId };
+        queryVariants.push(regionOnly);
+      }
+
+      queryVariants.push(baseQuery);
+
+      const seenVariants = new Set();
+      for (const variant of queryVariants) {
+        const sanitized = Object.fromEntries(
+          Object.entries(variant).filter(([, value]) => value !== undefined)
+        );
+        const fingerprint = JSON.stringify(sanitized);
+        if (seenVariants.has(fingerprint)) {
+          continue;
+        }
+        seenVariants.add(fingerprint);
+
+        const matches = await HierarchicalUserAssignment.find(sanitized).lean();
+        if (matches.length > 0) {
+          matches.forEach(match => addRecipient(match.userId));
+          // Stop after the first variant that yields recipients to avoid duplicate fan-out
+          break;
+        }
+      }
+    }
+
+    if (recipientIds.size === 0) {
+      console.warn('⚠️  Notification skipped - no recipients resolved', {
+        recipientUserId,
+        recipientRole,
+        org
+      });
+      return;
+    }
+
+    const notifications = Array.from(recipientIds).map(recipientId => ({
       recipientUserId: recipientId,
       title,
       message,
