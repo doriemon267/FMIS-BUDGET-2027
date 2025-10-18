@@ -9,6 +9,8 @@ import api from "../../config/api";
 import { useUser } from "../../context/UserContext";
 import { useRegion } from "../../context/RegionContext";
 import ActiveRegionDisplay from "../common/ActiveRegionDisplay";
+import { useQueryClient } from "@tanstack/react-query";
+import { invalidateDataList } from "../../utils/queryClientHelpers";
 
 const CustomPageTable = ({
   dataListName,
@@ -34,6 +36,7 @@ const CustomPageTable = ({
   const pageDescription = description || `Manage ${dataListName}`;
   const apiPath = `/${dataListName}`;
   const { currentUser } = useUser();
+  const queryClient = useQueryClient();
 
   // Get the active region
   const { activeRegion } = useRegion();
@@ -117,12 +120,12 @@ const CustomPageTable = ({
           toast.info(response.data.message || "No personnel services to add.");
         }
         
-        const newStatusLabel = `Personnel Services - ${selectedStatus.charAt(0).toUpperCase() + selectedStatus.slice(1).toLowerCase()}`;
+    const newStatusLabel = `Personnel Services - ${selectedStatus.charAt(0).toUpperCase() + selectedStatus.slice(1).toLowerCase()}`;
         setStatusLabel(newStatusLabel);
         localStorage.setItem("statusLabel", newStatusLabel);
 
-        // await fetchData(); // Ensure table refreshes before dialog closes
-        location.reload()
+    await fetchData();
+    await invalidateDataList(queryClient, dataListName);
       } else if (response.data.message) {
         toast.info(response.data.message);
         console.error("Bulk add response:", response.data);

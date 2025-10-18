@@ -40,6 +40,7 @@ import FilterListIcon from '@mui/icons-material/FilterList';
 import GetAppIcon from '@mui/icons-material/GetApp';
 import PrintIcon from '@mui/icons-material/Print';
 import { useQueryClient } from "@tanstack/react-query";
+import { invalidateDataList } from "../../utils/queryClientHelpers";
 
 const PSPCustomPageTable = ({
   dataListName,
@@ -90,25 +91,28 @@ const PSPCustomPageTable = ({
     try {
       const response = await api.get("/settings/active");
       if (response.data) {
-        setFiscalYear(response.data.fiscalYear || "");
-        setBudgetType(response.data.budgetType || "");
-        setPERA(response.data.PERA || 0);
+        const settings = response.data;
+        setFiscalYear(settings.fiscalYear || "");
+        setBudgetType(settings.budgetType || "");
+        setPERA(settings.PERA || 0);
         setCompensation({
-          uniformALLOWANCE: response.data.uniformAllowance,
-          productivityIncentive: response.data.productivityIncentive,
-          medicalAllowance: response.data.medicalAllowance,
-          meal: response.data.meal,
-          cashGift: response.data.cashGift,
-          pagibigPremium: response.data.pagibigPremium,
-          gsisPremium: response.data.gsisPremium,
-          employeeCompensation: response.data.employeeCompensation,
+          uniformALLOWANCE: settings.uniformAllowance,
+          productivityIncentive: settings.productivityIncentive,
+          medicalAllowance: settings.medicalAllowance,
+          meal: settings.meal,
+          cashGift: settings.cashGift,
+          pagibigPremium: settings.pagibigPremium,
+          gsisPremium: settings.gsisPremium,
+          employeeCompensation: settings.employeeCompensation,
         });
-      } else {
-        toast.error("Active settings not found.");
+        return settings;
       }
+      toast.error("Active settings not found.");
+      return null;
     } catch (error) {
       toast.error("Error fetching active settings.");
       console.error("Error fetching active settings:", error);
+      return null;
     }
   }, []);
 
@@ -545,14 +549,36 @@ const PSPCustomPageTable = ({
   }, [rows]);
 
   const handleAddAllPersonnel = useCallback(async (statusOfAppointment) => {
-    if (!fiscalYear) {
-      toast.error("Active fiscal year not set. Please try again later.");
-      return;
-    }
-
     setLoading(true);
 
     try {
+      let currentFiscalYear = fiscalYear;
+      let currentBudgetType = budgetType;
+      let currentPERA = PERA;
+      let currentCompensation = compensation;
+
+      if (!currentFiscalYear) {
+        const latestSettings = await fetchActiveSettings();
+        currentFiscalYear = latestSettings?.fiscalYear || "";
+        currentBudgetType = latestSettings?.budgetType || "";
+        currentPERA = latestSettings?.PERA || 0;
+        currentCompensation = {
+          uniformALLOWANCE: latestSettings?.uniformAllowance ?? compensation?.uniformALLOWANCE ?? 0,
+          productivityIncentive: latestSettings?.productivityIncentive ?? compensation?.productivityIncentive ?? 0,
+          medicalAllowance: latestSettings?.medicalAllowance ?? compensation?.medicalAllowance ?? 0,
+          meal: latestSettings?.meal ?? compensation?.meal ?? 0,
+          cashGift: latestSettings?.cashGift ?? compensation?.cashGift ?? 0,
+          pagibigPremium: latestSettings?.pagibigPremium ?? compensation?.pagibigPremium ?? 0,
+          gsisPremium: latestSettings?.gsisPremium ?? compensation?.gsisPremium ?? 0,
+          employeeCompensation: latestSettings?.employeeCompensation ?? compensation?.employeeCompensation ?? 0,
+        };
+
+        if (!currentFiscalYear) {
+          toast.error("Active fiscal year not set. Please try again later.");
+          return;
+        }
+      }
+
       const processBy = `${currentUser.FirstName} ${currentUser.LastName}`;
 
       // Get active region from localStorage
@@ -570,11 +596,11 @@ const PSPCustomPageTable = ({
       const response = await api.post(`/personnelServices/bulk-add`, {
         processBy,
         statusOfAppointment,
-        fiscalYear,
-        budgetType,
-        PERA,
+        fiscalYear: currentFiscalYear,
+        budgetType: currentBudgetType,
+        PERA: currentPERA,
         RATA: RATA.map(item => ({ grade: item.SG, amount: item.RATA })),
-        compensation,
+        compensation: currentCompensation,
         region // Include the active region in the request
       });
 
@@ -591,7 +617,7 @@ const PSPCustomPageTable = ({
         }
         
         await fetchData();
-        queryClient.invalidateQueries(dataListName);
+        await invalidateDataList(queryClient, dataListName);
       } else if (response.data.message) {
         toast.info(response.data.message);
         console.error("Bulk add response:", response.data);
@@ -611,7 +637,18 @@ const PSPCustomPageTable = ({
       setLoading(false);
       setOpenDialog(false);
     }
-  }, [fiscalYear, budgetType, PERA, RATA, compensation, currentUser, fetchData, queryClient, dataListName]);
+  }, [
+    fiscalYear,
+    budgetType,
+    PERA,
+    RATA,
+    compensation,
+    currentUser,
+    fetchData,
+    queryClient,
+    dataListName,
+    fetchActiveSettings
+  ]);
 
   const handleOpenDialog = () => setOpenDialog(true);
   const handleCloseDialog = () => setOpenDialog(false);

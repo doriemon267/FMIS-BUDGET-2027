@@ -238,7 +238,14 @@ courtAppearance: {
     finalApprovedBy: { type: String },
     submissionNote: { type: String },
     approvalNote: { type: String },
-    finalNote: { type: String }
+    finalNote: { type: String },
+    
+    // Link to specific proposal (CRITICAL for distinguishing between proposals)
+    proposalId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Proposal',
+      index: true
+    }
   },
   { timestamps: true }
 );

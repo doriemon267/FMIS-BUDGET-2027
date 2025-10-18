@@ -105,6 +105,13 @@ const incomeSchema = new mongoose.Schema(
     division: { type: String },
     originalLevel: { type: String },       // 'DIVISION' | 'DEPARTMENT' | 'REGION'
     consolidatedFrom: { type: String },    // 'DIVISION' | 'DEPARTMENT' | 'REGION'
+    
+    // Link to specific proposal (CRITICAL for distinguishing between proposals)
+    proposalId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Proposal',
+      index: true
+    }
   },
   { timestamps: true }
 );

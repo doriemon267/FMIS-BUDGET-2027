@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const BudgetOfficerEdit = require('../models/BudgetOfficerEdit');
 const ProposalEditLog = require('../models/ProposalEditLog');
 const Proposal = require('../models/Proposal');
@@ -111,7 +112,8 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
               region: budgetOfficerEdit.region,
               department: budgetOfficerEdit.department,
               division: budgetOfficerEdit.division,
-              processBy: budgetOfficerEdit.processBy
+              processBy: budgetOfficerEdit.processBy,
+              proposalId: budgetOfficerEdit.proposalId  // CRITICAL: Link to this proposal
             });
             await newIncome.save();
             results.income.added++;
@@ -164,7 +166,8 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
               region: budgetOfficerEdit.region,
               department: budgetOfficerEdit.department,
               division: budgetOfficerEdit.division,
-              processBy: budgetOfficerEdit.processBy
+              processBy: budgetOfficerEdit.processBy,
+              proposalId: budgetOfficerEdit.proposalId  // CRITICAL: Link to this proposal
             });
             await newPS.save();
             results.personnelServices.added++;
@@ -215,7 +218,8 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
               region: budgetOfficerEdit.region,
               department: budgetOfficerEdit.department,
               division: budgetOfficerEdit.division,
-              processBy: budgetOfficerEdit.processBy
+              processBy: budgetOfficerEdit.processBy,
+              proposalId: budgetOfficerEdit.proposalId  // CRITICAL: Link to this proposal
             });
             await newMooe.save();
             results.mooe.added++;
@@ -254,6 +258,32 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
       for (const edit of budgetOfficerEdit.editedCapitalOutlay) {
         try {
           const targetId = edit.originalId || edit._id;
+
+          if (edit.changeType === 'added') {
+            const data = sanitizeEditPayload(edit);
+            if (data.income !== undefined) data.income = Number(data.income);
+            if (data.subsidy !== undefined) data.subsidy = Number(data.subsidy);
+            if (data.cost !== undefined) {
+              data.cost = Number(data.cost);
+              data.total = Number(data.cost);
+            } else if (data.total !== undefined) {
+              data.total = Number(data.total);
+              data.cost = Number(data.total);
+            }
+            const newCapitalOutlay = new CapitalOutlay({
+              ...data,
+              fiscalYear: budgetOfficerEdit.fiscalYear,
+              budgetType: budgetOfficerEdit.budgetType,
+              region: budgetOfficerEdit.region,
+              department: budgetOfficerEdit.department,
+              division: budgetOfficerEdit.division,
+              processBy: budgetOfficerEdit.processBy,
+              proposalId: budgetOfficerEdit.proposalId  // CRITICAL: Link to this proposal
+            });
+            await newCapitalOutlay.save();
+            results.capitalOutlay.added++;
+            continue;
+          }
 
           if (edit.changeType === 'deleted' && targetId) {
             await CapitalOutlay.findByIdAndDelete(targetId);
@@ -303,13 +333,10 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
     try {
       const proposal = await Proposal.findById(budgetOfficerEdit.proposalId);
       if (proposal) {
-        // Aggregate totals from all budget items
+        // Aggregate totals from budget items SPECIFIC TO THIS PROPOSAL
+        // Using proposalId to ensure we only sum items for this proposal
         const filterCriteria = {
-          region: proposal.region,
-          department: proposal.department,
-          division: proposal.division,
-          fiscalYear: proposal.fiscalYear,
-          budgetType: proposal.budgetType
+          proposalId: mongoose.Types.ObjectId(budgetOfficerEdit.proposalId)
         };
 
         const [incomeTotal, psTotal, mooeTotal, coTotal] = await Promise.all([
@@ -716,7 +743,9 @@ exports.saveDraftEdit = async (req, res) => {
       ? 'BUDGET_MANAGER'
       : userRoles.includes('BUDGET_OFFICER')
       ? 'BUDGET_OFFICER'
-      : 'BUDGET_COORDINATOR';
+      : userRoles.includes('BUDGET_COORDINATOR')
+      ? 'BUDGET_COORDINATOR'
+      : 'BUDGET_ANALYST';
     
     if (budgetOfficerEdit) {
       // Update existing draft
@@ -838,7 +867,8 @@ exports.submitEdit = async (req, res) => {
       editedPersonnelServices,
       editedMOOE,
       editedCapitalOutlay,
-      comments
+      comments,
+      submitTargetRole
     } = req.body;
     
     const auditContext = await buildRequestAuditContext(req);
@@ -906,7 +936,9 @@ exports.submitEdit = async (req, res) => {
       ? 'BUDGET_MANAGER'
       : userRoles.includes('BUDGET_OFFICER')
       ? 'BUDGET_OFFICER'
-      : 'BUDGET_COORDINATOR';
+      : userRoles.includes('BUDGET_COORDINATOR')
+      ? 'BUDGET_COORDINATOR'
+      : 'BUDGET_ANALYST';
     
     // Check if there's an existing draft
     let budgetOfficerEdit = await BudgetOfficerEdit.findOne({
@@ -982,18 +1014,45 @@ exports.submitEdit = async (req, res) => {
     let currentAssigneeRole = proposal.currentAssigneeRole;
     let pendingRoles = Array.isArray(proposal.pendingWithRoles) ? [...proposal.pendingWithRoles] : [];
 
-    if (editorRole === 'BUDGET_COORDINATOR') {
-      newStatus = 'Forwarded to Officer';
-      newWorkflowLevel = 'OFFICER';
-      historyAction = 'COORDINATOR_SUBMIT_TO_OFFICER';
-      historyComment = comments || 'Budget Coordinator submitted edits to Budget Officer';
-      currentStep = 'OFFICER_REVIEW';
-      currentAssigneeRole = 'BUDGET_OFFICER';
-      pendingRoles = ['BUDGET_OFFICER'];
-      proposal.submittedByRole = 'BUDGET_COORDINATOR';
-      proposal.forwardedToOfficerAt = now;
-      proposal.forwardedToOfficerBy = { userId, userName };
-      proposal.bypassedOfficerReview = false;
+    if (editorRole === 'BUDGET_ANALYST') {
+      newStatus = 'Division Submitted';
+      newWorkflowLevel = 'COORDINATOR';
+      historyAction = 'ANALYST_SUBMIT_TO_COORDINATOR';
+      historyComment = comments || 'Budget Analyst submitted edits to Budget Coordinator';
+      currentStep = 'COORDINATOR_REVIEW';
+      currentAssigneeRole = 'BUDGET_COORDINATOR';
+      pendingRoles = ['BUDGET_COORDINATOR'];
+      proposal.submittedByRole = 'BUDGET_ANALYST';
+      proposal.submittedToDivisionAt = now;
+      proposal.submittedToDivisionBy = { userId, userName };
+    } else if (editorRole === 'BUDGET_COORDINATOR') {
+      // Check if coordinator wants to bypass officer and submit directly to manager
+      if (submitTargetRole === 'BUDGET_MANAGER') {
+        newStatus = 'Forwarded to Manager';
+        newWorkflowLevel = 'MANAGER';
+        historyAction = 'COORDINATOR_SUBMIT_TO_MANAGER';
+        historyComment = comments || 'Budget Coordinator submitted edits directly to Budget Manager (bypassed Officer)';
+        currentStep = 'MANAGER_REVIEW';
+        currentAssigneeRole = 'BUDGET_MANAGER';
+        pendingRoles = ['BUDGET_MANAGER'];
+        proposal.submittedByRole = 'BUDGET_COORDINATOR';
+        proposal.forwardedToManagerAt = now;
+        proposal.forwardedToManagerBy = { userId, userName };
+        proposal.bypassedOfficerReview = true;
+      } else {
+        // Standard flow: submit to officer
+        newStatus = 'Forwarded to Officer';
+        newWorkflowLevel = 'OFFICER';
+        historyAction = 'COORDINATOR_SUBMIT_TO_OFFICER';
+        historyComment = comments || 'Budget Coordinator submitted edits to Budget Officer';
+        currentStep = 'OFFICER_REVIEW';
+        currentAssigneeRole = 'BUDGET_OFFICER';
+        pendingRoles = ['BUDGET_OFFICER'];
+        proposal.submittedByRole = 'BUDGET_COORDINATOR';
+        proposal.forwardedToOfficerAt = now;
+        proposal.forwardedToOfficerBy = { userId, userName };
+        proposal.bypassedOfficerReview = false;
+      }
     } else if (editorRole === 'BUDGET_OFFICER') {
       newStatus = 'Forwarded to Manager';
       newWorkflowLevel = 'MANAGER';
@@ -1040,8 +1099,14 @@ exports.submitEdit = async (req, res) => {
     await syncRelatedBudgetItems(proposal);
     
     let logSummary = 'Submitted edits for approval';
-    if (editorRole === 'BUDGET_COORDINATOR') {
-      logSummary = 'Submitted edits to Budget Officer';
+    if (editorRole === 'BUDGET_ANALYST') {
+      logSummary = 'Submitted edits to Budget Coordinator';
+    } else if (editorRole === 'BUDGET_COORDINATOR') {
+      if (submitTargetRole === 'BUDGET_MANAGER') {
+        logSummary = 'Submitted edits directly to Budget Manager (bypassed Officer)';
+      } else {
+        logSummary = 'Submitted edits to Budget Officer';
+      }
     } else if (editorRole === 'BUDGET_OFFICER') {
       logSummary = 'Submitted edits to Budget Manager';
     } else if (editorRole === 'BUDGET_MANAGER') {
@@ -1063,7 +1128,7 @@ exports.submitEdit = async (req, res) => {
         userId,
         userName,
         email: userEmail,
-        role: roles && roles.length ? roles[0] : 'BUDGET_OFFICER'
+        role: editorRole
       },
   summary: logSummary,
       comments,

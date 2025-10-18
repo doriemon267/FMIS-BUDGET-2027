@@ -45,6 +45,13 @@ const CapitalOutlaySchema = new mongoose.Schema(
     regionApprovedBy: String,
     regionApprovedDate: Date,
     rejectionReason: String,
+    // Link to specific proposal (CRITICAL for distinguishing between proposals)
+    proposalId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Proposal',
+      index: true
+    },
+    
     processBy: {
       type: String,
       required: true,

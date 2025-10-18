@@ -98,6 +98,8 @@ import BudgetSummary from "./BudgetSummary";
 import { hasPermission, PERMISSIONS } from "../../utils/permissions";
 import { useUserRestrictions } from "../../hooks/useUserRestrictions";
 
+const CAPITAL_OUTLAY_VIEW_PREFERENCE_KEY = "capitalOutlayViewPreference";
+
 const CustomPage = ({
   dataListName,
   schema,
@@ -147,7 +149,7 @@ const CustomPage = ({
   const [speedDialOpen, setSpeedDialOpen] = useState(false);
   
   // Capital Outlay view toggle (true = new DataGrid, false = old table)
-  const [useDataGridView, setUseDataGridView] = useState(true);
+  const [useDataGridView, setUseDataGridView] = useState(false);
 
   // Use canCreate from the hook, but keep canEditOwn from permissions
   const canEditOwn = hasPermission(currentUser, PERMISSIONS.EDIT_OWN);
@@ -183,6 +185,24 @@ const CustomPage = ({
   const [saveStatus, setSaveStatus] = useState("saved"); // 'saved', 'saving', 'error'
   const [validationErrors, setValidationErrors] = useState({});
   const [isValidating, setIsValidating] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const storedPreference = window.localStorage.getItem(
+      CAPITAL_OUTLAY_VIEW_PREFERENCE_KEY
+    );
+    if (storedPreference === "datagrid") {
+      setUseDataGridView(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      CAPITAL_OUTLAY_VIEW_PREFERENCE_KEY,
+      useDataGridView ? "datagrid" : "table"
+    );
+  }, [useDataGridView]);
 
   // Add a useEffect to store the incomeGrandTotal in localStorage when it changes
   useEffect(() => {

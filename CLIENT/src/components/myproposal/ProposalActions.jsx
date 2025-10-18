@@ -26,7 +26,7 @@ import toast from "react-hot-toast";
 import ProposalDetailsDialog from "./ProposalDetailsDialog";
 import { goTo } from "../../global/navigation";
 
-export function ViewMenuItem({ row, parentClose }) {
+export function ViewMenuItem({ row, parentClose, refreshData }) {
   const [open, setOpen] = useState(false);
 
   const handleView = () => {
@@ -50,6 +50,7 @@ export function ViewMenuItem({ row, parentClose }) {
         open={open}
         onClose={handleClose}
         proposal={row}
+        onRefresh={refreshData}
       />
     </>
   );

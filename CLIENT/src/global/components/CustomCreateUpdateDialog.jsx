@@ -20,6 +20,7 @@ import CustomButton from "../../global/components/CustomButton";
 import CustomTextField from "../../global/components/CustomTextField";
 import CustomAutocompleteField from "../../global/components/CustomAutocompleteField";
 import { formatLabel } from "../../utils/formatLabel";
+import { invalidateDataList } from "../../utils/queryClientHelpers";
 
 // We'll fetch regions from the database instead of using static values
 
@@ -120,13 +121,13 @@ const CustomCreateUpdateDialog = ({
           : await api.post(endpoint, data);
         return response;
       } catch (error) {
-        console.error('API error:', error);
-        console.error('Error response:', error.response?.data);
+        console.error("API error:", error);
+        console.error("Error response:", error.response?.data);
         throw error;
       }
     },
-    onSuccess: (response) => {
-      queryClient.invalidateQueries([dataListName]);
+    onSuccess: async () => {
+      await invalidateDataList(queryClient, dataListName);
       toast.success(
         isEditMode ? "Updated successfully" : "Created successfully"
       );
@@ -134,7 +135,7 @@ const CustomCreateUpdateDialog = ({
       if (parentClose) parentClose();
     },
     onError: (error) => {
-      console.error('Mutation error:', error);
+      console.error("Mutation error:", error);
       toast.error(error.response?.data?.error || error.message || "Error occurred");
     },
   });

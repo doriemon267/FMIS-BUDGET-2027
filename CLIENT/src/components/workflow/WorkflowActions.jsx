@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, forwardRef, useImperativeHandle } from "react";
 import { toast } from "react-toastify";
 import api from "../../config/api";
 import { goTo } from "../../global/navigation";
@@ -18,7 +18,7 @@ import SaveIcon from "@mui/icons-material/Save";
  * Provides action buttons for the role-based workflow based on user role and current status:
  * Draft → Division Submitted → Forwarded to Officer → Officer Approved → Forwarded to Manager → Finalized
  */
-const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = true, showTrackInMenu = true, showViewInMenu = true }) => {
+const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, showHeader = true, showTrackInMenu = true, showViewInMenu = true }, ref) => {
   const [loading, setLoading] = useState(false);
   const [historyItems, setHistoryItems] = useState(Array.isArray(proposal?.workflowHistory) ? proposal.workflowHistory : []);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -858,6 +858,15 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
     setComment('');
   };
 
+  // Expose triggerFinalizeAction method to parent via ref
+  useImperativeHandle(ref, () => ({
+    triggerFinalizeAction: () => {
+      console.log('🔧 Triggering finalize action from parent');
+      // Call the finalize action with empty comment - user will be prompted in dialog
+      handleActionClick('manager-approve', 'Finalize', true, false);
+    }
+  }), []);
+
   const availableActions = getAvailableActions();
 
 
@@ -1263,6 +1272,8 @@ const WorkflowActions = ({ proposal, userInfo, onRefresh, onView, showHeader = t
       </Dialog>
     </>
   );
-};
+});
+
+WorkflowActions.displayName = 'WorkflowActions';
 
 export default WorkflowActions;

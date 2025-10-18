@@ -77,6 +77,12 @@ const mooeProposalSchema = new Schema({
   fiscalYear: {
     type: String
   },
+  // Link to specific proposal (CRITICAL for distinguishing between proposals)
+  proposalId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Proposal',
+    index: true
+  },
   budgetType: {
     type: String
   },

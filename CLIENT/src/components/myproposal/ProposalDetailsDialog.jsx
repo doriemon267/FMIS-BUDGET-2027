@@ -40,7 +40,7 @@ import WarningIcon from '@mui/icons-material/Warning';
 
 const CACHE_TTL = 60 * 1000; // 1 minute cache for proposal details
 
-const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
+const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [userInfo, setUserInfo] = useState(null);
@@ -48,9 +48,11 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
   const [comparisonData, setComparisonData] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [officerEditMode, setOfficerEditMode] = useState(false); // Track if Budget Officer wants to edit
+  const [displayedProposal, setDisplayedProposal] = useState(proposal); // Local copy for immediate status updates
 
   const cacheRef = useRef(new Map());
   const abortControllerRef = useRef(null);
+  const workflowActionsRef = useRef(null);
   const proposalKey = proposal?._id || null;
 
   const normalizedAssignmentLevel = useMemo(() => {
@@ -94,6 +96,15 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
       role === 'managerapprover'
     ));
   }, [normalizedAssignmentLevel, normalizedPrimaryRoles, normalizedWorkflowRoles, userInfo]);
+
+  // Budget Manager: Check if ready to finalize (prominent button)
+  const canBudgetManagerFinalize = useMemo(() => {
+    if (!isManagerLevel && !normalizedPrimaryRoles.some((role) => role.includes('BUDGET MANAGER') || role.includes('BUDGET ADMIN'))) {
+      return false;
+    }
+    const status = displayedProposal?.status || proposal?.status;
+    return status === 'Forwarded to Manager' || status === 'Officer Approved';
+  }, [isManagerLevel, normalizedPrimaryRoles, displayedProposal?.status, proposal?.status]);
 
   // Budget Coordinator: Division approvers (divisionapprover) - STRICT workflow role check only
   const isBudgetCoordinator = useMemo(() => {
@@ -149,6 +160,13 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
     ['Finalized']
   ), []);
   const isReadOnlyMode = useMemo(() => readOnlyStatuses.includes(proposal?.status), [proposal?.status, readOnlyStatuses]);
+
+  // Sync displayedProposal with parent proposal prop
+  useEffect(() => {
+    if (proposal) {
+      setDisplayedProposal(proposal);
+    }
+  }, [proposal]);
 
   useEffect(() => {
     const fetchUserInfo = async () => {
@@ -539,8 +557,8 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
           <Typography variant="h5">Proposal Details</Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <Chip 
-              label={proposal?.status || 'Unknown'} 
-              color={getStatusColor(proposal?.status)} 
+              label={displayedProposal?.status || 'Unknown'} 
+              color={getStatusColor(displayedProposal?.status)} 
               sx={{ fontWeight: 'bold' }}
             />
             <Button
@@ -728,9 +746,29 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
                 <BudgetOfficerEditView 
                   proposal={proposal}
                   proposalData={proposalData}
-                  onSaveSuccess={() => {
+                  onSaveSuccess={async () => {
                     setOfficerEditMode(false);
+                    
+                    // IMPORTANT: Fetch updated proposal to show new status immediately
+                    try {
+                      const updatedProposal = await api.get(`/proposals/${proposalKey}`);
+                      if (updatedProposal?.data) {
+                        console.log('✅ Updated proposal fetched:', { 
+                          oldStatus: displayedProposal?.status, 
+                          newStatus: updatedProposal.data.status 
+                        });
+                        setDisplayedProposal(updatedProposal.data);
+                      }
+                    } catch (error) {
+                      console.error('Could not fetch updated proposal immediately:', error);
+                      // Continue anyway - will be updated by loadData refresh
+                    }
+                    
+                    // Refresh proposal data (income, ps, mooe, co)
                     loadData(true);
+                    
+                    // Refresh parent proposal list
+                    onRefresh?.();
                   }}
                   variant={managerCanEditNow ? 'manager' : coordinatorCanEditNow ? 'coordinator' : analystCanEditNow ? 'analyst' : 'officer'}
                   allowSubmit={!managerCanEditNow}
@@ -825,7 +863,37 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
         {/* Workflow Actions - Show only if user has appropriate role and proposal is not in final state */}
         {proposal && userInfo && proposal.status !== 'Finalized' && (
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            {/* PROMINENT FINALIZE BUTTON FOR BUDGET MANAGER - Visible when ready to finalize */}
+            {canBudgetManagerFinalize && (
+              <Button
+                variant="contained"
+                color="success"
+                sx={{ 
+                  fontWeight: 'bold',
+                  backgroundColor: '#008000',
+                  '&:hover': { backgroundColor: '#006400' },
+                  textTransform: 'none',
+                  fontSize: '14px',
+                  px: 2
+                }}
+                onClick={() => {
+                  // Open confirmation dialog for finalization
+                  console.log('💚 Prominent Finalize button clicked');
+                  if (workflowActionsRef.current) {
+                    // Trigger the finalize action - the WorkflowActions component will handle the dialog
+                    // by directly calling its handleActionClick method via ref
+                    workflowActionsRef.current?.triggerFinalizeAction?.();
+                  }
+                }}
+                disabled={loading || refreshing}
+                title="Click to finalize this proposal"
+              >
+                ✅ Finalize Proposal
+              </Button>
+            )}
+            
             <WorkflowActions
+              ref={workflowActionsRef}
               proposal={proposal}
               userInfo={userInfo}
               onRefresh={(updatedProposal, forceFlag) => {
@@ -837,7 +905,12 @@ const ProposalDetailsDialog = ({ open, onClose, proposal }) => {
                 
                 // IMMEDIATE UPDATE: If we have the updated proposal, show it immediately
                 if (updatedProposal) {
-                  console.log('✅ Immediately updating UI with fresh proposal data');
+                  console.log('✅ Immediately updating UI with fresh proposal data:', {
+                    oldStatus: displayedProposal?.status,
+                    newStatus: updatedProposal.status
+                  });
+                  // Update BOTH displayedProposal (for status badge) AND proposalData (for tables)
+                  setDisplayedProposal(updatedProposal);
                   setProposalData(updatedProposal);
                 }
                 

@@ -22,20 +22,21 @@ router.use(checkToken);
 router.use(loadHierarchicalAssignment);
 
 /**
- * Custom middleware to check if user is a Budget Officer
+ * Custom middleware to check if user is a Budget Officer or Budget Coordinator
  * Budget Officers are users with DEPARTMENT, OFFICE, REGION, or FULL assignment level
  * OR users with specific workflow roles
+ * Budget Coordinators have DIVISION level or divisionapprover role
  */
 const requireBudgetOfficerAccess = (req, res, next) => {
   const assignment = req.userHierarchicalAssignment;
   const workflowRoles = assignment?.workflowRoles || [];
   
-  // Check assignment level
-  const validLevels = ['DEPARTMENT', 'OFFICE', 'REGION', 'FULL'];
+  // Check assignment level (includes Budget Officer levels + Budget Coordinator DIVISION level)
+  const validLevels = ['DIVISION', 'DEPARTMENT', 'OFFICE', 'REGION', 'FULL'];
   const hasValidLevel = validLevels.includes(assignment?.assignmentLevel);
   
-  // Check workflow roles
-  const validRoles = ['departmentConsolidator', 'officeConsolidator', 'regionFinalVerifier'];
+  // Check workflow roles (includes Budget Officer roles + Budget Coordinator divisionapprover role)
+  const validRoles = ['divisionapprover', 'departmentConsolidator', 'officeConsolidator', 'regionFinalVerifier'];
   const hasValidRole = validRoles.some(role => workflowRoles.includes(role));
   
   // Check if user has EditAllProposals permission
@@ -47,25 +48,25 @@ const requireBudgetOfficerAccess = (req, res, next) => {
   
   return res.status(403).json({
     success: false,
-    message: 'Access denied: Budget Officer access required (DEPARTMENT, OFFICE, REGION, or FULL level)',
+    message: 'Access denied: Budget Officer or Budget Coordinator access required',
     code: 'INSUFFICIENT_PERMISSIONS',
-    required: 'Budget Officer access'
+    required: 'Budget Officer or Budget Coordinator access'
   });
 };
 
-// Get proposal data for editing (Budget Officer only)
+// Get proposal data for editing (Budget Officer or Budget Coordinator)
 router.get('/proposal-for-edit', 
   requireBudgetOfficerAccess,
   getProposalForEdit
 );
 
-// Save draft edit (Budget Officer only)
+// Save draft edit (Budget Officer or Budget Coordinator)
 router.post('/draft',
   requireBudgetOfficerAccess,
   saveDraftEdit
 );
 
-// Submit edit for approval (Budget Officer only)
+// Submit edit for approval (Budget Officer or Budget Coordinator)
 router.post('/submit',
   requireBudgetOfficerAccess,
   submitEdit

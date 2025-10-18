@@ -37,6 +37,7 @@ import "react-toastify/dist/ReactToastify.css";
 import api from "../../config/api";
 import { useUser } from "../../context/UserContext";
 import { useQueryClient } from "@tanstack/react-query";
+import { invalidateDataList } from "../../utils/queryClientHelpers";
 import * as XLSX from 'xlsx';
 
 // Define allowed columns for COS (adjust as needed)
@@ -98,47 +99,63 @@ const PSCOSCustomPageTable = ({
   const [autoRefresh, setAutoRefresh] = useState(false);
 
   // Fetch active settings
-  const fetchActiveSettings = async () => {
+  const fetchActiveSettings = useCallback(async () => {
     try {
       const response = await api.get("/settings/active");
       if (response.data) {
-        setFiscalYear(response.data.fiscalYear || "");
-        setBudgetType(response.data.budgetType || "");
+        const settings = response.data;
+        setFiscalYear(settings.fiscalYear || "");
+        setBudgetType(settings.budgetType || "");
+        return settings;
       }
+      toast.error("Active settings not found.");
+      return null;
     } catch (error) {
+      toast.error("Error fetching active settings.");
       console.error("Error fetching active settings:", error);
+      return null;
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchActiveSettings();
-  }, []);
+  }, [fetchActiveSettings]);
 
   // Auto-refresh functionality
   useEffect(() => {
     if (!autoRefresh) return;
 
     const interval = setInterval(() => {
-      queryClient.invalidateQueries([dataListName]);
-    }, 30000); // Refresh every 30 seconds
+      invalidateDataList(queryClient, dataListName);
+    }, 30000);
 
     return () => clearInterval(interval);
   }, [autoRefresh, queryClient, dataListName]);
 
   // Bulk add COS personnel – gamit ang react-query invalidation para mag-refetch agad
-  const handleAddAllPersonnel = async (statusOfAppointment) => {
-    if (!fiscalYear) {
-      toast.error("Active fiscal year not set. Please try again later.");
-      return;
-    }
+  const handleAddAllPersonnel = useCallback(async (statusOfAppointment) => {
     setLoading(true);
     try {
+      let currentFiscalYear = fiscalYear;
+      let currentBudgetType = budgetType;
+
+      if (!currentFiscalYear) {
+        const latestSettings = await fetchActiveSettings();
+        currentFiscalYear = latestSettings?.fiscalYear || "";
+        currentBudgetType = latestSettings?.budgetType || "";
+
+        if (!currentFiscalYear) {
+          toast.error("Active fiscal year not set. Please try again later.");
+          return;
+        }
+      }
+
       const processBy = `${currentUser.FirstName} ${currentUser.LastName}`;
       const response = await api.post(`/cos-personnel/bulk-add`, {
         processBy,
         statusOfAppointment,
-        fiscalYear,
-        budgetType,
+        fiscalYear: currentFiscalYear,
+        budgetType: currentBudgetType,
         region: currentUser?.organizationalAssignment?.regions?.[0]?.regionName || 'CENTRAL OFFICE'
       });
 
@@ -151,8 +168,7 @@ const PSCOSCustomPageTable = ({
         } else {
           toast.success("Bulk add operation completed!");
         }
-        // Invalidate query para mapilitang mag-refetch ang table data
-        queryClient.invalidateQueries([dataListName]);
+        await invalidateDataList(queryClient, dataListName);
       } else {
         toast.error("Error: Bulk add response invalid");
       }
@@ -166,14 +182,21 @@ const PSCOSCustomPageTable = ({
       setLoading(false);
       setOpenDialog(false);
     }
-  };
+  }, [
+    fiscalYear,
+    budgetType,
+    currentUser,
+    queryClient,
+    dataListName,
+    fetchActiveSettings
+  ]);
 
   const handleOpenDialog = () => setOpenDialog(true);
   const handleCloseDialog = () => setOpenDialog(false);
 
   // Enhanced functionality handlers
   const handleManualRefresh = useCallback(() => {
-    queryClient.invalidateQueries([dataListName]);
+    invalidateDataList(queryClient, dataListName);
     toast.info("Data refreshed");
   }, [queryClient, dataListName]);
 

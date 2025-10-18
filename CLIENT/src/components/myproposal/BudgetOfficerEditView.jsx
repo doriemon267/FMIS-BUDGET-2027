@@ -7,7 +7,14 @@ import {
   Alert,
   CircularProgress,
   Typography,
-  TextField
+  TextField,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  RadioGroup,
+  FormControlLabel,
+  Radio
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
 import SendIcon from '@mui/icons-material/Send';
@@ -30,6 +37,8 @@ const BudgetOfficerEditView = ({
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [comments, setComments] = useState('');
+  const [showSubmitDialog, setShowSubmitDialog] = useState(false);
+  const [submitTarget, setSubmitTarget] = useState('BUDGET_OFFICER');
   
   // State for each table
   const [incomeData, setIncomeData] = useState([]);
@@ -115,6 +124,38 @@ const BudgetOfficerEditView = ({
       toast.error(error.response?.data?.message || 'Failed to save draft');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSubmitClick = () => {
+    // For BUDGET_COORDINATOR, show dialog to choose submit target
+    if (variant === 'coordinator') {
+      setShowSubmitDialog(true);
+    } else {
+      // For other roles, submit directly
+      handleSubmit();
+    }
+  };
+
+  const handleConfirmSubmit = async () => {
+    setShowSubmitDialog(false);
+    setSubmitting(true);
+    try {
+      const editData = prepareEditData();
+      // Add the submit target for BUDGET_COORDINATOR
+      if (variant === 'coordinator') {
+        editData.submitTargetRole = submitTarget;
+      }
+      await submitEdit(editData);
+      
+      const targetLabel = submitTarget === 'BUDGET_OFFICER' ? 'Budget Officer' : 'Budget Manager';
+      toast.success(`Edits submitted to ${targetLabel} successfully`);
+      onSaveSuccess?.();
+    } catch (error) {
+      console.error('Error submitting edits:', error);
+      toast.error(error.response?.data?.message || 'Failed to submit edits');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -241,16 +282,72 @@ const BudgetOfficerEditView = ({
             variant="contained"
             color="primary"
             startIcon={submitting ? <CircularProgress size={20} /> : <SendIcon />}
-            onClick={handleSubmit}
+            onClick={handleSubmitClick}
             disabled={saving || submitting}
           >
             {submitting ? 'Submitting...' : 
              variant === 'analyst' ? 'Submit for Coordinator Review' :
-             variant === 'coordinator' ? 'Submit for Officer Review' :
+             variant === 'coordinator' ? 'Submit Reviewed Proposal' :
              'Submit for Manager Approval'}
           </Button>
         )}
       </Box>
+
+      {/* Budget Coordinator Submit Target Dialog */}
+      {variant === 'coordinator' && (
+        <Dialog open={showSubmitDialog} onClose={() => setShowSubmitDialog(false)} maxWidth="sm" fullWidth>
+          <DialogTitle>Submit Reviewed Proposal</DialogTitle>
+          <DialogContent sx={{ pt: 3 }}>
+            <Typography variant="body2" sx={{ mb: 3, color: 'text.secondary' }}>
+              Where would you like to send this reviewed proposal?
+            </Typography>
+            <RadioGroup
+              value={submitTarget}
+              onChange={(e) => setSubmitTarget(e.target.value)}
+            >
+              <FormControlLabel
+                value="BUDGET_OFFICER"
+                control={<Radio />}
+                label={
+                  <Box>
+                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                      Budget Officer (Standard Flow)
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                      Send to Budget Officer for verification and consolidation
+                    </Typography>
+                  </Box>
+                }
+              />
+              <FormControlLabel
+                value="BUDGET_MANAGER"
+                control={<Radio />}
+                label={
+                  <Box>
+                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                      Budget Manager (Skip Officer)
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                      Send directly to Budget Manager for final approval
+                    </Typography>
+                  </Box>
+                }
+              />
+            </RadioGroup>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setShowSubmitDialog(false)}>Cancel</Button>
+            <Button 
+              onClick={handleConfirmSubmit} 
+              variant="contained" 
+              color="primary"
+              disabled={submitting}
+            >
+              {submitting ? 'Submitting...' : 'Submit'}
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
     </Box>
   );
 };
