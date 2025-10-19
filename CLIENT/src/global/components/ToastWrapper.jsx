@@ -1,23 +1,20 @@
 import { useTheme } from "@emotion/react";
 import { Toaster } from "react-hot-toast";
 
+const FALLBACK_THEME = {
+  palette: {
+    background: { paper: "#fff" },
+    text: { primary: "#333" },
+    success: { main: "#4caf50", contrastText: "#fff" },
+    error: { main: "#f44336", contrastText: "#fff" },
+  },
+  typography: { fontFamily: "Arial, sans-serif" },
+};
+
 const ToastWrapper = () => {
-  // Check if theme is available before using it
-  let theme;
-  try {
-    theme = useTheme();
-  } catch (error) {
-    // Fallback theme if useTheme fails
-    theme = {
-      palette: {
-        background: { paper: '#fff' },
-        text: { primary: '#333' },
-        success: { main: '#4caf50', contrastText: '#fff' },
-        error: { main: '#f44336', contrastText: '#fff' }
-      },
-      typography: { fontFamily: 'Arial, sans-serif' }
-    };
-  }
+  const theme = useTheme();
+  const palette = theme?.palette ?? FALLBACK_THEME.palette;
+  const typography = theme?.typography ?? FALLBACK_THEME.typography;
 
   return (
     <Toaster
@@ -26,9 +23,9 @@ const ToastWrapper = () => {
       toastOptions={{
         // Styling the container
         style: {
-          background: theme.palette.background.paper,
-          color: theme.palette.text.primary,
-          fontFamily: theme.typography.fontFamily,
+          background: palette.background?.paper ?? FALLBACK_THEME.palette.background.paper,
+          color: palette.text?.primary ?? FALLBACK_THEME.palette.text.primary,
+          fontFamily: typography.fontFamily ?? FALLBACK_THEME.typography.fontFamily,
           borderRadius: "8px",
           boxShadow: "0px 4px 6px rgba(0, 0, 0, 0.1)",
         },
@@ -37,22 +34,22 @@ const ToastWrapper = () => {
         // Customize for success, error, and other types
         success: {
           style: {
-            background: theme.palette.success.main,
-            color: theme.palette.success.contrastText,
+            background: palette.success?.main ?? FALLBACK_THEME.palette.success.main,
+            color: palette.success?.contrastText ?? FALLBACK_THEME.palette.success.contrastText,
           },
           iconTheme: {
-            primary: theme.palette.success.contrastText,
-            secondary: theme.palette.success.main,
+            primary: palette.success?.contrastText ?? FALLBACK_THEME.palette.success.contrastText,
+            secondary: palette.success?.main ?? FALLBACK_THEME.palette.success.main,
           },
         },
         error: {
           style: {
-            background: theme.palette.error.main,
-            color: theme.palette.error.contrastText,
+            background: palette.error?.main ?? FALLBACK_THEME.palette.error.main,
+            color: palette.error?.contrastText ?? FALLBACK_THEME.palette.error.contrastText,
           },
           iconTheme: {
-            primary: theme.palette.error.contrastText,
-            secondary: theme.palette.error.main,
+            primary: palette.error?.contrastText ?? FALLBACK_THEME.palette.error.contrastText,
+            secondary: palette.error?.main ?? FALLBACK_THEME.palette.error.main,
           },
         },
       }}

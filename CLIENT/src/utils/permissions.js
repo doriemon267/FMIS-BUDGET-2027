@@ -129,7 +129,7 @@ export function getFilteredOptions(currentUser, options, type) {
   return options;
 }
 
-export function canCreateProposalWithAmount(currentUser, amount) {
+export function canCreateProposalWithAmount(currentUser, _amount) {
   if (!currentUser) return false;
 
   const hasCreatePermission = hasPermission(currentUser, 'CreateProposals');

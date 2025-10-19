@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from "react";
+﻿import React, { useRef, useState, useEffect } from "react";
 import CustomPage from "../../src/components/myproposal/ProposalCustomPage";
 import TextSearchable from "../global/components/TextSearchable";
 import {
@@ -254,15 +254,16 @@ const AllProposalsPage = () => {
             if (Number.isFinite(backendTotal)) {
               subsidyAmount = backendTotal;
             } else {
+              // 25 PS components matching PersonnelServices.js SUBTOTAL formula
               const psParts = [
                 Number(row.annualSalary), Number(row.RATA), Number(row.PERA), Number(row.uniformALLOWANCE),
                 Number(row.productivityIncentive), Number(row.medical), Number(row.childrenAllowance), Number(row.meal),
                 Number(row.cashGift), Number(row.subsistenceAllowanceMDS), Number(row.subsistenceAllowanceST),
+                Number(row.loyaltyAward), Number(row.overtimePay),
                 Number(row.midyearBonus), Number(row.yearEndBonus), Number(row.gsisPremium), Number(row.philhealthPremium),
-                Number(row.pagibigPremium), Number(row.employeeCompensation),
-                // Additional PS components to match backend aggregation
-                Number(row.loyaltyAward), Number(row.overtimePay), Number(row.earnedLeaves),
-                Number(row.retirementBenefits), Number(row.terminalLeave), Number(row.courtAppearance)
+                Number(row.pagibigPremium), Number(row.employeeCompensation), Number(row.courtAppearance),
+                Number(row.earnedLeaves), Number(row.retirementBenefits), Number(row.terminalLeave),
+                Number(row.hazardPay), Number(row.honoraria)
               ];
               subsidyAmount = psParts.reduce((sum, val) => sum + (Number.isFinite(val) ? val : 0), 0);
             }

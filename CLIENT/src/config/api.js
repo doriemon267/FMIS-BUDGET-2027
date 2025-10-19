@@ -47,7 +47,7 @@ api.interceptors.request.use(
           config.headers['X-Dev-Roles'] = rolesArr.join(',');
         }
       }
-    } catch (e) {
+    } catch (_error) {
       // ignore
     }
 

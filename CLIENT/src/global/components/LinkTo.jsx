@@ -21,7 +21,6 @@ const LinkTo = ({
   subLinks, 
   isAllow, 
   collapsed = false,
-  iconRight
 }) => {
   const location = useLocation();
   const isActive = location.pathname === link; // Check if the current path matches the link

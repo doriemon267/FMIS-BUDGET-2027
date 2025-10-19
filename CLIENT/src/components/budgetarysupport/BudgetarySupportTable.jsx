@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRegion } from '../../context/RegionContext';
 import {
   Box,
-  Paper,
   Table,
   TableBody,
   TableCell,
@@ -17,23 +16,44 @@ import {
   Tooltip,
   Card,
   CardContent,
-  Grid,
   Menu,
-  MenuItem,
-  Fade,
-  Zoom
+  MenuItem
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import GetAppIcon from '@mui/icons-material/GetApp';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import InfoIcon from '@mui/icons-material/Info';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import api from '../../config/api';
 import { toast } from 'react-toastify';
 import { useUser } from '../../context/UserContext';
+
+const normalizeName = (value) => {
+  if (!value) return '';
+  return String(value)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/[^a-z0-9\s\-()/]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*\(.*?\)\s*/g, '')
+    .trim();
+};
+
+const toNumber = (value) => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  if (typeof value === 'string') {
+    const cleaned = value.replace(/,/g, '').trim();
+    const parsed = Number(cleaned);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+};
 
 const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, groupedItems = {} }) => {
   const [amount, setAmount] = useState(0);
@@ -59,6 +79,152 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
     
     return null;
   }, [selectedRegion]);
+
+  const normalizedSelectedRegion = useMemo(() => {
+    if (!regionName) return '';
+    const normalized = normalizeName(regionName);
+    return normalized === 'all' ? '' : normalized;
+  }, [regionName]);
+
+  const hierarchicalAccess = useMemo(
+    () => currentUser?.hierarchicalAccess || {},
+    [currentUser]
+  );
+
+  const assignmentFilters = useMemo(() => {
+    const toNormalizedList = (collection = [], possibleKeys = []) => {
+      return collection
+        .map((entry) => {
+          if (!entry) return '';
+
+          if (typeof entry === 'string') {
+            return normalizeName(entry);
+          }
+
+          for (const key of possibleKeys) {
+            const value = entry?.[key];
+            if (value) {
+              return normalizeName(value);
+            }
+          }
+
+          if (entry?.name) {
+            return normalizeName(entry.name);
+          }
+
+          return '';
+        })
+        .filter(Boolean);
+    };
+
+    const accessibleRegionNames = toNormalizedList(hierarchicalAccess.accessibleRegions, ['regionName', 'Region', 'name']);
+    const accessibleDivisionNames = toNormalizedList(hierarchicalAccess.accessibleDivisions, ['divisionName', 'Division', 'name']);
+    const accessibleDepartmentNames = toNormalizedList(hierarchicalAccess.accessibleDepartments, ['departmentName', 'Department', 'officeName', 'name']);
+    const accessibleOfficeNames = toNormalizedList(hierarchicalAccess.accessibleOffices, ['officeName', 'Office', 'name']);
+    const accessibleResponsibilityCenters = toNormalizedList(
+      hierarchicalAccess.accessibleResponsibilityCenters,
+      ['responsibilityCenterName', 'ResponsibilityCenter', 'name']
+    );
+
+    const departmentFilters = accessibleDepartmentNames.length > 0 ? accessibleDepartmentNames : accessibleOfficeNames;
+
+    return {
+      scope: hierarchicalAccess.scope || hierarchicalAccess.assignmentLevel || 'NONE',
+      regions: normalizedSelectedRegion ? [normalizedSelectedRegion] : accessibleRegionNames,
+      divisions: accessibleDivisionNames,
+      departments: departmentFilters,
+      responsibilityCenters: accessibleResponsibilityCenters
+    };
+  }, [hierarchicalAccess, normalizedSelectedRegion]);
+
+  const hasAssignmentFilters = useMemo(() => {
+    if (assignmentFilters.scope === 'FULL') {
+      return Boolean(normalizedSelectedRegion);
+    }
+
+    return (
+      assignmentFilters.regions.length > 0 ||
+      assignmentFilters.divisions.length > 0 ||
+      assignmentFilters.departments.length > 0 ||
+      assignmentFilters.responsibilityCenters.length > 0
+    );
+  }, [assignmentFilters, normalizedSelectedRegion]);
+
+  const matchesAssignmentScope = useCallback(
+    (item) => {
+      if (!item) return false;
+      if (!hasAssignmentFilters) return true;
+
+      const { scope, regions, divisions, departments, responsibilityCenters } = assignmentFilters;
+
+      const extractValue = (source, keys) => {
+        for (const key of keys) {
+          const parts = key.split('.');
+          let value = source;
+          for (const part of parts) {
+            if (!value) break;
+            value = value?.[part];
+          }
+
+          if (typeof value === 'string' && value.trim()) {
+            return value;
+          }
+        }
+        return null;
+      };
+
+      const matchesList = (value, list) => {
+        if (!list || list.length === 0) return true;
+        const normalizedValue = normalizeName(value);
+        return normalizedValue ? list.includes(normalizedValue) : false;
+      };
+
+      const regionValue = extractValue(item, ['region', 'Region', 'regionName', 'RegionName', 'meta.region', 'meta.Region', 'meta.regionName']);
+      const divisionValue = extractValue(item, ['division', 'Division', 'divisionName', 'DivisionName', 'meta.division', 'meta.Division']);
+      const departmentValue = extractValue(item, [
+        'department',
+        'Department',
+        'departmentName',
+        'DepartmentName',
+        'office',
+        'Office',
+        'officeName',
+        'meta.department',
+        'meta.Department',
+        'meta.office',
+        'meta.Office'
+      ]);
+      const responsibilityCenterValue = extractValue(item, [
+        'responsibilityCenter',
+        'ResponsibilityCenter',
+        'responsibilityCenterName',
+        'responsibility_center',
+        'meta.responsibilityCenter',
+        'meta.ResponsibilityCenter'
+      ]);
+
+      switch (scope) {
+        case 'FULL':
+          if (normalizedSelectedRegion) {
+            return matchesList(regionValue, [normalizedSelectedRegion]);
+          }
+          return true;
+        case 'REGION':
+          return matchesList(regionValue, regions);
+        case 'DIVISION':
+          return matchesList(divisionValue, divisions) && matchesList(regionValue, regions);
+        case 'DEPARTMENT':
+        case 'OFFICE':
+          return matchesList(departmentValue, departments) && matchesList(divisionValue, divisions) && matchesList(regionValue, regions);
+        case 'RESPONSIBILITY_CENTER':
+          if (matchesList(responsibilityCenterValue, responsibilityCenters)) return true;
+          return matchesList(departmentValue, departments) && matchesList(regionValue, regions);
+        default:
+          return matchesList(regionValue, regions);
+      }
+    },
+    [assignmentFilters, hasAssignmentFilters, normalizedSelectedRegion]
+  );
 
   // No custom formatting needed since amount is read-only
 
@@ -337,8 +503,54 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
     }
   });
 
+  // Check authentication status for protected endpoints
+  const { data: authTest } = useQuery({
+    queryKey: ['auth-test', fiscalYear, budgetType],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/budgetary-support/calculate', {
+          params: {
+            fiscalYear: Number(fiscalYear) || 2025,
+            budgetType: budgetType || 'CURRENT'
+          }
+        });
+        return { status: 'authenticated', response: response.data };
+      } catch (error) {
+        if (error.response?.status === 401 || error.response?.status === 403) {
+          console.error('❌ Authentication failed - user not logged in or token expired');
+          return { status: 'unauthenticated', error: 'Please log in to access this data' };
+        }
+
+        console.error('❌ Authentication test failed with unexpected error:', {
+          message: error.message,
+          status: error.response?.status,
+          statusText: error.response?.statusText
+        });
+        return { status: 'error', error: error.message };
+      }
+    },
+    enabled: hasValidParams,
+    retry: false,
+    staleTime: 60000
+  });
+
   // Combined loading state for all queries - MUST be defined after all useQuery hooks
   const isLoading = isLoadingCalculated || isLoadingCapitalOutlay || isLoadingMOOE || isLoadingPersonnel || isLoadingBudgetarySupport;
+
+  // Timeout mechanism to prevent infinite loading
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
+
+  useEffect(() => {
+    if (isLoading) {
+      const timer = setTimeout(() => {
+        setLoadingTimeout(true);
+      }, 15000);
+
+      return () => clearTimeout(timer);
+    }
+
+    setLoadingTimeout(false);
+  }, [isLoading]);
 
   // Use calculated budgetary support amount with better validation
   useEffect(() => {
@@ -380,96 +592,95 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
   // Helper function to get corporate income from actual data sources
   const getCorporateIncomeFromBreakdown = useCallback((category) => {
     let totalIncome = 0;
-    
+
     if (category === 'MOOE') {
-      // Get MOOE income from the actual MOOE data first
-      // The breakdown data doesn't have income - we need the actual data
       if (mooeData && Array.isArray(mooeData)) {
-        // If mooeData is a flat array (like from /mooe-list)
-        totalIncome = mooeData.reduce((sum, item) => {
-          const incomeValue = Number(item.income) || 0;
-          return sum + incomeValue;
-        }, 0);
-        console.log(`🔍 MOOE: Found ${mooeData.length} records, total income: ₱${totalIncome.toLocaleString()}`);
+        const filteredMooe = hasAssignmentFilters
+          ? mooeData.filter((item) => matchesAssignmentScope(item))
+          : mooeData;
+
+        totalIncome = filteredMooe.reduce((sum, item) => sum + toNumber(item?.income), 0);
+        console.log(`🔍 MOOE: Found ${mooeData.length} records, ${filteredMooe.length} after filter, total income: ₱${totalIncome.toLocaleString()}`);
       } else if (mooeData && mooeData.formattedData && Array.isArray(mooeData.formattedData)) {
-        // If mooeData has nested structure with formattedData
-        totalIncome = mooeData.formattedData.reduce((sum, row) => {
-          return sum + (row.children || []).reduce((childSum, child) => {
-            const incomeValue = Number(child.income) || 0;
-            return childSum + incomeValue;
-          }, 0);
-        }, 0);
-        console.log(`🔍 MOOE (nested): Found formatted data, total income: ₱${totalIncome.toLocaleString()}`);
+        const filteredRows = mooeData.formattedData
+          .map((row) => {
+            const rowRegion = row?.region || row?.Region;
+            const children = (row.children || []).filter((child) => {
+              const childRegion = child?.region || child?.Region || rowRegion;
+              if (!hasAssignmentFilters) return true;
+              return matchesAssignmentScope({ ...child, region: childRegion });
+            });
+            return { ...row, children };
+          })
+          .filter((row) => row.children && row.children.length > 0);
+
+        totalIncome = filteredRows.reduce(
+          (sum, row) =>
+            sum + (row.children || []).reduce((childSum, child) => childSum + toNumber(child?.income), 0),
+          0
+        );
+        console.log(`🔍 MOOE (nested): Found formatted data, ${filteredRows.length} rows after filter, total income: ₱${totalIncome.toLocaleString()}`);
       } else {
         console.log(`⚠️ MOOE: No valid data structure found`, { mooeData });
       }
-      
-      // Fallback: Check breakdown data (unlikely to have income but check anyway)
+
       if (totalIncome === 0 && calculatedBudgetarySupport?.breakdown) {
-        const mooeItems = calculatedBudgetarySupport.breakdown.filter(item => 
-          item.source?.includes('MOOE') || 
+        const mooeItems = calculatedBudgetarySupport.breakdown.filter((item) =>
+          item.source?.includes('MOOE') ||
           item.source?.includes('IAs O&M') ||
           item.source?.includes('MAINTENANCE')
         );
-        
-        mooeItems.forEach(item => {
-          // Look for income property in the breakdown data
-          const incomeValue = item.income || item.corporateIncome || item.regionalIncome || 0;
-          totalIncome += Number(incomeValue);
+
+        mooeItems.forEach((item) => {
+          if (!hasAssignmentFilters || matchesAssignmentScope(item)) {
+            const incomeValue = item.income || item.corporateIncome || item.regionalIncome || 0;
+            totalIncome += toNumber(incomeValue);
+          }
         });
       }
-      
     } else if (category === 'CAPITAL_OUTLAY') {
-      // Get Capital Outlay income from the actual Capital Outlay data
-      // The data comes as array of regions with nested items
       if (capitalOutlayData && Array.isArray(capitalOutlayData)) {
-        // Flatten all items from all regions
-        const allItems = capitalOutlayData.flatMap(regionData => regionData.items || []);
-        
-        // Filter by current region if specified
-        const regionFilteredData = regionName && regionName !== 'All' 
-          ? allItems.filter(item => {
-              // Handle different region name formats
-              const itemRegion = item.region?.toLowerCase();
-              const currentRegion = regionName.toLowerCase();
-              
-              return itemRegion === currentRegion || 
-                     itemRegion === currentRegion.replace(' region', '') ||
-                     currentRegion === 'central office' && itemRegion === 'central region';
-            })
-          : allItems; // If no region filter, use all items
-        
-        totalIncome = regionFilteredData.reduce((sum, item) => {
-          // Use income field from the actual Capital Outlay records
-          const incomeValue = Number(item.income) || 0;
-          return sum + incomeValue;
-        }, 0);
-        
-        console.log(`🔍 CAPITAL OUTLAY: Found ${allItems.length} total items, ${regionFilteredData.length} after region filter, total income: ₱${totalIncome.toLocaleString()}`);
-        console.log(`🔍 CAPITAL OUTLAY: Sample items:`, allItems.slice(0, 2).map(item => ({ region: item.region, income: item.income })));
+        const allItems = capitalOutlayData.flatMap((regionData) => regionData.items || []);
+
+        const regionFilteredData = hasAssignmentFilters
+          ? allItems.filter((item) => matchesAssignmentScope(item))
+          : allItems;
+
+        totalIncome = regionFilteredData.reduce((sum, item) => sum + toNumber(item?.income), 0);
+
+        console.log(
+          `🔍 CAPITAL OUTLAY: Found ${allItems.length} total items, ${regionFilteredData.length} after region filter, total income: ₱${totalIncome.toLocaleString()}`
+        );
+        if (allItems.length > 0) {
+          console.log(
+            `🔍 CAPITAL OUTLAY: Sample items:`,
+            allItems.slice(0, 2).map((item) => ({ region: item.region, income: item.income }))
+          );
+        }
       } else {
         console.log(`⚠️ CAPITAL OUTLAY: No valid data structure found`, { capitalOutlayData });
       }
-      
-      // Fallback: Check if breakdown has income data (unlikely but check anyway)
+
       if (totalIncome === 0 && calculatedBudgetarySupport?.breakdown) {
-        const coItems = calculatedBudgetarySupport.breakdown.filter(item => 
-          item.source?.includes('CAPITAL OUTLAY') || 
+        const coItems = calculatedBudgetarySupport.breakdown.filter((item) =>
+          item.source?.includes('CAPITAL OUTLAY') ||
           item.source?.includes('Capital Outlay') ||
           item.source?.includes('CAPITAL OUTLAYS') ||
           item.source?.includes('CO')
         );
-        
-        coItems.forEach(item => {
-          const incomeValue = item.income || item.corporateIncome || item.regionalIncome || 0;
-          totalIncome += Number(incomeValue);
+
+        coItems.forEach((item) => {
+          if (!hasAssignmentFilters || matchesAssignmentScope(item)) {
+            const incomeValue = item.income || item.corporateIncome || item.regionalIncome || 0;
+            totalIncome += toNumber(incomeValue);
+          }
         });
       }
     }
-    
+
     console.log(`✅ ${category}: Returning total income: ₱${totalIncome.toLocaleString()}`);
     return totalIncome;
-  }, [calculatedBudgetarySupport, capitalOutlayData, mooeData, regionName]);
+  }, [calculatedBudgetarySupport, capitalOutlayData, mooeData, matchesAssignmentScope, hasAssignmentFilters]);
   const useOfFundsBreakdown = useMemo(() => {
     // A.1 CORPORATE INCOME - Direct copy from IncomeTable
     const corporateIncome = incomeGrandTotal || 0;
@@ -477,89 +688,72 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
     // B.1.1 PERSONAL SERVICES - Use Total field approach like Budget Summary cards
     let personalServices = 0;
     if (personalServicesData && Array.isArray(personalServicesData)) {
-      
-      // Check for duplicate data by appointment status
       const statusBreakdown = {};
-      personalServicesData.forEach(p => {
-        const status = p.statusOfAppointment || 'Unknown';
+      personalServicesData.forEach((p) => {
+        const status = p?.statusOfAppointment || 'Unknown';
         if (!statusBreakdown[status]) statusBreakdown[status] = 0;
         statusBreakdown[status]++;
       });
-      
-      // Filter by region if needed (in case API didn't filter properly)
-      const filteredPersonnel = regionName 
-        ? personalServicesData.filter(p => (p.region || p.Region) === regionName)
+
+      const filteredPersonnel = hasAssignmentFilters
+        ? personalServicesData.filter((p) => matchesAssignmentScope(p))
         : personalServicesData;
 
-      // Check for duplicates - if we have both PERMANENT and CASUAL with similar names/amounts, we may be double-counting
       const uniquePersonnel = [];
       const seen = new Set();
-      
-      filteredPersonnel.forEach(p => {
-        // Create a unique key based on employee details
-        const key = `${p.employeeFullName}_${p.positionTitle}_${p.department}`;
+
+      filteredPersonnel.forEach((p) => {
+        if (!p) return;
+        const key =
+          p._id ||
+          p.employeeNumber ||
+          [
+            normalizeName(p.employeeFullName || p.EmployeeName),
+            normalizeName(p.positionTitle || p.PositionTitle),
+            normalizeName(p.department || p.Department),
+            normalizeName(p.division || p.Division),
+            normalizeName(p.region || p.Region || p.regionName || p.RegionName)
+          ].join('|');
+
         if (!seen.has(key)) {
           seen.add(key);
           uniquePersonnel.push(p);
-        } else {
         }
       });
 
-      if (uniquePersonnel.length > 0) {
-      }
-      
-      // Use Total field approach (matches Budget Summary cards in Proposal pages)
       personalServices = uniquePersonnel.reduce((sum, p) => {
         if (!p) return sum;
-        return sum + (Number(p.Total) || Number(p.total) || 0);
+        return sum + toNumber(p.Total ?? p.total ?? p.amount ?? p.annualSalary ?? p.TotalAmount);
       }, 0);
 
-      // Show sample Total field values for verification
-      if (uniquePersonnel.length > 0 && uniquePersonnel.length <= 5) {
-        uniquePersonnel.forEach((p, index) => {
-          const totalValue = Number(p.Total) || Number(p.total) || 0;
-        });
-      }
-    } else {
     }
 
-    // B.1.2 MOOE - Direct from server calculation
-    const maintenanceAndOperating = calculatedBudgetarySupport?.breakdown?.find(item => 
-      item.source?.includes('MOOE') || 
-      item.source?.includes('IAs O&M') ||
-      item.source?.includes('B.1.2 - MOOE') ||
-      item.source?.includes('MAINTENANCE AND OTHER OPERATING')
-    )?.amount || 0;
-
-    // Debug MOOE calculation
-    
-    if (calculatedBudgetarySupport?.breakdown) {
-      const mooeItem = calculatedBudgetarySupport.breakdown.find(item => 
-        item.source?.includes('MOOE') || 
-        item.source?.includes('IAs O&M') ||
-        item.source?.includes('B.1.2 - MOOE') ||
-        item.source?.includes('MAINTENANCE AND OTHER OPERATING')
-      );
-    }
-
-    // B.2 CAPITAL OUTLAYS - Get from server breakdown 
-    let capitalOutlays = 0;
-    if (calculatedBudgetarySupport?.breakdown) {
-      const coFromBreakdown = calculatedBudgetarySupport.breakdown.find(item => 
-        item.source?.includes('CAPITAL OUTLAY') || 
-        item.source?.includes('Capital Outlay') ||
-        item.source?.includes('CAPITAL OUTLAYS') ||
-        item.source?.includes('Capital Outlays') ||
-        item.source?.includes('CO')
-      );
+    // B.1.2 MOOE - Use TOTAL expenses from mooeData, NOT just subsidies
+    let maintenanceAndOperating = 0;
+    if (mooeData && Array.isArray(mooeData)) {
+      const filteredMooe = hasAssignmentFilters
+        ? mooeData.filter((item) => matchesAssignmentScope(item))
+        : mooeData;
       
-      if (coFromBreakdown) {
-        capitalOutlays = coFromBreakdown.amount || 0;
-      }
+      maintenanceAndOperating = filteredMooe.reduce((sum, item) => {
+        return sum + toNumber(item?.cost || item?.amount || item?.expense || 0);
+      }, 0);
+    }
+
+    // B.2 CAPITAL OUTLAYS - Use TOTAL expenses from capitalOutlayData, NOT just subsidies
+    let capitalOutlays = 0;
+    if (capitalOutlayData && Array.isArray(capitalOutlayData)) {
+      const filteredCapitalOutlay = hasAssignmentFilters
+        ? capitalOutlayData.filter((item) => matchesAssignmentScope(item))
+        : capitalOutlayData;
+      
+      capitalOutlays = filteredCapitalOutlay.reduce((sum, item) => {
+        return sum + toNumber(item?.totalCost || item?.cost || item?.amount || item?.expense || 0);
+      }, 0);
     }
 
     // Operating Requirements Total
-    const operatingRequirements =  personalServices + maintenanceAndOperating + capitalOutlays;
+    const operatingRequirements = personalServices + maintenanceAndOperating + capitalOutlays;
     
     return {
       corporateIncome,
@@ -568,7 +762,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
       capitalOutlays,
       operatingRequirements
     };
-  }, [capitalOutlayData, personalServicesData, calculatedBudgetarySupport, selectedRegion, incomeGrandTotal]);
+  }, [mooeData, capitalOutlayData, personalServicesData, incomeGrandTotal, matchesAssignmentScope, hasAssignmentFilters]);
 
   // Enhanced export functionality
   const handleExportToExcel = useCallback(() => {
@@ -670,12 +864,40 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
 
     toast.success("Enhanced budgetary support and use of funds data exported successfully!");
     setExportMenuAnchor(null);
-  }, [amount, fiscalYear, budgetType, selectedRegion, regionName, useOfFundsBreakdown, calculatedBudgetarySupport, getCorporateIncomeFromBreakdown]);
+  }, [amount, fiscalYear, budgetType, selectedRegion, regionName, useOfFundsBreakdown, getCorporateIncomeFromBreakdown]);
 
   // No add/edit functionality - amount is auto-calculated
 
   // Show summary for A.1.1 IRRIGATION SERVICE FEES (Corporate Income)
   const irrigationServiceFees = useOfFundsBreakdown.corporateIncome || 0;
+
+  const corporateIncomeFromMOOE = useMemo(
+    () => getCorporateIncomeFromBreakdown('MOOE'),
+    [getCorporateIncomeFromBreakdown]
+  );
+
+  const corporateIncomeFromCapitalOutlay = useMemo(
+    () => getCorporateIncomeFromBreakdown('CAPITAL_OUTLAY'),
+    [getCorporateIncomeFromBreakdown]
+  );
+
+  const totalCorporateIncomeSources = Number(useOfFundsBreakdown.corporateIncome || 0);
+  const totalCorporateIncomeUses = corporateIncomeFromMOOE + corporateIncomeFromCapitalOutlay;
+
+  const totalSubsidySources = Number(useOfFundsBreakdown.operatingRequirements || 0);
+  const totalSubsidyUses =
+    Number(useOfFundsBreakdown.personalServices || 0) +
+    Number(useOfFundsBreakdown.maintenanceAndOperating || 0) +
+    Number(useOfFundsBreakdown.capitalOutlays || 0);
+
+  const totalProposedBudgetSources = totalCorporateIncomeSources + totalSubsidySources;
+  const totalProposedBudgetUses = totalCorporateIncomeUses + totalSubsidyUses;
+
+  const surplusDeficit = {
+    corporateIncome: totalCorporateIncomeSources - totalCorporateIncomeUses,
+    subsidy: totalSubsidySources - totalSubsidyUses,
+    proposedBudget: totalProposedBudgetSources - totalProposedBudgetUses
+  };
 
   if (!hasValidParams) {
     return (
@@ -696,53 +918,6 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
       </Box>
     );
   }
-
-  // Simple connectivity test
-  const { data: connectivityTest, isLoading: isTestingConnectivity } = useQuery({
-    queryKey: ['connectivity-test'],
-    queryFn: async () => {
-      try {const response = await api.get('/test');return { status: 'connected', response: response.data };
-      } catch (error) {
-        console.error('❌ Backend connectivity test failed:', {
-          message: error.message,
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          url: error.config?.url
-        });
-        return { status: 'disconnected', error: error.message };
-      }
-    },
-    enabled: hasValidParams, // Only test when we have valid params
-    retry: false,
-    staleTime: 30000
-  });
-
-  // Check authentication status
-  const { data: authTest, isLoading: isTestingAuth } = useQuery({
-    queryKey: ['auth-test'],
-    queryFn: async () => {
-      try {// Try to access a protected endpoint that requires authentication
-        const response = await api.get('/budgetary-support/calculate', { 
-          params: { fiscalYear: Number(fiscalYear) || 2025, budgetType: budgetType || 'CURRENT' }
-        });return { status: 'authenticated', response: response.data };
-      } catch (error) {
-        if (error.response?.status === 401 || error.response?.status === 403) {
-          console.error('❌ Authentication failed - user not logged in or token expired');
-          return { status: 'unauthenticated', error: 'Please log in to access this data' };
-        } else {
-          console.error('❌ Authentication test failed with unexpected error:', {
-            message: error.message,
-            status: error.response?.status,
-            statusText: error.response?.statusText
-          });
-          return { status: 'error', error: error.message };
-        }
-      }
-    },
-    enabled: hasValidParams, // Only test when we have valid params
-    retry: false,
-    staleTime: 60000 // Cache for 1 minute
-  });
 
   // Show authentication warning if user is not logged in
   if (authTest?.status === 'unauthenticated') {
@@ -765,23 +940,6 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
       </Box>
     );
   }
-
-  // Debug loading states
-
-  // Timeout mechanism to prevent infinite loading
-  const [loadingTimeout, setLoadingTimeout] = useState(false);
-  
-  useEffect(() => {
-    if (isLoading) {
-      const timer = setTimeout(() => {
-        setLoadingTimeout(true);
-      }, 15000); // 15 seconds timeout to surface issues faster
-      
-      return () => clearTimeout(timer);
-    } else {
-      setLoadingTimeout(false);
-    }
-  }, [isLoading]);
 
   if (loadingTimeout) {
     return (
@@ -976,12 +1134,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2 }}>
                   <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: '#1565c0' }}>
-                    ₱{(
-                      ["Irrigation Service Fees", "Rent Income", "Water Service Fee", "Miscellaneous Income"]
-                        .map(cat => groupedItems?.[cat]?.subtotal || 0)
-                        .reduce((a, b) => a + b, 0)
-                      || incomeGrandTotal
-                    ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₱{totalCorporateIncomeSources.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2 }}>
@@ -991,12 +1144,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2 }}>
                   <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: '#1565c0' }}>
-                    ₱{(
-                      ["Irrigation Service Fees", "Rent Income", "Water Service Fee", "Miscellaneous Income"]
-                        .map(cat => groupedItems?.[cat]?.subtotal || 0)
-                        .reduce((a, b) => a + b, 0)
-                      || incomeGrandTotal
-                    ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₱{totalCorporateIncomeSources.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
               </TableRow>
@@ -1144,25 +1292,17 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
                   </TableCell>
                   <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: compactView ? '0.95rem' : '1.05rem', pr: 3, py: 2 }}>
                     <Typography variant="body2" fontWeight="bold" sx={{ color: 'white' }}>
-                      ₱{(getCorporateIncomeFromBreakdown('MOOE') + getCorporateIncomeFromBreakdown('CAPITAL_OUTLAY')).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₱{totalCorporateIncomeSources.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
                   </TableCell>
                   <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: compactView ? '0.95rem' : '1.05rem', pr: 3, py: 2 }}>
                     <Typography variant="body2" fontWeight="bold" sx={{ color: 'white' }}>
-                      ₱{(
-                        useOfFundsBreakdown.operatingRequirements + 
-                        0 // TOTAL CORPORATE INCOME PROJECTED SUBSIDY is 0 (dash)
-                      ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₱{totalSubsidySources.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
                   </TableCell>
                   <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: compactView ? '0.95rem' : '1.05rem', pr: 3, py: 2 }}>
                     <Typography variant="body2" fontWeight="bold" sx={{ color: 'white' }}>
-                      ₱{(
-                        getCorporateIncomeFromBreakdown('MOOE') + 
-                        getCorporateIncomeFromBreakdown('CAPITAL_OUTLAY') + 
-                        useOfFundsBreakdown.operatingRequirements +
-                        0 // TOTAL CORPORATE INCOME PROJECTED SUBSIDY is 0 (dash)
-                      ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₱{totalProposedBudgetSources.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
                   </TableCell>
                 </TableRow>
@@ -1180,12 +1320,12 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
             </Typography>
             <Box display="flex" alignItems="center" gap={1}>
               <Chip
-                label="Region-based CORPORATE INCOME and SUBSIDY breakdown"
+                label="CORPORATE INCOME and SUBSIDY breakdown"
                 size="small"
                 color="info"
                 variant="outlined"
               />
-              <Tooltip title="PROJECTED CORPORATE INCOME comes from region-specific income data. PROJECTED SUBSIDY is government funding. PROPOSED BUDGET is the total requirement.">
+              <Tooltip title="PROJECTED CORPORATE INCOME comes from specific income data. PROJECTED SUBSIDY is government funding. PROPOSED BUDGET is the total requirement.">
                 <IconButton size="small">
                   <InfoIcon fontSize="small" />
                 </IconButton>
@@ -1251,12 +1391,12 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
                     B.1.2 MAINTENANCE AND OTHER OPERATING EXPENSES
                   </Typography>
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontStyle: 'italic' }}>
-                    (Mixed funding: Regional income + Subsidy)
+                    (Mixed funding: Income + Subsidy)
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                   <Typography variant="body2" sx={{ fontWeight: 500, color: '#d32f2f', letterSpacing: 0.2 }}>
-                    ₱{getCorporateIncomeFromBreakdown('MOOE').toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₱{corporateIncomeFromMOOE.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
@@ -1266,7 +1406,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                   <Typography variant="body2" sx={{ fontWeight: 500, color: '#1976d2', letterSpacing: 0.2 }}>
-                    ₱{(getCorporateIncomeFromBreakdown('MOOE') + Number(useOfFundsBreakdown.maintenanceAndOperating || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₱{(corporateIncomeFromMOOE + Number(useOfFundsBreakdown.maintenanceAndOperating || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
               </TableRow>
@@ -1281,12 +1421,12 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
                     B.2 CAPITAL OUTLAYS
                   </Typography>
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontStyle: 'italic' }}>
-                    (Mixed funding: Regional income + Subsidy)
+                    (Mixed funding: Income + Subsidy)
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                   <Typography variant="body2" sx={{ fontWeight: 500, color: '#d32f2f', letterSpacing: 0.2 }}>
-                    ₱{getCorporateIncomeFromBreakdown('CAPITAL_OUTLAY').toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₱{corporateIncomeFromCapitalOutlay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
@@ -1296,7 +1436,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                   <Typography variant="body2" sx={{ fontWeight: 500, color: '#1976d2', letterSpacing: 0.2 }}>
-                    ₱{(getCorporateIncomeFromBreakdown('CAPITAL_OUTLAY') + Number(useOfFundsBreakdown.capitalOutlays || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₱{(corporateIncomeFromCapitalOutlay + Number(useOfFundsBreakdown.capitalOutlays || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
               </TableRow>
@@ -1316,21 +1456,17 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2 }}>
                   <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: '#d32f2f' }}>
-                    ₱{(getCorporateIncomeFromBreakdown('MOOE') + getCorporateIncomeFromBreakdown('CAPITAL_OUTLAY')).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₱{totalCorporateIncomeUses.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2 }}>
                   <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: '#2e7d32' }}>
-                    ₱{useOfFundsBreakdown.operatingRequirements.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₱{totalSubsidyUses.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2 }}>
                   <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: '#1976d2' }}>
-                    ₱{(
-                      getCorporateIncomeFromBreakdown('MOOE') + 
-                      getCorporateIncomeFromBreakdown('CAPITAL_OUTLAY') + 
-                      useOfFundsBreakdown.operatingRequirements
-                    ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₱{totalProposedBudgetUses.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
               </TableRow>
@@ -1349,17 +1485,17 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2 }}>
                   <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: '#f57c00' }}>
-                    ₱{(0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₱{surplusDeficit.corporateIncome.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2 }}>
                   <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: '#f57c00' }}>
-                    ₱{(0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₱{surplusDeficit.subsidy.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2 }}>
                   <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: '#f57c00' }}>
-                    ₱{(0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₱{surplusDeficit.proposedBudget.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
               </TableRow>

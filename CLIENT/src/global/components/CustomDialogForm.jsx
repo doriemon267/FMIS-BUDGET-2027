@@ -9,7 +9,7 @@ import {
     Typography
 } from '@mui/material';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { toast } from 'react-hot-toast';
 import * as yup from 'yup';
@@ -49,8 +49,8 @@ const CustomDialogForm = () => {
 
     const handleOpen = () => setIsOpen(true)
     const handleClose = () => {
-        setIsOpen(!isOpen);
-        if (isOpen) reset(); // Reset the form when closing
+        setIsOpen(false);
+        reset();
     }
 
     const onSubmit = async (data) => {
@@ -62,7 +62,7 @@ const CustomDialogForm = () => {
                     handleClose();
                 }
             });
-        } catch (e) {
+        } catch (_error) {
             toast.error("Something went wrong!", { duration: 4000 });
         }
     };
@@ -79,7 +79,7 @@ const CustomDialogForm = () => {
                 Create Role
             </Button>
 
-            <Dialog open={isOpen} onClose={handleOpen}>
+            <Dialog open={isOpen} onClose={handleClose}>
                 <DialogTitle>Add New Role</DialogTitle>
                 <DialogContent dividers>
                     <Typography variant="body2" gutterBottom mb={2}>

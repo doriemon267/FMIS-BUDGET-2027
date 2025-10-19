@@ -1371,19 +1371,14 @@ exports.getProposals = async (req, res) => {
       ...(() => {
         const psGroups = new Map();
 
+        // Use pre-calculated Total field from PersonnelServices instead of recalculating from components
+        // This ensures consistency with the stored Total value and matches the new API endpoint
+        const calcPSTotal = (item) => Number(item?.Total) || 0;
+
         // Fields contributing to Personnel Services totals
         const psFields = [
-          'annualSalary','RATA','PERA','uniformALLOWANCE','productivityIncentive','medical','childrenAllowance','meal','cashGift','subsistenceAllowanceMDS','subsistenceAllowanceST','midyearBonus','yearEndBonus','gsisPremium','philhealthPremium','pagibigPremium','employeeCompensation','loyaltyAward','overtimePay','earnedLeaves','retirementBenefits','terminalLeave','courtAppearance'
+          'annualSalary','RATA','PERA','uniformALLOWANCE','productivityIncentive','medical','childrenAllowance','meal','cashGift','subsistenceAllowanceMDS','subsistenceAllowanceST','midyearBonus','yearEndBonus','gsisPremium','philhealthPremium','pagibigPremium','employeeCompensation','loyaltyAward','overtimePay','earnedLeaves','retirementBenefits','terminalLeave','courtAppearance','hazardPay','honoraria'
         ];
-
-        const toNumber = (val) => {
-          if (typeof val === 'number') return Number.isFinite(val) ? val : 0;
-          if (val == null) return 0;
-          const cleaned = String(val).replace(/[^0-9.-]/g, '');
-          const n = parseFloat(cleaned);
-          return Number.isFinite(n) ? n : 0;
-        };
-        const calcPSTotal = (item) => psFields.reduce((sum, f) => sum + toNumber(item?.[f]), 0);
 
         const norm = (v) => String(v ?? '').trim().toUpperCase();
         const scope = req.hierarchicalAccessInfo?.scope?.toUpperCase() || 'REGION';

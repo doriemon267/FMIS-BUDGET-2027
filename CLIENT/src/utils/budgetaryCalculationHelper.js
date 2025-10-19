@@ -24,7 +24,7 @@ export const calculateMooeSubsidyTotals = (mooeEntries) => {
     const isIAsOMCost = row.sublineItem === "Irrigators' Associations (IAs) Operation & Maintenance Cost";
     
     if (row.children && Array.isArray(row.children)) {
-      row.children.forEach((child, childIndex) => {
+      row.children.forEach((child) => {
         const childSubsidy = parseFloat(child.subsidy || 0);
         
         if (isIAsOMCost) {
@@ -66,7 +66,7 @@ export const calculateCapitalOutlaySubsidyTotal = (capitalOutlayData) => {
     return 0;
   }
 
-  const total = capitalOutlayData.reduce((sum, item, index) => {
+  const total = capitalOutlayData.reduce((sum, item) => {
     const subsidy = parseFloat(item.subsidy || 0);
     // console.log(`Capital Outlay [${index}]: ${item.description || item.uacsCode || 'N/A'} = ₱${subsidy.toLocaleString()}`);
     return sum + subsidy;

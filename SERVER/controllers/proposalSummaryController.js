@@ -139,3 +139,114 @@ exports.getAnalytics = async (req, res) => {
     res.status(500).json({ message: "Server Error" });
   }
 };
+
+// Get Personnel Services SUBTOTAL with breakdown
+exports.getPersonnelServicesTotalWithBreakdown = async (req, res) => {
+  try {
+    // Build query using submission workflow filters when available
+    let baseQuery = {};
+    if (req.submissionWorkflowFilters && Object.keys(req.submissionWorkflowFilters).length) {
+      baseQuery = { ...req.submissionWorkflowFilters };
+    } else if (req.hierarchicalFilters && Object.keys(req.hierarchicalFilters).length) {
+      baseQuery = { ...req.hierarchicalFilters };
+    }
+
+    // Get overall total
+    const overallTotal = await PersonnelServices.aggregate([
+      { $match: baseQuery },
+      {
+        $group: {
+          _id: null,
+          totalSubtotal: { $sum: "$Total" },
+          totalCount: { $sum: 1 }
+        }
+      }
+    ]);
+
+    // Get breakdown by Department
+    const breakdownByDepartment = await PersonnelServices.aggregate([
+      { $match: baseQuery },
+      {
+        $group: {
+          _id: "$department",
+          subtotalAmount: { $sum: "$Total" },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { subtotalAmount: -1 } }
+    ]);
+
+    // Get breakdown by Region
+    const breakdownByRegion = await PersonnelServices.aggregate([
+      { $match: baseQuery },
+      {
+        $group: {
+          _id: "$region",
+          subtotalAmount: { $sum: "$Total" },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { subtotalAmount: -1 } }
+    ]);
+
+    // Get breakdown by Status
+    const breakdownByStatus = await PersonnelServices.aggregate([
+      { $match: baseQuery },
+      {
+        $group: {
+          _id: "$status",
+          subtotalAmount: { $sum: "$Total" },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { subtotalAmount: -1 } }
+    ]);
+
+    // Get top 10 employees by Total
+    const topEmployees = await PersonnelServices.find(baseQuery)
+      .select('employeeFullName department region Total status')
+      .sort({ Total: -1 })
+      .limit(10)
+      .lean();
+
+    const response = {
+      summary: {
+        totalSubtotal: overallTotal[0] ? overallTotal[0].totalSubtotal : 0,
+        totalRecords: overallTotal[0] ? overallTotal[0].totalCount : 0,
+        averageSubtotal: overallTotal[0] ? (overallTotal[0].totalSubtotal / overallTotal[0].totalCount) : 0
+      },
+      breakdown: {
+        byDepartment: breakdownByDepartment.map(item => ({
+          department: item._id || 'Unknown',
+          total: item.subtotalAmount,
+          count: item.count,
+          average: Math.round(item.subtotalAmount / item.count)
+        })),
+        byRegion: breakdownByRegion.map(item => ({
+          region: item._id || 'Unknown',
+          total: item.subtotalAmount,
+          count: item.count,
+          average: Math.round(item.subtotalAmount / item.count)
+        })),
+        byStatus: breakdownByStatus.map(item => ({
+          status: item._id || 'Unknown',
+          total: item.subtotalAmount,
+          count: item.count,
+          average: Math.round(item.subtotalAmount / item.count)
+        }))
+      },
+      topEmployees: topEmployees.map(emp => ({
+        name: emp.employeeFullName,
+        department: emp.department,
+        region: emp.region,
+        subtotal: emp.Total,
+        status: emp.status
+      }))
+    };
+
+    res.json(response);
+  } catch (error) {
+    console.error('Error getting Personnel Services total:', error);
+    res.status(500).json({ message: "Server Error", error: error.message });
+  }
+};

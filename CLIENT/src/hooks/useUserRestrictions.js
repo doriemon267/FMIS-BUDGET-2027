@@ -48,8 +48,6 @@ export function useAccessCheck() {
     },
 
     getAccessMessage: (budgetType, fiscalYear) => {
-      const restrictions = getUserRestrictions(currentUser);
-
       if (isUserReadOnly(currentUser)) {
         return "Account is in read-only mode";
       }

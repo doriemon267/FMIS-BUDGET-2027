@@ -6,7 +6,7 @@
     try {
       // This will work in Vite/ESM; if not available, it will throw and we'll fallback
       viteEnv = import.meta.env || {};
-    } catch (_) {
+    } catch {
       viteEnv = {};
     }
     const nodeEnv = (typeof process !== 'undefined' && process.env) ? process.env : {};
@@ -25,7 +25,7 @@
     if (silenceErrors) {
       console.error = noop;
     }
-  } catch (_) {
+  } catch {
     // ignore
   }
 })();

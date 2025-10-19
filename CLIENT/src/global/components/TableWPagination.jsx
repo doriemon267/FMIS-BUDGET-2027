@@ -4,7 +4,7 @@ import { MdEdit } from 'react-icons/md';
 import * as React from 'react';
 import {
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
-    TablePagination, TableSortLabel, IconButton, Tooltip
+    TablePagination, TableSortLabel, IconButton, Tooltip, Typography
 } from '@mui/material';
 
 const TableWPagination = ({ data = [

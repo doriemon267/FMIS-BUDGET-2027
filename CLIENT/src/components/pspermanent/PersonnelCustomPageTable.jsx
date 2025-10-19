@@ -11,7 +11,6 @@ import {
   DialogContentText,
   DialogTitle,
   CircularProgress,
-  Chip,
   FormControlLabel,
   Switch,
   IconButton,
@@ -24,19 +23,15 @@ import {
   Typography,
   Paper,
   Checkbox,
-  Alert,
 } from "@mui/material";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import api from "../../config/api";
 import { useRegion } from "../../context/RegionContext";
-import ActiveRegionDisplay from "../common/ActiveRegionDisplay";
 import { useUser } from "../../context/UserContext";
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
-import FilterListIcon from '@mui/icons-material/FilterList';
 import GetAppIcon from '@mui/icons-material/GetApp';
 import PrintIcon from '@mui/icons-material/Print';
 import { useQueryClient } from "@tanstack/react-query";
@@ -47,18 +42,13 @@ const PSPCustomPageTable = ({
   schema,
   title = "",
   description = "",
-  searchable = true,
   hasEdit = true,
   hasDelete = true,
-  hasAdd = true,
-  customAddElement = null,
   customEditElement = null,
   additionalMenuOptions = [],
   ROWS_PER_PAGE = 20,
   locked = false,
 }) => {
-  const [rows, setRows] = useState([]);
-  const [filteredRows, setFilteredRows] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [loading, setLoading] = useState(false);
   const [fiscalYear, setFiscalYear] = useState("");
@@ -68,19 +58,17 @@ const PSPCustomPageTable = ({
   const [compensation, setCompensation] = useState({});
   const { currentUser } = useUser();
   const { activeRegion } = useRegion();
-  const [regionFilter, setRegionFilter] = useState("");
   const queryClient = useQueryClient();
 
   // Enhanced state management
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(null);
   const [columnVisibility, setColumnVisibility] = useState({});
-  const [anchorEl, setAnchorEl] = useState(null);
   const [filterMenuAnchor, setFilterMenuAnchor] = useState(null);
   const [exportMenuAnchor, setExportMenuAnchor] = useState(null);
   const [viewDetailsDialog, setViewDetailsDialog] = useState({ open: false, data: null });
-  const [currentTableData, setCurrentTableData] = useState([]);
   const [printPreviewDialog, setPrintPreviewDialog] = useState({ open: false, content: '', data: [] });
+  const [filteredRows, setFilteredRows] = useState([]);
 
   const pageTitle = useMemo(() => title || dataListName.charAt(0).toUpperCase() + dataListName.slice(1), [title, dataListName]);
   const pageDescription = useMemo(() => description || `Manage ${dataListName}`, [description, dataListName]);
@@ -116,41 +104,14 @@ const PSPCustomPageTable = ({
     }
   }, []);
 
-  // Update region filter when active region changes
-  useEffect(() => {
-    if (activeRegion) {
-      const regionName = activeRegion.name || activeRegion.regionName;
-      setRegionFilter(regionName);
-    } else {
-      setRegionFilter("");
-    }
-  }, [activeRegion]);
-
-  const fetchData = useCallback(async () => {
+  const refreshPersonnelData = useCallback(async () => {
     try {
-      // Build query parameters
-      const params = new URLSearchParams();
-      params.append('statusOfAppointment', 'PERMANENT|Permanent');
-      
-      // Add region filter if available
-      if (regionFilter) {
-        params.append('region', regionFilter);
-      }
-      
-      const response = await api.get(`${apiPath}?${params.toString()}`);
-      if (response.data && Array.isArray(response.data.personnelServices)) {
-        const permanentPersonnel = response.data.personnelServices;
-        setRows(permanentPersonnel);
-        setFilteredRows(permanentPersonnel);
-      } else {
-        toast.error("Fetched data is not in the expected format.");
-        console.error("Fetched data is not an array:", response.data);
-      }
+      await invalidateDataList(queryClient, dataListName);
     } catch (error) {
-      toast.error("Error fetching personnel data.");
-      console.error("Error fetching data:", error);
+      toast.error("Error refreshing personnel data.");
+      console.error("Error refreshing data:", error);
     }
-  }, [apiPath, regionFilter]);
+  }, [queryClient, dataListName]);
 
   const fetchRATA = useCallback(async () => {
     try {
@@ -179,18 +140,19 @@ const PSPCustomPageTable = ({
   // Auto-refresh functionality
   useEffect(() => {
     if (autoRefresh) {
-      const interval = setInterval(fetchData, 30000); // Refresh every 30 seconds
+      const interval = setInterval(() => {
+        refreshPersonnelData();
+        fetchActiveSettings();
+        fetchRATA();
+      }, 30000); // Refresh every 30 seconds
       setRefreshInterval(interval);
       return () => clearInterval(interval);
     } else if (refreshInterval) {
       clearInterval(refreshInterval);
       setRefreshInterval(null);
     }
-  }, [autoRefresh, fetchData, refreshInterval]);
+  }, [autoRefresh, refreshPersonnelData, refreshInterval, fetchActiveSettings, fetchRATA]);
 
-  // Enhanced menu handlers
-  const handleMenuClick = (event) => setAnchorEl(event.currentTarget);
-  const handleMenuClose = () => setAnchorEl(null);
   const handleFilterMenuClick = (event) => setFilterMenuAnchor(event.currentTarget);
   const handleFilterMenuClose = () => setFilterMenuAnchor(null);
   const handleExportMenuClick = (event) => setExportMenuAnchor(event.currentTarget);
@@ -208,16 +170,16 @@ const PSPCustomPageTable = ({
   const handleManualRefresh = useCallback(async () => {
     setLoading(true);
     try {
-      await fetchData();
+      await refreshPersonnelData();
       await fetchActiveSettings();
       await fetchRATA();
       toast.success("Data refreshed successfully!");
-    } catch (error) {
+    } catch (_error) {
       toast.error("Failed to refresh data");
     } finally {
       setLoading(false);
     }
-  }, [fetchData, fetchActiveSettings, fetchRATA]);
+  }, [refreshPersonnelData, fetchActiveSettings, fetchRATA]);
 
   // Enhanced export function that fetches all data
   const handleExportAllData = useCallback(async () => {
@@ -473,7 +435,7 @@ const PSPCustomPageTable = ({
       </thead>
       <tbody>
         ${Object.entries(columnTotals)
-          .filter(([field, total]) => total > 0)
+          .filter(([_, total]) => total > 0)
           .map(([field, total]) => {
             const fieldLabels = {
               'monthlySalary': 'Monthly Salary',
@@ -538,15 +500,10 @@ const PSPCustomPageTable = ({
 
   // Initial data fetch
   useEffect(() => {
-    fetchData();
+    refreshPersonnelData();
     fetchActiveSettings();
     fetchRATA();
-  }, [fetchData, fetchActiveSettings, fetchRATA]);
-
-  // Update filtered rows when rows change
-  useEffect(() => {
-    setFilteredRows(rows);
-  }, [rows]);
+  }, [refreshPersonnelData, fetchActiveSettings, fetchRATA]);
 
   const handleAddAllPersonnel = useCallback(async (statusOfAppointment) => {
     setLoading(true);
@@ -614,10 +571,9 @@ const PSPCustomPageTable = ({
           toast.warning(`No new personnel added. ${duplicateCount} employees already exist in the system.`);
         } else {
           toast.info(response.data.message || "No personnel services to add.");
-        }
+  }
         
-        await fetchData();
-        await invalidateDataList(queryClient, dataListName);
+  await refreshPersonnelData();
       } else if (response.data.message) {
         toast.info(response.data.message);
         console.error("Bulk add response:", response.data);
@@ -644,9 +600,7 @@ const PSPCustomPageTable = ({
     RATA,
     compensation,
     currentUser,
-    fetchData,
-    queryClient,
-    dataListName,
+    refreshPersonnelData,
     fetchActiveSettings
   ]);
 
@@ -757,6 +711,9 @@ const PSPCustomPageTable = ({
             <Typography variant="body2" sx={{ opacity: 0.8, mb: 1 }}>
               Access Level: {currentUser?.hierarchicalAccess?.scope || 'REGION'}
             </Typography>
+            <Typography variant="body2" sx={{ opacity: 0.7, mb: 1 }}>
+              Active Region: {activeRegion?.name || activeRegion?.regionName || 'All Regions'}
+            </Typography>
             <Typography variant="body2" sx={{ opacity: 0.7 }}>
               {currentUser?.hierarchicalAccess?.scope === 'RESPONSIBILITY_CENTER'
                 ? `You can process permanent personnel within your responsibility center (${currentUser?.hierarchicalAccess?.accessibleDivisions?.[0] || 'Responsibility Center'}). Bulk operations are limited to your access scope.`
@@ -816,7 +773,10 @@ const PSPCustomPageTable = ({
             />
           </Box>
 
-          <Box display="flex" alignItems="center" gap={1}>
+          <Box display="flex" alignItems="center" gap={2}>
+            <Typography variant="body2" color="text.secondary">
+              Records loaded: {filteredRows.length.toLocaleString('en-US')}
+            </Typography>
             <Tooltip title="Column Visibility">
               <IconButton onClick={handleFilterMenuClick}>
                 <VisibilityIcon />
@@ -1148,8 +1108,7 @@ const PSPCustomPageTable = ({
         ROWS_PER_PAGE={ROWS_PER_PAGE}
         dataListName={dataListName}
         apiPath={apiPath}
-        rows={filteredRows}
-        onDataChange={setCurrentTableData}
+        onDataChange={setFilteredRows}
         columns={useMemo(() => Object.keys(schema)
           .filter((key) => (columnVisibility[key] !== false && (schema[key].show === true || key === "action")))
           .map((key) => {
@@ -1205,11 +1164,8 @@ PSPCustomPageTable.propTypes = {
   ).isRequired,
   title: PropTypes.string,
   description: PropTypes.string,
-  searchable: PropTypes.bool,
   hasEdit: PropTypes.bool,
   hasDelete: PropTypes.bool,
-  hasAdd: PropTypes.bool,
-  customAddElement: PropTypes.element,
   customEditElement: PropTypes.element,
   additionalMenuOptions: PropTypes.array,
   ROWS_PER_PAGE: PropTypes.number,

@@ -25,7 +25,7 @@ const statusRouter = require("./routers/Status");
 const salaryRouter = require("./routers/salaryRoutes");
 const mooeRoutes = require('./routers/mooeRoutes');
 const fiscalYearRoutes = require("./routers/fiscalYearRoutes");
-const personnelServicesRouter = require("./routers/personnelServicesRoutes");
+const personnelServicesRouter = require("./routers/personnelServices_router");
 const excelUploadRouter = require("./routers/excelUpload");
 const capitalOutlayRouter = require("./routers/capitalOutlayRouter");
 const capitalOutlayDetailsRouter = require("./routers/capitalOutlayDetailsRouter");
@@ -305,7 +305,7 @@ app.use(loyaltyPayRouter);
 app.use('/reports', reportsRouter); // Mount with /reports prefix
 app.use(cosPersonnelRouter);
 app.use('/', mooeRoutes);
-app.use(proposalSummaryRoutes);
+app.use('/api/proposalSummary', proposalSummaryRoutes);
 //para sa mga uploader
 app.use(chartOfAccountsRouter);
 app.use(uploadcategories);
@@ -335,8 +335,9 @@ app.use("/api/database-backup", databaseBackupRouter); // Mount database backup 
 // app.use("/api", overtimeRouter);
 // Add this line to use the new router
 app.use(require("./routers/personnelParamsRoutes"));
-// Keep the original routers
-app.use(require("./routers/personnelServicesRoutes"));
+// REMOVED: The old personnelServicesRoutes has submission workflow disabled
+// This was overriding the correct personnelServices_router loaded earlier at line 274
+// app.use(require("./routers/personnelServicesRoutes"));
 // app.use(require("./routers/medicalAllowanceRoutes"));
 app.use("/api/discount-settings", discountSettingsRouter);
 app.use(retireeRouter);

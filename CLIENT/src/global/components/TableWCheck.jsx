@@ -12,7 +12,6 @@ import {
     IconButton,
     Tooltip,
     Typography,
-    Box,
 } from '@mui/material';
 import { MdDelete, MdEdit } from 'react-icons/md';
 

@@ -20,7 +20,7 @@ import {
 import { blueGrey, green, grey } from "@mui/material/colors";
 import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
-import React, { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TiFilter } from "react-icons/ti";
 import api from "../../config/api";
 import { useSearch } from "../../context/SearchContext";
@@ -38,7 +38,8 @@ const CustomTable = ({
   filter = {}, // Added filter prop
 }) => {
   const { searchValue, setSearchValue } = useSearch();
-  const TEN_SECONDS_AGO = dayjs().subtract(10, "second");
+  const [debouncedSearch, setDebouncedSearch] = useState(searchValue);
+  const tenSecondsAgo = dayjs().subtract(10, "second");
 
   const [order, setOrder] = useState("desc");
   const [orderBy, setOrderBy] = useState(orderByDefault);
@@ -53,55 +54,120 @@ const CustomTable = ({
     operator: "=", // for number type
   });
 
-  const { data, isLoading, refetch, error } = useQuery({
-    queryKey: [dataListName, page],
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchValue);
+    }, 400);
+
+    return () => clearTimeout(handler);
+  }, [searchValue]);
+
+  const serializedFilter = useMemo(
+    () => JSON.stringify(filter ?? {}),
+    [filter]
+  );
+
+  const memoizedFilter = useMemo(
+    () => JSON.parse(serializedFilter),
+    [serializedFilter]
+  );
+
+  const activeFilterValue = useMemo(() => {
+    if (fieldAndValue.field === "date") {
+      return isValidDate(fieldAndValue.value) ? fieldAndValue.value : "";
+    }
+    return fieldAndValue.value ?? "";
+  }, [fieldAndValue.field, fieldAndValue.value]);
+
+  const queryParams = useMemo(() => {
+    const params = {
+      page: page + 1,
+      limit: rowsPerPage,
+      orderBy,
+      order,
+      operator: fieldAndValue.operator,
+      ...memoizedFilter,
+    };
+
+    if (debouncedSearch) {
+      params.search = debouncedSearch;
+    }
+
+    if (fieldAndValue.field && activeFilterValue !== "" && activeFilterValue !== undefined) {
+      params[fieldAndValue.field] = activeFilterValue;
+    }
+
+    return params;
+  }, [
+    page,
+    rowsPerPage,
+    orderBy,
+    order,
+    fieldAndValue.operator,
+    fieldAndValue.field,
+    activeFilterValue,
+    memoizedFilter,
+    debouncedSearch,
+  ]);
+
+  const queryKey = useMemo(
+    () => [
+      dataListName,
+      page,
+      rowsPerPage,
+      debouncedSearch,
+      orderBy,
+      order,
+      fieldAndValue.field,
+      activeFilterValue,
+      fieldAndValue.operator,
+      serializedFilter,
+    ],
+    [
+      dataListName,
+      page,
+      rowsPerPage,
+      debouncedSearch,
+      orderBy,
+      order,
+      fieldAndValue.field,
+      activeFilterValue,
+      fieldAndValue.operator,
+      serializedFilter,
+    ]
+  );
+
+  const { data = {}, isLoading, isFetching } = useQuery({
+    queryKey,
     queryFn: async () => {
-      const res = await api.get(apiPath, {
-        params: {
-          page: page + 1, // API expects page starting from 1
-          limit: rowsPerPage,
-          search: searchValue,
-          [fieldAndValue.field]: fieldAndValue.value,
-          orderBy,
-          order,
-          operator: fieldAndValue.operator,
-          ...filter, // Spread filter props into params
-        },
-      });
+      const res = await api.get(apiPath, { params: queryParams });
       return res.data;
     },
+    keepPreviousData: true,
+    staleTime: 30000,
   });
 
-  useEffect(() => {
-    if (fieldAndValue.value && fieldAndValue.field === "date") {
-      setPage(0);
-      setRowsPerPage(ROWS_PER_PAGE);
-      if (isValidDate(fieldAndValue.value)) refetch();
-    } else if (searchValue && searchValue.split("-").length === 3) {
-      if (isValidDate(searchValue)) refetch();
-    } else {
-      setPage(0);
-      setRowsPerPage(ROWS_PER_PAGE);
-      const debouncedSearch = setTimeout(() => {
-        refetch();
-      }, 500);
-      return () => clearTimeout(debouncedSearch);
-    }
-  }, [searchValue, fieldAndValue]);
+  const loading = isLoading || isFetching;
 
   useEffect(() => {
-    const debouncedSearch = setTimeout(() => {
-      refetch();
-    }, 500);
-    return () => clearTimeout(debouncedSearch);
-  }, [order, orderBy, rowsPerPage]);
+    if (
+      fieldAndValue.value &&
+      fieldAndValue.field === "date" &&
+      !isValidDate(fieldAndValue.value)
+    ) {
+      return;
+    }
+
+    setPage(0);
+    setRowsPerPage(ROWS_PER_PAGE);
+  }, [debouncedSearch, fieldAndValue.field, activeFilterValue, serializedFilter]);
 
   useEffect(() => {
     if (
       searchValue &&
       (fieldAndValue.field || fieldAndValue.label || fieldAndValue.value)
     ) {
-      setFieldAndValue({ field: "", label: "", value: "" });
+      setFieldAndValue({ field: "", label: "", value: "", operator: "=" });
     }
   }, [searchValue]); // Depend only on searchValue to prevent looping
 
@@ -379,7 +445,7 @@ const CustomTable = ({
               </TableRow>
             </TableHead>
             {/* LOADING AND TABLE BODY */}
-            {isLoading ? (
+            {loading ? (
               <TableBodyLoading numCell={columns.length} />
             ) : (
               <TableBody>
@@ -402,7 +468,7 @@ const CustomTable = ({
                   (data[dataListName] || []).map((row, rowIndex) => {
                     const isRecentlyUpdated =
                       row.updatedAt &&
-                      dayjs(row.updatedAt).isAfter(TEN_SECONDS_AGO);
+                      dayjs(row.updatedAt).isAfter(tenSecondsAgo);
 
                     return (
                       <TableRow
@@ -493,7 +559,7 @@ const CustomTable = ({
         </TableContainer>
 
         {/* PAGINATION AREA */}
-        {!isLoading ? (
+        {!loading ? (
           <TablePagination
             rowsPerPageOptions={[10, ROWS_PER_PAGE, 50]}
             component="div"

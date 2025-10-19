@@ -22,7 +22,6 @@ import {
   Checkbox,
   Zoom,
   Fade,
-  CircularProgress,
 } from "@mui/material";
 import {
   blueGrey,
@@ -532,20 +531,9 @@ const PermanentCustomTable = ({
                 </TableRow>
               </TableHead>
               {isLoading ? (
-                <TableBody>
-                  <TableRow>
-                    <TableCell colSpan={columns.length + (onRowSelectionChange ? 1 : 0)} sx={{ textAlign: 'center', py: 8 }}>
-                      <Fade in={isLoading}>
-                        <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
-                          <CircularProgress size={40} sx={{ color: '#375e38' }} />
-                          <Typography variant="body2" color="text.secondary">
-                            Loading personnel data...
-                          </Typography>
-                        </Box>
-                      </Fade>
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
+                <TableBodyLoading
+                  numCell={columns.length + (onRowSelectionChange ? 1 : 0)}
+                />
               ) : (
                 <TableBody>
                   {tableData.length === 0 ? (

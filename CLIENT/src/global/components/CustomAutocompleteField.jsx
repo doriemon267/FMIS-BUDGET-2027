@@ -1,4 +1,3 @@
-import React from 'react';
 import { Autocomplete, TextField, Chip } from '@mui/material';
 import { useController } from 'react-hook-form';
 
@@ -54,6 +53,7 @@ const CustomAutocompleteField = ({
       renderTags={(value, getTagProps) =>
         value.map((option, index) => (
           <Chip
+            key={`${option}-${index}`}
             label={option}
             {...getTagProps({ index })}
             color="primary"

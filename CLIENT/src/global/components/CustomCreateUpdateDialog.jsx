@@ -6,8 +6,6 @@ import {
   DialogTitle,
   MenuItem,
   Typography,
-  FormControlLabel,
-  Checkbox,
 } from "@mui/material";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
@@ -89,7 +87,6 @@ const CustomCreateUpdateDialog = ({
     handleSubmit,
     watch,
     setValue,
-    formState: { isDirty },
   } = useForm({
     resolver: yupResolver(validationSchema),
     defaultValues: isEditMode

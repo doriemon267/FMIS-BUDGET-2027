@@ -1,7 +1,5 @@
-import React from 'react';
-import { useNavigate, } from 'react-router-dom';
-import { BsArrowLeft } from 'react-icons/bs';
-import { Button, } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@mui/material';
 import { IoMdArrowBack } from "react-icons/io";
 
 const GoBackButton = () => {

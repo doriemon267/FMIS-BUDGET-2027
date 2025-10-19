@@ -57,8 +57,8 @@ const CustomAutoComplete = ({
     apiList.api
       .get(`${apiList.endpoint}${searchQuery ? `?search=${searchQuery}` : ""}`)
       .then((res) => {
-        const options = res.data[apiList.listName] || [];
-        setOptions(options);
+        const fetchedOptions = res.data[apiList.listName] || [];
+        setOptions(fetchedOptions);
       })
       .catch((error) => {
         console.error("Error fetching options:", error);
@@ -111,7 +111,7 @@ const CustomAutoComplete = ({
         );
         onChange && onChange(value);
       }}
-      onInputChange={(_, inputValue, reason) => {
+      onInputChange={(_, inputValue, _reason) => {
         // Don't override field value when input changes, let filterOptions handle it
         onInputChange && onInputChange(inputValue);
       }}
@@ -146,7 +146,7 @@ const CustomAutoComplete = ({
           />
         );
       }}
-      renderOption={(props, option, state) => {
+      renderOption={(props, option, _state) => {
         const label = typeof option === "string"
           ? option
           : option[getOptionColumn || getOptionLabel] || "";

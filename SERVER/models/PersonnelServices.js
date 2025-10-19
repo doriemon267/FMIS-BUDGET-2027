@@ -258,14 +258,14 @@ personnelServicesSchema.pre('save', function(next) {
   // Ensure meal is a number
   this.meal = Number(this.meal);
   
-  // Calculate total from all numeric fields
+  // Calculate total from all numeric fields (25 components per SUBTOTAL formula)
   const numericFields = [
     "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
-    "medical", "meal", "cashGift", "midyearBonus", "yearEndBonus",
-    "gsisPremium", "philhealthPremium", "pagibigPremium", "employeeCompensation",
-    "subsistenceAllowanceMDS", "subsistenceAllowanceST", "overtimePay", "loyaltyAward",
-    "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
-    "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
+    "medical", "childrenAllowance", "meal", "cashGift", 
+    "subsistenceAllowanceMDS", "subsistenceAllowanceST", "loyaltyAward", "overtimePay",
+    "midyearBonus", "yearEndBonus", "gsisPremium", "philhealthPremium", "pagibigPremium", 
+    "employeeCompensation", "courtAppearance", "earnedLeaves", "retirementBenefits", 
+    "terminalLeave", "hazardPay", "honoraria"
   ];
   
   this.Total = numericFields.reduce(
@@ -285,14 +285,14 @@ personnelServicesSchema.statics.resetMealAllowance = async function(employeeNumb
     // Recalculate total
     const doc = await this.findOne({ employeeNumber, fiscalYear });
     if (doc) {
-      // Get all numeric fields
+      // Get all numeric fields (25 components per SUBTOTAL formula)
       const numericFields = [
         "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
-        "medical", "meal", "cashGift", "midyearBonus", "yearEndBonus",
-        "gsisPremium", "philhealthPremium", "pagibigPremium", "employeeCompensation",
-        "subsistenceAllowanceMDS", "subsistenceAllowanceST", "overtimePay", "loyaltyAward",
-        "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
-        "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
+        "medical", "childrenAllowance", "meal", "cashGift", 
+        "subsistenceAllowanceMDS", "subsistenceAllowanceST", "loyaltyAward", "overtimePay",
+        "midyearBonus", "yearEndBonus", "gsisPremium", "philhealthPremium", "pagibigPremium", 
+        "employeeCompensation", "courtAppearance", "earnedLeaves", "retirementBenefits", 
+        "terminalLeave", "hazardPay", "honoraria"
       ];
       // Calculate new total
       doc.Total = numericFields.reduce(

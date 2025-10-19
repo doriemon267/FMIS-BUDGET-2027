@@ -2,6 +2,7 @@ const {
     getProposalSummary,
     getAnalytics,
     getPersonnelAggregates,
+    getPersonnelServicesTotalWithBreakdown,
   } = require("../controllers/proposalSummaryController");
   const Router = require("express").Router;
   const checkToken = require('../middleware/checkToken');
@@ -27,4 +28,12 @@ const {
     submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
     getPersonnelAggregates
   );
+
+  // Get Personnel Services SUBTOTAL with breakdown (respect submission workflow)
+  proposalSummaryRouter.get(
+    "/personnelServicesTotalWithBreakdown",
+    submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
+    getPersonnelServicesTotalWithBreakdown
+  );
+
   module.exports = proposalSummaryRouter;

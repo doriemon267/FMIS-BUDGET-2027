@@ -66,7 +66,7 @@ router.post(
       console.log('🔄 Processing submission:', { entity, ids: ids.length });
 
       const userId = req.user?.id || 'system';
-      const Model = require('../models/personnelServices'); // Default to personnel for legacy
+      const Model = require('../models/PersonnelServices'); // Default to personnel for legacy
 
       // Convert string IDs to ObjectId if needed
       const objectIds = ids.map(id => {
@@ -188,7 +188,7 @@ router.post(
       console.log('🔄 Processing verification:', { entity, ids: ids.length });
 
       const userId = req.user?.id || 'system';
-      const Model = require('../models/personnelServices');
+      const Model = require('../models/PersonnelServices');
 
       const objectIds = ids.map(id => {
         if (typeof id === 'string') {
@@ -300,7 +300,7 @@ router.post(
       console.log('🔄 Processing finalization:', { entity, ids: ids.length });
 
       const userId = req.user?.id || 'system';
-      const Model = require('../models/personnelServices');
+      const Model = require('../models/PersonnelServices');
 
       const objectIds = ids.map(id => {
         if (typeof id === 'string') {

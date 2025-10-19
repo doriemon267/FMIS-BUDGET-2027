@@ -1,5 +1,5 @@
 import { createTheme, responsiveFontSizes } from "@mui/material/styles";
-import { grey, red } from "@mui/material/colors";
+import { red } from "@mui/material/colors";
 
 // Create theme with both light and dark modes
 export const getTheme = (mode) => {
