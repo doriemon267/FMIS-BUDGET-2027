@@ -155,6 +155,12 @@ const HomePage = () => {
   const { activeRegion } = useRegion();
   const queryClient = useQueryClient();
   const isDarkMode = mode === 'dark';
+  const userRoles = Array.isArray(currentUser?.Roles)
+    ? currentUser.Roles
+    : currentUser?.Roles
+      ? [currentUser.Roles]
+      : [];
+  const isBudgetAnalyst = userRoles.includes('BUDGET ANALYST');
 
   // Get user's hierarchical access information
   const userAccessLevel = currentUser?.hierarchicalAccess?.scope || 'REGION';
@@ -342,27 +348,31 @@ const HomePage = () => {
           </Typography>
 
           <Grid container spacing={3}>
-            <Grid item xs={12} sm={6} md={4}>
-              <ActionCard
-                title='Create New Proposal'
-                description='Start a new budget proposal submission'
-                icon={AddCircleOutlineIcon}
-                color={theme.palette.primary.main}
-                onClick={handleCreateProposal}
-                buttonText='Get Started'
-              />
-            </Grid>
+            {isBudgetAnalyst && (
+              <Grid item xs={12} sm={6} md={4}>
+                <ActionCard
+                  title='Create New Proposal'
+                  description='Start a new budget proposal submission'
+                  icon={AddCircleOutlineIcon}
+                  color={theme.palette.primary.main}
+                  onClick={handleCreateProposal}
+                  buttonText='Get Started'
+                />
+              </Grid>
+            )}
 
-            <Grid item xs={12} sm={6} md={4}>
-              <ActionCard
-                title='My Proposals'
-                description='View and manage your submitted proposals'
-                icon={ListAltIcon}
-                color={theme.palette.secondary.main}
-                onClick={handleViewProposals}
-                buttonText='View Proposals'
-              />
-            </Grid>
+            {isBudgetAnalyst && (
+              <Grid item xs={12} sm={6} md={4}>
+                <ActionCard
+                  title='My Proposals'
+                  description='View and manage your submitted proposals'
+                  icon={ListAltIcon}
+                  color={theme.palette.secondary.main}
+                  onClick={handleViewProposals}
+                  buttonText='View Proposals'
+                />
+              </Grid>
+            )}
 
             <Grid item xs={12} sm={6} md={4}>
               <ActionCard

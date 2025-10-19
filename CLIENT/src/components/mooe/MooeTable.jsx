@@ -159,6 +159,21 @@ const Mooe = ({ onDataChange, locked = false }) => {
     return v !== undefined ? v : child[field];
   }, [draftInputs]);
 
+  const parseCurrency = useCallback((value) => {
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : 0;
+    }
+    if (typeof value === 'string') {
+      const cleaned = value.replace(/,/g, '').trim();
+      if (!cleaned) {
+        return 0;
+      }
+      const parsed = Number(cleaned);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+    return 0;
+  }, []);
+
   // Fetch data using React Query
   const { data, isLoading, error } = useQuery({
     queryKey: ["mooeData", activeRegion?.name], // Add region ID to query key to refetch when region changes
@@ -300,6 +315,41 @@ const Mooe = ({ onDataChange, locked = false }) => {
       toast.error("Failed to load consolidated data");
     },
   });
+
+  const cosRegionName = activeRegion?.name || activeRegion?.regionName || 'Central Office';
+
+  const { data: cosGrandTotalData } = useQuery({
+    queryKey: [
+      'cosGrandTotal',
+      cosRegionName,
+      currentUser?.hierarchicalAccess?.scope,
+      currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName,
+      currentUser?.hierarchicalAccess?.accessibleDivisions?.[0]
+    ],
+    queryFn: async () => {
+      const response = await api.get('/grandtotalCOS', {
+        params: { region: cosRegionName },
+        withCredentials: true
+      });
+      return response.data;
+    },
+    enabled: Boolean(cosRegionName && currentUser),
+    staleTime: 60000,
+    refetchInterval: 60000,
+    onError: (err) => {
+      console.error('Error fetching COS grand total:', err);
+    }
+  });
+
+  const cosGrandTotal = useMemo(() => {
+    const rawTotal = cosGrandTotalData?.grandTotal;
+    if (rawTotal === undefined || rawTotal === null) return null;
+    if (typeof rawTotal === 'number') {
+      return Number.isFinite(rawTotal) ? rawTotal : null;
+    }
+    const numeric = Number(String(rawTotal).replace(/,/g, ''));
+    return Number.isFinite(numeric) ? numeric : null;
+  }, [cosGrandTotalData]);
   
   // Memoize formatData function to prevent unnecessary recalculations
   const formatData = useCallback((rawData) => {
@@ -505,6 +555,95 @@ const Mooe = ({ onDataChange, locked = false }) => {
   const trackChanges = useCallback(() => {
     setHasUnsavedChanges(true);
   }, []);
+
+  useEffect(() => {
+    if (!data?.formattedData) return;
+    if (cosGrandTotal === null) return;
+
+    const subsidyString = cosGrandTotal.toFixed(2);
+
+    const adjustData = (original) => {
+      if (!original?.formattedData) return { next: null, childIds: [] };
+
+      let changed = false;
+      const childIds = [];
+
+      const updatedFormattedData = original.formattedData.map(row => {
+        let rowChanged = false;
+
+        const updatedChildren = row.children.map(child => {
+          if (child.uacsCode === '5-02-99-990-3') {
+            const currentSubsidy = parseCurrency(child.subsidy);
+            if (Math.abs(currentSubsidy - cosGrandTotal) > 0.009) {
+              rowChanged = true;
+              changed = true;
+              childIds.push(child.id);
+              const incomeValue = parseCurrency(child.income);
+              const amountValue = incomeValue + cosGrandTotal;
+
+              return {
+                ...child,
+                subsidy: subsidyString,
+                amount: amountValue.toFixed(2)
+              };
+            }
+          }
+          return child;
+        });
+
+        return rowChanged ? { ...row, children: updatedChildren } : row;
+      });
+
+      if (!changed) {
+        return { next: null, childIds: [] };
+      }
+
+      return {
+        next: { ...original, formattedData: updatedFormattedData },
+        childIds
+      };
+    };
+
+    const targetKeys = [
+      ["mooeData", activeRegion?.name],
+      ["mooeData"]
+    ];
+
+    let updateOccurred = false;
+    const touchedChildIds = new Set();
+
+    targetKeys.forEach((key) => {
+      const cached = queryClient.getQueryData(key);
+      if (!cached) return;
+
+      const { next, childIds } = adjustData(cached);
+      if (next) {
+        queryClient.setQueryData(key, next);
+        childIds.forEach((id) => touchedChildIds.add(id));
+        updateOccurred = true;
+      }
+    });
+
+    if (updateOccurred) {
+      if (touchedChildIds.size > 0) {
+        setDraftInputs((prev) => {
+          if (!prev || Object.keys(prev).length === 0) return prev;
+          const nextDrafts = { ...prev };
+          touchedChildIds.forEach((id) => {
+            if (!(id in nextDrafts)) return;
+            const entry = nextDrafts[id];
+            if (entry && entry.income !== undefined) {
+              nextDrafts[id] = { income: entry.income };
+            } else {
+              delete nextDrafts[id];
+            }
+          });
+          return nextDrafts;
+        });
+      }
+      trackChanges();
+    }
+  }, [cosGrandTotal, data?.formattedData, activeRegion?.name, parseCurrency, queryClient, trackChanges]);
 
   const toggleExpandRow = useCallback((rowId) => {
     setExpandedRows(prev => 
