@@ -19,7 +19,8 @@ const {
   saveDraftProposal,
   getDraftProposal,
   consolidateProposals,
-  debugProposals
+  debugProposals,
+  recalculateProposalTotals
 } = require("../controllers/proposalController");
 const Router = require("express").Router;
 const checkToken = require('../middleware/checkToken');
@@ -182,4 +183,6 @@ proposalRouter.post('/consolidate-drafts', async (req, res) => {
 });
 // Debug route to check database content
 proposalRouter.get('/debug-proposals', debugProposals);
+// Recalculate totals for a specific proposal
+proposalRouter.post('/proposals/:id/recalculate', recalculateProposalTotals);
 module.exports = proposalRouter;

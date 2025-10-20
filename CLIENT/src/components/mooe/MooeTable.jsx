@@ -951,12 +951,19 @@ const Mooe = ({ onDataChange, locked = false }) => {
   // Add saveMutation for saving MOOE data
   const saveMutation = useMutation({
     mutationFn: async (payload) => {
-      // Use the same API instance and endpoint as data loading, but POST
-      const response = await api.post('/mooe-data', payload, { withCredentials: true });
-      if (!response.data) {
-        throw new Error('No response data from server');
+      try {
+        // Use the same API instance and endpoint as data loading, but POST
+        const response = await api.post('/mooe-data', payload, { withCredentials: true });
+        if (!response.data) {
+          throw new Error('No response data from server');
+        }
+        // Return the response even if it contains warnings (partial success is still success)
+        return response.data;
+      } catch (error) {
+        // Axios throws on 4xx/5xx status codes, but data is often already saved
+        // Re-throw with full error details for onError handler
+        throw error;
       }
-      return response.data;
     },
   });
 
@@ -1165,6 +1172,26 @@ const Mooe = ({ onDataChange, locked = false }) => {
       },
       onError: (error) => {
         console.error("Save error:", error);
+        
+        // Check if the error response indicates partial success or warning
+        const errorData = error?.response?.data;
+        const errorStatus = error?.response?.status;
+        
+        // If we got a 500 error but the server says data was saved (partial success), treat as success
+        if (errorStatus === 500 && errorData?.success) {
+          if (!isAutoSave) {
+            const message = errorData?.warning 
+              ? `${errorData.message} (${errorData.warning})`
+              : errorData?.message || 'Data saved with warnings';
+            toast.success(message, { autoClose: 3000 });
+          }
+          // Still invalidate queries since some data was saved
+          queryClient.invalidateQueries(["mooeData", activeRegion?.name || activeRegion?.regionName]);
+          queryClient.invalidateQueries(["consolidatedData", activeRegion?.name || activeRegion?.regionName]);
+          return;
+        }
+        
+        // Actual error - no data was saved
         if (!isAutoSave) {
           toast.error(`Failed to save: ${error.message || 'Unknown error'}`);
         }

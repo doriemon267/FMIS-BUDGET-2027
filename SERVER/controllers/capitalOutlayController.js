@@ -3,6 +3,8 @@ const CapitalOutlay = require("../models/CapitalOutlay");
 const ChartOfAccounts = require('../models/chartOfAccounts');
 const Category = require("../models/Category");
 const Settings = require("../models/Settings");
+const Proposal = require('../models/Proposal');
+const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 // All Chart of Accounts entries are read straight from the FMIS main database via MONGODB_MAIN_URL.
 // We intentionally avoid local file-based seeding so the data always mirrors the source system.
 // Helper function to get the active fiscal year
@@ -212,7 +214,33 @@ exports.addCapitalOutlay = async (req, res) => {
     await newOutlay.save();
     console.log("Capital outlay saved successfully:", newOutlay._id);
     console.log("=== ADD CAPITAL OUTLAY COMPLETE ===");
-    
+    // Non-blocking: trigger Proposal totals recalculation for affected proposals
+    try {
+      const keys = {
+        fiscalYear: newOutlay.fiscalYear,
+        budgetType: newOutlay.budgetType,
+        region: newOutlay.region,
+        processBy: newOutlay.processBy
+      };
+      const strictQuery = {
+        fiscalYear: keys.fiscalYear,
+        budgetType: keys.budgetType,
+        region: keys.region,
+        ...(keys.processBy ? { processBy: keys.processBy } : {})
+      };
+      let proposals = await Proposal.find(strictQuery).select('_id').lean();
+      if (!proposals.length) {
+        const relaxedQuery = { fiscalYear: keys.fiscalYear, budgetType: keys.budgetType, region: keys.region };
+        proposals = await Proposal.find(relaxedQuery).select('_id').lean();
+      }
+      if (proposals.length) {
+        await Promise.allSettled(proposals.map(p => recalculateAndSaveProposalTotals({ proposalId: p._id })));
+        console.log(`🔄 [CO] Recalculated totals for ${proposals.length} proposal(s)`, keys);
+      }
+    } catch (recErr) {
+      console.warn('⚠️ [CO] Proposal totals recalculation skipped:', recErr?.message);
+    }
+
     return res.status(201).json({
       message: "Capital outlay added successfully",
       capitalOutlay: newOutlay
@@ -298,6 +326,32 @@ exports.editCapitalOutlay = async (req, res) => {
       },
       { new: true, runValidators: true }
     ).populate("category"); // Ensure updated category details are returned
+    // Non-blocking: trigger Proposal totals recalculation for affected proposals
+    try {
+      const keys = {
+        fiscalYear: updatedCapitalOutlay.fiscalYear,
+        budgetType: updatedCapitalOutlay.budgetType,
+        region: updatedCapitalOutlay.region,
+        processBy: updatedCapitalOutlay.processBy
+      };
+      const strictQuery = {
+        fiscalYear: keys.fiscalYear,
+        budgetType: keys.budgetType,
+        region: keys.region,
+        ...(keys.processBy ? { processBy: keys.processBy } : {})
+      };
+      let proposals = await Proposal.find(strictQuery).select('_id').lean();
+      if (!proposals.length) {
+        const relaxedQuery = { fiscalYear: keys.fiscalYear, budgetType: keys.budgetType, region: keys.region };
+        proposals = await Proposal.find(relaxedQuery).select('_id').lean();
+      }
+      if (proposals.length) {
+        await Promise.allSettled(proposals.map(p => recalculateAndSaveProposalTotals({ proposalId: p._id })));
+        console.log(`🔄 [CO] Recalculated totals for ${proposals.length} proposal(s)`, keys);
+      }
+    } catch (recErr) {
+      console.warn('⚠️ [CO] Proposal totals recalculation skipped:', recErr?.message);
+    }
     return res.status(200).json({
       message: "Capital outlay updated successfully.",
       capitalOutlay: updatedCapitalOutlay,

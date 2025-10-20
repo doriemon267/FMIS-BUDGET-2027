@@ -743,9 +743,10 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
     // B.2 CAPITAL OUTLAYS - Use TOTAL expenses from capitalOutlayData, NOT just subsidies
     let capitalOutlays = 0;
     if (capitalOutlayData && Array.isArray(capitalOutlayData)) {
+      const allItems = capitalOutlayData.flatMap((regionData) => regionData.items || []);
       const filteredCapitalOutlay = hasAssignmentFilters
-        ? capitalOutlayData.filter((item) => matchesAssignmentScope(item))
-        : capitalOutlayData;
+        ? allItems.filter((item) => matchesAssignmentScope(item))
+        : allItems;
       
       capitalOutlays = filteredCapitalOutlay.reduce((sum, item) => {
         return sum + toNumber(item?.totalCost || item?.cost || item?.amount || item?.expense || 0);

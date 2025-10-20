@@ -180,6 +180,12 @@ if (typeof saveDraftProposal === 'function') {
     saveDraftProposal
   );
 }
+// Recalculate totals for a specific proposal (Admin only)
+proposalRBACRouter.post(
+  '/proposals/:id/recalculate',
+  ...adminRoute(),
+  require('../controllers/proposalController').recalculateProposalTotals
+);
 // Simplified proposal endpoint (Authenticated users with filtering)
 proposalRBACRouter.get('/proposal-simple', 
   ...authenticatedRoute(),

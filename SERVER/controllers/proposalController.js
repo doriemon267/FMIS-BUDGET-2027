@@ -7,6 +7,7 @@ const CapitalOutlay = require('../models/CapitalOutlay');
 const BudgetarySupport = require('../models/BudgetarySupport');
 const Income = require('../models/Income');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 // Remove the checkUserRegionAccess function
 // const checkUserRegionAccess = async (userId, region) => {
 //   try {
@@ -6255,6 +6256,21 @@ exports.debugProposals = async (req, res) => {
       message: "Failed to debug proposals",
       error: error.message
     });
+  }
+};
+
+// Recalculate proposal totals and persist to db.proposals
+exports.recalculateProposalTotals = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'Proposal ID is required' });
+    }
+    const result = await recalculateAndSaveProposalTotals({ proposalId: id });
+    return res.status(200).json({ success: true, message: 'Proposal totals recalculated', result });
+  } catch (error) {
+    console.error('Error recalculating proposal totals:', error);
+    return res.status(500).json({ success: false, message: 'Failed to recalculate totals', error: error.message });
   }
 };
 

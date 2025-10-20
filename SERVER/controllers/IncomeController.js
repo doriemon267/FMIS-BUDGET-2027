@@ -1,6 +1,8 @@
 const mongoose = require("mongoose");
 const Income = require("../models/Income");
 const Settings = require("../models/Settings");
+const Proposal = require('../models/Proposal');
+const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 // Create new income entry
 exports.createIncome = async (req, res) => {
   try {
@@ -50,6 +52,32 @@ exports.createIncome = async (req, res) => {
       status: workflowData.status || "Draft" // Use new workflow status
     });
     await newIncome.save();
+    // Non-blocking: trigger Proposal totals recalculation for affected proposals
+    try {
+      const keys = {
+        fiscalYear: newIncome.fiscalYear,
+        budgetType: newIncome.budgetType,
+        region: newIncome.region,
+        processBy: newIncome.processBy
+      };
+      const strictQuery = {
+        fiscalYear: keys.fiscalYear,
+        budgetType: keys.budgetType,
+        region: keys.region,
+        ...(keys.processBy ? { processBy: keys.processBy } : {})
+      };
+      let proposals = await Proposal.find(strictQuery).select('_id').lean();
+      if (!proposals.length) {
+        const relaxedQuery = { fiscalYear: keys.fiscalYear, budgetType: keys.budgetType, region: keys.region };
+        proposals = await Proposal.find(relaxedQuery).select('_id').lean();
+      }
+      if (proposals.length) {
+        await Promise.allSettled(proposals.map(p => recalculateAndSaveProposalTotals({ proposalId: p._id })));
+        console.log(`🔄 [Income] Recalculated totals for ${proposals.length} proposal(s)`, keys);
+      }
+    } catch (recErr) {
+      console.warn('⚠️ [Income] Proposal totals recalculation skipped:', recErr?.message);
+    }
     res.status(201).json(newIncome);
   } catch (error) {
     console.error("Error creating income entry:", error);
@@ -121,6 +149,32 @@ exports.updateIncome = async (req, res) => {
     );
     if (!updatedIncome) {
       return res.status(404).json({ message: "Income entry not found" });
+    }
+    // Non-blocking: trigger Proposal totals recalculation for affected proposals
+    try {
+      const keys = {
+        fiscalYear: updatedIncome.fiscalYear,
+        budgetType: updatedIncome.budgetType,
+        region: updatedIncome.region,
+        processBy: updatedIncome.processBy
+      };
+      const strictQuery = {
+        fiscalYear: keys.fiscalYear,
+        budgetType: keys.budgetType,
+        region: keys.region,
+        ...(keys.processBy ? { processBy: keys.processBy } : {})
+      };
+      let proposals = await Proposal.find(strictQuery).select('_id').lean();
+      if (!proposals.length) {
+        const relaxedQuery = { fiscalYear: keys.fiscalYear, budgetType: keys.budgetType, region: keys.region };
+        proposals = await Proposal.find(relaxedQuery).select('_id').lean();
+      }
+      if (proposals.length) {
+        await Promise.allSettled(proposals.map(p => recalculateAndSaveProposalTotals({ proposalId: p._id })));
+        console.log(`🔄 [Income] Recalculated totals for ${proposals.length} proposal(s)`, keys);
+      }
+    } catch (recErr) {
+      console.warn('⚠️ [Income] Proposal totals recalculation skipped:', recErr?.message);
     }
     res.status(200).json(updatedIncome);
   } catch (error) {

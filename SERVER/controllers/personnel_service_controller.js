@@ -2,6 +2,8 @@ const mongoose = require("mongoose");
 const PersonnelServices = require("../models/PersonnelServices");
 const EmployeeMaster = require("../models/EmployeeList");
 const Settings = require("../models/Settings");
+const Proposal = require('../models/Proposal');
+const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 // Import ChildrenAllowance model safely
 const ChildrenAllowance =
   mongoose.models.ChildrenAllowance || require("../models/childrenAllowance");
@@ -669,6 +671,35 @@ exports.bulkAddPersonnelServices = async (req, res) => {
       const addedPersonnelServices = await PersonnelServices.insertMany(
         personnelServicesData
       );
+      // Non-blocking: trigger Proposal totals recalculation for affected proposals using first added item's keys
+      try {
+        const first = addedPersonnelServices[0] || {};
+        const keys = {
+          fiscalYear: first.fiscalYear,
+          budgetType: first.budgetType,
+          region: first.region,
+          processBy: first.processBy
+        };
+        if (keys.fiscalYear && keys.region) {
+          const strictQuery = {
+            fiscalYear: keys.fiscalYear,
+            budgetType: keys.budgetType,
+            region: keys.region,
+            ...(keys.processBy ? { processBy: keys.processBy } : {})
+          };
+          let proposals = await Proposal.find(strictQuery).select('_id').lean();
+          if (!proposals.length) {
+            const relaxedQuery = { fiscalYear: keys.fiscalYear, budgetType: keys.budgetType, region: keys.region };
+            proposals = await Proposal.find(relaxedQuery).select('_id').lean();
+          }
+          if (proposals.length) {
+            await Promise.allSettled(proposals.map(p => recalculateAndSaveProposalTotals({ proposalId: p._id })));
+            console.log(`🔄 [PS] Recalculated totals for ${proposals.length} proposal(s)`, keys);
+          }
+        }
+      } catch (recErr) {
+        console.warn('⚠️ [PS] Proposal totals recalculation skipped:', recErr?.message);
+      }
       res.status(200).json({
         added: addedPersonnelServices,
         duplicates: duplicates,
@@ -828,6 +859,34 @@ exports.updatePersonnelService = async (req, res) => {
       0
     );
     await updatedPersonnelService.save();
+    // Non-blocking: trigger Proposal totals recalculation for affected proposals
+    try {
+      const keys = {
+        fiscalYear: updatedPersonnelService?.fiscalYear,
+        budgetType: updatedPersonnelService?.budgetType,
+        region: updatedPersonnelService?.region,
+        processBy: updatedPersonnelService?.processBy
+      };
+      if (keys.fiscalYear && keys.region) {
+        const strictQuery = {
+          fiscalYear: keys.fiscalYear,
+          budgetType: keys.budgetType,
+          region: keys.region,
+          ...(keys.processBy ? { processBy: keys.processBy } : {})
+        };
+        let proposals = await Proposal.find(strictQuery).select('_id').lean();
+        if (!proposals.length) {
+          const relaxedQuery = { fiscalYear: keys.fiscalYear, budgetType: keys.budgetType, region: keys.region };
+          proposals = await Proposal.find(relaxedQuery).select('_id').lean();
+        }
+        if (proposals.length) {
+          await Promise.allSettled(proposals.map(p => recalculateAndSaveProposalTotals({ proposalId: p._id })));
+          console.log(`🔄 [PS] Recalculated totals for ${proposals.length} proposal(s)`, keys);
+        }
+      }
+    } catch (recErr) {
+      console.warn('⚠️ [PS] Proposal totals recalculation skipped:', recErr?.message);
+    }
     res.status(200).json(updatedPersonnelService);
   } catch (error) {
     console.error("Error in updatePersonnelService:", error.stack);
