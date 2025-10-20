@@ -5,7 +5,7 @@ A comprehensive Financial Management Information System for budget proposals and
 ## 📁 Project Structure
 
 ```
-FMIS-BUDGET-JULY/
+FMIS-BUDGET-SEPTEMBER/
 ├── CLIENT/                    # React frontend application
 │   ├── src/                  # Source code
 │   ├── public/               # Static assets
@@ -48,8 +48,8 @@ FMIS-BUDGET-JULY/
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/doriemon267/FMIS-BUDGET-JULY.git
-   cd FMIS-BUDGET-JULY
+   git clone https://github.com/doriemon267/FMIS-BUDGET-SEPTEMBER.git
+   cd FMIS-BUDGET-SEPTEMBER
    ```
 
 2. **Setup Backend**
@@ -127,6 +127,20 @@ All detailed documentation is available in the `DOCUMENTATION/` folder:
 - **Troubleshooting Guides**: Common issues and solutions
 - **Security Documentation**: Security implementation details
 
+Additional docs in repo root:
+
+- `PROPOSAL_TOTALS_AUTO_RECALC.md`: End-to-end guide for automatic Proposal totals recalculation, admin endpoint, and maintenance script.
+
+Maintenance script:
+
+- Recalculate all proposals totals
+   - Script: `SERVER/scripts/recalculate-all-proposals.js`
+   - NPM script: `recalc:proposals`
+   - Run (PowerShell):
+      ```powershell
+      npm run recalc:proposals
+      ```
+
 ## 🤝 Contributing
 
 1. Fork the repository
@@ -141,6 +155,6 @@ For technical support or questions, please refer to the documentation in the `DO
 
 ---
 
-**Last Updated**: July 23, 2025
-**Version**: 2.0.0
+**Last Updated**: October 20, 2025
+**Version**: 2.1.0
 **Status**: Production Ready
