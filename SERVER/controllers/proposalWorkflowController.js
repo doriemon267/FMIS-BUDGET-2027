@@ -11,6 +11,14 @@ const Income = require('../models/Income');
 const BudgetOfficerEdit = require('../models/BudgetOfficerEdit');
 const { applyEditsToOriginalDocuments } = require('./budgetOfficerEditController');
 
+// Labels used when reporting missing budget modules during analyst submission validation
+const MODULE_LABELS = {
+  personnel: 'Personnel Services',
+  mooe: 'Maintenance and Other Operating Expenses (MOOE)',
+  capital: 'Capital Outlay',
+  income: 'Income'
+};
+
 /**
  * Budget Role Access Control Middleware
  * Implements visibility rules based on budget roles and proposal status
@@ -154,6 +162,270 @@ function checkProposalAccess(proposal, userId, userRoles) {
 
   return false;
 }
+
+function sanitizeFilterObject(filter) {
+  return Object.entries(filter || {}).reduce((clean, [key, value]) => {
+    if (value === undefined || value === null) {
+      return clean;
+    }
+    if (typeof value === 'string' && value.trim() === '') {
+      return clean;
+    }
+    clean[key] = value;
+    return clean;
+  }, {});
+}
+
+function buildModuleFilter(proposal) {
+  const baseFilter = sanitizeFilterObject({
+    budgetType: proposal.budgetType,
+    region: proposal.region
+  });
+
+  const orFilters = [];
+
+  if (proposal?._id) {
+    orFilters.push({ proposalId: proposal._id });
+  }
+
+  const addOrganizationalFilter = (extraCriteria = {}) => {
+    const candidate = sanitizeFilterObject({ ...baseFilter, ...extraCriteria });
+    if (Object.keys(candidate).length > 0) {
+      orFilters.push(candidate);
+    }
+  };
+
+  addOrganizationalFilter({ division: proposal.division });
+  addOrganizationalFilter({ division: proposal.originalDivision });
+  addOrganizationalFilter({ department: proposal.department });
+  addOrganizationalFilter({ department: proposal.originalDepartment });
+  addOrganizationalFilter({ processBy: proposal.processBy });
+
+  if (!orFilters.length && Object.keys(baseFilter).length) {
+    orFilters.push(baseFilter);
+  }
+
+  let combinedFilter;
+  if (orFilters.length === 0) {
+    combinedFilter = {};
+  } else if (orFilters.length === 1) {
+    combinedFilter = orFilters[0];
+  } else {
+    combinedFilter = { $or: orFilters };
+  }
+
+  const yearConditions = [];
+  if (proposal.fiscalYear) {
+    yearConditions.push({ fiscalYear: proposal.fiscalYear });
+  }
+  const numericFiscalYear = Number(proposal.fiscalYear);
+  if (!Number.isNaN(numericFiscalYear)) {
+    yearConditions.push({ fiscalYear: numericFiscalYear });
+    yearConditions.push({ fiscal_year: numericFiscalYear });
+  }
+
+  if (yearConditions.length) {
+    const yearFilter = yearConditions.length === 1 ? yearConditions[0] : { $or: yearConditions };
+    if (!combinedFilter || !Object.keys(combinedFilter).length) {
+      combinedFilter = yearFilter;
+    } else {
+      combinedFilter = { $and: [combinedFilter, yearFilter] };
+    }
+  }
+
+  return combinedFilter || {};
+}
+
+function appendStatusGuard(filter) {
+  const statusGuard = { status: { $ne: 'Returned' } };
+
+  if (!filter || !Object.keys(filter).length) {
+    return statusGuard;
+  }
+
+  if (filter.status) {
+    return filter;
+  }
+
+  if (filter.$or) {
+    return { $and: [filter, statusGuard] };
+  }
+
+  return { ...filter, ...statusGuard };
+}
+
+function buildGroupStage(amountFields) {
+  const fields = Array.isArray(amountFields) && amountFields.length ? amountFields : ['amount'];
+
+  let amountExpression;
+  if (fields.length === 1) {
+    amountExpression = { $ifNull: [`$${fields[0]}`, 0] };
+  } else {
+    amountExpression = {
+      $add: fields.map((field) => ({ $ifNull: [`$${field}`, 0] }))
+    };
+  }
+
+  return {
+    $group: {
+      _id: null,
+      count: { $sum: 1 },
+      total: { $sum: amountExpression }
+    }
+  };
+}
+
+async function evaluateModuleCompletion(model, filter, amountFields) {
+  const effectiveFilter = appendStatusGuard(filter);
+
+  try {
+    const pipeline = [
+      { $match: effectiveFilter },
+      buildGroupStage(amountFields)
+    ];
+
+    const [stats] = await model.aggregate(pipeline);
+
+    return {
+      count: stats?.count || 0,
+      total: stats?.total || 0,
+      hasEntries: Boolean(stats?.count),
+      filter: effectiveFilter
+    };
+  } catch (error) {
+    console.error(`❌ Error evaluating module completion for ${model.modelName}:`, {
+      message: error.message,
+      filter: JSON.stringify(filter)
+    });
+    return {
+      count: 0,
+      total: 0,
+      hasEntries: false,
+      error: error.message,
+      filter: effectiveFilter
+    };
+  }
+}
+
+async function validateAnalystSubmissionReadiness(proposal) {
+  const filters = buildModuleFilter(proposal);
+  const regionName = (proposal.region || '').trim().toUpperCase();
+  const isCentralOffice = regionName.includes('CENTRAL') && regionName.includes('OFFICE');
+  const requiresIncome = !isCentralOffice;
+
+  const [personnelStats, mooeStats, capitalStats, incomeStats] = await Promise.all([
+    evaluateModuleCompletion(PersonnelServices, filters, ['Total']),
+    evaluateModuleCompletion(mooeProposals, filters, ['amount']),
+    evaluateModuleCompletion(CapitalOutlay, filters, ['cost']),
+    requiresIncome ? evaluateModuleCompletion(Income, filters, ['amount']) : Promise.resolve({
+      count: 0,
+      total: 0,
+      hasEntries: true,
+      note: 'Income not required for Central Office'
+    })
+  ]);
+
+  const details = {
+    personnel: personnelStats,
+    mooe: mooeStats,
+    capital: capitalStats,
+    income: incomeStats
+  };
+
+  console.log('📊 Analyst submission readiness check', {
+    proposalId: proposal._id,
+    region: proposal.region,
+    requiresIncome,
+    stats: {
+      personnel: { count: personnelStats.count, total: personnelStats.total, hasEntries: personnelStats.hasEntries },
+      mooe: { count: mooeStats.count, total: mooeStats.total, hasEntries: mooeStats.hasEntries },
+      capital: { count: capitalStats.count, total: capitalStats.total, hasEntries: capitalStats.hasEntries },
+      income: { count: incomeStats.count, total: incomeStats.total, hasEntries: incomeStats.hasEntries }
+    }
+  });
+
+  const missingModules = [];
+
+  if (!personnelStats.hasEntries) {
+    missingModules.push(MODULE_LABELS.personnel);
+  }
+
+  if (!mooeStats.hasEntries) {
+    missingModules.push(MODULE_LABELS.mooe);
+  }
+
+  if (!capitalStats.hasEntries) {
+    missingModules.push(MODULE_LABELS.capital);
+  }
+
+  if (requiresIncome && !incomeStats.hasEntries) {
+    missingModules.push(MODULE_LABELS.income);
+  }
+
+  const message = missingModules.length
+    ? `Please complete the following budget modules before submitting: ${missingModules.join(', ')}`
+    : null;
+
+  return {
+    missingModules,
+    requiresIncome,
+    details,
+    message
+  };
+}
+
+exports.checkAnalystSubmissionPrerequisites = async (req, res) => {
+  try {
+    const { proposalId } = req.params;
+    const userId = req.user.id;
+    const userRoles = req.user.Roles || [];
+
+    if (!proposalId) {
+      return res.status(400).json({ success: false, message: 'Proposal ID is required' });
+    }
+
+    const isBudgetAnalyst = userRoles.includes('BUDGET_ANALYST');
+    if (!isBudgetAnalyst) {
+      return res.status(403).json({ success: false, message: 'Only Budget Analysts can validate submission prerequisites' });
+    }
+
+    let proposal = await Proposal.findById(proposalId);
+
+    if (!proposal) {
+      const personnelRecord = await PersonnelServices.findById(proposalId);
+
+      if (personnelRecord && personnelRecord.status === 'Draft') {
+        proposal = await Proposal.findOne({
+          division: personnelRecord.division,
+          fiscalYear: personnelRecord.fiscalYear,
+          budgetType: personnelRecord.budgetType,
+          region: personnelRecord.region,
+          status: 'Draft'
+        });
+      }
+    }
+
+    if (!proposal) {
+      return res.status(404).json({ success: false, message: 'Proposal not found' });
+    }
+
+    if (proposal.createdByUserId && proposal.createdByUserId !== userId) {
+      return res.status(403).json({ success: false, message: 'You do not have access to check this proposal' });
+    }
+
+    const readiness = await validateAnalystSubmissionReadiness(proposal);
+    const ready = readiness.missingModules.length === 0;
+
+    res.json({
+      success: true,
+      ready,
+      readiness
+    });
+  } catch (error) {
+    console.error('Error checking analyst submission prerequisites:', error);
+    res.status(500).json({ success: false, message: 'Failed to check submission prerequisites', error: error.message });
+  }
+};
 
 /**
  * Helper function to sync proposal status to all related budget items
@@ -663,6 +935,28 @@ exports.submitProposal = async (req, res) => {
         success: false,
         message: `Proposal must be in Draft status before submission. Current status: ${proposal.status}`
       });
+    }
+
+    if (isBudgetAnalyst) {
+      const readiness = await validateAnalystSubmissionReadiness(proposal);
+
+      if (readiness.missingModules.length) {
+        console.warn('⛔ Analyst submission prevented due to incomplete modules', {
+          proposalId,
+          missingModules: readiness.missingModules,
+          region: proposal.region,
+          requiresIncome: readiness.requiresIncome
+        });
+
+        return res.status(400).json({
+          success: false,
+          code: 'ANALYST_SUBMISSION_PREREQUISITES_INCOMPLETE',
+          message: readiness.message,
+          missingModules: readiness.missingModules,
+          details: readiness.details,
+          requiresIncome: readiness.requiresIncome
+        });
+      }
     }
 
     const previousStatus = proposal.status;

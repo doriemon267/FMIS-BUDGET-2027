@@ -11,6 +11,14 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import TimelineIcon from "@mui/icons-material/Timeline";
 import SaveIcon from "@mui/icons-material/Save";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+
+const MODULE_SUMMARY_LABELS = {
+  personnel: 'Personnel Services',
+  mooe: 'Maintenance and Other Operating Expenses (MOOE)',
+  capital: 'Capital Outlay',
+  income: 'Income'
+};
 
 /**
  * Workflow Actions Component
@@ -24,6 +32,13 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState(null);
   const [historyFetchedAt, setHistoryFetchedAt] = useState(null);
+  const [blockDialog, setBlockDialog] = useState({
+    open: false,
+    message: '',
+    missingModules: [],
+    details: {},
+    requiresIncome: false
+  });
   const proposalId = proposal?._id;
   const historyMetaRef = useRef({
     fetchedAt: historyFetchedAt,
@@ -90,6 +105,115 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     roles: userInfo?.workflowRoles || []
   });
 
+  const normalizeRoleValue = useCallback((roleValue) => {
+    if (!roleValue || typeof roleValue !== 'string') return '';
+    const normalized = roleValue.trim().toUpperCase().replace(/\s+/g, '_');
+    const camelCaseNormalized = normalized.replace(/[^A-Z0-9_]/g, '_');
+
+    const roleSynonyms = {
+      ANALYST: 'BUDGET_ANALYST',
+      BUDGETANALYST: 'BUDGET_ANALYST',
+      BUDGET_ANALYST: 'BUDGET_ANALYST',
+      BUDGET_OFFICER_ANALYST: 'BUDGET_ANALYST',
+      BA: 'BUDGET_ANALYST',
+      OFFICE_ANALYST: 'BUDGET_ANALYST',
+      ANALYST_OFFICER: 'BUDGET_ANALYST',
+      RESPONSIBILITY_CENTER: 'BUDGET_ANALYST',
+      RC: 'BUDGET_ANALYST',
+
+      COORDINATOR: 'BUDGET_COORDINATOR',
+      BUDGET_COORDINATOR: 'BUDGET_COORDINATOR',
+      BUDGETCOORDINATOR: 'BUDGET_COORDINATOR',
+      COOR: 'BUDGET_COORDINATOR',
+      DIVISION_COORDINATOR: 'BUDGET_COORDINATOR',
+      DIVISIONAPPROVER: 'BUDGET_COORDINATOR',
+      DIVISION_APPROVER: 'BUDGET_COORDINATOR',
+      DIVISIONVERIFIER: 'BUDGET_COORDINATOR',
+      DIVISION_VERIFIER: 'BUDGET_COORDINATOR',
+
+      BUDGET_OFFICER: 'BUDGET_OFFICER',
+      BUDGETOFFICER: 'BUDGET_OFFICER',
+      OFFICER: 'BUDGET_OFFICER',
+      BUDGET_SPECIALIST: 'BUDGET_OFFICER',
+      OFFICE_VERIFIER: 'BUDGET_OFFICER',
+      OFFICEVERIFIER: 'BUDGET_OFFICER',
+      OFFICE_APPROVER: 'BUDGET_OFFICER',
+      OFFICEAPPROVER: 'BUDGET_OFFICER',
+      OFFICE_CONSOLIDATOR: 'BUDGET_OFFICER',
+      BUDGET_SUPERVISOR: 'BUDGET_OFFICER',
+
+      BUDGETMANAGER: 'BUDGET_MANAGER',
+      BUDGET_MANAGER: 'BUDGET_MANAGER',
+      BUDGET_OFFICE_HEAD: 'BUDGET_MANAGER',
+      BUDGET_DIRECTOR: 'BUDGET_MANAGER',
+      FINAL_APPROVER: 'BUDGET_MANAGER',
+      MANAGER_APPROVER: 'BUDGET_MANAGER',
+      MANAGERAPPROVER: 'BUDGET_MANAGER',
+      REGION_FINAL_VERIFIER: 'BUDGET_MANAGER',
+      REGIONAL_FINAL_VERIFIER: 'BUDGET_MANAGER',
+      REGION_MANAGER: 'BUDGET_MANAGER',
+
+      BUDGETADMIN: 'BUDGET_ADMIN'
+    };
+
+    return roleSynonyms[camelCaseNormalized] || camelCaseNormalized;
+  }, []);
+
+  const {
+    rawRoleSources,
+    rawRoles,
+    roleMapping,
+    normalizedRoles
+  } = useMemo(() => {
+    const sources = [
+      userInfo?.roles,
+      userInfo?.Roles,
+      userInfo?.role,
+      userInfo?.currentUser?.roles,
+      userInfo?.currentUser?.Roles,
+      userInfo?.currentUser?.role,
+      userInfo?.currentUser?.budgetRoles,
+      userInfo?.hierarchicalAccess?.roles,
+      userInfo?.hierarchicalAccess?.Roles,
+      userInfo?.hierarchicalAccess?.role,
+      userInfo?.additionalRoles,
+      userInfo?.budgetRoles,
+      userInfo?.workflowRoles,
+      userInfo?.access?.roles,
+      userInfo?.access?.Roles,
+      userInfo?.access?.role,
+      userInfo?.assignmentLevel,
+      userInfo?.accessScope,
+      userInfo?.scope
+    ];
+
+    const flattened = sources
+      .flatMap((value) => {
+        if (!value) return [];
+        if (Array.isArray(value)) return value;
+        return [value];
+      })
+      .filter((value) => typeof value === 'string' && value.trim().length > 0);
+
+    const mapping = flattened.map(role => ({
+      original: role,
+      normalized: normalizeRoleValue(role)
+    }));
+
+    const normalized = Array.from(new Set(
+      flattened
+        .map((roleValue) => normalizeRoleValue(roleValue))
+        .filter(Boolean)
+    ));
+
+    return {
+      rawRoleSources: sources,
+      rawRoles: flattened,
+      roleMapping: mapping,
+      normalizedRoles: normalized
+    };
+  }, [userInfo, normalizeRoleValue]);
+
   // Helper function to determine entity type based on proposal modelType
   const getEntityType = (proposal) => {
     switch (proposal.modelType) {
@@ -109,96 +233,6 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
   // Determine what actions are available based on user role and proposal status
   const getAvailableActions = () => {
     const actions = [];
-    const rawRoleSources = [
-      userInfo?.roles,
-      userInfo?.Roles,
-      userInfo?.role,
-      userInfo?.currentUser?.roles,
-      userInfo?.currentUser?.Roles,
-      userInfo?.currentUser?.role,
-      userInfo?.currentUser?.budgetRoles,
-      userInfo?.hierarchicalAccess?.roles,
-      userInfo?.hierarchicalAccess?.budgetRoles,
-      userInfo?.hierarchicalAccess?.userRoles,
-      userInfo?.hierarchicalAccess?.workflowRoles,
-      userInfo?.workflowRoles
-    ];
-
-    const normalizeRoleValue = (roleValue) => {
-      if (!roleValue) return null;
-      const stringValue = roleValue.toString().trim();
-      if (!stringValue) return null;
-
-      const camelCaseNormalized = stringValue
-        .replace(/([a-z0-9])([A-Z])/g, '$1_$2') // convert camelCase to snake_case
-        .replace(/[\s-]+/g, '_')
-        .replace(/__+/g, '_')
-        .toUpperCase();
-
-      const roleSynonyms = {
-        // BUDGET ANALYST - Division level creators
-        DIVISION_CREATOR: 'BUDGET_ANALYST',
-        DIVISION_ANALYST: 'BUDGET_ANALYST',
-        DIVISION_ENCODER: 'BUDGET_ANALYST',
-        DIVISION_STAFF: 'BUDGET_ANALYST',
-        // Temporary: Legacy role support (to be migrated)
-        DIVISION_APPROVER: 'BUDGET_ANALYST', // TODO: Migrate to divisionCreator in database
-        
-  // BUDGET COORDINATOR - Department/Region level creators
-        DEPARTMENT_CREATOR: 'BUDGET_COORDINATOR',
-        DEPARTMENT_COORDINATOR: 'BUDGET_COORDINATOR',
-  DIVISION_COORDINATOR: 'BUDGET_COORDINATOR',
-  COORDINATOR: 'BUDGET_COORDINATOR',
-        REGION_CREATOR: 'BUDGET_COORDINATOR',
-        REGION_COORDINATOR: 'BUDGET_COORDINATOR',
-        
-        // BUDGET OFFICER - Department/Region level verifiers
-        BUDGETOFFICER: 'BUDGET_OFFICER',
-        DEPARTMENT_VERIFIER: 'BUDGET_OFFICER',
-        DEPARTMENT_APPROVER: 'BUDGET_OFFICER',
-        REGION_VERIFIER: 'BUDGET_OFFICER',
-        REGION_APPROVER: 'BUDGET_OFFICER',
-        OFFICE_VERIFIER: 'BUDGET_OFFICER',
-        OFFICE_APPROVER: 'BUDGET_OFFICER',
-        OFFICE_HEAD: 'BUDGET_OFFICER',
-        
-        // BUDGET MANAGER - Budget Office final approvers
-        BUDGETMANAGER: 'BUDGET_MANAGER',
-        BUDGET_MANAGER: 'BUDGET_MANAGER',
-        BUDGET_OFFICE_HEAD: 'BUDGET_MANAGER',
-        BUDGET_DIRECTOR: 'BUDGET_MANAGER',
-        FINAL_APPROVER: 'BUDGET_MANAGER',
-        MANAGER_APPROVER: 'BUDGET_MANAGER',
-        MANAGERAPPROVER: 'BUDGET_MANAGER',
-        REGION_FINAL_VERIFIER: 'BUDGET_MANAGER',
-        REGIONAL_FINAL_VERIFIER: 'BUDGET_MANAGER',
-        REGION_MANAGER: 'BUDGET_MANAGER',
-        // Budget admin
-        BUDGETADMIN: 'BUDGET_ADMIN'
-      };
-
-      return roleSynonyms[camelCaseNormalized] || camelCaseNormalized;
-    };
-
-    const rawRoles = rawRoleSources
-      .flatMap((value) => {
-        if (!value) return [];
-        if (Array.isArray(value)) return value;
-        return [value];
-      })
-      .filter((value) => typeof value === 'string' && value.trim().length > 0);
-
-    const roleMapping = rawRoles.map(role => ({
-      original: role,
-      normalized: normalizeRoleValue(role)
-    }));
-
-    const normalizedRoles = Array.from(new Set(
-      rawRoles
-        .map((roleValue) => normalizeRoleValue(roleValue))
-        .filter(Boolean)
-    ));
-
     const status = proposal?.status;
     const normalizedStatus = String(status || '').toUpperCase().trim();
 
@@ -532,6 +566,18 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     let successMessage = "";
     
     try {
+      if (action === 'submit-to-coordinator' && normalizedRoles.includes('BUDGET_ANALYST') && proposal?._id) {
+        try {
+          const readinessResponse = await api.get(`/api/workflow/submit/prerequisites/${proposal._id}`);
+          if (readinessResponse?.data?.success && readinessResponse.data.ready === false) {
+            showSubmissionPrerequisiteDialog(readinessResponse.data.readiness, readinessResponse.data.readiness?.message);
+            setLoading(false);
+            return;
+          }
+        } catch (precheckError) {
+          console.warn('⚠️ Failed to pre-validate analyst submission readiness:', precheckError);
+        }
+      }
 
       switch (action) {
         case "save-draft":
@@ -796,20 +842,27 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
 
       // Show more specific error messages
       let errorMessage = "Failed to execute workflow action";
-      if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.response?.data?.error) {
-        errorMessage = error.response.data.error;
+      const responseData = error.response?.data;
+      if (responseData?.message) {
+        errorMessage = responseData.message;
+      } else if (responseData?.error) {
+        errorMessage = responseData.error;
       } else if (error.message) {
         errorMessage = error.message;
       }
 
-      toast.error(errorMessage);
-      try {
-        if (typeof window !== 'undefined' && window.showError) {
-          window.showError(errorMessage, 8000);
-        }
-      } catch (_) {}
+      const isPrereqError = responseData?.code === 'ANALYST_SUBMISSION_PREREQUISITES_INCOMPLETE';
+
+      if (isPrereqError) {
+        showSubmissionPrerequisiteDialog(responseData, errorMessage);
+      } else {
+        toast.error(errorMessage);
+        try {
+          if (typeof window !== 'undefined' && typeof window.showError === 'function') {
+            window.showError(errorMessage, 8000);
+          }
+        } catch (_) {}
+      }
     } finally {
       setLoading(false);
     }
@@ -857,6 +910,39 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     setConfirmState({ open: false, action: null, label: '', requiresComment: false, allowOptionalComment: false });
     setComment('');
   };
+
+  const closeBlockDialog = () => {
+    setBlockDialog((prev) => ({ ...prev, open: false }));
+  };
+
+  const showSubmissionPrerequisiteDialog = useCallback((readinessPayload, fallbackMessage) => {
+    if (!readinessPayload) return;
+    const readiness = readinessPayload.readiness || readinessPayload;
+    const missingModules = Array.isArray(readiness?.missingModules) ? readiness.missingModules : [];
+    const message = readiness?.message || fallbackMessage || 'Please complete all required modules before submitting this proposal to the Budget Coordinator.';
+
+    setBlockDialog({
+      open: true,
+      message,
+      missingModules,
+      details: readiness?.details || {},
+      requiresIncome: Boolean(readiness?.requiresIncome)
+    });
+
+    toast.info(message);
+
+    try {
+      if (typeof window !== 'undefined') {
+        if (typeof window.showWarning === 'function') {
+          window.showWarning(message, 8000);
+        } else if (typeof window.showInfo === 'function') {
+          window.showInfo(message, 8000);
+        } else if (typeof window.showError === 'function') {
+          window.showError(message, 8000);
+        }
+      }
+    } catch (_) {}
+  }, []);
 
   // Expose triggerFinalizeAction method to parent via ref
   useImperativeHandle(ref, () => ({
@@ -1160,6 +1246,75 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           <Button onClick={handleConfirm} variant="contained" disabled={loading || (requiresComment && !comment.trim())}>
             Confirm
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={blockDialog.open} onClose={closeBlockDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>Complete Budget Modules</DialogTitle>
+        <DialogContent dividers>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            {blockDialog.message || 'Please complete all required modules before submitting this proposal to the Budget Coordinator.'}
+          </Alert>
+
+          {blockDialog.missingModules.length > 0 && (
+            <>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>Missing modules</Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 2 }}>
+                {blockDialog.missingModules.map((moduleName) => (
+                  <Chip key={moduleName} label={moduleName} color="warning" variant="outlined" sx={{ mr: 0.5, mb: 0.5 }} />
+                ))}
+              </Stack>
+            </>
+          )}
+
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            {blockDialog.requiresIncome
+              ? 'Regional submissions must include Personnel Services, MOOE, Capital Outlay, and Income entries before submitting to the Budget Coordinator.'
+              : 'Central Office submissions must include Personnel Services, MOOE, and Capital Outlay entries before submitting to the Budget Coordinator.'}
+          </Typography>
+
+          <List dense disablePadding>
+            {Object.entries(MODULE_SUMMARY_LABELS).map(([key, label]) => {
+              const stats = blockDialog.details?.[key] || {};
+              const required = key !== 'income' || blockDialog.requiresIncome;
+              const hasError = Boolean(stats.error);
+              const recordCount = stats.count || 0;
+              const hasRecords = recordCount > 0;
+              const isComplete = hasError ? false : required ? hasRecords : true;
+              const secondaryText = (() => {
+                if (hasError) {
+                  return `Unable to verify (${stats.error})`;
+                }
+                if (stats.note) {
+                  return stats.note;
+                }
+                if (hasRecords) {
+                  return `${recordCount} record${recordCount === 1 ? '' : 's'} available`;
+                }
+                return required ? 'No records found' : 'Optional for Central Office';
+              })();
+
+              return (
+                <ListItem key={key} disableGutters sx={{ py: 0.5 }}>
+                  <ListItemIcon sx={{ minWidth: 36 }}>
+                    {isComplete ? (
+                      <CheckIcon fontSize="small" color="success" />
+                    ) : (
+                      <WarningAmberIcon fontSize="small" color={hasError ? 'error' : required ? 'warning' : 'disabled'} />
+                    )}
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={label}
+                    secondary={secondaryText}
+                    secondaryTypographyProps={{ variant: 'caption', color: 'text.secondary' }}
+                  />
+                </ListItem>
+              );
+            })}
+          </List>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeBlockDialog}>Close</Button>
         </DialogActions>
       </Dialog>
 

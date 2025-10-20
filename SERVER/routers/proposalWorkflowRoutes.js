@@ -17,6 +17,9 @@ router.post('/draft/save', proposalWorkflowController.saveDraft);
 // Submit proposal to Budget Officer (BUDGET_ANALYST submits to BUDGET_COORDINATOR)
 router.post('/submit', proposalWorkflowController.submitProposal);
 
+// Validate analyst submission prerequisites without attempting submission
+router.get('/submit/prerequisites/:proposalId', proposalWorkflowController.checkAnalystSubmissionPrerequisites);
+
 // Submit proposal directly to Budget Manager (BUDGET_ANALYST only - DEPRECATED, use coordinator routes)
 router.post('/submit-direct-to-manager', proposalWorkflowController.submitDirectToManager);
 
