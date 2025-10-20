@@ -37,7 +37,8 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     message: '',
     missingModules: [],
     details: {},
-    requiresIncome: false
+    requiresIncome: false,
+    requirementMessage: ''
   });
   const proposalId = proposal?._id;
   const historyMetaRef = useRef({
@@ -153,10 +154,18 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       REGIONAL_FINAL_VERIFIER: 'BUDGET_MANAGER',
       REGION_MANAGER: 'BUDGET_MANAGER',
 
-      BUDGETADMIN: 'BUDGET_ADMIN'
+      BUDGETADMIN: 'BUDGET_ADMIN',
+      FULL: 'BUDGET_MANAGER'  // Map 'FULL' to manager role
     };
 
-    return roleSynonyms[camelCaseNormalized] || camelCaseNormalized;
+    const result = roleSynonyms[camelCaseNormalized] || camelCaseNormalized;
+    
+    // Debug log for mapping issues
+    if (roleValue && ['FULL', 'REGIONAL_FINAL_VERIFIER', 'REGION_FINAL_VERIFIER'].includes(camelCaseNormalized)) {
+      console.log(`🔄 Role Mapping: "${roleValue}" → normalized: "${camelCaseNormalized}" → final: "${result}"`);
+    }
+    
+    return result;
   }, []);
 
   const {
@@ -243,6 +252,17 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     const isBudgetManager = normalizedRoles.includes('BUDGET_MANAGER');
     const isBudgetAdmin = normalizedRoles.includes('BUDGET_ADMIN');
 
+    // ROLE HIERARCHY PROTECTION: Use highest role in hierarchy
+    // Hierarchy: ANALYST < COORDINATOR < OFFICER < MANAGER
+    // Only block higher actions if user has ONLY ANALYST role
+    const isAnalystOnly = isBudgetAnalyst && !isBudgetCoordinator && !isBudgetOfficer && !isBudgetManager && !isBudgetAdmin;
+    const hasHigherRole = isBudgetCoordinator || isBudgetOfficer || isBudgetManager || isBudgetAdmin;
+    
+    // Block manager actions only if user is ANALYST ONLY (no other roles)
+    const shouldBlockManagerActions = isAnalystOnly;
+    // Block officer actions only if user is ANALYST ONLY (no other roles)
+    const shouldBlockOfficerActions = isAnalystOnly;
+
     console.log('🔍 WorkflowActions Debug:', {
       status,
       normalizedStatus,
@@ -255,6 +275,9 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       isBudgetOfficer,
       isBudgetManager,
       isBudgetAdmin,
+      isAnalystOnly,
+      shouldBlockManagerActions,
+      shouldBlockOfficerActions,
       proposalId: proposal?._id,
       userInfo: {
         roles: userInfo?.roles,
@@ -344,7 +367,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     }
 
     // BUDGET OFFICER Actions (Approval Level)
-    if (isBudgetOfficer) {
+    if (isBudgetOfficer && !shouldBlockOfficerActions) {
       // Can review and edit proposals forwarded by coordinator
       if (normalizedStatus === "FORWARDED TO OFFICER" || status === "Forwarded to Officer" ||
           normalizedStatus === "OFFICER APPROVED" || status === "Officer Approved" ||
@@ -390,7 +413,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     }
 
     // BUDGET MANAGER & BUDGET ADMIN Actions (Finalization Level)
-    if (isBudgetManager || isBudgetAdmin) {
+    if ((isBudgetManager || isBudgetAdmin) && !shouldBlockManagerActions) {
       const managerStatuses = [
         'FORWARDED TO MANAGER',
         'OFFICER APPROVED'
@@ -424,6 +447,46 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           requiresComment: true
         });
       }
+    }
+
+    // FALLBACK: If BUDGET_MANAGER and no actions found but status is "Forwarded to Manager", ensure Return action is available
+    // This handles cases where role detection might fail but manager user can still perform manager actions
+    if (isBudgetManager && !shouldBlockManagerActions && actions.length === 0 && 
+        (normalizedStatus === 'FORWARDED TO MANAGER' || status === 'Forwarded to Manager')) {
+      console.warn('⚠️ Role detection may have failed, but adding fallback manager actions for "Forwarded to Manager" status');
+      actions.push({
+        label: "Save Edits",
+        action: "manager-save-edits",
+        color: "bg-gray-500 hover:bg-gray-600",
+        icon: "💾",
+        description: "Save changes without finalizing",
+        requiresComment: false,
+        allowOptionalComment: true
+      });
+      actions.push({
+        label: "Finalize",
+        action: "manager-approve",
+        color: "bg-teal-500 hover:bg-teal-600",
+        icon: "✔",
+        description: "Approve proposal for finalization",
+        requiresComment: true
+      });
+      actions.push({
+        label: "Return",
+        action: "manager-return",
+        color: "bg-red-500 hover:bg-red-600",
+        icon: "↩️",
+        description: "Return proposal for revisions",
+        requiresComment: true
+      });
+    }
+
+    // Log if actions are being blocked due to role hierarchy
+    if (shouldBlockManagerActions && (isBudgetManager || isBudgetAdmin)) {
+      console.warn('🚫 BLOCKED: Manager actions blocked for BUDGET_ANALYST user (role hierarchy protection active)');
+    }
+    if (shouldBlockOfficerActions && isBudgetOfficer) {
+      console.warn('🚫 BLOCKED: Officer actions blocked for BUDGET_ANALYST user (role hierarchy protection active)');
     }
 
     console.log('🎯 Available Actions:', actions.length, actions.map(a => a.label));
@@ -926,7 +989,10 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       message,
       missingModules,
       details: readiness?.details || {},
-      requiresIncome: Boolean(readiness?.requiresIncome)
+      requiresIncome: Boolean(readiness?.requiresIncome),
+      requirementMessage: readiness?.requirementMessage || (readiness?.requiresIncome
+        ? 'Regional submissions must include Personnel Services, MOOE, Capital Outlay, and Income entries before submitting to the Budget Coordinator.'
+        : 'Central Office submissions must include Personnel Services, MOOE, and Capital Outlay entries before submitting to the Budget Coordinator.')
     });
 
     toast.info(message);
@@ -1156,16 +1222,40 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       {/* Status header with track + actions */}
       {showHeader && (
         <Stack direction="row" spacing={1} alignItems="center" justifyContent="flex-end" sx={{ mb: 1 }}>
-          <Tooltip title="Workflow actions" arrow>
+          <Tooltip title="View available workflow actions" arrow>
             <span>
               <Button
                 size="small"
                 variant="contained"
-                color="primary"
                 onClick={handleMenuOpen}
-                endIcon={<KeyboardArrowDownIcon fontSize="small" />}
+                endIcon={<KeyboardArrowDownIcon sx={{ fontSize: '18px', transition: 'transform 0.2s' }} />}
                 disabled={loading}
-                sx={{ textTransform: 'none', fontWeight: 600 }}
+                sx={{ 
+                  textTransform: 'none', 
+                  fontWeight: 600,
+                  backgroundColor: '#2d6a4f',
+                  color: '#ffffff',
+                  fontSize: '13px',
+                  px: 2.5,
+                  py: 0.9,
+                  borderRadius: '6px',
+                  boxShadow: '0 2px 6px rgba(45, 106, 79, 0.25)',
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  '&:hover': {
+                    backgroundColor: '#1e4d35',
+                    boxShadow: '0 4px 10px rgba(45, 106, 79, 0.35)',
+                    transform: 'translateY(-1px)'
+                  },
+                  '&:active': {
+                    transform: 'translateY(0)',
+                    boxShadow: '0 2px 4px rgba(45, 106, 79, 0.25)'
+                  },
+                  '&:disabled': {
+                    backgroundColor: '#a8bfb5',
+                    color: '#ffffff',
+                    boxShadow: 'none'
+                  }
+                }}
               >
                 Actions
               </Button>
@@ -1174,46 +1264,151 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
         </Stack>
       )}
 
-      <Menu anchorEl={anchorEl} open={menuOpen} onClose={handleMenuClose} elevation={3}>
+      <Menu 
+        anchorEl={anchorEl} 
+        open={menuOpen} 
+        onClose={handleMenuClose} 
+        elevation={4}
+        sx={{ 
+          maxWidth: '450px',
+          '& .MuiPaper-root': {
+            borderRadius: '8px',
+            marginTop: '8px'
+          }
+        }}
+      >
         {/* View action at top (optional) */}
         {showViewInMenu && (
-          <MenuItem onClick={() => { handleMenuClose(); onView?.(); }}>
-            <ListItemIcon>
+          <MenuItem 
+            onClick={() => { handleMenuClose(); onView?.(); }} 
+            sx={{ 
+              py: 1.5, 
+              px: 2,
+              backgroundColor: 'rgba(99, 198, 206, 0.05)',
+              '&:hover': { backgroundColor: 'rgba(99, 198, 206, 0.12)' }
+            }}
+          >
+            <ListItemIcon sx={{ color: '#00796b', minWidth: 40 }}>
               <VisibilityIcon fontSize="small" />
             </ListItemIcon>
-            <ListItemText primary="View" secondary="Open proposal details" />
+            <ListItemText 
+              primary="View" 
+              secondary="Open proposal details"
+              primaryTypographyProps={{ variant: 'body2', fontWeight: 500, color: '#00796b' }}
+              secondaryTypographyProps={{ variant: 'caption', sx: { mt: 0.3 } }}
+            />
           </MenuItem>
         )}
         
         {showViewInMenu && availableActions.length > 0 && <Divider sx={{ my: 0.5 }} />}
         
-        {availableActions.length === 0 ? (
-          <MenuItem disabled>
-            <ListItemText 
-              primary="No workflow actions available" 
-              secondary={`Status: ${proposal?.status || 'Unknown'}`}
-              primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
-            />
-          </MenuItem>
-        ) : (
-          availableActions.map((actionConfig, index) => (
-            <MenuItem key={index} onClick={() => handleMenuItemClick(actionConfig.action, actionConfig.label, actionConfig.requiresComment, actionConfig.allowOptionalComment)}>
-              <ListItemIcon>
-                {renderIcon(actionConfig.action)}
-              </ListItemIcon>
-              <ListItemText primary={actionConfig.label} secondary={actionConfig.description} />
-            </MenuItem>
-          ))
+        {/* Workflow Actions Section */}
+        {availableActions.length > 0 && (
+          <Box sx={{ p: '0.5rem 0' }}>
+            {availableActions.map((actionConfig, index) => {
+              // Determine action category for better visual grouping
+              const isManagerAction = actionConfig.action.startsWith('manager-');
+              const isSaveAction = actionConfig.action.includes('save');
+              const isReturnAction = actionConfig.action.includes('return');
+              const isApproveAction = actionConfig.action.includes('approve') || actionConfig.action.includes('finalize');
+              const isSubmitAction = actionConfig.action.includes('submit') || actionConfig.action.includes('forward');
+              
+              // Color styling based on action type
+              let actionColor = 'inherit';
+              let backgroundColor = 'transparent';
+              if (isReturnAction) {
+                actionColor = 'error';
+                backgroundColor = 'rgba(244, 67, 54, 0.05)';
+              } else if (isApproveAction) {
+                actionColor = 'success';
+                backgroundColor = 'rgba(76, 175, 80, 0.05)';
+              } else if (isSubmitAction) {
+                actionColor = 'info';
+                backgroundColor = 'rgba(33, 150, 243, 0.05)';
+              } else if (isSaveAction) {
+                actionColor = 'warning';
+                backgroundColor = 'rgba(255, 152, 0, 0.05)';
+              }
+              
+              return (
+                <MenuItem 
+                  key={index} 
+                  onClick={() => handleMenuItemClick(actionConfig.action, actionConfig.label, actionConfig.requiresComment, actionConfig.allowOptionalComment)}
+                  sx={{
+                    py: 1.5,
+                    px: 2,
+                    backgroundColor: backgroundColor,
+                    '&:hover': {
+                      backgroundColor: backgroundColor,
+                      filter: 'brightness(0.95)'
+                    },
+                    borderLeft: isManagerAction ? '4px solid #1976d2' : 'none',
+                    borderRadius: isManagerAction ? '0 4px 4px 0' : '0'
+                  }}
+                >
+                  <ListItemIcon sx={{ color: actionColor, minWidth: 36 }}>
+                    {renderIcon(actionConfig.action)}
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary={actionConfig.label}
+                    secondary={actionConfig.description}
+                    primaryTypographyProps={{ 
+                      variant: 'body2', 
+                      fontWeight: 500,
+                      color: actionColor
+                    }}
+                    secondaryTypographyProps={{ 
+                      variant: 'caption',
+                      sx: { mt: 0.3 }
+                    }}
+                  />
+                </MenuItem>
+              );
+            })}
+          </Box>
         )}
         
+        {/* No actions available */}
+        {availableActions.length === 0 && (
+          <MenuItem disabled sx={{ py: 2, px: 2 }}>
+            <ListItemText 
+              primary="No workflow actions available" 
+              secondary={`Current Status: ${proposal?.status || 'Unknown'}`}
+              primaryTypographyProps={{ variant: 'body2', color: 'text.secondary', fontWeight: 500 }}
+              secondaryTypographyProps={{ variant: 'caption', sx: { mt: 0.3 } }}
+            />
+          </MenuItem>
+        )}
+        
+        {/* Track Progress Section */}
         {showTrackInMenu && (
           <>
             <Divider sx={{ my: 0.5 }} />
-            <MenuItem onClick={() => { handleMenuClose(); openTrack(); }}>
-              <ListItemIcon>
+            <MenuItem 
+              onClick={() => { handleMenuClose(); openTrack(); }}
+              sx={{ 
+                py: 1.5, 
+                px: 2, 
+                backgroundColor: 'rgba(156, 39, 176, 0.08)',
+                '&:hover': { backgroundColor: 'rgba(156, 39, 176, 0.15)' }
+              }}
+            >
+              <ListItemIcon sx={{ color: '#7b1fa2', minWidth: 40 }}>
                 <TimelineIcon fontSize="small" />
               </ListItemIcon>
-              <ListItemText primary="Track progress" secondary="View workflow timeline" />
+              <ListItemText 
+                primary="Track Progress" 
+                secondary="View complete workflow timeline"
+                primaryTypographyProps={{ 
+                  variant: 'body2', 
+                  fontWeight: 500,
+                  color: 'secondary.main'
+                }}
+                secondaryTypographyProps={{ 
+                  variant: 'caption',
+                  sx: { mt: 0.3 }
+                }}
+              />
             </MenuItem>
           </>
         )}
@@ -1268,9 +1463,9 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           )}
 
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            {blockDialog.requiresIncome
+            {blockDialog.requirementMessage || (blockDialog.requiresIncome
               ? 'Regional submissions must include Personnel Services, MOOE, Capital Outlay, and Income entries before submitting to the Budget Coordinator.'
-              : 'Central Office submissions must include Personnel Services, MOOE, and Capital Outlay entries before submitting to the Budget Coordinator.'}
+              : 'Central Office submissions must include Personnel Services, MOOE, and Capital Outlay entries before submitting to the Budget Coordinator.')}
           </Typography>
 
           <List dense disablePadding>
@@ -1280,7 +1475,13 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
               const hasError = Boolean(stats.error);
               const recordCount = stats.count || 0;
               const hasRecords = recordCount > 0;
-              const isComplete = hasError ? false : required ? hasRecords : true;
+              const hasEntries = typeof stats.hasEntries === 'boolean' ? stats.hasEntries : hasRecords;
+              const hasPositiveTotal = typeof stats.hasPositiveTotal === 'boolean'
+                ? stats.hasPositiveTotal
+                : (Number.isFinite(Number(stats.total)) && Math.abs(Number(stats.total)) > 0.0001);
+              const isComplete = hasError ? false : required ? (hasEntries && hasPositiveTotal) : true;
+              const totalAmount = Number(stats.total);
+              const hasAmount = Number.isFinite(totalAmount) && Math.abs(totalAmount) > 0.0001;
               const secondaryText = (() => {
                 if (hasError) {
                   return `Unable to verify (${stats.error})`;
@@ -1288,8 +1489,17 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
                 if (stats.note) {
                   return stats.note;
                 }
-                if (hasRecords) {
-                  return `${recordCount} record${recordCount === 1 ? '' : 's'} available`;
+                if (hasEntries) {
+                  const base = `${recordCount} record${recordCount === 1 ? '' : 's'}`;
+                  if (hasAmount) {
+                    try {
+                      const formatted = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(totalAmount);
+                      return `${base} — total ${formatted}`;
+                    } catch (_) {
+                      return `${base} — total ${totalAmount.toFixed(2)}`;
+                    }
+                  }
+                  return `${base} available`;
                 }
                 return required ? 'No records found' : 'Optional for Central Office';
               })();

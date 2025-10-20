@@ -19,6 +19,70 @@ const MODULE_LABELS = {
   income: 'Income'
 };
 
+function normalizeRoleValue(roleValue) {
+  if (!roleValue) return '';
+  const base = roleValue.toString().trim();
+  if (!base) return '';
+  return base
+    .toUpperCase()
+    .replace(/[\s/-]+/g, '_')
+    .replace(/[^A-Z0-9_]/g, '_');
+}
+
+function extractUserRoles(user = {}) {
+  const sources = [
+    user.Roles,
+    user.roles,
+    user.role,
+    user.workflowRoles,
+    user.budgetRoles,
+    user.additionalRoles,
+    user.access?.roles,
+    user.access?.Roles,
+    user.access?.role,
+    user.hierarchicalAccess?.roles,
+    user.hierarchicalAccess?.Roles,
+    user.hierarchicalAccess?.role,
+    user.currentUser?.roles,
+    user.currentUser?.Roles,
+    user.currentUser?.role
+  ];
+
+  const roleSet = new Set();
+
+  const addRole = (role) => {
+    if (!role || (typeof role !== 'string' && typeof role !== 'number')) return;
+    const raw = role.toString().trim();
+    if (!raw) return;
+    if (!roleSet.has(raw)) {
+      roleSet.add(raw);
+    }
+    const normalized = normalizeRoleValue(raw);
+    if (normalized && !roleSet.has(normalized)) {
+      roleSet.add(normalized);
+    }
+  };
+
+  for (const source of sources) {
+    if (!source) continue;
+    if (Array.isArray(source)) {
+      source.forEach(addRole);
+    } else if (typeof source === 'string') {
+      source.split(/[;,]+/).forEach(addRole);
+    } else {
+      addRole(source);
+    }
+  }
+
+  return Array.from(roleSet);
+}
+
+function hasRole(userRoles, ...targets) {
+  if (!Array.isArray(userRoles) || !userRoles.length || !targets.length) return false;
+  const normalizedSet = new Set(userRoles.map(normalizeRoleValue).filter(Boolean));
+  return targets.some((target) => normalizedSet.has(normalizeRoleValue(target)));
+}
+
 /**
  * Budget Role Access Control Middleware
  * Implements visibility rules based on budget roles and proposal status
@@ -27,7 +91,7 @@ const budgetRoleAccessControl = (operation = 'read') => {
   return async (req, res, next) => {
     try {
       const userId = req.user.id;
-      const userRoles = req.user.Roles || [];
+  const userRoles = extractUserRoles(req.user);
 
       // Define role hierarchy
       const isBudgetAnalyst = userRoles.includes('BUDGET_ANALYST');
@@ -177,16 +241,16 @@ function sanitizeFilterObject(filter) {
 }
 
 function buildModuleFilter(proposal) {
+  // 🔴 CRITICAL FIX v2: Use ORGANIZATIONAL FILTERS as PRIMARY (they're what's actually populated)
+  // proposalId field is often NULL in module records, so we must use division/department/region/budgetType
+  // This matches how modules are actually created and stored in the database
+  
   const baseFilter = sanitizeFilterObject({
     budgetType: proposal.budgetType,
     region: proposal.region
   });
 
   const orFilters = [];
-
-  if (proposal?._id) {
-    orFilters.push({ proposalId: proposal._id });
-  }
 
   const addOrganizationalFilter = (extraCriteria = {}) => {
     const candidate = sanitizeFilterObject({ ...baseFilter, ...extraCriteria });
@@ -195,6 +259,7 @@ function buildModuleFilter(proposal) {
     }
   };
 
+  // Build organizational hierarchy filters (these are what's actually populated in module records)
   addOrganizationalFilter({ division: proposal.division });
   addOrganizationalFilter({ division: proposal.originalDivision });
   addOrganizationalFilter({ department: proposal.department });
@@ -214,6 +279,7 @@ function buildModuleFilter(proposal) {
     combinedFilter = { $or: orFilters };
   }
 
+  // Add fiscal year conditions
   const yearConditions = [];
   if (proposal.fiscalYear) {
     yearConditions.push({ fiscalYear: proposal.fiscalYear });
@@ -286,26 +352,59 @@ async function evaluateModuleCompletion(model, filter, amountFields) {
 
     const [stats] = await model.aggregate(pipeline);
 
+    const count = Number(stats?.count || 0);
+    const total = Number(stats?.total || 0);
+    const hasPositiveTotal = Number.isFinite(total) && Math.abs(total) > 0.0001;
+    const hasEntries = count > 0 && hasPositiveTotal;
+
+    // 🔴 ENHANCED DEBUG LOGGING
+    console.log(`📋 Module ${model.modelName} evaluation:`, {
+      found: count,
+      total,
+      isComplete: hasEntries,
+      hasPositiveTotal,
+      amountFields,
+      effectiveFilter: JSON.stringify(effectiveFilter)
+    });
+    
+    // Additional debug: show what records are being matched
+    if (count > 0) {
+      const sampleRecords = await model.find(effectiveFilter).limit(2).select('_id division department region budgetType fiscalYear');
+      console.log(`  📌 Sample records matched:`, sampleRecords.map(r => ({
+        id: r._id,
+        div: r.division,
+        dept: r.department,
+        region: r.region,
+        budgetType: r.budgetType,
+        fy: r.fiscalYear
+      })));
+    }
+
     return {
-      count: stats?.count || 0,
-      total: stats?.total || 0,
-      hasEntries: Boolean(stats?.count),
+      count,
+      total,
+      hasEntries,
+      hasPositiveTotal,
       filter: effectiveFilter
     };
   } catch (error) {
     console.error(`❌ Error evaluating module completion for ${model.modelName}:`, {
       message: error.message,
-      filter: JSON.stringify(filter)
+      effectiveFilter: JSON.stringify(effectiveFilter)
     });
     return {
       count: 0,
       total: 0,
       hasEntries: false,
+      hasPositiveTotal: false,
       error: error.message,
       filter: effectiveFilter
     };
   }
 }
+
+// Export for use in other controllers (e.g., budgetOfficerEditController)
+exports.validateAnalystSubmissionReadiness = validateAnalystSubmissionReadiness;
 
 async function validateAnalystSubmissionReadiness(proposal) {
   const filters = buildModuleFilter(proposal);
@@ -321,6 +420,7 @@ async function validateAnalystSubmissionReadiness(proposal) {
       count: 0,
       total: 0,
       hasEntries: true,
+      hasPositiveTotal: true,
       note: 'Income not required for Central Office'
     })
   ]);
@@ -336,6 +436,10 @@ async function validateAnalystSubmissionReadiness(proposal) {
     proposalId: proposal._id,
     region: proposal.region,
     requiresIncome,
+    budgetType: proposal.budgetType,
+    division: proposal.division,
+    department: proposal.department,
+    fiscalYear: proposal.fiscalYear,
     stats: {
       personnel: { count: personnelStats.count, total: personnelStats.total, hasEntries: personnelStats.hasEntries },
       mooe: { count: mooeStats.count, total: mooeStats.total, hasEntries: mooeStats.hasEntries },
@@ -362,13 +466,18 @@ async function validateAnalystSubmissionReadiness(proposal) {
     missingModules.push(MODULE_LABELS.income);
   }
 
+  const requirementMessage = requiresIncome
+    ? 'Regional proposals must include Personnel Services, MOOE, Capital Outlay, and Income before submitting to the Budget Coordinator.'
+    : 'Central Office proposals must include Personnel Services, MOOE, and Capital Outlay before submitting to the Budget Coordinator.';
+
   const message = missingModules.length
-    ? `Please complete the following budget modules before submitting: ${missingModules.join(', ')}`
+    ? `${requirementMessage} Missing modules: ${missingModules.join(', ')}.`
     : null;
 
   return {
     missingModules,
     requiresIncome,
+    requirementMessage,
     details,
     message
   };
@@ -376,15 +485,15 @@ async function validateAnalystSubmissionReadiness(proposal) {
 
 exports.checkAnalystSubmissionPrerequisites = async (req, res) => {
   try {
-    const { proposalId } = req.params;
-    const userId = req.user.id;
-    const userRoles = req.user.Roles || [];
+  const { proposalId } = req.params;
+  const userId = req.user.id;
+  const userRoles = extractUserRoles(req.user);
 
     if (!proposalId) {
       return res.status(400).json({ success: false, message: 'Proposal ID is required' });
     }
 
-    const isBudgetAnalyst = userRoles.includes('BUDGET_ANALYST');
+  const isBudgetAnalyst = hasRole(userRoles, 'BUDGET_ANALYST');
     if (!isBudgetAnalyst) {
       return res.status(403).json({ success: false, message: 'Only Budget Analysts can validate submission prerequisites' });
     }
@@ -638,10 +747,10 @@ exports.submitDirectToManager = async (req, res) => {
   const { proposalId, comment } = req.body;
     const userId = req.user.id;
     const userName = req.user.FirstName + ' ' + req.user.LastName;
-    const userRoles = req.user.Roles || [];
+    const userRoles = extractUserRoles(req.user);
 
     // Only BUDGET_ANALYST can use this endpoint
-    if (!userRoles.includes('BUDGET_ANALYST')) {
+    if (!hasRole(userRoles, 'BUDGET_ANALYST')) {
       return res.status(403).json({ 
         success: false, 
         message: 'Only Budget Analysts can submit directly to Budget Manager' 
@@ -776,14 +885,14 @@ exports.saveDraft = async (req, res) => {
     const { proposalId, comment, updates } = req.body;
     const userId = req.user.id;
     const userName = `${req.user.FirstName} ${req.user.LastName}`;
-    const userRoles = req.user.Roles || [];
+  const userRoles = extractUserRoles(req.user);
 
     const proposal = await Proposal.findById(proposalId);
     if (!proposal) {
       return res.status(404).json({ success: false, message: 'Proposal not found' });
     }
 
-    const isBudgetAnalyst = userRoles.includes('BUDGET_ANALYST');
+  const isBudgetAnalyst = hasRole(userRoles, 'BUDGET_ANALYST');
     const isCreator = proposal.createdByUserId === userId;
 
     if (!isBudgetAnalyst && !isCreator) {
@@ -891,7 +1000,7 @@ exports.submitProposal = async (req, res) => {
     const { proposalId, comment } = req.body;
     const userId = req.user.id;
     const userName = `${req.user.FirstName} ${req.user.LastName}`;
-    const userRoles = req.user.Roles || [];
+  const userRoles = extractUserRoles(req.user);
 
     let sanitizedComment;
     try {
@@ -920,7 +1029,7 @@ exports.submitProposal = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Proposal not found' });
     }
 
-    const isBudgetAnalyst = userRoles.includes('BUDGET_ANALYST');
+  const isBudgetAnalyst = hasRole(userRoles, 'BUDGET_ANALYST');
     const isCreator = proposal.createdByUserId === userId;
 
     if (!isBudgetAnalyst && !isCreator) {

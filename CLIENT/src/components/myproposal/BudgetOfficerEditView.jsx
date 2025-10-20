@@ -101,6 +101,91 @@ const BudgetOfficerEditView = ({
     setActiveTab(newValue);
   };
 
+  const calculateModuleTotal = (data, fieldName) => {
+    if (!Array.isArray(data) || data.length === 0) return 0;
+    return data.reduce((sum, item) => {
+      const val = Number(item[fieldName] || 0);
+      return sum + (Number.isFinite(val) ? val : 0);
+    }, 0);
+  };
+
+  const validateBeforeSubmit = () => {
+    try {
+      // Calculate totals for each module
+      const personnelTotal = calculateModuleTotal(personnelData, 'Total');
+      const mooeTotal = calculateModuleTotal(mooeData, 'amount');
+      const capitalTotal = calculateModuleTotal(capitalOutlayData, 'cost');
+      const incomeTotal = calculateModuleTotal(incomeData, 'amount');
+
+      console.log('🔍 CLIENT-SIDE VALIDATION STARTED:', {
+        personnelTotal,
+        mooeTotal,
+        capitalTotal,
+        incomeTotal,
+        personnelCount: personnelData.length,
+        mooeCount: mooeData.length,
+        capitalCount: capitalOutlayData.length,
+        incomeCount: incomeData.length
+      });
+
+      // Determine if regional or central office
+      const regionName = (proposal.region || '').toUpperCase();
+      const isCentralOffice = regionName.includes('CENTRAL') && regionName.includes('OFFICE');
+
+      const missingModules = [];
+
+      // All modules must have positive amounts (STRICTLY GREATER THAN 0)
+      if (personnelTotal <= 0) {
+        missingModules.push(`Personnel Services (Total: ${personnelTotal})`);
+        console.log('❌ VALIDATION FAILED: Personnel Services total is:', personnelTotal);
+      }
+      if (mooeTotal <= 0) {
+        missingModules.push(`MOOE (Total: ${mooeTotal})`);
+        console.log('❌ VALIDATION FAILED: MOOE total is:', mooeTotal);
+      }
+      if (capitalTotal <= 0) {
+        missingModules.push(`Capital Outlay (Total: ${capitalTotal})`);
+        console.log('❌ VALIDATION FAILED: Capital Outlay total is:', capitalTotal);
+      }
+      
+      // Income is required for regional proposals only
+      if (!isCentralOffice && incomeTotal <= 0) {
+        missingModules.push(`Income (Total: ${incomeTotal})`);
+        console.log('❌ VALIDATION FAILED: Income total is:', incomeTotal, '(Regional Proposal)');
+      }
+
+      if (missingModules.length > 0) {
+        const requirement = isCentralOffice
+          ? 'Central Office proposals require Personnel Services, MOOE, and Capital Outlay with positive amounts.'
+          : 'Regional proposals require all four modules (Personnel Services, MOOE, Capital Outlay, and Income) with positive amounts.';
+        
+        const summaryLines = [
+          requirement,
+          '',
+          '❌ Missing or incomplete modules:',
+          ...missingModules,
+          '',
+          '📊 Module Totals:',
+          `  Personnel Services: ₱${personnelTotal.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`,
+          `  MOOE: ₱${mooeTotal.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`,
+          `  Capital Outlay: ₱${capitalTotal.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`,
+          `  Income: ₱${incomeTotal.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+        ];
+        
+        toast.error(summaryLines.join('\n'));
+        console.log('🛑 SUBMISSION BLOCKED BY CLIENT VALIDATION');
+        return false;
+      }
+
+      console.log('✅ CLIENT-SIDE VALIDATION PASSED');
+      return true;
+    } catch (error) {
+      console.error('⚠️ ERROR IN VALIDATION LOGIC:', error);
+      toast.error('Validation error: ' + error.message);
+      return false;
+    }
+  };
+
   const prepareEditData = () => {
     return {
       proposalId: proposal._id,
@@ -117,7 +202,10 @@ const BudgetOfficerEditView = ({
     try {
       const editData = prepareEditData();
       await saveDraftEdit(editData);
-      toast.success('Draft saved successfully');
+      toast.success(
+        `✅ Draft saved successfully!\n💾 Your changes are preserved`,
+        { duration: 3000 }
+      );
       onSaveSuccess?.();
     } catch (error) {
       console.error('Error saving draft:', error);
@@ -138,6 +226,11 @@ const BudgetOfficerEditView = ({
   };
 
   const handleConfirmSubmit = async () => {
+    // 🔍 VALIDATE BEFORE SUBMITTING
+    if (!validateBeforeSubmit()) {
+      return; // Validation failed, don't proceed
+    }
+
     setShowSubmitDialog(false);
     setSubmitting(true);
     try {
@@ -149,7 +242,10 @@ const BudgetOfficerEditView = ({
       await submitEdit(editData);
       
       const targetLabel = submitTarget === 'BUDGET_OFFICER' ? 'Budget Officer' : 'Budget Manager';
-      toast.success(`Edits submitted to ${targetLabel} successfully`);
+      toast.success(
+        `✅ Edits submitted to ${targetLabel} successfully!\n⏳ Dialog closing...`,
+        { duration: 4000 }
+      );
       onSaveSuccess?.();
     } catch (error) {
       console.error('Error submitting edits:', error);
@@ -160,11 +256,19 @@ const BudgetOfficerEditView = ({
   };
 
   const handleSubmit = async () => {
+    // 🔍 VALIDATE BEFORE SUBMITTING
+    if (!validateBeforeSubmit()) {
+      return; // Validation failed, don't proceed
+    }
+
     setSubmitting(true);
     try {
       const editData = prepareEditData();
       await submitEdit(editData);
-      toast.success('Edits submitted for approval successfully');
+      toast.success(
+        `✅ Edits submitted for approval successfully!\n⏳ Dialog closing...`,
+        { duration: 4000 }
+      );
       onSaveSuccess?.();
     } catch (error) {
       console.error('Error submitting edits:', error);
@@ -174,6 +278,24 @@ const BudgetOfficerEditView = ({
     }
   };
 
+
+  // Calculate module totals for summary display
+  const summaryPersonnelTotal = calculateModuleTotal(personnelData, 'Total');
+  const summaryMooeTotal = calculateModuleTotal(mooeData, 'amount');
+  const summaryCapitalTotal = calculateModuleTotal(capitalOutlayData, 'cost');
+  const summaryIncomeTotal = calculateModuleTotal(incomeData, 'amount');
+  const regionName = (proposal.region || '').toUpperCase();
+  const isCentralOffice = regionName.includes('CENTRAL') && regionName.includes('OFFICE');
+
+  // Determine missing modules for warning
+  const summaryMissingModules = [];
+  if (summaryPersonnelTotal <= 0 || personnelData.length === 0) summaryMissingModules.push('Personnel Services');
+  if (summaryMooeTotal <= 0 || mooeData.length === 0) summaryMissingModules.push('MOOE');
+  if (summaryCapitalTotal <= 0 || capitalOutlayData.length === 0) summaryMissingModules.push('Capital Outlay');
+  if (!isCentralOffice && (summaryIncomeTotal <= 0 || incomeData.length === 0)) summaryMissingModules.push('Income');
+
+  // Determine if form is valid for submission (disable button if not)
+  const isFormValid = summaryMissingModules.length === 0;
 
   return (
     <Box>
@@ -190,6 +312,37 @@ const BudgetOfficerEditView = ({
            variant === 'analyst' ? ' Make necessary updates and submit for coordinator review.' :
            ' Changes will be tracked and sent to Budget Analysts for review after approval.'}
         </Typography>
+      </Alert>
+
+      {/* Module Summary Box */}
+      <Alert 
+        severity={summaryMissingModules.length > 0 ? 'error' : 'success'} 
+        sx={{ mb: 2, p: 2 }}
+      >
+        <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
+          📊 Budget Summary (Totals):
+        </Typography>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1, mb: 1 }}>
+          <Typography variant="body2">
+            ✓ Personnel Services: <strong>{summaryPersonnelTotal.toLocaleString('en-PH', { style: 'currency', currency: 'PHP' })}</strong>
+          </Typography>
+          <Typography variant="body2">
+            ✓ MOOE: <strong>{summaryMooeTotal.toLocaleString('en-PH', { style: 'currency', currency: 'PHP' })}</strong>
+          </Typography>
+          <Typography variant="body2">
+            ✓ Capital Outlay: <strong>{summaryCapitalTotal.toLocaleString('en-PH', { style: 'currency', currency: 'PHP' })}</strong>
+          </Typography>
+          {!isCentralOffice && (
+            <Typography variant="body2">
+              ✓ Income: <strong>{summaryIncomeTotal.toLocaleString('en-PH', { style: 'currency', currency: 'PHP' })}</strong>
+            </Typography>
+          )}
+        </Box>
+        {summaryMissingModules.length > 0 && (
+          <Typography variant="body2" sx={{ color: '#d32f2f', fontWeight: 'bold', mt: 1 }}>
+            ⚠️ Before submitting, please ensure all required modules have positive amounts: {summaryMissingModules.join(', ')}
+          </Typography>
+        )}
       </Alert>
 
       {showTables && (
@@ -283,9 +436,11 @@ const BudgetOfficerEditView = ({
             color="primary"
             startIcon={submitting ? <CircularProgress size={20} /> : <SendIcon />}
             onClick={handleSubmitClick}
-            disabled={saving || submitting}
+            disabled={saving || submitting || !isFormValid}
+            title={!isFormValid ? `Missing required modules: ${summaryMissingModules.join(', ')}` : 'Submit for approval'}
           >
             {submitting ? 'Submitting...' : 
+             !isFormValid ? `❌ Complete all modules to submit` :
              variant === 'analyst' ? 'Submit for Coordinator Review' :
              variant === 'coordinator' ? 'Submit Reviewed Proposal' :
              'Submit for Manager Approval'}

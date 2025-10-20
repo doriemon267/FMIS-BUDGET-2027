@@ -21,6 +21,7 @@ exports.createNotification = async (notificationData) => {
       message: notificationData.message,
       relatedEntityId: notificationData.relatedId,
       relatedEntityType: notificationData.relatedType,
+      relatedLink: notificationData.relatedLink,
       metadata: notificationData.metadata || {},
       status: 'UNREAD',
       createdAt: new Date()
@@ -48,6 +49,7 @@ exports.createNotifications = async (notificationsData) => {
       message: data.message,
       relatedEntityId: data.relatedId,
       relatedEntityType: data.relatedType,
+      relatedLink: data.relatedLink,
       metadata: data.metadata || {},
       status: 'UNREAD',
       createdAt: new Date()

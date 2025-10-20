@@ -7,8 +7,12 @@ const PersonnelServices = require('../models/PersonnelServices');
 const MOOE = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const CapitalOutlayDetails = require('../models/CapitalOutlayDetails');
-const { createNotification } = require('./notificationController');
+const { createNotification, createNotifications } = require('./notificationController');
 const { resolveUserIdentity, getClientIp } = require('../utils/requestContext');
+const { validateAnalystSubmissionReadiness } = require('./proposalWorkflowController');
+const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+const Region = require('../models/Region');
+const Department = require('../models/Department');
 
 const buildRequestAuditContext = async (req) => {
   const user = req.user || {};
@@ -73,6 +77,66 @@ const isEqual = (a, b) => {
     return true;
   }
   return false;
+};
+
+/**
+ * Find all users with a specific role in a department/region
+ * Used for sending notifications to all users responsible for the next workflow step
+ * @param {String} targetRole - The budget role to search for (e.g., 'BUDGET_MANAGER')
+ * @param {String} region - The region name
+ * @param {String} department - The department name (optional)
+ * @returns {Promise<Array>} - Array of user IDs with that role in the location
+ */
+const findUsersByRoleAndLocation = async (targetRole, region, department) => {
+  try {
+    const query = {
+      userRole: targetRole,
+      isActive: true
+    };
+
+    // Find region by name for ID
+    let regionObj = null;
+    if (region) {
+      regionObj = await Region.findOne({ 
+        $or: [
+          { regionName: region },
+          { Region: region }
+        ]
+      });
+    }
+
+    // Add region to query if found
+    if (regionObj) {
+      query.regionId = regionObj._id;
+    }
+
+    // Add department to query if provided
+    if (department) {
+      const deptObj = await Department.findOne({
+        $or: [
+          { departmentName: department },
+          { Department: department },
+          { DepartmentName: department }
+        ]
+      });
+      if (deptObj) {
+        query.departmentId = deptObj._id;
+      }
+    }
+
+    const assignments = await HierarchicalUserAssignment.find(query)
+      .select('userId userName email')
+      .lean();
+
+    return assignments.map(a => ({
+      userId: a.userId,
+      userName: a.userName,
+      email: a.email
+    }));
+  } catch (error) {
+    console.error('Error finding users by role and location:', error);
+    return [];
+  }
 };
 
 /**
@@ -861,6 +925,12 @@ exports.saveDraftEdit = async (req, res) => {
  */
 exports.submitEdit = async (req, res) => {
   try {
+    // 🔴🔴🔴 RAW REQUEST LOGGING - BEFORE ANY PROCESSING 🔴🔴🔴
+    console.log('\n\n🔴🔴🔴 BUDGET OFFICER EDIT SUBMIT - RAW REQUEST RECEIVED 🔴🔴🔴');
+    console.log('Request body keys:', Object.keys(req.body));
+    console.log('Full request body:', JSON.stringify(req.body, null, 2));
+    console.log('\n');
+    
     const {
       proposalId,
       editedIncome,
@@ -870,6 +940,13 @@ exports.submitEdit = async (req, res) => {
       comments,
       submitTargetRole
     } = req.body;
+    
+    // 🔴 LOG THE EXTRACTED ARRAYS IMMEDIATELY
+    console.log('🔴 EXTRACTED ARRAYS FROM REQUEST BODY:');
+    console.log('editedPersonnelServices type:', typeof editedPersonnelServices, 'isArray:', Array.isArray(editedPersonnelServices), 'length:', editedPersonnelServices?.length);
+    console.log('editedMOOE type:', typeof editedMOOE, 'isArray:', Array.isArray(editedMOOE), 'length:', editedMOOE?.length);
+    console.log('editedCapitalOutlay type:', typeof editedCapitalOutlay, 'isArray:', Array.isArray(editedCapitalOutlay), 'length:', editedCapitalOutlay?.length);
+    console.log('editedIncome type:', typeof editedIncome, 'isArray:', Array.isArray(editedIncome), 'length:', editedIncome?.length);
     
     const auditContext = await buildRequestAuditContext(req);
     if (!auditContext.userId) {
@@ -889,6 +966,195 @@ exports.submitEdit = async (req, res) => {
         message: 'Proposal not found'
       });
     }
+    
+    // ✅ VALIDATE: Check if the EDITED entries have all required modules before allowing submission
+    // In Edit Mode, we must validate the DRAFT EDITED ENTRIES, not just the original records
+    console.log('🔍🔍🔍 VALIDATING BUDGET OFFICER EDIT SUBMISSION 🔍🔍🔍', {
+      proposalId,
+      region: proposal.region,
+      budgetType: proposal.budgetType,
+      editedPersonnelCount: editedPersonnelServices?.length || 0,
+      editedMOOECount: editedMOOE?.length || 0,
+      editedCapitalCount: editedCapitalOutlay?.length || 0,
+      editedIncomeCount: editedIncome?.length || 0,
+      receivedArrayTypes: {
+        personnel: Array.isArray(editedPersonnelServices) ? 'ARRAY' : typeof editedPersonnelServices,
+        mooe: Array.isArray(editedMOOE) ? 'ARRAY' : typeof editedMOOE,
+        capital: Array.isArray(editedCapitalOutlay) ? 'ARRAY' : typeof editedCapitalOutlay,
+        income: Array.isArray(editedIncome) ? 'ARRAY' : typeof editedIncome
+      }
+    });
+    
+    // Log first entry of each module to inspect field names and actual data
+    console.log('📋📋 CHECKING FIRST ENTRIES 📋📋');
+    if (editedPersonnelServices?.length > 0) {
+      console.log('📋 First Personnel entry fields:', Object.keys(editedPersonnelServices[0]));
+      console.log('📋 First Personnel entry (full):', JSON.stringify(editedPersonnelServices[0], null, 2));
+    } else {
+      console.log('⚠️ Personnel array is empty or null');
+    }
+    if (editedMOOE?.length > 0) {
+      console.log('📋 First MOOE entry fields:', Object.keys(editedMOOE[0]));
+      console.log('📋 First MOOE entry (full):', JSON.stringify(editedMOOE[0], null, 2));
+    } else {
+      console.log('⚠️ MOOE array is empty or null');
+    }
+    if (editedCapitalOutlay?.length > 0) {
+      console.log('📋 First Capital entry fields:', Object.keys(editedCapitalOutlay[0]));
+      console.log('📋 First Capital entry (full):', JSON.stringify(editedCapitalOutlay[0], null, 2));
+    } else {
+      console.log('⚠️ Capital array is empty or null');
+    }
+    if (editedIncome?.length > 0) {
+      console.log('📋 First Income entry fields:', Object.keys(editedIncome[0]));
+      console.log('📋 First Income entry (full):', JSON.stringify(editedIncome[0], null, 2));
+    } else {
+      console.log('⚠️ Income array is empty or null');
+    }
+    
+    // ⚠️ STRICT VALIDATION: Do NOT allow any module to be empty
+    // FAILSAFE CHECK: Ensure arrays are actually arrays
+    if (!Array.isArray(editedPersonnelServices)) {
+      console.log('🛑 FAILSAFE: editedPersonnelServices is not an array, it is:', typeof editedPersonnelServices);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid data format: Personnel Services must be an array',
+        missingModules: ['Personnel Services - Invalid Format']
+      });
+    }
+    if (!Array.isArray(editedMOOE)) {
+      console.log('🛑 FAILSAFE: editedMOOE is not an array, it is:', typeof editedMOOE);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid data format: MOOE must be an array',
+        missingModules: ['MOOE - Invalid Format']
+      });
+    }
+    if (!Array.isArray(editedCapitalOutlay)) {
+      console.log('🛑 FAILSAFE: editedCapitalOutlay is not an array, it is:', typeof editedCapitalOutlay);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid data format: Capital Outlay must be an array',
+        missingModules: ['Capital Outlay - Invalid Format']
+      });
+    }
+    if (!Array.isArray(editedIncome)) {
+      console.log('🛑 FAILSAFE: editedIncome is not an array, it is:', typeof editedIncome);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid data format: Income must be an array',
+        missingModules: ['Income - Invalid Format']
+      });
+    }
+    
+    // Helper function to calculate total from entries
+    const calculateModuleTotal = (entries, amountField) => {
+      if (!Array.isArray(entries) || entries.length === 0) return 0;
+      return entries.reduce((sum, entry) => {
+        const amount = Number(entry[amountField] || 0);
+        return sum + (Number.isFinite(amount) ? amount : 0);
+      }, 0);
+    };
+    
+    const regionName = (proposal.region || '').trim().toUpperCase();
+    const isCentralOffice = regionName.includes('CENTRAL') && regionName.includes('OFFICE');
+    
+    // ⚠️ CRITICAL: Calculate totals for each module USING ALL POSSIBLE FIELD NAMES
+    const personnelTotal = calculateModuleTotal(editedPersonnelServices, 'Total');
+    const mooeTotal = calculateModuleTotal(editedMOOE, 'amount');
+    const capitalTotal = calculateModuleTotal(editedCapitalOutlay, 'cost');
+    const incomeTotal = calculateModuleTotal(editedIncome, 'amount');
+    
+    console.log('💰💰 MODULE TOTALS CALCULATED 💰💰', {
+      personnelTotal,
+      mooeTotal,
+      capitalTotal,
+      incomeTotal,
+      isCentralOffice
+    });
+    
+    // ⚠️ BUILD LIST OF MISSING MODULES
+    const missingEditedModules = [];
+    
+    // Check Personnel Services - ALWAYS required
+    // MUST have entries AND positive total
+    if (!editedPersonnelServices || editedPersonnelServices.length === 0) {
+      missingEditedModules.push('Personnel Services (no entries)');
+      console.log('❌ Personnel Services missing: array is empty');
+    } else if (personnelTotal <= 0.0001) {
+      missingEditedModules.push('Personnel Services (total is zero)');
+      console.log('❌ Personnel Services has zero total');
+    } else {
+      console.log('✅ Personnel Services OK: ' + editedPersonnelServices.length + ' entries, Total: ' + personnelTotal);
+    }
+    
+    // Check MOOE - ALWAYS required
+    // MUST have entries AND positive total
+    if (!editedMOOE || editedMOOE.length === 0) {
+      missingEditedModules.push('MOOE (no entries)');
+      console.log('❌ MOOE missing: array is empty');
+    } else if (mooeTotal <= 0.0001) {
+      missingEditedModules.push('MOOE (total is zero)');
+      console.log('❌ MOOE has zero total');
+    } else {
+      console.log('✅ MOOE OK: ' + editedMOOE.length + ' entries, Total: ' + mooeTotal);
+    }
+    
+    // Check Capital Outlay - ALWAYS required
+    // MUST have entries AND positive total
+    if (!editedCapitalOutlay || editedCapitalOutlay.length === 0) {
+      missingEditedModules.push('Capital Outlay (no entries)');
+      console.log('❌ Capital Outlay missing: array is empty');
+    } else if (capitalTotal <= 0.0001) {
+      missingEditedModules.push('Capital Outlay (total is zero)');
+      console.log('❌ Capital Outlay has zero total');
+    } else {
+      console.log('✅ Capital Outlay OK: ' + editedCapitalOutlay.length + ' entries, Total: ' + capitalTotal);
+    }
+    
+    // Check Income - ALWAYS required for regional, not required for central office
+    if (isCentralOffice) {
+      console.log('ℹ️ Central Office detected - Income not required');
+    } else {
+      if (!editedIncome || editedIncome.length === 0) {
+        missingEditedModules.push('Income (no entries)');
+        console.log('❌ Income missing: array is empty (required for regional)');
+      } else if (incomeTotal <= 0.0001) {
+        missingEditedModules.push('Income (total is zero)');
+        console.log('❌ Income has zero total (required for regional)');
+      } else {
+        console.log('✅ Income OK: ' + editedIncome.length + ' entries, Total: ' + incomeTotal);
+      }
+    }
+    
+    // 🛑 BLOCK SUBMISSION IF ANY REQUIRED MODULE IS MISSING
+    if (missingEditedModules.length > 0) {
+      const requirementMessage = isCentralOffice
+        ? 'Central Office proposals must include Personnel Services, MOOE, and Capital Outlay with positive amounts before submitting.'
+        : 'Regional proposals must include all four modules (Personnel Services, MOOE, Capital Outlay, and Income) with positive amounts before submitting.';
+      
+      console.log('🛑🛑🛑 SUBMISSION BLOCKED: MISSING MODULES 🛑🛑🛑', {
+        proposalId,
+        missingModules: missingEditedModules,
+        requirement: requirementMessage,
+        moduleTotals: {
+          personnelTotal,
+          mooeTotal,
+          capitalTotal,
+          incomeTotal
+        }
+      });
+      
+      return res.status(400).json({
+        success: false,
+        message: `${requirementMessage} Missing modules: ${missingEditedModules.join(', ')}.`,
+        missingModules: missingEditedModules,
+        requirementMessage,
+        moduleTotals: { personnelTotal, mooeTotal, capitalTotal, incomeTotal }
+      });
+    }
+    
+    console.log('✅✅✅ VALIDATION PASSED - ALL REQUIRED MODULES ARE PRESENT ✅✅✅');
     
     // Get user roles
     const userRoles = req.user?.Roles || [];
@@ -1136,28 +1402,103 @@ exports.submitEdit = async (req, res) => {
       userAgent: req.get('user-agent')
     });
     
-    // Create notification for Budget Analyst
-    if (proposal.processBy) {
-      await createNotification({
-        userId: proposal.processBy,
-        type: 'PROPOSAL_EDITED',
-        title: 'Proposal Edited by Budget Officer',
-        message: `Your proposal for ${proposal.fiscalYear} - ${proposal.budgetType} has been edited by Budget Officer ${userName}`,
-        relatedId: proposalId,
-        relatedType: 'Proposal',
-        metadata: {
-          proposalId,
-          fiscalYear: proposal.fiscalYear,
-          budgetType: proposal.budgetType,
-          editedBy: userName,
-          changeSummary: budgetOfficerEdit.getChangeSummary()
+    // Create notifications for all users with the next role in the workflow
+    // EXCEPTION: If BUDGET_MANAGER is finalizing, don't send notifications (workflow is complete)
+    const notificationsToSend = [];
+    let recipientUserIds = [];
+    
+    if (editorRole !== 'BUDGET_MANAGER') {
+      const nextRoleUsers = await findUsersByRoleAndLocation(
+        currentAssigneeRole,
+        proposal.region,
+        proposal.department
+      );
+
+      // If no specific users found for the role, fallback to original processBy
+      recipientUserIds = nextRoleUsers.length > 0 
+        ? nextRoleUsers.map(u => u.userId) 
+        : (proposal.processBy ? [proposal.processBy] : []);
+
+      // Store which users the edit is forwarded to
+      budgetOfficerEdit.forwardedTo_UserId = recipientUserIds;
+      budgetOfficerEdit.forwardedTo_Role = currentAssigneeRole;
+
+      // Build notification message based on who's submitting and who's receiving
+      let notificationTitle = `Proposal Submitted for ${currentAssigneeRole} Review`;
+      let notificationMessage = `${editorRole} has submitted the proposal "${proposal.title}" for your review. Fiscal Year: ${proposal.fiscalYear} - ${proposal.budgetType}`;
+
+      if (editorRole === 'BUDGET_ANALYST') {
+        notificationTitle = 'Proposal Submitted for Coordination';
+        notificationMessage = `Budget Analyst has submitted the proposal "${proposal.title}" for your coordination review. Fiscal Year: ${proposal.fiscalYear} - ${proposal.budgetType}`;
+      } else if (editorRole === 'BUDGET_COORDINATOR') {
+        if (currentAssigneeRole === 'BUDGET_MANAGER') {
+          notificationTitle = 'Proposal Submitted for Manager Review (Bypassed Officer)';
+          notificationMessage = `Budget Coordinator has submitted the proposal "${proposal.title}" directly to you for final review. Fiscal Year: ${proposal.fiscalYear} - ${proposal.budgetType}`;
+        } else {
+          notificationTitle = 'Proposal Submitted for Officer Review';
+          notificationMessage = `Budget Coordinator has submitted the proposal "${proposal.title}" for your review. Fiscal Year: ${proposal.fiscalYear} - ${proposal.budgetType}`;
         }
-      });
+      } else if (editorRole === 'BUDGET_OFFICER') {
+        notificationTitle = 'Proposal Submitted for Manager Review';
+        notificationMessage = `Budget Officer has submitted the proposal "${proposal.title}" for your final review and approval. Fiscal Year: ${proposal.fiscalYear} - ${proposal.budgetType}`;
+      }
+
+      // Create notifications for each recipient
+      for (const recipientId of recipientUserIds) {
+        notificationsToSend.push({
+          userId: recipientId,
+          type: 'PROPOSAL_WORKFLOW',
+          title: notificationTitle,
+          message: notificationMessage,
+          relatedId: proposalId.toString(),
+          relatedType: 'Proposal',
+          relatedLink: `/AllProposals?proposalId=${proposalId}`,
+          metadata: {
+            proposalId: proposalId.toString(),
+            fiscalYear: proposal.fiscalYear,
+            budgetType: proposal.budgetType,
+            region: proposal.region,
+            department: proposal.department,
+            submittedBy: userName,
+            submittedByRole: editorRole,
+            targetRole: currentAssigneeRole,
+            changeSummary: budgetOfficerEdit.getChangeSummary()
+          }
+        });
+      }
+    } else {
+      // BUDGET_MANAGER finalized - mark forwardedTo as empty (no further routing)
+      budgetOfficerEdit.forwardedTo_UserId = [];
+      budgetOfficerEdit.forwardedTo_Role = 'FINALIZED';
     }
+
+    // Send all notifications
+    if (notificationsToSend.length > 0) {
+      try {
+        await createNotifications(notificationsToSend);
+        console.log(`📧 Sent ${notificationsToSend.length} notification(s) to ${currentAssigneeRole} users`);
+      } catch (notifError) {
+        console.error('❌ Error sending notifications:', notifError);
+        // Continue even if notifications fail - the edit submission should not fail
+      }
+    }
+
+    // Save the budgetOfficerEdit again to persist forwardedTo fields
+    try {
+      await budgetOfficerEdit.save();
+    } catch (saveError) {
+      console.error('❌ Error saving budgetOfficerEdit with forwardedTo fields:', saveError);
+      // Continue - this is not critical for the response
+    }
+    
+    // Return appropriate message based on action
+    const responseMessage = editorRole === 'BUDGET_MANAGER' 
+      ? 'Proposal Finalized Successfully' 
+      : 'Edits Submitted Successfully';
     
     res.json({
       success: true,
-      message: 'Edits submitted successfully',
+      message: responseMessage,
       data: {
         _id: budgetOfficerEdit._id,
         proposalId: budgetOfficerEdit.proposalId,
@@ -1171,6 +1512,8 @@ exports.submitEdit = async (req, res) => {
         status: budgetOfficerEdit.status,
         editedBy: budgetOfficerEdit.editedBy,
         submittedAt: budgetOfficerEdit.submittedAt,
+        finalizedAt: editorRole === 'BUDGET_MANAGER' ? proposal.finalizedAt : undefined,
+        finalizedBy: editorRole === 'BUDGET_MANAGER' ? proposal.finalizedBy : undefined,
         changeSummary: budgetOfficerEdit.getChangeSummary()
       }
     });

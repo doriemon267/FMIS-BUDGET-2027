@@ -14,7 +14,14 @@ const NotificationSchema = new mongoose.Schema({
   status: { type: String, enum: ['UNREAD','READ'], default: 'UNREAD', index: true },
   createdBy: { userId: String, name: String },
   createdAt: { type: Date, default: Date.now },
-  readAt: { type: Date }
+  readAt: { type: Date },
+  // Deep linking support - route user to specific proposal or page
+  relatedLink: { type: String },
+  // Type and related ID for routing logic
+  type: { type: String },
+  relatedEntityId: { type: String },
+  relatedEntityType: { type: String },
+  metadata: mongoose.Schema.Types.Mixed
 });
 
 module.exports = mongoose.model('Notification', NotificationSchema);

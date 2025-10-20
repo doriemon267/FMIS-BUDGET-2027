@@ -146,19 +146,29 @@ const personnelServicesSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
-    status: {
-      type: String,
-      enum: [
-        "Draft",                    // Division working copy
-        "Division Submitted",       // Division \u2192 Department
-        "Department Verified",      // Department technical validation
-        "Department Submitted",     // Department \u2192 Region  
-        "Region Approved",         // Region administrative approval (legacy)
-        "Office Approved",         // Office/Budget Officer approval (preferred)
-        "Finalized",               // Ready for execution
-        "Returned"                 // Rejected at any level
-      ],
-      default: "Draft"
+    medical: {
+      type: Number,
+      required: true,
+    },
+    childrenAllowance: {
+      type: Number,
+      required: true,
+    },
+    midyearBonus: {
+      type: Number,
+      required: true,
+    },
+    cashGift: {
+      type: Number,
+      required: true,
+    },
+    subsistenceAllowanceMDS: {
+      type: Number,
+      required: true,
+    },
+    subsistenceAllowanceST: {
+      type: Number,
+      required: true,
     },
     yearEndBonus: {
       type: Number,

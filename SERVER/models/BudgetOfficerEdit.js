@@ -148,7 +148,7 @@ const budgetOfficerEditSchema = new mongoose.Schema({
     email: String,
     role: {
       type: String,
-      enum: ['BUDGET_COORDINATOR', 'BUDGET_OFFICER', 'BUDGET_MANAGER'],
+      enum: ['BUDGET_ANALYST', 'BUDGET_COORDINATOR', 'BUDGET_OFFICER', 'BUDGET_MANAGER'],
       default: 'BUDGET_OFFICER'
     }
   },
@@ -172,6 +172,17 @@ const budgetOfficerEditSchema = new mongoose.Schema({
     email: String,
     date: Date,
     reason: String
+  },
+  
+  // Track which user(s) this edit is forwarded to (for next workflow step)
+  forwardedTo_UserId: {
+    type: [String],
+    default: []
+  },
+  forwardedTo_Role: {
+    type: String,
+    enum: ['BUDGET_ANALYST', 'BUDGET_COORDINATOR', 'BUDGET_OFFICER', 'BUDGET_MANAGER'],
+    required: false
   },
   
   // Timestamps

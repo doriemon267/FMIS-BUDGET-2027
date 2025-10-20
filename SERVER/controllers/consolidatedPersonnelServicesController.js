@@ -1,4 +1,4 @@
-const PersonnelServices = require('../models/personnelServices');
+const PersonnelServices = require('../models/PersonnelServices');
 // Define the hierarchical structure mapping
 const PERSONNEL_SERVICES_STRUCTURE = {
   "B.1.1": {

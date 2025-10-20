@@ -26,6 +26,7 @@ import BudgetManagerSubmissionView from './BudgetManagerSubmissionView';
 import WorkflowActions from '../workflow/WorkflowActions';
 import WorkflowStatusStepper from '../workflow/WorkflowStatusStepper';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import CheckIcon from '@mui/icons-material/Check';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import PublicIcon from '@mui/icons-material/Public';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
@@ -769,6 +770,12 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                     
                     // Refresh parent proposal list
                     onRefresh?.();
+                    
+                    // 🔄 AUTO-CLOSE DIALOG AND REFRESH TABLE after successful submission
+                    setTimeout(() => {
+                      console.log('🔄 Auto-closing dialog after successful submission...');
+                      handleClose();
+                    }, 1500); // Give time to show success toast before closing
                   }}
                   variant={managerCanEditNow ? 'manager' : coordinatorCanEditNow ? 'coordinator' : analystCanEditNow ? 'analyst' : 'officer'}
                   allowSubmit={!managerCanEditNow}
@@ -860,21 +867,39 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
           Close
         </Button>
         
-        {/* Workflow Actions - Show only if user has appropriate role and proposal is not in final state */}
+        Workflow Actions - Show only if user has appropriate role and proposal is not in final state
         {proposal && userInfo && proposal.status !== 'Finalized' && (
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
             {/* PROMINENT FINALIZE BUTTON FOR BUDGET MANAGER - Visible when ready to finalize */}
             {canBudgetManagerFinalize && (
               <Button
                 variant="contained"
-                color="success"
+                startIcon={<CheckIcon sx={{ fontSize: '18px' }} />}
                 sx={{ 
-                  fontWeight: 'bold',
-                  backgroundColor: '#008000',
-                  '&:hover': { backgroundColor: '#006400' },
+                  fontWeight: 600,
+                  backgroundColor: '#1b7a3b',
+                  color: '#ffffff',
                   textTransform: 'none',
                   fontSize: '14px',
-                  px: 2
+                  px: 3,
+                  py: 1.2,
+                  borderRadius: '6px',
+                  boxShadow: '0 2px 8px rgba(27, 122, 59, 0.3)',
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  '&:hover': { 
+                    backgroundColor: '#155a30',
+                    boxShadow: '0 4px 12px rgba(27, 122, 59, 0.4)',
+                    transform: 'translateY(-1px)'
+                  },
+                  '&:active': {
+                    transform: 'translateY(0)',
+                    boxShadow: '0 2px 6px rgba(27, 122, 59, 0.3)'
+                  },
+                  '&:disabled': {
+                    backgroundColor: '#b0bfb8',
+                    color: '#ffffff',
+                    boxShadow: 'none'
+                  }
                 }}
                 onClick={() => {
                   // Open confirmation dialog for finalization
@@ -888,7 +913,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                 disabled={loading || refreshing}
                 title="Click to finalize this proposal"
               >
-                ✅ Finalize Proposal
+                Finalize Proposal
               </Button>
             )}
             

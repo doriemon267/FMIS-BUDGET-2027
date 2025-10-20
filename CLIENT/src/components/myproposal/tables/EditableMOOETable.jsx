@@ -133,6 +133,16 @@ const EditableMOOETable = ({ data, onChange }) => {
     }).format(amount || 0);
   };
 
+  const formatNumber = (value) => {
+    if (!value && value !== 0) return '';
+    const num = Number(value);
+    if (!Number.isFinite(num)) return '';
+    return num.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  };
+
   const getRowStyle = (changeType) => {
     if (changeType === 'deleted') return { backgroundColor: '#ffebee', textDecoration: 'line-through', opacity: 0.6 };
     if (changeType === 'added') return { backgroundColor: '#e8f5e9' };
@@ -328,9 +338,13 @@ const EditableMOOETable = ({ data, onChange }) => {
                           </TableCell>
                           <TableCell align="right" sx={{ maxWidth: 140 }}>
                             <TextField
-                              type="number"
-                              value={Number(item.income || 0)}
-                              onChange={(e) => handleFieldChange(index, 'income', e.target.value)}
+                              type="text"
+                              value={formatNumber(item.income || 0)}
+                              onChange={(e) => {
+                                const inputValue = e.target.value.replace(/,/g, '');
+                                const numValue = parseFloat(inputValue) || 0;
+                                handleFieldChange(index, 'income', numValue);
+                              }}
                               size="small"
                               fullWidth
                               disabled={changeType === 'deleted'}
@@ -340,9 +354,13 @@ const EditableMOOETable = ({ data, onChange }) => {
                           </TableCell>
                           <TableCell align="right" sx={{ maxWidth: 140 }}>
                             <TextField
-                              type="number"
-                              value={Number(item.subsidy || 0)}
-                              onChange={(e) => handleFieldChange(index, 'subsidy', e.target.value)}
+                              type="text"
+                              value={formatNumber(item.subsidy || 0)}
+                              onChange={(e) => {
+                                const inputValue = e.target.value.replace(/,/g, '');
+                                const numValue = parseFloat(inputValue) || 0;
+                                handleFieldChange(index, 'subsidy', numValue);
+                              }}
                               size="small"
                               fullWidth
                               disabled={changeType === 'deleted'}
