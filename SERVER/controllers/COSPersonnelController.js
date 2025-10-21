@@ -5,7 +5,7 @@ const { searchFilter, textFilter } = require("../utils/controller_get_process");
 
 exports.bulkAddCOSPersonnel = async (req, res) => {
   try {
-    const { statusOfAppointment, region } = req.body;
+    const { statusOfAppointment } = req.body; // Removed region requirement
 
     // ⚠️ CRITICAL: Get user's assignment DIRECTLY to ensure proper filtering
     const userId = req.user.id;
@@ -35,13 +35,14 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
     console.log('🔍 [COS BULK ADD] User Division:', userDivision);
     console.log('🔍 [COS BULK ADD] =================================================================');
 
-    // CRITICAL SECURITY CHECK: Ensure region is provided
-    if (!region) {
+    // CRITICAL VALIDATION: Ensure user has a region assignment for COS personnel
+    if (!userRegion) {
       return res.status(400).json({
-        error: "Region parameter is required",
-        message: "Please specify a region to add COS personnel"
+        error: "No region assignment found",
+        message: "You must be assigned to a region to perform COS personnel bulk add operations"
       });
     }
+
     if (!statusOfAppointment || statusOfAppointment !== "COS") {
       return res.status(400).json({ message: "Missing or invalid required field: statusOfAppointment" });
     }
@@ -101,7 +102,7 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
 
     if (employees.length === 0) {
       return res.status(200).json({
-        message: `No COS employees found within your access scope (Region: ${region}).`,
+        message: `No COS employees found within your access scope (Region: ${userRegion}).`,
         accessLevel: userAssignment?.assignmentLevel || 'UNKNOWN',
         hierarchicalScope: {
           region: userRegion,
@@ -112,9 +113,9 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
     }
     const checks = await Promise.all(
       employees.map(async (employee) => {
-        // Double-check that employee belongs to the specified region
-        if (employee.Region !== region) {
-          console.error(`SECURITY WARNING: Employee ${employee.EmployeeFullName} has region ${employee.Region} but requested region is ${region}`);
+        // Double-check that employee belongs to user's assigned region
+        if (employee.Region !== userRegion) {
+          console.error(`SECURITY WARNING: Employee ${employee.EmployeeFullName} has region ${employee.Region} but user's assigned region is ${userRegion}`);
           return null;
         }
 
@@ -215,7 +216,7 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
     } else {
       return res.status(200).json({
         message: "No new COS personnel to add.",
-        region,
+        region: userRegion,
         accessLevel: userAssignment?.assignmentLevel || 'UNKNOWN',
         hierarchicalScope: {
           region: userRegion,
