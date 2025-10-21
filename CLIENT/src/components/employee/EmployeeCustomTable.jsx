@@ -80,9 +80,10 @@ const CustomTable = ({
   const { activeRegion } = useRegion();
   const { currentUser } = useUser();
 
-      // Get user's hierarchical access information
-      const userAccessLevel = currentUser?.hierarchicalAccess?.scope || 'REGION';
-      const userDivision = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
+    // Get user's hierarchical access information
+    const userAccessLevel = currentUser?.hierarchicalAccess?.scope || 'REGION';
+    const rawDivision = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
+    const userDivision = typeof rawDivision === 'string' ? rawDivision : rawDivision?.divisionName;
       const userDepartment = currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
       const userRegion = currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
 
@@ -95,6 +96,23 @@ const CustomTable = ({
         hierarchicalAccess: currentUser?.hierarchicalAccess,
         currentUser: currentUser ? 'User exists' : 'No user'
       });
+
+  const resolveProcessByFilter = (user) => {
+    if (!user) return null;
+    if (user.FirstName && user.LastName) {
+      return `${user.FirstName} ${user.LastName}`;
+    }
+    if (user.fullName) {
+      return user.fullName;
+    }
+    if (user.name) {
+      return user.name;
+    }
+    if (user.username) {
+      return user.username;
+    }
+    return null;
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -148,13 +166,13 @@ const CustomTable = ({
 
       if (userAccessLevel === 'DIVISION' && userDivision) {
         // Division level: Only send division parameter, no region override
-        queryParams.division = userDivision;
+        queryParams.Division = userDivision;
         console.log(`Division level user - restricting to division: ${userDivision}`);
       } else if (userAccessLevel === 'DEPARTMENT' && userDepartment) {
         // Department level: Only send department parameter, no region override
-        queryParams.department = userDepartment;
+        queryParams.Department = userDepartment;
         if (userDivision) {
-          queryParams.division = userDivision;
+          queryParams.Division = userDivision;
         }
         console.log(`Department level user - restricting to department: ${userDepartment}`);
       } else if (userAccessLevel === 'REGION' && userRegion) {
@@ -174,8 +192,9 @@ const CustomTable = ({
 
       // Add processBy parameter for additional access control
       // This allows users to see employees they processed, in addition to hierarchical access
-      if (currentUser?._id) {
-        queryParams.processBy = currentUser._id;
+      const processByFilter = resolveProcessByFilter(currentUser);
+      if (processByFilter) {
+        queryParams.processBy = processByFilter;
       }
       
       // Add other filters

@@ -711,6 +711,29 @@ exports.getEmployeeStats = async (req, res) => {
       }
     }
 
+    const departmentFilter = req.query.Department || req.query.department;
+    const divisionFilter = req.query.Division || req.query.division;
+
+    const applyScopedFilter = (key, value) => {
+      if (!value) return;
+      const normalizedValue = norm(value);
+      if (!normalizedValue) return;
+
+      if (filtersCi.$or) {
+        filtersCi.$or = filtersCi.$or.map(condition => ({
+          ...condition,
+          [key]: normalizedValue,
+        }));
+      } else if (filtersCi.$and) {
+        filtersCi.$and = filtersCi.$and.map(condition => ({
+          ...condition,
+          [key]: normalizedValue,
+        }));
+      } else {
+        filtersCi[key] = normalizedValue;
+      }
+    };
+
     // Add region filter to all conditions if specified
     if (region) {
       if (filtersCi.$or) {
@@ -722,6 +745,9 @@ exports.getEmployeeStats = async (req, res) => {
         filtersCi.Region = norm(region);
       }
     }
+
+    applyScopedFilter('Department', departmentFilter);
+    applyScopedFilter('Division', divisionFilter);
     // Count total employees with hierarchical filters
     const total = await collection.countDocuments(filtersCi);
     // Derive active/inactive using the same filtersCi + status

@@ -86,7 +86,8 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
   const [formDataToSave, setFormDataToSave] = useState(null);
   // Get user's hierarchical access information
   const userAccessLevel = currentUser?.hierarchicalAccess?.scope || 'REGION';
-  const userDivision = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
+  const rawDivision = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
+  const userDivision = typeof rawDivision === "string" ? rawDivision : rawDivision?.divisionName;
   const userDepartment = currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
   const userRegion = currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
 

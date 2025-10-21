@@ -45,6 +45,23 @@ const EmployeeList = () => {
   const { mode } = useThemeContext();
   const { activeRegion } = useRegion();
   const { currentUser } = useUser();
+  const resolveProcessByFilter = (user) => {
+    if (!user) return null;
+    if (user.FirstName && user.LastName) {
+      return `${user.FirstName} ${user.LastName}`;
+    }
+    if (user.fullName) {
+      return user.fullName;
+    }
+    if (user.name) {
+      return user.name;
+    }
+    if (user.username) {
+      return user.username;
+    }
+    return null;
+  };
+
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const navigate = useNavigate();
   const [employeeStats, setEmployeeStats] = useState({
@@ -58,7 +75,8 @@ const EmployeeList = () => {
 
   // Get user's hierarchical access information
   const userAccessLevel = currentUser?.hierarchicalAccess?.scope || 'REGION';
-  const userDivision = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
+  const rawDivision = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
+  const userDivision = typeof rawDivision === "string" ? rawDivision : rawDivision?.divisionName;
   const userDepartment = currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
   const userRegion = currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
 
@@ -130,10 +148,10 @@ const EmployeeList = () => {
 
         // Add hierarchical access parameters based on user level
         if (userAccessLevel === 'DIVISION' && userDivision) {
-          queryParams.division = userDivision;
+          queryParams.Division = userDivision;
         }
         if (userAccessLevel === 'DEPARTMENT' && userDepartment) {
-          queryParams.department = userDepartment;
+          queryParams.Department = userDepartment;
         }
         if (userAccessLevel === 'REGION' && userRegion) {
           queryParams.region = userRegion;
@@ -142,8 +160,9 @@ const EmployeeList = () => {
 
         // Add processBy parameter for additional access control
         // This allows users to see employees they processed, in addition to hierarchical access
-        if (currentUser?._id) {
-          queryParams.processBy = currentUser._id;
+        const processByFilter = resolveProcessByFilter(currentUser);
+        if (processByFilter) {
+          queryParams.processBy = processByFilter;
         }
 
         // Include the hierarchical access parameters in the request
