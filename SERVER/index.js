@@ -410,10 +410,8 @@ server.listen(process.env.APP_PORT, () => {
   setTimeout(() => {
     initializeCleanupScheduler();
     }, 5000); // Wait 5 seconds for database connection to be established
-  // Only log if logs are allowed
-  if (process.env.ALLOW_SERVER_LOGS === 'true') {
-    console.log("🚀", "FMIS - BUDGET IS UP AND RUNNING :: 5005");
-  }
+  // Always show essential startup message
+  console.log("🚀", "FMIS - BUDGET IS UP AND RUNNING :: 5005");
   return null;
 });
 
