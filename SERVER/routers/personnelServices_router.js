@@ -121,6 +121,12 @@ personnelServicesRouter.get("/api/personnel/getByParams", async (req, res) => {
 //   getPersonnelHiredBeforeJune1988 || 
 //     ((req, res) => res.status(500).json({ message: "Function not available" }))
 // );
+personnelServicesRouter.get(
+  "/getpersonnels/hiredBeforeJune1988", 
+  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
+  getPersonnelHiredBeforeJune1988 || 
+    ((req, res) => res.status(500).json({ message: "Function not available" }))
+);
 // Add the new route for syncing meal allowances
 personnelServicesRouter.post(
   "/personnelServices/sync-meal-allowances", 

@@ -3,6 +3,7 @@ const PersonnelServices = require("../models/PersonnelServices");
 const EmployeeMaster = require("../models/EmployeeList");
 const Settings = require("../models/Settings");
 const Proposal = require('../models/Proposal');
+const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 // Import ChildrenAllowance model safely
 const ChildrenAllowance =
@@ -468,27 +469,41 @@ exports.bulkAddPersonnelServices = async (req, res) => {
     // This is the PRIMARY fix - no more middleware filter merging
     let employeeQuery = {
       StatusOfAppointment: statusOfAppointment,
-      employeeStatus: "Active",
       fiscalYear: fiscalYear
     };
 
+    // Include both Active and Inactive employees to ensure VACANT positions are included
+    // VACANT positions may be marked as Inactive but should still be available for bulk add
+    let statusConditions = [
+      { employeeStatus: "Active" },
+      { employeeStatus: "Inactive", EmployeeFullName: { $regex: /^VACANT$/i } }
+    ];
+
     // Apply hierarchical filtering based on user's DIRECT assignment level
     if (userRegion) {
-      employeeQuery.Region = userRegion;
+      statusConditions.forEach(condition => {
+        condition.Region = userRegion;
+      });
     }
 
     if (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'DIVISION') {
       if (userDepartment) {
-        employeeQuery.Department = userDepartment;
+        statusConditions.forEach(condition => {
+          condition.Department = userDepartment;
+        });
       }
     }
 
     if (userAssignment.assignmentLevel === 'DIVISION') {
       if (userDivision) {
-        employeeQuery.Division = userDivision;
+        statusConditions.forEach(condition => {
+          condition.Division = userDivision;
+        });
         console.log('🔍 [BULK ADD] ⚠️⚠️⚠️ DIVISION LEVEL - STRICT FILTER:', userDivision);
       }
     }
+
+    employeeQuery.$or = statusConditions;
 
     console.log('🔍 [BULK ADD] ==================== FINAL QUERY ====================');
     console.log('🔍 [BULK ADD] Employee Query:', JSON.stringify(employeeQuery, null, 2));
@@ -1258,6 +1273,121 @@ exports.getPersonnelHiredBeforeJune1988 = async (req, res) => {
     if (region) {
       filter.region = region;
     }
+    const personnel = await PersonnelServices.find(filter);
+    res.status(200).json(personnel);
+  } catch (error) {
+    console.error("Error fetching personnel:", error.stack);
+    res.status(500).json({ message: "Server error", details: error.message });
+  }
+};
+exports.getPersonnelHiredBeforeJune1988 = async (req, res) => {
+  try {
+    const activeSettings = await Settings.findOne({ isActive: true });
+    if (!activeSettings || !activeSettings.fiscalYear) {
+      return res.status(400).json({
+        message: "Active settings with a fiscalYear not found",
+        details: "No active settings available",
+      });
+    }
+    const { fiscalYear } = activeSettings;
+
+    // Load user's hierarchical assignment for access control
+    const userId = req.user.id;
+    let userAssignment = null;
+    try {
+      userAssignment = await HierarchicalUserAssignment.getUserPermissions(userId);
+    } catch (error) {
+      console.warn('Could not load hierarchical assignment for user:', userId, error.message);
+    }
+
+    // Get region from query parameters (for backward compatibility)
+    const requestedRegion = req.query.region;
+
+    // Build base filter object
+    const filter = {
+      fiscalYear,
+      DateOfAppointment: { $lt: new Date("1988-06-01"), $ne: null },
+    };
+
+    // Apply hierarchical access control
+    if (userAssignment) {
+      switch (userAssignment.assignmentLevel) {
+        case 'DIVISION':
+          // Division users can only access their specific division data
+          if (userAssignment.divisions && userAssignment.divisions.length > 0) {
+            filter.$and = filter.$and || [];
+            filter.$and.push(
+              { region: userAssignment.regions[0]?.regionName },
+              { department: userAssignment.departments[0]?.departmentName },
+              { division: userAssignment.divisions[0] }
+            );
+          }
+          break;
+        case 'DEPARTMENT':
+          // Department users can access all divisions within their department
+          if (userAssignment.departments && userAssignment.departments.length > 0) {
+            filter.$and = filter.$and || [];
+            filter.$and.push(
+              { region: userAssignment.regions[0]?.regionName },
+              { department: userAssignment.departments[0]?.departmentName }
+            );
+          }
+          break;
+        case 'REGION':
+          // Region users can access all departments and divisions within their region
+          if (userAssignment.regions && userAssignment.regions.length > 0) {
+            filter.region = userAssignment.regions[0]?.regionName;
+          }
+          break;
+        case 'FULL':
+          // Full access users can access everything, but if they have specific region assignments,
+          // they should still be filtered to those regions
+          if (userAssignment.regions && userAssignment.regions.length > 0) {
+            filter.region = { $in: userAssignment.regions.map(r => r.regionName) };
+          }
+          // If no specific regions assigned, allow access to all
+          break;
+        default:
+          // No assignment found, restrict to user's region if available
+          const userRegion = req.user?.Region;
+          if (userRegion) {
+            filter.region = userRegion;
+          }
+          break;
+      }
+    } else {
+      // Fallback: use user's region if no hierarchical assignment
+      const userRegion = req.user?.Region || req.headers["x-region"];
+      if (userRegion) {
+        filter.region = userRegion;
+      }
+    }
+
+    // If a specific region was requested in query params, intersect with hierarchical access
+    if (requestedRegion) {
+      if (filter.region) {
+        // If we already have a region filter, ensure the requested region is allowed
+        if (filter.region.$in) {
+          // Multiple regions allowed - check if requested region is in the list
+          if (!filter.region.$in.includes(requestedRegion)) {
+            return res.status(403).json({
+              message: "Access denied",
+              details: `You do not have access to region: ${requestedRegion}`
+            });
+          }
+        } else if (filter.region !== requestedRegion) {
+          // Single region filter - check if it matches
+          return res.status(403).json({
+            message: "Access denied",
+            details: `You do not have access to region: ${requestedRegion}`
+          });
+        }
+      } else {
+        // No hierarchical restriction, but requested region specified
+        filter.region = requestedRegion;
+      }
+    }
+
     const personnel = await PersonnelServices.find(filter);
     res.status(200).json(personnel);
   } catch (error) {
