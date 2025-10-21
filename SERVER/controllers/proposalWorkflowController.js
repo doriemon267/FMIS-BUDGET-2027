@@ -403,9 +403,7 @@ async function evaluateModuleCompletion(model, filter, amountFields) {
   }
 }
 
-// Export for use in other controllers (e.g., budgetOfficerEditController)
-exports.validateAnalystSubmissionReadiness = validateAnalystSubmissionReadiness;
-
+// Function definition for validateAnalystSubmissionReadiness
 async function validateAnalystSubmissionReadiness(proposal) {
   const filters = buildModuleFilter(proposal);
   const regionName = (proposal.region || '').trim().toUpperCase();
@@ -3663,5 +3661,6 @@ const __private = {
 module.exports = {
   ...exports,
   budgetRoleAccessControl,
+  // validateAnalystSubmissionReadiness,  // REMOVED: Not used externally, causes circular dependency
   __private
 };

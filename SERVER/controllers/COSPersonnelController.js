@@ -2,41 +2,38 @@ const COSPersonnel = require("../models/COSPersonnel");
 const EmployeeMaster = require("../models/EmployeeList");
 const Settings = require("../models/Settings");
 const { searchFilter, textFilter } = require("../utils/controller_get_process");
+
 exports.bulkAddCOSPersonnel = async (req, res) => {
   try {
     const { statusOfAppointment, region } = req.body;
 
-    // Prefer submission workflow filters; fallback to hierarchical
+    // ⚠️ CRITICAL: Get user's assignment DIRECTLY to ensure proper filtering
+    const userId = req.user.id;
+    const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+    const userAssignment = await HierarchicalUserAssignment.getUserPermissions(userId);
+
+    if (!userAssignment || userAssignment.assignmentLevel === 'NONE') {
+      return res.status(403).json({
+        message: 'No organizational assignment found. Cannot perform bulk add.',
+        code: 'NO_ORG_ASSIGNMENT'
+      });
+    }
+
+    // Get hierarchical filters from middleware (as backup)
     const hierarchicalFilters = req.submissionWorkflowFilters || req.hierarchicalFilters || {};
 
-    // Get user's assignment level to determine access restrictions
-    const assignment = req.userHierarchicalAssignment || {};
-    const userLevel = assignment.assignmentLevel || 'NONE';
+    // Get the user's ACTUAL assigned organizational units
+    const userRegion = userAssignment.regions?.[0]?.regionName || req.body.region;
+    const userDepartment = userAssignment.departments?.[0]?.departmentName;
+    const userDivision = userAssignment.divisions?.[0];
 
-    // Map hierarchical filters to database field names
-    const mapFiltersToDb = (filters) => {
-      const mapped = {};
-
-      // Handle $and conditions from middleware
-      if (filters.$and && Array.isArray(filters.$and)) {
-        mapped.$and = filters.$and.map(condition => {
-          const conditionMapped = {};
-          if (condition.region) conditionMapped.Region = condition.region;
-          if (condition.department) conditionMapped.Department = condition.department;
-          if (condition.division) conditionMapped.Division = condition.division;
-          return conditionMapped;
-        });
-        return mapped;
-      }
-
-      // Handle simple key-value filters
-      if (filters.region) mapped.Region = filters.region;
-      if (filters.department) mapped.Department = filters.department;
-      if (filters.division) mapped.Division = filters.division;
-      return mapped;
-    };
-
-    const dbHierarchicalFilters = mapFiltersToDb(hierarchicalFilters);
+    console.log('🔍 [COS BULK ADD] ==================== USER ASSIGNMENT ====================');
+    console.log('🔍 [COS BULK ADD] User ID:', userId);
+    console.log('🔍 [COS BULK ADD] Assignment Level:', userAssignment.assignmentLevel);
+    console.log('🔍 [COS BULK ADD] User Region:', userRegion);
+    console.log('🔍 [COS BULK ADD] User Department:', userDepartment);
+    console.log('🔍 [COS BULK ADD] User Division:', userDivision);
+    console.log('🔍 [COS BULK ADD] =================================================================');
 
     // CRITICAL SECURITY CHECK: Ensure region is provided
     if (!region) {
@@ -55,41 +52,62 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
     const fiscalYear = activeSettings.fiscalYear;
     const budgetType = activeSettings.budgetType;
 
-    // Build employee query with hierarchical filters
+    // ⚠️ CRITICAL: Build STRICT query using DIRECT user assignment
+    // This is the PRIMARY fix - no more middleware filter merging
     let employeeQuery = {
-      StatusOfAppointment: statusOfAppointment,
-      Region: region
+      StatusOfAppointment: statusOfAppointment
     };
 
-    // Apply hierarchical filters to employee query
-    if (Object.keys(dbHierarchicalFilters).length > 0) {
-      if (dbHierarchicalFilters.$and) {
-        employeeQuery = {
-          $and: [
-            employeeQuery,
-            ...dbHierarchicalFilters.$and
-          ]
-        };
-      } else {
-        employeeQuery = {
-          ...employeeQuery,
-          ...dbHierarchicalFilters
-        };
+    // Apply hierarchical filtering based on user's DIRECT assignment level
+    if (userRegion) {
+      employeeQuery.Region = userRegion;
+    } else if (region) {
+      employeeQuery.Region = region;
+    }
+
+    if (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'DIVISION') {
+      if (userDepartment) {
+        employeeQuery.Department = userDepartment;
       }
     }
 
-    // Log what employees the user can process for transparency
-    console.log(`User ${req.user.id} (${assignment?.assignmentLevel || 'UNKNOWN'}) attempting to process COS employees with filters:`, JSON.stringify(dbHierarchicalFilters, null, 2));
+    if (userAssignment.assignmentLevel === 'DIVISION') {
+      if (userDivision) {
+        employeeQuery.Division = userDivision;
+        console.log('🔍 [COS BULK ADD] ⚠️⚠️⚠️ DIVISION LEVEL - STRICT FILTER:', userDivision);
+      }
+    }
+
+    console.log('🔍 [COS BULK ADD] ==================== FINAL QUERY ====================');
+    console.log('🔍 [COS BULK ADD] Employee Query:', JSON.stringify(employeeQuery, null, 2));
+    console.log('🔍 [COS BULK ADD] Expected Division:', userDivision || 'N/A');
+    console.log('🔍 [COS BULK ADD] ================================================================');
 
     // Only get employees within user's hierarchical scope
     const employees = await EmployeeMaster.find(employeeQuery);
-    console.log(`Found ${employees.length} COS employees within user's hierarchical scope`);
+
+    console.log('🔍 [COS BULK ADD] ==================== QUERY RESULTS ====================');
+    console.log('🔍 [COS BULK ADD] Found employees:', employees.length);
+
+    // Extract unique divisions from results for verification
+    const divisions = [...new Set(employees.map(emp => emp.Division).filter(Boolean))];
+    const departments = [...new Set(employees.map(emp => emp.Department).filter(Boolean))];
+
+    console.log('🔍 [COS BULK ADD] Unique Divisions in results:', divisions);
+    console.log('🔍 [COS BULK ADD] Unique Departments in results:', departments);
+    console.log('🔍 [COS BULK ADD] ⚠️ EXPECTED DIVISION:', userDivision);
+    console.log('🔍 [COS BULK ADD] ⚠️ MATCH:', divisions.length === 1 && divisions[0] === userDivision ? 'YES ✓' : 'NO ✗');
+    console.log('🔍 [COS BULK ADD] ================================================================');
 
     if (employees.length === 0) {
       return res.status(200).json({
         message: `No COS employees found within your access scope (Region: ${region}).`,
-        accessLevel: assignment?.assignmentLevel || 'UNKNOWN',
-        hierarchicalScope: dbHierarchicalFilters
+        accessLevel: userAssignment?.assignmentLevel || 'UNKNOWN',
+        hierarchicalScope: {
+          region: userRegion,
+          department: userDepartment,
+          division: userDivision
+        }
       });
     }
     const checks = await Promise.all(
@@ -101,8 +119,8 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
         }
 
         // Additional validation: Check if Division user is processing employee from their division
-        if (assignment?.assignmentLevel === 'DIVISION' && employee.Division !== assignment.divisions?.[0]) {
-          console.warn(`WORKFLOW WARNING: Division user ${req.user.id} processing employee ${employee.EmployeeFullName} from division ${employee.Division} (user's division: ${assignment.divisions?.[0]})`);
+        if (userAssignment?.assignmentLevel === 'DIVISION' && employee.Division !== userDivision) {
+          console.warn(`WORKFLOW WARNING: Division user ${req.user.id} processing employee ${employee.EmployeeFullName} from division ${employee.Division} (user's division: ${userDivision})`);
         }
 
         const existingRecord = await COSPersonnel.findOne({
@@ -184,18 +202,26 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
         count: addedRecords.length,
         processedBy: {
           userId: req.user.id,
-          userLevel: assignment?.assignmentLevel || 'UNKNOWN',
-          accessScope: dbHierarchicalFilters,
+          userLevel: userAssignment?.assignmentLevel || 'UNKNOWN',
+          accessScope: {
+            region: userRegion,
+            department: userDepartment,
+            division: userDivision
+          },
           timestamp: new Date()
         },
-        message: `${addedRecords.length} COS personnel records added successfully by ${assignment?.assignmentLevel || 'Unknown'} level user`
+        message: `${addedRecords.length} COS personnel records added successfully by ${userAssignment?.assignmentLevel || 'Unknown'} level user`
       });
     } else {
       return res.status(200).json({
         message: "No new COS personnel to add.",
         region,
-        accessLevel: assignment?.assignmentLevel || 'UNKNOWN',
-        hierarchicalScope: dbHierarchicalFilters
+        accessLevel: userAssignment?.assignmentLevel || 'UNKNOWN',
+        hierarchicalScope: {
+          region: userRegion,
+          department: userDepartment,
+          division: userDivision
+        }
       });
     }
   } catch (error) {
