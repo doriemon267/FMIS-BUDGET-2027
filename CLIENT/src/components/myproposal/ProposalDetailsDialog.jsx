@@ -921,11 +921,12 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
               ref={workflowActionsRef}
               proposal={proposal}
               userInfo={userInfo}
-              onRefresh={(updatedProposal, forceFlag) => {
+              onRefresh={(updatedProposal, forceFlag, triggeredAction) => {
                 console.log('🔄 onRefresh callback triggered:', {
                   hasUpdatedProposal: !!updatedProposal,
                   forceFlag,
-                  status: updatedProposal?.status
+                  status: updatedProposal?.status,
+                  triggeredAction
                 });
                 
                 // IMMEDIATE UPDATE: If we have the updated proposal, show it immediately
@@ -943,6 +944,16 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                 // The forceFlag ensures cache is completely bypassed
                 // This will trigger loadData(true) which clears cache at the start
                 loadData(true);
+
+                const actionTag = String(triggeredAction || '').toLowerCase();
+                const statusTag = String(updatedProposal?.status || '').toLowerCase();
+                const shouldAutoClose = actionTag.includes('return') || statusTag.includes('return');
+                if (shouldAutoClose) {
+                  console.log('🟡 Auto-closing dialog after return action');
+                  setTimeout(() => {
+                    handleClose();
+                  }, 1200);
+                }
               }}
               onView={() => {}}
               showHeader={true}

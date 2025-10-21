@@ -12,6 +12,7 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import TimelineIcon from "@mui/icons-material/Timeline";
 import SaveIcon from "@mui/icons-material/Save";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import { useNotification } from "../../context/NotificationContext";
 
 const MODULE_SUMMARY_LABELS = {
   personnel: 'Personnel Services',
@@ -40,6 +41,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     requiresIncome: false,
     requirementMessage: ''
   });
+  const { refreshNotifications } = useNotification();
   const proposalId = proposal?._id;
   const historyMetaRef = useRef({
     fetchedAt: historyFetchedAt,
@@ -876,10 +878,10 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
               workflowLevel: response.data.proposal.workflowLevel
             });
             // Pass true to force refresh and ignore cache
-            onRefresh(response.data.proposal, true); // Pass updated proposal AND force flag for instant update
+            onRefresh(response.data.proposal, true, action); // Pass updated proposal AND force flag for instant update
           } else {
             console.log('📤 No proposal in response, calling onRefresh with force=true');
-            onRefresh(null, true); // Fallback to force re-fetch without cache
+            onRefresh(null, true, action); // Fallback to force re-fetch without cache
           }
           console.log('✅ onRefresh callback completed successfully');
         } catch (refreshErr) {
@@ -887,8 +889,12 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           // Don't throw - just log it, we already showed the success toast
           // Try a simple fallback refresh
           try {
-            onRefresh(null, true);
+            onRefresh(null, true, action);
           } catch (_) {}
+        }
+
+        if (typeof refreshNotifications === 'function') {
+          refreshNotifications();
         }
       } else {
         throw new Error(response.data.message || "Workflow action failed");

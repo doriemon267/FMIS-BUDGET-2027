@@ -742,7 +742,7 @@ function recordWorkflowEvent(proposal, {
 // Submit proposal directly to Budget Manager (bypassing Officer)
 exports.submitDirectToManager = async (req, res) => {
   try {
-  const { proposalId, comment } = req.body;
+    const { proposalId, comment } = req.body;
     const userId = req.user.id;
     const userName = req.user.FirstName + ' ' + req.user.LastName;
     const userRoles = extractUserRoles(req.user);
@@ -1130,7 +1130,7 @@ exports.submitProposal = async (req, res) => {
 // Approve proposal (Budget Officer or Budget Manager)
 exports.approveProposal = async (req, res) => {
   try {
-  const { proposalId, comment } = req.body;
+    const { proposalId, comment } = req.body;
     const userId = req.user.id;
     const userName = req.user.FirstName + ' ' + req.user.LastName;
     const userRoles = req.user.Roles || [];
@@ -1398,7 +1398,7 @@ exports.approveProposal = async (req, res) => {
 // Return proposal with comment (Budget Officer or Budget Manager)
 exports.returnProposal = async (req, res) => {
   try {
-  const { proposalId, comment } = req.body;
+    const { proposalId, comment } = req.body;
     const userId = req.user.id;
     const userName = req.user.FirstName + ' ' + req.user.LastName;
     const userRoles = req.user.Roles || [];
@@ -1417,14 +1417,29 @@ exports.returnProposal = async (req, res) => {
 
     const previousStatus = proposal.status;
     const newStatus = 'Returned';
+    const performedByRole = (userRoles.find(role => String(role).toUpperCase().startsWith('BUDGET_')) || userRoles[0] || '').toUpperCase();
     let returnField;
-    let returnToLevel;
+    let returnToLevel = 'ANALYST';
     let notificationMessage;
     let targetRole = null;
     let assignmentStep = proposal.currentStep;
     let assignmentRole = proposal.currentAssigneeRole;
     let assignmentPendingRoles = proposal.pendingWithRoles;
     const notificationPayloads = [];
+    const baseNotificationFields = {
+      entity: 'proposal',
+      recordIds: [proposal._id],
+      org: {
+        region: proposal.region,
+        department: proposal.department,
+        division: proposal.division
+      },
+      createdBy: { userId, name: userName },
+      type: 'PROPOSAL_WORKFLOW',
+      relatedEntityId: proposal._id,
+      relatedEntityType: 'Proposal',
+      relatedLink: `/AllProposals?proposalId=${proposal._id}`
+    };
 
     // Determine return path based on current status and user role
     if (userRoles.includes('BUDGET_OFFICER')) {
@@ -1442,14 +1457,28 @@ exports.returnProposal = async (req, res) => {
           recipientRole: 'BUDGET_COORDINATOR',
           title: 'Proposal Returned by Officer',
           message: notificationMessage,
-          entity: 'proposal',
-          recordIds: [proposal._id],
-          org: {
+          ...baseNotificationFields,
+          metadata: {
+            proposalId: String(proposal._id),
+            proposalTitle: proposal.title,
+            fiscalYear: proposal.fiscalYear,
+            budgetType: proposal.budgetType,
             region: proposal.region,
             department: proposal.department,
-            division: proposal.division
-          },
-          createdBy: { userId, name: userName }
+            division: proposal.division,
+            action: 'RETURN',
+            comment: sanitizedComment,
+            previousStatus,
+            newStatus,
+            returnToLevel,
+            targetRole: 'BUDGET_COORDINATOR',
+            performedBy: {
+              userId,
+              name: userName,
+              role: performedByRole
+            },
+            recipientType: 'ROLE'
+          }
         });
       } else {
         return res.status(400).json({ 
@@ -1476,14 +1505,28 @@ exports.returnProposal = async (req, res) => {
             recipientRole: 'BUDGET_COORDINATOR',
             title: 'Proposal Returned by Manager',
             message: notificationMessage,
-            entity: 'proposal',
-            recordIds: [proposal._id],
-            org: {
+            ...baseNotificationFields,
+            metadata: {
+              proposalId: String(proposal._id),
+              proposalTitle: proposal.title,
+              fiscalYear: proposal.fiscalYear,
+              budgetType: proposal.budgetType,
               region: proposal.region,
               department: proposal.department,
-              division: proposal.division
-            },
-            createdBy: { userId, name: userName }
+              division: proposal.division,
+              action: 'RETURN',
+              comment: sanitizedComment,
+              previousStatus,
+              newStatus,
+              returnToLevel,
+              targetRole: 'BUDGET_COORDINATOR',
+              performedBy: {
+                userId,
+                name: userName,
+                role: performedByRole
+              },
+              recipientType: 'ROLE'
+            }
           });
         } else {
           // Return to OFFICER
@@ -1498,14 +1541,28 @@ exports.returnProposal = async (req, res) => {
             recipientRole: 'BUDGET_OFFICER',
             title: 'Proposal Returned by Manager',
             message: notificationMessage,
-            entity: 'proposal',
-            recordIds: [proposal._id],
-            org: {
+            ...baseNotificationFields,
+            metadata: {
+              proposalId: String(proposal._id),
+              proposalTitle: proposal.title,
+              fiscalYear: proposal.fiscalYear,
+              budgetType: proposal.budgetType,
               region: proposal.region,
               department: proposal.department,
-              division: proposal.division
-            },
-            createdBy: { userId, name: userName }
+              division: proposal.division,
+              action: 'RETURN',
+              comment: sanitizedComment,
+              previousStatus,
+              newStatus,
+              returnToLevel,
+              targetRole: 'BUDGET_OFFICER',
+              performedBy: {
+                userId,
+                name: userName,
+                role: performedByRole
+              },
+              recipientType: 'ROLE'
+            }
           });
         }
       } else {
@@ -1560,14 +1617,28 @@ exports.returnProposal = async (req, res) => {
       recipientUserId: proposal.createdByUserId,
       title: 'Proposal Returned',
       message: notificationMessage,
-      entity: 'proposal',
-      recordIds: [proposal._id],
-      org: {
+      ...baseNotificationFields,
+      metadata: {
+        proposalId: String(proposal._id),
+        proposalTitle: proposal.title,
+        fiscalYear: proposal.fiscalYear,
+        budgetType: proposal.budgetType,
         region: proposal.region,
         department: proposal.department,
-        division: proposal.division
-      },
-      createdBy: { userId, name: userName }
+        division: proposal.division,
+        action: 'RETURN',
+        comment: sanitizedComment,
+        previousStatus,
+        newStatus,
+        returnToLevel,
+        targetRole,
+        performedBy: {
+          userId,
+          name: userName,
+          role: performedByRole
+        },
+        recipientType: 'CREATOR'
+      }
     });
 
     await Promise.all(notificationPayloads.map(payload => sendNotification(payload)));
@@ -2307,8 +2378,9 @@ exports.coordinatorReturnProposal = async (req, res) => {
       });
     }
 
-    const previousStatus = proposal.status;
-    const newStatus = 'Returned';
+  const previousStatus = proposal.status;
+  const newStatus = 'Returned';
+  const performedByRole = (userRoles.find(role => String(role).toUpperCase().startsWith('BUDGET_')) || userRoles[0] || '').toUpperCase();
 
     // Update proposal
     proposal.status = newStatus;
@@ -2338,6 +2410,21 @@ exports.coordinatorReturnProposal = async (req, res) => {
 
     await proposal.save();
 
+    const baseNotificationFields = {
+      entity: 'proposal',
+      recordIds: [proposal._id],
+      org: {
+        region: proposal.region,
+        department: proposal.department,
+        division: proposal.division
+      },
+      createdBy: { userId, name: userName },
+      type: 'PROPOSAL_WORKFLOW',
+      relatedEntityId: proposal._id,
+      relatedEntityType: 'Proposal',
+      relatedLink: `/AllProposals?proposalId=${proposal._id}`
+    };
+
     // Sync status to all related budget items
     await syncBudgetItemsStatus(proposal);
 
@@ -2346,14 +2433,28 @@ exports.coordinatorReturnProposal = async (req, res) => {
       recipientUserId: proposal.createdByUserId,
       title: 'Proposal Returned by Coordinator',
       message: `Your proposal "${proposal.title}" has been returned by ${userName} (Budget Coordinator) for revisions. Reason: ${comment}`,
-      entity: 'proposal',
-      recordIds: [proposal._id],
-      org: {
+      ...baseNotificationFields,
+      metadata: {
+        proposalId: String(proposal._id),
+        proposalTitle: proposal.title,
+        fiscalYear: proposal.fiscalYear,
+        budgetType: proposal.budgetType,
         region: proposal.region,
         department: proposal.department,
-        division: proposal.division
-      },
-      createdBy: { userId, name: userName }
+        division: proposal.division,
+        action: 'RETURN',
+        comment,
+        previousStatus,
+        newStatus,
+        returnToLevel: 'ANALYST',
+        targetRole: 'BUDGET_ANALYST',
+        performedBy: {
+          userId,
+          name: userName,
+          role: performedByRole
+        },
+        recipientType: 'CREATOR'
+      }
     });
 
     res.json({
@@ -3082,8 +3183,9 @@ exports.officerReturnProposal = async (req, res) => {
       });
     }
 
-    const previousStatus = proposal.status;
-    const newStatus = 'Returned';
+  const previousStatus = proposal.status;
+  const newStatus = 'Returned';
+  const performedByRole = (userRoles.find(role => String(role).toUpperCase().startsWith('BUDGET_')) || userRoles[0] || '').toUpperCase();
 
     // Update proposal
     proposal.status = newStatus;
@@ -3117,34 +3219,76 @@ exports.officerReturnProposal = async (req, res) => {
     await syncBudgetItemsStatus(proposal);
 
     const coordinatorRecipientId = proposal.approvedByCoordinator?.userId;
+    const baseNotificationFields = {
+      entity: 'proposal',
+      recordIds: [proposal._id],
+      org: {
+        region: proposal.region,
+        department: proposal.department,
+        division: proposal.division
+      },
+      createdBy: { userId, name: userName },
+      type: 'PROPOSAL_WORKFLOW',
+      relatedEntityId: proposal._id,
+      relatedEntityType: 'Proposal',
+      relatedLink: `/AllProposals?proposalId=${proposal._id}`
+    };
 
     await sendNotification({
       recipientUserId: coordinatorRecipientId || undefined,
       recipientRole: coordinatorRecipientId ? undefined : 'BUDGET_COORDINATOR',
       title: 'Proposal Returned by Officer',
       message: `Proposal "${proposal.title}" has been returned by ${userName} (Budget Officer) for further review. Reason: ${comment}`,
-      entity: 'proposal',
-      recordIds: [proposal._id],
-      org: {
+      ...baseNotificationFields,
+      metadata: {
+        proposalId: String(proposal._id),
+        proposalTitle: proposal.title,
+        fiscalYear: proposal.fiscalYear,
+        budgetType: proposal.budgetType,
         region: proposal.region,
         department: proposal.department,
-        division: proposal.division
-      },
-      createdBy: { userId, name: userName }
+        division: proposal.division,
+        action: 'RETURN',
+        comment,
+        previousStatus,
+        newStatus,
+        returnToLevel: 'COORDINATOR',
+        targetRole: 'BUDGET_COORDINATOR',
+        performedBy: {
+          userId,
+          name: userName,
+          role: performedByRole
+        },
+        recipientType: coordinatorRecipientId ? 'USER' : 'ROLE'
+      }
     });
 
     await sendNotification({
       recipientUserId: proposal.createdByUserId,
       title: 'Proposal Returned by Officer',
       message: `Your proposal "${proposal.title}" has been returned by ${userName} (Budget Officer). Please coordinate with your approver. Reason: ${comment}`,
-      entity: 'proposal',
-      recordIds: [proposal._id],
-      org: {
+      ...baseNotificationFields,
+      metadata: {
+        proposalId: String(proposal._id),
+        proposalTitle: proposal.title,
+        fiscalYear: proposal.fiscalYear,
+        budgetType: proposal.budgetType,
         region: proposal.region,
         department: proposal.department,
-        division: proposal.division
-      },
-      createdBy: { userId, name: userName }
+        division: proposal.division,
+        action: 'RETURN',
+        comment,
+        previousStatus,
+        newStatus,
+        returnToLevel: 'COORDINATOR',
+        targetRole: 'BUDGET_COORDINATOR',
+        performedBy: {
+          userId,
+          name: userName,
+          role: performedByRole
+        },
+        recipientType: 'CREATOR'
+      }
     });
 
     res.json({
@@ -3490,11 +3634,7 @@ exports.managerReturnProposal = async (req, res) => {
           ? proposal.approvedByOfficer?.userId
           : null;
 
-    await sendNotification({
-      recipientUserId: targetRecipientUserId || undefined,
-      recipientRole: targetRecipientUserId ? undefined : targetRole,
-      title: 'Proposal Returned by Manager',
-      message: `Proposal "${proposal.title}" has been returned by ${userName} (Budget Manager) for revisions. Reason: ${comment}`,
+    const baseNotificationFields = {
       entity: 'proposal',
       recordIds: [proposal._id],
       org: {
@@ -3502,7 +3642,43 @@ exports.managerReturnProposal = async (req, res) => {
         department: proposal.department,
         division: proposal.division
       },
-      createdBy: { userId, name: userName }
+      createdBy: { userId, name: userName },
+      type: 'PROPOSAL_WORKFLOW',
+      relatedEntityId: proposal._id,
+      relatedEntityType: 'Proposal',
+      relatedLink: `/AllProposals?proposalId=${proposal._id}`
+    };
+    const baseMetadata = {
+      proposalId: String(proposal._id),
+      proposalTitle: proposal.title,
+      fiscalYear: proposal.fiscalYear,
+      budgetType: proposal.budgetType,
+      region: proposal.region,
+      department: proposal.department,
+      division: proposal.division,
+      action: 'RETURN',
+      comment,
+      previousStatus,
+      newStatus,
+      returnToLevel: targetWorkflowLevel,
+      targetRole,
+      performedBy: {
+        userId,
+        name: userName,
+        role: performedByRole
+      }
+    };
+
+    await sendNotification({
+      recipientUserId: targetRecipientUserId || undefined,
+      recipientRole: targetRecipientUserId ? undefined : targetRole,
+      title: 'Proposal Returned by Manager',
+      message: `Proposal "${proposal.title}" has been returned by ${userName} (Budget Manager) for revisions. Reason: ${comment}`,
+      ...baseNotificationFields,
+      metadata: {
+        ...baseMetadata,
+        recipientType: targetRecipientUserId ? 'USER' : 'ROLE'
+      }
     });
 
     if (targetRole !== 'BUDGET_ANALYST') {
@@ -3510,14 +3686,11 @@ exports.managerReturnProposal = async (req, res) => {
         recipientUserId: proposal.createdByUserId,
         title: 'Proposal Returned by Manager',
         message: `Your proposal "${proposal.title}" has been returned by ${userName} (Budget Manager) to the ${targetRole.replace('BUDGET_', '').toLowerCase()} for revisions. Reason: ${comment}`,
-        entity: 'proposal',
-        recordIds: [proposal._id],
-        org: {
-          region: proposal.region,
-          department: proposal.department,
-          division: proposal.division
-        },
-        createdBy: { userId, name: userName }
+        ...baseNotificationFields,
+        metadata: {
+          ...baseMetadata,
+          recipientType: 'CREATOR'
+        }
       });
     }
 
@@ -3538,7 +3711,21 @@ exports.managerReturnProposal = async (req, res) => {
 };
 
 // Helper function to send notifications
-async function sendNotification({ recipientUserId, recipientRole, title, message, entity, recordIds, org, createdBy }) {
+async function sendNotification({
+  recipientUserId,
+  recipientRole,
+  title,
+  message,
+  entity,
+  recordIds,
+  org,
+  createdBy,
+  type,
+  relatedEntityId,
+  relatedEntityType,
+  relatedLink,
+  metadata
+}) {
   try {
     const recipientIds = new Set();
 
@@ -3636,6 +3823,14 @@ async function sendNotification({ recipientUserId, recipientRole, title, message
       return;
     }
 
+    const recordId = Array.isArray(recordIds) ? recordIds[0] : recordIds;
+    const derivedRelatedEntityType = relatedEntityType || (entity ? entity.toUpperCase() : undefined);
+    const derivedRelatedEntityId = relatedEntityId || (recordId ? String(recordId) : undefined);
+    const derivedRelatedLink = relatedLink || (entity === 'proposal' && derivedRelatedEntityId
+      ? `/AllProposals?proposalId=${derivedRelatedEntityId}`
+      : relatedLink);
+    const normalizedMetadata = metadata && typeof metadata === 'object' ? metadata : {};
+
     const notifications = Array.from(recipientIds).map(recipientId => ({
       recipientUserId: recipientId,
       title,
@@ -3643,7 +3838,12 @@ async function sendNotification({ recipientUserId, recipientRole, title, message
       entity,
       recordIds,
       org,
-      createdBy
+      createdBy,
+      type: type || (entity ? `${String(entity).toUpperCase()}_EVENT` : 'INFO'),
+      relatedEntityId: derivedRelatedEntityId,
+      relatedEntityType: derivedRelatedEntityType,
+      relatedLink: derivedRelatedLink,
+      metadata: normalizedMetadata
     }));
 
     await Notification.insertMany(notifications);

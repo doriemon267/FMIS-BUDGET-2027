@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useCallback } from "react";
 import ProposalCustomPage from "../components/allproposals/ProposalCustomPage";
 import TextSearchable from "../global/components/TextSearchable";
 import { ViewButton } from "../components/allproposals/ProposalActions";
@@ -14,7 +14,12 @@ import {
   Grid,
   Card,
   CardContent,
-  CircularProgress
+  CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
@@ -25,6 +30,7 @@ import { FaPesoSign } from "react-icons/fa6";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import { toast } from "react-toastify";
 import api from "../config/api";
+import { useLocation, useNavigate } from "react-router-dom";
 
 const AllProposalsPage = () => {
   const tableRef = useRef(null);
@@ -40,6 +46,12 @@ const AllProposalsPage = () => {
     loading: true
   });
   const [includeFinalized, setIncludeFinalized] = useState(false);
+  const [submitAllConfirmOpen, setSubmitAllConfirmOpen] = useState(false);
+  const [submitAllPreview, setSubmitAllPreview] = useState({ count: 0, rows: [] });
+  const [submitAllNote, setSubmitAllNote] = useState('');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [deepLinkProposalId, setDeepLinkProposalId] = useState(null);
 
   // Handle table row selection changes
   const handleRowSelectionChange = (selectedIds) => {
@@ -53,6 +65,17 @@ const AllProposalsPage = () => {
     fetchStats(); // Refresh stats when data is refreshed
   };
 
+  const clearDeepLinkParam = useCallback(() => {
+    const params = new URLSearchParams(location.search);
+    if (!params.has('proposalId')) return;
+
+    params.delete('proposalId');
+    navigate({
+      pathname: location.pathname,
+      search: params.toString() ? `?${params.toString()}` : "",
+    }, { replace: true });
+  }, [location.pathname, location.search, navigate]);
+
   // Helper: map COB to entity key used by submission workflow
   const mapCobToEntity = (cob) => {
     if (!cob) return 'personnel';
@@ -64,10 +87,71 @@ const AllProposalsPage = () => {
     return 'personnel';
   };
 
-  // Submit all Drafts for the current scope per expenditure row
-  const handleSubmitAllDrafts = async () => {
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const paramId = params.get('proposalId');
+    if (paramId) {
+      setDeepLinkProposalId(paramId);
+    }
+  }, [location.search]);
+
+  useEffect(() => {
+    if (!deepLinkProposalId) return;
+
+    let cancelled = false;
+
+    const attemptOpen = async (attempt = 0) => {
+      if (cancelled) return;
+
+      try {
+        const rows = (tableRef.current && typeof tableRef.current.getRows === 'function')
+          ? await tableRef.current.getRows()
+          : [];
+        const matchedRow = rows.find((row) => String(row._id) === String(deepLinkProposalId));
+
+        if (matchedRow) {
+          window.dispatchEvent(new CustomEvent('open-proposal-view', { detail: { row: matchedRow } }));
+          clearDeepLinkParam();
+          setDeepLinkProposalId(null);
+          return;
+        }
+      } catch (error) {
+        console.warn('Failed to resolve deep-linked proposal', error);
+      }
+
+      if (cancelled) return;
+
+      if (attempt < 5) {
+        setTimeout(() => {
+          attemptOpen(attempt + 1);
+        }, 600);
+      } else {
+        clearDeepLinkParam();
+        setDeepLinkProposalId(null);
+      }
+    };
+
+    const prepareAndOpen = async () => {
+      if (tableRef.current && typeof tableRef.current.refetch === 'function') {
+        try {
+          await tableRef.current.refetch();
+        } catch (error) {
+          console.warn('Failed to refresh proposals table for deep link', error);
+        }
+      }
+      attemptOpen();
+    };
+
+    prepareAndOpen();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [deepLinkProposalId, clearDeepLinkParam]);
+
+  // Open confirmation dialog for bulk submit
+  const handleOpenSubmitAllDialog = async () => {
     try {
-      setSubmittingAll(true);
       // Ask table for current rows (ProposalCustomPage should expose getRows() via ref, else fallback to fetch)
       const rows = (tableRef.current && typeof tableRef.current.getRows === 'function')
         ? await tableRef.current.getRows()
@@ -78,6 +162,27 @@ const AllProposalsPage = () => {
         return;
       }
 
+      const draftRows = rows.filter(row => row.status === 'Draft');
+      if (draftRows.length === 0) {
+        toast.error('No draft proposals found to submit.');
+        return;
+      }
+
+      setSubmitAllPreview({ count: draftRows.length, rows: draftRows });
+      setSubmitAllConfirmOpen(true);
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to prepare submission preview.');
+    }
+  };
+
+  // Submit all Drafts for the current scope per expenditure row
+  const handleSubmitAllDrafts = async () => {
+    try {
+      setSubmittingAll(true);
+      setSubmitAllConfirmOpen(false);
+
+      const rows = submitAllPreview.rows;
       const scope = currentUser?.hierarchicalAccess?.scope;
       const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
 
@@ -121,7 +226,7 @@ const AllProposalsPage = () => {
         await api.post(endpoint, {
           ids,
           entity,
-          submissionNote: `Submitted all drafts from ${scope} level on ${new Date().toLocaleString()}`
+          submissionNote: submitAllNote || `Submitted all drafts from ${scope} level on ${new Date().toLocaleString()}`
         });
         toast.success(`${successMessage}: ${row.cobExpenditures}`);
       }
@@ -129,6 +234,8 @@ const AllProposalsPage = () => {
       // Refresh table and stats
       if (tableRef.current?.refetch) await tableRef.current.refetch();
       await fetchStats();
+      setSubmitAllNote('');
+      setSubmitAllPreview({ count: 0, rows: [] });
     } catch (e) {
       console.error(e);
       toast.error(e.response?.data?.message || e.message || 'Failed to submit all drafts');
@@ -525,6 +632,37 @@ const AllProposalsPage = () => {
         </Box>
       )}
 
+      {/* Bulk Submit Drafts Section */}
+      {(() => {
+        const scope = currentUser?.hierarchicalAccess?.scope;
+        const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
+        const canBulkSubmit = (scope === 'RESPONSIBILITY_CENTER' && roles.includes('responsibilityCenterCreator')) ||
+                              (scope === 'OFFICE' && roles.includes('officeConsolidator'));
+        return canBulkSubmit ? (
+          <Box sx={{ mb: 3, mx: 3 }}>
+            <Card sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
+                📤 Bulk Submit Drafts
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={handleOpenSubmitAllDialog}
+                  disabled={submittingAll}
+                  startIcon={submittingAll ? <CircularProgress size={20} /> : null}
+                >
+                  {submittingAll ? 'Submitting...' : 'Submit All Drafts'}
+                </Button>
+                <Typography variant="body2" color="textSecondary">
+                  Submit all draft proposals shown in the table to the next workflow level.
+                </Typography>
+              </Box>
+            </Card>
+          </Box>
+        ) : null;
+      })()}
+
       {/* Include Finalized Toggle */}
       <Box sx={{ mb: 3, mx: 3 }}>
         <Card sx={{ p: 2 }}>
@@ -636,6 +774,50 @@ const AllProposalsPage = () => {
           />
         );
       })()}
+      
+      {/* Bulk Submit Confirmation Dialog */}
+      <Dialog 
+        open={submitAllConfirmOpen} 
+        onClose={() => !submittingAll && setSubmitAllConfirmOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Confirm Bulk Submit Drafts</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            This will submit all draft proposals shown in the table to the next workflow level.
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+            Number of draft proposals to submit: <strong>{submitAllPreview.count}</strong>
+          </Typography>
+          <TextField
+            fullWidth
+            multiline
+            minRows={3}
+            label="Submission Note (Optional)"
+            value={submitAllNote}
+            onChange={(e) => setSubmitAllNote(e.target.value)}
+            placeholder="Add any notes for this submission..."
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => setSubmitAllConfirmOpen(false)} 
+            disabled={submittingAll}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSubmitAllDrafts} 
+            disabled={submittingAll || submitAllPreview.count === 0}
+            variant="contained" 
+            color="primary"
+            startIcon={submittingAll ? <CircularProgress size={20} /> : null}
+          >
+            {submittingAll ? 'Submitting...' : 'Submit All'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

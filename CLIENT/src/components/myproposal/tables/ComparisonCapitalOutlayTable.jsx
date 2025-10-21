@@ -22,7 +22,46 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import InfoIcon from '@mui/icons-material/Info';
 
-const getTitleDisplay = (item) => item?.categoryName || item?.category?.categoryName || item?.category?.name || 'Untitled Title';
+const isObjectIdLike = (val) => typeof val === 'string' && /^[a-f0-9]{24}$/i.test(val.trim());
+
+const getTitleDisplay = (item) => {
+  if (!item) return 'Untitled Title';
+
+  if (item.category && typeof item.category === 'object') {
+    const populatedLabel = item.category.categoryName || item.category.name || item.category.title;
+    if (populatedLabel && String(populatedLabel).trim()) {
+      return String(populatedLabel).trim();
+    }
+  }
+
+  const candidateFields = [
+    item.categoryName,
+    item.categoryLabel,
+    item.categoryTitle,
+    item.categoryText,
+    item.category_display_name,
+    item.capitalOutlayTitle,
+    item.capitalOutlayCategory,
+    item.title,
+    item.Title
+  ];
+
+  const resolved = candidateFields.find((value) => value && String(value).trim());
+  if (resolved) {
+    return String(resolved).trim();
+  }
+
+  if (item.category && typeof item.category === 'string' && !isObjectIdLike(item.category) && item.category.trim()) {
+    return item.category.trim();
+  }
+
+  const fallback = item.accountingTitle || item.particulars || item.sublineItem || item.uacsCode;
+  if (fallback && String(fallback).trim()) {
+    return String(fallback).trim();
+  }
+
+  return 'Untitled Title';
+};
 const normalizeTitle = (title) => (title ? title.trim().toLowerCase() : 'untitled');
 
 const formatCurrency = (amount) => new Intl.NumberFormat('en-PH', {

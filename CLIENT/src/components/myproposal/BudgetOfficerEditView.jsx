@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Tabs,
@@ -39,6 +39,30 @@ const BudgetOfficerEditView = ({
   const [comments, setComments] = useState('');
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [submitTarget, setSubmitTarget] = useState('BUDGET_OFFICER');
+  const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
+
+  const submitConfirmationCopy = useMemo(() => {
+    switch (variant) {
+      case 'analyst':
+        return {
+          title: 'Submit to Budget Coordinator',
+          message: 'This will send your draft proposal to the Budget Coordinator for review. You will not be able to edit again until it is returned.',
+          confirmLabel: 'Submit to Coordinator'
+        };
+      case 'officer':
+        return {
+          title: 'Submit Reviewed Proposal',
+          message: 'This will forward your reviewed proposal for approval. Ensure all edits are finalized before proceeding.',
+          confirmLabel: 'Submit Proposal'
+        };
+      default:
+        return {
+          title: 'Confirm Submission',
+          message: 'Send your updates to the next workflow reviewer?',
+          confirmLabel: 'Submit'
+        };
+    }
+  }, [variant]);
   
   // State for each table
   const [incomeData, setIncomeData] = useState([]);
@@ -220,8 +244,8 @@ const BudgetOfficerEditView = ({
     if (variant === 'coordinator') {
       setShowSubmitDialog(true);
     } else {
-      // For other roles, submit directly
-      handleSubmit();
+      // For other roles, ask for confirmation before submitting
+      setConfirmSubmitOpen(true);
     }
   };
 
@@ -276,6 +300,13 @@ const BudgetOfficerEditView = ({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleConfirmSubmitClose = () => setConfirmSubmitOpen(false);
+
+  const handleConfirmSubmitProceed = () => {
+    setConfirmSubmitOpen(false);
+    handleSubmit();
   };
 
 
@@ -447,6 +478,27 @@ const BudgetOfficerEditView = ({
           </Button>
         )}
       </Box>
+
+      {/* Generic submit confirmation (analyst/officer) */}
+      <Dialog open={confirmSubmitOpen} onClose={handleConfirmSubmitClose} maxWidth="xs" fullWidth>
+        <DialogTitle>{submitConfirmationCopy.title}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            {submitConfirmationCopy.message}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleConfirmSubmitClose} disabled={submitting}>Cancel</Button>
+          <Button
+            onClick={handleConfirmSubmitProceed}
+            variant="contained"
+            color="primary"
+            disabled={submitting}
+          >
+            {submitConfirmationCopy.confirmLabel}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Budget Coordinator Submit Target Dialog */}
       {variant === 'coordinator' && (
