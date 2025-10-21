@@ -156,7 +156,8 @@ const PSCOSCustomPageTable = ({
         statusOfAppointment,
         fiscalYear: currentFiscalYear,
         budgetType: currentBudgetType,
-        region: currentUser?.organizationalAssignment?.regions?.[0]?.regionName || 'CENTRAL OFFICE'
+        // Remove hardcoded region - controller now filters based on user's actual assignment
+        // region: currentUser?.organizationalAssignment?.regions?.[0]?.regionName || 'CENTRAL OFFICE'
       });
 
       // Check for successful response - server returns different structures

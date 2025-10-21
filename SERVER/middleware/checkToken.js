@@ -77,15 +77,7 @@ module.exports = async (req, res, next) => {
         userRoles = [userRoles.replace(/\s+/g, '_').toUpperCase()];
       }
       
-      // 🔍 DEBUG: Log role normalization
-      console.log('🔍 Role Normalization:', {
-        userId,
-        originalRoles: devRoles || payload.roles || payload.role,
-        normalizedRoles: userRoles,
-        source: devRoles ? 'devHeaders (X-Dev-Roles)' : 'JWT payload'
-      });
-      
-      // Reject if no roles found - no fallback roles allowed
+      // Role normalization completed silently
       if (!userRoles || userRoles.length === 0) {
         console.error('❌ No user roles found in JWT or headers');
         return res.status(401).json({ error: "Authentication required: No user roles found" });
