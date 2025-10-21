@@ -52,6 +52,14 @@ module.exports = async function enforceOrgAccess(req, res, next) {
       return res.status(403).json({ message: 'Bulk delete is restricted to administrators.' });
     }
 
+    // Special-case: Allow COS Personnel bulk add - it internally validates organizational access
+    // based on user's hierarchical assignment, not request body parameters
+    if (req.method === 'POST' && (req.originalUrl || '').includes('/cos-personnel/bulk-add')) {
+      // COS personnel bulk add controller handles its own organizational filtering
+      // based on user's assignment - allow the request to proceed
+      return next();
+    }
+
     // Special-case: Allow saving Capital Outlay breakdown details by validating
     // the parent CapitalOutlay record's organizational ownership instead of
     // requiring region/department/division in the request body.
