@@ -772,7 +772,7 @@ const EmployeeList = () => {
                       </Typography>
                       <Typography variant="body2" sx={{ opacity: 0.6, mt: 0.5 }}>
                         {userAccessLevel === 'DIVISION' 
-                          ? `You can view and manage employees in ${userDivision || 'your division'}. You can process COS personnel within your division scope only.`
+                          ? `You can view and manage employees in ${userDivision || 'your division'}. You can process personnel within your division scope only.`
                           : userAccessLevel === 'DEPARTMENT'
                           ? `You can view all employees in ${userDepartment || 'your department'} and oversee all divisions.`
                           : `You have full access to view and manage employees within ${regionName || 'your region'}.`

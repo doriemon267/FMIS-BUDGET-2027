@@ -384,14 +384,32 @@ exports.bulkAddPersonnelServices = async (req, res) => {
   try {
     const { statusOfAppointment, RATA, region } = req.body;
 
-    // Get hierarchical filters from middleware
+    // ⚠️ CRITICAL: Get user's assignment DIRECTLY to ensure proper filtering
+    const userId = req.user.id;
+    const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+    const userAssignment = await HierarchicalUserAssignment.getUserPermissions(userId);
+    
+    if (!userAssignment || userAssignment.assignmentLevel === 'NONE') {
+      return res.status(403).json({
+        message: 'No organizational assignment found. Cannot perform bulk add.',
+        code: 'NO_ORG_ASSIGNMENT'
+      });
+    }
+
+    // Get hierarchical filters from middleware (as backup)
     const hierarchicalFilters = req.hierarchicalFilters || {};
     // Get submission workflow data for correct org attribution
     const workflowData = req.submissionWorkflowData || {};
-    const userLevel = workflowData.userLevel;
-    const ownerRegion = workflowData.region ?? req.body.region;
-    const ownerDepartment = workflowData.department ?? req.body.department;
-    const ownerDivision = userLevel === 'DEPARTMENT' ? null : (workflowData.division ?? req.body.division ?? null);
+    const userLevel = userAssignment.assignmentLevel || workflowData.userLevel;
+    
+    // Get the user's ACTUAL assigned organizational units
+    const userRegion = userAssignment.regions?.[0]?.regionName || workflowData.region || req.body.region;
+    const userDepartment = userAssignment.departments?.[0]?.departmentName || workflowData.department || req.body.department;
+    const userDivision = userAssignment.divisions?.[0] || workflowData.division || req.body.division;
+    
+    const ownerRegion = userRegion;
+    const ownerDepartment = userDepartment;
+    const ownerDivision = userLevel === 'DEPARTMENT' ? null : userDivision;
 
     // Map hierarchical filters to database field names
     const mapFiltersToDb = (filters) => {
@@ -401,6 +419,7 @@ exports.bulkAddPersonnelServices = async (req, res) => {
       if (filters.$and && Array.isArray(filters.$and)) {
         mapped.$and = filters.$and.map(condition => {
           const conditionMapped = {};
+          // Map lowercase to database field names (uppercase first letter)
           if (condition.region) conditionMapped.Region = condition.region;
           if (condition.department) conditionMapped.Department = condition.department;
           if (condition.division) conditionMapped.Division = condition.division;
@@ -410,13 +429,20 @@ exports.bulkAddPersonnelServices = async (req, res) => {
       }
 
       // Handle simple key-value filters
+      // Map lowercase to database field names (uppercase first letter)
       if (filters.region) mapped.Region = filters.region;
       if (filters.department) mapped.Department = filters.department;
       if (filters.division) mapped.Division = filters.division;
       return mapped;
     };
 
-    const dbHierarchicalFilters = mapFiltersToDb(hierarchicalFilters);
+    console.log('🔍 [BULK ADD] ==================== USER ASSIGNMENT ====================');
+    console.log('🔍 [BULK ADD] User ID:', userId);
+    console.log('🔍 [BULK ADD] Assignment Level:', userAssignment.assignmentLevel);
+    console.log('🔍 [BULK ADD] Assigned Region:', userRegion);
+    console.log('🔍 [BULK ADD] Assigned Department:', userDepartment);
+    console.log('🔍 [BULK ADD] Assigned Division:', userDivision);
+    console.log('🔍 [BULK ADD] =================================================================');
 
     if (!statusOfAppointment || !RATA) {
       return res
@@ -438,44 +464,78 @@ exports.bulkAddPersonnelServices = async (req, res) => {
     const fiscalYear = activeSettings.fiscalYear;
     const budgetType = activeSettings.budgetType;
 
-    // Build query for employees with fiscal year and hierarchical filters
+    // ⚠️ CRITICAL: Build STRICT query using DIRECT user assignment
+    // This is the PRIMARY fix - no more middleware filter merging
     let employeeQuery = {
       StatusOfAppointment: statusOfAppointment,
-      employeeStatus: "Active", // Only get active employees
-      fiscalYear: fiscalYear, // Only get employees for the current fiscal year
+      employeeStatus: "Active",
+      fiscalYear: fiscalYear
     };
 
-    // Apply hierarchical filters to employee query
-    if (Object.keys(dbHierarchicalFilters).length > 0) {
-      if (dbHierarchicalFilters.$and) {
-        employeeQuery = {
-          $and: [
-            employeeQuery,
-            ...dbHierarchicalFilters.$and
-          ]
-        };
-      } else {
-        employeeQuery = {
-          ...employeeQuery,
-          ...dbHierarchicalFilters
-        };
+    // Apply hierarchical filtering based on user's DIRECT assignment level
+    if (userRegion) {
+      employeeQuery.Region = userRegion;
+    }
+
+    if (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'DIVISION') {
+      if (userDepartment) {
+        employeeQuery.Department = userDepartment;
       }
     }
 
-    // Add region filter if provided
-    if (region) {
-      if (employeeQuery.$and) {
-        employeeQuery.$and.push({ Region: region });
-      } else {
-        employeeQuery.Region = region;
+    if (userAssignment.assignmentLevel === 'DIVISION') {
+      if (userDivision) {
+        employeeQuery.Division = userDivision;
+        console.log('🔍 [BULK ADD] ⚠️⚠️⚠️ DIVISION LEVEL - STRICT FILTER:', userDivision);
       }
     }
 
-  // Fetch only Active employees within user's hierarchical scope
+    console.log('🔍 [BULK ADD] ==================== FINAL QUERY ====================');
+    console.log('🔍 [BULK ADD] Employee Query:', JSON.stringify(employeeQuery, null, 2));
+    console.log('🔍 [BULK ADD] Expected Division:', userDivision || 'N/A');
+    console.log('🔍 [BULK ADD] ================================================================');
+
+    // Fetch only Active employees within user's hierarchical scope
+    // This will now respect the Division (Responsibility Center) or Department (Office) filters
     const employees = await EmployeeMaster.find(employeeQuery);
+    
+    console.log('🔍 [BULK ADD] ==================== QUERY RESULTS ====================');
+    console.log('🔍 [BULK ADD] Found employees:', employees.length);
+    
+    // Extract unique divisions from results for verification
+    const divisions = [...new Set(employees.map(emp => emp.Division).filter(Boolean))];
+    const departments = [...new Set(employees.map(emp => emp.Department).filter(Boolean))];
+    
+    console.log('🔍 [BULK ADD] Unique Divisions in results:', divisions);
+    console.log('🔍 [BULK ADD] Unique Departments in results:', departments);
+    console.log('🔍 [BULK ADD] ⚠️ EXPECTED DIVISION:', userDivision);
+    console.log('🔍 [BULK ADD] ⚠️ MATCH:', divisions.length === 1 && divisions[0] === userDivision ? 'YES ✓' : 'NO ✗');
+    console.log('🔍 [BULK ADD] ================================================================');
+    
+    // Log how many employees were found
+    console.log(`🔍 [BULK ADD] Found ${employees.length} employee(s) matching criteria`);
+    
+    // Log sample of divisions found (for debugging)
+    if (employees.length > 0) {
+      const divisions = [...new Set(employees.map(e => e.Division))];
+      console.log(`🔍 [BULK ADD] Unique Divisions found:`, divisions);
+      const departments = [...new Set(employees.map(e => e.Department))];
+      console.log(`🔍 [BULK ADD] Unique Departments found:`, departments);
+    }
+    
     // Check if no employees found
     if (employees.length === 0) {
-      return res.status(200).json([]);
+      const scopeInfo = userLevel === 'DIVISION' 
+        ? `Division/Responsibility Center: ${ownerDivision}` 
+        : userLevel === 'DEPARTMENT' 
+        ? `Department/Office: ${ownerDepartment}` 
+        : `Region: ${ownerRegion}`;
+      
+      return res.status(200).json({
+        added: [],
+        duplicates: [],
+        message: `No active ${statusOfAppointment} employees found in your assigned scope (${scopeInfo}) for fiscal year ${fiscalYear}. Please verify that employees are properly assigned to your Office/Responsibility Center in the Employee Master List.`
+      });
     }
     const personnelServicesData = [];
     const duplicates = [];
@@ -566,12 +626,14 @@ exports.bulkAddPersonnelServices = async (req, res) => {
         employeeNumber: employee.EmployeeID || "",
         DateOfAppointment: employee.DateOfAppointment || null,
         DateOfBirth: employee.DateOfBirth || null,
-        department: ownerDepartment || employee.Department || "",
-        division: ownerDivision || "",
+        // CRITICAL: Use the employee's ORIGINAL Department/Division/Section from db.employees
+        // DO NOT replace with user's assignment - that's only for filtering!
+        department: employee.Department || "",
+        division: employee.Division || "",
         section: employee.Section || "",
         unit: employee.Unit || "",
-        // Use region/department/division from submission workflow data
-        region: ownerRegion || employee.Region || "",
+        // Use the employee's ORIGINAL Region from db.employees
+        region: employee.Region || "",
         statusOfAppointment: statusAppointment,
         employeeStatus: employee.employeeStatus,
         monthlySalary: monthlySalary,
@@ -604,10 +666,14 @@ exports.bulkAddPersonnelServices = async (req, res) => {
         terminalLeave: 0,
         courtAppearance: 0,
         Total: 0,
-        // Submission workflow tagging
+        // Submission workflow tagging - tracks WHO processed this record, NOT the employee's org assignment
         originalLevel: workflowData.originalLevel || (userLevel === 'DIVISION' ? 'DIVISION' : userLevel === 'DEPARTMENT' ? 'DEPARTMENT' : userLevel === 'REGION' ? 'REGION' : null),
         workflowLevel: workflowData.workflowLevel || (userLevel === 'DIVISION' ? 'DIVISION' : userLevel === 'DEPARTMENT' ? 'DEPARTMENT' : userLevel === 'REGION' ? 'REGION' : null),
-        status: req.body.status || 'Draft'
+        status: req.body.status || 'Draft',
+        // Track the user's assignment for workflow purposes (NOT the employee's org)
+        processorRegion: ownerRegion || null,
+        processorDepartment: ownerDepartment || null,
+        processorDivision: ownerDivision || null
       };
       if (statusAppointment === "COS") {
         personnelService = {

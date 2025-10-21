@@ -559,6 +559,82 @@ const handleSubmissionWorkflowWrite = async (req, res, next, assignment, operati
     applySubmissionWorkflowConsolidation(req, assignment);
   }
 
+  // ⚠️ CRITICAL FIX: Set hierarchical filters for write operations too
+  // This ensures bulk operations only operate on user's assigned organizational units
+  let hierarchicalFilters = {};
+  
+  if (isNewStructure) {
+    // NEW STRUCTURE
+    const officeName = assignment.offices?.[0] || null;
+    const responsibilityCenterName = assignment.responsibilityCenters?.[0] || null;
+    
+    switch (assignment.accessScope) {
+      case 'RESPONSIBILITY_CENTER':
+        // Responsibility Center users can only access their specific responsibility center
+        hierarchicalFilters = {
+          $and: [
+            { region: officeName },
+            { department: officeName },
+            { division: responsibilityCenterName }
+          ]
+        };
+        break;
+      case 'OFFICE':
+        // Office users can access all responsibility centers within their office
+        hierarchicalFilters = {
+          $and: [
+            { region: officeName },
+            { department: officeName }
+          ]
+        };
+        break;
+      case 'FULL':
+        // Full access - no filters
+        hierarchicalFilters = {};
+        break;
+    }
+  } else {
+    // OLD STRUCTURE
+    const regionName = assignment.regionId?.Region || assignment.regions?.[0]?.regionName;
+    const departmentName = assignment.departmentId?.Department || assignment.departments?.[0]?.departmentName;
+    const divisionName = assignment.divisions?.[0] || null;
+    
+    switch (assignment.assignmentLevel) {
+      case 'DIVISION':
+        // Division users can only access their specific division
+        hierarchicalFilters = {
+          $and: [
+            { region: regionName },
+            { department: departmentName },
+            { division: divisionName }
+          ]
+        };
+        break;
+      case 'DEPARTMENT':
+        // Department users can access all divisions within their department
+        hierarchicalFilters = {
+          $and: [
+            { region: regionName },
+            { department: departmentName }
+          ]
+        };
+        break;
+      case 'REGION':
+        // Region users can access all departments and divisions within their region
+        hierarchicalFilters = {
+          region: regionName
+        };
+        break;
+      case 'FULL':
+        // Full access - no filters
+        hierarchicalFilters = {};
+        break;
+    }
+  }
+  
+  // Set the hierarchical filters on the request object for controllers to use
+  req.hierarchicalFilters = hierarchicalFilters;
+
   // Provide submission workflow data to controllers that expect it
   try {
     const regionName = isNewStructure ?
