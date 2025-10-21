@@ -1,17 +1,5 @@
 require("dotenv").config();
-// Silence server console output by default. Opt-in logs via ALLOW_SERVER_LOGS=true
-(() => {
-  try {
-    const allow = process.env.ALLOW_SERVER_LOGS === 'true';
-    if (allow) return;
-    const noop = () => {};
-    console.log = noop;
-    console.debug = noop;
-    console.info = noop;
-    console.warn = noop;
-    console.error = noop;
-  } catch (_) {}
-})();
+// Removed console silencing - we want essential startup messages to show
 const express = require("express");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
