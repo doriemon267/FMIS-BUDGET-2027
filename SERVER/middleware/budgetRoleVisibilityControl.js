@@ -176,27 +176,32 @@ const budgetRoleVisibilityControl = () => {
 
         case 'REVIEWER':
           // REVIEWER can see:
-          // 1. Their own proposals (created by them) - any status including drafts
-          // 2. Proposals in their review workflow queue
-          // 3. Proposals in specific statuses for review
+          // 1. Proposals explicitly pending with REVIEWER (currentAssigneeRole or pendingWithRoles)
+          // 2. Proposals in submitted/review statuses relevant to REVIEWER
+          //    IMPORTANT: Drafts should NOT appear to REVIEWER unless explicitly assigned (which should not happen)
           visibilityFilter = {
-            $or: [
-              // Own proposals created by this user
-              { createdByUserId: userId },
-              // Proposals assigned/processed by this user
-              { processBy: userId },
-              // Proposals in submitted/review statuses
+            $and: [
+              // Exclude Drafts from reviewer view
+              { status: { $ne: 'Draft' } },
               {
-                status: {
-                  $in: [
-                    'Division Submitted',
-                    'DIVISION SUBMITTED',
-                    'Department Verified',
-                    'DEPARTMENT VERIFIED',
-                    'Department Submitted',
-                    'DEPARTMENT SUBMITTED'
-                  ]
-                }
+                $or: [
+                  // Explicit assignment to REVIEWER in new workflow fields
+                  { currentAssigneeRole: 'REVIEWER' },
+                  { pendingWithRoles: 'REVIEWER' },
+                  // Backward-compatible: proposals in statuses typically awaiting reviewer
+                  {
+                    status: {
+                      $in: [
+                        'Division Submitted',
+                        'DIVISION SUBMITTED',
+                        'Under Review by Reviewer',
+                        'UNDER REVIEW BY COORDINATOR', // legacy label
+                        'Department Submitted',
+                        'DEPARTMENT SUBMITTED'
+                      ]
+                    }
+                  }
+                ]
               }
             ]
           };
