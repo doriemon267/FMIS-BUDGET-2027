@@ -330,7 +330,8 @@ const BudgetOfficerEditView = ({
 
   return (
     <Box>
-      <Alert severity={variant === 'manager' ? 'warning' : 'info'} sx={{ mb: 2 }}>
+      {/* TEMPORARILY HIDDEN - Edit Mode Alert */}
+      {false && <Alert severity={variant === 'manager' ? 'warning' : 'info'} sx={{ mb: 2 }}>
         <Typography variant="body2">
           <strong>
             {variant === 'manager' ? 'Budget Manager Edit Mode' : 
@@ -343,7 +344,7 @@ const BudgetOfficerEditView = ({
            variant === 'analyst' ? ' Make necessary updates and submit for coordinator review.' :
            ' Changes will be tracked and sent to Budget Analysts for review after approval.'}
         </Typography>
-      </Alert>
+      </Alert>}
 
       {/* Module Summary Box */}
       <Alert 

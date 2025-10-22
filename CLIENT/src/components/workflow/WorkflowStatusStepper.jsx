@@ -20,9 +20,9 @@ import GavelIcon from '@mui/icons-material/Gavel';
  * Shows the current status and next steps in the budget proposal workflow
  * in a space-efficient horizontal layout
  * 
- * NEW WORKFLOW (September 2025):
- * - Division Level: 6-step workflow (PREPARER → REVIEWER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_BUDGET_APPROVER)
- * - Office Level: 5-step workflow (PREPARER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_BUDGET_APPROVER)
+ * NEW 6-STEP WORKFLOW (September 2025):
+ * - Division Level: PREPARER → REVIEWER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_BUDGET_APPROVER
+ * - Office Level: PREPARER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_BUDGET_APPROVER (skips REVIEWER)
  */
 const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
   if (!proposal) return null;
@@ -32,44 +32,44 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
   // NEW 6-STEP WORKFLOW (Division/Responsibility Center Level)
   const divisionSteps = [
     {
-      label: 'Preparer',
+      label: 'PREPARER',
       role: 'Creates',
       shortLabel: 'Preparer',
       statuses: ['Draft'],
       icon: <PersonIcon />
     },
     {
-      label: 'Reviewer',
+      label: 'REVIEWER',
       role: 'Reviews',
       shortLabel: 'Reviewer',
-      statuses: ['Submitted for Review'],
+      statuses: ['Division Submitted'],
       icon: <GroupIcon />
     },
     {
-      label: 'Approver',
+      label: 'APPROVER',
       role: 'Approves',
       shortLabel: 'Approver',
-      statuses: ['Submitted for Approval'],
+      statuses: ['Forwarded to Officer'],
       icon: <VerifiedUserIcon />
     },
     {
-      label: 'Budget Analyst',
+      label: 'BUDGET_ANALYST',
       role: 'Analyzes',
       shortLabel: 'Analyst',
-      statuses: ['At Analyst'],
+      statuses: ['Officer Approved'],
       icon: <PersonIcon />
     },
     {
-      label: 'Budget Officer',
+      label: 'BUDGET_OFFICER',
       role: 'Approves',
       shortLabel: 'Officer',
-      statuses: ['At Officer'],
+      statuses: ['Forwarded to Manager'],
       icon: <VerifiedUserIcon />
     },
     {
-      label: 'Overall Approver',
+      label: 'OVERALL_BUDGET_APPROVER',
       role: 'Finalizes',
-      shortLabel: 'Approver',
+      shortLabel: 'Final Approver',
       statuses: ['Finalized'],
       icon: <GavelIcon />
     }
@@ -78,37 +78,37 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
   // NEW 5-STEP WORKFLOW (Office Level - skips Reviewer)
   const officeSteps = [
     {
-      label: 'Preparer',
+      label: 'PREPARER',
       role: 'Creates',
       shortLabel: 'Preparer',
       statuses: ['Draft'],
       icon: <PersonIcon />
     },
     {
-      label: 'Approver',
+      label: 'APPROVER',
       role: 'Approves',
       shortLabel: 'Approver',
-      statuses: ['Submitted for Approval'],
+      statuses: ['Forwarded to Officer'],
       icon: <VerifiedUserIcon />
     },
     {
-      label: 'Budget Analyst',
+      label: 'BUDGET_ANALYST',
       role: 'Analyzes',
       shortLabel: 'Analyst',
-      statuses: ['At Analyst'],
+      statuses: ['Officer Approved'],
       icon: <PersonIcon />
     },
     {
-      label: 'Budget Officer',
+      label: 'BUDGET_OFFICER',
       role: 'Approves',
       shortLabel: 'Officer',
-      statuses: ['At Officer'],
+      statuses: ['Forwarded to Manager'],
       icon: <VerifiedUserIcon />
     },
     {
-      label: 'Overall Approver',
+      label: 'OVERALL_BUDGET_APPROVER',
       role: 'Finalizes',
-      shortLabel: 'Approver',
+      shortLabel: 'Final Approver',
       statuses: ['Finalized'],
       icon: <GavelIcon />
     }
@@ -151,10 +151,10 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
     switch (status) {
       case 'Draft':
         return 'default';
-      case 'Submitted for Review':
-      case 'Submitted for Approval':
-      case 'At Analyst':
-      case 'At Officer':
+      case 'Division Submitted':
+      case 'Forwarded to Officer':
+      case 'Officer Approved':
+      case 'Forwarded to Manager':
         return 'info';
       case 'Finalized':
         return 'success';

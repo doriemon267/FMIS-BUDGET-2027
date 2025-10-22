@@ -656,8 +656,8 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
             {/* Detailed Records Section */}
             <Typography variant="h6" gutterBottom>Detailed Records</Typography>
 
-            {/* INFO: Show user's current role and workflow status */}
-            {(isBudgetAnalyst || isBudgetCoordinator || isBudgetOfficer || isManagerLevel) && (
+            {/* TEMPORARILY HIDDEN - INFO: Show user's current role and workflow status */}
+            {false && (isBudgetAnalyst || isBudgetCoordinator || isBudgetOfficer || isManagerLevel) && (
               <Alert 
                 severity={isBudgetAnalyst && isBudgetCoordinator ? "warning" : "info"} 
                 sx={{ mb: 2 }}
@@ -665,15 +665,15 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
               >
                 <Typography variant="body2">
                   <strong>Your Role:</strong>{' '}
-                  {isBudgetAnalyst && 'Budget Analyst (Creator)'}
-                  {isBudgetCoordinator && !isBudgetAnalyst && 'Budget Coordinator (Approver)'}
-                  {isBudgetOfficer && !isBudgetAnalyst && !isBudgetCoordinator && 'Budget Officer (Verifier)'}
-                  {isManagerLevel && !isBudgetAnalyst && !isBudgetCoordinator && !isBudgetOfficer && 'Budget Manager (Final Approver)'}
+                  {isBudgetAnalyst && 'PREPARER (Creator)'}
+                  {isBudgetCoordinator && !isBudgetAnalyst && 'APPROVER (Division)'}
+                  {isBudgetOfficer && !isBudgetAnalyst && !isBudgetCoordinator && 'BUDGET_OFFICER (Verifier)'}
+                  {isManagerLevel && !isBudgetAnalyst && !isBudgetCoordinator && !isBudgetOfficer && 'OVERALL_BUDGET_APPROVER (Final)'}
                   <br />
                   
                   {isBudgetAnalyst && isBudgetCoordinator && (
                     <>
-                      <strong>⚠️ Role Conflict:</strong> You have BOTH Analyst and Coordinator roles. 
+                      <strong>⚠️ Role Conflict:</strong> You have BOTH Preparer and Approver roles. 
                       Please contact your administrator to correct your role assignment.
                       <br />
                     </>
@@ -684,11 +684,52 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                   
                   <strong>What you can do:</strong>{' '}
                   {isBudgetAnalyst && proposal?.status === 'Draft' && 'Create and edit proposals, then submit for approval'}
-                  {isBudgetAnalyst && proposal?.status === 'Division Submitted' && 'Waiting for Budget Coordinator review'}
+                  {isBudgetAnalyst && proposal?.status === 'Division Submitted' && 'Waiting for Approver review'}
                   {isBudgetCoordinator && proposal?.status === 'Division Submitted' && 'Review and approve/return this proposal'}
-                  {isBudgetOfficer && (proposal?.status === 'Forwarded to Officer' || proposal?.status === 'Officer Approved') && 'Verify and consolidate, then submit to Budget Manager'}
+                  {isBudgetOfficer && (proposal?.status === 'Forwarded to Officer' || proposal?.status === 'Officer Approved') && 'Verify and consolidate, then submit to Overall Budget Approver'}
                   {isManagerLevel && proposal?.status === 'Forwarded to Manager' && 'Final review and approval'}
                   {proposal?.status === 'Finalized' && 'This proposal has been finalized'}
+                </Typography>
+              </Alert>
+            )}
+
+            {/* TEMPORARILY HIDDEN - PREPARER Edit Mode Information */}
+            {false && isBudgetAnalyst && canRenderEditView && proposal?.status === 'Draft' && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                  <strong>PREPARER Edit Mode:</strong> You can edit all four tables below. Make necessary updates and submit for approver review.
+                </Typography>
+              </Alert>
+            )}
+
+            {/* TEMPORARILY HIDDEN - Budget Summary for PREPARER */}
+            {false && isBudgetAnalyst && proposalData && (
+              <Paper sx={{ p: 2, mb: 2, backgroundColor: '#f8f9fa' }}>
+                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  📊 Budget Summary (Totals):
+                </Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    ✓ <strong>Personnel Services:</strong> ₱{proposalData.personnelServices?.reduce((sum, item) => sum + (item.totalAmount || 0), 0)?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
+                  </Typography>
+                  <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    ✓ <strong>MOOE:</strong> ₱{proposalData.mooe?.reduce((sum, item) => sum + (item.totalAmount || 0), 0)?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
+                  </Typography>
+                  <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    ✓ <strong>Capital Outlay:</strong> ₱{proposalData.capitalOutlay?.reduce((sum, item) => sum + (item.totalAmount || 0), 0)?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
+                  </Typography>
+                  <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    ✓ <strong>Income:</strong> ₱{proposalData.income?.reduce((sum, item) => sum + (item.totalAmount || 0), 0)?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
+                  </Typography>
+                </Box>
+              </Paper>
+            )}
+
+            {/* TEMPORARILY HIDDEN - Warning for PREPARER about required modules */}
+            {false && isBudgetAnalyst && proposalData && proposal?.status === 'Draft' && (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                  ⚠️ <strong>Before submitting, please ensure all required modules have positive amounts:</strong> MOOE, Capital Outlay, Income
                 </Typography>
               </Alert>
             )}
@@ -827,35 +868,36 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
               />
             )}
 
-            {/* Budget Coordinator warnings - check first to avoid conflicts */}
-            {isBudgetCoordinator && !proposalData && !coordinatorCanEditNow && !loading && (
+            {/* TEMPORARILY HIDDEN - Budget Coordinator warnings */}
+            {false && isBudgetCoordinator && !proposalData && !coordinatorCanEditNow && !loading && (
               <Alert severity="warning">
                 No proposal data available for Budget Coordinator. Please try refreshing.
               </Alert>
             )}
 
-            {/* Budget Officer warnings */}
-            {isBudgetOfficer && !isManagerLevel && !proposalData && !loading && (
+            {/* TEMPORARILY HIDDEN - Budget Officer warnings */}
+            {false && isBudgetOfficer && !isManagerLevel && !proposalData && !loading && (
               <Alert severity="warning">
                 No proposal data available. Please try refreshing.
               </Alert>
             )}
 
-            {/* Manager warnings */}
-            {isManagerLevel && !proposalData && !loading && (
+            {/* TEMPORARILY HIDDEN - Manager warnings */}
+            {false && isManagerLevel && !proposalData && !loading && (
               <Alert severity="warning">
                 Submitted proposal details could not be loaded. Please try refreshing to retry.
               </Alert>
             )}
 
-            {/* Budget Analyst warnings */}
-            {isBudgetAnalyst && !comparisonData && !loading && (
+            {/* TEMPORARILY HIDDEN - Budget Analyst warnings */}
+            {false && isBudgetAnalyst && !comparisonData && !loading && (
               <Alert severity="warning">
                 No comparison data available. The proposal may not have been edited yet.
               </Alert>
             )}
 
-            {!isBudgetOfficer && !isBudgetAnalyst && !isBudgetCoordinator && !isManagerLevel && (
+            {/* TEMPORARILY HIDDEN - Permission denied alert */}
+            {false && !isBudgetOfficer && !isBudgetAnalyst && !isBudgetCoordinator && !isManagerLevel && (
               <Alert severity="info">
                 You do not have permission to view detailed records for this proposal.
                 <br />
