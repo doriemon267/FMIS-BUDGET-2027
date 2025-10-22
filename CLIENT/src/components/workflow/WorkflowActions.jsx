@@ -563,45 +563,45 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
   // Derive step/assignee/pending from status when new fields are not yet present on older records
   const deriveFromStatus = useCallback((status) => {
     const s = String(status || '').toUpperCase();
-    const derived = { step: 'ANALYST_DRAFT', assignee: 'BUDGET_ANALYST', pending: ['BUDGET_ANALYST'] };
+    const derived = { step: 'PREPARER_DRAFT', assignee: 'PREPARER', pending: ['PREPARER'] };
     
     // 6-Step Workflow Mapping:
-    // 1. Draft → Analyst
-    // 2. Division Submitted → Coordinator Review
-    // 3. Forwarded to Officer → Officer Review
-    // 4. Officer Approved → Officer (approves, prepares submission)
-    // 5. Forwarded to Manager → Manager Review
-    // 6. Finalized → Admin
+    // 1. Draft → PREPARER
+    // 2. Division Submitted → REVIEWER
+    // 3. Forwarded to Officer → APPROVER
+    // 4. Officer Approved → BUDGET_ANALYST
+    // 5. Forwarded to Manager → BUDGET_OFFICER
+    // 6. Finalized → OVERALL_BUDGET_APPROVER
     
     if (s.includes('DIVISION SUBMITTED') || s.includes('RESPONSIBILITY CENTER SUBMITTED')) {
-      // Step 2: Coordinator reviews
-      derived.step = 'COORDINATOR_REVIEW';
-      derived.assignee = 'BUDGET_COORDINATOR';
-      derived.pending = ['BUDGET_COORDINATOR'];
+      // Step 2: REVIEWER reviews (old BUDGET_COORDINATOR)
+      derived.step = 'REVIEWER_REVIEW';
+      derived.assignee = 'REVIEWER';
+      derived.pending = ['REVIEWER'];
     } else if (s.includes('FORWARDED TO OFFICER') || s === 'OFFICE' || s.includes('OFFICE REVIEW') || s.includes('OFFICE SUBMITTED')) {
-      // Step 3: Officer reviews
-      derived.step = 'OFFICER_REVIEW';
-      derived.assignee = 'BUDGET_OFFICER';
-      derived.pending = ['BUDGET_OFFICER'];
+      // Step 3: APPROVER reviews (old BUDGET_OFFICER)
+      derived.step = 'APPROVER_REVIEW';
+      derived.assignee = 'APPROVER';
+      derived.pending = ['APPROVER'];
     } else if (s.includes('OFFICER APPROVED')) {
-      // Step 4: Officer approves and prepares for manager (always goes to manager in 6-step flow)
-      derived.step = 'OFFICER_APPROVAL';
-      derived.assignee = 'BUDGET_OFFICER';
-      derived.pending = ['BUDGET_OFFICER'];
-    } else if (s.includes('FORWARDED TO MANAGER') || s.includes('SUBMITTED TO MANAGER')) {
-      // Step 5: Manager reviews
-      derived.step = 'MANAGER_REVIEW';
-      derived.assignee = 'BUDGET_MANAGER';
-      derived.pending = ['BUDGET_MANAGER'];
-    } else if (s.includes('RETURNED')) {
-      // Return to analyst for revision
-      derived.step = 'RETURNED';
+      // Step 4: BUDGET_ANALYST reviews (after officer approval)
+      derived.step = 'BUDGET_ANALYST_REVIEW';
       derived.assignee = 'BUDGET_ANALYST';
       derived.pending = ['BUDGET_ANALYST'];
+    } else if (s.includes('FORWARDED TO MANAGER') || s.includes('SUBMITTED TO MANAGER')) {
+      // Step 5: BUDGET_OFFICER reviews
+      derived.step = 'BUDGET_OFFICER_REVIEW';
+      derived.assignee = 'BUDGET_OFFICER';
+      derived.pending = ['BUDGET_OFFICER'];
+    } else if (s.includes('RETURNED')) {
+      // Return to PREPARER for revision
+      derived.step = 'RETURNED';
+      derived.assignee = 'PREPARER';
+      derived.pending = ['PREPARER'];
     } else if (s.includes('FINALIZED')) {
-      // Step 6: Finalized
+      // Step 6: OVERALL_BUDGET_APPROVER finalizes
       derived.step = 'FINALIZED';
-      derived.assignee = 'BUDGET_ADMIN';
+      derived.assignee = 'OVERALL_BUDGET_APPROVER';
       derived.pending = [];
     }
     return derived;
