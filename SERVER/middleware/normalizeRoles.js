@@ -47,6 +47,11 @@ const ROLE_SYNONYMS = {
   'REGIONCREATOR': 'BUDGET_COORDINATOR',
   'REGION_CREATOR': 'BUDGET_COORDINATOR',
   'REGION_COORDINATOR': 'BUDGET_COORDINATOR',
+  'APPROVER': 'BUDGET_COORDINATOR',        // New 6-step workflow mapping
+  'DIVISION_APPROVER': 'BUDGET_COORDINATOR', // New 6-step workflow mapping
+  'DIVISIONAPPROVER': 'BUDGET_COORDINATOR',  // New 6-step workflow mapping
+  'OFFICE_APPROVER': 'BUDGET_COORDINATOR',   // New 6-step workflow mapping
+  'OFFICEAPPROVER': 'BUDGET_COORDINATOR',    // New 6-step workflow mapping
   
   // BUDGET OFFICER synonyms (Operational budget approval)
   'BUDGET_OFFICER': 'BUDGET_OFFICER',

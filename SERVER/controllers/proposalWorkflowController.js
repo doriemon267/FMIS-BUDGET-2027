@@ -2129,11 +2129,12 @@ exports.coordinatorApproveProposal = async (req, res) => {
     const userName = req.user.FirstName + ' ' + req.user.LastName;
     const userRoles = req.user.Roles || [];
 
-    // Verify user is BUDGET_COORDINATOR
-    if (!userRoles.includes('BUDGET_COORDINATOR')) {
+    // Verify user is BUDGET_COORDINATOR or APPROVER (same workflow step)
+    const hasApprovalRole = userRoles.includes('BUDGET_COORDINATOR') || userRoles.includes('APPROVER');
+    if (!hasApprovalRole) {
       return res.status(403).json({ 
         success: false, 
-        message: 'Only Budget Coordinators can approve proposals' 
+        message: 'Only Budget Coordinators or Approvers can approve proposals' 
       });
     }
 
@@ -2233,11 +2234,12 @@ exports.coordinatorApproveAndForwardToOfficer = async (req, res) => {
     const userName = req.user.FirstName + ' ' + req.user.LastName;
     const userRoles = req.user.Roles || [];
 
-    // Verify user is BUDGET_COORDINATOR
-    if (!userRoles.includes('BUDGET_COORDINATOR')) {
+    // Verify user is BUDGET_COORDINATOR or APPROVER (same workflow step)
+    const hasApprovalRole = userRoles.includes('BUDGET_COORDINATOR') || userRoles.includes('APPROVER');
+    if (!hasApprovalRole) {
       return res.status(403).json({ 
         success: false, 
-        message: 'Only Budget Coordinators can approve and forward proposals' 
+        message: 'Only Budget Coordinators or Approvers can approve and forward proposals' 
       });
     }
 
@@ -2400,11 +2402,12 @@ exports.coordinatorReturnProposal = async (req, res) => {
     const userName = req.user.FirstName + ' ' + req.user.LastName;
     const userRoles = req.user.Roles || [];
 
-    // Verify user is BUDGET_COORDINATOR
-    if (!userRoles.includes('BUDGET_COORDINATOR')) {
+    // Verify user is BUDGET_COORDINATOR or APPROVER (same workflow step)
+    const hasApprovalRole = userRoles.includes('BUDGET_COORDINATOR') || userRoles.includes('APPROVER');
+    if (!hasApprovalRole) {
       return res.status(403).json({ 
         success: false, 
-        message: 'Only Budget Coordinators can return proposals' 
+        message: 'Only Budget Coordinators or Approvers can return proposals' 
       });
     }
 
@@ -2529,11 +2532,12 @@ exports.coordinatorSubmitToOfficer = async (req, res) => {
     const userName = req.user.FirstName + ' ' + req.user.LastName;
     const userRoles = req.user.Roles || [];
 
-    // Verify user is BUDGET_COORDINATOR
-    if (!userRoles.includes('BUDGET_COORDINATOR')) {
+    // Verify user is BUDGET_COORDINATOR or APPROVER (same workflow step)
+    const hasApprovalRole = userRoles.includes('BUDGET_COORDINATOR') || userRoles.includes('APPROVER');
+    if (!hasApprovalRole) {
       return res.status(403).json({ 
         success: false, 
-        message: 'Only Budget Coordinators can submit to Budget Officer' 
+        message: 'Only Budget Coordinators or Approvers can submit to Budget Officer' 
       });
     }
 
@@ -2627,11 +2631,12 @@ exports.coordinatorSubmitToManager = async (req, res) => {
     const userName = req.user.FirstName + ' ' + req.user.LastName;
     const userRoles = req.user.Roles || [];
 
-    // Verify user is BUDGET_COORDINATOR
-    if (!userRoles.includes('BUDGET_COORDINATOR')) {
+    // Verify user is BUDGET_COORDINATOR or APPROVER (same workflow step)
+    const hasApprovalRole = userRoles.includes('BUDGET_COORDINATOR') || userRoles.includes('APPROVER');
+    if (!hasApprovalRole) {
       return res.status(403).json({ 
         success: false, 
-        message: 'Only Budget Coordinators can submit to Budget Manager' 
+        message: 'Only Budget Coordinators or Approvers can submit to Budget Manager' 
       });
     }
 
@@ -2730,8 +2735,9 @@ exports.coordinatorSaveEdits = async (req, res) => {
     const userName = req.user.FirstName + ' ' + req.user.LastName;
     const userRoles = req.user.Roles || [];
 
-    // Verify user is BUDGET_COORDINATOR
-    if (!userRoles.includes('BUDGET_COORDINATOR')) {
+    // Verify user is BUDGET_COORDINATOR or APPROVER (same workflow step)
+    const hasApprovalRole = userRoles.includes('BUDGET_COORDINATOR') || userRoles.includes('APPROVER');
+    if (!hasApprovalRole) {
       return res.status(403).json({ 
         success: false, 
         message: 'Only Budget Coordinators can save edits' 

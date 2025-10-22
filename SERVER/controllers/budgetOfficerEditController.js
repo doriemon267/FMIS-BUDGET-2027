@@ -807,7 +807,7 @@ exports.saveDraftEdit = async (req, res) => {
       ? 'BUDGET_MANAGER'
       : userRoles.includes('BUDGET_OFFICER')
       ? 'BUDGET_OFFICER'
-      : userRoles.includes('BUDGET_COORDINATOR')
+      : userRoles.includes('BUDGET_COORDINATOR') || userRoles.includes('APPROVER')
       ? 'BUDGET_COORDINATOR'
       : userRoles.includes('BUDGET_ANALYST')
       ? 'BUDGET_ANALYST'
@@ -1204,7 +1204,7 @@ exports.submitEdit = async (req, res) => {
       ? 'BUDGET_MANAGER'
       : userRoles.includes('BUDGET_OFFICER')
       ? 'BUDGET_OFFICER'
-      : userRoles.includes('BUDGET_COORDINATOR')
+      : userRoles.includes('BUDGET_COORDINATOR') || userRoles.includes('APPROVER')
       ? 'BUDGET_COORDINATOR'
       : userRoles.includes('BUDGET_ANALYST')
       ? 'BUDGET_ANALYST'
