@@ -24,6 +24,13 @@ const ROLE_SYNONYMS = {
   'REVIEWER': 'REVIEWER',
   'DIVISION_REVIEWER': 'REVIEWER',
   'DIVISIONREVIEWER': 'REVIEWER',
+  'BUDGET_COORDINATOR': 'REVIEWER',        // Old role mapping
+  'DEPARTMENTCREATOR': 'REVIEWER',          // Legacy mapping
+  'DEPARTMENT_CREATOR': 'REVIEWER',         // Legacy mapping
+  'DEPARTMENT_COORDINATOR': 'REVIEWER',     // Legacy mapping
+  'REGIONCREATOR': 'REVIEWER',              // Legacy mapping
+  'REGION_CREATOR': 'REVIEWER',             // Legacy mapping
+  'REGION_COORDINATOR': 'REVIEWER',         // Legacy mapping
   
   // APPROVER synonyms (Division/Office level approval)
   'APPROVER': 'APPROVER',
@@ -31,33 +38,10 @@ const ROLE_SYNONYMS = {
   'DIVISIONAPPROVER': 'APPROVER',
   'OFFICE_APPROVER': 'APPROVER',
   'OFFICEAPPROVER': 'APPROVER',
-  
-  // BUDGET ANALYST synonyms (Technical budget review)
-  'BUDGET_ANALYST': 'BUDGET_ANALYST',
-  'BUDGETANALYST': 'BUDGET_ANALYST',
-  'DIVISIONCREATOR': 'BUDGET_ANALYST',  // Legacy mapping
-  'DIVISION_CREATOR': 'BUDGET_ANALYST',  // Legacy mapping
-  'DIVISION_ENCODER': 'BUDGET_ANALYST',  // Legacy mapping
-  'DIVISION_STAFF': 'BUDGET_ANALYST',     // Legacy mapping
-  
-  // BUDGET COORDINATOR synonyms (Department/Region level creators)
-  'DEPARTMENTCREATOR': 'BUDGET_COORDINATOR',
-  'DEPARTMENT_CREATOR': 'BUDGET_COORDINATOR',
-  'DEPARTMENT_COORDINATOR': 'BUDGET_COORDINATOR',
-  'REGIONCREATOR': 'BUDGET_COORDINATOR',
-  'REGION_CREATOR': 'BUDGET_COORDINATOR',
-  'REGION_COORDINATOR': 'BUDGET_COORDINATOR',
-  'APPROVER': 'BUDGET_COORDINATOR',        // New 6-step workflow mapping
-  'DIVISION_APPROVER': 'BUDGET_COORDINATOR', // New 6-step workflow mapping
-  'DIVISIONAPPROVER': 'BUDGET_COORDINATOR',  // New 6-step workflow mapping
-  'OFFICE_APPROVER': 'BUDGET_COORDINATOR',   // New 6-step workflow mapping
-  'OFFICEAPPROVER': 'BUDGET_COORDINATOR',    // New 6-step workflow mapping
-  
-  // BUDGET OFFICER synonyms (Operational budget approval)
-  'BUDGET_OFFICER': 'BUDGET_OFFICER',
-  'BUDGETOFFICER': 'BUDGET_OFFICER',
-  'DEPARTMENTVERIFIER': 'BUDGET_OFFICER',  // Legacy mapping
-  'DEPARTMENT_VERIFIER': 'BUDGET_OFFICER', // Legacy mapping
+  'BUDGET_OFFICER': 'APPROVER',            // Old BUDGET_OFFICER maps to APPROVER
+  'BUDGETOFFICER': 'APPROVER',             // Old BUDGET_OFFICER maps to APPROVER
+  'DEPARTMENTVERIFIER': 'APPROVER',         // Legacy mapping
+  'DEPARTMENT_VERIFIER': 'APPROVER',        // Legacy mapping
   'REGIONVERIFIER': 'BUDGET_OFFICER',      // Legacy mapping
   'REGION_VERIFIER': 'BUDGET_OFFICER',     // Legacy mapping
   'OFFICEVERIFIER': 'BUDGET_OFFICER',      // Legacy mapping

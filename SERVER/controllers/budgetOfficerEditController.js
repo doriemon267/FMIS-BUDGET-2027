@@ -805,9 +805,9 @@ exports.saveDraftEdit = async (req, res) => {
     // Determine the role of the editor
     const editorRole = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN')
       ? 'BUDGET_MANAGER'
-      : userRoles.includes('BUDGET_OFFICER')
+      : userRoles.includes('APPROVER') || userRoles.includes('BUDGET_OFFICER')
       ? 'BUDGET_OFFICER'
-      : userRoles.includes('BUDGET_COORDINATOR') || userRoles.includes('APPROVER')
+      : userRoles.includes('REVIEWER') || userRoles.includes('BUDGET_COORDINATOR')
       ? 'BUDGET_COORDINATOR'
       : userRoles.includes('BUDGET_ANALYST')
       ? 'BUDGET_ANALYST'
@@ -1202,9 +1202,9 @@ exports.submitEdit = async (req, res) => {
     // Determine the role of the editor
     const editorRole = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN')
       ? 'BUDGET_MANAGER'
-      : userRoles.includes('BUDGET_OFFICER')
+      : userRoles.includes('APPROVER') || userRoles.includes('BUDGET_OFFICER')
       ? 'BUDGET_OFFICER'
-      : userRoles.includes('BUDGET_COORDINATOR') || userRoles.includes('APPROVER')
+      : userRoles.includes('REVIEWER') || userRoles.includes('BUDGET_COORDINATOR')
       ? 'BUDGET_COORDINATOR'
       : userRoles.includes('BUDGET_ANALYST')
       ? 'BUDGET_ANALYST'

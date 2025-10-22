@@ -2129,16 +2129,14 @@ exports.coordinatorApproveProposal = async (req, res) => {
     const userName = req.user.FirstName + ' ' + req.user.LastName;
     const userRoles = req.user.Roles || [];
 
-    // Verify user is BUDGET_COORDINATOR or APPROVER (same workflow step)
-    const hasApprovalRole = userRoles.includes('BUDGET_COORDINATOR') || userRoles.includes('APPROVER');
-    if (!hasApprovalRole) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Only Budget Coordinators or Approvers can approve proposals' 
+    // Verify user is REVIEWER (old BUDGET_COORDINATOR)
+    const hasReviewRole = userRoles.includes('REVIEWER') || userRoles.includes('BUDGET_COORDINATOR');
+    if (!hasReviewRole) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only Reviewers can approve proposals'
       });
-    }
-
-    if (!comment || comment.trim() === '') {
+    }    if (!comment || comment.trim() === '') {
       return res.status(400).json({ success: false, message: 'Comment is required for approval' });
     }
 
@@ -2234,16 +2232,14 @@ exports.coordinatorApproveAndForwardToOfficer = async (req, res) => {
     const userName = req.user.FirstName + ' ' + req.user.LastName;
     const userRoles = req.user.Roles || [];
 
-    // Verify user is BUDGET_COORDINATOR or APPROVER (same workflow step)
-    const hasApprovalRole = userRoles.includes('BUDGET_COORDINATOR') || userRoles.includes('APPROVER');
-    if (!hasApprovalRole) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Only Budget Coordinators or Approvers can approve and forward proposals' 
+    // Verify user is REVIEWER (old BUDGET_COORDINATOR)
+    const hasReviewRole = userRoles.includes('REVIEWER') || userRoles.includes('BUDGET_COORDINATOR');
+    if (!hasReviewRole) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only Reviewers can approve and forward proposals'
       });
-    }
-
-    if (!comment || comment.trim() === '') {
+    }    if (!comment || comment.trim() === '') {
       return res.status(400).json({ success: false, message: 'Comment is required for approval' });
     }
 
@@ -2402,16 +2398,14 @@ exports.coordinatorReturnProposal = async (req, res) => {
     const userName = req.user.FirstName + ' ' + req.user.LastName;
     const userRoles = req.user.Roles || [];
 
-    // Verify user is BUDGET_COORDINATOR or APPROVER (same workflow step)
-    const hasApprovalRole = userRoles.includes('BUDGET_COORDINATOR') || userRoles.includes('APPROVER');
-    if (!hasApprovalRole) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Only Budget Coordinators or Approvers can return proposals' 
+    // Verify user is REVIEWER (old BUDGET_COORDINATOR)
+    const hasReviewRole = userRoles.includes('REVIEWER') || userRoles.includes('BUDGET_COORDINATOR');
+    if (!hasReviewRole) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only Reviewers can return proposals'
       });
-    }
-
-    if (!comment || comment.trim() === '') {
+    }    if (!comment || comment.trim() === '') {
       return res.status(400).json({ success: false, message: 'Comment is required for return' });
     }
 
@@ -2532,16 +2526,14 @@ exports.coordinatorSubmitToOfficer = async (req, res) => {
     const userName = req.user.FirstName + ' ' + req.user.LastName;
     const userRoles = req.user.Roles || [];
 
-    // Verify user is BUDGET_COORDINATOR or APPROVER (same workflow step)
-    const hasApprovalRole = userRoles.includes('BUDGET_COORDINATOR') || userRoles.includes('APPROVER');
-    if (!hasApprovalRole) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Only Budget Coordinators or Approvers can submit to Budget Officer' 
+    // Verify user is REVIEWER (old BUDGET_COORDINATOR)
+    const hasReviewRole = userRoles.includes('REVIEWER') || userRoles.includes('BUDGET_COORDINATOR');
+    if (!hasReviewRole) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only Reviewers can submit to Budget Officer'
       });
-    }
-
-    // Find the proposal
+    }    // Find the proposal
     let proposal = await Proposal.findById(proposalId);
     if (!proposal) {
       return res.status(404).json({ success: false, message: 'Proposal not found' });
@@ -2631,16 +2623,14 @@ exports.coordinatorSubmitToManager = async (req, res) => {
     const userName = req.user.FirstName + ' ' + req.user.LastName;
     const userRoles = req.user.Roles || [];
 
-    // Verify user is BUDGET_COORDINATOR or APPROVER (same workflow step)
-    const hasApprovalRole = userRoles.includes('BUDGET_COORDINATOR') || userRoles.includes('APPROVER');
-    if (!hasApprovalRole) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Only Budget Coordinators or Approvers can submit to Budget Manager' 
+    // Verify user is REVIEWER (old BUDGET_COORDINATOR)
+    const hasReviewRole = userRoles.includes('REVIEWER') || userRoles.includes('BUDGET_COORDINATOR');
+    if (!hasReviewRole) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only Reviewers can submit to Budget Manager'
       });
-    }
-
-    // Find the proposal
+    }    // Find the proposal
     let proposal = await Proposal.findById(proposalId);
     if (!proposal) {
       return res.status(404).json({ success: false, message: 'Proposal not found' });
@@ -2735,9 +2725,9 @@ exports.coordinatorSaveEdits = async (req, res) => {
     const userName = req.user.FirstName + ' ' + req.user.LastName;
     const userRoles = req.user.Roles || [];
 
-    // Verify user is BUDGET_COORDINATOR or APPROVER (same workflow step)
-    const hasApprovalRole = userRoles.includes('BUDGET_COORDINATOR') || userRoles.includes('APPROVER');
-    if (!hasApprovalRole) {
+    // Verify user is REVIEWER (old BUDGET_COORDINATOR)
+    const hasReviewRole = userRoles.includes('REVIEWER') || userRoles.includes('BUDGET_COORDINATOR');
+    if (!hasReviewRole) {
       return res.status(403).json({ 
         success: false, 
         message: 'Only Budget Coordinators can save edits' 
