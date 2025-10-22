@@ -13,12 +13,20 @@ require('dotenv').config();
 // Import the model
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 
-// Valid workflow roles based on schema enum
+// ✅ NEW: Support BOTH old and new workflow role names (September 2025 system)
 const VALID_WORKFLOW_ROLES = [
-  'divisionCreator', 'divisionApprover',
+  // OLD ROLE NAMES (Legacy system)
+  'divisionCreator', 'divisionApprover', 'divisionReviewer',
   'departmentCreator', 'departmentConsolidator', 'departmentSubmission',
   'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier',
-  'regionCreator', 'regionFinalVerifier'
+  'regionCreator', 'regionFinalVerifier',
+  // NEW ROLE NAMES (September 2025 workflow system)
+  'PREPARER', 'REVIEWER', 'APPROVER',
+  'BUDGET_ANALYST', 'BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_ADMIN',
+  // NEW INTERNAL ROLE NAMES (used in workflowConstants)
+  'divisionCreator', 'divisionReviewer', 'divisionApprover',
+  'officeCreator', 'officeApprover',
+  'budgetAnalyst', 'budgetOfficer', 'overallBudgetApprover', 'budgetAdmin'
 ];
 
 async function cleanupInvalidWorkflowRoles() {

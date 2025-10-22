@@ -2,15 +2,20 @@ const checkToken = require('./checkToken');
 const checkDueDate = require('./checkDueDate');
 const checkRegionAccess = require('./checkRegionAccess');
 const { checkUserRegionAccess } = require('./checkRegionAccess');
-// Permission levels constants
+// Permission levels constants (aligned with 6-step workflow hierarchy)
 const PERMISSION_LEVELS = {
   USER: 'USER',
   ADMIN: 'ADMIN',
+  SUPER_ADMIN: 'SUPER_ADMIN',
   BUDGET_ADMIN: 'BUDGET_ADMIN',
-  BUDGET_ANALYST: 'BUDGET_ANALYST',
   BUDGET_MANAGER: 'BUDGET_MANAGER',
-  BUDGET_OFFICER: 'BUDGET_OFFICER',
-  SUPER_ADMIN: 'SUPER_ADMIN'
+  OVERALL_BUDGET_APPROVER: 'OVERALL_BUDGET_APPROVER',  // Step 6: Executive approval
+  BUDGET_OFFICER: 'BUDGET_OFFICER',                    // Step 5: Operational approval
+  BUDGET_ANALYST: 'BUDGET_ANALYST',                    // Step 4: Technical review
+  APPROVER: 'APPROVER',                                // Step 3: Division/Office approval
+  REVIEWER: 'REVIEWER',                                // Step 2: Division review
+  PREPARER: 'PREPARER',                                // Step 1: Proposal creation
+  BUDGET_COORDINATOR: 'BUDGET_COORDINATOR'             // Legacy: Department/Region level
 };
 // Access scope constants
 const ACCESS_SCOPE = {
@@ -39,16 +44,19 @@ const hasFullAccess = (userRoles) => {
     PERMISSION_LEVELS.BUDGET_ADMIN,
     PERMISSION_LEVELS.BUDGET_ANALYST,
     PERMISSION_LEVELS.BUDGET_MANAGER,
-    PERMISSION_LEVELS.BUDGET_OFFICER,  // Added BUDGET_OFFICER for approval permissions
-    'BUDGET_COORDINATOR'  // NEW: Added BUDGET_COORDINATOR for assignment access
+    PERMISSION_LEVELS.BUDGET_OFFICER,  // Budget Officer for approval permissions
+    'BUDGET_COORDINATOR',               // Budget Coordinator for assignment access
+    PERMISSION_LEVELS.PREPARER,         // 6-step workflow: Step 1 - Proposal creation
+    PERMISSION_LEVELS.REVIEWER,         // 6-step workflow: Step 2 - Division review
+    PERMISSION_LEVELS.APPROVER,         // 6-step workflow: Step 3 - Division/Office approval
+    PERMISSION_LEVELS.OVERALL_BUDGET_APPROVER  // 6-step workflow: Step 6 - Executive approval
   ];
   const result = hasRequiredRole(userRoles, requiredRoles);
   
-  // 🔍 DEBUG for BUDGET roles
-  if (Array.isArray(userRoles) && (userRoles.includes('BUDGET_OFFICER') || userRoles.includes('BUDGET_COORDINATOR'))) {
-    console.log('🔍 hasFullAccess check for BUDGET role:', {
+  // 🔍 DEBUG for workflow roles
+  if (Array.isArray(userRoles) && (userRoles.includes('BUDGET_OFFICER') || userRoles.includes('BUDGET_COORDINATOR') || userRoles.includes('REVIEWER') || userRoles.includes('APPROVER') || userRoles.includes('OVERALL_BUDGET_APPROVER'))) {
+    console.log('🔍 hasFullAccess check for workflow/budget role:', {
       userRoles,
-      requiredRoles,
       result,
       hasRequiredRoleDebug: userRoles.some(role => requiredRoles.includes(role))
     });
@@ -220,6 +228,41 @@ const ownerOnlyRoute = () => {
     }
   ];
 };
+// Workflow staff access (for PREPARER, REVIEWER, APPROVER to view proposals)
+const workflowStaffRoute = (allowedOperations = ['read']) => {
+  return [
+    checkToken,
+    (req, res, next) => {
+      const userRoles = req.user.Roles;
+      
+      // SUPER ADMIN bypasses all restrictions
+      if (userRoles.includes('SUPER ADMIN')) {
+        return next();
+      }
+      
+      // Check if user has workflow or budget staff privileges
+      const allowedRoles = [
+        // Budget staff roles
+        PERMISSION_LEVELS.BUDGET_ADMIN,
+        PERMISSION_LEVELS.BUDGET_ANALYST,
+        PERMISSION_LEVELS.BUDGET_MANAGER,
+        PERMISSION_LEVELS.BUDGET_OFFICER,
+        // Workflow staff roles - can now view proposals
+        PERMISSION_LEVELS.PREPARER,
+        PERMISSION_LEVELS.REVIEWER,
+        PERMISSION_LEVELS.APPROVER,
+        PERMISSION_LEVELS.OVERALL_BUDGET_APPROVER
+      ];
+      if (!hasRequiredRole(userRoles, allowedRoles)) {
+        return res.status(403).json({
+          message: "Access denied. Budget or workflow staff privileges required."
+        });
+      }
+      next();
+    },
+    checkOrganizationalAccess
+  ];
+};
 // Budget Officer restricted access
 const budgetOfficerRoute = (allowedOperations = ['read']) => {
   return [
@@ -278,6 +321,7 @@ module.exports = {
   regionProtectedRoute,
   ownerOnlyRoute,
   budgetOfficerRoute,
+  workflowStaffRoute,
   checkOrganizationalAccess,
   PERMISSION_LEVELS,
   ACCESS_SCOPE,

@@ -19,65 +19,103 @@ import GavelIcon from '@mui/icons-material/Gavel';
  * 
  * Shows the current status and next steps in the budget proposal workflow
  * in a space-efficient horizontal layout
+ * 
+ * NEW WORKFLOW (September 2025):
+ * - Division Level: 6-step workflow (PREPARER → REVIEWER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_BUDGET_APPROVER)
+ * - Office Level: 5-step workflow (PREPARER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_BUDGET_APPROVER)
  */
 const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
   if (!proposal) return null;
 
   const status = proposal.status || 'Draft';
 
-  // Define workflow steps based on level
-  const steps = isOfficeLevel ? [
+  // NEW 6-STEP WORKFLOW (Division/Responsibility Center Level)
+  const divisionSteps = [
     {
-      label: 'Budget Analyst',
+      label: 'Preparer',
       role: 'Creates',
-      shortLabel: 'Analyst',
+      shortLabel: 'Preparer',
       statuses: ['Draft'],
       icon: <PersonIcon />
     },
     {
-      label: 'Budget Officer',
-      role: 'Approves',
-      shortLabel: 'Officer',
-      statuses: ['Officer Approved', 'Forwarded to Manager'],
-      icon: <VerifiedUserIcon />
-    },
-    {
-      label: 'Budget Manager',
-      role: 'Finalizes',
-      shortLabel: 'Manager',
-      statuses: ['Finalized'],
-      icon: <GavelIcon />
-    }
-  ] : [
-    {
-      label: 'Budget Analyst',
-      role: 'Creates',
-      shortLabel: 'Analyst',
-      statuses: ['Draft'],
-      icon: <PersonIcon />
-    },
-    {
-      label: 'Budget Coordinator',
+      label: 'Reviewer',
       role: 'Reviews',
-      shortLabel: 'Coordinator',
-      statuses: ['Division Submitted', 'Forwarded to Officer'],
+      shortLabel: 'Reviewer',
+      statuses: ['Submitted for Review'],
       icon: <GroupIcon />
     },
     {
-      label: 'Budget Officer',
+      label: 'Approver',
       role: 'Approves',
-      shortLabel: 'Officer',
-      statuses: ['Officer Approved', 'Forwarded to Manager'],
+      shortLabel: 'Approver',
+      statuses: ['Submitted for Approval'],
       icon: <VerifiedUserIcon />
     },
     {
-      label: 'Budget Manager',
+      label: 'Budget Analyst',
+      role: 'Analyzes',
+      shortLabel: 'Analyst',
+      statuses: ['At Analyst'],
+      icon: <PersonIcon />
+    },
+    {
+      label: 'Budget Officer',
+      role: 'Approves',
+      shortLabel: 'Officer',
+      statuses: ['At Officer'],
+      icon: <VerifiedUserIcon />
+    },
+    {
+      label: 'Overall Approver',
       role: 'Finalizes',
-      shortLabel: 'Manager',
+      shortLabel: 'Approver',
       statuses: ['Finalized'],
       icon: <GavelIcon />
     }
   ];
+
+  // NEW 5-STEP WORKFLOW (Office Level - skips Reviewer)
+  const officeSteps = [
+    {
+      label: 'Preparer',
+      role: 'Creates',
+      shortLabel: 'Preparer',
+      statuses: ['Draft'],
+      icon: <PersonIcon />
+    },
+    {
+      label: 'Approver',
+      role: 'Approves',
+      shortLabel: 'Approver',
+      statuses: ['Submitted for Approval'],
+      icon: <VerifiedUserIcon />
+    },
+    {
+      label: 'Budget Analyst',
+      role: 'Analyzes',
+      shortLabel: 'Analyst',
+      statuses: ['At Analyst'],
+      icon: <PersonIcon />
+    },
+    {
+      label: 'Budget Officer',
+      role: 'Approves',
+      shortLabel: 'Officer',
+      statuses: ['At Officer'],
+      icon: <VerifiedUserIcon />
+    },
+    {
+      label: 'Overall Approver',
+      role: 'Finalizes',
+      shortLabel: 'Approver',
+      statuses: ['Finalized'],
+      icon: <GavelIcon />
+    }
+  ];
+
+  // Select workflow based on level
+  const steps = isOfficeLevel ? officeSteps : divisionSteps;
 
   // Determine active step
   const getActiveStep = () => {
@@ -113,11 +151,11 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
     switch (status) {
       case 'Draft':
         return 'default';
-      case 'Division Submitted':
-      case 'Forwarded to Officer':
-      case 'Forwarded to Manager':
+      case 'Submitted for Review':
+      case 'Submitted for Approval':
+      case 'At Analyst':
+      case 'At Officer':
         return 'info';
-      case 'Officer Approved':
       case 'Finalized':
         return 'success';
       case 'Returned':
@@ -224,23 +262,35 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
       </Box>
 
       {/* Status Messages */}
-      {(status === 'Finalized' || status === 'Returned') && (
+      {(status === 'Finalized' || status === 'Returned' || status === 'Rejected') && (
         <Box sx={{
           mt: 1.5,
           p: 1,
-          backgroundColor: status === 'Finalized' ? 'success.light' : 'warning.light',
+          backgroundColor: 
+            status === 'Finalized' ? 'success.light' : 
+            status === 'Returned' ? 'warning.light' : 
+            'error.light',
           borderRadius: 0.5,
-          borderLeft: `3px solid ${status === 'Finalized' ? '#4caf50' : '#ff9800'}`
+          borderLeft: `3px solid ${
+            status === 'Finalized' ? '#4caf50' : 
+            status === 'Returned' ? '#ff9800' : 
+            '#f44336'
+          }`
         }}>
           <Typography 
             variant="caption" 
             sx={{
-              color: status === 'Finalized' ? 'success.dark' : 'warning.dark',
+              color: 
+                status === 'Finalized' ? 'success.dark' : 
+                status === 'Returned' ? 'warning.dark' : 
+                'error.dark',
               fontWeight: 600,
               fontSize: '0.75rem'
             }}
           >
-            {status === 'Finalized' ? '✅ Finalized & Approved' : '⚠️ Returned for Revision'}
+            {status === 'Finalized' ? '✅ Finalized & Approved' : 
+             status === 'Returned' ? '⚠️ Returned for Revision' :
+             '❌ Rejected'}
           </Typography>
         </Box>
       )}

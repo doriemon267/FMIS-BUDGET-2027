@@ -93,7 +93,11 @@ const budgetRoleAccessControl = (operation = 'read') => {
       const userId = req.user.id;
   const userRoles = extractUserRoles(req.user);
 
-      // Define role hierarchy
+      // Define role hierarchy - 6-step workflow roles + legacy budget roles
+      const isPreparer = userRoles.includes('PREPARER');
+      const isReviewer = userRoles.includes('REVIEWER');
+      const isApprover = userRoles.includes('APPROVER');
+      const isOverallBudgetApprover = userRoles.includes('OVERALL_BUDGET_APPROVER');
       const isBudgetAnalyst = userRoles.includes('BUDGET_ANALYST');
       const isBudgetCoordinator = userRoles.includes('BUDGET_COORDINATOR');
       const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
@@ -114,7 +118,20 @@ const budgetRoleAccessControl = (operation = 'read') => {
         const assignment = req.userHierarchicalAssignment || req.user?.hierarchicalAssignment || {};
         const userDivision = assignment.divisionName || req.user?.division || null;
 
-        if (isBudgetAnalyst) {
+        // 6-STEP WORKFLOW ROLES
+        if (isPreparer) {
+          // Preparers can see their own proposals
+          visibilityFilter.createdByUserId = userId;
+        } else if (isReviewer) {
+          // Reviewers can see proposals in review stage
+          visibilityFilter.status = { $in: ['Draft', 'Division Submitted', 'Under Review', 'Reviewed'] };
+        } else if (isApprover) {
+          // Approvers can see proposals pending approval
+          visibilityFilter.status = { $in: ['Reviewed', 'Pending Approval', 'Approved'] };
+        } else if (isOverallBudgetApprover) {
+          // Overall Budget Approvers can see all proposals
+          visibilityFilter.status = { $in: ['Division Submitted', 'Under Review', 'Reviewed', 'Pending Approval', 'Approved', 'Finalized', 'Officer Approved', 'Forwarded to Manager'] };
+        } else if (isBudgetAnalyst) {
           // Budget Analysts: prefer to show only own proposals, but also include other proposals
           // from the same division so that approvals by the Officer don't make them disappear.
           if (userDivision) {
@@ -196,6 +213,12 @@ const budgetRoleAccessControl = (operation = 'read') => {
 
 // Helper function to check if user can access a specific proposal
 function checkProposalAccess(proposal, userId, userRoles) {
+  // 6-step workflow roles
+  const isPreparer = userRoles.includes('PREPARER');
+  const isReviewer = userRoles.includes('REVIEWER');
+  const isApprover = userRoles.includes('APPROVER');
+  const isOverallBudgetApprover = userRoles.includes('OVERALL_BUDGET_APPROVER');
+  // Legacy budget roles
   const isBudgetAnalyst = userRoles.includes('BUDGET_ANALYST');
   const isBudgetCoordinator = userRoles.includes('BUDGET_COORDINATOR');
   const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
@@ -213,7 +236,20 @@ function checkProposalAccess(proposal, userId, userRoles) {
     return true;
   }
 
-  // Role-based access
+  // 6-STEP WORKFLOW ROLE ACCESS
+  if (isReviewer && ['Draft', 'Division Submitted', 'Under Review', 'Reviewed'].includes(proposal.status)) {
+    return true;
+  }
+
+  if (isApprover && ['Reviewed', 'Pending Approval', 'Approved'].includes(proposal.status)) {
+    return true;
+  }
+
+  if (isOverallBudgetApprover) {
+    return true;  // Executives can see everything
+  }
+
+  // LEGACY BUDGET ROLE ACCESS
   if (isBudgetOfficer && ['Division Submitted', 'Forwarded to Officer', 'Officer Approved', 'Forwarded to Manager', 'Finalized'].includes(proposal.status)) {
     return true;
   }

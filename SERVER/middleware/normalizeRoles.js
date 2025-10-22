@@ -4,23 +4,41 @@
  * Maps legacy/database role names to standardized workflow roles
  * This ensures consistent role checking across the application
  * 
- * Standard Workflow Roles:
- * - BUDGET_ANALYST      → Division level creators (divisionCreator)
- * - BUDGET_COORDINATOR  → Department/Region level creators (departmentCreator)
- * - BUDGET_OFFICER      → Department/Region level verifiers (departmentVerifier)
- * - BUDGET_MANAGER      → Budget Office final approvers (budgetManager)
+ * Standard Workflow Roles (6-Step Workflow):
+ * - PREPARER              → Step 1: Initial proposal creators
+ * - REVIEWER              → Step 2: Division level reviewers
+ * - APPROVER              → Step 3: Division/Office level approvers
+ * - BUDGET_ANALYST        → Step 4: Technical budget review
+ * - BUDGET_OFFICER        → Step 5: Operational budget approval
+ * - OVERALL_BUDGET_APPROVER → Step 6: Executive budget approval
+ * - BUDGET_COORDINATOR    → Department/Region level (legacy)
+ * - BUDGET_MANAGER        → Upper management (legacy)
  */
 
 // Role synonym mapping - maps various role names to standardized workflow roles
 const ROLE_SYNONYMS = {
-  // BUDGET ANALYST synonyms (Division level creators)
-  'DIVISIONCREATOR': 'BUDGET_ANALYST',
-  'DIVISION_CREATOR': 'BUDGET_ANALYST',
-  'DIVISION_ANALYST': 'BUDGET_ANALYST',
-  'DIVISION_ENCODER': 'BUDGET_ANALYST',
-  'DIVISION_STAFF': 'BUDGET_ANALYST',
-  'DIVISIONAPPROVER': 'BUDGET_ANALYST',  // Legacy - to be migrated
-  'DIVISION_APPROVER': 'BUDGET_ANALYST', // Legacy - to be migrated
+  // PREPARER synonyms (Initial proposal creators)
+  'PREPARER': 'PREPARER',
+  
+  // REVIEWER synonyms (Division level review)
+  'REVIEWER': 'REVIEWER',
+  'DIVISION_REVIEWER': 'REVIEWER',
+  'DIVISIONREVIEWER': 'REVIEWER',
+  
+  // APPROVER synonyms (Division/Office level approval)
+  'APPROVER': 'APPROVER',
+  'DIVISION_APPROVER': 'APPROVER',
+  'DIVISIONAPPROVER': 'APPROVER',
+  'OFFICE_APPROVER': 'APPROVER',
+  'OFFICEAPPROVER': 'APPROVER',
+  
+  // BUDGET ANALYST synonyms (Technical budget review)
+  'BUDGET_ANALYST': 'BUDGET_ANALYST',
+  'BUDGETANALYST': 'BUDGET_ANALYST',
+  'DIVISIONCREATOR': 'BUDGET_ANALYST',  // Legacy mapping
+  'DIVISION_CREATOR': 'BUDGET_ANALYST',  // Legacy mapping
+  'DIVISION_ENCODER': 'BUDGET_ANALYST',  // Legacy mapping
+  'DIVISION_STAFF': 'BUDGET_ANALYST',     // Legacy mapping
   
   // BUDGET COORDINATOR synonyms (Department/Region level creators)
   'DEPARTMENTCREATOR': 'BUDGET_COORDINATOR',
@@ -30,28 +48,30 @@ const ROLE_SYNONYMS = {
   'REGION_CREATOR': 'BUDGET_COORDINATOR',
   'REGION_COORDINATOR': 'BUDGET_COORDINATOR',
   
-  // BUDGET OFFICER synonyms (Department/Region level verifiers)
-  'DEPARTMENTVERIFIER': 'BUDGET_OFFICER',
-  'DEPARTMENT_VERIFIER': 'BUDGET_OFFICER',
-  'DEPARTMENT_APPROVER': 'BUDGET_OFFICER',
-  'REGIONVERIFIER': 'BUDGET_OFFICER',
-  'REGION_VERIFIER': 'BUDGET_OFFICER',
-  'REGION_APPROVER': 'BUDGET_OFFICER',
-  'OFFICEAPPROVER': 'BUDGET_OFFICER',
-  'OFFICE_APPROVER': 'BUDGET_OFFICER',
-  'OFFICEVERIFIER': 'BUDGET_OFFICER',
-  'OFFICE_VERIFIER': 'BUDGET_OFFICER',
-  'OFFICE_HEAD': 'BUDGET_OFFICER',
+  // BUDGET OFFICER synonyms (Operational budget approval)
+  'BUDGET_OFFICER': 'BUDGET_OFFICER',
+  'BUDGETOFFICER': 'BUDGET_OFFICER',
+  'DEPARTMENTVERIFIER': 'BUDGET_OFFICER',  // Legacy mapping
+  'DEPARTMENT_VERIFIER': 'BUDGET_OFFICER', // Legacy mapping
+  'REGIONVERIFIER': 'BUDGET_OFFICER',      // Legacy mapping
+  'REGION_VERIFIER': 'BUDGET_OFFICER',     // Legacy mapping
+  'OFFICEVERIFIER': 'BUDGET_OFFICER',      // Legacy mapping
+  'OFFICE_VERIFIER': 'BUDGET_OFFICER',     // Legacy mapping
   
-  // BUDGET MANAGER synonyms (Budget Office final approvers)
+  // OVERALL_BUDGET_APPROVER synonyms (Executive budget approval)
+  'OVERALL_BUDGET_APPROVER': 'OVERALL_BUDGET_APPROVER',
+  'OVERALLBUDGETAPPROVER': 'OVERALL_BUDGET_APPROVER',
+  'OVERALL_APPROVER': 'OVERALL_BUDGET_APPROVER',
+  'FINAL_APPROVER': 'OVERALL_BUDGET_APPROVER',
+  'FINALAPPROVER': 'OVERALL_BUDGET_APPROVER',
+  'BUDGET_DIRECTOR': 'OVERALL_BUDGET_APPROVER',
+  'BUDGETDIRECTOR': 'OVERALL_BUDGET_APPROVER',
+  
+  // BUDGET MANAGER synonyms (Upper management - legacy)
   'BUDGETMANAGER': 'BUDGET_MANAGER',
   'BUDGET_MANAGER': 'BUDGET_MANAGER',
   'BUDGET_OFFICE_HEAD': 'BUDGET_MANAGER',
-  'BUDGET_DIRECTOR': 'BUDGET_MANAGER',
-  'FINAL_APPROVER': 'BUDGET_MANAGER',
-  'BUDGETOFFICEHEAD': 'BUDGET_MANAGER',
-  'BUDGETDIRECTOR': 'BUDGET_MANAGER',
-  'FINALAPPROVER': 'BUDGET_MANAGER'
+  'BUDGETOFFICEHEAD': 'BUDGET_MANAGER'
 };
 
 /**

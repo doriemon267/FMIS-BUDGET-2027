@@ -35,18 +35,23 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
         return next();
       }
 
-      // Check if user has budget role - budget roles use budgetRoleAccessControl middleware instead
+      // Check if user has budget role or workflow role - these use budgetRoleAccessControl middleware instead
       const hasBudgetRole = userRoles && (
         userRoles.includes('BUDGET_ADMIN') ||
         userRoles.includes('BUDGET_MANAGER') ||
         userRoles.includes('BUDGET_OFFICER') ||
-        userRoles.includes('BUDGET_ANALYST')
+        userRoles.includes('BUDGET_ANALYST') ||
+        // 6-step workflow roles
+        userRoles.includes('PREPARER') ||
+        userRoles.includes('REVIEWER') ||
+        userRoles.includes('APPROVER') ||
+        userRoles.includes('OVERALL_BUDGET_APPROVER')
       );
       
       if (hasBudgetRole) {
-        // Budget role users bypass submission workflow control
+        // Budget/workflow role users bypass submission workflow control
         // They will be filtered by budgetRoleAccessControl middleware instead
-        console.log(`[submissionWorkflowControl] User has budget role, bypassing submission workflow control`);
+        console.log(`[submissionWorkflowControl] User has budget/workflow role, bypassing submission workflow control`);
         return next();
       }
 

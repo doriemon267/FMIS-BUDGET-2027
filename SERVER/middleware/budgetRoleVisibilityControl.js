@@ -34,11 +34,19 @@ const budgetRoleVisibilityControl = () => {
         budgetRole = 'BUDGET_OFFICER';
       } else if (userRoles.includes('BUDGET_ANALYST')) {
         budgetRole = 'BUDGET_ANALYST';
+      } else if (userRoles.includes('PREPARER')) {
+        budgetRole = 'PREPARER';
+      } else if (userRoles.includes('REVIEWER')) {
+        budgetRole = 'REVIEWER';
+      } else if (userRoles.includes('APPROVER')) {
+        budgetRole = 'APPROVER';
+      } else if (userRoles.includes('OVERALL_BUDGET_APPROVER')) {
+        budgetRole = 'OVERALL_BUDGET_APPROVER';
       }
 
       if (!budgetRole) {
         // No budget role, skip filtering
-        console.log('[budgetRoleVisibilityControl] No budget role detected, skipping filters');
+        console.log('[budgetRoleVisibilityControl] No budget or workflow role detected, skipping filters');
         return next();
       }
 
@@ -147,6 +155,117 @@ const budgetRoleVisibilityControl = () => {
                 'Submitted'
               ]
             }
+          };
+          break;
+
+        case 'PREPARER':
+          // PREPARER can see:
+          // 1. Their own proposals (created by them) - any status including drafts
+          // 2. Proposals in their workflow queue
+          visibilityFilter = {
+            $or: [
+              // Own proposals created by this user
+              { createdByUserId: userId },
+              // Proposals assigned/processed by this user
+              { processBy: userId }
+            ]
+          };
+          break;
+
+        case 'REVIEWER':
+          // REVIEWER can see:
+          // 1. Their own proposals (created by them) - any status including drafts
+          // 2. Proposals in their review workflow queue
+          // 3. Proposals in specific statuses for review
+          visibilityFilter = {
+            $or: [
+              // Own proposals created by this user
+              { createdByUserId: userId },
+              // Proposals assigned/processed by this user
+              { processBy: userId },
+              // Proposals in submitted/review statuses
+              {
+                status: {
+                  $in: [
+                    'Division Submitted',
+                    'DIVISION SUBMITTED',
+                    'Department Verified',
+                    'DEPARTMENT VERIFIED',
+                    'Department Submitted',
+                    'DEPARTMENT SUBMITTED'
+                  ]
+                }
+              }
+            ]
+          };
+          break;
+
+        case 'APPROVER':
+          // APPROVER can see:
+          // 1. Their own proposals (created by them) - any status including drafts
+          // 2. Proposals in their approval workflow queue
+          // 3. Proposals in submitted/verification statuses for approval
+          visibilityFilter = {
+            $or: [
+              // Own proposals created by this user
+              { createdByUserId: userId },
+              // Proposals assigned/processed by this user
+              { processBy: userId },
+              // Proposals in submitted/verification statuses
+              {
+                status: {
+                  $in: [
+                    'Division Submitted',
+                    'DIVISION SUBMITTED',
+                    'Department Verified',
+                    'DEPARTMENT VERIFIED',
+                    'Department Submitted',
+                    'DEPARTMENT SUBMITTED',
+                    'Responsibility Center Submitted',
+                    'RESPONSIBILITY_CENTER_SUBMITTED',
+                    'Office Verified',
+                    'OFFICE VERIFIED'
+                  ]
+                }
+              }
+            ]
+          };
+          break;
+
+        case 'OVERALL_BUDGET_APPROVER':
+          // OVERALL_BUDGET_APPROVER can see:
+          // 1. Their own proposals (created by them) - any status including drafts
+          // 2. All submitted/verified/approved proposals for final approval
+          visibilityFilter = {
+            $or: [
+              // Own proposals created by this user
+              { createdByUserId: userId },
+              // Proposals assigned/processed by this user
+              { processBy: userId },
+              // Proposals in any submitted/verified/approved status
+              {
+                status: {
+                  $in: [
+                    'Division Submitted',
+                    'DIVISION SUBMITTED',
+                    'Department Verified',
+                    'DEPARTMENT VERIFIED',
+                    'Department Submitted',
+                    'DEPARTMENT SUBMITTED',
+                    'Responsibility Center Submitted',
+                    'RESPONSIBILITY_CENTER_SUBMITTED',
+                    'Office Verified',
+                    'OFFICE VERIFIED',
+                    'Forwarded to Manager',
+                    'FORWARDED_TO_MANAGER',
+                    'Officer Approved',
+                    'OFFICER_APPROVED',
+                    'Region Approved',
+                    'REGION APPROVED'
+                  ]
+                }
+              }
+            ]
           };
           break;
 

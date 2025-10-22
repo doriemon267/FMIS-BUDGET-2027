@@ -1,26 +1,55 @@
 /**
- * 🎭 Workflow Role Assignment Helper
+ * 🎭 Workflow Role Assignment Helper (September 2025)
  * 
- * This module provides functions to assign and manage workflow roles for the submission process.
+ * This module provides functions to assign and manage workflow roles for the NEW 6-step submission process.
  * 
- * WORKFLOW HIERARCHY (October 2025):
- * - BUDGET ANALYST (Creator): divisioncreator (RC/Division) OR officecreator (Office)
- * - BUDGET COORDINATOR (Approver): divisionapprover only
- * - BUDGET OFFICER (Verifier): officeverifier/officeconsolidator/officefinalverifier
- * - BUDGET MANAGER (Final Approver): managerapprover/regionfinalverifier
+ * NEW 6-STEP WORKFLOW HIERARCHY (September 2025):
+ * ==============================================
+ * STEP 1: PREPARER
+ *         - divisionCreator (Division Level) OR officeCreator (Department/Regional Level)
+ *         - Creates and edits proposals
+ *
+ * STEP 2: REVIEWER
+ *         - divisionReviewer (Division Level only)
+ *         - Reviews submissions before approval
+ *
+ * STEP 3: APPROVER
+ *         - divisionApprover (Division Level) OR officeApprover (Department/Regional Level)
+ *         - Approves/verifies submissions
+ *         - NOTE: Office level users skip BUDGET_COORDINATOR directly
+ *
+ * STEP 4: BUDGET_ANALYST
+ *         - budgetAnalyst (Budget and Revenue Division)
+ *         - Technical review of submissions
+ *
+ * STEP 5: BUDGET_OFFICER
+ *         - budgetOfficer (Budget and Revenue Division)
+ *         - Operational approval
+ *
+ * STEP 6: OVERALL_BUDGET_APPROVER
+ *         - overallBudgetApprover (Budget and Revenue Division)
+ *         - Executive authorization and final approval
  * 
  * WORKFLOW PATHS:
- * Division Level: ANALYST (divisioncreator) → COORDINATOR (divisionapprover) → OFFICER → MANAGER
- * Office Level:   ANALYST (officecreator) → OFFICER (direct, skip coordinator) → MANAGER
+ * - Division Level:   PREPARER → REVIEWER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER
+ * - Office Level:     PREPARER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER (skips REVIEWER)
  */
+
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+const {
+  ASSIGNMENT_LEVELS,
+  WORKFLOW_ROLES,
+  ASSIGNMENT_LEVEL_WORKFLOW_MAPPING,
+  ROLE_HIERARCHY,
+  PERMISSION_MAPPING
+} = require('../constants/workflowConstants');
+
 /**
- * Assign workflow roles to users based on their organizational level
- * - If roles argument is OMITTED, auto-assign defaults based on level (CREATOR roles only)
- * - If roles argument is PROVIDED (even []), honor it exactly (no auto-assignment)
+ * Assign workflow roles to users based on their organizational level (NEW 6-step workflow)
+ * - If roles argument is OMITTED, auto-assign defaults based on level
+ * - If roles argument is PROVIDED (even []), honor it exactly
  * 
- * NOTE: Approver roles should be manually assigned to separate users to maintain
- * separation of duties between creators and approvers.
+ * NOTE: Strict separation of duties - Preparer and Approver roles should be separate users
  */
 const assignWorkflowRoles = async (userId, assignmentLevel, workflowRoles) => {
   try {
@@ -28,62 +57,37 @@ const assignWorkflowRoles = async (userId, assignmentLevel, workflowRoles) => {
     if (!assignment) {
       throw new Error('User assignment not found');
     }
+
     const rolesArgProvided = arguments.length >= 3; // detect explicit provision
     let rolesToSave = Array.isArray(workflowRoles) ? [...workflowRoles] : [];
 
     if (!rolesArgProvided) {
-      // Auto-assign default CREATOR workflow roles based on assignment level
-      // APPROVER roles must be assigned manually
-      switch (assignmentLevel) {
-        case 'RESPONSIBILITY_CENTER':
-        case 'DIVISION':
-          // Division/RC Level: Budget Analyst creator role only
-          // Submits to COORDINATOR → OFFICER → MANAGER
-          rolesToSave = ['divisionCreator'];
-          break;
-        case 'OFFICE':
-          // Office Level: Budget Analyst creator role only
-          // Submits DIRECTLY to OFFICER (skip coordinator) → MANAGER
-          rolesToSave = ['officeCreator'];
-          break;
-        case 'DEPARTMENT':
-          // Department Level: Typically coordinator/consolidator roles
-          // Should be manually assigned based on actual function
-          rolesToSave = ['departmentConsolidator'];
-          break;
-        case 'REGION':
-          // Regional Level: Final verifier/approver roles
-          rolesToSave = ['regionFinalVerifier'];
-          break;
-        case 'FULL':
-          // Full access: All creator and approver roles
-          rolesToSave = [
-            'divisionCreator', 
-            'officeCreator',
-            'divisionApprover',
-            'officeFinalVerifier',
-            'regionFinalVerifier',
-            'managerapprover'
-          ];
-          break;
-        default:
-          // Unknown level: no auto-assignment
-          rolesToSave = [];
+      // Auto-assign default workflow roles based on NEW assignment level
+      const normalizedLevel = normalizeAssignmentLevel(assignmentLevel);
+      const assignedRoles = ASSIGNMENT_LEVEL_WORKFLOW_MAPPING[normalizedLevel];
+
+      if (assignedRoles && assignedRoles.autoAssignedRoles) {
+        rolesToSave = assignedRoles.autoAssignedRoles;
+      } else {
+        // Fallback to legacy logic if not found
+        rolesToSave = getDefaultRolesForLevel(assignmentLevel);
       }
     }
 
-    // Update the assignment with workflow roles (as provided or auto)
+    // Update the assignment with workflow roles
     assignment.workflowRoles = rolesToSave;
     await assignment.save();
+
     return {
       success: true,
-      message: 'Workflow roles assigned successfully',
+      message: 'Workflow roles assigned successfully (NEW 6-step workflow)',
       userId,
       assignmentLevel,
+      normalizedLevel: normalizeAssignmentLevel(assignmentLevel),
       workflowRoles: rolesToSave
     };
   } catch (error) {
-    console.error('Error assigning workflow roles:', error);
+    console.error('❌ Error assigning workflow roles:', error);
     return {
       success: false,
       message: 'Failed to assign workflow roles',
@@ -91,8 +95,42 @@ const assignWorkflowRoles = async (userId, assignmentLevel, workflowRoles) => {
     };
   }
 };
+
 /**
- * Check if user has specific workflow role
+ * Normalize assignment level to NEW standard (maps old levels to new)
+ */
+const normalizeAssignmentLevel = (level) => {
+  const mapping = {
+    'RESPONSIBILITY_CENTER': ASSIGNMENT_LEVELS.DIVISION_LEVEL,
+    'DIVISION': ASSIGNMENT_LEVELS.DIVISION_LEVEL,
+    'OFFICE': ASSIGNMENT_LEVELS.DEPARTMENT_REGIONAL_LEVEL,
+    'DEPARTMENT': ASSIGNMENT_LEVELS.DEPARTMENT_REGIONAL_LEVEL,
+    'REGION': ASSIGNMENT_LEVELS.BUDGET_AND_REVENUE_DIVISION
+  };
+  return mapping[level] || level;
+};
+
+/**
+ * Get default roles for legacy assignment levels (fallback)
+ */
+const getDefaultRolesForLevel = (level) => {
+  const mapping = {
+    'RESPONSIBILITY_CENTER': [WORKFLOW_ROLES.DIVISION_CREATOR],
+    'DIVISION': [WORKFLOW_ROLES.DIVISION_CREATOR],
+    'OFFICE': [WORKFLOW_ROLES.OFFICE_CREATOR],
+    'DEPARTMENT': [WORKFLOW_ROLES.OFFICE_CREATOR],
+    'REGION': [
+      WORKFLOW_ROLES.BUDGET_ANALYST,
+      WORKFLOW_ROLES.BUDGET_OFFICER,
+      WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER
+    ],
+    'FULL': Object.values(WORKFLOW_ROLES)
+  };
+  return mapping[level] || [];
+};
+
+/**
+ * Check if user has specific workflow role (NEW 6-step workflow)
  */
 const hasWorkflowRole = async (userId, requiredRole) => {
   try {
@@ -101,28 +139,33 @@ const hasWorkflowRole = async (userId, requiredRole) => {
       return false;
     }
 
-    // Bridge new vs legacy role names used by workflow routes vs. model enum
-    // New structure routes use: officeConsolidator, officeFinalVerifier, officeSubmission, responsibilityCenterCreator
-    // Legacy/model roles are: departmentConsolidator, regionFinalVerifier, departmentSubmission, divisionCreator
+    // Map legacy role names to new roles for backward compatibility
     const roleAliases = {
-      officeConsolidator: 'departmentConsolidator',
-      officeFinalVerifier: 'regionFinalVerifier',
-      officeSubmission: 'departmentSubmission',
-      responsibilityCenterCreator: 'divisionCreator'
+      // Legacy → New role mappings
+      'responsibilityCenterCreator': WORKFLOW_ROLES.DIVISION_CREATOR,
+      'officeConsolidator': WORKFLOW_ROLES.OFFICE_APPROVER,
+      'officeFinalVerifier': WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER,
+      'officeSubmission': WORKFLOW_ROLES.OFFICE_CREATOR,
+      'departmentCreator': WORKFLOW_ROLES.OFFICE_CREATOR,
+      'departmentConsolidator': WORKFLOW_ROLES.OFFICE_APPROVER,
+      'regionFinalVerifier': WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER
     };
 
     const acceptableRoles = [requiredRole];
-    if (roleAliases[requiredRole]) acceptableRoles.push(roleAliases[requiredRole]);
+    if (roleAliases[requiredRole]) {
+      acceptableRoles.push(roleAliases[requiredRole]);
+    }
 
     const roles = assignment.workflowRoles || [];
     return acceptableRoles.some(r => roles.includes(r));
   } catch (error) {
-    console.error('Error checking workflow role:', error);
+    console.error('❌ Error checking workflow role:', error);
     return false;
   }
 };
+
 /**
- * Get users with specific workflow role in an organizational unit
+ * Get users with specific workflow role in an organizational unit (NEW 6-step workflow)
  */
 const getUsersWithWorkflowRole = async (role, organizationalFilter = {}) => {
   try {
@@ -130,6 +173,7 @@ const getUsersWithWorkflowRole = async (role, organizationalFilter = {}) => {
       isActive: true,
       workflowRoles: role
     };
+
     // Add organizational filters
     if (organizationalFilter.regionId) {
       query.regionId = organizationalFilter.regionId;
@@ -140,68 +184,66 @@ const getUsersWithWorkflowRole = async (role, organizationalFilter = {}) => {
     if (organizationalFilter.divisionName) {
       query.divisionName = organizationalFilter.divisionName;
     }
+
     const users = await HierarchicalUserAssignment.find(query)
       .populate('regionId', 'regionName Region')
       .populate('departmentId', 'Department departmentName');
+
     return users.map(user => ({
       userId: user.userId,
       userName: user.userName,
       email: user.email,
       assignmentLevel: user.assignmentLevel,
+      normalizedAssignmentLevel: normalizeAssignmentLevel(user.assignmentLevel),
       workflowRoles: user.workflowRoles,
       region: user.regionId?.regionName || user.regionId?.Region,
       department: user.departmentId?.Department || user.departmentId?.departmentName,
       division: user.divisionName
     }));
   } catch (error) {
-    console.error('Error getting users with workflow role:', error);
+    console.error('❌ Error getting users with workflow role:', error);
     return [];
   }
 };
+
 /**
- * Setup default workflow role assignments for existing users
+ * Setup default workflow role assignments for existing users (NEW 6-step workflow)
  */
 const setupDefaultWorkflowRoles = async () => {
   try {
     const assignments = await HierarchicalUserAssignment.find({ isActive: true });
     let updatedCount = 0;
+
     for (const assignment of assignments) {
       // Skip if already has workflow roles
       if (assignment.workflowRoles && assignment.workflowRoles.length > 0) {
         continue;
       }
-      let defaultRoles = [];
-      switch (assignment.assignmentLevel) {
-        case 'DIVISION':
-          defaultRoles = ['divisionCreator'];
-          break;
-        case 'DEPARTMENT':
-          defaultRoles = ['departmentCreator', 'departmentConsolidator'];
-          break;
-        case 'REGION':
-          defaultRoles = ['regionCreator', 'regionFinalVerifier'];
-          break;
-        case 'FULL':
-          defaultRoles = [
-            'divisionCreator', 'divisionApprover',
-            'departmentCreator', 'departmentConsolidator', 'departmentSubmission',
-            'regionCreator', 'regionFinalVerifier'
-          ];
-          break;
+
+      const normalizedLevel = normalizeAssignmentLevel(assignment.assignmentLevel);
+      const assignedRoles = ASSIGNMENT_LEVEL_WORKFLOW_MAPPING[normalizedLevel];
+      let defaultRoles = assignedRoles?.autoAssignedRoles || [];
+
+      if (!defaultRoles.length) {
+        // Fallback: use legacy logic
+        defaultRoles = getDefaultRolesForLevel(assignment.assignmentLevel);
       }
+
       if (defaultRoles.length > 0) {
         assignment.workflowRoles = defaultRoles;
         await assignment.save();
         updatedCount++;
+        console.log(`✅ Assigned roles to ${assignment.userName}:`, defaultRoles);
       }
     }
+
     return {
       success: true,
-      message: `Default workflow roles assigned to ${updatedCount} users`,
+      message: `Default workflow roles assigned to ${updatedCount} users (NEW 6-step workflow)`,
       updatedCount
     };
   } catch (error) {
-    console.error('Error setting up default workflow roles:', error);
+    console.error('❌ Error setting up default workflow roles:', error);
     return {
       success: false,
       message: 'Failed to setup default workflow roles',
@@ -209,56 +251,59 @@ const setupDefaultWorkflowRoles = async () => {
     };
   }
 };
+
 /**
- * Workflow role descriptions for admin interface
- */
-const WORKFLOW_ROLE_DESCRIPTIONS = {
-  'divisionCreator': 'Can create and edit division-level data',
-  'divisionApprover': 'Can approve division submissions (usually Department-level users)',
-  'departmentCreator': 'Can create and edit department-level data',
-  'departmentConsolidator': 'Can consolidate and review division submissions',
-  'departmentSubmission': 'Can submit department data to region',
-  'regionCreator': 'Can create and edit region-level data',
-  'regionFinalVerifier': 'Can provide final approval for all submissions'
-};
-/**
- * Get workflow permissions for a user
+ * Get workflow permissions for a user (NEW 6-step workflow)
  */
 const getUserWorkflowPermissions = async (userId) => {
   try {
     const assignment = await HierarchicalUserAssignment.findOne({ userId, isActive: true })
       .populate('regionId', 'regionName Region')
       .populate('departmentId', 'Department departmentName');
+
     if (!assignment) {
       return {
         success: false,
         message: 'User assignment not found'
       };
     }
+
     const workflowRoles = assignment.workflowRoles || [];
+    const normalizedLevel = normalizeAssignmentLevel(assignment.assignmentLevel);
+
     return {
       success: true,
       userId,
       userName: assignment.userName,
       assignmentLevel: assignment.assignmentLevel,
+      normalizedAssignmentLevel: normalizedLevel,
       workflowRoles,
       permissions: {
-        canCreateDivisionData: workflowRoles.includes('divisionCreator'),
-        canApproveDivisionSubmissions: workflowRoles.includes('divisionApprover'),
-        canCreateDepartmentData: workflowRoles.includes('departmentCreator'),
-        canConsolidateDivisionData: workflowRoles.includes('departmentConsolidator'),
-        canSubmitDepartmentData: workflowRoles.includes('departmentSubmission'),
-        canCreateRegionData: workflowRoles.includes('regionCreator'),
-        canProvideRegionFinalApproval: workflowRoles.includes('regionFinalVerifier')
+        // NEW 6-step workflow permissions
+        canCreateProposals: workflowRoles.includes(WORKFLOW_ROLES.DIVISION_CREATOR) || 
+                           workflowRoles.includes(WORKFLOW_ROLES.OFFICE_CREATOR),
+        canReviewProposals: workflowRoles.includes(WORKFLOW_ROLES.DIVISION_REVIEWER),
+        canApproveProposals: workflowRoles.includes(WORKFLOW_ROLES.DIVISION_APPROVER) || 
+                            workflowRoles.includes(WORKFLOW_ROLES.OFFICE_APPROVER),
+        canPerformTechnicalReview: workflowRoles.includes(WORKFLOW_ROLES.BUDGET_ANALYST),
+        canProvideOperationalApproval: workflowRoles.includes(WORKFLOW_ROLES.BUDGET_OFFICER),
+        canProvideExecutiveApproval: workflowRoles.includes(WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER),
+        isAdministrator: workflowRoles.includes(WORKFLOW_ROLES.BUDGET_ADMIN),
+        // Legacy permissions (for backward compatibility)
+        isPreparer: assignment.isPreparer?.(),
+        isReviewer: assignment.isReviewer?.(),
+        isApprover: assignment.isApprover?.(),
+        isBudgetAndRevenueUser: assignment.isBudgetAndRevenueUser?.()
       },
       organizationalContext: {
         region: assignment.regionId?.regionName || assignment.regionId?.Region,
         department: assignment.departmentId?.Department || assignment.departmentId?.departmentName,
         division: assignment.divisionName
-      }
+      },
+      workflowPath: getWorkflowPath(normalizedLevel)
     };
   } catch (error) {
-    console.error('Error getting user workflow permissions:', error);
+    console.error('❌ Error getting user workflow permissions:', error);
     return {
       success: false,
       message: 'Failed to get workflow permissions',
@@ -266,11 +311,96 @@ const getUserWorkflowPermissions = async (userId) => {
     };
   }
 };
+
+/**
+ * Get workflow path based on assignment level
+ */
+const getWorkflowPath = (normalizedLevel) => {
+  const paths = {
+    [ASSIGNMENT_LEVELS.DIVISION_LEVEL]: {
+      name: 'Division Level Submission',
+      steps: [
+        { step: 1, role: WORKFLOW_ROLES.DIVISION_CREATOR, name: 'PREPARER' },
+        { step: 2, role: WORKFLOW_ROLES.DIVISION_REVIEWER, name: 'REVIEWER' },
+        { step: 3, role: WORKFLOW_ROLES.DIVISION_APPROVER, name: 'APPROVER' },
+        { step: 4, role: WORKFLOW_ROLES.BUDGET_ANALYST, name: 'BUDGET_ANALYST' },
+        { step: 5, role: WORKFLOW_ROLES.BUDGET_OFFICER, name: 'BUDGET_OFFICER' },
+        { step: 6, role: WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER, name: 'OVERALL_BUDGET_APPROVER' }
+      ]
+    },
+    [ASSIGNMENT_LEVELS.DEPARTMENT_REGIONAL_LEVEL]: {
+      name: 'Office/Department Level Submission',
+      steps: [
+        { step: 1, role: WORKFLOW_ROLES.OFFICE_CREATOR, name: 'PREPARER' },
+        { step: 2, role: WORKFLOW_ROLES.OFFICE_APPROVER, name: 'APPROVER' },
+        { step: 3, role: WORKFLOW_ROLES.BUDGET_ANALYST, name: 'BUDGET_ANALYST' },
+        { step: 4, role: WORKFLOW_ROLES.BUDGET_OFFICER, name: 'BUDGET_OFFICER' },
+        { step: 5, role: WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER, name: 'OVERALL_BUDGET_APPROVER' }
+      ]
+    },
+    [ASSIGNMENT_LEVELS.BUDGET_AND_REVENUE_DIVISION]: {
+      name: 'Budget and Revenue Division',
+      steps: [
+        { step: 1, role: WORKFLOW_ROLES.BUDGET_ANALYST, name: 'BUDGET_ANALYST' },
+        { step: 2, role: WORKFLOW_ROLES.BUDGET_OFFICER, name: 'BUDGET_OFFICER' },
+        { step: 3, role: WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER, name: 'OVERALL_BUDGET_APPROVER' }
+      ]
+    }
+  };
+
+  return paths[normalizedLevel] || null;
+};
+
+/**
+ * Validate workflow role for a specific assignment level
+ */
+const validateWorkflowRole = (role, assignmentLevel) => {
+  const normalizedLevel = normalizeAssignmentLevel(assignmentLevel);
+  const assignedRoles = ASSIGNMENT_LEVEL_WORKFLOW_MAPPING[normalizedLevel];
+
+  if (!assignedRoles) {
+    return { valid: false, message: `Unknown assignment level: ${assignmentLevel}` };
+  }
+
+  if (!assignedRoles.canHaveRoles.includes(role)) {
+    return {
+      valid: false,
+      message: `Role '${role}' not allowed for assignment level '${normalizedLevel}'`,
+      allowedRoles: assignedRoles.canHaveRoles
+    };
+  }
+
+  return { valid: true, message: 'Role is valid for this assignment level' };
+};
+
+/**
+ * Get the next workflow role in the sequence
+ */
+const getNextWorkflowRole = (currentRole) => {
+  const nextRoleMap = {
+    [WORKFLOW_ROLES.DIVISION_CREATOR]: WORKFLOW_ROLES.DIVISION_REVIEWER,
+    [WORKFLOW_ROLES.DIVISION_REVIEWER]: WORKFLOW_ROLES.DIVISION_APPROVER,
+    [WORKFLOW_ROLES.DIVISION_APPROVER]: WORKFLOW_ROLES.BUDGET_ANALYST,
+    [WORKFLOW_ROLES.OFFICE_CREATOR]: WORKFLOW_ROLES.OFFICE_APPROVER,
+    [WORKFLOW_ROLES.OFFICE_APPROVER]: WORKFLOW_ROLES.BUDGET_ANALYST,
+    [WORKFLOW_ROLES.BUDGET_ANALYST]: WORKFLOW_ROLES.BUDGET_OFFICER,
+    [WORKFLOW_ROLES.BUDGET_OFFICER]: WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER,
+    [WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER]: null
+  };
+
+  return nextRoleMap[currentRole] || null;
+};
+
 module.exports = {
   assignWorkflowRoles,
   hasWorkflowRole,
   getUsersWithWorkflowRole,
   setupDefaultWorkflowRoles,
   getUserWorkflowPermissions,
-  WORKFLOW_ROLE_DESCRIPTIONS
+  getWorkflowPath,
+  validateWorkflowRole,
+  getNextWorkflowRole,
+  normalizeAssignmentLevel,
+  getDefaultRolesForLevel,
+  WORKFLOW_ROLES: WORKFLOW_ROLES
 };

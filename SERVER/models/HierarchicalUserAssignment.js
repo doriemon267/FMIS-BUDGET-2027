@@ -18,36 +18,66 @@ const HierarchicalUserAssignmentSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  // Persist the user's intended budget role to avoid UI re-inference flipping roles
+  // Persist the user's intended budget role (NEW: 6-step workflow roles)
   userRole: {
     type: String,
-    enum: ['BUDGET_ANALYST', 'BUDGET_COORDINATOR', 'BUDGET_OFFICER', 'BUDGET_MANAGER', 'BUDGET_ADMIN'],
+    enum: [
+      'PREPARER',
+      'REVIEWER',
+      'APPROVER',
+      'BUDGET_ANALYST',
+      'BUDGET_OFFICER',
+      'OVERALL_BUDGET_APPROVER',
+      'BUDGET_ADMIN',
+      // Legacy roles for backward compatibility
+      'BUDGET_COORDINATOR',
+      'BUDGET_MANAGER'
+    ],
     required: false,
     default: undefined
   },
+  // NEW: Assignment Level with new naming convention
   assignmentLevel: {
     type: String,
-    enum: ['DIVISION', 'DEPARTMENT', 'REGION', 'FULL', 'RESPONSIBILITY_CENTER', 'OFFICE'],
+    enum: [
+      // New levels (September 2025)
+      'DIVISION_LEVEL',
+      'DEPARTMENT_REGIONAL_LEVEL',
+      'BUDGET_AND_REVENUE_DIVISION',
+      // Legacy levels (for backward compatibility)
+      'DIVISION',
+      'DEPARTMENT',
+      'REGION',
+      'RESPONSIBILITY_CENTER',
+      'OFFICE',
+      'FULL'
+    ],
     required: true
   },
   regionId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'region',
     required: function() {
-      return ['DIVISION', 'DEPARTMENT', 'REGION', 'RESPONSIBILITY_CENTER'].includes(this.assignmentLevel);
+      return [
+        'DIVISION', 'DEPARTMENT', 'REGION', 'RESPONSIBILITY_CENTER',
+        'DIVISION_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL'
+      ].includes(this.assignmentLevel);
     }
   },
   departmentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'department',
     required: function() {
-      return ['DIVISION', 'DEPARTMENT', 'RESPONSIBILITY_CENTER', 'OFFICE'].includes(this.assignmentLevel);
+      return [
+        'DIVISION', 'DEPARTMENT', 'RESPONSIBILITY_CENTER', 'OFFICE',
+        'DIVISION_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL'
+      ].includes(this.assignmentLevel);
     }
   },
   divisionName: {
     type: String,
     required: function() {
-      return ['DIVISION', 'RESPONSIBILITY_CENTER'].includes(this.assignmentLevel);
+      return ['DIVISION', 'RESPONSIBILITY_CENTER', 'DIVISION_LEVEL'].includes(this.assignmentLevel);
     }
   },
   rolePermissions: {
@@ -61,12 +91,21 @@ const HierarchicalUserAssignmentSchema = new mongoose.Schema({
     ManageUsers: { type: Boolean, default: false },
     ManageSettings: { type: Boolean, default: false }
   },
+  // NEW: Updated workflow roles for 6-step workflow
   workflowRoles: {
     type: [String],
     enum: [
-      'divisionCreator', 'divisionApprover',
+      // New 6-step workflow roles (September 2025) - INTERNAL NAMES
+      'divisionCreator', 'divisionReviewer', 'divisionApprover',
+      'officeCreator', 'officeApprover',
+      'budgetAnalyst', 'budgetOfficer', 'overallBudgetApprover',
+      'budgetAdmin',
+      // NEW USER-FACING ROLE NAMES (September 2025 system)
+      'PREPARER', 'REVIEWER', 'APPROVER',
+      'BUDGET_ANALYST', 'BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_ADMIN',
+      // Legacy roles (for backward compatibility)
       'departmentCreator', 'departmentConsolidator', 'departmentSubmission',
-      'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier',
+      'officeConsolidator', 'officeSubmission', 'officeFinalVerifier',
       'regionCreator', 'regionFinalVerifier'
     ],
     default: []
@@ -81,6 +120,17 @@ const HierarchicalUserAssignmentSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  // NEW: Track migration status for backward compatibility
+  migrationStatus: {
+    type: String,
+    enum: ['LEGACY', 'MIGRATED', 'NEW'],
+    default: 'NEW'
+  },
+  // NEW: Store old assignment level for migration tracking
+  legacyAssignmentLevel: {
+    type: String,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now
@@ -88,6 +138,10 @@ const HierarchicalUserAssignmentSchema = new mongoose.Schema({
   updatedAt: {
     type: Date,
     default: Date.now
+  },
+  migratedAt: {
+    type: Date,
+    default: null
   }
 });
 // Update the updatedAt field before saving
@@ -206,7 +260,11 @@ HierarchicalUserAssignmentSchema.methods.hasDivisionAccess = function(divisionNa
 };
 // Method to get consolidation target (where data should be saved)
 HierarchicalUserAssignmentSchema.methods.getConsolidationTarget = function() {
-  switch (this.assignmentLevel) {
+  const newLevel = this.assignmentLevel;
+  
+  // Handle new assignment levels
+  switch (newLevel) {
+    case 'DIVISION_LEVEL':
     case 'DIVISION':
       // Division data consolidates to Department level
       return {
@@ -215,6 +273,7 @@ HierarchicalUserAssignmentSchema.methods.getConsolidationTarget = function() {
         departmentId: this.departmentId,
         divisionName: null // Clear division for consolidated data
       };
+    case 'DEPARTMENT_REGIONAL_LEVEL':
     case 'DEPARTMENT':
       // Department data consolidates to Region level
       return {
@@ -223,6 +282,7 @@ HierarchicalUserAssignmentSchema.methods.getConsolidationTarget = function() {
         departmentId: null, // Clear department for consolidated data
         divisionName: null
       };
+    case 'BUDGET_AND_REVENUE_DIVISION':
     case 'REGION':
       // Region data stays at Region level
       return {
@@ -238,4 +298,78 @@ HierarchicalUserAssignmentSchema.methods.getConsolidationTarget = function() {
       return null;
   }
 };
+
+/**
+ * NEW: Get the normalized assignment level (maps legacy to new levels)
+ */
+HierarchicalUserAssignmentSchema.methods.getNormalizedAssignmentLevel = function() {
+  const mapping = {
+    'RESPONSIBILITY_CENTER': 'DIVISION_LEVEL',
+    'DIVISION': 'DIVISION_LEVEL',
+    'OFFICE': 'DEPARTMENT_REGIONAL_LEVEL',
+    'DEPARTMENT': 'DEPARTMENT_REGIONAL_LEVEL',
+    'REGION': 'BUDGET_AND_REVENUE_DIVISION'
+  };
+  return mapping[this.assignmentLevel] || this.assignmentLevel;
+};
+
+/**
+ * NEW: Check if user is a preparer (can create proposals)
+ */
+HierarchicalUserAssignmentSchema.methods.isPreparer = function() {
+  const preparerRoles = ['divisionCreator', 'officeCreator'];
+  return this.workflowRoles.some(role => preparerRoles.includes(role));
+};
+
+/**
+ * NEW: Check if user is a reviewer (reviews submissions)
+ */
+HierarchicalUserAssignmentSchema.methods.isReviewer = function() {
+  const reviewerRoles = ['divisionReviewer'];
+  return this.workflowRoles.some(role => reviewerRoles.includes(role));
+};
+
+/**
+ * NEW: Check if user is an approver (approves submissions)
+ */
+HierarchicalUserAssignmentSchema.methods.isApprover = function() {
+  const approverRoles = ['divisionApprover', 'officeApprover'];
+  return this.workflowRoles.some(role => approverRoles.includes(role));
+};
+
+/**
+ * NEW: Check if user is in Budget and Revenue Division
+ */
+HierarchicalUserAssignmentSchema.methods.isBudgetAndRevenueUser = function() {
+  const budgetRoles = ['budgetAnalyst', 'budgetOfficer', 'overallBudgetApprover', 'budgetAdmin'];
+  return this.workflowRoles.some(role => budgetRoles.includes(role));
+};
+
+/**
+ * NEW: Get the next workflow step for this user
+ */
+HierarchicalUserAssignmentSchema.methods.getNextWorkflowStep = function() {
+  const WORKFLOW_STEPS = {
+    'divisionCreator': 'divisionReviewer',
+    'divisionReviewer': 'divisionApprover',
+    'divisionApprover': 'budgetAnalyst',
+    'officeCreator': 'officeApprover',
+    'officeApprover': 'budgetAnalyst',
+    'budgetAnalyst': 'budgetOfficer',
+    'budgetOfficer': 'overallBudgetApprover',
+    'overallBudgetApprover': null
+  };
+  
+  // Return next steps for this user's roles
+  const nextSteps = [];
+  this.workflowRoles.forEach(role => {
+    const next = WORKFLOW_STEPS[role];
+    if (next && !nextSteps.includes(next)) {
+      nextSteps.push(next);
+    }
+  });
+  
+  return nextSteps.length > 0 ? nextSteps : null;
+};
+
 module.exports = mongoose.model('HierarchicalUserAssignment', HierarchicalUserAssignmentSchema);

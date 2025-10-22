@@ -77,18 +77,19 @@ const proposalSchema = new mongoose.Schema({
   currentAssigneeRole: {
     type: String,
     enum: [
+      "PREPARER",
       "BUDGET_ANALYST",
       "BUDGET_COORDINATOR",
       "BUDGET_OFFICER",
       "BUDGET_MANAGER",
       "BUDGET_ADMIN"
     ],
-    default: "BUDGET_ANALYST"
+    default: "PREPARER"
   },
   pendingWithRoles: {
     type: [String],
     default: function() {
-      return ["BUDGET_ANALYST"];
+      return ["PREPARER"];
     }
   },
   // Workflow history with comments and user tracking

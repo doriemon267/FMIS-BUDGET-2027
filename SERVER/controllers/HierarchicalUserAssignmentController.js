@@ -12,6 +12,9 @@ const { hasFullAccess } = require('../middleware/securityMiddleware');
 const mongoose = require('mongoose');
 const { mainConnection } = require('../config/mongo_db');
 
+// Import new workflow constants (September 2025 refactoring)
+const { WORKFLOW_ROLES } = require('../constants/workflowConstants');
+
 /**
  * Lookup user from fmis_main.assigned_roles table
  * Restricted based on current user's role permissions
@@ -22,13 +25,17 @@ const lookupUserFromMainDB = async (req, res) => {
     const currentUserRoles = req.user.Roles || [];
     const currentUserId = req.user.id;
 
-    // Define role hierarchy for access control
+    // Define role hierarchy for access control (based on 6-step workflow)
     const roleHierarchy = {
-      'BUDGET_ADMIN': 5,
-      'BUDGET_MANAGER': 4,
-      'BUDGET_OFFICER': 3,
-      'BUDGET_COORDINATOR': 2,
-      'BUDGET_ANALYST': 1
+      'BUDGET_ADMIN': 8,                    // Admin override
+      'BUDGET_MANAGER': 7,                  // Upper management (legacy)
+      'BUDGET_COORDINATOR': 6,              // Department/Region level (legacy)
+      'OVERALL_BUDGET_APPROVER': 5,        // Step 6: Executive budget approval
+      'BUDGET_OFFICER': 4,                  // Step 5: Operational approval
+      'BUDGET_ANALYST': 3,                  // Step 4: Technical review
+      'APPROVER': 2,                        // Step 3: Division/Office approval
+      'REVIEWER': 1,                        // Step 2: Division review
+      'PREPARER': 0                         // Step 1: Proposal creation
     };
 
     // Get current user's highest role level
@@ -88,16 +95,27 @@ const lookupUserFromMainDB = async (req, res) => {
     };
 
     // Determine the appropriate budget role based on user's main roles
-    let budgetRole = 'BUDGET_ANALYST'; // default
+    // Following the 6-step workflow hierarchy
+    let budgetRole = 'PREPARER'; // default
 
     if (roleNames.includes('SUPER ADMIN') || roleNames.includes('ADMIN')) {
       budgetRole = 'BUDGET_ADMIN';
     } else if (roleNames.includes('BUDGET MANAGER') || roleNames.includes('DEPARTMENT_HEAD')) {
       budgetRole = 'BUDGET_MANAGER';
+    } else if (roleNames.includes('OVERALL_BUDGET_APPROVER') || roleNames.includes('OVERALL BUDGET APPROVER')) {
+      budgetRole = 'OVERALL_BUDGET_APPROVER';
     } else if (roleNames.includes('BUDGET OFFICER') || roleNames.includes('SUPERVISOR')) {
       budgetRole = 'BUDGET_OFFICER';
+    } else if (roleNames.includes('BUDGET ANALYST')) {
+      budgetRole = 'BUDGET_ANALYST';
+    } else if (roleNames.includes('APPROVER') || roleNames.includes('OFFICE APPROVER') || roleNames.includes('DIVISION APPROVER')) {
+      budgetRole = 'APPROVER';
+    } else if (roleNames.includes('REVIEWER') || roleNames.includes('DIVISION REVIEWER')) {
+      budgetRole = 'REVIEWER';
     } else if (roleNames.includes('BUDGET COORDINATOR') || roleNames.includes('SENIOR_STAFF')) {
       budgetRole = 'BUDGET_COORDINATOR';
+    } else if (roleNames.includes('PREPARER')) {
+      budgetRole = 'PREPARER';
     }
 
     userInfo.budgetRole = budgetRole;
@@ -222,19 +240,27 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
 
     const approvalLevels = ['REGION', 'FULL', 'OFFICE', 'RESPONSIBILITY_CENTER'];
     
-    // Define valid workflow roles based on schema enum
+    // ✅ NEW: Support BOTH old and new workflow role names (September 2025 system)
     const VALID_WORKFLOW_ROLES = [
-      'divisionCreator', 'divisionApprover',
+      // OLD ROLE NAMES (Legacy system)
+      'divisionCreator', 'divisionApprover', 'divisionReviewer',
       'departmentCreator', 'departmentConsolidator', 'departmentSubmission',
       'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier',
-      'regionCreator', 'regionFinalVerifier'
+      'regionCreator', 'regionFinalVerifier',
+      // NEW ROLE NAMES (September 2025 workflow system)
+      'PREPARER', 'REVIEWER', 'APPROVER',
+      'BUDGET_ANALYST', 'BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_ADMIN',
+      // NEW INTERNAL ROLE NAMES (used in workflowConstants)
+      'divisionCreator', 'divisionReviewer', 'divisionApprover',
+      'officeCreator', 'officeApprover',
+      'budgetAnalyst', 'budgetOfficer', 'overallBudgetApprover', 'budgetAdmin'
     ];
     
     const hasExplicitWorkflowRoles = Array.isArray(req.body.workflowRoles);
     const sanitizedWorkflowRoles = hasExplicitWorkflowRoles
       ? (req.body.workflowRoles || [])
           .filter(role => typeof role === 'string' && role.trim())
-          .filter(role => VALID_WORKFLOW_ROLES.includes(role)) // Filter out invalid roles
+          .filter(role => VALID_WORKFLOW_ROLES.includes(role)) // ✅ NOW accepts both old and new roles
       : [];
     
     console.log('🔍 Workflow roles sanitization:', {
@@ -626,12 +652,19 @@ const updateWorkflowRoles = async (req, res) => {
     }
     const { userId } = req.params;
     const { workflowRoles = [] } = req.body;
+    
+    // ✅ NEW: Build allowed workflow roles from BOTH new and legacy systems
     const ALLOWED_WORKFLOW_ROLES = [
-      'divisionCreator', 'divisionApprover',
+      ...Object.values(WORKFLOW_ROLES),
+      // NEW USER-FACING ROLE NAMES (September 2025 system)
+      'PREPARER', 'REVIEWER', 'APPROVER',
+      'BUDGET_ANALYST', 'BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_ADMIN',
+      // Legacy roles for backward compatibility
       'departmentCreator', 'departmentConsolidator', 'departmentSubmission',
-      'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier',
+      'officeConsolidator', 'officeSubmission', 'officeFinalVerifier',
       'regionCreator', 'regionFinalVerifier', 'superAdmin'
     ];
+    
     if (!Array.isArray(workflowRoles)) {
       return res.status(400).json({ success: false, message: 'workflowRoles must be an array', code: 'INVALID_PAYLOAD' });
     }

@@ -51,36 +51,56 @@ const ACCESS_LEVELS = [
   { value: 'OWN_ONLY', label: 'Own Records Only', icon: <PersonIcon />, color: '#757575' }
 ];
 
+// New unified workflow roles (September 2025)
 const USER_ROLES = [
+  { 
+    value: 'PREPARER', 
+    label: 'Preparer', 
+    description: 'Creates and edits budget proposals',
+    workflowRoles: 'PREPARER (creates proposals)',
+    assignmentLevels: ['DIVISION_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL']
+  },
+  { 
+    value: 'REVIEWER', 
+    label: 'Reviewer', 
+    description: 'Reviews proposals for quality assurance (Division level only)',
+    workflowRoles: 'REVIEWER (mandatory review step)',
+    assignmentLevels: ['DIVISION_LEVEL']
+  },
+  { 
+    value: 'APPROVER', 
+    label: 'Approver', 
+    description: 'Approves proposals after review/creation',
+    workflowRoles: 'APPROVER (approves proposals)',
+    assignmentLevels: ['DIVISION_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL']
+  },
   { 
     value: 'BUDGET_ANALYST', 
     label: 'Budget Analyst', 
-    description: 'Creates and prepares budget proposals (divisionCreator or officeCreator based on assignment level)',
-    workflowRoles: 'divisionCreator (RC) or officeCreator (Office)'
-  },
-  { 
-    value: 'BUDGET_COORDINATOR', 
-    label: 'Budget Coordinator', 
-    description: 'Reviews and approves division-level proposals before forwarding to Budget Officer',
-    workflowRoles: 'divisionApprover'
+    description: 'Performs technical analysis of proposals',
+    workflowRoles: 'BUDGET_ANALYST (analyzes budget proposals)',
+    assignmentLevels: ['BUDGET_AND_REVENUE_DIVISION']
   },
   { 
     value: 'BUDGET_OFFICER', 
     label: 'Budget Officer', 
-    description: 'Verifies and consolidates proposals from divisions/offices, forwards to Budget Manager',
-    workflowRoles: 'officeConsolidator, officeFinalVerifier'
+    description: 'Provides operational approval of proposals',
+    workflowRoles: 'BUDGET_OFFICER (operational approval)',
+    assignmentLevels: ['BUDGET_AND_REVENUE_DIVISION']
   },
   { 
-    value: 'BUDGET_MANAGER', 
-    label: 'Budget Manager', 
-    description: 'Final approval authority for all budget proposals',
-    workflowRoles: 'managerapprover, regionFinalVerifier'
+    value: 'OVERALL_BUDGET_APPROVER', 
+    label: 'Overall Budget Approver', 
+    description: 'Final executive-level approval authority',
+    workflowRoles: 'OVERALL_BUDGET_APPROVER (executive approval)',
+    assignmentLevels: ['BUDGET_AND_REVENUE_DIVISION']
   },
   { 
     value: 'BUDGET_ADMIN', 
     label: 'Budget Admin', 
     description: 'Full administrative access - manages all proposals, users, and system settings',
-    workflowRoles: 'All workflow roles (full system access)'
+    workflowRoles: 'All workflow roles (full system access)',
+    assignmentLevels: ['FULL']
   }
 ];
 
@@ -822,71 +842,59 @@ const HierarchicalUserAssignmentPage = () => {
                           handleFormChange('userId', data.userId || '');
                           handleFormChange('userName', data.userName || '');
                           handleFormChange('email', data.email || '');
-                          const budgetRole = data.budgetRole || 'BUDGET_ANALYST';
-                          handleFormChange('userRole', budgetRole);
                           
-                          // Auto-set assignment level and permissions based on the budget role
-                          if (budgetRole === 'BUDGET_ANALYST') {
-                            handleFormChange('assignmentLevel', 'RESPONSIBILITY_CENTER');
-                            handleFormChange('rolePermissions', {
-                              CreateProposals: true,
-                              EditOwnProposals: true,
-                              EditAllProposals: false,
-                              DeleteProposals: false,
-                              ApproveProposals: false,
-                              ViewReports: true,
-                              ManageUsers: false,
-                              ManageSettings: false
-                            });
-                          } else if (budgetRole === 'BUDGET_COORDINATOR') {
-                            handleFormChange('assignmentLevel', 'OFFICE');
-                            handleFormChange('rolePermissions', {
-                              CreateProposals: true,
-                              EditOwnProposals: true,
-                              EditAllProposals: false,
-                              DeleteProposals: false,
-                              ApproveProposals: false,
-                              ViewReports: true,
-                              ManageUsers: false,
-                              ManageSettings: false
-                            });
-                          } else if (budgetRole === 'BUDGET_OFFICER') {
-                            handleFormChange('assignmentLevel', 'OFFICE');
-                            handleFormChange('rolePermissions', {
-                              CreateProposals: true,
-                              EditOwnProposals: true,
-                              EditAllProposals: true,
-                              DeleteProposals: false,
-                              ApproveProposals: true,
-                              ViewReports: true,
-                              ManageUsers: false,
-                              ManageSettings: false
-                            });
+                          // NEW ROLE SYSTEM (September 2025)
+                          // Map old budgetRole to new workflow roles with sensible defaults
+                          // User can still override the role selection in the User Role dropdown
+                          const budgetRole = data.budgetRole || 'BUDGET_ANALYST';
+                          let defaultRole = 'PREPARER'; // Most common role
+                          let defaultLevel = 'OFFICE';
+                          
+                          // Suggest appropriate role based on user's main database role
+                          if (budgetRole === 'BUDGET_ADMIN') {
+                            defaultRole = 'BUDGET_ADMIN';
+                            defaultLevel = 'FULL';
                           } else if (budgetRole === 'BUDGET_MANAGER') {
-                            handleFormChange('assignmentLevel', 'FULL');
-                            handleFormChange('rolePermissions', {
-                              CreateProposals: true,
-                              EditOwnProposals: true,
-                              EditAllProposals: true,
-                              DeleteProposals: true,
-                              ApproveProposals: true,
-                              ViewReports: true,
-                              ManageUsers: true,
-                              ManageSettings: true
-                            });
-                          } else if (budgetRole === 'BUDGET_ADMIN') {
-                            handleFormChange('assignmentLevel', 'FULL');
-                            handleFormChange('rolePermissions', {
-                              CreateProposals: true,
-                              EditOwnProposals: true,
-                              EditAllProposals: true,
-                              DeleteProposals: true,
-                              ApproveProposals: true,
-                              ViewReports: true,
-                              ManageUsers: true,
-                              ManageSettings: true
-                            });
+                            defaultRole = 'BUDGET_ADMIN'; // Managers get admin role
+                            defaultLevel = 'FULL';
+                          } else if (budgetRole === 'BUDGET_OFFICER') {
+                            defaultRole = 'APPROVER'; // Officers approve proposals
+                            defaultLevel = 'OFFICE';
+                          } else if (budgetRole === 'BUDGET_COORDINATOR') {
+                            defaultRole = 'APPROVER'; // Coordinators review and approve
+                            defaultLevel = 'OFFICE';
+                          } else if (budgetRole === 'BUDGET_ANALYST') {
+                            defaultRole = 'PREPARER'; // Analysts prepare proposals
+                            defaultLevel = 'RESPONSIBILITY_CENTER';
                           }
+                          
+                          handleFormChange('userRole', defaultRole);
+                          handleFormChange('assignmentLevel', defaultLevel);
+                          
+                          // Set permissions based on default role (will be auto-updated when role is finalized)
+                          const rolePerms = {
+                            CreateProposals: true,
+                            EditOwnProposals: true,
+                            EditAllProposals: false,
+                            DeleteProposals: false,
+                            ApproveProposals: false,
+                            ViewReports: true,
+                            ManageUsers: false,
+                            ManageSettings: false
+                          };
+                          
+                          if (defaultRole === 'APPROVER') {
+                            rolePerms.EditAllProposals = true;
+                            rolePerms.ApproveProposals = true;
+                          } else if (defaultRole === 'BUDGET_ADMIN') {
+                            rolePerms.EditAllProposals = true;
+                            rolePerms.DeleteProposals = true;
+                            rolePerms.ApproveProposals = true;
+                            rolePerms.ManageUsers = true;
+                            rolePerms.ManageSettings = true;
+                          }
+                          
+                          handleFormChange('rolePermissions', rolePerms);
                         }
                       }).catch((error) => {
                         console.warn('Auto-lookup query failed:', error);
@@ -961,17 +969,86 @@ const HierarchicalUserAssignmentPage = () => {
               )}
 
               <Grid item xs={12}>
-                <TextField
+                <Autocomplete
+                  options={USER_ROLES}
+                  getOptionLabel={(option) => {
+                    if (typeof option === 'string') return option;
+                    return option.label || '';
+                  }}
+                  value={USER_ROLES.find(r => r.value === formData.userRole) || null}
+                  onChange={(event, newValue) => {
+                    if (newValue) {
+                      handleFormChange('userRole', newValue.value);
+                      
+                      // Auto-update permissions based on selected role
+                      const rolePerms = {
+                        CreateProposals: true,
+                        EditOwnProposals: true,
+                        EditAllProposals: false,
+                        DeleteProposals: false,
+                        ApproveProposals: false,
+                        ViewReports: true,
+                        ManageUsers: false,
+                        ManageSettings: false
+                      };
+                      
+                      // Set permissions based on role
+                      if (newValue.value === 'APPROVER') {
+                        rolePerms.EditOwnProposals = true;
+                        rolePerms.EditAllProposals = true;
+                        rolePerms.ApproveProposals = true;
+                      } else if (newValue.value === 'REVIEWER') {
+                        rolePerms.EditOwnProposals = true;
+                        rolePerms.EditAllProposals = true;
+                      } else if (newValue.value === 'PREPARER') {
+                        rolePerms.CreateProposals = true;
+                        rolePerms.EditOwnProposals = true;
+                      } else if (newValue.value === 'BUDGET_ANALYST' || newValue.value === 'BUDGET_OFFICER' || newValue.value === 'OVERALL_BUDGET_APPROVER') {
+                        rolePerms.EditAllProposals = true;
+                        rolePerms.ApproveProposals = true;
+                        if (newValue.value === 'OVERALL_BUDGET_APPROVER') {
+                          rolePerms.ManageSettings = true;
+                        }
+                      } else if (newValue.value === 'BUDGET_ADMIN') {
+                        rolePerms.CreateProposals = true;
+                        rolePerms.EditOwnProposals = true;
+                        rolePerms.EditAllProposals = true;
+                        rolePerms.DeleteProposals = true;
+                        rolePerms.ApproveProposals = true;
+                        rolePerms.ViewReports = true;
+                        rolePerms.ManageUsers = true;
+                        rolePerms.ManageSettings = true;
+                      }
+                      
+                      handleFormChange('rolePermissions', rolePerms);
+                    }
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="User Role"
+                      placeholder="Select a role"
+                      helperText="Choose the workflow role for this user"
+                      required
+                    />
+                  )}
+                  renderOption={(props, option) => {
+                    const { key, ...otherProps } = props;
+                    return (
+                      <Box component="li" key={key} {...otherProps}>
+                        <Box>
+                          <Typography variant="body2" fontWeight="bold">
+                            {option.label}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {option.description}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    );
+                  }}
+                  noOptionsText="No roles available"
                   fullWidth
-                  label="User Role"
-                  value={(() => {
-                    // Display the role label based on the role value
-                    const role = USER_ROLES.find(r => r.value === formData.userRole);
-                    return role ? role.label : formData.userRole || '';
-                  })()}
-                  disabled={true}
-                  helperText="Role is automatically determined by Assignment Level and permissions"
-                  inputProps={{ 'aria-label': 'User Role' }}
                 />
               </Grid>
 
@@ -1012,10 +1089,8 @@ const HierarchicalUserAssignmentPage = () => {
                         ManageUsers: false,
                         ManageSettings: false
                       });
-                      // Update user role
-                      // Preserve existing explicit coordinator if already set
-                      const nextUserRole = formData.userRole === 'BUDGET_COORDINATOR' ? 'BUDGET_COORDINATOR' : 'BUDGET_ANALYST';
-                      handleFormChange('userRole', nextUserRole);
+                      // Update user role - default to PREPARER for OWN_ONLY
+                      handleFormChange('userRole', 'PREPARER');
                     } else if (isRC) {
                       // Only RC roles allowed
                       setRole('divisionCreator', !!nextRoles.divisionCreator);
@@ -1037,9 +1112,8 @@ const HierarchicalUserAssignmentPage = () => {
                           ManageSettings: false
                         });
                       }
-                      // Update user role: allow Budget Coordinator at RC level if explicitly chosen
-                      const nextUserRole = formData.userRole === 'BUDGET_COORDINATOR' ? 'BUDGET_COORDINATOR' : 'BUDGET_ANALYST';
-                      handleFormChange('userRole', nextUserRole);
+                      // Update user role - default to PREPARER for Responsibility Center level
+                      handleFormChange('userRole', formData.userRole || 'PREPARER');
                     } else if (isOffice) {
                       // Office roles allowed; RC creator optional -> keep selection
                       setRole('officeCreator', !!nextRoles.officeCreator);
@@ -1062,8 +1136,8 @@ const HierarchicalUserAssignmentPage = () => {
                           ManageSettings: false
                         });
                       }
-                      // Update user role - default to BUDGET_COORDINATOR for Office, preserve any explicit choice
-                      handleFormChange('userRole', formData.userRole || 'BUDGET_COORDINATOR');
+                      // Update user role - default to PREPARER for Office level, preserve any explicit choice
+                      handleFormChange('userRole', formData.userRole || 'PREPARER');
                     } else if (isFull) {
                       // All roles permitted; automatically grant all workflow roles for FULL access
                       Object.keys(nextRoles).forEach(k => { nextRoles[k] = true; });
@@ -1356,22 +1430,38 @@ const HierarchicalUserAssignmentPage = () => {
                                   return role ? role.label : assignment.userRole;
                                 }
                                 
-                                // Fallback to inference from level and permissions
+                                // Fallback to inference from level and permissions (Updated for new roles)
                                 const level = assignment.assignmentLevel;
                                 const perms = assignment.rolePermissions || {};
-                                if (level === 'RESPONSIBILITY_CENTER' || level === 'DIVISION') {
-                                  return 'Budget Analyst';
-                                } else if (level === 'OFFICE' || level === 'DEPARTMENT') {
+                                
+                                // NEW ROLE INFERENCE LOGIC (September 2025)
+                                if (level === 'RESPONSIBILITY_CENTER' || level === 'DIVISION' || level === 'DIVISION_LEVEL') {
                                   if (perms.ApproveProposals) {
+                                    return 'Approver'; // New role for approvers at division level
+                                  } else if (perms.EditAllProposals) {
+                                    return 'Reviewer'; // New role for reviewers
+                                  } else {
+                                    return 'Preparer'; // Default preparer at division/responsibility center level
+                                  }
+                                } else if (level === 'OFFICE' || level === 'DEPARTMENT' || level === 'DEPARTMENT_REGIONAL_LEVEL') {
+                                  if (perms.ApproveProposals) {
+                                    return 'Approver'; // New role for approvers at office level
+                                  } else {
+                                    return 'Preparer'; // Default preparer at office level
+                                  }
+                                } else if (level === 'BUDGET_AND_REVENUE_DIVISION') {
+                                  if (perms.ManageSettings) {
+                                    return 'Overall Budget Approver';
+                                  } else if (perms.EditAllProposals && perms.ApproveProposals) {
                                     return 'Budget Officer';
                                   } else {
-                                    return 'Budget Coordinator';
+                                    return 'Budget Analyst';
                                   }
                                 } else if (level === 'FULL') {
                                   if (perms.ManageSettings) {
                                     return 'Budget Admin';
                                   } else {
-                                    return 'Budget Manager';
+                                    return 'Budget Admin'; // FULL level is admin
                                   }
                                 }
                                 return 'Unknown';

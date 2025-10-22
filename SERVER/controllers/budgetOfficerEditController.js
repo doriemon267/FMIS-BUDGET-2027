@@ -809,7 +809,9 @@ exports.saveDraftEdit = async (req, res) => {
       ? 'BUDGET_OFFICER'
       : userRoles.includes('BUDGET_COORDINATOR')
       ? 'BUDGET_COORDINATOR'
-      : 'BUDGET_ANALYST';
+      : userRoles.includes('BUDGET_ANALYST')
+      ? 'BUDGET_ANALYST'
+      : 'PREPARER';
     
     if (budgetOfficerEdit) {
       // Update existing draft
@@ -1204,7 +1206,9 @@ exports.submitEdit = async (req, res) => {
       ? 'BUDGET_OFFICER'
       : userRoles.includes('BUDGET_COORDINATOR')
       ? 'BUDGET_COORDINATOR'
-      : 'BUDGET_ANALYST';
+      : userRoles.includes('BUDGET_ANALYST')
+      ? 'BUDGET_ANALYST'
+      : 'PREPARER';
     
     // Check if there's an existing draft
     let budgetOfficerEdit = await BudgetOfficerEdit.findOne({
@@ -1280,17 +1284,29 @@ exports.submitEdit = async (req, res) => {
     let currentAssigneeRole = proposal.currentAssigneeRole;
     let pendingRoles = Array.isArray(proposal.pendingWithRoles) ? [...proposal.pendingWithRoles] : [];
 
-    if (editorRole === 'BUDGET_ANALYST') {
+    if (editorRole === 'PREPARER') {
       newStatus = 'Division Submitted';
       newWorkflowLevel = 'COORDINATOR';
-      historyAction = 'ANALYST_SUBMIT_TO_COORDINATOR';
-      historyComment = comments || 'Budget Analyst submitted edits to Budget Coordinator';
+      historyAction = 'PREPARER_SUBMIT_TO_COORDINATOR';
+      historyComment = comments || 'Preparer submitted edits to Budget Coordinator';
       currentStep = 'COORDINATOR_REVIEW';
       currentAssigneeRole = 'BUDGET_COORDINATOR';
       pendingRoles = ['BUDGET_COORDINATOR'];
-      proposal.submittedByRole = 'BUDGET_ANALYST';
+      proposal.submittedByRole = 'PREPARER';
       proposal.submittedToDivisionAt = now;
       proposal.submittedToDivisionBy = { userId, userName };
+    } else if (editorRole === 'BUDGET_ANALYST') {
+      // New BUDGET_ANALYST role (different level from old workflow)
+      newStatus = 'Analysis Submitted';
+      newWorkflowLevel = 'ANALYST_REVIEW';
+      historyAction = 'ANALYST_SUBMIT';
+      historyComment = comments || 'Budget Analyst submitted analysis';
+      currentStep = 'ANALYST_REVIEW';
+      currentAssigneeRole = 'BUDGET_ANALYST';
+      pendingRoles = ['BUDGET_ANALYST'];
+      proposal.submittedByRole = 'BUDGET_ANALYST';
+      proposal.submittedToAnalystAt = now;
+      proposal.submittedToAnalystBy = { userId, userName };
     } else if (editorRole === 'BUDGET_COORDINATOR') {
       // Check if coordinator wants to bypass officer and submit directly to manager
       if (submitTargetRole === 'BUDGET_MANAGER') {
@@ -1365,8 +1381,10 @@ exports.submitEdit = async (req, res) => {
     await syncRelatedBudgetItems(proposal);
     
     let logSummary = 'Submitted edits for approval';
-    if (editorRole === 'BUDGET_ANALYST') {
+    if (editorRole === 'PREPARER') {
       logSummary = 'Submitted edits to Budget Coordinator';
+    } else if (editorRole === 'BUDGET_ANALYST') {
+      logSummary = 'Submitted analysis';
     } else if (editorRole === 'BUDGET_COORDINATOR') {
       if (submitTargetRole === 'BUDGET_MANAGER') {
         logSummary = 'Submitted edits directly to Budget Manager (bypassed Officer)';

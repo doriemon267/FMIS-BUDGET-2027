@@ -28,6 +28,7 @@ const {
   dueDateProtectedRoute,
   ownerOnlyRoute,
   budgetOfficerRoute,
+  workflowStaffRoute,
   PERMISSION_LEVELS,
   ACCESS_SCOPE
 } = require('../middleware/securityMiddleware');
@@ -55,7 +56,7 @@ proposalRBACRouter.get(
 // Get all proposals (Budget Officer+ with organizational filtering)
 proposalRBACRouter.get(
   "/proposals", 
-  ...budgetOfficerRoute(['read']),
+  ...workflowStaffRoute(['read']),
   budgetRoleVisibilityControl(),  // ✅ APPLY ROLE-BASED VISIBILITY FIRST
   proposalAccessControl('read'),
   applyAccessFilters(),

@@ -3,7 +3,7 @@ import { Navigate } from "react-router-dom";
 import { useUser } from "../context/UserContext";
 import { hasPermission } from "../utils/permissions";
 
-const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], children }) => {
+const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], excludeRoles = [], children }) => {
   const { currentUser } = useUser();
 
   // If no user, redirect to login
@@ -71,12 +71,40 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
       effectiveWorkflowRoles.push('superAdmin');
     }
   }
+  
+  // Also check for workflow roles from Roles array (PREPARER, REVIEWER, APPROVER, OVERALL_BUDGET_APPROVER)
+  const workflowRolesFromJobRoles = {
+    'PREPARER': 'preparer',
+    'REVIEWER': 'reviewer',
+    'APPROVER': 'approver',
+    'OVERALL_BUDGET_APPROVER': 'overallBudgetApprover'
+  };
+  
+  userJobRoles.forEach(jobRole => {
+    const workflowRole = workflowRolesFromJobRoles[jobRole];
+    if (workflowRole && !effectiveWorkflowRoles.includes(workflowRole)) {
+      console.log(`🔧 Adding workflow role ${workflowRole} from job role ${jobRole}`);
+      effectiveWorkflowRoles.push(workflowRole);
+    }
+  });
+  
+  // If user is OVERALL_BUDGET_APPROVER, also add superAdmin role for access to reports, settings, etc.
+  if (userJobRoles.includes('OVERALL_BUDGET_APPROVER') && !effectiveWorkflowRoles.includes('superAdmin')) {
+    console.log('🔧 Adding superAdmin workflow role for OVERALL_BUDGET_APPROVER');
+    effectiveWorkflowRoles.push('superAdmin');
+  }
+
+  // Check if user has any excluded roles - if so, deny access
+  const hasExcludedRoles = excludeRoles.length > 0 &&
+    excludeRoles.some(role => effectiveWorkflowRoles.includes(role));
 
   const hasRequiredWorkflowRoles = requiredWorkflowRoles.length === 0 ||
     requiredWorkflowRoles.some(role => effectiveWorkflowRoles.includes(role));
 
   console.log('🔍 Workflow Roles Check:', {
     requiredWorkflowRoles,
+    excludeRoles,
+    hasExcludedRoles,
     userWorkflowRoles,
     effectiveWorkflowRoles,
     hasRequiredWorkflowRoles,
@@ -84,8 +112,8 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
     isFullAccess: hierarchicalAccess.scope === 'FULL'
   });
 
-  // User must have both required permissions AND required workflow roles
-  if (!hasRequiredPermissions || !hasRequiredWorkflowRoles) {
+  // User must have both required permissions AND required workflow roles, and no excluded roles
+  if (!hasRequiredPermissions || !hasRequiredWorkflowRoles || hasExcludedRoles) {
     return <Navigate to="/not-authorized" />;
   }
 
