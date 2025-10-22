@@ -94,14 +94,18 @@ const budgetRoleAccessControl = (operation = 'read') => {
   const userRoles = extractUserRoles(req.user);
 
       // Define role hierarchy - 6-step workflow roles + legacy budget roles
-      const isPreparer = userRoles.includes('PREPARER');
-      const isReviewer = userRoles.includes('REVIEWER');
-      const isApprover = userRoles.includes('APPROVER');
-      const isOverallBudgetApprover = userRoles.includes('OVERALL_BUDGET_APPROVER');
-      const isBudgetAnalyst = userRoles.includes('BUDGET_ANALYST');
+      // Check both main database roles and workflow roles from hierarchical assignment
+      const assignment = req.userHierarchicalAssignment || req.user?.hierarchicalAssignment || {};
+      const workflowRoles = assignment.workflowRoles || [];
+      
+      const isPreparer = userRoles.includes('PREPARER') || workflowRoles.includes('PREPARER') || workflowRoles.includes('divisionCreator') || workflowRoles.includes('officeCreator');
+      const isReviewer = userRoles.includes('REVIEWER') || workflowRoles.includes('REVIEWER') || workflowRoles.includes('divisionReviewer');
+      const isApprover = userRoles.includes('APPROVER') || workflowRoles.includes('APPROVER') || workflowRoles.includes('divisionApprover') || workflowRoles.includes('officeApprover');
+      const isOverallBudgetApprover = userRoles.includes('OVERALL_BUDGET_APPROVER') || workflowRoles.includes('OVERALL_BUDGET_APPROVER');
+      const isBudgetAnalyst = userRoles.includes('BUDGET_ANALYST') || workflowRoles.includes('BUDGET_ANALYST');
       const isBudgetCoordinator = userRoles.includes('BUDGET_COORDINATOR');
-      const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
-      const isBudgetManager = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN');
+      const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER') || workflowRoles.includes('BUDGET_OFFICER');
+      const isBudgetManager = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN') || workflowRoles.includes('BUDGET_ADMIN');
       // Check for both 'SUPER_ADMIN' (with underscore) and 'SUPER ADMIN' (with space) from database
       const isSuperAdmin = userRoles.includes('SUPER_ADMIN') || userRoles.includes('SUPER ADMIN');
 
@@ -117,11 +121,19 @@ const budgetRoleAccessControl = (operation = 'read') => {
         // Extract hierarchical assignment once so multiple roles can reuse it
         const assignment = req.userHierarchicalAssignment || req.user?.hierarchicalAssignment || {};
         const userDivision = assignment.divisionName || req.user?.division || null;
+        const userDepartment = assignment.departmentId || req.user?.department || null;
+        const userRegion = assignment.regionId || req.user?.region || null;
 
         // 6-STEP WORKFLOW ROLES
         if (isPreparer) {
-          // Preparers can see their own proposals
-          visibilityFilter.createdByUserId = userId;
+          // Preparers can see their own proposals and proposals within their organizational scope
+          visibilityFilter.$or = [
+            { createdByUserId: userId },
+            { processBy: userId },
+            ...(userDivision ? [{ division: userDivision }] : []),
+            ...(userDepartment ? [{ department: userDepartment }] : []),
+            ...(userRegion ? [{ region: userRegion }] : [])
+          ];
         } else if (isReviewer) {
           // Reviewers can see proposals in review stage
           visibilityFilter.status = { $in: ['Draft', 'Division Submitted', 'Under Review', 'Reviewed'] };

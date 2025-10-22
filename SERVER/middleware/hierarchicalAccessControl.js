@@ -434,7 +434,31 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
         if (!workflowRoles || workflowRoles.length === 0) {
           // Determine workflow roles based on user's main roles
           const userMainRoles = userRoles || [];
-          if (userMainRoles.includes('BUDGET_OFFICER') || userMainRoles.includes('SUPERVISOR')) {
+          if (userMainRoles.includes('PREPARER')) {
+            // PREPARER: Division or Office creator based on assignment level
+            if (assignmentDoc.assignmentLevel === 'DIVISION' || assignmentDoc.assignmentLevel === 'RESPONSIBILITY_CENTER') {
+              workflowRoles = ['divisionCreator'];
+            } else if (assignmentDoc.assignmentLevel === 'OFFICE' || assignmentDoc.assignmentLevel === 'DEPARTMENT') {
+              workflowRoles = ['officeCreator'];
+            } else {
+              workflowRoles = ['divisionCreator']; // Default to division creator
+            }
+          } else if (userMainRoles.includes('REVIEWER')) {
+            // REVIEWER: Division reviewer
+            workflowRoles = ['divisionReviewer'];
+          } else if (userMainRoles.includes('APPROVER')) {
+            // APPROVER: Division or Office approver based on assignment level
+            if (assignmentDoc.assignmentLevel === 'DIVISION' || assignmentDoc.assignmentLevel === 'RESPONSIBILITY_CENTER') {
+              workflowRoles = ['divisionApprover'];
+            } else if (assignmentDoc.assignmentLevel === 'OFFICE' || assignmentDoc.assignmentLevel === 'DEPARTMENT') {
+              workflowRoles = ['officeApprover'];
+            } else {
+              workflowRoles = ['divisionApprover']; // Default to division approver
+            }
+          } else if (userMainRoles.includes('BUDGET_ANALYST')) {
+            // BUDGET_ANALYST: Budget analyst (from Budget and Revenue Division)
+            workflowRoles = ['budgetAnalyst'];
+          } else if (userMainRoles.includes('BUDGET_OFFICER') || userMainRoles.includes('SUPERVISOR')) {
             workflowRoles = ['officeFinalVerifier'];
           } else if (userMainRoles.includes('BUDGET_MANAGER') || userMainRoles.includes('DEPARTMENT_HEAD')) {
             workflowRoles = ['departmentConsolidator', 'regionFinalVerifier'];
@@ -507,6 +531,66 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
           ManageSettings: true
         };
         defaultWorkflowRoles = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier', 'regionCreator','superAdmin', 'regionFinalVerifier'];
+      }
+      // Special handling for PREPARER - give them DIVISION scope and creator permissions
+      else if (userRoles.includes('PREPARER')) {
+        defaultScope = 'DIVISION';
+        defaultRolePermissions = {
+          CreateProposals: true,
+          EditOwnProposals: true,
+          EditAllProposals: false,
+          DeleteProposals: false,
+          ApproveProposals: false,
+          ViewReports: true,
+          ManageUsers: false,
+          ManageSettings: false
+        };
+        defaultWorkflowRoles = ['divisionCreator'];
+      }
+      // Special handling for REVIEWER - give them DIVISION scope and reviewer permissions
+      else if (userRoles.includes('REVIEWER')) {
+        defaultScope = 'DIVISION';
+        defaultRolePermissions = {
+          CreateProposals: false,
+          EditOwnProposals: false,
+          EditAllProposals: false,
+          DeleteProposals: false,
+          ApproveProposals: false,
+          ViewReports: true,
+          ManageUsers: false,
+          ManageSettings: false
+        };
+        defaultWorkflowRoles = ['divisionReviewer'];
+      }
+      // Special handling for APPROVER - give them DIVISION scope and approver permissions
+      else if (userRoles.includes('APPROVER')) {
+        defaultScope = 'DIVISION';
+        defaultRolePermissions = {
+          CreateProposals: false,
+          EditOwnProposals: false,
+          EditAllProposals: false,
+          DeleteProposals: false,
+          ApproveProposals: true,
+          ViewReports: true,
+          ManageUsers: false,
+          ManageSettings: false
+        };
+        defaultWorkflowRoles = ['divisionApprover'];
+      }
+      // Special handling for BUDGET_ANALYST - give them appropriate scope and permissions
+      else if (userRoles.includes('BUDGET_ANALYST')) {
+        defaultScope = 'OFFICE';
+        defaultRolePermissions = {
+          CreateProposals: false,
+          EditOwnProposals: false,
+          EditAllProposals: true,
+          DeleteProposals: false,
+          ApproveProposals: true,
+          ViewReports: true,
+          ManageUsers: false,
+          ManageSettings: false
+        };
+        defaultWorkflowRoles = ['budgetAnalyst'];
       }
       // Special handling for BUDGET_OFFICER - give them OFFICE scope and permissions
       else if (userRoles.includes('BUDGET_OFFICER') || userRoles.includes('SUPERVISOR')) {

@@ -24,24 +24,29 @@ const budgetRoleVisibilityControl = () => {
         return next();
       }
 
+      // Get hierarchical assignment for workflow roles
+      const hierarchicalAssignment = req.userHierarchicalAssignment || req.user?.hierarchicalAssignment || {};
+      const workflowRoles = hierarchicalAssignment.workflowRoles || [];
+
       // Determine user's budget role (highest privilege takes precedence)
+      // Check both main database roles and workflow roles from hierarchical assignment
       let budgetRole = null;
-      if (userRoles.includes('BUDGET_ADMIN')) {
+      if (userRoles.includes('BUDGET_ADMIN') || workflowRoles.includes('BUDGET_ADMIN')) {
         budgetRole = 'BUDGET_ADMIN';
-      } else if (userRoles.includes('BUDGET_MANAGER')) {
+      } else if (userRoles.includes('BUDGET_MANAGER') || workflowRoles.includes('BUDGET_ADMIN')) {
         budgetRole = 'BUDGET_MANAGER';
-      } else if (userRoles.includes('BUDGET_OFFICER')) {
+      } else if (userRoles.includes('BUDGET_OFFICER') || workflowRoles.includes('BUDGET_OFFICER')) {
         budgetRole = 'BUDGET_OFFICER';
-      } else if (userRoles.includes('BUDGET_ANALYST')) {
+      } else if (userRoles.includes('BUDGET_ANALYST') || workflowRoles.includes('BUDGET_ANALYST')) {
         budgetRole = 'BUDGET_ANALYST';
-      } else if (userRoles.includes('PREPARER')) {
-        budgetRole = 'PREPARER';
-      } else if (userRoles.includes('REVIEWER')) {
-        budgetRole = 'REVIEWER';
-      } else if (userRoles.includes('APPROVER')) {
-        budgetRole = 'APPROVER';
-      } else if (userRoles.includes('OVERALL_BUDGET_APPROVER')) {
+      } else if (userRoles.includes('OVERALL_BUDGET_APPROVER') || workflowRoles.includes('OVERALL_BUDGET_APPROVER')) {
         budgetRole = 'OVERALL_BUDGET_APPROVER';
+      } else if (userRoles.includes('APPROVER') || workflowRoles.includes('APPROVER') || workflowRoles.includes('divisionApprover') || workflowRoles.includes('officeApprover')) {
+        budgetRole = 'APPROVER';
+      } else if (userRoles.includes('REVIEWER') || workflowRoles.includes('REVIEWER') || workflowRoles.includes('divisionReviewer')) {
+        budgetRole = 'REVIEWER';
+      } else if (userRoles.includes('PREPARER') || workflowRoles.includes('PREPARER') || workflowRoles.includes('divisionCreator') || workflowRoles.includes('officeCreator')) {
+        budgetRole = 'PREPARER';
       }
 
       if (!budgetRole) {
@@ -53,34 +58,26 @@ const budgetRoleVisibilityControl = () => {
       // Build visibility filters based on role
       let visibilityFilter = {};
 
+      // Get hierarchical assignment for organizational filtering
+      const assignment = req.userHierarchicalAssignment || req.user?.hierarchicalAssignment || {};
+      const userDivision = assignment.divisionName || req.user?.division || null;
+      const userDepartment = assignment.departmentId || req.user?.department || null;
+      const userRegion = assignment.regionId || req.user?.region || null;
+
       switch (budgetRole) {
         case 'BUDGET_ANALYST':
           // BUDGET_ANALYST can see:
-          // 1. Own proposals (any status including Draft)
+          // 1. Own proposals (any status)
           // 2. Division proposals within their division (any status)
-          const analystAssignment = req.userHierarchicalAssignment;
-          if (analystAssignment && analystAssignment.divisionName) {
-            visibilityFilter = {
-              $or: [
-                // Own proposals (created by this user)
-                { createdByUserId: userId },
-                { processBy: userId },
-                // Division proposals (same division, any status)
-                {
-                  division: analystAssignment.divisionName,
-                  department: analystAssignment.departmentName || analystAssignment.officeName
-                }
-              ]
-            };
-          } else {
-            // If no division assignment, only show own proposals
-            visibilityFilter = {
-              $or: [
-                { createdByUserId: userId },
-                { processBy: userId }
-              ]
-            };
-          }
+          visibilityFilter = {
+            $or: [
+              // Own proposals (any status)
+              { createdByUserId: userId },
+              { processBy: userId },
+              // Division proposals (if user has a division)
+              ...(userDivision ? [{ division: userDivision }] : [])
+            ]
+          };
           break;
 
         case 'BUDGET_OFFICER':
@@ -162,12 +159,17 @@ const budgetRoleVisibilityControl = () => {
           // PREPARER can see:
           // 1. Their own proposals (created by them) - any status including drafts
           // 2. Proposals in their workflow queue
+          // 3. Proposals within their organizational scope (division/department/region)
           visibilityFilter = {
             $or: [
               // Own proposals created by this user
               { createdByUserId: userId },
               // Proposals assigned/processed by this user
-              { processBy: userId }
+              { processBy: userId },
+              // Organizational scope proposals
+              ...(userDivision ? [{ division: userDivision }] : []),
+              ...(userDepartment ? [{ department: userDepartment }] : []),
+              ...(userRegion ? [{ region: userRegion }] : [])
             ]
           };
           break;

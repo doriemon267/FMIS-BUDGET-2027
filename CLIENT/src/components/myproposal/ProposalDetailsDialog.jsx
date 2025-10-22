@@ -58,13 +58,13 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
 
   const normalizedAssignmentLevel = useMemo(() => {
     const direct = String(userInfo?.assignmentLevel || '').toUpperCase();
-    const hier = String(userInfo?.hierarchicalAccess?.scope || '').toUpperCase();
+    const hier = String(userInfo?.scope || '').toUpperCase();
     return direct || hier;
   }, [userInfo]);
 
   const normalizedWorkflowRoles = useMemo(() => {
     const a = (userInfo?.workflowRoles || []).map((role) => String(role || '').toLowerCase());
-    const b = (userInfo?.hierarchicalAccess?.workflowRoles || []).map((role) => String(role || '').toLowerCase());
+    const b = (userInfo?.workflowRoles || []).map((role) => String(role || '').toLowerCase());
     const result = Array.from(new Set([...(a || []), ...(b || [])]));
     console.log('🔍 normalizedWorkflowRoles computed:', {
       fromWorkflowRoles: a,
@@ -78,7 +78,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     const collected = [];
     if (Array.isArray(userInfo?.roles)) collected.push(...userInfo.roles);
     if (Array.isArray(userInfo?.Roles)) collected.push(...userInfo.Roles);
-    if (Array.isArray(userInfo?.hierarchicalAccess?.roles)) collected.push(...userInfo.hierarchicalAccess.roles);
+    if (Array.isArray(userInfo?.roles)) collected.push(...userInfo.roles);
     if (userInfo?.role) collected.push(userInfo.role);
     if (userInfo?.primaryRole) collected.push(userInfo.primaryRole);
     return collected.map((role) => String(role || '').toUpperCase());
@@ -87,7 +87,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
   const isManagerLevel = useMemo(() => {
     if (!userInfo) return false;
     const scope = normalizedAssignmentLevel;
-    const canApprove = userInfo?.hierarchicalFlags?.canApproveProposals === true || userInfo?.hierarchicalAccess?.rolePermissions?.canApproveProposals === true;
+    const canApprove = userInfo?.hierarchicalFlags?.canApproveProposals === true || userInfo?.rolePermissions?.canApproveProposals === true;
     if (scope === 'REGION' || scope === 'FULL') return true;
     if (canApprove && (scope === 'OFFICE' || scope === 'DEPARTMENT' || scope === 'REGION' || scope === 'FULL')) return true;
     if (normalizedPrimaryRoles.some((role) => role.includes('BUDGET MANAGER') || role.includes('BUDGET ADMIN'))) return true;
@@ -114,15 +114,21 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     return normalizedWorkflowRoles.some((role) => role === 'divisionapprover');
   }, [userInfo, normalizedWorkflowRoles]);
 
+  // Reviewer: Division reviewers (divisionreviewer) - can view and review proposals
+  const isReviewer = useMemo(() => {
+    if (!userInfo) return false;
+    // Check for 'divisionreviewer' workflow role
+    return normalizedWorkflowRoles.some((role) => role === 'divisionreviewer');
+  }, [userInfo, normalizedWorkflowRoles]);
+
   // Budget Analyst: Division creators (divisioncreator) OR Office creators (officecreator)
   // - divisioncreator = Responsibility Center/Division Level → submits to BUDGET COORDINATOR
   // - officecreator = Office Level → submits DIRECTLY to BUDGET OFFICER (skip coordinator)
   const isBudgetAnalyst = useMemo(() => {
     if (!userInfo || isManagerLevel) return false;
-    // Check for divisioncreator, divisionpreparer, OR officecreator workflow roles
+    // Check for divisioncreator OR officecreator workflow roles
     return normalizedWorkflowRoles.some((role) => 
       role === 'divisioncreator' || 
-      role === 'divisionpreparer' ||
       role === 'officecreator'
     );
   }, [userInfo, isManagerLevel, normalizedWorkflowRoles]);
@@ -143,7 +149,6 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     if (normalizedWorkflowRoles.some((role) => 
       role === 'divisionapprover' || 
       role === 'divisioncreator' || 
-      role === 'divisionpreparer' ||
       role === 'officecreator'
     )) {
       return false;
@@ -180,7 +185,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
           Roles: info?.Roles,
           role: info?.role,
           assignmentLevel: info?.assignmentLevel,
-          hierarchicalAccess: info?.hierarchicalAccess
+          hierarchicalAccess: info
         });
         setUserInfo(info);
       } catch (error) {
@@ -198,6 +203,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
       isBudgetCoordinator,
       isBudgetOfficer,
       isBudgetAnalyst,
+      isReviewer,
       isManagerLevel,
       normalizedPrimaryRoles,
       normalizedAssignmentLevel,
@@ -240,7 +246,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     // Allow fetching for read-only final statuses even if role detection says no
   const requiresReadOnlyData = isReadOnlyMode;
 
-    if (!isBudgetOfficer && !isBudgetAnalyst && !isBudgetCoordinator && !isManagerLevel && !requiresReadOnlyData) {
+    if (!isBudgetOfficer && !isBudgetAnalyst && !isBudgetCoordinator && !isReviewer && !isManagerLevel && !requiresReadOnlyData) {
       console.log('❌ No permission to view proposal details');
       setLoading(false);
       setRefreshing(false);
@@ -854,7 +860,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                 You do not have permission to view detailed records for this proposal.
                 <br />
                 <Typography variant="caption">
-                  Your role: {userInfo?.role || 'Unknown'}, Assignment Level: {userInfo?.assignmentLevel || 'Unknown'}
+                  Scope: {userInfo?.scope || 'Unknown'}, Workflow Roles: {userInfo?.workflowRoles?.join(', ') || 'None'}
                 </Typography>
               </Alert>
             )}
