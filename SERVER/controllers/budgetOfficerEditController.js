@@ -1286,12 +1286,12 @@ exports.submitEdit = async (req, res) => {
 
     if (editorRole === 'PREPARER') {
       newStatus = 'Division Submitted';
-      newWorkflowLevel = 'COORDINATOR';
-      historyAction = 'PREPARER_SUBMIT_TO_COORDINATOR';
-      historyComment = comments || 'Preparer submitted edits to Budget Coordinator';
-      currentStep = 'COORDINATOR_REVIEW';
-      currentAssigneeRole = 'BUDGET_COORDINATOR';
-      pendingRoles = ['BUDGET_COORDINATOR'];
+      newWorkflowLevel = 'REVIEWER';
+      historyAction = 'PREPARER_SUBMIT_TO_REVIEWER';
+      historyComment = comments || 'Preparer submitted edits to Reviewer';
+      currentStep = 'REVIEWER_REVIEW';
+      currentAssigneeRole = 'REVIEWER';
+      pendingRoles = ['REVIEWER'];
       proposal.submittedByRole = 'PREPARER';
       proposal.submittedToDivisionAt = now;
       proposal.submittedToDivisionBy = { userId, userName };
@@ -1307,54 +1307,54 @@ exports.submitEdit = async (req, res) => {
       proposal.submittedByRole = 'BUDGET_ANALYST';
       proposal.submittedToAnalystAt = now;
       proposal.submittedToAnalystBy = { userId, userName };
-    } else if (editorRole === 'BUDGET_COORDINATOR') {
-      // Check if coordinator wants to bypass officer and submit directly to manager
+    } else if (editorRole === 'REVIEWER') {
+      // Check if reviewer wants to bypass officer and submit directly to manager
       if (submitTargetRole === 'BUDGET_MANAGER') {
         newStatus = 'Forwarded to Manager';
-        newWorkflowLevel = 'MANAGER';
-        historyAction = 'COORDINATOR_SUBMIT_TO_MANAGER';
-        historyComment = comments || 'Budget Coordinator submitted edits directly to Budget Manager (bypassed Officer)';
-        currentStep = 'MANAGER_REVIEW';
-        currentAssigneeRole = 'BUDGET_MANAGER';
-        pendingRoles = ['BUDGET_MANAGER'];
-        proposal.submittedByRole = 'BUDGET_COORDINATOR';
+        newWorkflowLevel = 'BUDGET_OFFICER';
+        historyAction = 'REVIEWER_SUBMIT_TO_OFFICER';
+        historyComment = comments || 'Reviewer submitted edits to Budget Officer';
+        currentStep = 'BUDGET_OFFICER_REVIEW';
+        currentAssigneeRole = 'BUDGET_OFFICER';
+        pendingRoles = ['BUDGET_OFFICER'];
+        proposal.submittedByRole = 'REVIEWER';
         proposal.forwardedToManagerAt = now;
         proposal.forwardedToManagerBy = { userId, userName };
         proposal.bypassedOfficerReview = true;
       } else {
-        // Standard flow: submit to officer
+        // Standard flow: submit to APPROVER
         newStatus = 'Forwarded to Officer';
-        newWorkflowLevel = 'OFFICER';
-        historyAction = 'COORDINATOR_SUBMIT_TO_OFFICER';
-        historyComment = comments || 'Budget Coordinator submitted edits to Budget Officer';
-        currentStep = 'OFFICER_REVIEW';
-        currentAssigneeRole = 'BUDGET_OFFICER';
-        pendingRoles = ['BUDGET_OFFICER'];
-        proposal.submittedByRole = 'BUDGET_COORDINATOR';
+        newWorkflowLevel = 'APPROVER';
+        historyAction = 'REVIEWER_SUBMIT_TO_APPROVER';
+        historyComment = comments || 'Reviewer submitted edits to Approver';
+        currentStep = 'APPROVER_REVIEW';
+        currentAssigneeRole = 'APPROVER';
+        pendingRoles = ['APPROVER'];
+        proposal.submittedByRole = 'REVIEWER';
         proposal.forwardedToOfficerAt = now;
         proposal.forwardedToOfficerBy = { userId, userName };
         proposal.bypassedOfficerReview = false;
       }
-    } else if (editorRole === 'BUDGET_OFFICER') {
+    } else if (editorRole === 'APPROVER') {
       newStatus = 'Forwarded to Manager';
-      newWorkflowLevel = 'MANAGER';
-      historyAction = 'OFFICER_SUBMIT_TO_MANAGER';
-      historyComment = comments || 'Budget Officer submitted edits to Budget Manager';
-      currentStep = 'MANAGER_REVIEW';
-      currentAssigneeRole = 'BUDGET_MANAGER';
-      pendingRoles = ['BUDGET_MANAGER'];
-      proposal.submittedByRole = 'BUDGET_OFFICER';
+      newWorkflowLevel = 'BUDGET_OFFICER';
+      historyAction = 'APPROVER_SUBMIT_TO_OFFICER';
+      historyComment = comments || 'Approver submitted edits to Budget Officer';
+      currentStep = 'BUDGET_OFFICER_REVIEW';
+      currentAssigneeRole = 'BUDGET_OFFICER';
+      pendingRoles = ['BUDGET_OFFICER'];
+      proposal.submittedByRole = 'APPROVER';
       proposal.forwardedToManagerAt = now;
       proposal.forwardedToManagerBy = { userId, userName };
-    } else if (editorRole === 'BUDGET_MANAGER') {
+    } else if (editorRole === 'OVERALL_BUDGET_APPROVER') {
       newStatus = 'Finalized';
       newWorkflowLevel = 'FINALIZED';
-      historyAction = 'MANAGER_FINALIZE_EDIT';
-      historyComment = comments || 'Budget Manager finalized proposal edits';
+      historyAction = 'APPROVER_FINALIZE_EDIT';
+      historyComment = comments || 'Overall Budget Approver finalized proposal edits';
       currentStep = 'FINALIZED';
-      currentAssigneeRole = 'BUDGET_MANAGER';
+      currentAssigneeRole = 'OVERALL_BUDGET_APPROVER';
       pendingRoles = [];
-      proposal.submittedByRole = 'BUDGET_MANAGER';
+      proposal.submittedByRole = 'OVERALL_BUDGET_APPROVER';
       proposal.finalizedAt = now;
       proposal.finalizedBy = { userId, userName };
     }
