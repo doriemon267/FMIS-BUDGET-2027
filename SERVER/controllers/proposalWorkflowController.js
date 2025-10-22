@@ -513,8 +513,8 @@ async function validateAnalystSubmissionReadiness(proposal) {
   }
 
   const requirementMessage = requiresIncome
-    ? 'Regional proposals must include Personnel Services, MOOE, Capital Outlay, and Income before submitting to the Budget Coordinator.'
-    : 'Central Office proposals must include Personnel Services, MOOE, and Capital Outlay before submitting to the Budget Coordinator.';
+    ? 'Regional proposals must include Personnel Services, MOOE, Capital Outlay, and Income before submitting to the Budget Officer.'
+    : 'Central Office proposals must include Personnel Services, MOOE, and Capital Outlay before submitting to the Budget Officer.';
 
   const message = missingModules.length
     ? `${requirementMessage} Missing modules: ${missingModules.join(', ')}.`
@@ -1050,7 +1050,7 @@ exports.submitProposal = async (req, res) => {
 
     let sanitizedComment;
     try {
-      sanitizedComment = validateAndNormalizeComment(comment, 'submit the proposal to the coordinator');
+      sanitizedComment = validateAndNormalizeComment(comment, 'submit the proposal to the budget officer');
     } catch (commentError) {
       return res.status(400).json({ success: false, message: commentError.message });
     }
@@ -1118,25 +1118,25 @@ exports.submitProposal = async (req, res) => {
     const newStatus = 'Division Submitted';
 
     proposal.status = newStatus;
-    proposal.workflowLevel = 'COORDINATOR';
+    proposal.workflowLevel = 'OFFICER';
     proposal.submittedByRole = 'BUDGET_ANALYST';
     proposal.submittedDate = new Date();
     proposal.bypassedOfficerReview = false;
 
     updateAssignment(proposal, {
-      step: 'COORDINATOR_REVIEW',
-      assigneeRole: 'BUDGET_COORDINATOR',
-      pendingRoles: ['BUDGET_COORDINATOR']
+      step: 'OFFICER_REVIEW',
+      assigneeRole: 'BUDGET_OFFICER',
+      pendingRoles: ['BUDGET_OFFICER']
     });
 
     recordWorkflowEvent(proposal, {
-      action: 'ANALYST_SUBMIT_TO_COORDINATOR',
+      action: 'ANALYST_SUBMIT_TO_OFFICER',
       comment: sanitizedComment,
       userId,
       userName,
       previousStatus,
       newStatus,
-      targetRole: 'BUDGET_COORDINATOR'
+      targetRole: 'BUDGET_OFFICER'
     });
 
     await proposal.save();
@@ -1144,7 +1144,7 @@ exports.submitProposal = async (req, res) => {
     await syncBudgetItemsStatus(proposal);
 
     await sendNotification({
-      recipientRole: 'BUDGET_COORDINATOR',
+      recipientRole: 'BUDGET_OFFICER',
       title: 'Proposal Submitted for Review',
       message: `Proposal "${proposal.title}" from ${proposal.division || proposal.department} has been submitted by ${userName}. Comment: ${sanitizedComment}`,
       entity: 'proposal',
@@ -1159,7 +1159,7 @@ exports.submitProposal = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Proposal submitted to Budget Coordinator successfully',
+      message: 'Proposal submitted to Budget Officer successfully',
       proposal: {
         id: proposal._id,
         status: proposal.status,
@@ -1491,18 +1491,18 @@ exports.returnProposal = async (req, res) => {
 
     // Determine return path based on current status and user role
     if (userRoles.includes('BUDGET_OFFICER')) {
-      // BUDGET_OFFICER returns to BUDGET_COORDINATOR
+      // BUDGET_OFFICER returns to BUDGET_ANALYST
       if (proposal.status === 'Office') {
         returnField = 'returnedByOfficer';
-        proposal.workflowLevel = 'COORDINATOR';
-        returnToLevel = 'COORDINATOR';
+        proposal.workflowLevel = 'ANALYST';
+        returnToLevel = 'ANALYST';
         notificationMessage = `Proposal "${proposal.title}" has been returned by ${userName} (Budget Officer) for revisions. Reason: ${sanitizedComment}`;
-        targetRole = 'BUDGET_COORDINATOR';
-        assignmentStep = 'COORDINATOR_REVIEW';
-        assignmentRole = 'BUDGET_COORDINATOR';
-        assignmentPendingRoles = ['BUDGET_COORDINATOR'];
+        targetRole = 'BUDGET_ANALYST';
+        assignmentStep = 'ANALYST_REVIEW';
+        assignmentRole = 'BUDGET_ANALYST';
+        assignmentPendingRoles = ['BUDGET_ANALYST'];
         notificationPayloads.push({
-          recipientRole: 'BUDGET_COORDINATOR',
+          recipientRole: 'BUDGET_ANALYST',
           title: 'Proposal Returned by Officer',
           message: notificationMessage,
           ...baseNotificationFields,
@@ -1519,7 +1519,7 @@ exports.returnProposal = async (req, res) => {
             previousStatus,
             newStatus,
             returnToLevel,
-            targetRole: 'BUDGET_COORDINATOR',
+            targetRole: 'BUDGET_ANALYST',
             performedBy: {
               userId,
               name: userName,
@@ -1540,17 +1540,17 @@ exports.returnProposal = async (req, res) => {
         returnField = 'returnedByManager';
         
         // Check if proposal bypassed officer review
-        if (proposal.bypassedOfficerReview || proposal.submittedByRole === 'BUDGET_COORDINATOR') {
-          // Return to COORDINATOR
-          proposal.workflowLevel = 'COORDINATOR';
-          returnToLevel = 'COORDINATOR';
+        if (proposal.bypassedOfficerReview || proposal.submittedByRole === 'REVIEWER') {
+          // Return to REVIEWER
+          proposal.workflowLevel = 'REVIEWER';
+          returnToLevel = 'REVIEWER';
           notificationMessage = `Proposal "${proposal.title}" has been returned by ${userName} (Budget Manager) for revisions. Reason: ${sanitizedComment}`;
-          targetRole = 'BUDGET_COORDINATOR';
-          assignmentStep = 'COORDINATOR_REVIEW';
-          assignmentRole = 'BUDGET_COORDINATOR';
-          assignmentPendingRoles = ['BUDGET_COORDINATOR'];
+          targetRole = 'REVIEWER';
+          assignmentStep = 'REVIEWER_REVIEW';
+          assignmentRole = 'REVIEWER';
+          assignmentPendingRoles = ['REVIEWER'];
           notificationPayloads.push({
-            recipientRole: 'BUDGET_COORDINATOR',
+            recipientRole: 'REVIEWER',
             title: 'Proposal Returned by Manager',
             message: notificationMessage,
             ...baseNotificationFields,
@@ -1567,7 +1567,7 @@ exports.returnProposal = async (req, res) => {
               previousStatus,
               newStatus,
               returnToLevel,
-              targetRole: 'BUDGET_COORDINATOR',
+              targetRole: 'REVIEWER',
               performedBy: {
                 userId,
                 name: userName,
@@ -2117,11 +2117,11 @@ exports.getProposalHistory = async (req, res) => {
 };
 
 /**
- * BUDGET_COORDINATOR WORKFLOW FUNCTIONS
+ * REVIEWER WORKFLOW FUNCTIONS
  * New flexible workflow implementation
  */
 
-// BUDGET_COORDINATOR approves proposal from BUDGET_ANALYST
+// REVIEWER approves proposal from PREPARER/APPROVER
 exports.coordinatorApproveProposal = async (req, res) => {
   try {
     const { proposalId, comment } = req.body;
@@ -2156,11 +2156,11 @@ exports.coordinatorApproveProposal = async (req, res) => {
     }
 
     const previousStatus = proposal.status;
-    const newStatus = 'Coordinator Approved';
+    const newStatus = 'Reviewer Approved';
 
     // Update proposal
     proposal.status = newStatus;
-    proposal.workflowLevel = 'COORDINATOR';
+    proposal.workflowLevel = 'REVIEWER';
     proposal.approvedByCoordinator = {
       userId,
       userName,
@@ -2170,19 +2170,19 @@ exports.coordinatorApproveProposal = async (req, res) => {
     proposal.bypassedOfficerReview = false;
 
     updateAssignment(proposal, {
-      step: 'COORDINATOR_REVIEW',
-      assigneeRole: 'BUDGET_COORDINATOR',
-      pendingRoles: ['BUDGET_COORDINATOR']
+      step: 'REVIEWER_REVIEW',
+      assigneeRole: 'REVIEWER',
+      pendingRoles: ['REVIEWER']
     });
 
     recordWorkflowEvent(proposal, {
-      action: 'COORDINATOR_APPROVE',
+      action: 'REVIEWER_APPROVE',
       comment,
       userId,
       userName,
       previousStatus,
       newStatus,
-      targetRole: 'BUDGET_COORDINATOR'
+      targetRole: 'REVIEWER'
     });
 
     await proposal.save();
@@ -2190,11 +2190,11 @@ exports.coordinatorApproveProposal = async (req, res) => {
     // Sync status to all related budget items
     await syncBudgetItemsStatus(proposal);
 
-    // Send notification to BUDGET_ANALYST (creator)
+    // Send notification to creator
     await sendNotification({
       recipientUserId: proposal.createdByUserId,
-      title: 'Proposal Approved by Coordinator',
-      message: `Your proposal "${proposal.title}" has been approved by ${userName} (Budget Coordinator). Comment: ${comment}`,
+      title: 'Proposal Approved by Reviewer',
+      message: `Your proposal "${proposal.title}" has been approved by ${userName} (Reviewer). Comment: ${comment}`,
       entity: 'proposal',
       recordIds: [proposal._id],
       org: {
@@ -2207,7 +2207,7 @@ exports.coordinatorApproveProposal = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Proposal approved by coordinator successfully',
+      message: 'Proposal approved by reviewer successfully',
       proposal: {
         id: proposal._id,
         status: proposal.status,
@@ -2296,10 +2296,10 @@ exports.coordinatorApproveAndForwardToOfficer = async (req, res) => {
       });
     }
 
-    // Update proposal - directly to Forwarded to Officer (skip "Coordinator Approved" intermediate status)
+    // Update proposal - forward to APPROVER
     proposal.status = newStatus;
-    proposal.workflowLevel = 'OFFICER';
-    proposal.submittedByRole = 'BUDGET_COORDINATOR';
+    proposal.workflowLevel = 'APPROVER';
+    proposal.submittedByRole = 'REVIEWER';
     proposal.approvedByCoordinator = {
       userId,
       userName,
@@ -2309,30 +2309,30 @@ exports.coordinatorApproveAndForwardToOfficer = async (req, res) => {
     proposal.bypassedOfficerReview = false;
 
     updateAssignment(proposal, {
-      step: 'OFFICER_REVIEW',
-      assigneeRole: 'BUDGET_OFFICER',
-      pendingRoles: ['BUDGET_OFFICER']
+      step: 'APPROVER_REVIEW',
+      assigneeRole: 'APPROVER',
+      pendingRoles: ['APPROVER']
     });
 
     // Record TWO events: approval + forward
     recordWorkflowEvent(proposal, {
-      action: 'COORDINATOR_APPROVE',
+      action: 'REVIEWER_APPROVE_AND_FORWARD',
       comment: comment,
       userId,
       userName,
       previousStatus,
-      newStatus: 'Coordinator Approved',
-      targetRole: 'BUDGET_COORDINATOR'
+      newStatus: 'Reviewer Approved',
+      targetRole: 'REVIEWER'
     });
 
     recordWorkflowEvent(proposal, {
-      action: 'COORDINATOR_SUBMIT_TO_OFFICER',
-      comment: 'Approved and forwarded to Budget Officer',
+      action: 'REVIEWER_FORWARD_TO_APPROVER',
+      comment: 'Approved and forwarded to Approver',
       userId,
       userName,
-      previousStatus: 'Coordinator Approved',
+      previousStatus: 'Reviewer Approved',
       newStatus,
-      targetRole: 'BUDGET_OFFICER'
+      targetRole: 'APPROVER'
     });
 
     await proposal.save();
@@ -2340,11 +2340,11 @@ exports.coordinatorApproveAndForwardToOfficer = async (req, res) => {
     // Sync status to all related budget items
     await syncBudgetItemsStatus(proposal);
 
-    // Send notification to BUDGET_ANALYST (creator)
+    // Send notification to creator
     await sendNotification({
       recipientUserId: proposal.createdByUserId,
       title: 'Proposal Approved and Forwarded',
-      message: `Your proposal "${proposal.title}" has been approved by ${userName} (Budget Coordinator) and forwarded to Budget Officer. Comment: ${comment}`,
+      message: `Your proposal "${proposal.title}" has been approved by ${userName} (Reviewer) and forwarded to Approver. Comment: ${comment}`,
       entity: 'proposal',
       recordIds: [proposal._id],
       org: {
@@ -2355,11 +2355,11 @@ exports.coordinatorApproveAndForwardToOfficer = async (req, res) => {
       createdBy: { userId, name: userName }
     });
 
-    // Send notification to BUDGET_OFFICER
+    // Send notification to APPROVER
     await sendNotification({
-      recipientRole: 'BUDGET_OFFICER',
-      title: 'New Proposal for Verification',
-      message: `Proposal "${proposal.title}" approved and forwarded by ${userName} (Budget Coordinator) from ${proposal.division || proposal.department} for verification. Comment: ${comment}`,
+      recipientRole: 'APPROVER',
+      title: 'New Proposal for Review',
+      message: `Proposal "${proposal.title}" approved and forwarded by ${userName} (Reviewer) from ${proposal.division || proposal.department} for review. Comment: ${comment}`,
       entity: 'proposal',
       recordIds: [proposal._id],
       org: {
@@ -2429,7 +2429,7 @@ exports.coordinatorReturnProposal = async (req, res) => {
 
     // Update proposal
     proposal.status = newStatus;
-    proposal.workflowLevel = 'ANALYST';
+    proposal.workflowLevel = 'PREPARER';
     proposal.returnedByCoordinator = {
       userId,
       userName,
@@ -2438,19 +2438,19 @@ exports.coordinatorReturnProposal = async (req, res) => {
     };
 
     updateAssignment(proposal, {
-      step: 'ANALYST_DRAFT',
-      assigneeRole: 'BUDGET_ANALYST',
-      pendingRoles: ['BUDGET_ANALYST']
+      step: 'PREPARER_DRAFT',
+      assigneeRole: 'PREPARER',
+      pendingRoles: ['PREPARER']
     });
 
     recordWorkflowEvent(proposal, {
-      action: 'COORDINATOR_RETURN',
+      action: 'REVIEWER_RETURN',
       comment,
       userId,
       userName,
       previousStatus,
       newStatus,
-      targetRole: 'BUDGET_ANALYST'
+      targetRole: 'PREPARER'
     });
 
     await proposal.save();
@@ -2473,11 +2473,11 @@ exports.coordinatorReturnProposal = async (req, res) => {
     // Sync status to all related budget items
     await syncBudgetItemsStatus(proposal);
 
-    // Send notification to BUDGET_ANALYST (creator)
+    // Send notification to creator
     await sendNotification({
       recipientUserId: proposal.createdByUserId,
-      title: 'Proposal Returned by Coordinator',
-      message: `Your proposal "${proposal.title}" has been returned by ${userName} (Budget Coordinator) for revisions. Reason: ${comment}`,
+      title: 'Proposal Returned by Reviewer',
+      message: `Your proposal "${proposal.title}" has been returned by ${userName} (Reviewer) for revisions. Reason: ${comment}`,
       ...baseNotificationFields,
       metadata: {
         proposalId: String(proposal._id),
@@ -2658,7 +2658,7 @@ exports.coordinatorSubmitToManager = async (req, res) => {
     // Update proposal
     proposal.status = newStatus;
     proposal.workflowLevel = 'MANAGER';
-    proposal.submittedByRole = 'BUDGET_COORDINATOR';
+    proposal.submittedByRole = 'REVIEWER';
     proposal.bypassedOfficerReview = true; // Flag that this skipped officer review
 
     updateAssignment(proposal, {
@@ -2668,7 +2668,7 @@ exports.coordinatorSubmitToManager = async (req, res) => {
     });
 
     recordWorkflowEvent(proposal, {
-      action: 'COORDINATOR_SUBMIT_TO_MANAGER',
+      action: 'REVIEWER_SUBMIT_TO_MANAGER',
       comment: sanitizedComment,
       userId,
       userName,
@@ -2750,14 +2750,14 @@ exports.coordinatorSaveEdits = async (req, res) => {
     }
 
     const previousStatus = proposal.status;
-    const newStatus = 'Under Review by Coordinator';
+    const newStatus = 'Under Review by Reviewer';
 
     // Update proposal status if not already under review
     if (proposal.status !== newStatus) {
       proposal.status = newStatus;
     }
     
-    proposal.workflowLevel = 'COORDINATOR';
+    proposal.workflowLevel = 'REVIEWER';
     
     // Track the edit
     proposal.editedByCoordinator = {
@@ -3233,7 +3233,7 @@ exports.officerReturnProposal = async (req, res) => {
 
     // Update proposal
     proposal.status = newStatus;
-    proposal.workflowLevel = 'COORDINATOR';
+    proposal.workflowLevel = 'ANALYST';
     proposal.returnedByOfficer = {
       userId,
       userName,
@@ -3242,9 +3242,9 @@ exports.officerReturnProposal = async (req, res) => {
     };
 
     updateAssignment(proposal, {
-      step: 'COORDINATOR_REVIEW',
-      assigneeRole: 'BUDGET_COORDINATOR',
-      pendingRoles: ['BUDGET_COORDINATOR']
+      step: 'ANALYST_REVIEW',
+      assigneeRole: 'BUDGET_ANALYST',
+      pendingRoles: ['BUDGET_ANALYST']
     });
 
     recordWorkflowEvent(proposal, {
@@ -3630,9 +3630,9 @@ exports.managerReturnProposal = async (req, res) => {
     let targetRole = 'BUDGET_OFFICER';
     let targetWorkflowLevel = 'OFFICER';
     
-    if (returnTo === 'COORDINATOR' || proposal.bypassedOfficerReview) {
-      targetRole = 'BUDGET_COORDINATOR';
-      targetWorkflowLevel = 'COORDINATOR';
+    if (returnTo === 'REVIEWER' || proposal.bypassedOfficerReview) {
+      targetRole = 'REVIEWER';
+      targetWorkflowLevel = 'REVIEWER';
     } else if (returnTo === 'ANALYST') {
       targetRole = 'BUDGET_ANALYST';
       targetWorkflowLevel = 'ANALYST';
@@ -3650,7 +3650,7 @@ exports.managerReturnProposal = async (req, res) => {
 
     updateAssignment(proposal, {
       step: targetWorkflowLevel === 'ANALYST' ? 'ANALYST_DRAFT' : 
-            targetWorkflowLevel === 'COORDINATOR' ? 'COORDINATOR_REVIEW' : 'OFFICER_REVIEW',
+            targetWorkflowLevel === 'REVIEWER' ? 'REVIEWER_REVIEW' : 'OFFICER_REVIEW',
       assigneeRole: targetRole,
       pendingRoles: [targetRole]
     });
