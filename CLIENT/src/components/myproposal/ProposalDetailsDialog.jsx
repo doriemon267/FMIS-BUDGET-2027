@@ -161,6 +161,51 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     ));
   }, [userInfo, isManagerLevel, normalizedWorkflowRoles]);
 
+  // APPROVER: Division Approvers (divisionapprover) and Office Approvers (officeapprover)
+  // Can view and approve proposals routed to them
+  const isApprover = useMemo(() => {
+    if (!userInfo) return false;
+    return normalizedWorkflowRoles.some((role) => 
+      role === 'divisionapprover' || 
+      role === 'officeapprover'
+    );
+  }, [userInfo, normalizedWorkflowRoles]);
+
+  // BUDGET_ANALYST: User role or workflow role that can review and analyze proposals forwarded from APPROVER
+  const isBudgetAnalystUserRole = useMemo(() => {
+    if (!userInfo) return false;
+    
+    // Check all possible role fields
+    const allRoles = [
+      ...(userInfo?.roles || []),
+      ...(userInfo?.Roles || []),
+      ...(userInfo?.workflowRoles || []),
+      ...(userInfo?.userRoles || []),
+      userInfo?.role,
+      userInfo?.primaryRole,
+      userInfo?.userRole
+    ].filter(Boolean).map(role => String(role).toUpperCase());
+    
+    // Also check localStorage currentUser roles (for dev headers)
+    try {
+      const currentUserStr = localStorage.getItem('currentUser');
+      if (currentUserStr) {
+        const currentUser = JSON.parse(currentUserStr);
+        if (currentUser?.Roles) {
+          const localRoles = Array.isArray(currentUser.Roles) ? currentUser.Roles : [currentUser.Roles];
+          allRoles.push(...localRoles.map(role => String(role).toUpperCase()));
+        }
+      }
+    } catch (e) {
+      // Ignore localStorage errors
+    }
+    
+    return allRoles.includes('BUDGET_ANALYST') || 
+           normalizedWorkflowRoles.includes('budgetanalyst') ||
+           normalizedWorkflowRoles.includes('budget_analyst') || 
+           normalizedWorkflowRoles.includes('BUDGET_ANALYST');
+  }, [userInfo, normalizedWorkflowRoles]);
+
   // Read-only statuses (view mode) - MUST BE DEFINED BEFORE loadData callback
   const readOnlyStatuses = useMemo(() => (
     ['Finalized']
@@ -205,6 +250,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
       isBudgetAnalyst,
       isReviewer,
       isManagerLevel,
+      isApprover,
       normalizedPrimaryRoles,
       normalizedAssignmentLevel,
       normalizedWorkflowRoles,
@@ -246,7 +292,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     // Allow fetching for read-only final statuses even if role detection says no
   const requiresReadOnlyData = isReadOnlyMode;
 
-    if (!isBudgetOfficer && !isBudgetAnalyst && !isBudgetCoordinator && !isReviewer && !isManagerLevel && !requiresReadOnlyData) {
+    if (!isBudgetOfficer && !isBudgetAnalyst && !isBudgetCoordinator && !isReviewer && !isManagerLevel && !isApprover && !isBudgetAnalystUserRole && !requiresReadOnlyData) {
       console.log('❌ No permission to view proposal details');
       setLoading(false);
       setRefreshing(false);
@@ -273,11 +319,12 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     try {
       const requests = [];
 
-      // Budget Coordinator and Analyst should fetch raw proposal data, not Budget Officer Edit records
-      if (isBudgetCoordinator || isBudgetAnalyst) {
-        console.log('✅ Fetching raw proposal data for BUDGET_COORDINATOR/BUDGET_ANALYST', {
+      // Budget Coordinator, Analyst (creators), and BUDGET_ANALYST users should fetch raw proposal data, not Budget Officer Edit records
+      if (isBudgetCoordinator || isBudgetAnalyst || isBudgetAnalystUserRole) {
+        console.log('✅ Fetching raw proposal data for BUDGET_COORDINATOR/BUDGET_ANALYST/BUDGET_ANALYST_USER', {
           isBudgetCoordinator,
           isBudgetAnalyst,
+          isBudgetAnalystUserRole,
           proposalId: proposalKey
         });
         requests.push(
@@ -367,7 +414,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
       // Prefetch comparison data only for roles that need it
       // Note: This may fail if no edits exist yet, which is normal
       // Fetch for Budget Analysts, Budget Officers, and read-only statuses (where comparison view is shown)
-      if (isBudgetAnalyst || isBudgetOfficer || requiresReadOnlyData) {
+      if (isBudgetAnalyst || isBudgetOfficer || isBudgetAnalystUserRole || requiresReadOnlyData) {
         requests.push(
           getComparisonData(proposalKey, { signal: controller.signal })
             .then((response) => {
@@ -410,7 +457,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
         setRefreshing(false);
       }
     }
-  }, [proposalKey, userInfo, isBudgetOfficer, isBudgetAnalyst, isBudgetCoordinator, isManagerLevel, proposal, isReadOnlyMode]);
+  }, [proposalKey, userInfo, isBudgetOfficer, isBudgetAnalyst, isBudgetCoordinator, isManagerLevel, isApprover, isBudgetAnalystUserRole, proposal, isReadOnlyMode]);
 
   useEffect(() => {
     if (open && proposalKey && userInfo) {
@@ -528,11 +575,12 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
   // Manager can edit when Forwarded to Manager (per requirement)
   const managerCanEditNow = isManagerLevel && proposal?.status === 'Forwarded to Manager';
 
-  // Budget Analyst can edit when proposal is in Draft or Returned status
-  const analystCanEditNow = isBudgetAnalyst && (
+  // Budget Analyst can edit when proposal is in Draft or Returned status (for creators)
+  // OR when BUDGET_ANALYST user role has proposals Forwarded to Analyst
+  const analystCanEditNow = (isBudgetAnalyst && (
     proposal?.status === 'Draft' || 
     proposal?.status === 'Returned'
-  );
+  )) || (isBudgetAnalystUserRole && proposal?.status === 'Forwarded to Analyst');
 
   // Budget Coordinator can edit when proposal is Division Submitted (waiting for coordinator review)
   const coordinatorCanEditNow = isBudgetCoordinator && (
@@ -543,7 +591,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
   const officerReadOnlyTables = officerModeActive && Boolean(comparisonData) && !officerEditMode;
   const officerShowTables = officerModeActive ? (!comparisonData || officerEditMode) : true;
   const canRenderEditView = !isReadOnlyMode && proposalData && proposal?.status !== 'Officer Approved' && proposal?.status !== 'Approved' && (
-    (isBudgetOfficer && !isManagerLevel) || coordinatorCanEditNow || analystCanEditNow || managerCanEditNow
+    (isBudgetOfficer && !isManagerLevel) || coordinatorCanEditNow || analystCanEditNow || managerCanEditNow || isApprover
   );
 
   return (
@@ -824,7 +872,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                       handleClose();
                     }, 1500); // Give time to show success toast before closing
                   }}
-                  variant={managerCanEditNow ? 'manager' : coordinatorCanEditNow ? 'coordinator' : analystCanEditNow ? 'analyst' : 'officer'}
+                  variant={managerCanEditNow ? 'manager' : coordinatorCanEditNow ? 'coordinator' : analystCanEditNow ? 'analyst' : isApprover ? 'approver' : 'officer'}
                   allowSubmit={!managerCanEditNow}
                   showTables={officerShowTables}
                 />

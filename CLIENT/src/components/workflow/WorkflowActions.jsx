@@ -305,11 +305,11 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
         });
 
         actions.push({
-          label: 'Submit to Coordinator',
+          label: 'Submit to Reviewer',
           action: 'submit-to-coordinator',
           color: 'bg-blue-500 hover:bg-blue-600',
           icon: '📤',
-          description: 'Forward proposal to Budget Coordinator for review',
+          description: 'Forward proposal to Budget Reviewer for review',
           requiresComment: true
         });
 
@@ -392,11 +392,11 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           requiresComment: true
         });
         actions.push({
-          label: "Return to Coordinator",
+          label: "Return to Reviewer",
           action: "officer-return",
           color: "bg-red-500 hover:bg-red-600",
           icon: "↩️",
-          description: "Return proposal to coordinator for revisions",
+          description: "Return proposal to reviewer for revisions",
           requiresComment: true
         });
       }
@@ -498,7 +498,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
 
   const roleLabelMap = useMemo(() => ({
     BUDGET_ANALYST: 'Budget Analyst',
-    BUDGET_COORDINATOR: 'Budget Coordinator',
+    BUDGET_COORDINATOR: 'Budget Reviewer',
     BUDGET_OFFICER: 'Budget Officer',
     BUDGET_MANAGER: 'Budget Manager',
     BUDGET_ADMIN: 'Budget Admin'
@@ -522,7 +522,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
 
   const stepLabelMap = useMemo(() => ({
     ANALYST_DRAFT: { label: 'Analyst Draft', tooltip: 'Draft in progress with Analyst' },
-    COORDINATOR_REVIEW: { label: 'Coordinator Review', tooltip: 'Awaiting Budget Coordinator action' },
+    COORDINATOR_REVIEW: { label: 'Reviewer Review', tooltip: 'Awaiting Budget Reviewer action' },
     OFFICER_REVIEW: { label: 'Officer Review', tooltip: 'Awaiting Budget Officer verification' },
     MANAGER_REVIEW: { label: 'Manager Review', tooltip: 'Awaiting Budget Manager decision' },
     RETURNED: { label: 'Returned', tooltip: 'Returned for revisions' },
@@ -651,7 +651,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           break;
         case "submit-to-coordinator":
           endpoint = "/api/workflow/submit";
-          successMessage = "Proposal submitted to Budget Coordinator successfully";
+          successMessage = "Proposal submitted to Budget Reviewer successfully";
           break;
         case "submit-direct-to-manager":
           endpoint = "/api/workflow/submit-direct-to-manager";
@@ -659,7 +659,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           break;
         case "coordinator-approve":
           endpoint = "/api/workflow/coordinator/approve";
-          successMessage = "Proposal approved by Budget Coordinator successfully";
+          successMessage = "Proposal approved by Budget Reviewer successfully";
           break;
         case "coordinator-approve-forward-officer":
           endpoint = "/api/workflow/coordinator/approve-and-forward-to-officer";
@@ -988,7 +988,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     if (!readinessPayload) return;
     const readiness = readinessPayload.readiness || readinessPayload;
     const missingModules = Array.isArray(readiness?.missingModules) ? readiness.missingModules : [];
-    const message = readiness?.message || fallbackMessage || 'Please complete all required modules before submitting this proposal to the Budget Coordinator.';
+    const message = readiness?.message || fallbackMessage || 'Please complete all required modules before submitting this proposal to the Budget Reviewer.';
 
     setBlockDialog({
       open: true,
@@ -997,8 +997,8 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       details: readiness?.details || {},
       requiresIncome: Boolean(readiness?.requiresIncome),
       requirementMessage: readiness?.requirementMessage || (readiness?.requiresIncome
-        ? 'Regional submissions must include Personnel Services, MOOE, Capital Outlay, and Income entries before submitting to the Budget Coordinator.'
-        : 'Central Office submissions must include Personnel Services, MOOE, and Capital Outlay entries before submitting to the Budget Coordinator.')
+        ? 'Regional submissions must include Personnel Services, MOOE, Capital Outlay, and Income entries before submitting to the Budget Reviewer.'
+        : 'Central Office submissions must include Personnel Services, MOOE, and Capital Outlay entries before submitting to the Budget Reviewer.')
     });
 
     toast.info(message);
@@ -1470,8 +1470,8 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
 
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             {blockDialog.requirementMessage || (blockDialog.requiresIncome
-              ? 'Regional submissions must include Personnel Services, MOOE, Capital Outlay, and Income entries before submitting to the Budget Coordinator.'
-              : 'Central Office submissions must include Personnel Services, MOOE, and Capital Outlay entries before submitting to the Budget Coordinator.')}
+              ? 'Regional submissions must include Personnel Services, MOOE, Capital Outlay, and Income entries before submitting to the Budget Reviewer.'
+              : 'Central Office submissions must include Personnel Services, MOOE, and Capital Outlay entries before submitting to the Budget Reviewer.')}
           </Typography>
 
           <List dense disablePadding>

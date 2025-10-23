@@ -106,7 +106,7 @@ const ComparisonPersonnelTable = ({ data }) => {
                 {isCurrency ? formatCurrency(displayValue) : displayValue}
               </Typography>
               <Typography variant="caption" color="text.secondary" sx={{ textDecoration: 'line-through' }}>
-                Was: {isCurrency ? formatCurrency(previousValue) : previousValue}
+                {isCurrency ? formatCurrency(previousValue) : previousValue}
               </Typography>
             </Box>
           </TableCell>
@@ -199,7 +199,7 @@ const ComparisonPersonnelTable = ({ data }) => {
                                     </Typography>
                                     {hasChanged && (
                                       <Typography variant="caption" color="text.secondary" sx={{ textDecoration: 'line-through' }}>
-                                        Was: {formatCurrency(oldValue)}
+                                        {formatCurrency(oldValue)}
                                       </Typography>
                                     )}
                                   </Box>

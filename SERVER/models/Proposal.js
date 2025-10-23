@@ -39,8 +39,10 @@ const proposalSchema = new mongoose.Schema({
     type: String,
     enum: [
       "Draft",                          // ANALYST creates
+      "Forwarded to Reviewer",          // PREPARER submits to REVIEWER
       "Division Submitted",             // ANALYST submits
       "Forwarded to Officer",           // COORDINATOR approves and forwards to Officer
+      "Forwarded to Analyst",           // APPROVER approves and forwards to Analyst
       "Officer Approved",               // OFFICER approves
       "Forwarded to Manager",           // OFFICER submits to Manager
       "Finalized",                      // MANAGER approves
@@ -68,6 +70,7 @@ const proposalSchema = new mongoose.Schema({
       "ANALYST_DRAFT",
       "COORDINATOR_REVIEW",
       "OFFICER_REVIEW",
+      "ANALYST_REVIEW",
       "MANAGER_REVIEW",
       "RETURNED",
       "FINALIZED"
@@ -115,10 +118,13 @@ const proposalSchema = new mongoose.Schema({
         "OFFICER_RETURN",
         "OFFICER_SUBMIT_TO_MANAGER",
         "OFFICER_SAVE_EDITS",
+        "APPROVER_APPROVE_TO_ANALYST",
+        "PREPARER_SUBMIT_TO_REVIEWER",
         "MANAGER_APPROVE",
         "MANAGER_RETURN",
         "MANAGER_SAVE_EDITS",
         "ANALYST_SUBMIT_TO_COORDINATOR",
+        "ANALYST_SUBMIT_TO_OFFICER",
         "SAVE_DRAFT",
         "AUTO_SYNC"
       ],

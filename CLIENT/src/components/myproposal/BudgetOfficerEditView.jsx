@@ -45,15 +45,21 @@ const BudgetOfficerEditView = ({
     switch (variant) {
       case 'analyst':
         return {
-          title: 'Submit to Budget Coordinator',
-          message: 'This will send your draft proposal to the Budget Coordinator for review. You will not be able to edit again until it is returned.',
-          confirmLabel: 'Submit to Coordinator'
+          title: 'Submit to Budget Officer',
+          message: 'This will send your analyzed proposal to the Budget Officer for approval. You will not be able to edit again until it is returned.',
+          confirmLabel: 'Submit to Budget Officer'
+        };
+      case 'approver':
+        return {
+          title: 'Approve and Forward to Budget Analyst',
+          message: 'This will approve the proposal and forward it to the Budget Analyst for further processing.',
+          confirmLabel: 'Approve and Forward'
         };
       case 'officer':
         return {
-          title: 'Submit Reviewed Proposal',
-          message: 'This will forward your reviewed proposal for approval. Ensure all edits are finalized before proceeding.',
-          confirmLabel: 'Submit Proposal'
+          title: 'Submit to Overall Budget Approver',
+          message: 'This will forward your reviewed proposal to the Overall Budget Approver for final approval. Ensure all edits are finalized before proceeding.',
+          confirmLabel: 'Submit to Overall Budget Approver'
         };
       default:
         return {
@@ -241,7 +247,7 @@ const BudgetOfficerEditView = ({
 
   const handleSubmitClick = () => {
     // For BUDGET_COORDINATOR, show dialog to choose submit target
-    if (variant === 'coordinator') {
+    if (variant === 'reviewer') {
       setShowSubmitDialog(true);
     } else {
       // For other roles, ask for confirmation before submitting
@@ -260,15 +266,27 @@ const BudgetOfficerEditView = ({
     try {
       const editData = prepareEditData();
       // Add the submit target for BUDGET_COORDINATOR
-      if (variant === 'coordinator') {
+      if (variant === 'reviewer') {
         editData.submitTargetRole = submitTarget;
       }
-      await submitEdit(editData);
-      
-      const targetLabel = submitTarget === 'BUDGET_OFFICER' ? 'Budget Officer' : 'Budget Manager';
+      const res = await submitEdit(editData);
+
+      const routedRole = res?.data?.displayCurrentAssigneeRole || (submitTarget === 'BUDGET_MANAGER' ? 'OVERALL_BUDGET_APPROVER' : 'APPROVER');
+      const forwardedCount = res?.data?.forwardedToUsersCount;
+      const targetLabel = submitTarget === 'BUDGET_OFFICER' ? 'Budget Officer (Approver)' : 'Budget Manager (Overall Approver)';
+      const extraHint = routedRole === 'APPROVER'
+        ? `You can track it under statuses like "Forwarded to Officer" or "Under Review by Officer" in All Proposals.`
+        : routedRole === 'OVERALL_BUDGET_APPROVER'
+        ? `You can track it under statuses like "Forwarded to Manager" or "Under Review by Manager" in All Proposals.`
+        : '';
+
+      const recipientsNote = typeof forwardedCount === 'number'
+        ? ` Notified recipients: ${forwardedCount}.`
+        : '';
+
       toast.success(
-        `✅ Edits submitted to ${targetLabel} successfully!\n⏳ Dialog closing...`,
-        { duration: 4000 }
+        `✅ Submitted to ${targetLabel}. Now pending with: ${routedRole}. ${recipientsNote}\n${extraHint}`,
+        { duration: 6000 }
       );
       onSaveSuccess?.();
     } catch (error) {
@@ -288,10 +306,22 @@ const BudgetOfficerEditView = ({
     setSubmitting(true);
     try {
       const editData = prepareEditData();
-      await submitEdit(editData);
+      const res = await submitEdit(editData);
+
+      const routedRole = res?.data?.displayCurrentAssigneeRole || 'NEXT APPROVER';
+      const forwardedCount = res?.data?.forwardedToUsersCount;
+      const extraHint = routedRole === 'APPROVER'
+        ? `You can track it under statuses like "Forwarded to Officer" or "Under Review by Officer" in All Proposals.`
+        : routedRole === 'OVERALL_BUDGET_APPROVER'
+        ? `You can track it under statuses like "Forwarded to Manager" or "Under Review by Manager" in All Proposals.`
+        : '';
+      const recipientsNote = typeof forwardedCount === 'number'
+        ? ` Notified recipients: ${forwardedCount}.`
+        : '';
+
       toast.success(
-        `✅ Edits submitted for approval successfully!\n⏳ Dialog closing...`,
-        { duration: 4000 }
+        `✅ Edits submitted successfully. Now pending with: ${routedRole}.${recipientsNote}\n${extraHint}`,
+        { duration: 6000 }
       );
       onSaveSuccess?.();
     } catch (error) {
@@ -335,13 +365,13 @@ const BudgetOfficerEditView = ({
         <Typography variant="body2">
           <strong>
             {variant === 'manager' ? 'Budget Manager Edit Mode' : 
-             variant === 'coordinator' ? 'Budget Coordinator Edit Mode' : 
+             variant === 'reviewer' ? 'Budget Reviewer Edit Mode' : 
              variant === 'analyst' ? 'Budget Analyst Edit Mode' :
              'Budget Officer Edit Mode'}:
           </strong> You can edit all four tables below.
           {variant === 'manager' ? ' After reviewing your changes, use Approve in the dialog footer to proceed.' : 
-           variant === 'coordinator' ? ' Changes will be tracked and sent for further review after submission.' :
-           variant === 'analyst' ? ' Make necessary updates and submit for coordinator review.' :
+           variant === 'reviewer' ? ' Changes will be tracked and sent for further review after submission.' :
+           variant === 'analyst' ? ' Make necessary updates and submit to budget officer for approval.' :
            ' Changes will be tracked and sent to Budget Analysts for review after approval.'}
         </Typography>
       </Alert>}
@@ -444,9 +474,11 @@ const BudgetOfficerEditView = ({
           variant="outlined"
           helperText={
             variant === 'analyst' 
-              ? 'These comments will be visible to Budget Coordinators when reviewing your submission'
-              : variant === 'coordinator'
-              ? 'These comments will be visible to Budget Officers when reviewing your edits'
+              ? 'These comments will be visible to Budget Officer when approving your submission'
+              : variant === 'reviewer'
+              ? 'These comments will be visible to Approvers when reviewing your edits'
+              : variant === 'approver'
+              ? 'These comments will be visible to Budget Analyst when reviewing your approved proposal'
               : 'These comments will be visible to Budget Analysts when reviewing your edits'
           }
         />
@@ -473,9 +505,10 @@ const BudgetOfficerEditView = ({
           >
             {submitting ? 'Submitting...' : 
              !isFormValid ? `❌ Complete all modules to submit` :
-             variant === 'analyst' ? 'Submit for Coordinator Review' :
-             variant === 'coordinator' ? 'Submit Reviewed Proposal' :
-             'Submit for Manager Approval'}
+             variant === 'analyst' ? 'Submit to Budget Officer' :
+             variant === 'approver' ? 'Approve and Forward to Budget Analyst' :
+             variant === 'reviewer' ? 'Submit to Approver' :
+             'Submit to Overall Budget Approver'}
           </Button>
         )}
       </Box>
@@ -501,8 +534,8 @@ const BudgetOfficerEditView = ({
         </DialogActions>
       </Dialog>
 
-      {/* Budget Coordinator Submit Target Dialog */}
-      {variant === 'coordinator' && (
+      {/* Reviewer Submit Target Dialog */}
+      {variant === 'reviewer' && (
         <Dialog open={showSubmitDialog} onClose={() => setShowSubmitDialog(false)} maxWidth="sm" fullWidth>
           <DialogTitle>Submit Reviewed Proposal</DialogTitle>
           <DialogContent sx={{ pt: 3 }}>
@@ -519,10 +552,10 @@ const BudgetOfficerEditView = ({
                 label={
                   <Box>
                     <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                      Budget Officer (Standard Flow)
+                      Approver (Standard Flow)
                     </Typography>
                     <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      Send to Budget Officer for verification and consolidation
+                      Send to Approver for review and approval
                     </Typography>
                   </Box>
                 }
@@ -533,10 +566,10 @@ const BudgetOfficerEditView = ({
                 label={
                   <Box>
                     <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                      Budget Manager (Skip Officer)
+                      Overall Budget Approver (Skip Approver)
                     </Typography>
                     <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      Send directly to Budget Manager for final approval
+                      Send directly to the Overall Budget Approver for final approval
                     </Typography>
                   </Box>
                 }

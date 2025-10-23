@@ -288,12 +288,12 @@ const AllProposalsPage = () => {
     try {
       setStats(prev => ({ ...prev, loading: true }));
   // Use the same endpoint as the table to get aggregated data
-  const response = await api.get("/proposals", { params: { includeFinalized: includeFinalized || undefined } });
+  const response = await api.get("/api/my-proposals/all", { params: { includeFinalized: includeFinalized || undefined } });
 
-      if (response.data && response.data.proposals) {
-        const proposals = response.data.proposals;
+      if (response.data && response.data.data) {
+        const proposals = response.data.data;
 
-        const totalProposals = proposals.length;
+        const totalProposals = response.data.total || proposals.length;
 
         // For aggregated data, sum up the values from each aggregated row
         const totalProjectedCorporateIncome = proposals.reduce((sum, proposal) => {
@@ -340,8 +340,8 @@ const AllProposalsPage = () => {
   const testAPIAccess = async () => {
     try {
       // Test direct API call
-      const response = await api.get("/proposals?limit=5");
-      alert(`API accessible! Found ${response.data.proposals?.length || 0} proposals. Check console for details.`);
+      const response = await api.get("/api/my-proposals/all?limit=5");
+      alert(`API accessible! Found ${response.data.data?.length || 0} proposals. Check console for details.`);
     } catch (error) {
       console.error("❌ API Error:", error);
       console.error("❌ Error response:", error.response?.data);
@@ -764,7 +764,7 @@ const AllProposalsPage = () => {
             refreshData={refreshData}
             title="All Proposals"
             description="View and manage budget proposals based on your role"
-            apiPath="/proposals"
+            apiPath="/api/my-proposals/all"
             apiParams={{ includeFinalized }}
             groupBy={null} // No grouping - show individual entries
             showTotals={true}

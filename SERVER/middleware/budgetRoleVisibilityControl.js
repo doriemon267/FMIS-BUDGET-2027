@@ -69,13 +69,17 @@ const budgetRoleVisibilityControl = () => {
           // BUDGET_ANALYST can see:
           // 1. Own proposals (any status)
           // 2. Division proposals within their division (any status)
+          // 3. Proposals assigned to BUDGET_ANALYST role
           visibilityFilter = {
             $or: [
               // Own proposals (any status)
               { createdByUserId: userId },
               { processBy: userId },
               // Division proposals (if user has a division)
-              ...(userDivision ? [{ division: userDivision }] : [])
+              ...(userDivision ? [{ division: userDivision }] : []),
+              // Proposals assigned to BUDGET_ANALYST
+              { currentAssigneeRole: 'BUDGET_ANALYST' },
+              { pendingWithRoles: 'BUDGET_ANALYST' }
             ]
           };
           break;
@@ -84,6 +88,7 @@ const budgetRoleVisibilityControl = () => {
           // BUDGET_OFFICER can see:
           // 1. Own proposals (any status)
           // 2. Approved/Submitted/Finalized proposals from others (no Drafts)
+          // 3. Proposals assigned to BUDGET_OFFICER role
           visibilityFilter = {
             $or: [
               // Own proposals (any status)
@@ -116,7 +121,10 @@ const budgetRoleVisibilityControl = () => {
                     'Submitted'
                   ]
                 }
-              }
+              },
+              // Proposals assigned to BUDGET_OFFICER
+              { currentAssigneeRole: 'BUDGET_OFFICER' },
+              { pendingWithRoles: 'BUDGET_OFFICER' }
             ]
           };
           break;
@@ -253,6 +261,7 @@ const budgetRoleVisibilityControl = () => {
           // OVERALL_BUDGET_APPROVER can see:
           // 1. Their own proposals (created by them) - any status including drafts
           // 2. All submitted/verified/approved proposals for final approval
+          // 3. Proposals assigned to OVERALL_BUDGET_APPROVER/BUDGET_MANAGER role
           visibilityFilter = {
             $or: [
               // Own proposals created by this user
@@ -281,7 +290,10 @@ const budgetRoleVisibilityControl = () => {
                     'REGION APPROVED'
                   ]
                 }
-              }
+              },
+              // Proposals assigned to OVERALL_BUDGET_APPROVER/BUDGET_MANAGER
+              { currentAssigneeRole: { $in: ['OVERALL_BUDGET_APPROVER', 'BUDGET_MANAGER'] } },
+              { pendingWithRoles: { $in: ['OVERALL_BUDGET_APPROVER', 'BUDGET_MANAGER'] } }
             ]
           };
           break;

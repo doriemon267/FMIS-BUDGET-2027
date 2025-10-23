@@ -473,6 +473,14 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
           }
         }
         
+        // Ensure BUDGET_ANALYST role is included in workflowRoles if user has BUDGET_ANALYST role
+        if (userRoles.includes('BUDGET_ANALYST') && !workflowRoles.includes('budgetAnalyst')) {
+          workflowRoles = [...workflowRoles, 'budgetAnalyst'];
+          // Update the assignment document
+          assignmentDoc.workflowRoles = workflowRoles;
+          assignmentDoc.save().catch(err => console.warn('Failed to save budgetAnalyst role:', err.message));
+        }
+        
         // Ensure rolePermissions are set based on assignment level
         let rolePermissions = assignmentDoc.rolePermissions || {};
         const effectiveAssignmentLevel = assignmentDoc.assignmentLevel;

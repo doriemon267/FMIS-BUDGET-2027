@@ -79,7 +79,7 @@ const ComparisonMOOETable = ({ data }) => {
                 {isCurrency ? formatCurrency(displayValue) : displayValue}
               </Typography>
               <Typography variant="caption" color="text.secondary" sx={{ textDecoration: 'line-through' }}>
-                Was: {isCurrency ? formatCurrency(oldValue ?? 0) : (oldValue ?? '—')}
+                {isCurrency ? formatCurrency(oldValue ?? 0) : (oldValue ?? '—')}
               </Typography>
             </Box>
           </TableCell>

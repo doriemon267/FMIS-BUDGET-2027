@@ -138,7 +138,7 @@ const ComparisonIncomeTable = ({ data }) => {
               color="text.secondary"
               sx={{ textDecoration: "line-through" }}
             >
-              Was: {displayOld}
+              {displayOld}
             </Typography>
           </Box>
         </TableCell>
@@ -349,7 +349,7 @@ const ComparisonIncomeTable = ({ data }) => {
               color="text.secondary"
               sx={{ textDecoration: "line-through", display: "block" }}
             >
-              Was: {formatCurrency(originalTotal)}
+              {formatCurrency(originalTotal)}
             </Typography>
           )}
         </Box>

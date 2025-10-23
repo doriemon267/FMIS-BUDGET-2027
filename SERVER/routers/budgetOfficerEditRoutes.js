@@ -22,14 +22,16 @@ router.use(checkToken);
 router.use(loadHierarchicalAssignment);
 
 /**
- * Custom middleware to check if user is a Budget Officer or Budget Coordinator
+ * Custom middleware to check if user is a Budget Officer, Budget Coordinator, or Budget Analyst
  * Budget Officers are users with DEPARTMENT, OFFICE, REGION, or FULL assignment level
  * OR users with specific workflow roles
  * Budget Coordinators have DIVISION level or divisionapprover role
+ * Budget Analysts have BUDGET_ANALYST user role
  */
 const requireBudgetOfficerAccess = (req, res, next) => {
   const assignment = req.userHierarchicalAssignment;
   const workflowRoles = assignment?.workflowRoles || [];
+  const userRoles = req.user?.Roles || [];
   
   // Check assignment level (includes Budget Officer levels + Budget Coordinator DIVISION level)
   const validLevels = ['DIVISION', 'DEPARTMENT', 'OFFICE', 'REGION', 'FULL'];
@@ -39,10 +41,13 @@ const requireBudgetOfficerAccess = (req, res, next) => {
   const validRoles = ['divisionapprover', 'officeapprover', 'departmentConsolidator', 'officeConsolidator', 'regionFinalVerifier'];
   const hasValidRole = validRoles.some(role => workflowRoles.includes(role));
   
+  // Check user roles (includes BUDGET_ANALYST)
+  const hasValidUserRole = userRoles.includes('BUDGET_ANALYST');
+  
   // Check if user has EditAllProposals permission
   const hasPermission = req.hierarchicalFlags?.canEditAllProposals === true;
   
-  if (hasValidLevel || hasValidRole || hasPermission) {
+  if (hasValidLevel || hasValidRole || hasValidUserRole || hasPermission) {
     return next();
   }
   
