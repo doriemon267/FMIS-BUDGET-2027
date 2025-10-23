@@ -135,8 +135,28 @@ const budgetRoleAccessControl = (operation = 'read') => {
             ...(userRegion ? [{ region: userRegion }] : [])
           ];
         } else if (isReviewer) {
-          // Reviewers can see proposals in review stage
-          visibilityFilter.status = { $in: ['Draft', 'Division Submitted', 'Under Review', 'Reviewed'] };
+          // Reviewers can see only proposals pending their review or in reviewer-specific statuses
+          // IMPORTANT: Exclude Drafts from reviewer view to avoid showing unsubmitted items
+          visibilityFilter = {
+            $and: [
+              { status: { $ne: 'Draft' } },
+              {
+                $or: [
+                  { currentAssigneeRole: 'REVIEWER' },
+                  { pendingWithRoles: 'REVIEWER' },
+                  {
+                    status: {
+                      $in: [
+                        'Division Submitted',
+                        'Under Review by Reviewer',
+                        'Department Submitted'
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          };
         } else if (isApprover) {
           // Approvers can see proposals pending approval
           visibilityFilter.status = { $in: ['Reviewed', 'Pending Approval', 'Approved'] };
