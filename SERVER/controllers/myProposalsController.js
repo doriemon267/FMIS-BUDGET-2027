@@ -1,9 +1,89 @@
+const Proposal = require('../models/Proposal');
+
+/**
+ * Get proposals visible to the current user, honoring:
+ * - Role-based visibility (req.budgetRoleVisibilityFilter)
+ * - Organizational scope (req.hierarchicalFilters)
+ * - Optional query filters: statuses, region, department, division, search
+ * - Pagination and sorting
+ */
+exports.getAllUserProposals = async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page || '1', 10));
+    const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize || '20', 10)));
+    const sortBy = req.query.sortBy || 'updatedAt';
+    const sortOrder = (req.query.sortOrder || 'desc').toLowerCase() === 'asc' ? 1 : -1;
+
+    // Base filters from middlewares
+    const roleFilter = req.budgetRoleVisibilityFilter || {};
+    const orgFilter = req.hierarchicalFilters || {};
+
+    // Optional query filters
+    const andFilters = [];
+    if (roleFilter && Object.keys(roleFilter).length) andFilters.push(roleFilter);
+    if (orgFilter && Object.keys(orgFilter).length) andFilters.push(orgFilter);
+
+    // statuses: comma-separated or repeated query param
+    let statuses = req.query.statuses;
+    if (typeof statuses === 'string') {
+      statuses = statuses.split(',').map(s => s.trim()).filter(Boolean);
+    }
+    if (Array.isArray(statuses) && statuses.length) {
+      andFilters.push({ status: { $in: statuses } });
+    }
+
+    // region/department/division overrides (further restrict, not broaden)
+    const { region, department, division, processBy, fiscalYear, budgetType } = req.query;
+    if (region) andFilters.push({ region });
+    if (department) andFilters.push({ department });
+    if (division) andFilters.push({ division });
+    if (processBy) andFilters.push({ processBy });
+    if (fiscalYear) andFilters.push({ fiscalYear });
+    if (budgetType) andFilters.push({ budgetType });
+
+    // Simple text search across common fields
+    const search = (req.query.search || '').trim();
+    if (search) {
+      const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      andFilters.push({ $or: [
+        { title: regex },
+        { description: regex },
+        { region: regex },
+        { department: regex },
+        { division: regex },
+        { processBy: regex }
+      ]});
+    }
+
+    const query = andFilters.length ? { $and: andFilters } : {};
+
+    const [items, total] = await Promise.all([
+      Proposal.find(query)
+        .sort({ [sortBy]: sortOrder })
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
+        .lean(),
+      Proposal.countDocuments(query)
+    ]);
+
+    return res.json({
+      success: true,
+      data: items,
+      total,
+      page,
+      pageSize
+    });
+  } catch (error) {
+    console.error('❌ getAllUserProposals error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to fetch proposals', error: error.message });
+  }
+};
 const Personnel = require('../models/personnelServices');
 const MOOE = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const Income = require('../models/Income');
 const BudgetarySupport = require('../models/BudgetarySupport');
-exports.getAllUserProposals = async (req, res) => {
+exports.getAllUserBudgetItems = async (req, res) => {
   try {
     // Get the user's name and region from the query parameters
     const { processBy, region } = req.query;
@@ -87,4 +167,4 @@ exports.getAllUserProposals = async (req, res) => {
     console.error("Error fetching all user proposals:", error);
     res.status(500).json({ message: "Failed to fetch proposals" });
   }
-};
+};

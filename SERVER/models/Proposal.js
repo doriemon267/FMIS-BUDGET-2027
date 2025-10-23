@@ -80,8 +80,10 @@ const proposalSchema = new mongoose.Schema({
       "PREPARER",
       "BUDGET_ANALYST",
       "BUDGET_COORDINATOR",
+      "APPROVER",
       "BUDGET_OFFICER",
       "BUDGET_MANAGER",
+      "OVERALL_BUDGET_APPROVER",
       "BUDGET_ADMIN"
     ],
     default: "PREPARER"

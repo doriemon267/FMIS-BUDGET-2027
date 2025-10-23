@@ -74,6 +74,7 @@ const { initializeCleanupScheduler } = require("./utils/backupCleanup");
 const { initializeBackupSystem } = require("./backup-scripts/initBackupSystem");
 const income_categories = require("./routers/income_categories");
 const authRouter = require("./routers/AuthRoutes");
+const myProposalsRoutes = require("./routes/myProposalsRoutes");
 require("./config/mongo_db")();
 // Fix database index for region isolation
 const mongoose = require('mongoose');
@@ -268,6 +269,8 @@ app.use(proposalRouter);
 // app.use(proposalRBACRouter);  // DISABLED - use proposalRouter instead
 // Budget Officer Edit Routes
 app.use('/api/budget-officer-edits', budgetOfficerEditRouter);
+// My Proposals Routes (for role-based proposal listing)
+app.use('/api/my-proposals', myProposalsRoutes);
 // Workflow-specific endpoints
 app.use('/api/workflow', require('./routers/proposalWorkflowRoutes'));
 // 🔄 Submission Workflow Routes - Controls data visibility based on submission status

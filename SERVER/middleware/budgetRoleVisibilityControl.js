@@ -209,31 +209,41 @@ const budgetRoleVisibilityControl = () => {
 
         case 'APPROVER':
           // APPROVER can see:
-          // 1. Their own proposals (created by them) - any status including drafts
-          // 2. Proposals in their approval workflow queue
-          // 3. Proposals in submitted/verification statuses for approval
+          // 1. Items explicitly pending with APPROVER (BUDGET_OFFICER persisted) via currentAssigneeRole/pendingWithRoles
+          // 2. Proposals in statuses routed to Approver step (include legacy + new labels)
+          // 3. Optionally their own/processBy proposals
           visibilityFilter = {
-            $or: [
-              // Own proposals created by this user
-              { createdByUserId: userId },
-              // Proposals assigned/processed by this user
-              { processBy: userId },
-              // Proposals in submitted/verification statuses
+            $and: [
+              { status: { $ne: 'Draft' } },
               {
-                status: {
-                  $in: [
-                    'Division Submitted',
-                    'DIVISION SUBMITTED',
-                    'Department Verified',
-                    'DEPARTMENT VERIFIED',
-                    'Department Submitted',
-                    'DEPARTMENT SUBMITTED',
-                    'Responsibility Center Submitted',
-                    'RESPONSIBILITY_CENTER_SUBMITTED',
-                    'Office Verified',
-                    'OFFICE VERIFIED'
-                  ]
-                }
+                $or: [
+                  // Explicit assignment to Approver (persisted + display aliases)
+                  { currentAssigneeRole: { $in: ['BUDGET_OFFICER', 'APPROVER'] } },
+                  { pendingWithRoles: { $in: ['BUDGET_OFFICER', 'APPROVER'] } },
+                  // Statuses commonly at Approver step
+                  {
+                    status: {
+                      $in: [
+                        'Forwarded to Officer',
+                        'UNDER REVIEW BY OFFICER',
+                        'Under Review by Officer',
+                        'Division Submitted',
+                        'DIVISION SUBMITTED',
+                        'Department Verified',
+                        'DEPARTMENT VERIFIED',
+                        'Department Submitted',
+                        'DEPARTMENT SUBMITTED',
+                        'Responsibility Center Submitted',
+                        'RESPONSIBILITY_CENTER_SUBMITTED',
+                        'Office Verified',
+                        'OFFICE VERIFIED'
+                      ]
+                    }
+                  },
+                  // Own or processBy as a fallback for continuity
+                  { createdByUserId: userId },
+                  { processBy: userId }
+                ]
               }
             ]
           };

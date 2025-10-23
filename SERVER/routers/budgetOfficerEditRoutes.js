@@ -35,8 +35,8 @@ const requireBudgetOfficerAccess = (req, res, next) => {
   const validLevels = ['DIVISION', 'DEPARTMENT', 'OFFICE', 'REGION', 'FULL'];
   const hasValidLevel = validLevels.includes(assignment?.assignmentLevel);
   
-  // Check workflow roles (includes Budget Officer roles + Budget Coordinator divisionapprover role)
-  const validRoles = ['divisionapprover', 'departmentConsolidator', 'officeConsolidator', 'regionFinalVerifier'];
+  // Check workflow roles (includes Budget Officer roles + Budget Coordinator divisionapprover role + APPROVER roles)
+  const validRoles = ['divisionapprover', 'officeapprover', 'departmentConsolidator', 'officeConsolidator', 'regionFinalVerifier'];
   const hasValidRole = validRoles.some(role => workflowRoles.includes(role));
   
   // Check if user has EditAllProposals permission
