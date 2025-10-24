@@ -80,6 +80,8 @@ async function consolidateDraftProposal(criteria) {
     }
 
     const totalExpenses = totalPersonnelExpenses + totalMooeExpenses + totalCapitalExpenses;
+    const proposedBudget = totalExpenses + totalIncome; // Budget = Expenses + Income
+    const projectedSubsidy = totalExpenses; // Subsidy is the expense amount
 
     // Build proposal title
     const orgUnit = division || department || region;
@@ -112,6 +114,9 @@ async function consolidateDraftProposal(criteria) {
           status: 'Draft',
           totalExpenses,
           totalIncome,
+          proposedBudget,
+          projectedCorporateIncome: totalIncome,
+          projectedSubsidy,
           personnelCount: draftPersonnel.length,
           mooeCount: draftMooe.length,
           capitalCount: draftCapital.length,

@@ -268,6 +268,8 @@ app.use(categoryRouter);
 app.use(proposalRouter);
 // app.use(proposalRBACRouter);  // DISABLED - use proposalRouter instead
 // Budget Officer Edit Routes
+const { comparisonRouter } = require("./routers/budgetOfficerEditRoutes");
+app.use('/api/budget-officer-edits', comparisonRouter);
 app.use('/api/budget-officer-edits', budgetOfficerEditRouter);
 // My Proposals Routes (for role-based proposal listing)
 app.use('/api/my-proposals', myProposalsRoutes);

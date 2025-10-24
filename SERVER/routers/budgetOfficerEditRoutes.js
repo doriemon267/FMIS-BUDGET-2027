@@ -82,10 +82,9 @@ router.post('/submit',
 // ⚠️ IMPORTANT: Specific routes MUST come BEFORE generic /:id route!
 // Otherwise Express will match /:id first and fail for /comparison/:proposalId and /proposal/:proposalId
 
-// Get comparison data (for Budget Analyst to see changes)
-router.get('/comparison/:proposalId',
-  getComparisonData
-);
+// Get comparison data (for Budget Analyst to see changes) - NO AUTH REQUIRED
+const comparisonRouter = express.Router();
+comparisonRouter.get('/comparison/:proposalId', getComparisonData);
 
 // Get edits for a specific proposal
 router.get('/proposal/:proposalId',
@@ -111,3 +110,4 @@ router.delete('/:id',
 );
 
 module.exports = router;
+module.exports.comparisonRouter = comparisonRouter;
