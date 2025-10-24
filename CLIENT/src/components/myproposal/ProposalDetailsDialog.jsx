@@ -947,7 +947,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                       handleClose();
                     }, 1500); // Give time to show success toast before closing
                   }}
-                  variant={managerCanEditNow ? 'manager' : reviewerCanEditNow ? 'reviewer' : preparerCanEditNow ? 'preparer' : isApprover ? 'approver' : 'officer'}
+                  variant={isManagerLevel ? 'manager' : isReviewer ? 'reviewer' : isPreparer ? 'preparer' : isDivisionApprover ? 'approver' : 'officer'}
                   allowSubmit={!managerCanEditNow && !isViewOnlyAfterSubmission}
                   showTables={officerShowTables || isViewOnlyAfterSubmission}
                   readOnly={isViewOnlyAfterSubmission}
