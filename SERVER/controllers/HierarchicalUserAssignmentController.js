@@ -27,15 +27,13 @@ const lookupUserFromMainDB = async (req, res) => {
 
     // Define role hierarchy for access control (based on 6-step workflow)
     const roleHierarchy = {
-      'BUDGET_ADMIN': 8,                    // Admin override
-      'BUDGET_MANAGER': 7,                  // Upper management (legacy)
-      'BUDGET_COORDINATOR': 6,              // Department/Region level (legacy)
-      'OVERALL_BUDGET_APPROVER': 5,        // Step 6: Executive budget approval
-      'BUDGET_OFFICER': 4,                  // Step 5: Operational approval
-      'BUDGET_ANALYST': 3,                  // Step 4: Technical review
-      'APPROVER': 2,                        // Step 3: Division/Office approval
-      'REVIEWER': 1,                        // Step 2: Division review
-      'PREPARER': 0                         // Step 1: Proposal creation
+      'BUDGET_ADMIN': 7,                        // Admin override
+      'OVERALL_BUDGET_APPROVER': 6,             // STEP 6: Executive budget approval
+      'BUDGET_OFFICER': 5,                      // STEP 5: Operational approval
+      'BUDGET_ANALYST': 4,                      // STEP 4: Technical review
+      'APPROVER': 3,                            // STEP 3: Division/Office approval
+      'REVIEWER': 2,                            // STEP 2: Division review
+      'PREPARER': 1                             // STEP 1: Proposal creation
     };
 
     // Get current user's highest role level
@@ -77,10 +75,9 @@ const lookupUserFromMainDB = async (req, res) => {
       const roles = await Promise.all(
         userData.roles.map(roleId => Role.findById(roleId, { name: 1 }).lean())
       );
-      // Filter to only show budget-related roles
+      // Include all roles, not just budget-related ones, for proper role determination
       const allRoleNames = roles.filter(role => role).map(role => role.name);
-      const budgetRoles = allRoleNames.filter(roleName => roleName.includes('BUDGET'));
-      roleNames.push(...budgetRoles);
+      roleNames.push(...allRoleNames);
     }
 
     // Extract relevant user information
@@ -98,26 +95,31 @@ const lookupUserFromMainDB = async (req, res) => {
     // Following the 6-step workflow hierarchy
     let budgetRole = 'PREPARER'; // default
 
-    if (roleNames.includes('SUPER ADMIN') || roleNames.includes('ADMIN')) {
+    console.log(`🔍 User ${userId} roles from DB:`, roleNames);
+
+    if (roleNames.includes('SUPER ADMIN') || roleNames.includes('ADMIN') || roleNames.includes('BUDGET ADMIN')) {
       budgetRole = 'BUDGET_ADMIN';
-    } else if (roleNames.includes('BUDGET MANAGER') || roleNames.includes('DEPARTMENT_HEAD')) {
-      budgetRole = 'BUDGET_MANAGER';
-    } else if (roleNames.includes('OVERALL_BUDGET_APPROVER') || roleNames.includes('OVERALL BUDGET APPROVER')) {
+    } else if (roleNames.includes('OVERALL_BUDGET_APPROVER') || roleNames.includes('OVERALL BUDGET APPROVER') || roleNames.includes('BUDGET MANAGER') || roleNames.includes('DEPARTMENT_HEAD')) {
+      // STEP 6: OVERALL_BUDGET_APPROVER (replaces legacy BUDGET_MANAGER)
       budgetRole = 'OVERALL_BUDGET_APPROVER';
     } else if (roleNames.includes('BUDGET OFFICER') || roleNames.includes('SUPERVISOR')) {
+      // STEP 5: BUDGET_OFFICER
       budgetRole = 'BUDGET_OFFICER';
-    } else if (roleNames.includes('BUDGET ANALYST')) {
+    } else if (roleNames.includes('BUDGET ANALYST') || roleNames.includes('BUDGET_ANALYST')) {
+      // STEP 4: BUDGET_ANALYST (technical review from Budget and Revenue Division)
       budgetRole = 'BUDGET_ANALYST';
-    } else if (roleNames.includes('APPROVER') || roleNames.includes('OFFICE APPROVER') || roleNames.includes('DIVISION APPROVER')) {
+    } else if (roleNames.includes('APPROVER') || roleNames.includes('OFFICE APPROVER') || roleNames.includes('DIVISION APPROVER') || roleNames.includes('OFFICEAPPROVER') || roleNames.includes('DIVISIONAPPROVER')) {
+      // STEP 3: APPROVER
       budgetRole = 'APPROVER';
-    } else if (roleNames.includes('REVIEWER') || roleNames.includes('DIVISION REVIEWER')) {
+    } else if (roleNames.includes('REVIEWER') || roleNames.includes('DIVISION REVIEWER') || roleNames.includes('BUDGET COORDINATOR') || roleNames.includes('DIVISIONREVIEWER')) {
+      // STEP 2: REVIEWER (replaces legacy BUDGET_COORDINATOR)
       budgetRole = 'REVIEWER';
-    } else if (roleNames.includes('BUDGET COORDINATOR') || roleNames.includes('SENIOR_STAFF')) {
-      budgetRole = 'BUDGET_COORDINATOR';
-    } else if (roleNames.includes('PREPARER')) {
+    } else if (roleNames.includes('PREPARER') || roleNames.includes('SENIOR_STAFF') || roleNames.includes('STAFF')) {
+      // STEP 1: PREPARER
       budgetRole = 'PREPARER';
     }
 
+    console.log(`📋 Determined budgetRole for user ${userId}: ${budgetRole}`);
     userInfo.budgetRole = budgetRole;
 
     res.json({
@@ -273,7 +275,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       userId,
       userName,
       email,
-      // Persist the requested role if provided, so the UI doesn't "downgrade" coordinator at RC level
+      // Persist the requested role if provided, so the UI doesn't "downgrade" reviewer at RC level
       userRole: userRole || undefined,
       assignmentLevel: modelAssignmentLevel,
       regionId: assignmentData.regions?.[0] || null,
@@ -1105,21 +1107,21 @@ function applyOfficeDefaults(assignmentDoc, sanitizedWorkflowRoles, normalizedLe
     // NEW LOGIC: Auto-assign based on userRole instead of level
     console.log('🔍 Auto-assigning workflow roles based on userRole:', { userRole, level });
     
-    if (userRole === 'BUDGET_ANALYST') {
-      // BUDGET ANALYST: Creator only, based on assignment level
+    if (userRole === 'PREPARER') {
+      // PREPARER: Creator only, based on assignment level
       if (level === 'OFFICE' || level === 'DEPARTMENT') {
         assignmentDoc.workflowRoles = ['officeCreator'];
       } else if (level === 'RESPONSIBILITY_CENTER' || level === 'DIVISION') {
         assignmentDoc.workflowRoles = ['divisionCreator'];
       }
-    } else if (userRole === 'BUDGET_COORDINATOR') {
-      // BUDGET COORDINATOR: Division approver only (no creator role)
-      assignmentDoc.workflowRoles = ['divisionApprover'];
+    } else if (userRole === 'REVIEWER') {
+      // STEP 2: REVIEWER: Division reviewer only (no creator role)
+      assignmentDoc.workflowRoles = ['divisionReviewer'];
     } else if (userRole === 'BUDGET_OFFICER') {
-      // BUDGET OFFICER: Office consolidator and verifier (no creator role)
+      // STEP 5: BUDGET_OFFICER: Office consolidator and verifier (no creator role)
       assignmentDoc.workflowRoles = ['officeConsolidator', 'officeFinalVerifier'];
-    } else if (userRole === 'BUDGET_MANAGER') {
-      // BUDGET MANAGER: Regional verifier (no creator role)
+    } else if (userRole === 'OVERALL_BUDGET_APPROVER') {
+      // STEP 6: OVERALL_BUDGET_APPROVER: Regional verifier (no creator role)
       assignmentDoc.workflowRoles = ['regionFinalVerifier'];
     } else if (userRole === 'BUDGET_ADMIN') {
       // BUDGET ADMIN: All roles for administrative purposes
