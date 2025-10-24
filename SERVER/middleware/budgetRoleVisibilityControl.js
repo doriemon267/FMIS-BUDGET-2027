@@ -201,6 +201,7 @@ const budgetRoleVisibilityControl = () => {
                   {
                     status: {
                       $in: [
+                        'Forwarded to Reviewer',
                         'Division Submitted',
                         'DIVISION SUBMITTED',
                         'Under Review by Reviewer',
@@ -233,6 +234,7 @@ const budgetRoleVisibilityControl = () => {
                   {
                     status: {
                       $in: [
+                        'Forwarded to Approver',
                         'Forwarded to Officer',
                         'UNDER REVIEW BY OFFICER',
                         'Under Review by Officer',
