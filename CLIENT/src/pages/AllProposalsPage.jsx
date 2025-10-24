@@ -396,10 +396,10 @@ const AllProposalsPage = () => {
         }, 0);
 
         const totalProposedBudget = proposals.reduce((sum, proposal) => {
-          // Calculate proposed budget as income - expenses
+          // Calculate proposed budget as income + expenses (matches database formula)
           const income = proposal.totalIncome || proposal.amount || 0;
           const expenses = proposal.totalExpenses || proposal.totalAmount || proposal.amount || 0;
-          return sum + (income - expenses);
+          return sum + (income + expenses);
         }, 0);
 
         setStats({
