@@ -19,14 +19,14 @@ export function hasPermission(currentUser, permissionKey) {
   }
 
   // ✅ Settings access: allow only BUDGET MANAGER (admins already allowed above);
-  // explicitly deny for other budget staff (analyst/coordinator/officer)
+  // explicitly deny for other budget staff (analyst/reviewer/officer)
   if (permissionKey === 'ManageSettings') {
     return userRoles.includes('BUDGET MANAGER');
   }
 
-  // 🔥 BUDGET ANALYST, BUDGET COORDINATOR, BUDGET MANAGER, BUDGET OFFICER
+  // 🔥 BUDGET_PLANNING_ANALYST, BUDGET MANAGER, BUDGET OFFICER
   // Access ALL menus EXCEPT Settings
-  const budgetStaffRoles = ['BUDGET ANALYST', 'BUDGET COORDINATOR', 'BUDGET MANAGER', 'BUDGET OFFICER'];
+  const budgetStaffRoles = ['BUDGET_PLANNING_ANALYST', 'BUDGET MANAGER', 'BUDGET OFFICER'];
   if (budgetStaffRoles.some(role => userRoles.includes(role))) {
     return true; // All permissions except ManageSettings (already filtered above)
   }

@@ -114,25 +114,25 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     const camelCaseNormalized = normalized.replace(/[^A-Z0-9_]/g, '_');
 
     const roleSynonyms = {
-      ANALYST: 'BUDGET_ANALYST',
-      BUDGETANALYST: 'BUDGET_ANALYST',
-      BUDGET_ANALYST: 'BUDGET_ANALYST',
-      BUDGET_OFFICER_ANALYST: 'BUDGET_ANALYST',
-      BA: 'BUDGET_ANALYST',
-      OFFICE_ANALYST: 'BUDGET_ANALYST',
-      ANALYST_OFFICER: 'BUDGET_ANALYST',
-      RESPONSIBILITY_CENTER: 'BUDGET_ANALYST',
-      RC: 'BUDGET_ANALYST',
+      ANALYST: 'PREPARER',
+      BUDGETANALYST: 'PREPARER',
+      BUDGET_ANALYST: 'PREPARER',
+      BUDGET_OFFICER_ANALYST: 'PREPARER',
+      BA: 'PREPARER',
+      OFFICE_ANALYST: 'PREPARER',
+      ANALYST_OFFICER: 'PREPARER',
+      RESPONSIBILITY_CENTER: 'PREPARER',
+      RC: 'PREPARER',
 
-      COORDINATOR: 'BUDGET_COORDINATOR',
-      BUDGET_COORDINATOR: 'BUDGET_COORDINATOR',
-      BUDGETCOORDINATOR: 'BUDGET_COORDINATOR',
-      COOR: 'BUDGET_COORDINATOR',
-      DIVISION_COORDINATOR: 'BUDGET_COORDINATOR',
-      DIVISIONAPPROVER: 'BUDGET_COORDINATOR',
-      DIVISION_APPROVER: 'BUDGET_COORDINATOR',
-      DIVISIONVERIFIER: 'BUDGET_COORDINATOR',
-      DIVISION_VERIFIER: 'BUDGET_COORDINATOR',
+      REVIEWER: 'APPROVER',
+      BUDGET_REVIEWER: 'APPROVER',
+      BUDGETREVIEWER: 'APPROVER',
+      REV: 'APPROVER',
+      DIVISION_REVIEWER: 'APPROVER',
+      DIVISIONAPPROVER: 'APPROVER',
+      DIVISION_APPROVER: 'APPROVER',
+      DIVISIONVERIFIER: 'APPROVER',
+      DIVISION_VERIFIER: 'APPROVER',
 
       BUDGET_OFFICER: 'BUDGET_OFFICER',
       BUDGETOFFICER: 'BUDGET_OFFICER',
@@ -248,22 +248,22 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     const normalizedStatus = String(status || '').toUpperCase().trim();
 
     // Check if user has the required role for actions
-    const isBudgetAnalyst = normalizedRoles.includes('BUDGET_ANALYST');
-    const isBudgetCoordinator = normalizedRoles.includes('BUDGET_COORDINATOR');
+    const isPreparer = normalizedRoles.includes('PREPARER');
+    const isBudgetReviewer = normalizedRoles.includes('BUDGET_REVIEWER');
     const isBudgetOfficer = normalizedRoles.includes('BUDGET_OFFICER');
     const isBudgetManager = normalizedRoles.includes('BUDGET_MANAGER');
     const isBudgetAdmin = normalizedRoles.includes('BUDGET_ADMIN');
 
     // ROLE HIERARCHY PROTECTION: Use highest role in hierarchy
-    // Hierarchy: ANALYST < COORDINATOR < OFFICER < MANAGER
-    // Only block higher actions if user has ONLY ANALYST role
-    const isAnalystOnly = isBudgetAnalyst && !isBudgetCoordinator && !isBudgetOfficer && !isBudgetManager && !isBudgetAdmin;
-    const hasHigherRole = isBudgetCoordinator || isBudgetOfficer || isBudgetManager || isBudgetAdmin;
+    // Hierarchy: PREPARER < REVIEWER < OFFICER < MANAGER
+    // Only block higher actions if user has ONLY PREPARER role
+    const isPreparerOnly = isPreparer && !isBudgetReviewer && !isBudgetOfficer && !isBudgetManager && !isBudgetAdmin;
+    const hasHigherRole = isBudgetReviewer || isBudgetOfficer || isBudgetManager || isBudgetAdmin;
     
-    // Block manager actions only if user is ANALYST ONLY (no other roles)
-    const shouldBlockManagerActions = isAnalystOnly;
-    // Block officer actions only if user is ANALYST ONLY (no other roles)
-    const shouldBlockOfficerActions = isAnalystOnly;
+    // Block manager actions only if user is PREPARER ONLY (no other roles)
+    const shouldBlockManagerActions = isPreparerOnly;
+    // Block officer actions only if user is PREPARER ONLY (no other roles)
+    const shouldBlockOfficerActions = isPreparerOnly;
 
     console.log('🔍 WorkflowActions Debug:', {
       status,
@@ -272,12 +272,12 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       rawRoles,
       roleMapping,
       normalizedRoles,
-      isBudgetAnalyst,
-      isBudgetCoordinator,
+      isPreparer,
+      isBudgetReviewer,
       isBudgetOfficer,
       isBudgetManager,
       isBudgetAdmin,
-      isAnalystOnly,
+      isPreparerOnly,
       shouldBlockManagerActions,
       shouldBlockOfficerActions,
       proposalId: proposal?._id,
@@ -288,8 +288,8 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       }
     });
 
-    // BUDGET ANALYST Actions (Draft control & submission)
-    if (isBudgetAnalyst) {
+    // PREPARER Actions (Draft control & submission)
+    if (isPreparer) {
       const isDraft = normalizedStatus === 'DRAFT' || status === 'Draft';
       const isReturnedToAnalyst = normalizedStatus === 'RETURNED' || (status === 'Returned' && proposal?.workflowLevel === 'ANALYST');
 
@@ -306,7 +306,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
 
         actions.push({
           label: 'Submit to Reviewer',
-          action: 'submit-to-coordinator',
+          action: 'submit-to-reviewer',
           color: 'bg-blue-500 hover:bg-blue-600',
           icon: '📤',
           description: 'Forward proposal to Budget Reviewer for review',
@@ -314,7 +314,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
         });
 
         // Optional escalation path if organization allows analyst direct submission
-  if (isBudgetCoordinator) {
+  if (isBudgetReviewer) {
           actions.push({
             label: 'Submit to Manager (Direct)',
             action: 'submit-direct-to-manager',
@@ -327,14 +327,14 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       }
     }
 
-    // BUDGET COORDINATOR Actions (Review & routing)
-    if (isBudgetCoordinator) {
+    // BUDGET REVIEWER Actions (Review & routing)
+    if (isBudgetReviewer) {
       // Can review and edit proposals submitted by analysts
       if (normalizedStatus === 'DIVISION SUBMITTED' || status === 'Division Submitted' || 
           normalizedStatus === 'RESPONSIBILITY CENTER SUBMITTED') {
         actions.push({
           label: 'Save Edits',
-          action: 'coordinator-save-edits',
+          action: 'reviewer-save-edits',
           color: 'bg-gray-500 hover:bg-gray-600',
           icon: '💾',
           description: 'Save changes without forwarding',
@@ -343,7 +343,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
         });
         actions.push({
           label: 'Approve & Forward to Officer',
-          action: 'coordinator-approve-forward-officer',
+          action: 'reviewer-approve-forward-officer',
           color: 'bg-green-500 hover:bg-green-600',
           icon: '✅',
           description: 'Approve and forward to Budget Officer for verification',
@@ -351,7 +351,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
         });
         actions.push({
           label: 'Submit to Manager (Skip Officer)',
-          action: 'coordinator-submit-to-manager',
+          action: 'reviewer-submit-to-manager',
           color: 'bg-purple-500 hover:bg-purple-600',
           icon: '⚡',
           description: 'Submit proposal directly to Budget Manager (bypasses Officer review)',
@@ -359,7 +359,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
         });
         actions.push({
           label: 'Return to Analyst',
-          action: 'coordinator-return',
+          action: 'reviewer-return',
           color: 'bg-red-500 hover:bg-red-600',
           icon: '↩️',
           description: 'Send back to analyst for revisions',
@@ -370,7 +370,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
 
     // BUDGET OFFICER Actions (Approval Level)
     if (isBudgetOfficer && !shouldBlockOfficerActions) {
-      // Can review and edit proposals forwarded by coordinator
+      // Can review and edit proposals forwarded by reviewer
       if (normalizedStatus === "FORWARDED TO OFFICER" || status === "Forwarded to Officer" ||
           normalizedStatus === "OFFICER APPROVED" || status === "Officer Approved" ||
           normalizedStatus === "DIVISION SUBMITTED" || status === "Division Submitted") {
@@ -497,8 +497,8 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
   };
 
   const roleLabelMap = useMemo(() => ({
-    BUDGET_ANALYST: 'Budget Analyst',
-    BUDGET_COORDINATOR: 'Budget Reviewer',
+    PREPARER: 'Preparer',
+    BUDGET_REVIEWER: 'Budget Reviewer',
     BUDGET_OFFICER: 'Budget Officer',
     BUDGET_MANAGER: 'Budget Manager',
     BUDGET_ADMIN: 'Budget Admin'
@@ -522,7 +522,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
 
   const stepLabelMap = useMemo(() => ({
     ANALYST_DRAFT: { label: 'Analyst Draft', tooltip: 'Draft in progress with Analyst' },
-    COORDINATOR_REVIEW: { label: 'Reviewer Review', tooltip: 'Awaiting Budget Reviewer action' },
+    REVIEWER_REVIEW: { label: 'Reviewer Review', tooltip: 'Awaiting Budget Reviewer action' },
     OFFICER_REVIEW: { label: 'Officer Review', tooltip: 'Awaiting Budget Officer verification' },
     MANAGER_REVIEW: { label: 'Manager Review', tooltip: 'Awaiting Budget Manager decision' },
     RETURNED: { label: 'Returned', tooltip: 'Returned for revisions' },
@@ -631,7 +631,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     let successMessage = "";
     
     try {
-      if (action === 'submit-to-coordinator' && normalizedRoles.includes('BUDGET_ANALYST') && proposal?._id) {
+      if (action === 'submit-to-reviewer' && normalizedRoles.includes('BUDGET_ANALYST') && proposal?._id) {
         try {
           const readinessResponse = await api.get(`/api/workflow/submit/prerequisites/${proposal._id}`);
           if (readinessResponse?.data?.success && readinessResponse.data.ready === false) {
@@ -649,7 +649,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           endpoint = "/api/workflow/draft/save";
           successMessage = "Draft saved successfully";
           break;
-        case "submit-to-coordinator":
+        case "submit-to-reviewer":
           endpoint = "/api/workflow/submit";
           successMessage = "Proposal submitted to Budget Reviewer successfully";
           break;
@@ -657,28 +657,28 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           endpoint = "/api/workflow/submit-direct-to-manager";
           successMessage = "Proposal submitted directly to Budget Manager successfully";
           break;
-        case "coordinator-approve":
-          endpoint = "/api/workflow/coordinator/approve";
-          successMessage = "Proposal approved by Budget Reviewer successfully";
+        case "reviewer-approve":
+          endpoint = "/api/workflow/reviewer/approve";
+          successMessage = "Proposal approved by Reviewer successfully";
           break;
-        case "coordinator-approve-forward-officer":
-          endpoint = "/api/workflow/coordinator/approve-and-forward-to-officer";
+        case "reviewer-approve-forward-officer":
+          endpoint = "/api/workflow/reviewer/approve-and-forward-to-officer";
           successMessage = "Proposal approved and forwarded to Budget Officer successfully";
           break;
-        case "coordinator-return":
-          endpoint = "/api/workflow/coordinator/return";
-          successMessage = "Proposal returned to Budget Analyst successfully";
+        case "reviewer-return":
+          endpoint = "/api/workflow/reviewer/return";
+          successMessage = "Proposal returned to Preparer successfully";
           break;
-        case "coordinator-forward-officer":
-          endpoint = "/api/workflow/coordinator/submit-to-officer";
+        case "reviewer-forward-officer":
+          endpoint = "/api/workflow/preparer/submit-to-officer";
           successMessage = "Proposal forwarded to Budget Officer successfully";
           break;
-        case "coordinator-submit-to-manager":
-          endpoint = "/api/workflow/coordinator/submit-to-manager";
+        case "reviewer-submit-to-manager":
+          endpoint = "/api/workflow/preparer/submit-to-manager";
           successMessage = "Proposal submitted directly to Budget Manager (bypassing Officer review)";
           break;
-        case "coordinator-save-edits":
-          endpoint = "/api/workflow/coordinator/save-edits";
+        case "reviewer-save-edits":
+          endpoint = "/api/workflow/preparer/save-edits";
           successMessage = "Changes saved successfully";
           break;
         case "officer-verify":
@@ -691,7 +691,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           break;
         case "officer-return":
           endpoint = "/api/workflow/officer/return";
-          successMessage = "Proposal returned to Coordinator successfully";
+          successMessage = "Proposal returned to Reviewer successfully";
           break;
         case "officer-submit-to-manager":
           endpoint = "/api/workflow/officer/submit-to-manager";
@@ -720,7 +720,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
         // Legacy actions for backward compatibility (deprecated - use standard 6-step workflow actions above)
         // Note: These are kept for database queries and legacy data, but new workflows should use:
         // analyst-submit → "Division Submitted" (step 2)
-        // coordinator-approve → "Forwarded to Officer" (step 3)
+        // reviewer-approve → "Forwarded to Officer" (step 3)
         // officer-approve → "Officer Approved" (step 4)
         // officer-submit-to-manager → "Forwarded to Manager" (step 5)
         // manager-approve → "Finalized" (step 6)
@@ -769,14 +769,14 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           updates: {}
         };
       } else if ([
-        "submit-to-coordinator",
+        "submit-to-reviewer",
         "submit-direct-to-manager",
-        "coordinator-approve",
-        "coordinator-approve-forward-officer",
-        "coordinator-return",
-        "coordinator-forward-officer",
-        "coordinator-submit-to-manager",
-        "coordinator-save-edits",
+        "reviewer-approve",
+        "reviewer-approve-forward-officer",
+        "reviewer-return",
+        "preparer-submit-to-officer",
+        "preparer-submit-to-manager",
+        "preparer-save-edits",
         "officer-verify",
         "officer-approve",
         "officer-return",
@@ -941,12 +941,12 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
   const [confirmState, setConfirmState] = useState({ open: false, action: null, label: '', requiresComment: false, allowOptionalComment: false });
   const [comment, setComment] = useState('');
   const forcedCommentActions = new Set([
-    'submit-to-coordinator',
+    'submit-to-reviewer',
     'submit-direct-to-manager',
-    'coordinator-approve',
-    'coordinator-return',
-    'coordinator-forward-officer',
-    'coordinator-submit-to-manager',
+    'reviewer-approve',
+    'reviewer-return',
+    'preparer-submit-to-officer',
+    'preparer-submit-to-manager',
     'officer-verify',
     'officer-approve',
     'officer-return',
@@ -1042,18 +1042,18 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     switch (action) {
       case 'save-draft':
         return <SaveIcon fontSize="small" color={color} />;
-      case 'submit-to-coordinator':
-      case 'coordinator-forward-officer':
-      // case 'coordinator-forward-manager': // DEPRECATED
+      case 'submit-to-reviewer':
+      case 'preparer-submit-to-officer':
+      // case 'preparer-submit-to-manager': // DEPRECATED
       case 'submit-to-manager':
       case 'submit-direct-to-manager':
         return <SendIcon fontSize="small" color={color} />;
-      case 'coordinator-approve':
+      case 'reviewer-approve':
       case 'officer-verify':
       case 'officer-approve':
       case 'manager-approve':
         return <CheckIcon fontSize="small" color={color} />;
-      case 'coordinator-return':
+      case 'reviewer-return':
       case 'officer-return':
       case 'manager-return':
         return <UndoIcon fontSize="small" color={color} />;

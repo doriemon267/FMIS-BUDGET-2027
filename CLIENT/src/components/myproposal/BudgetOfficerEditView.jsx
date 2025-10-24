@@ -52,8 +52,8 @@ const BudgetOfficerEditView = ({
         };
       case 'approver':
         return {
-          title: 'Approve and Forward to Budget Analyst',
-          message: 'This will approve the proposal and forward it to the Budget Analyst for further processing.',
+          title: 'Approve and Forward to Preparer',
+          message: 'This will approve the proposal and forward it to the Preparer for further processing.',
           confirmLabel: 'Approve and Forward'
         };
       case 'officer':
@@ -367,13 +367,13 @@ const BudgetOfficerEditView = ({
           <strong>
             {variant === 'manager' ? 'Budget Manager Edit Mode' : 
              variant === 'reviewer' ? 'Budget Reviewer Edit Mode' : 
-             variant === 'analyst' ? 'Budget Analyst Edit Mode' :
+             variant === 'analyst' ? 'Preparer Edit Mode' :
              'Budget Officer Edit Mode'}:
           </strong> You can edit all four tables below.
           {variant === 'manager' ? ' After reviewing your changes, use Approve in the dialog footer to proceed.' : 
            variant === 'reviewer' ? ' Changes will be tracked and sent for further review after submission.' :
            variant === 'analyst' ? ' Make necessary updates and submit to budget officer for approval.' :
-           ' Changes will be tracked and sent to Budget Analysts for review after approval.'}
+           ' Changes will be tracked and sent to Preparers for review after approval.'}
         </Typography>
       </Alert>}
 
@@ -482,8 +482,8 @@ const BudgetOfficerEditView = ({
               : variant === 'reviewer'
               ? 'These comments will be visible to Approvers when reviewing your edits'
               : variant === 'approver'
-              ? 'These comments will be visible to Budget Analyst when reviewing your approved proposal'
-              : 'These comments will be visible to Budget Analysts when reviewing your edits'
+              ? 'These comments will be visible to Preparer when reviewing your approved proposal'
+              : 'These comments will be visible to Preparers when reviewing your edits'
           }
         />
       </Box>
@@ -510,7 +510,7 @@ const BudgetOfficerEditView = ({
             {submitting ? 'Submitting...' : 
              !isFormValid ? `❌ Complete all modules to submit` :
              variant === 'analyst' ? 'Submit to Budget Officer' :
-             variant === 'approver' ? 'Approve and Forward to Budget Analyst' :
+             variant === 'approver' ? 'Approve and Forward to Preparer' :
              variant === 'reviewer' ? 'Submit to Approver' :
              'Submit to Overall Budget Approver'}
           </Button>

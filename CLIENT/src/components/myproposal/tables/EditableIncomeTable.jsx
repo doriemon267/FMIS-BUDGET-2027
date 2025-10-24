@@ -72,10 +72,10 @@ const EditableIncomeTable = ({ data = [], onChange }) => {
     });
 
     const hasRolePermission = normalizedRoles.some((role) =>
-      role.includes('BUDGET OFFICER') || role.includes('BUDGET MANAGER') || role.includes('BUDGET COORDINATOR') || role.includes('BUDGET ANALYST')
+      role.includes('BUDGET OFFICER') || role.includes('BUDGET MANAGER') || role.includes('BUDGET COORDINATOR')
     );
 
-    // Also check workflow roles for Budget Coordinators (divisionapprover) and Budget Analysts (divisioncreator)
+    // Also check workflow roles for Budget Coordinators (divisionapprover) and Preparers (divisioncreator)
     const workflowRoles = currentUser?.workflowRoles || [];
     const normalizedWorkflowRoles = workflowRoles.map(r => String(r || '').toLowerCase());
     const hasWorkflowPermission = normalizedWorkflowRoles.some(role => 

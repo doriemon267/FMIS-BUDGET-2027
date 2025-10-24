@@ -76,7 +76,7 @@ const USER_ROLES = [
   },
   { 
     value: 'BUDGET_ANALYST', 
-    label: 'Budget Analyst', 
+    label: 'Preparer', 
     description: 'Performs technical analysis of proposals',
     workflowRoles: 'BUDGET_ANALYST (analyzes budget proposals)',
     assignmentLevels: ['BUDGET_AND_REVENUE_DIVISION']
@@ -403,7 +403,7 @@ const HierarchicalUserAssignmentPage = () => {
           ManageSettings: false
         });
         handleFormChange('workflowRoles', null);
-      } else if (budgetRole === 'BUDGET_COORDINATOR') {
+      } else if (budgetRole === 'APPROVER') {
         handleFormChange('assignmentLevel', 'OFFICE');
         handleFormChange('rolePermissions', {
           CreateProposals: true,
@@ -860,11 +860,11 @@ const HierarchicalUserAssignmentPage = () => {
                           } else if (budgetRole === 'BUDGET_OFFICER') {
                             defaultRole = 'APPROVER'; // Officers approve proposals
                             defaultLevel = 'OFFICE';
-                          } else if (budgetRole === 'BUDGET_COORDINATOR') {
-                            defaultRole = 'APPROVER'; // Coordinators review and approve
+                          } else if (budgetRole === 'APPROVER') {
+                            defaultRole = 'APPROVER'; // Approvers review and approve
                             defaultLevel = 'OFFICE';
-                          } else if (budgetRole === 'BUDGET_ANALYST') {
-                            defaultRole = 'PREPARER'; // Analysts prepare proposals
+                          } else if (budgetRole === 'BUDGET_PLANNING_ANALYST') {
+                            defaultRole = 'PREPARER'; // Planning Analysts prepare proposals
                             defaultLevel = 'RESPONSIBILITY_CENTER';
                           }
                           
@@ -1455,7 +1455,7 @@ const HierarchicalUserAssignmentPage = () => {
                                   } else if (perms.EditAllProposals && perms.ApproveProposals) {
                                     return 'Budget Officer';
                                   } else {
-                                    return 'Budget Analyst';
+                                    return 'Preparer';
                                   }
                                 } else if (level === 'FULL') {
                                   if (perms.ManageSettings) {
@@ -1592,7 +1592,7 @@ const HierarchicalUserAssignmentPage = () => {
                                     if (perms.ApproveProposals) {
                                       inferredRole = 'BUDGET_OFFICER';
                                     } else {
-                                      inferredRole = 'BUDGET_COORDINATOR';
+                                      inferredRole = 'APPROVER';
                                     }
                                   } else if (level === 'FULL') {
                                     if (perms.ManageSettings) {

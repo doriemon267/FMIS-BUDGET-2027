@@ -160,7 +160,7 @@ const HomePage = () => {
     : currentUser?.Roles
       ? [currentUser.Roles]
       : [];
-  const isBudgetAnalyst = userRoles.includes('BUDGET ANALYST');
+  const isPreparer = userRoles.includes('PREPARER');
 
   // Get user's hierarchical access information
   const userAccessLevel = currentUser?.hierarchicalAccess?.scope || 'REGION';
@@ -348,7 +348,7 @@ const HomePage = () => {
           </Typography>
 
           <Grid container spacing={3}>
-            {isBudgetAnalyst && (
+            {isPreparer && (
               <Grid item xs={12} sm={6} md={4}>
                 <ActionCard
                   title='Create New Proposal'
@@ -361,7 +361,7 @@ const HomePage = () => {
               </Grid>
             )}
 
-            {isBudgetAnalyst && (
+            {isPreparer && (
               <Grid item xs={12} sm={6} md={4}>
                 <ActionCard
                   title='My Proposals'

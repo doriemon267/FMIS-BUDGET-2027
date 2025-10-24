@@ -115,7 +115,6 @@ const AccessGuard = ({ children }) => {
     'SUPER ADMIN',
     'SUPER_ADMIN',  // Handle underscore variant
     'BUDGET ADMIN',
-    'BUDGET ANALYST',
     'BUDGET COORDINATOR',
     'BUDGET MANAGER',
     'BUDGET OFFICER',

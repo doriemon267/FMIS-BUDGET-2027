@@ -25,7 +25,7 @@ const WorkflowStatusBadge = ({ status, step, assignee, pendingRoles = [], classN
   const stepMap = {
     'ANALYST_DRAFT': '1/6',
     'ANALYST_DIVISION_SUBMITTED': '2/6',
-    'COORDINATOR_FORWARDED': '3/6',
+    'APPROVER_FORWARDED': '3/6',
     'OFFICER_APPROVED': '4/6',
     'OFFICER_FORWARDED': '5/6',
     'MANAGER_FINALIZED': '6/6',

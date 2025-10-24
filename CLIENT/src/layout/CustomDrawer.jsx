@@ -31,7 +31,7 @@ import { FaAward } from "react-icons/fa6";
 import { BiData } from "react-icons/bi";
 import {
   isBudgetAdmin,
-  isBudgetAnalyst,
+  isPreparer,
   isSuperAdmin,
 } from "../utils/checkRole";
 import { hasPermission } from "../utils/permissions";
@@ -43,7 +43,7 @@ const CustomDrawer = ({ collapsed = false }) => {
   const roles = (currentUser?.Roles || []).map(String);
   const isBudgetManager = roles.includes("BUDGET MANAGER");
   const isBudgetOfficer = roles.includes("BUDGET OFFICER");
-  const isBudgetCoordinator = roles.includes("BUDGET COORDINATOR");
+  const isBudgetReviewer = roles.includes("APPROVER");
   return (
     <Box
       sx={{
@@ -83,7 +83,7 @@ const CustomDrawer = ({ collapsed = false }) => {
                     hasPermission(currentUser, "EditOwnProposals")) &&
                   !isBudgetManager &&
                   !isBudgetOfficer &&
-                  !isBudgetCoordinator,
+                  !isBudgetReviewer,
                 icon: <FaFileAlt />,
               },
 

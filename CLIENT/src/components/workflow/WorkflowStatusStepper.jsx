@@ -21,8 +21,8 @@ import GavelIcon from '@mui/icons-material/Gavel';
  * in a space-efficient horizontal layout
  * 
  * NEW 6-STEP WORKFLOW (September 2025):
- * - Division Level: PREPARER → REVIEWER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_BUDGET_APPROVER
- * - Office Level: PREPARER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_BUDGET_APPROVER (skips REVIEWER)
+ * - Division Level: PREPARER → REVIEWER → APPROVER → BUDGET_PLANNING_ANALYST → BUDGET_OFFICER → OVERALL_BUDGET_APPROVER
+ * - Office Level: PREPARER → APPROVER → BUDGET_PLANNING_ANALYST → BUDGET_OFFICER → OVERALL_BUDGET_APPROVER (skips REVIEWER)
  */
 const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
   if (!proposal) return null;
@@ -53,9 +53,9 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
       icon: <VerifiedUserIcon />
     },
     {
-      label: 'BUDGET_ANALYST',
+      label: 'BUDGET_PLANNING_ANALYST',
       role: 'Analyzes',
-      shortLabel: 'Analyst',
+      shortLabel: 'Planning Analyst',
       statuses: ['Forwarded to Analyst', 'Officer Approved'],
       icon: <PersonIcon />
     },
@@ -92,9 +92,9 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
       icon: <VerifiedUserIcon />
     },
     {
-      label: 'BUDGET_ANALYST',
+      label: 'BUDGET_PLANNING_ANALYST',
       role: 'Analyzes',
-      shortLabel: 'Analyst',
+      shortLabel: 'Planning Analyst',
       statuses: ['Forwarded to Analyst', 'Officer Approved'],
       icon: <PersonIcon />
     },

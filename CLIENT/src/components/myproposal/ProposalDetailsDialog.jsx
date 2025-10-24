@@ -107,8 +107,8 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     return status === 'Forwarded to Manager' || status === 'Officer Approved';
   }, [isManagerLevel, normalizedPrimaryRoles, displayedProposal?.status, proposal?.status]);
 
-  // Budget Coordinator: Division approvers (divisionapprover) - STRICT workflow role check only
-  const isBudgetCoordinator = useMemo(() => {
+  // APPROVER: Division approvers (divisionapprover) - STRICT workflow role check only
+  const isDivisionApprover = useMemo(() => {
     if (!userInfo) return false;
     // ONLY check for 'divisionapprover' workflow role - no assignmentLevel fallback
     return normalizedWorkflowRoles.some((role) => role === 'divisionapprover');
@@ -121,10 +121,10 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     return normalizedWorkflowRoles.some((role) => role === 'divisionreviewer');
   }, [userInfo, normalizedWorkflowRoles]);
 
-  // Budget Analyst: Division creators (divisioncreator) OR Office creators (officecreator)
-  // - divisioncreator = Responsibility Center/Division Level → submits to BUDGET COORDINATOR
-  // - officecreator = Office Level → submits DIRECTLY to BUDGET OFFICER (skip coordinator)
-  const isBudgetAnalyst = useMemo(() => {
+  // PREPARER: Division creators (divisioncreator) OR Office creators (officecreator)
+  // - divisioncreator = Responsibility Center/Division Level → submits to APPROVER
+  // - officecreator = Office Level → submits DIRECTLY to BUDGET OFFICER (skip approver)
+  const isPreparer = useMemo(() => {
     if (!userInfo || isManagerLevel) return false;
     // Check for divisioncreator OR officecreator workflow roles
     return normalizedWorkflowRoles.some((role) => 
@@ -133,19 +133,19 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     );
   }, [userInfo, isManagerLevel, normalizedWorkflowRoles]);
 
-  // Check if Budget Analyst is Office-level (officecreator) - they skip coordinator
+  // Check if BUDGET_PLANNING_ANALYST is Office-level (officecreator) - they skip approver
   const isOfficeCreator = useMemo(() => {
-    if (!isBudgetAnalyst) return false;
+    if (!isPreparer) return false;
     return normalizedWorkflowRoles.some((role) => role === 'officecreator');
-  }, [isBudgetAnalyst, normalizedWorkflowRoles]);
+  }, [isPreparer, normalizedWorkflowRoles]);
 
   // Budget Officer: Approver/Verifier ONLY (NOT a creator)
   // Receives proposals from:
-  // - BUDGET COORDINATOR (division-level proposals)
-  // - BUDGET ANALYST with officecreator (office-level proposals - direct)
+  // - APPROVER (division-level proposals)
+  // - PREPARER with officecreator (office-level proposals - direct)
   const isBudgetOfficer = useMemo(() => {
     if (!userInfo || isManagerLevel) return false;
-    // Exclude users who are Budget Coordinator or Budget Analyst (creators)
+    // Exclude users who are APPROVER or PREPARER (creators)
     if (normalizedWorkflowRoles.some((role) => 
       role === 'divisionapprover' || 
       role === 'divisioncreator' || 
@@ -171,8 +171,8 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     );
   }, [userInfo, normalizedWorkflowRoles]);
 
-  // BUDGET_ANALYST: User role or workflow role that can review and analyze proposals forwarded from APPROVER
-  const isBudgetAnalystUserRole = useMemo(() => {
+  // BUDGET_PLANNING_ANALYST: User role that can analyze proposals forwarded by APPROVER (STEP 4 of 6-step workflow)
+  const isBudgetPlanningAnalystRole = useMemo(() => {
     if (!userInfo) return false;
     
     // Check all possible role fields
@@ -200,10 +200,10 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
       // Ignore localStorage errors
     }
     
-    return allRoles.includes('BUDGET_ANALYST') || 
+    return allRoles.includes('BUDGET_PLANNING_ANALYST') || 
            normalizedWorkflowRoles.includes('budgetanalyst') ||
            normalizedWorkflowRoles.includes('budget_analyst') || 
-           normalizedWorkflowRoles.includes('BUDGET_ANALYST');
+           normalizedWorkflowRoles.includes('BUDGET_PLANNING_ANALYST');
   }, [userInfo, normalizedWorkflowRoles]);
 
   // Read-only statuses (view mode) - MUST BE DEFINED BEFORE loadData callback
@@ -245,9 +245,9 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
 
     // Debug logging for role detection
     console.log('🔍 ProposalDetailsDialog Role Detection:', {
-      isBudgetCoordinator,
+      isBudgetReviewer: isDivisionApprover,
       isBudgetOfficer,
-      isBudgetAnalyst,
+      isPreparer,
       isReviewer,
       isManagerLevel,
       isApprover,
@@ -292,7 +292,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     // Allow fetching for read-only final statuses even if role detection says no
   const requiresReadOnlyData = isReadOnlyMode;
 
-    if (!isBudgetOfficer && !isBudgetAnalyst && !isBudgetCoordinator && !isReviewer && !isManagerLevel && !isApprover && !isBudgetAnalystUserRole && !requiresReadOnlyData) {
+    if (!isBudgetOfficer && !isPreparer && !isDivisionApprover && !isReviewer && !isManagerLevel && !isApprover && !isBudgetPlanningAnalystRole && !requiresReadOnlyData) {
       console.log('❌ No permission to view proposal details');
       setLoading(false);
       setRefreshing(false);
@@ -319,12 +319,13 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     try {
       const requests = [];
 
-      // Budget Coordinator, Analyst (creators), and BUDGET_ANALYST users should fetch raw proposal data, not Budget Officer Edit records
-      if (isBudgetCoordinator || isBudgetAnalyst || isBudgetAnalystUserRole) {
-        console.log('✅ Fetching raw proposal data for BUDGET_COORDINATOR/BUDGET_ANALYST/BUDGET_ANALYST_USER', {
-          isBudgetCoordinator,
-          isBudgetAnalyst,
-          isBudgetAnalystUserRole,
+      // APPROVER, Preparer (creators), and REVIEWER should fetch raw proposal data, not Budget Officer Edit records
+      if (isDivisionApprover || isPreparer || isBudgetPlanningAnalystRole || isReviewer) {
+        console.log('✅ Fetching raw proposal data for APPROVER/PREPARER/BUDGET_ANALYST_USER/REVIEWER', {
+          isDivisionApprover,
+          isPreparer,
+          isBudgetPlanningAnalystRole,
+          isReviewer,
           proposalId: proposalKey
         });
         requests.push(
@@ -413,8 +414,8 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
 
       // Prefetch comparison data only for roles that need it
       // Note: This may fail if no edits exist yet, which is normal
-      // Fetch for Budget Analysts, Budget Officers, and read-only statuses (where comparison view is shown)
-      if (isBudgetAnalyst || isBudgetOfficer || isBudgetAnalystUserRole || requiresReadOnlyData) {
+      // Fetch for PREPARERs, Budget Officers, Reviewers, and read-only statuses (where comparison view is shown)
+      if (isPreparer || isBudgetOfficer || isBudgetPlanningAnalystRole || isReviewer || requiresReadOnlyData) {
         requests.push(
           getComparisonData(proposalKey, { signal: controller.signal })
             .then((response) => {
@@ -457,7 +458,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
         setRefreshing(false);
       }
     }
-  }, [proposalKey, userInfo, isBudgetOfficer, isBudgetAnalyst, isBudgetCoordinator, isManagerLevel, isApprover, isBudgetAnalystUserRole, proposal, isReadOnlyMode]);
+  }, [proposalKey, userInfo, isBudgetOfficer, isPreparer, isDivisionApprover, isManagerLevel, isApprover, isBudgetPlanningAnalystRole, proposal, isReadOnlyMode]);
 
   useEffect(() => {
     if (open && proposalKey && userInfo) {
@@ -575,15 +576,21 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
   // Manager can edit when Forwarded to Manager (per requirement)
   const managerCanEditNow = isManagerLevel && proposal?.status === 'Forwarded to Manager';
 
-  // Budget Analyst can edit when proposal is in Draft or Returned status (for creators)
-  // OR when BUDGET_ANALYST user role has proposals Forwarded to Analyst
-  const analystCanEditNow = (isBudgetAnalyst && (
+  // PREPARER can edit when proposal is in Draft or Returned status (for creators)
+  // OR when BUDGET_PLANNING_ANALYST user role has proposals Forwarded to Analyst
+  const preparerCanEditNow = (isPreparer && (
     proposal?.status === 'Draft' || 
     proposal?.status === 'Returned'
-  )) || (isBudgetAnalystUserRole && proposal?.status === 'Forwarded to Analyst');
+  )) || (isBudgetPlanningAnalystRole && proposal?.status === 'Forwarded to Analyst');
 
-  // Budget Coordinator can edit when proposal is Division Submitted (waiting for coordinator review)
-  const coordinatorCanEditNow = isBudgetCoordinator && (
+  // APPROVER can edit when proposal is Division Submitted (waiting for approver review)
+  const approverCanEditNow = isDivisionApprover && (
+    proposal?.status === 'Division Submitted'
+  );
+
+  // Reviewer can edit when proposal is Forwarded to Reviewer or Division Submitted
+  const reviewerCanEditNow = isReviewer && (
+    proposal?.status === 'Forwarded to Reviewer' || 
     proposal?.status === 'Division Submitted'
   );
 
@@ -595,8 +602,8 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     const userId = userInfo.userId;
     const submitActions = [
       'PREPARER_SUBMIT_TO_REVIEWER',
-      'COORDINATOR_SUBMIT_TO_OFFICER',
-      'COORDINATOR_SUBMIT_TO_MANAGER',
+      'REVIEWER_SUBMIT_TO_OFFICER',
+      'REVIEWER_SUBMIT_TO_MANAGER',
       'APPROVER_APPROVE_TO_ANALYST',
       'ANALYST_SUBMIT_TO_OFFICER',
       'OFFICER_SUBMIT_TO_MANAGER',
@@ -616,14 +623,14 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
       'Division Submitted': 2,              // REVIEWER
       'Forwarded to Reviewer': 2,           // REVIEWER
       'Forwarded to Approver': 3,           // APPROVER
-      'Forwarded to Analyst': 4,            // BUDGET_ANALYST
+      'Forwarded to Analyst': 4,            // BUDGET_PLANNING_ANALYST
       'Forwarded to Budget Officer': 5,     // BUDGET_OFFICER
       'Forwarded to Manager': 6,            // BUDGET_MANAGER
       'Finalized': 7,                       // FINALIZED
       'Returned': 1,                        // RETURNED to PREPARER
       // Legacy statuses
-      'Under Review by Coordinator': 2,
-      'Coordinator Approved': 2,
+      'Under Review by Reviewer': 2,
+      'Reviewer Approved': 2,
       'Under Review by Officer': 3,
       'Officer Approved': 5,
       'Under Review by Manager': 6,
@@ -633,9 +640,9 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
   };
 
   const getUserWorkflowStep = () => {
-    if (isBudgetCoordinator) return 2; // REVIEWER
-    if (isApprover) return 3; // APPROVER
-    if (isBudgetAnalystUserRole) return 4; // BUDGET_ANALYST
+    if (isReviewer) return 2; // REVIEWER
+    if (isDivisionApprover) return 3; // APPROVER
+    if (isBudgetPlanningAnalystRole) return 4; // BUDGET_PLANNING_ANALYST
     if (isBudgetOfficer && !isManagerLevel) return 5; // BUDGET_OFFICER
     if (isManagerLevel) return 6; // BUDGET_MANAGER
     return 1; // PREPARER or other
@@ -653,11 +660,12 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
   // OR when user is viewing after their submission step (should only see comparison view)
   const canRenderEditView = !isReadOnlyMode && proposalData && !officerReadOnlyTables && !isViewOnlyAfterSubmission && proposal?.status !== 'Officer Approved' && proposal?.status !== 'Approved' && (
     (isBudgetOfficer && !isManagerLevel) || 
-    coordinatorCanEditNow || 
-    analystCanEditNow || 
+    approverCanEditNow || 
+    preparerCanEditNow || 
+    reviewerCanEditNow || 
     managerCanEditNow || 
     (isApprover && proposal?.status === 'Forwarded to Approver') ||
-    (proposal?.status === 'Draft' && !isBudgetOfficer && !isBudgetAnalyst && !isBudgetCoordinator && !isManagerLevel && !isApprover)
+    (proposal?.status === 'Draft' && !isBudgetOfficer && !isPreparer && !isDivisionApprover && !isManagerLevel && !isApprover && !isReviewer)
   );
 
   return (
@@ -771,21 +779,21 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
             <Typography variant="h6" gutterBottom>Detailed Records</Typography>
 
             {/* TEMPORARILY HIDDEN - INFO: Show user's current role and workflow status */}
-            {false && (isBudgetAnalyst || isBudgetCoordinator || isBudgetOfficer || isManagerLevel) && (
+            {false && (isPreparer || isDivisionApprover || isBudgetOfficer || isManagerLevel) && (
               <Alert 
-                severity={isBudgetAnalyst && isBudgetCoordinator ? "warning" : "info"} 
+                severity={isPreparer && isDivisionApprover ? "warning" : "info"} 
                 sx={{ mb: 2 }}
-                icon={isBudgetAnalyst && isBudgetCoordinator ? <WarningIcon /> : <InfoIcon />}
+                icon={isPreparer && isDivisionApprover ? <WarningIcon /> : <InfoIcon />}
               >
                 <Typography variant="body2">
                   <strong>Your Role:</strong>{' '}
-                  {isBudgetAnalyst && 'PREPARER (Creator)'}
-                  {isBudgetCoordinator && !isBudgetAnalyst && 'APPROVER (Division)'}
-                  {isBudgetOfficer && !isBudgetAnalyst && !isBudgetCoordinator && 'BUDGET_OFFICER (Verifier)'}
-                  {isManagerLevel && !isBudgetAnalyst && !isBudgetCoordinator && !isBudgetOfficer && 'OVERALL_BUDGET_APPROVER (Final)'}
+                  {isPreparer && 'PREPARER (Creator)'}
+                  {isDivisionApprover && !isPreparer && 'APPROVER (Division)'}
+                  {isBudgetOfficer && !isPreparer && !isDivisionApprover && 'BUDGET_OFFICER (Verifier)'}
+                  {isManagerLevel && !isPreparer && !isDivisionApprover && !isBudgetOfficer && 'OVERALL_BUDGET_APPROVER (Final)'}
                   <br />
                   
-                  {isBudgetAnalyst && isBudgetCoordinator && (
+                  {isPreparer && isDivisionApprover && (
                     <>
                       <strong>⚠️ Role Conflict:</strong> You have BOTH Preparer and Approver roles. 
                       Please contact your administrator to correct your role assignment.
@@ -797,9 +805,9 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                   <br />
                   
                   <strong>What you can do:</strong>{' '}
-                  {isBudgetAnalyst && proposal?.status === 'Draft' && 'Create and edit proposals, then submit for approval'}
-                  {isBudgetAnalyst && proposal?.status === 'Division Submitted' && 'Waiting for Approver review'}
-                  {isBudgetCoordinator && proposal?.status === 'Division Submitted' && 'Review and approve/return this proposal'}
+                  {isPreparer && proposal?.status === 'Draft' && 'Create and edit proposals, then submit for approval'}
+                  {isPreparer && proposal?.status === 'Division Submitted' && 'Waiting for Approver review'}
+                  {isDivisionApprover && proposal?.status === 'Division Submitted' && 'Review and approve/return this proposal'}
                   {isBudgetOfficer && (proposal?.status === 'Forwarded to Officer' || proposal?.status === 'Officer Approved') && 'Verify and consolidate, then submit to Overall Budget Approver'}
                   {isManagerLevel && proposal?.status === 'Forwarded to Manager' && 'Final review and approval'}
                   {proposal?.status === 'Finalized' && 'This proposal has been finalized'}
@@ -808,7 +816,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
             )}
 
             {/* TEMPORARILY HIDDEN - PREPARER Edit Mode Information */}
-            {false && isBudgetAnalyst && canRenderEditView && proposal?.status === 'Draft' && (
+            {false && isPreparer && canRenderEditView && proposal?.status === 'Draft' && (
               <Alert severity="info" sx={{ mb: 2 }}>
                 <Typography variant="body2">
                   <strong>PREPARER Edit Mode:</strong> You can edit all four tables below. Make necessary updates and submit for approver review.
@@ -817,7 +825,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
             )}
 
             {/* TEMPORARILY HIDDEN - Budget Summary for PREPARER */}
-            {false && isBudgetAnalyst && proposalData && (
+            {false && isPreparer && proposalData && (
               <Paper sx={{ p: 2, mb: 2, backgroundColor: '#f8f9fa' }}>
                 <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   📊 Budget Summary (Totals):
@@ -840,7 +848,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
             )}
 
             {/* TEMPORARILY HIDDEN - Warning for PREPARER about required modules */}
-            {false && isBudgetAnalyst && proposalData && proposal?.status === 'Draft' && (
+            {false && isPreparer && proposalData && proposal?.status === 'Draft' && (
               <Alert severity="warning" sx={{ mb: 2 }}>
                 <Typography variant="body2">
                   ⚠️ <strong>Before submitting, please ensure all required modules have positive amounts:</strong> MOOE, Capital Outlay, Income
@@ -848,12 +856,12 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
               </Alert>
             )}
 
-            {/* Budget Officer: Show comparison view first if there are changes from Budget Coordinator */}
+            {/* Budget Officer: Show comparison view first if there are changes from Budget Reviewer */}
             {!isReadOnlyMode && isBudgetOfficer && !isManagerLevel && comparisonData && !officerEditMode && proposal?.status === 'Forwarded to Officer' && (
               <>
                 <Alert severity="info" sx={{ mb: 2 }}>
                   <Typography variant="body2">
-                    <strong>Budget Coordinator has submitted changes.</strong> Review the changes below, then click the <strong>Edit</strong> button to make additional modifications or submit to Budget Manager.
+                    <strong>APPROVER has submitted changes.</strong> Review the changes below, then click the <strong>Edit</strong> button to make additional modifications or submit to Budget Manager.
                   </Typography>
                 </Alert>
                 <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end' }}>
@@ -874,7 +882,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
             )}
 
             {/* Show comparison view for users viewing after their submission step (EXCLUDE BUDGET_ANALYST - they have their own view) */}
-            {isViewOnlyAfterSubmission && !isReadOnlyMode && !isBudgetAnalystUserRole && comparisonData && (
+            {isViewOnlyAfterSubmission && !isReadOnlyMode && !isBudgetPlanningAnalystRole && comparisonData && (
               <>
                 <Alert severity="info" sx={{ mb: 2 }}>
                   <Typography variant="body2">
@@ -889,7 +897,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
               </>
             )}
 
-            {/* Show edit view for Budget Officer (when in edit mode), Budget Coordinator (when editable), Budget Analyst (when editable), and Budget Manager (when Forwarded to Manager) */}
+            {/* Show edit view for Budget Officer (when in edit mode), APPROVER (when editable), BUDGET_PLANNING_ANALYST (when editable), and Budget Manager (when Forwarded to Manager) */}
             {canRenderEditView && (
               <>
                 {managerCanEditNow && (
@@ -939,7 +947,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                       handleClose();
                     }, 1500); // Give time to show success toast before closing
                   }}
-                  variant={managerCanEditNow ? 'manager' : coordinatorCanEditNow ? 'coordinator' : analystCanEditNow ? 'analyst' : isApprover ? 'approver' : 'officer'}
+                  variant={managerCanEditNow ? 'manager' : reviewerCanEditNow ? 'reviewer' : preparerCanEditNow ? 'preparer' : isApprover ? 'approver' : 'officer'}
                   allowSubmit={!managerCanEditNow && !isViewOnlyAfterSubmission}
                   showTables={officerShowTables || isViewOnlyAfterSubmission}
                   readOnly={isViewOnlyAfterSubmission}
@@ -968,8 +976,8 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
               </>
             )}
 
-            {/* Analyst comparison view - Budget Analyst (workflow role) or BUDGET_ANALYST (user role) can view comparison when available (only when they CANNOT edit) */}
-            {!isReadOnlyMode && (isBudgetAnalyst || isBudgetAnalystUserRole) && comparisonData && !analystCanEditNow && (
+            {/* BUDGET_PLANNING_ANALYST comparison view - BUDGET_PLANNING_ANALYST (workflow role) or BUDGET_PLANNING_ANALYST (user role) can view comparison when available (only when they CANNOT edit) */}
+            {!isReadOnlyMode && (isPreparer || isBudgetPlanningAnalystRole) && comparisonData && !preparerCanEditNow && (
               <>
                 <Alert severity="info" sx={{ mb: 2 }}>
                   <Typography variant="body2">
@@ -984,18 +992,26 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
               </>
             )}
 
-            {/* Coordinator comparison view when NOT in edit mode (Budget Coordinator can only view when status is NOT Division Submitted) */}
-            {!isReadOnlyMode && isBudgetCoordinator && !coordinatorCanEditNow && comparisonData && (
+            {/* APPROVER comparison view when NOT in edit mode (APPROVER can only view when status is NOT Division Submitted) */}
+            {!isReadOnlyMode && isDivisionApprover && !approverCanEditNow && comparisonData && (
               <BudgetAnalystComparisonView 
                 comparisonData={comparisonData}
                 proposal={proposal}
               />
             )}
 
-            {/* TEMPORARILY HIDDEN - Budget Coordinator warnings */}
-            {false && isBudgetCoordinator && !proposalData && !coordinatorCanEditNow && !loading && (
+            {/* Reviewer comparison view when NOT in edit mode */}
+            {!isReadOnlyMode && isReviewer && !reviewerCanEditNow && comparisonData && (
+              <BudgetAnalystComparisonView 
+                comparisonData={comparisonData}
+                proposal={proposal}
+              />
+            )}
+
+            {/* TEMPORARILY HIDDEN - APPROVER warnings */}
+            {false && isDivisionApprover && !proposalData && !approverCanEditNow && !loading && (
               <Alert severity="warning">
-                No proposal data available for Budget Coordinator. Please try refreshing.
+                No proposal data available for APPROVER. Please try refreshing.
               </Alert>
             )}
 
@@ -1013,15 +1029,15 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
               </Alert>
             )}
 
-            {/* TEMPORARILY HIDDEN - Budget Analyst warnings */}
-            {false && isBudgetAnalyst && !comparisonData && !loading && (
+            {/* TEMPORARILY HIDDEN - BUDGET_PLANNING_ANALYST warnings */}
+            {false && isPreparer && !comparisonData && !loading && (
               <Alert severity="warning">
                 No comparison data available. The proposal may not have been edited yet.
               </Alert>
             )}
 
-            {/* Fallback view for Budget Analyst when they can't edit and have no comparison data */}
-            {!isReadOnlyMode && isBudgetAnalyst && !analystCanEditNow && !comparisonData && proposalData && (
+            {/* Fallback view for BUDGET_PLANNING_ANALYST when they can't edit and have no comparison data */}
+            {!isReadOnlyMode && isPreparer && !preparerCanEditNow && !comparisonData && proposalData && (
               <Alert severity="info" sx={{ mb: 2 }}>
                 <Typography variant="body2">
                   <strong>Analysis View:</strong> This proposal is available for your analysis. 
@@ -1031,7 +1047,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
             )}
 
             {/* TEMPORARILY HIDDEN - Permission denied alert */}
-            {false && !isBudgetOfficer && !isBudgetAnalyst && !isBudgetCoordinator && !isManagerLevel && (
+            {false && !isBudgetOfficer && !isBudgetAnalyst && !isDivisionApprover && !isManagerLevel && (
               <Alert severity="info">
                 You do not have permission to view detailed records for this proposal.
                 <br />

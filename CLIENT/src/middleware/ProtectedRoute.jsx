@@ -52,7 +52,7 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
   // ✅ Check job position Roles for budget staff (SUPER ADMIN, BUDGET ADMIN, BUDGET STAFF)
   const userJobRoles = currentUser.Roles || [];
   const budgetAdminRoles = ['SUPER ADMIN', 'SUPER_ADMIN', 'BUDGET ADMIN'];
-  const budgetStaffRoles = ['BUDGET ANALYST', 'BUDGET COORDINATOR', 'BUDGET MANAGER', 'BUDGET OFFICER'];
+  const budgetStaffRoles = ['BUDGET_PLANNING_ANALYST', 'BUDGET MANAGER', 'BUDGET OFFICER'];
   
   const isBudgetAdmin = userJobRoles.some(role => budgetAdminRoles.includes(role));
   const isBudgetStaff = userJobRoles.some(role => budgetStaffRoles.includes(role));
@@ -63,7 +63,7 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
     effectiveWorkflowRoles.push('superAdmin');
   }
   
-  // If user is Budget Staff (ANALYST, COORDINATOR, MANAGER, OFFICER), add appropriate workflow roles
+  // If user is Budget Staff (PLANNING_ANALYST, MANAGER, OFFICER), add appropriate workflow roles
   if (isBudgetStaff) {
     console.log('🔧 Adding workflow roles for Budget Staff');
     // Add superAdmin role for Budget Staff to access reports and employee pages

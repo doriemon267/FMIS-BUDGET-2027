@@ -40,7 +40,7 @@ export const submitEdit = async (editData) => {
 };
 
 /**
- * Get comparison data for Budget Analyst view
+ * Get comparison data for Preparer view
  * @param {string} proposalId - The proposal ID
  * @returns {Promise} API response with comparison data
  */

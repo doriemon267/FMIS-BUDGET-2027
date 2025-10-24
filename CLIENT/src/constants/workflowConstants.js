@@ -23,7 +23,7 @@ export const WORKFLOW_ROLES = {
   APPROVER: 'APPROVER',
   
   // Budget authority roles
-  BUDGET_ANALYST: 'BUDGET_ANALYST',
+  BUDGET_PLANNING_ANALYST: 'BUDGET_PLANNING_ANALYST',
   BUDGET_OFFICER: 'BUDGET_OFFICER',
   OVERALL_BUDGET_APPROVER: 'OVERALL_BUDGET_APPROVER',
   BUDGET_ADMIN: 'BUDGET_ADMIN'
@@ -56,12 +56,12 @@ export const WORKFLOW_STEPS = [
     description: 'Approves proposal',
     icon: 'verified_user',
     statuses: ['Submitted for Approval'],
-    nextRole: WORKFLOW_ROLES.BUDGET_ANALYST
+    nextRole: WORKFLOW_ROLES.BUDGET_PLANNING_ANALYST
   },
   {
     step: 4,
-    role: WORKFLOW_ROLES.BUDGET_ANALYST,
-    label: 'Budget Analyst',
+    role: WORKFLOW_ROLES.BUDGET_PLANNING_ANALYST,
+    label: 'Budget Planning Analyst',
     description: 'Technical review',
     icon: 'assignment',
     statuses: ['At Analyst'],
@@ -119,8 +119,8 @@ export const OFFICE_WORKFLOW_STEPS = [
   },
   {
     step: 3,
-    role: WORKFLOW_ROLES.BUDGET_ANALYST,
-    label: 'Budget Analyst',
+    role: WORKFLOW_ROLES.BUDGET_PLANNING_ANALYST,
+    label: 'Budget Planning Analyst',
     description: 'Technical review',
     icon: 'assignment',
     statuses: ['At Analyst']
@@ -148,7 +148,7 @@ export const ROLE_LABELS = {
   [WORKFLOW_ROLES.PREPARER]: 'Preparer',
   [WORKFLOW_ROLES.REVIEWER]: 'Reviewer',
   [WORKFLOW_ROLES.APPROVER]: 'Approver',
-  [WORKFLOW_ROLES.BUDGET_ANALYST]: 'Budget Analyst',
+  [WORKFLOW_ROLES.BUDGET_PLANNING_ANALYST]: 'Budget Planning Analyst',
   [WORKFLOW_ROLES.BUDGET_OFFICER]: 'Budget Officer',
   [WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER]: 'Overall Budget Approver',
   [WORKFLOW_ROLES.BUDGET_ADMIN]: 'Budget Admin'
