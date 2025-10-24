@@ -75,8 +75,8 @@ const USER_ROLES = [
     assignmentLevels: ['DIVISION_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL']
   },
   { 
-    value: 'BUDGET_ANALYST', 
-    label: 'Preparer', 
+    value: 'BUDGET_PLANNING_ANALYST', 
+    label: 'Budget Planning Analyst', 
     description: 'Performs technical analysis of proposals',
     workflowRoles: 'BUDGET_ANALYST (analyzes budget proposals)',
     assignmentLevels: ['BUDGET_AND_REVENUE_DIVISION']
@@ -386,7 +386,7 @@ const HierarchicalUserAssignmentPage = () => {
       handleFormChange('userId', userLookupData.userId || '');
       handleFormChange('userName', userLookupData.userName || '');
       handleFormChange('email', userLookupData.email || '');
-      const budgetRole = userLookupData.budgetRole || 'BUDGET_ANALYST';
+      const budgetRole = userLookupData.budgetRole || 'PREPARER';
       handleFormChange('userRole', budgetRole);
 
       // Auto-set assignment level and permissions based on the budget role
@@ -843,58 +843,9 @@ const HierarchicalUserAssignmentPage = () => {
                           handleFormChange('userName', data.userName || '');
                           handleFormChange('email', data.email || '');
                           
-                          // NEW ROLE SYSTEM (September 2025)
-                          // Map old budgetRole to new workflow roles with sensible defaults
-                          // User can still override the role selection in the User Role dropdown
-                          const budgetRole = data.budgetRole || 'BUDGET_ANALYST';
-                          let defaultRole = 'PREPARER'; // Most common role
-                          let defaultLevel = 'OFFICE';
-                          
-                          // Suggest appropriate role based on user's main database role
-                          if (budgetRole === 'BUDGET_ADMIN') {
-                            defaultRole = 'BUDGET_ADMIN';
-                            defaultLevel = 'FULL';
-                          } else if (budgetRole === 'BUDGET_MANAGER') {
-                            defaultRole = 'BUDGET_ADMIN'; // Managers get admin role
-                            defaultLevel = 'FULL';
-                          } else if (budgetRole === 'BUDGET_OFFICER') {
-                            defaultRole = 'APPROVER'; // Officers approve proposals
-                            defaultLevel = 'OFFICE';
-                          } else if (budgetRole === 'APPROVER') {
-                            defaultRole = 'APPROVER'; // Approvers review and approve
-                            defaultLevel = 'OFFICE';
-                          } else if (budgetRole === 'BUDGET_PLANNING_ANALYST') {
-                            defaultRole = 'PREPARER'; // Planning Analysts prepare proposals
-                            defaultLevel = 'RESPONSIBILITY_CENTER';
-                          }
-                          
-                          handleFormChange('userRole', defaultRole);
-                          handleFormChange('assignmentLevel', defaultLevel);
-                          
-                          // Set permissions based on default role (will be auto-updated when role is finalized)
-                          const rolePerms = {
-                            CreateProposals: true,
-                            EditOwnProposals: true,
-                            EditAllProposals: false,
-                            DeleteProposals: false,
-                            ApproveProposals: false,
-                            ViewReports: true,
-                            ManageUsers: false,
-                            ManageSettings: false
-                          };
-                          
-                          if (defaultRole === 'APPROVER') {
-                            rolePerms.EditAllProposals = true;
-                            rolePerms.ApproveProposals = true;
-                          } else if (defaultRole === 'BUDGET_ADMIN') {
-                            rolePerms.EditAllProposals = true;
-                            rolePerms.DeleteProposals = true;
-                            rolePerms.ApproveProposals = true;
-                            rolePerms.ManageUsers = true;
-                            rolePerms.ManageSettings = true;
-                          }
-                          
-                          handleFormChange('rolePermissions', rolePerms);
+                          // Use the budgetRole directly from server - no client-side mapping needed
+                          const budgetRole = data.budgetRole || 'PREPARER';
+                          handleFormChange('userRole', budgetRole);
                         }
                       }).catch((error) => {
                         console.warn('Auto-lookup query failed:', error);
