@@ -66,64 +66,48 @@ const budgetRoleVisibilityControl = () => {
 
       switch (budgetRole) {
         case 'BUDGET_ANALYST':
-          // BUDGET_ANALYST can see:
-          // 1. Own proposals (any status)
-          // 2. Division proposals within their division (any status)
-          // 3. Proposals assigned to BUDGET_ANALYST role
+          // STEP 4 of 6-step workflow: PREPARER → REVIEWER → APPROVER → [BUDGET_ANALYST] → BUDGET_OFFICER → OVERALL_APPROVER
+          // BUDGET_ANALYST can see proposals forwarded by APPROVER
           visibilityFilter = {
             $or: [
-              // Own proposals (any status)
               { createdByUserId: userId },
               { processBy: userId },
-              // Division proposals (if user has a division)
               ...(userDivision ? [{ division: userDivision }] : []),
-              // Proposals assigned to BUDGET_ANALYST
               { currentAssigneeRole: 'BUDGET_ANALYST' },
-              { pendingWithRoles: 'BUDGET_ANALYST' }
+              { pendingWithRoles: 'BUDGET_ANALYST' },
+              {
+                status: {
+                  $in: [
+                    'Forwarded to Analyst',
+                    'FORWARDED_TO_ANALYST'
+                  ]
+                }
+              }
             ]
           };
           break;
 
         case 'BUDGET_OFFICER':
-          // BUDGET_OFFICER can see:
-          // 1. Own proposals (any status)
-          // 2. Approved/Submitted/Finalized proposals from others (no Drafts)
-          // 3. Proposals assigned to BUDGET_OFFICER role
+          // STEP 5 of 6-step workflow: PREPARER → REVIEWER → APPROVER → BUDGET_ANALYST → [BUDGET_OFFICER] → OVERALL_APPROVER
+          // BUDGET_OFFICER can see proposals forwarded by BUDGET_ANALYST
           visibilityFilter = {
             $or: [
-              // Own proposals (any status)
               { createdByUserId: userId },
               { processBy: userId },
-              // Submitted/approved proposals from others
               {
                 status: {
                   $in: [
-                    'Division Submitted',
-                    'DIVISION SUBMITTED',
-                    'Department Verified',
-                    'DEPARTMENT VERIFIED',
-                    'Department Submitted',
-                    'DEPARTMENT SUBMITTED',
-                    'Responsibility Center Submitted',
-                    'RESPONSIBILITY_CENTER_SUBMITTED',
-                    'Office Verified',
-                    'OFFICE VERIFIED',
+                    'Forwarded to Budget Officer',
+                    'FORWARDED_TO_BUDGET_OFFICER',
                     'Forwarded to Manager',
                     'FORWARDED_TO_MANAGER',
-                    'Forwarded to Budget Officer',
                     'Officer Approved',
                     'OFFICER_APPROVED',
-                    'Region Approved',
-                    'REGION APPROVED',
-                    'Final Approved',
-                    'FINAL_APPROVED',
                     'Finalized',
-                    'Approved',
-                    'Submitted'
+                    'Approved'
                   ]
                 }
               },
-              // Proposals assigned to BUDGET_OFFICER
               { currentAssigneeRole: 'BUDGET_OFFICER' },
               { pendingWithRoles: 'BUDGET_OFFICER' }
             ]
@@ -132,43 +116,31 @@ const budgetRoleVisibilityControl = () => {
 
         case 'BUDGET_MANAGER':
         case 'BUDGET_ADMIN':
-          // BUDGET_MANAGER/ADMIN can see:
-          // Only submitted/approved/finalized proposals (no drafts from any level)
-          // This enforces that they only see proposals after officer submission
+          // STEP 6 of 6-step workflow: PREPARER → REVIEWER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → [OVERALL_APPROVER]
+          // OVERALL_APPROVER/BUDGET_ADMIN can see proposals forwarded by BUDGET_OFFICER for final approval
           visibilityFilter = {
-            status: {
-              $in: [
-                'Division Submitted',
-                'DIVISION SUBMITTED',
-                'Department Verified',
-                'DEPARTMENT VERIFIED',
-                'Department Submitted',
-                'DEPARTMENT SUBMITTED',
-                'Responsibility Center Submitted',
-                'RESPONSIBILITY_CENTER_SUBMITTED',
-                'Office Verified',
-                'OFFICE VERIFIED',
-                'Forwarded to Manager',
-                'FORWARDED_TO_MANAGER',
-                'Officer Approved',
-                'OFFICER_APPROVED',
-                'Region Approved',
-                'REGION APPROVED',
-                'Final Approved',
-                'FINAL_APPROVED',
-                'Finalized',
-                'Approved',
-                'Submitted'
-              ]
-            }
+            $or: [
+              {
+                status: {
+                  $in: [
+                    'Forwarded to Manager',
+                    'FORWARDED_TO_MANAGER',
+                    'Finalized',
+                    'Approved',
+                    'Final Approved',
+                    'FINAL_APPROVED'
+                  ]
+                }
+              },
+              { currentAssigneeRole: { $in: ['BUDGET_MANAGER', 'OVERALL_BUDGET_APPROVER'] } },
+              { pendingWithRoles: { $in: ['BUDGET_MANAGER', 'OVERALL_BUDGET_APPROVER'] } }
+            ]
           };
           break;
 
         case 'PREPARER':
-          // PREPARER can see:
-          // 1. Their own proposals (created by them) - any status including drafts
-          // 2. Proposals in their workflow queue
-          // 3. Proposals within their organizational scope (division/department/region)
+          // STEP 1 of 6-step workflow: [PREPARER] → REVIEWER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER
+          // PREPARER creates drafts and can see all their proposals
           visibilityFilter = {
             $or: [
               // Own proposals created by this user
@@ -184,28 +156,25 @@ const budgetRoleVisibilityControl = () => {
           break;
 
         case 'REVIEWER':
-          // REVIEWER can see:
-          // 1. Proposals explicitly pending with REVIEWER (currentAssigneeRole or pendingWithRoles)
-          // 2. Proposals in submitted/review statuses relevant to REVIEWER
-          //    IMPORTANT: Drafts should NOT appear to REVIEWER unless explicitly assigned (which should not happen)
+          // STEP 2 of 6-step workflow: PREPARER → [REVIEWER] → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER
+          // REVIEWER can see proposals forwarded to them by PREPARER
           visibilityFilter = {
             $and: [
-              // Exclude Drafts from reviewer view
               { status: { $ne: 'Draft' } },
               {
                 $or: [
-                  // Explicit assignment to REVIEWER in new workflow fields
                   { currentAssigneeRole: 'REVIEWER' },
                   { pendingWithRoles: 'REVIEWER' },
-                  // Backward-compatible: proposals in statuses typically awaiting reviewer
+                  { currentAssigneeRole: 'BUDGET_COORDINATOR' },
+                  { pendingWithRoles: 'BUDGET_COORDINATOR' },
                   {
                     status: {
                       $in: [
                         'Forwarded to Reviewer',
+                        'Under Review by Reviewer',
+                        'UNDER REVIEW BY COORDINATOR',
                         'Division Submitted',
                         'DIVISION SUBMITTED',
-                        'Under Review by Reviewer',
-                        'UNDER REVIEW BY COORDINATOR', // legacy label
                         'Department Submitted',
                         'DEPARTMENT SUBMITTED'
                       ]
@@ -218,40 +187,29 @@ const budgetRoleVisibilityControl = () => {
           break;
 
         case 'APPROVER':
-          // APPROVER can see:
-          // 1. Items explicitly pending with APPROVER (BUDGET_OFFICER persisted) via currentAssigneeRole/pendingWithRoles
-          // 2. Proposals in statuses routed to Approver step (include legacy + new labels)
-          // 3. Optionally their own/processBy proposals
+          // STEP 3 of 6-step workflow: PREPARER → REVIEWER → [APPROVER] → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER
+          // APPROVER can see proposals forwarded by REVIEWER
           visibilityFilter = {
             $and: [
               { status: { $ne: 'Draft' } },
               {
                 $or: [
-                  // Explicit assignment to Approver (persisted + display aliases)
                   { currentAssigneeRole: { $in: ['BUDGET_OFFICER', 'APPROVER'] } },
                   { pendingWithRoles: { $in: ['BUDGET_OFFICER', 'APPROVER'] } },
-                  // Statuses commonly at Approver step
                   {
                     status: {
                       $in: [
                         'Forwarded to Approver',
                         'Forwarded to Officer',
-                        'UNDER REVIEW BY OFFICER',
                         'Under Review by Officer',
-                        'Division Submitted',
-                        'DIVISION SUBMITTED',
+                        'UNDER REVIEW BY OFFICER',
                         'Department Verified',
                         'DEPARTMENT VERIFIED',
                         'Department Submitted',
-                        'DEPARTMENT SUBMITTED',
-                        'Responsibility Center Submitted',
-                        'RESPONSIBILITY_CENTER_SUBMITTED',
-                        'Office Verified',
-                        'OFFICE VERIFIED'
+                        'DEPARTMENT SUBMITTED'
                       ]
                     }
                   },
-                  // Own or processBy as a fallback for continuity
                   { createdByUserId: userId },
                   { processBy: userId }
                 ]
@@ -261,10 +219,8 @@ const budgetRoleVisibilityControl = () => {
           break;
 
         case 'OVERALL_BUDGET_APPROVER':
-          // OVERALL_BUDGET_APPROVER can see:
-          // 1. Their own proposals (created by them) - any status including drafts
-          // 2. All submitted/verified/approved proposals for final approval
-          // 3. Proposals assigned to OVERALL_BUDGET_APPROVER/BUDGET_MANAGER role
+          // STEP 6 of 6-step workflow: PREPARER → REVIEWER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → [OVERALL_APPROVER]
+          // Same as BUDGET_MANAGER above - final approval step
           visibilityFilter = {
             $or: [
               // Own proposals created by this user
