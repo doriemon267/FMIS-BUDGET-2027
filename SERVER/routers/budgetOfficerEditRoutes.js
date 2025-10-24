@@ -79,9 +79,12 @@ router.post('/submit',
   submitEdit
 );
 
-// Get edit by ID
-router.get('/:id',
-  getEditById
+// ⚠️ IMPORTANT: Specific routes MUST come BEFORE generic /:id route!
+// Otherwise Express will match /:id first and fail for /comparison/:proposalId and /proposal/:proposalId
+
+// Get comparison data (for Budget Analyst to see changes)
+router.get('/comparison/:proposalId',
+  getComparisonData
 );
 
 // Get edits for a specific proposal
@@ -89,15 +92,16 @@ router.get('/proposal/:proposalId',
   getEditsByProposal
 );
 
-// Get comparison data (for Budget Analyst to see changes)
-router.get('/comparison/:proposalId',
-  getComparisonData
-);
-
 // Approve edit (Budget Manager or higher)
 router.post('/:id/approve',
   requirePermission('canApproveProposals'),
   approveEdit
+);
+
+// Generic routes MUST be LAST
+// Get edit by ID
+router.get('/:id',
+  getEditById
 );
 
 // Delete draft edit
