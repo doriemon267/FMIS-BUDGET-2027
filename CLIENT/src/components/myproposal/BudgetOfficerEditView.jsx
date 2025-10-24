@@ -31,7 +31,8 @@ const BudgetOfficerEditView = ({
   onSaveSuccess,
   variant = 'officer',
   allowSubmit = true,
-  showTables = true
+  showTables = true,
+  readOnly = false
 }) => {
   const [activeTab, setActiveTab] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -275,7 +276,7 @@ const BudgetOfficerEditView = ({
       const forwardedCount = res?.data?.forwardedToUsersCount;
       const targetLabel = submitTarget === 'BUDGET_OFFICER' ? 'Budget Officer (Approver)' : 'Budget Manager (Overall Approver)';
       const extraHint = routedRole === 'APPROVER'
-        ? `You can track it under statuses like "Forwarded to Officer" or "Under Review by Officer" in All Proposals.`
+        ? `You can track it under statuses like "Forwarded to Approver" or "Under Review by Approver" in All Proposals.`
         : routedRole === 'OVERALL_BUDGET_APPROVER'
         ? `You can track it under statuses like "Forwarded to Manager" or "Under Review by Manager" in All Proposals.`
         : '';
@@ -311,7 +312,7 @@ const BudgetOfficerEditView = ({
       const routedRole = res?.data?.displayCurrentAssigneeRole || 'NEXT APPROVER';
       const forwardedCount = res?.data?.forwardedToUsersCount;
       const extraHint = routedRole === 'APPROVER'
-        ? `You can track it under statuses like "Forwarded to Officer" or "Under Review by Officer" in All Proposals.`
+        ? `You can track it under statuses like "Forwarded to Approver" or "Under Review by Approver" in All Proposals.`
         : routedRole === 'OVERALL_BUDGET_APPROVER'
         ? `You can track it under statuses like "Forwarded to Manager" or "Under Review by Manager" in All Proposals.`
         : '';
@@ -436,25 +437,25 @@ const BudgetOfficerEditView = ({
             {activeTab === 0 && (
               <EditableIncomeTable 
                 data={incomeData} 
-                onChange={setIncomeData}
+                onChange={readOnly ? undefined : setIncomeData}
               />
             )}
             {activeTab === 1 && (
               <EditablePersonnelTable 
                 data={personnelData} 
-                onChange={setPersonnelData}
+                onChange={readOnly ? undefined : setPersonnelData}
               />
             )}
             {activeTab === 2 && (
               <EditableMOOETable 
                 data={mooeData} 
-                onChange={setMooeData}
+                onChange={readOnly ? undefined : setMooeData}
               />
             )}
             {activeTab === 3 && (
               <EditableCapitalOutlayTable 
                 data={capitalOutlayData} 
-                onChange={setCapitalOutlayData}
+                onChange={readOnly ? undefined : setCapitalOutlayData}
               />
             )}
           </Box>
@@ -470,8 +471,11 @@ const BudgetOfficerEditView = ({
           label="Comments (Optional)"
           placeholder="Add any notes or comments about your edits..."
           value={comments}
-          onChange={(e) => setComments(e.target.value)}
+          onChange={readOnly ? undefined : (e) => setComments(e.target.value)}
           variant="outlined"
+          InputProps={{
+            readOnly: readOnly
+          }}
           helperText={
             variant === 'analyst' 
               ? 'These comments will be visible to Budget Officer when approving your submission'

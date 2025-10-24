@@ -22,11 +22,13 @@ router.use(checkToken);
 router.use(loadHierarchicalAssignment);
 
 /**
- * Custom middleware to check if user is a Budget Officer, Budget Coordinator, or Budget Analyst
+ * Custom middleware to check if user is a Budget Officer, Budget Coordinator, Budget Analyst, Approver, or Reviewer
  * Budget Officers are users with DEPARTMENT, OFFICE, REGION, or FULL assignment level
  * OR users with specific workflow roles
  * Budget Coordinators have DIVISION level or divisionapprover role
  * Budget Analysts have BUDGET_ANALYST user role
+ * Approvers have APPROVER user role or approver workflow roles
+ * Reviewers have REVIEWER user role or reviewer workflow roles
  */
 const requireBudgetOfficerAccess = (req, res, next) => {
   const assignment = req.userHierarchicalAssignment;
@@ -37,12 +39,12 @@ const requireBudgetOfficerAccess = (req, res, next) => {
   const validLevels = ['DIVISION', 'DEPARTMENT', 'OFFICE', 'REGION', 'FULL'];
   const hasValidLevel = validLevels.includes(assignment?.assignmentLevel);
   
-  // Check workflow roles (includes Budget Officer roles + Budget Coordinator divisionapprover role + APPROVER roles)
-  const validRoles = ['divisionapprover', 'officeapprover', 'departmentConsolidator', 'officeConsolidator', 'regionFinalVerifier'];
+  // Check workflow roles (includes Budget Officer roles + Budget Coordinator divisionapprover role + APPROVER roles + REVIEWER roles)
+  const validRoles = ['divisionapprover', 'officeapprover', 'departmentConsolidator', 'officeConsolidator', 'regionFinalVerifier', 'divisionReviewer', 'officeReviewer'];
   const hasValidRole = validRoles.some(role => workflowRoles.includes(role));
   
-  // Check user roles (includes BUDGET_ANALYST)
-  const hasValidUserRole = userRoles.includes('BUDGET_ANALYST');
+  // Check user roles (includes BUDGET_ANALYST, APPROVER, REVIEWER)
+  const hasValidUserRole = userRoles.includes('BUDGET_ANALYST') || userRoles.includes('APPROVER') || userRoles.includes('REVIEWER');
   
   // Check if user has EditAllProposals permission
   const hasPermission = req.hierarchicalFlags?.canEditAllProposals === true;
@@ -53,9 +55,9 @@ const requireBudgetOfficerAccess = (req, res, next) => {
   
   return res.status(403).json({
     success: false,
-    message: 'Access denied: Budget Officer or Budget Coordinator access required',
+    message: 'Access denied: Budget Officer, Budget Coordinator, Budget Analyst, Approver, or Reviewer access required',
     code: 'INSUFFICIENT_PERMISSIONS',
-    required: 'Budget Officer or Budget Coordinator access'
+    required: 'Budget Officer, Budget Coordinator, Budget Analyst, Approver, or Reviewer access'
   });
 };
 

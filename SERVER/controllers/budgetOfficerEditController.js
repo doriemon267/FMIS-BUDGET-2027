@@ -1349,7 +1349,7 @@ exports.submitEdit = async (req, res) => {
       proposal.submittedToDivisionBy = { userId, userName };
     } else if (editorRole === 'BUDGET_ANALYST') {
       // New BUDGET_ANALYST role submits to BUDGET_OFFICER
-      newStatus = 'Forwarded to Officer';
+      newStatus = 'Forwarded to Budget Officer';
       newWorkflowLevel = 'OFFICER';
       historyAction = 'ANALYST_SUBMIT_TO_OFFICER';
       historyComment = comments || 'Budget Analyst submitted for Officer review';
@@ -1376,7 +1376,7 @@ exports.submitEdit = async (req, res) => {
       } else {
         // Standard flow: submit to APPROVER (first approval step in new workflow)
         // Retain legacy status label for backward compatibility; UI will show alias as needed
-        newStatus = 'Forwarded to Officer';
+        newStatus = 'Forwarded to Approver';
         newWorkflowLevel = 'OFFICER';
         historyAction = 'COORDINATOR_SUBMIT_TO_OFFICER';
         historyComment = comments || 'Coordinator submitted edits to Approver';

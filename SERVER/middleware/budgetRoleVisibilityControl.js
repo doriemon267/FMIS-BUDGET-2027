@@ -110,6 +110,7 @@ const budgetRoleVisibilityControl = () => {
                     'OFFICE VERIFIED',
                     'Forwarded to Manager',
                     'FORWARDED_TO_MANAGER',
+                    'Forwarded to Budget Officer',
                     'Officer Approved',
                     'OFFICER_APPROVED',
                     'Region Approved',

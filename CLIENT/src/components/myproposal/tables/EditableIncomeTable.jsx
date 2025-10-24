@@ -53,6 +53,9 @@ const EditableIncomeTable = ({ data = [], onChange }) => {
   const { currentUser } = useUser();
 
   const canEditAmount = useMemo(() => {
+    // First check if onChange callback is provided (read-only mode)
+    if (!onChange) return false;
+    
     // Check primary roles
     const rawRoles = currentUser?.Roles;
     const rolesArray = Array.isArray(rawRoles) ? rawRoles : rawRoles ? [rawRoles] : [];
@@ -80,10 +83,12 @@ const EditableIncomeTable = ({ data = [], onChange }) => {
     );
 
     return hasRolePermission || hasWorkflowPermission;
-  }, [currentUser]);
+  }, [currentUser, onChange]);
 
   // Initialize changeType for data items that don't have it
   useEffect(() => {
+    if (!onChange) return; // Skip if read-only mode
+    
     const needsInitialization = data.some(item => !item.changeType);
     if (needsInitialization) {
       const initializedData = data.map(item => ({
@@ -276,14 +281,16 @@ const EditableIncomeTable = ({ data = [], onChange }) => {
         <Box>
           <Chip label={`Total: ${formatCurrency(data.reduce((sum, item) => sum + (item.changeType !== 'deleted' ? (item.amount || 0) : 0), 0))}`} color="primary" />
         </Box>
-        <Button
-          variant="contained"
-          size="small"
-          startIcon={<AddIcon />}
-          onClick={handleAddRow}
-        >
-          Add Income Entry
-        </Button>
+        {onChange && (
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<AddIcon />}
+            onClick={handleAddRow}
+          >
+            Add Income Entry
+          </Button>
+        )}
       </Box>
 
       <TableContainer component={Paper} variant="outlined">
@@ -294,15 +301,15 @@ const EditableIncomeTable = ({ data = [], onChange }) => {
               <TableCell><strong>SUB-CATEGORIES</strong></TableCell>
               <TableCell align="right"><strong>AMOUNT</strong></TableCell>
               <TableCell><strong>STATUS</strong></TableCell>
-              <TableCell align="center"><strong>ACTION</strong></TableCell>
+              {onChange && <TableCell align="center"><strong>ACTION</strong></TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
             {Object.keys(groupedData).length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} align="center">
+                <TableCell colSpan={onChange ? 5 : 4} align="center">
                   <Box sx={{ py: 3, color: 'text.secondary' }}>
-                    No income entries. Click "Add Income Entry" to create one.
+                    No income entries{onChange ? '. Click "Add Income Entry" to create one.' : '.'}
                   </Box>
                 </TableCell>
               </TableRow>
@@ -327,7 +334,7 @@ const EditableIncomeTable = ({ data = [], onChange }) => {
                         {formatCurrency(rowData.items.reduce((sum, item) => sum + (item.changeType !== 'deleted' ? (item.amount || 0) : 0), 0))}
                       </TableCell>
                       <TableCell></TableCell>
-                      <TableCell></TableCell>
+                      {onChange && <TableCell></TableCell>}
                     </TableRow>
                   );
                 } else {
@@ -371,27 +378,29 @@ const EditableIncomeTable = ({ data = [], onChange }) => {
                         {item.changeType === 'deleted' && <Chip label="Deleted" size="small" color="error" />}
                         {item.changeType === 'unchanged' && <Chip label="Unchanged" size="small" />}
                       </TableCell>
-                      <TableCell align="center">
-                        {item.changeType === 'deleted' ? (
-                          <IconButton
-                            size="small"
-                            color="primary"
-                            onClick={() => handleRestore(item.originalIndex)}
-                            title="Restore"
-                          >
-                            <RestoreIcon />
-                          </IconButton>
-                        ) : (
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => handleDelete(item.originalIndex)}
-                            title="Delete"
-                          >
-                            <DeleteIcon />
-                          </IconButton>
-                        )}
-                      </TableCell>
+                      {onChange && (
+                        <TableCell align="center">
+                          {item.changeType === 'deleted' ? (
+                            <IconButton
+                              size="small"
+                              color="primary"
+                              onClick={() => handleRestore(item.originalIndex)}
+                              title="Restore"
+                            >
+                              <RestoreIcon />
+                            </IconButton>
+                          ) : (
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={() => handleDelete(item.originalIndex)}
+                              title="Delete"
+                            >
+                              <DeleteIcon />
+                            </IconButton>
+                          )}
+                        </TableCell>
+                      )}
                     </TableRow>
                   );
                 }

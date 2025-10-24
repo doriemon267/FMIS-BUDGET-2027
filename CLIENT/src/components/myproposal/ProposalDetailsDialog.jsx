@@ -587,11 +587,77 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     proposal?.status === 'Division Submitted'
   );
 
+  // Check if current user has already submitted this proposal to a later step
+  // If they have, they should only be able to view, not edit
+  const hasUserAlreadySubmitted = useMemo(() => {
+    if (!userInfo?.userId || !proposal?.workflowHistory) return false;
+
+    const userId = userInfo.userId;
+    const submitActions = [
+      'PREPARER_SUBMIT_TO_REVIEWER',
+      'COORDINATOR_SUBMIT_TO_OFFICER',
+      'COORDINATOR_SUBMIT_TO_MANAGER',
+      'APPROVER_APPROVE_TO_ANALYST',
+      'ANALYST_SUBMIT_TO_OFFICER',
+      'OFFICER_SUBMIT_TO_MANAGER',
+      'MANAGER_APPROVE'
+    ];
+
+    // Check if user has performed any submit action on this proposal
+    return proposal.workflowHistory.some(history => 
+      history.userId === userId && submitActions.includes(history.action)
+    );
+  }, [userInfo?.userId, proposal?.workflowHistory]);
+
+  // Define workflow step order to determine if user should be in view-only mode
+  const getWorkflowStepOrder = (status) => {
+    const stepMap = {
+      'Draft': 1,                           // PREPARER
+      'Division Submitted': 2,              // REVIEWER
+      'Forwarded to Reviewer': 2,           // REVIEWER
+      'Forwarded to Approver': 3,           // APPROVER
+      'Forwarded to Analyst': 4,            // BUDGET_ANALYST
+      'Forwarded to Budget Officer': 5,     // BUDGET_OFFICER
+      'Forwarded to Manager': 6,            // BUDGET_MANAGER
+      'Finalized': 7,                       // FINALIZED
+      'Returned': 1,                        // RETURNED to PREPARER
+      // Legacy statuses
+      'Under Review by Coordinator': 2,
+      'Coordinator Approved': 2,
+      'Under Review by Officer': 3,
+      'Officer Approved': 5,
+      'Under Review by Manager': 6,
+      'Office Submitted': 6
+    };
+    return stepMap[status] || 0;
+  };
+
+  const getUserWorkflowStep = () => {
+    if (isBudgetCoordinator) return 2; // REVIEWER
+    if (isApprover) return 3; // APPROVER
+    if (isBudgetAnalystUserRole) return 4; // BUDGET_ANALYST
+    if (isBudgetOfficer && !isManagerLevel) return 5; // BUDGET_OFFICER
+    if (isManagerLevel) return 6; // BUDGET_MANAGER
+    return 1; // PREPARER or other
+  };
+
+  // If proposal is at a step that comes after the user's role, they can only view
+  const currentProposalStep = getWorkflowStepOrder(proposal?.status);
+  const userStep = getUserWorkflowStep();
+  const isViewOnlyAfterSubmission = currentProposalStep > userStep;
+
   const officerModeActive = !isReadOnlyMode && isBudgetOfficer && !isManagerLevel;
   const officerReadOnlyTables = officerModeActive && Boolean(comparisonData) && !officerEditMode;
   const officerShowTables = officerModeActive ? (!comparisonData || officerEditMode) : true;
-  const canRenderEditView = !isReadOnlyMode && proposalData && proposal?.status !== 'Officer Approved' && proposal?.status !== 'Approved' && (
-    (isBudgetOfficer && !isManagerLevel) || coordinatorCanEditNow || analystCanEditNow || managerCanEditNow || isApprover
+  // Do not allow rendering the full edit view when officer comparison-only tables are active
+  // OR when user is viewing after their submission step (should only see comparison view)
+  const canRenderEditView = !isReadOnlyMode && proposalData && !officerReadOnlyTables && !isViewOnlyAfterSubmission && proposal?.status !== 'Officer Approved' && proposal?.status !== 'Approved' && (
+    (isBudgetOfficer && !isManagerLevel) || 
+    coordinatorCanEditNow || 
+    analystCanEditNow || 
+    managerCanEditNow || 
+    (isApprover && proposal?.status === 'Forwarded to Approver') ||
+    (proposal?.status === 'Draft' && !isBudgetOfficer && !isBudgetAnalyst && !isBudgetCoordinator && !isManagerLevel && !isApprover)
   );
 
   return (
@@ -807,6 +873,22 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
               </>
             )}
 
+            {/* Show comparison view for users viewing after their submission step (EXCLUDE BUDGET_ANALYST - they have their own view) */}
+            {isViewOnlyAfterSubmission && !isReadOnlyMode && !isBudgetAnalystUserRole && comparisonData && (
+              <>
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <Typography variant="body2">
+                    <strong>View Only:</strong> This proposal has progressed beyond your workflow step (current status: {proposal?.status}). 
+                    You can view the current state but cannot make further edits.
+                  </Typography>
+                </Alert>
+                <BudgetAnalystComparisonView 
+                  comparisonData={comparisonData}
+                  proposal={proposal}
+                />
+              </>
+            )}
+
             {/* Show edit view for Budget Officer (when in edit mode), Budget Coordinator (when editable), Budget Analyst (when editable), and Budget Manager (when Forwarded to Manager) */}
             {canRenderEditView && (
               <>
@@ -823,21 +905,6 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                       Review the comparison above. Select <strong>Edit Proposal</strong> if you need to modify any entries, or use the actions below to submit directly to the Budget Manager.
                     </Typography>
                   </Alert>
-                )}
-                {isBudgetOfficer && officerEditMode && comparisonData && (
-                  <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Alert severity="info" sx={{ flex: 1, mr: 2 }}>
-                      <Typography variant="body2">
-                        You are editing on top of Budget Coordinator&rsquo;s changes. The form below shows their submitted values.
-                      </Typography>
-                    </Alert>
-                    <Button
-                      variant="outlined"
-                      onClick={() => setOfficerEditMode(false)}
-                    >
-                      Back to Comparison
-                    </Button>
-                  </Box>
                 )}
                 <BudgetOfficerEditView 
                   proposal={proposal}
@@ -873,8 +940,9 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                     }, 1500); // Give time to show success toast before closing
                   }}
                   variant={managerCanEditNow ? 'manager' : coordinatorCanEditNow ? 'coordinator' : analystCanEditNow ? 'analyst' : isApprover ? 'approver' : 'officer'}
-                  allowSubmit={!managerCanEditNow}
-                  showTables={officerShowTables}
+                  allowSubmit={!managerCanEditNow && !isViewOnlyAfterSubmission}
+                  showTables={officerShowTables || isViewOnlyAfterSubmission}
+                  readOnly={isViewOnlyAfterSubmission}
                 />
               </>
             )}
@@ -900,12 +968,20 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
               </>
             )}
 
-            {/* Analyst comparison view when NOT in edit mode (Budget Analyst can only view when status is NOT Draft/Returned) */}
-            {!isReadOnlyMode && isBudgetAnalyst && !analystCanEditNow && comparisonData && (
-              <BudgetAnalystComparisonView 
-                comparisonData={comparisonData}
-                proposal={proposal}
-              />
+            {/* Analyst comparison view - Budget Analyst (workflow role) or BUDGET_ANALYST (user role) can view comparison when available (only when they CANNOT edit) */}
+            {!isReadOnlyMode && (isBudgetAnalyst || isBudgetAnalystUserRole) && comparisonData && !analystCanEditNow && (
+              <>
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <Typography variant="body2">
+                    <strong>Analysis View:</strong> This proposal is available for your review.
+                    No further edits are allowed at this stage.
+                  </Typography>
+                </Alert>
+                <BudgetAnalystComparisonView
+                  comparisonData={comparisonData}
+                  proposal={proposal}
+                />
+              </>
             )}
 
             {/* Coordinator comparison view when NOT in edit mode (Budget Coordinator can only view when status is NOT Division Submitted) */}
@@ -941,6 +1017,16 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
             {false && isBudgetAnalyst && !comparisonData && !loading && (
               <Alert severity="warning">
                 No comparison data available. The proposal may not have been edited yet.
+              </Alert>
+            )}
+
+            {/* Fallback view for Budget Analyst when they can't edit and have no comparison data */}
+            {!isReadOnlyMode && isBudgetAnalyst && !analystCanEditNow && !comparisonData && proposalData && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                  <strong>Analysis View:</strong> This proposal is available for your analysis. 
+                  No edits have been made yet, or comparison data is not available.
+                </Typography>
               </Alert>
             )}
 

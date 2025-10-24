@@ -264,7 +264,7 @@ const EditableCapitalOutlayTable = ({ data = [], onChange }) => {
     }
 
     newData[index] = updated;
-    onChange(newData);
+    if (onChange) onChange(newData);
   };
 
   const handleDelete = (index) => {
@@ -280,7 +280,7 @@ const EditableCapitalOutlayTable = ({ data = [], onChange }) => {
     } else {
       newData.splice(index, 1);
     }
-    onChange(newData);
+    if (onChange) onChange(newData);
   };
 
   const handleRestore = (index) => {
@@ -299,7 +299,7 @@ const EditableCapitalOutlayTable = ({ data = [], onChange }) => {
       newData[index] = { ...record, changeType: 'unchanged' };
     }
 
-    onChange(newData);
+    if (onChange) onChange(newData);
   };
 
   const handleAddRow = () => {
@@ -315,7 +315,7 @@ const EditableCapitalOutlayTable = ({ data = [], onChange }) => {
       details: [],
       changeType: 'added'
     };
-    onChange([...(data || []), newRow]);
+    if (onChange) onChange([...(data || []), newRow]);
   };
 
   const toggleRow = (key) => {
@@ -369,9 +369,11 @@ const EditableCapitalOutlayTable = ({ data = [], onChange }) => {
           <Chip label={`Income: ${formatCurrency(totals.income)}`} color="secondary" variant="outlined" />
           <Chip label={`Subsidy: ${formatCurrency(totals.subsidy)}`} color="secondary" variant="outlined" />
         </Box>
-        <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleAddRow}>
-          Add Capital Outlay Entry
-        </Button>
+        {onChange && (
+          <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleAddRow}>
+            Add Capital Outlay Entry
+          </Button>
+        )}
       </Box>
 
       <TableContainer component={Paper} variant="outlined">
@@ -387,15 +389,15 @@ const EditableCapitalOutlayTable = ({ data = [], onChange }) => {
               <TableCell align="right"><strong>Subsidy</strong></TableCell>
               <TableCell align="right"><strong>Total</strong></TableCell>
               <TableCell><strong>Status</strong></TableCell>
-              <TableCell align="center"><strong>Actions</strong></TableCell>
+              {onChange && <TableCell align="center"><strong>Actions</strong></TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
             {(!groups || groups.length === 0) ? (
               <TableRow>
-                <TableCell colSpan={10} align="center">
+                <TableCell colSpan={onChange ? 10 : 9} align="center">
                   <Box sx={{ py: 3, color: 'text.secondary' }}>
-                    No capital outlay entries.
+                    No capital outlay entries{onChange ? '. Click "Add Capital Outlay Entry" to create one.' : '.'}
                   </Box>
                 </TableCell>
               </TableRow>
@@ -440,7 +442,7 @@ const EditableCapitalOutlayTable = ({ data = [], onChange }) => {
                       const totalCost = item.cost != null ? Number(item.cost) : Number(item.income || 0) + Number(item.subsidy || 0);
 
                       const renderMetaCell = (field, value, placeholder) => {
-                        if (isNewRecord && !isDeleted) {
+                        if (onChange && isNewRecord && !isDeleted) {
                           return (
                             <TextField
                               value={value || ''}
@@ -476,28 +478,40 @@ const EditableCapitalOutlayTable = ({ data = [], onChange }) => {
                             <TableCell>{renderMetaCell('accountingTitle', item.accountingTitle, 'Accounting Title')}</TableCell>
                             <TableCell>{renderMetaCell('uacsCode', item.uacsCode, 'UACS Code')}</TableCell>
                             <TableCell align="right" sx={{ maxWidth: 140 }}>
-                              <TextField
-                                value={item.income ?? 0}
-                                onChange={(e) => handleFieldChange(index, 'income', e.target.value)}
-                                size="small"
-                                fullWidth
-                                disabled={isDeleted}
-                                InputProps={{ inputComponent: NumericFormatInput }}
-                                inputProps={{ name: 'income' }}
-                                sx={{ '& .MuiInputBase-input': { textAlign: 'right' } }}
-                              />
+                              {onChange ? (
+                                <TextField
+                                  value={item.income ?? 0}
+                                  onChange={(e) => handleFieldChange(index, 'income', e.target.value)}
+                                  size="small"
+                                  fullWidth
+                                  disabled={isDeleted}
+                                  InputProps={{ inputComponent: NumericFormatInput }}
+                                  inputProps={{ name: 'income' }}
+                                  sx={{ '& .MuiInputBase-input': { textAlign: 'right' } }}
+                                />
+                              ) : (
+                                <Typography variant="body2" sx={{ textAlign: 'right', fontWeight: 500 }}>
+                                  {formatAmount(item.income ?? 0)}
+                                </Typography>
+                              )}
                             </TableCell>
                             <TableCell align="right" sx={{ maxWidth: 140 }}>
-                              <TextField
-                                value={item.subsidy ?? 0}
-                                onChange={(e) => handleFieldChange(index, 'subsidy', e.target.value)}
-                                size="small"
-                                fullWidth
-                                disabled={isDeleted}
-                                InputProps={{ inputComponent: NumericFormatInput }}
-                                inputProps={{ name: 'subsidy' }}
-                                sx={{ '& .MuiInputBase-input': { textAlign: 'right' } }}
-                              />
+                              {onChange ? (
+                                <TextField
+                                  value={item.subsidy ?? 0}
+                                  onChange={(e) => handleFieldChange(index, 'subsidy', e.target.value)}
+                                  size="small"
+                                  fullWidth
+                                  disabled={isDeleted}
+                                  InputProps={{ inputComponent: NumericFormatInput }}
+                                  inputProps={{ name: 'subsidy' }}
+                                  sx={{ '& .MuiInputBase-input': { textAlign: 'right' } }}
+                                />
+                              ) : (
+                                <Typography variant="body2" sx={{ textAlign: 'right', fontWeight: 500 }}>
+                                  {formatAmount(item.subsidy ?? 0)}
+                                </Typography>
+                              )}
                             </TableCell>
                             <TableCell align="right">
                               <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
@@ -510,35 +524,43 @@ const EditableCapitalOutlayTable = ({ data = [], onChange }) => {
                               {changeType === 'deleted' && <Chip label="Deleted" size="small" color="error" />}
                               {changeType === 'unchanged' && <Chip label="Unchanged" size="small" />}
                             </TableCell>
-                            <TableCell align="center">
-                              {changeType === 'deleted' ? (
-                                <IconButton size="small" color="primary" onClick={() => handleRestore(index)}>
-                                  <RestoreIcon fontSize="small" />
-                                </IconButton>
-                              ) : (
-                                <IconButton size="small" color="error" onClick={() => handleDelete(index)}>
-                                  <DeleteIcon fontSize="small" />
-                                </IconButton>
-                              )}
-                            </TableCell>
+                            {onChange && (
+                              <TableCell align="center">
+                                {changeType === 'deleted' ? (
+                                  <IconButton size="small" color="primary" onClick={() => handleRestore(index)}>
+                                    <RestoreIcon fontSize="small" />
+                                  </IconButton>
+                                ) : (
+                                  <IconButton size="small" color="error" onClick={() => handleDelete(index)}>
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                )}
+                              </TableCell>
+                            )}
                           </TableRow>
                           <TableRow>
-                            <TableCell colSpan={10} sx={{ py: 0, borderBottom: '1px solid', borderColor: 'divider' }}>
+                            <TableCell colSpan={onChange ? 10 : 9} sx={{ py: 0, borderBottom: '1px solid', borderColor: 'divider' }}>
                               <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                                 <Box sx={{ p: 2, backgroundColor: '#f9fafb' }}>
                                   <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '2fr 1fr' }, gap: 2 }}>
                                     <Box>
                                       <Typography variant="subtitle2" gutterBottom>Particulars</Typography>
-                                      <TextField
-                                        value={item.particulars || ''}
-                                        onChange={(e) => handleFieldChange(index, 'particulars', e.target.value)}
-                                        size="small"
-                                        fullWidth
-                                        multiline
-                                        minRows={3}
-                                        disabled={isDeleted}
-                                        placeholder="Describe the particulars for this capital outlay item"
-                                      />
+                                      {onChange ? (
+                                        <TextField
+                                          value={item.particulars || ''}
+                                          onChange={(e) => handleFieldChange(index, 'particulars', e.target.value)}
+                                          size="small"
+                                          fullWidth
+                                          multiline
+                                          minRows={3}
+                                          disabled={isDeleted}
+                                          placeholder="Describe the particulars for this capital outlay item"
+                                        />
+                                      ) : (
+                                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', color: 'text.secondary' }}>
+                                          {item.particulars || 'No particulars provided'}
+                                        </Typography>
+                                      )}
                                     </Box>
                                     <Box>
                                       <Typography variant="subtitle2" gutterBottom>Computed Totals</Typography>

@@ -12,7 +12,7 @@ router.get(
 	auth,
 	loadHierarchicalAssignment,
 	budgetRoleVisibilityControl(),
-	myProposalsController.getAllUserProposals
+	myProposalsController.getAllUserBudgetItems
 );
 
 module.exports = router;

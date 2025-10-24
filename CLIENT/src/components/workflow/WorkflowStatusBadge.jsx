@@ -13,7 +13,9 @@ const WorkflowStatusBadge = ({ status, step, assignee, pendingRoles = [], classN
   const statusMap = {
     'DRAFT': { color: 'bg-gray-200 text-gray-800', icon: '📝', label: 'Draft', defaultStep: '1/6' },
     'DIVISION SUBMITTED': { color: 'bg-blue-200 text-blue-800', icon: '📤', label: 'Division Submitted', defaultStep: '2/6' },
-    'FORWARDED TO OFFICER': { color: 'bg-indigo-200 text-indigo-800', icon: '📮', label: 'Forwarded to Officer', defaultStep: '3/6' },
+    'FORWARDED TO APPROVER': { color: 'bg-indigo-200 text-indigo-800', icon: '📮', label: 'Forwarded to Approver', defaultStep: '3/6' },
+    'FORWARDED TO OFFICER': { color: 'bg-indigo-200 text-indigo-800', icon: '📮', label: 'Forwarded to Approver', defaultStep: '3/6' },
+    'FORWARDED TO BUDGET OFFICER': { color: 'bg-cyan-200 text-cyan-800', icon: '📬', label: 'Forwarded to Budget Officer', defaultStep: '5/6' },
     'OFFICER APPROVED': { color: 'bg-green-200 text-green-800', icon: '✅', label: 'Officer Approved', defaultStep: '4/6' },
     'FORWARDED TO MANAGER': { color: 'bg-purple-200 text-purple-800', icon: '🚀', label: 'Forwarded to Manager', defaultStep: '5/6' },
     'RETURNED': { color: 'bg-red-200 text-red-800', icon: '↩️', label: 'Returned', defaultStep: '—' },

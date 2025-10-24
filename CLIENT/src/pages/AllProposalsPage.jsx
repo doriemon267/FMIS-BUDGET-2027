@@ -288,27 +288,118 @@ const AllProposalsPage = () => {
     try {
       setStats(prev => ({ ...prev, loading: true }));
   // Use the same endpoint as the table to get aggregated data
-  const response = await api.get("/api/my-proposals/all", { params: { includeFinalized: includeFinalized || undefined } });
+  const response = await api.get("/api/my-proposals/all", { 
+    params: { 
+      includeFinalized: includeFinalized || undefined,
+      processBy: currentUser?.Username,
+      region: currentUser?.Region
+    } 
+  });
 
-      if (response.data && response.data.data) {
-        const proposals = response.data.data;
+      if (response.data) {
+        // Handle the combined array response from the updated extractDataFromResponse
+        let proposals = [];
 
-        const totalProposals = response.data.total || proposals.length;
+        // If response has separate arrays, combine them (same logic as extractDataFromResponse)
+        if (response.data.personnel || response.data.mooe || response.data.capitalOutlay || response.data.income || response.data.budgetarySupport || response.data.drafts) {
+          const combinedData = [];
 
-        // For aggregated data, sum up the values from each aggregated row
+          // Add all personnel proposals
+          if (Array.isArray(response.data.personnel)) {
+            response.data.personnel.forEach(item => {
+              combinedData.push({
+                ...item,
+                cobExpenditures: 'Personnel Services',
+                _id: item._id,
+                status: item.status || 'Draft'
+              });
+            });
+          }
+
+          // Add all MOOE proposals
+          if (Array.isArray(response.data.mooe)) {
+            response.data.mooe.forEach(item => {
+              combinedData.push({
+                ...item,
+                cobExpenditures: 'MOOE',
+                _id: item._id,
+                status: item.status || 'Draft'
+              });
+            });
+          }
+
+          // Add all Capital Outlay proposals
+          if (Array.isArray(response.data.capitalOutlay)) {
+            response.data.capitalOutlay.forEach(item => {
+              combinedData.push({
+                ...item,
+                cobExpenditures: 'Capital Outlay',
+                _id: item._id,
+                status: item.status || 'Draft'
+              });
+            });
+          }
+
+          // Add all Income proposals
+          if (Array.isArray(response.data.income)) {
+            response.data.income.forEach(item => {
+              combinedData.push({
+                ...item,
+                cobExpenditures: 'Income',
+                _id: item._id,
+                status: item.status || 'Draft'
+              });
+            });
+          }
+
+          // Add all Budgetary Support proposals
+          if (Array.isArray(response.data.budgetarySupport)) {
+            response.data.budgetarySupport.forEach(item => {
+              combinedData.push({
+                ...item,
+                cobExpenditures: 'Budgetary Support',
+                _id: item._id,
+                status: item.status || 'Draft'
+              });
+            });
+          }
+
+          // Add all Draft proposals
+          if (Array.isArray(response.data.drafts)) {
+            response.data.drafts.forEach(item => {
+              combinedData.push({
+                ...item,
+                cobExpenditures: item.cobExpenditures || 'Draft',
+                _id: item._id,
+                status: 'Draft'
+              });
+            });
+          }
+
+          proposals = combinedData;
+        } else if (response.data.data) {
+          // Fallback for other response formats
+          proposals = response.data.data;
+        }
+
+        const totalProposals = proposals.length;
+
+        // Calculate totals from the combined data
         const totalProjectedCorporateIncome = proposals.reduce((sum, proposal) => {
-          // Use the totalIncome field from aggregated data
-          return sum + (proposal.totalIncome || 0);
+          // Sum up income amounts from different fields
+          return sum + (proposal.totalIncome || proposal.amount || 0);
         }, 0);
 
         const totalProjectedSubsidy = proposals.reduce((sum, proposal) => {
-          // Use the totalExpenses field from aggregated data
-          return sum + (proposal.totalExpenses || 0);
+          // Sum up expense amounts from different fields
+          return sum + (proposal.totalExpenses || proposal.totalAmount || proposal.amount || 0);
         }, 0);
 
         const totalProposedBudget = proposals.reduce((sum, proposal) => {
-          // Use the proposedBudget field from aggregated data
-          return sum + (proposal.proposedBudget || 0);
+          // Calculate proposed budget as income - expenses
+          const income = proposal.totalIncome || proposal.amount || 0;
+          const expenses = proposal.totalExpenses || proposal.totalAmount || proposal.amount || 0;
+          return sum + (income - expenses);
         }, 0);
 
         setStats({
@@ -765,7 +856,11 @@ const AllProposalsPage = () => {
             title="All Proposals"
             description="View and manage budget proposals based on your role"
             apiPath="/api/my-proposals/all"
-            apiParams={{ includeFinalized }}
+            apiParams={{ 
+              includeFinalized,
+              processBy: currentUser?.Username,
+              region: currentUser?.Region
+            }}
             groupBy={null} // No grouping - show individual entries
             showTotals={true}
             totalsData={stats}

@@ -169,7 +169,7 @@ const EditableMOOETable = ({ data, onChange }) => {
     target.changeType = hasOriginal ? 'modified' : 'added';
 
     newData[index] = target;
-    onChange(newData);
+    if (onChange) onChange(newData);
   };
 
   const handleDelete = (index) => {
@@ -180,14 +180,14 @@ const EditableMOOETable = ({ data, onChange }) => {
     } else {
       newData.splice(index, 1);
     }
-    onChange(newData);
+    if (onChange) onChange(newData);
   };
 
   const handleRestore = (index) => {
     const newData = [...data];
     const record = newData[index];
     newData[index] = { ...record, changeType: 'unchanged' };
-    onChange(newData);
+    if (onChange) onChange(newData);
   };
 
   const toggleGroup = (groupKey) => {
@@ -274,13 +274,13 @@ const EditableMOOETable = ({ data, onChange }) => {
               <TableCell align="right"><strong>Subsidy</strong></TableCell>
               <TableCell align="right"><strong>Amount</strong></TableCell>
               <TableCell><strong>Status</strong></TableCell>
-              <TableCell align="center"><strong>Actions</strong></TableCell>
+              {onChange && <TableCell align="center"><strong>Actions</strong></TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
             {groupedData.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} align="center">
+                <TableCell colSpan={onChange ? 9 : 8} align="center">
                   <Box sx={{ py: 3, color: 'text.secondary' }}>
                     No MOOE entries available.
                   </Box>
@@ -337,36 +337,48 @@ const EditableMOOETable = ({ data, onChange }) => {
                             </Typography>
                           </TableCell>
                           <TableCell align="right" sx={{ maxWidth: 140 }}>
-                            <TextField
-                              type="text"
-                              value={formatNumber(item.income || 0)}
-                              onChange={(e) => {
-                                const inputValue = e.target.value.replace(/,/g, '');
-                                const numValue = parseFloat(inputValue) || 0;
-                                handleFieldChange(index, 'income', numValue);
-                              }}
-                              size="small"
-                              fullWidth
-                              disabled={changeType === 'deleted'}
-                              inputProps={{ step: 0.01, min: 0 }}
-                              sx={{ '& .MuiInputBase-input': { textAlign: 'right' } }}
-                            />
+                            {onChange ? (
+                              <TextField
+                                type="text"
+                                value={formatNumber(item.income || 0)}
+                                onChange={(e) => {
+                                  const inputValue = e.target.value.replace(/,/g, '');
+                                  const numValue = parseFloat(inputValue) || 0;
+                                  handleFieldChange(index, 'income', numValue);
+                                }}
+                                size="small"
+                                fullWidth
+                                disabled={changeType === 'deleted'}
+                                inputProps={{ step: 0.01, min: 0 }}
+                                sx={{ '& .MuiInputBase-input': { textAlign: 'right' } }}
+                              />
+                            ) : (
+                              <Typography variant="body2" sx={{ textAlign: 'right', fontWeight: 500 }}>
+                                {formatCurrency(item.income || 0)}
+                              </Typography>
+                            )}
                           </TableCell>
                           <TableCell align="right" sx={{ maxWidth: 140 }}>
-                            <TextField
-                              type="text"
-                              value={formatNumber(item.subsidy || 0)}
-                              onChange={(e) => {
-                                const inputValue = e.target.value.replace(/,/g, '');
-                                const numValue = parseFloat(inputValue) || 0;
-                                handleFieldChange(index, 'subsidy', numValue);
-                              }}
-                              size="small"
-                              fullWidth
-                              disabled={changeType === 'deleted'}
-                              inputProps={{ step: 0.01, min: 0 }}
-                              sx={{ '& .MuiInputBase-input': { textAlign: 'right' } }}
-                            />
+                            {onChange ? (
+                              <TextField
+                                type="text"
+                                value={formatNumber(item.subsidy || 0)}
+                                onChange={(e) => {
+                                  const inputValue = e.target.value.replace(/,/g, '');
+                                  const numValue = parseFloat(inputValue) || 0;
+                                  handleFieldChange(index, 'subsidy', numValue);
+                                }}
+                                size="small"
+                                fullWidth
+                                disabled={changeType === 'deleted'}
+                                inputProps={{ step: 0.01, min: 0 }}
+                                sx={{ '& .MuiInputBase-input': { textAlign: 'right' } }}
+                              />
+                            ) : (
+                              <Typography variant="body2" sx={{ textAlign: 'right', fontWeight: 500 }}>
+                                {formatCurrency(item.subsidy || 0)}
+                              </Typography>
+                            )}
                           </TableCell>
                           <TableCell align="right">
                             <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
@@ -379,17 +391,19 @@ const EditableMOOETable = ({ data, onChange }) => {
                             {changeType === 'deleted' && <Chip label="Deleted" size="small" color="error" />}
                             {changeType === 'unchanged' && <Chip label="Unchanged" size="small" />}
                           </TableCell>
-                          <TableCell align="center">
-                            {changeType === 'deleted' ? (
-                              <IconButton size="small" color="primary" onClick={() => handleRestore(index)}>
-                                <RestoreIcon fontSize="small" />
-                              </IconButton>
-                            ) : (
-                              <IconButton size="small" color="error" onClick={() => handleDelete(index)}>
-                                <DeleteIcon fontSize="small" />
-                              </IconButton>
-                            )}
-                          </TableCell>
+                          {onChange && (
+                            <TableCell align="center">
+                              {changeType === 'deleted' ? (
+                                <IconButton size="small" color="primary" onClick={() => handleRestore(index)}>
+                                  <RestoreIcon fontSize="small" />
+                                </IconButton>
+                              ) : (
+                                <IconButton size="small" color="error" onClick={() => handleDelete(index)}>
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              )}
+                            </TableCell>
+                          )}
                         </TableRow>
                       );
                     })}

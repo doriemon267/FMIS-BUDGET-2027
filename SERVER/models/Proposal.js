@@ -41,13 +41,15 @@ const proposalSchema = new mongoose.Schema({
       "Draft",                          // ANALYST creates
       "Forwarded to Reviewer",          // PREPARER submits to REVIEWER
       "Division Submitted",             // ANALYST submits
-      "Forwarded to Officer",           // COORDINATOR approves and forwards to Officer
+      "Forwarded to Approver",           // COORDINATOR approves and forwards to APPROVER
+      "Forwarded to Budget Officer",    // BUDGET_ANALYST submits to BUDGET_OFFICER
       "Forwarded to Analyst",           // APPROVER approves and forwards to Analyst
       "Officer Approved",               // OFFICER approves
       "Forwarded to Manager",           // OFFICER submits to Manager
       "Finalized",                      // MANAGER approves
       "Returned",                       // Rejected at any level
       // Legacy statuses (for backward compatibility during migration)
+      "Forwarded to Officer",           // Legacy: maps to "Forwarded to Approver"
       "Under Review by Coordinator",
       "Coordinator Approved",
       "Under Review by Officer",

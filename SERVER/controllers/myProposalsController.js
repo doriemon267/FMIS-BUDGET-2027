@@ -1,4 +1,5 @@
 const Proposal = require('../models/Proposal');
+const { consolidateAllDrafts } = require('../utils/autoConsolidateDrafts');
 
 /**
  * Get proposals visible to the current user, honoring:
@@ -78,93 +79,82 @@ exports.getAllUserProposals = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to fetch proposals', error: error.message });
   }
 };
-const Personnel = require('../models/personnelServices');
-const MOOE = require('../models/mooeProposals');
-const CapitalOutlay = require('../models/CapitalOutlay');
-const Income = require('../models/Income');
-const BudgetarySupport = require('../models/BudgetarySupport');
+
+/**
+ * Get consolidated proposals visible to the current user.
+ * Returns aggregated Proposal records (not separate budget items).
+ * 
+ * Flow:
+ * 1. Auto-consolidate Draft budget items into Proposal records
+ * 2. Query db.proposals with role-based filters
+ * 3. Return consolidated proposals with totals (totalExpenses, projectedSubsidy, proposedBudget, etc.)
+ */
 exports.getAllUserBudgetItems = async (req, res) => {
   try {
-    // Get the user's name and region from the query parameters
-    const { processBy, region } = req.query;
-    if (!processBy) {
-      return res.status(400).json({ message: "processBy parameter is required" });
+    // Get role-based visibility filter from middleware (PREPARER, BUDGET_ANALYST, etc.)
+    const roleFilter = req.budgetRoleVisibilityFilter || {};
+    const orgFilter = req.hierarchicalFilters || {};
+
+    // Build query - prioritize roleFilter from middleware
+    // The roleFilter already knows what user can see based on their role
+    const andFilters = [];
+    
+    // 1. Apply role-based visibility (this is the main filter)
+    if (roleFilter && Object.keys(roleFilter).length) {
+      andFilters.push(roleFilter);
     }
-    // CRITICAL: Region is REQUIRED for all proposal queries to prevent data leakage
-    if (!region) {
-      console.error("No region specified - cannot show proposals without region filter");
-      return res.status(400).json({ 
-        message: "Region filter is required to view proposals",
-        error: "REGION_REQUIRED"
-      });
+    
+    // 2. Apply organizational scope filter if present
+    if (orgFilter && Object.keys(orgFilter).length) {
+      andFilters.push(orgFilter);
     }
-    // Create query that ALWAYS includes region filter
-    const query = { 
-      processBy,
-      region  // ALWAYS enforce region filter
-    };
-    // Create a separate query specifically for draft items
-    // This is a double-check to ensure drafts are strictly filtered by region
-    const draftQuery = {
-      processBy,
-      region,
-      status: "Draft"
-    };
-    // Fetch all data with separate queries for draft and non-draft items
-    // This ensures drafts are strictly filtered by region
-    const [
-      personnelDrafts, personnelNonDrafts,
-      mooeDrafts, mooeNonDrafts,
-      capitalOutlayDrafts, capitalOutlayNonDrafts,
-      incomeDrafts, incomeNonDrafts,
-      budgetarySupportDrafts, budgetarySupportNonDrafts
-    ] = await Promise.all([
-      // Draft items with strict region filtering
-      Personnel.find({ ...draftQuery }).sort({ updatedAt: -1 }),
-      Personnel.find({ ...query, status: { $ne: "Draft" } }).sort({ updatedAt: -1 }),
-      MOOE.find({ ...draftQuery }).sort({ updatedAt: -1 }),
-      MOOE.find({ ...query, status: { $ne: "Draft" } }).sort({ updatedAt: -1 }),
-      CapitalOutlay.find({ ...draftQuery }).sort({ updatedAt: -1 }),
-      CapitalOutlay.find({ ...query, status: { $ne: "Draft" } }).sort({ updatedAt: -1 }),
-      Income.find({ ...draftQuery }).sort({ updatedAt: -1 }),
-      Income.find({ ...query, status: { $ne: "Draft" } }).sort({ updatedAt: -1 }),
-      BudgetarySupport.find({ ...draftQuery }).sort({ updatedAt: -1 }),
-      BudgetarySupport.find({ ...query, status: { $ne: "Draft" } }).sort({ updatedAt: -1 })
-    ]);
-    // Combine draft and non-draft items
-    const personnel = [...personnelDrafts, ...personnelNonDrafts];
-    const mooe = [...mooeDrafts, ...mooeNonDrafts];
-    const capitalOutlay = [...capitalOutlayDrafts, ...capitalOutlayNonDrafts];
-    const income = [...incomeDrafts, ...incomeNonDrafts];
-    const budgetarySupport = [...budgetarySupportDrafts, ...budgetarySupportNonDrafts];
+    
+    // NOTE: region and processBy query params are IGNORED
+    // The middleware (budgetRoleVisibilityControl) already handles role-based filtering
+    // These should not override the middleware's authorization decisions
+
+    const query = andFilters.length ? { $and: andFilters } : {};
+    
+    // Debug: log what filters are being applied
+    if (String(req.query._debug) === 'true') {
+      console.log('📋 getAllUserBudgetItems Query (Consolidated):');
+      console.log('- roleFilter:', JSON.stringify(roleFilter));
+      console.log('- orgFilter:', JSON.stringify(orgFilter));
+      console.log('- (region & processBy query params are IGNORED - middleware handles auth)');
+      console.log('- final query:', JSON.stringify(query));
+    }
+    
+    // Step 1: Auto-consolidate any Draft budget items into Proposal records
+    try {
+      await consolidateAllDrafts();
+    } catch (error) {
+      console.warn('⚠️ Warning during consolidation:', error.message);
+      // Don't fail the request if consolidation has issues
+    }
+
+    // Step 2: Fetch consolidated proposals from db.proposals
+    const proposals = await Proposal.find(query)
+      .sort({ updatedAt: -1 })
+      .lean();
+
     // Log the results
-    // // Log the results with separate counts for draft items
-    // Double-check that all draft items have the correct region
-    const allDrafts = [
-      ...personnelDrafts, 
-      ...mooeDrafts, 
-      ...capitalOutlayDrafts, 
-      ...incomeDrafts, 
-      ...budgetarySupportDrafts
-    ];
-    const wrongRegionDrafts = allDrafts.filter(item => item.region !== region);
-    if (wrongRegionDrafts.length > 0) {
-      console.error(`WARNING: Found ${wrongRegionDrafts.length} draft items with incorrect region!`);
-      console.error(`These items should have region ${region} but have different regions:`, 
-        wrongRegionDrafts.map(item => ({ id: item._id, region: item.region }))
-      );
-    } else {
-      }
+    console.log(`📊 getAllUserBudgetItems results (Consolidated):`);
+    console.log(`- Total consolidated proposals: ${proposals.length}`);
+
     res.status(200).json({
-      personnel,
-      mooe,
-      capitalOutlay,
-      income,
-      budgetarySupport,
-      filters: { region, processBy } // Include the filters used in the response
+      success: true,
+      data: proposals,
+      total: proposals.length,
+      summary: {
+        totalProposals: proposals.length,
+        totalExpenses: proposals.reduce((sum, p) => sum + (p.totalExpenses || 0), 0),
+        totalIncome: proposals.reduce((sum, p) => sum + (p.totalIncome || 0), 0),
+        projectedSubsidy: proposals.reduce((sum, p) => sum + (p.projectedSubsidy || 0), 0),
+        proposedBudget: proposals.reduce((sum, p) => sum + (p.proposedBudget || 0), 0)
+      }
     });
   } catch (error) {
-    console.error("Error fetching all user proposals:", error);
-    res.status(500).json({ message: "Failed to fetch proposals" });
+    console.error("❌ Error fetching consolidated proposals:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch proposals" });
   }
 };

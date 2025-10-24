@@ -107,7 +107,89 @@ const ProposalCustomTable = forwardRef(({
 
   // Helper function to extract data from various response formats
   const extractDataFromResponse = (responseData) => {
-    // Try to find an array in the response
+    // Special handling for /api/my-proposals/all endpoint which returns separate arrays
+    if (responseData.personnel || responseData.mooe || responseData.capitalOutlay || responseData.income || responseData.budgetarySupport || responseData.drafts) {
+      const combinedData = [];
+
+      // Add all personnel proposals
+      if (Array.isArray(responseData.personnel)) {
+        responseData.personnel.forEach(item => {
+          combinedData.push({
+            ...item,
+            cobExpenditures: 'Personnel Services',
+            _id: item._id,
+            status: item.status || 'Draft'
+          });
+        });
+      }
+
+      // Add all MOOE proposals
+      if (Array.isArray(responseData.mooe)) {
+        responseData.mooe.forEach(item => {
+          combinedData.push({
+            ...item,
+            cobExpenditures: 'MOOE',
+            _id: item._id,
+            status: item.status || 'Draft'
+          });
+        });
+      }
+
+      // Add all Capital Outlay proposals
+      if (Array.isArray(responseData.capitalOutlay)) {
+        responseData.capitalOutlay.forEach(item => {
+          combinedData.push({
+            ...item,
+            cobExpenditures: 'Capital Outlay',
+            _id: item._id,
+            status: item.status || 'Draft'
+          });
+        });
+      }
+
+      // Add all Income proposals
+      if (Array.isArray(responseData.income)) {
+        responseData.income.forEach(item => {
+          combinedData.push({
+            ...item,
+            cobExpenditures: 'Income',
+            _id: item._id,
+            status: item.status || 'Draft'
+          });
+        });
+      }
+
+      // Add all Budgetary Support proposals
+      if (Array.isArray(responseData.budgetarySupport)) {
+        responseData.budgetarySupport.forEach(item => {
+          combinedData.push({
+            ...item,
+            cobExpenditures: 'Budgetary Support',
+            _id: item._id,
+            status: item.status || 'Draft'
+          });
+        });
+      }
+
+      // Add all Draft proposals (these are the actual draft records)
+      if (Array.isArray(responseData.drafts)) {
+        responseData.drafts.forEach(item => {
+          combinedData.push({
+            ...item,
+            cobExpenditures: item.cobExpenditures || 'Draft',
+            _id: item._id,
+            status: 'Draft' // Ensure drafts show as Draft status
+          });
+        });
+      }
+
+      return {
+        data: combinedData,
+        count: combinedData.length
+      };
+    }
+
+    // Fallback: Try to find an array in the response
     for (const key in responseData) {
       if (Array.isArray(responseData[key])) {
         return {
@@ -116,7 +198,7 @@ const ProposalCustomTable = forwardRef(({
         };
       }
     }
-    
+
     // If no array found, return empty data
     return { data: [], count: 0 };
   };

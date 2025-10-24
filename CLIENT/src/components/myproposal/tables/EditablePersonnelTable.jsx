@@ -181,7 +181,7 @@ const EditablePersonnelTable = ({ data = [], onChange }) => {
     }
 
     newData[index] = updated;
-    onChange(newData);
+    if (onChange) onChange(newData);
   }, [data, onChange]);
 
   const handleDelete = (index) => {
@@ -191,13 +191,13 @@ const EditablePersonnelTable = ({ data = [], onChange }) => {
     } else {
       newData.splice(index, 1);
     }
-    onChange(newData);
+    if (onChange) onChange(newData);
   };
 
   const handleRestore = (index) => {
     const newData = [...data];
     newData[index] = { ...newData[index], changeType: 'unchanged' };
-    onChange(newData);
+    if (onChange) onChange(newData);
   };
 
   const handleAddRow = useCallback(() => {
@@ -232,7 +232,7 @@ const EditablePersonnelTable = ({ data = [], onChange }) => {
       Total: 0,
       changeType: 'added'
     };
-    onChange([...data, newRow]);
+    if (onChange) onChange([...data, newRow]);
   }, [data, onChange]);
 
   const decimalFormatter = useMemo(() => new Intl.NumberFormat('en-PH', {
@@ -258,9 +258,11 @@ const EditablePersonnelTable = ({ data = [], onChange }) => {
           <Chip label={`Active Records: ${totals.count}`} variant="outlined" />
           <Chip label={`Total: ${formatCurrency(totals.totalAmount)}`} color="primary" />
         </Box>
-        <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleAddRow}>
-          Add Personnel
-        </Button>
+        {onChange && (
+          <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={handleAddRow}>
+            Add Personnel
+          </Button>
+        )}
       </Box>
 
       <TableContainer component={Paper} variant="outlined">
@@ -275,15 +277,15 @@ const EditablePersonnelTable = ({ data = [], onChange }) => {
               <TableCell align="right"><strong>Annual Salary</strong></TableCell>
               <TableCell align="right"><strong>Total</strong></TableCell>
               <TableCell><strong>Change Status</strong></TableCell>
-              <TableCell align="center"><strong>Actions</strong></TableCell>
+              {onChange && <TableCell align="center"><strong>Actions</strong></TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
             {data.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} align="center">
+                <TableCell colSpan={onChange ? 9 : 8} align="center">
                   <Box sx={{ py: 3, color: 'text.secondary' }}>
-                    No personnel entries. Click "Add Personnel" to create one.
+                    No personnel entries{onChange ? '. Click "Add Personnel" to create one.' : '.'}
                   </Box>
                 </TableCell>
               </TableRow>
@@ -294,18 +296,27 @@ const EditablePersonnelTable = ({ data = [], onChange }) => {
                 const isExpanded = expandedRows[rowKey] ?? false;
                 const isDeleted = item.changeType === 'deleted';
 
-                const renderNumberField = (field) => (
-                  <TextField
-                    value={item[field] ?? 0}
-                    onChange={(e) => handleFieldChange(actualIndex, field, e.target.value)}
-                    size="small"
-                    fullWidth
-                    disabled={isDeleted}
-                    InputProps={{ inputComponent: NumericFormatInput }}
-                    inputProps={{ name: field }}
-                    sx={{ '& .MuiInputBase-input': { textAlign: 'right' } }}
-                  />
-                );
+                const renderNumberField = (field) => {
+                  if (!onChange) {
+                    return (
+                      <Typography variant="body2" sx={{ textAlign: 'right', fontWeight: 500 }}>
+                        {formatCurrency(item[field] ?? 0)}
+                      </Typography>
+                    );
+                  }
+                  return (
+                    <TextField
+                      value={item[field] ?? 0}
+                      onChange={(e) => handleFieldChange(actualIndex, field, e.target.value)}
+                      size="small"
+                      fullWidth
+                      disabled={isDeleted}
+                      InputProps={{ inputComponent: NumericFormatInput }}
+                      inputProps={{ name: field }}
+                      sx={{ '& .MuiInputBase-input': { textAlign: 'right' } }}
+                    />
+                  );
+                };
 
                 return (
                   <React.Fragment key={rowKey}>
@@ -316,31 +327,49 @@ const EditablePersonnelTable = ({ data = [], onChange }) => {
                         </IconButton>
                       </TableCell>
                       <TableCell>
-                        <TextField
-                          value={item.employeeFullName || ''}
-                          onChange={(e) => handleFieldChange(actualIndex, 'employeeFullName', e.target.value)}
-                          size="small"
-                          fullWidth
-                          disabled={isDeleted}
-                        />
+                        {onChange ? (
+                          <TextField
+                            value={item.employeeFullName || ''}
+                            onChange={(e) => handleFieldChange(actualIndex, 'employeeFullName', e.target.value)}
+                            size="small"
+                            fullWidth
+                            disabled={isDeleted}
+                          />
+                        ) : (
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            {item.employeeFullName || ''}
+                          </Typography>
+                        )}
                       </TableCell>
                       <TableCell>
-                        <TextField
-                          value={item.positionTitle || ''}
-                          onChange={(e) => handleFieldChange(actualIndex, 'positionTitle', e.target.value)}
-                          size="small"
-                          fullWidth
-                          disabled={isDeleted}
-                        />
+                        {onChange ? (
+                          <TextField
+                            value={item.positionTitle || ''}
+                            onChange={(e) => handleFieldChange(actualIndex, 'positionTitle', e.target.value)}
+                            size="small"
+                            fullWidth
+                            disabled={isDeleted}
+                          />
+                        ) : (
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            {item.positionTitle || ''}
+                          </Typography>
+                        )}
                       </TableCell>
                       <TableCell>
-                        <TextField
-                          value={item.statusOfAppointment || ''}
-                          onChange={(e) => handleFieldChange(actualIndex, 'statusOfAppointment', e.target.value)}
-                          size="small"
-                          fullWidth
-                          disabled={isDeleted}
-                        />
+                        {onChange ? (
+                          <TextField
+                            value={item.statusOfAppointment || ''}
+                            onChange={(e) => handleFieldChange(actualIndex, 'statusOfAppointment', e.target.value)}
+                            size="small"
+                            fullWidth
+                            disabled={isDeleted}
+                          />
+                        ) : (
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            {item.statusOfAppointment || ''}
+                          </Typography>
+                        )}
                       </TableCell>
                       <TableCell align="right">
                         {renderNumberField('monthlySalary')}
@@ -359,20 +388,22 @@ const EditablePersonnelTable = ({ data = [], onChange }) => {
                         {item.changeType === 'deleted' && <Chip label="Deleted" size="small" color="error" />}
                         {(!item.changeType || item.changeType === 'unchanged') && <Chip label="Unchanged" size="small" />}
                       </TableCell>
-                      <TableCell align="center">
-                        {item.changeType === 'deleted' ? (
-                          <IconButton size="small" color="primary" onClick={() => handleRestore(actualIndex)}>
-                            <RestoreIcon fontSize="small" />
-                          </IconButton>
-                        ) : (
-                          <IconButton size="small" color="error" onClick={() => handleDelete(actualIndex)}>
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        )}
-                      </TableCell>
+                      {onChange && (
+                        <TableCell align="center">
+                          {item.changeType === 'deleted' ? (
+                            <IconButton size="small" color="primary" onClick={() => handleRestore(actualIndex)}>
+                              <RestoreIcon fontSize="small" />
+                            </IconButton>
+                          ) : (
+                            <IconButton size="small" color="error" onClick={() => handleDelete(actualIndex)}>
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          )}
+                        </TableCell>
+                      )}
                     </TableRow>
                     <TableRow sx={getRowStyle(item)}>
-                      <TableCell colSpan={9} sx={{ py: 0 }}>
+                      <TableCell colSpan={onChange ? 9 : 8} sx={{ py: 0 }}>
                         <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                           <Box sx={{ p: 2, backgroundColor: '#f9fafb' }}>
                             <Typography variant="subtitle2" gutterBottom>
