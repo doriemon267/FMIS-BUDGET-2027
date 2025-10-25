@@ -1807,17 +1807,41 @@ exports.getComparisonData = async (req, res) => {
     // Helper function to compare and highlight changes
     const compareData = (original = [], edited = []) => {
       const comparison = [];
+      const originalMap = new Map();
       const processedOriginalIds = new Set();
+
+      original.forEach(item => {
+        if (item?._id) {
+          originalMap.set(item._id.toString(), item);
+        }
+      });
 
       const sanitizeKey = (key) => (
         ['_id', 'originalId', 'changeType', 'originalValues', '__v', 'createdAt', 'updatedAt'].includes(key)
       );
 
       edited.forEach(editedItem => {
-        const changeType = editedItem?.changeType || 'modified';
-        let originalItem = editedItem?.originalValues || null;
+        const changeType = editedItem?.changeType || (editedItem?.originalId ? 'modified' : 'added');
+        let matchKey = null;
+        let originalItem = null;
 
-        if (changeType === 'added') {
+        if (editedItem?.originalId) {
+          matchKey = editedItem.originalId.toString();
+          originalItem = originalMap.get(matchKey) || null;
+        }
+
+        if (!originalItem && editedItem?._id) {
+          const fallbackKey = editedItem._id.toString();
+          if (originalMap.has(fallbackKey)) {
+            matchKey = fallbackKey;
+            originalItem = originalMap.get(fallbackKey) || null;
+            if (!editedItem.originalId) {
+              editedItem.originalId = fallbackKey;
+            }
+          }
+        }
+
+        if ((changeType === 'added' && !originalItem) || (!originalItem && !matchKey)) {
           comparison.push({
             type: 'added',
             edited: editedItem,
@@ -1826,25 +1850,21 @@ exports.getComparisonData = async (req, res) => {
           return;
         }
 
-        if (changeType === 'deleted') {
+        if (changeType === 'deleted' && originalItem) {
           comparison.push({
             type: 'deleted',
             edited: null,
             original: originalItem
           });
-          if (editedItem?.originalId) {
-            processedOriginalIds.add(editedItem.originalId.toString());
+          if (matchKey) {
+            processedOriginalIds.add(matchKey);
+            originalMap.delete(matchKey);
           }
           return;
         }
 
-        // For modified items
         if (!originalItem) {
-          // Fallback to DB data
-          originalItem = original.find(item => item?._id?.toString() === editedItem?.originalId?.toString()) || null;
-        }
-
-        if (!originalItem) {
+          // If we couldn't match the original but changeType isn't added/deleted, treat as added fallback
           comparison.push({
             type: 'added',
             edited: editedItem,
@@ -1853,7 +1873,11 @@ exports.getComparisonData = async (req, res) => {
           return;
         }
 
-        // Compare originalValues with edited values
+        // Prepare original values for comparison if not provided
+        if (!editedItem.originalValues) {
+          editedItem.originalValues = { ...originalItem };
+        }
+
         const changes = {};
         const allKeys = new Set([
           ...Object.keys(originalItem || {}),
@@ -1876,7 +1900,7 @@ exports.getComparisonData = async (req, res) => {
         });
 
         const hasChanges = Object.keys(changes).length > 0;
-        const entryType = hasChanges ? 'modified' : 'unchanged';
+        const entryType = changeType === 'unchanged' || !hasChanges ? 'unchanged' : 'modified';
 
         comparison.push({
           type: entryType,
@@ -1885,20 +1909,20 @@ exports.getComparisonData = async (req, res) => {
           changes: hasChanges ? changes : undefined
         });
 
-        if (editedItem?.originalId) {
-          processedOriginalIds.add(editedItem.originalId.toString());
+        if (matchKey) {
+          processedOriginalIds.add(matchKey);
+          originalMap.delete(matchKey);
         }
       });
 
-      // Unchanged items from DB that were not processed
-      original.forEach(item => {
-        if (item?._id && !processedOriginalIds.has(item._id.toString())) {
-          comparison.push({
-            type: 'unchanged',
-            edited: item, // Since DB is updated, edited = original
-            original: item
-          });
-        }
+      // Remaining originals that weren't explicitly processed should be marked as unchanged
+      originalMap.forEach((item, id) => {
+        if (processedOriginalIds.has(id)) return;
+        comparison.push({
+          type: 'unchanged',
+          edited: null,
+          original: item
+        });
       });
 
       return comparison;
