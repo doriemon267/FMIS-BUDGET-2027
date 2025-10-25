@@ -42,7 +42,7 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
       label: 'REVIEWER',
       role: 'Reviews',
       shortLabel: 'Reviewer',
-      statuses: ['Division Submitted'],
+      statuses: ['Division Submitted', 'Forwarded to Reviewer'],
       icon: <GroupIcon />
     },
     {
@@ -152,6 +152,7 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
       case 'Draft':
         return 'default';
       case 'Division Submitted':
+      case 'Forwarded to Reviewer':
       case 'Forwarded to Officer':
       case 'Officer Approved':
       case 'Forwarded to Manager':

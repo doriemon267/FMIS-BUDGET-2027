@@ -2062,6 +2062,8 @@ const CustomPage = ({
           return "default";
         case "Division Submitted":
           return "primary";
+        case "Forwarded to Reviewer":
+          return "primary";
         case "Forwarded to Officer":
           return "info";
         case "Officer Approved":

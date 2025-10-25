@@ -121,16 +121,27 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     return normalizedWorkflowRoles.some((role) => role === 'divisionreviewer');
   }, [userInfo, normalizedWorkflowRoles]);
 
-  // PREPARER: Division creators (divisioncreator) OR Office creators (officecreator)
-  // - divisioncreator = Responsibility Center/Division Level → submits to APPROVER
-  // - officecreator = Office Level → submits DIRECTLY to BUDGET OFFICER (skip approver)
+  // PREPARER: Check for PREPARER role in user roles or workflow roles
   const isPreparer = useMemo(() => {
     if (!userInfo || isManagerLevel) return false;
-    // Check for divisioncreator OR officecreator workflow roles
-    return normalizedWorkflowRoles.some((role) => 
+    
+    // Check user roles for PREPARER (matches WorkflowActions logic)
+    const allRoles = [
+      ...(userInfo?.roles || []),
+      ...(userInfo?.Roles || []),
+      ...(userInfo?.userRoles || []),
+      ...(userInfo?.workflowRoles || [])
+    ].map(role => String(role).toUpperCase());
+    
+    const hasPreparerRole = allRoles.includes('PREPARER');
+    
+    // Also check for workflow roles as fallback
+    const hasWorkflowRole = normalizedWorkflowRoles.some((role) => 
       role === 'divisioncreator' || 
       role === 'officecreator'
     );
+    
+    return hasPreparerRole || hasWorkflowRole;
   }, [userInfo, isManagerLevel, normalizedWorkflowRoles]);
 
   // Check if BUDGET_PLANNING_ANALYST is Office-level (officecreator) - they skip approver
@@ -977,7 +988,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
             )}
 
             {/* BUDGET_PLANNING_ANALYST comparison view - BUDGET_PLANNING_ANALYST (workflow role) or BUDGET_PLANNING_ANALYST (user role) can view comparison when available (only when they CANNOT edit) */}
-            {!isReadOnlyMode && (isPreparer || isBudgetPlanningAnalystRole) && comparisonData && !preparerCanEditNow && (
+            {!isReadOnlyMode && isBudgetPlanningAnalystRole && comparisonData && !preparerCanEditNow && (
               <>
                 <Alert severity="info" sx={{ mb: 2 }}>
                   <Typography variant="body2">
@@ -990,6 +1001,16 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                   proposal={proposal}
                 />
               </>
+            )}
+
+            {/* PREPARER view after submission - show status message instead of comparison */}
+            {!isReadOnlyMode && isPreparer && !preparerCanEditNow && (
+              <Alert severity="success" sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                  <strong>Proposal Submitted:</strong> Your proposal has been successfully submitted for review.
+                  You will be notified when there are updates on its status.
+                </Typography>
+              </Alert>
             )}
 
             {/* APPROVER comparison view when NOT in edit mode (APPROVER can only view when status is NOT Division Submitted) */}

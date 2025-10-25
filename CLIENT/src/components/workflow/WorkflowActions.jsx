@@ -313,17 +313,10 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           requiresComment: true
         });
 
-        // Optional escalation path if organization allows analyst direct submission
-  if (isBudgetReviewer) {
-          actions.push({
-            label: 'Submit to Manager (Direct)',
-            action: 'submit-direct-to-manager',
-            color: 'bg-purple-500 hover:bg-purple-600',
-            icon: '⚡',
-            description: 'Submit proposal directly to Budget Manager (bypasses Officer review)',
-            requiresComment: true
-          });
-        }
+        // ❌ FIXED: Removed escalation bypass for PREPARER role
+        // PREPARER users should ONLY submit to REVIEWER (next workflow step)
+        // They must follow the standard workflow: PREPARER → REVIEWER → APPROVER → ...
+        // If user has BUDGET_REVIEWER role too, they handle that at the REVIEWER level, not PREPARER level
       }
     }
 

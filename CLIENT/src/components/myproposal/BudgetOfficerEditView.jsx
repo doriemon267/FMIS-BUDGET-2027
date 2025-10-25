@@ -50,6 +50,12 @@ const BudgetOfficerEditView = ({
           message: 'This will send your analyzed proposal to the Budget Officer for approval. You will not be able to edit again until it is returned.',
           confirmLabel: 'Submit to Budget Officer'
         };
+      case 'preparer':
+        return {
+          title: 'Submit to Reviewer',
+          message: 'This will submit your proposal to the Reviewer for approval. You will not be able to edit again until it is returned.',
+          confirmLabel: 'Submit to Reviewer'
+        };
       case 'approver':
         return {
           title: 'Approve and Forward to Preparer',
@@ -510,6 +516,7 @@ const BudgetOfficerEditView = ({
             {submitting ? 'Submitting...' : 
              !isFormValid ? `❌ Complete all modules to submit` :
              variant === 'analyst' ? 'Submit to Budget Officer' :
+             variant === 'preparer' ? 'Submit to Reviewer' :
              variant === 'approver' ? 'Approve and Forward to Preparer' :
              variant === 'reviewer' ? 'Submit to Approver' :
              'Submit to Overall Budget Approver'}
