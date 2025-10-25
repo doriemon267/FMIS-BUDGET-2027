@@ -58,9 +58,9 @@ const BudgetOfficerEditView = ({
         };
       case 'approver':
         return {
-          title: 'Approve and Forward to Preparer',
-          message: 'This will approve the proposal and forward it to the Preparer for further processing.',
-          confirmLabel: 'Approve and Forward'
+          title: 'Submit to Budget Planning Analyst',
+          message: 'This will submit the proposal to the Budget Planning Analyst for review and analysis.',
+          confirmLabel: 'Submit to Budget Planning Analyst'
         };
       case 'officer':
         return {
@@ -379,6 +379,7 @@ const BudgetOfficerEditView = ({
           {variant === 'manager' ? ' After reviewing your changes, use Approve in the dialog footer to proceed.' : 
            variant === 'reviewer' ? ' Changes will be tracked and sent for further review after submission.' :
            variant === 'analyst' ? ' Make necessary updates and submit to budget officer for approval.' :
+           variant === 'approver' ? ' Review and submit to Budget Planning Analyst for analysis.' :
            ' Changes will be tracked and sent to Preparers for review after approval.'}
         </Typography>
       </Alert>}
@@ -517,7 +518,7 @@ const BudgetOfficerEditView = ({
              !isFormValid ? `❌ Complete all modules to submit` :
              variant === 'analyst' ? 'Submit to Budget Officer' :
              variant === 'preparer' ? 'Submit to Reviewer' :
-             variant === 'approver' ? 'Approve and Forward to Preparer' :
+             variant === 'approver' ? 'Submit to Budget Planning Analyst' :
              variant === 'reviewer' ? 'Submit to Approver' :
              'Submit to Overall Budget Approver'}
           </Button>
