@@ -78,9 +78,11 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     const collected = [];
     if (Array.isArray(userInfo?.roles)) collected.push(...userInfo.roles);
     if (Array.isArray(userInfo?.Roles)) collected.push(...userInfo.Roles);
+    if (Array.isArray(userInfo?.userRoles)) collected.push(...userInfo.userRoles);
     if (Array.isArray(userInfo?.roles)) collected.push(...userInfo.roles);
     if (userInfo?.role) collected.push(userInfo.role);
     if (userInfo?.primaryRole) collected.push(userInfo.primaryRole);
+    if (userInfo?.userRole) collected.push(userInfo.userRole);
     return collected.map((role) => String(role || '').toUpperCase());
   }, [userInfo]);
 
@@ -107,11 +109,11 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     return status === 'Forwarded to Manager' || status === 'Officer Approved';
   }, [isManagerLevel, normalizedPrimaryRoles, displayedProposal?.status, proposal?.status]);
 
-  // APPROVER: Division approvers (divisionapprover) or users with APPROVER role
+  // APPROVER: Division approvers (divisionapprover), Office approvers (officeapprover), or users with APPROVER role
   const isDivisionApprover = useMemo(() => {
     if (!userInfo) return false;
-    // Check for 'divisionapprover' workflow role OR 'APPROVER' primary role
-    return normalizedWorkflowRoles.some((role) => role === 'divisionapprover') ||
+    // Check for 'divisionapprover' or 'officeapprover' workflow role OR 'APPROVER' primary role
+    return normalizedWorkflowRoles.some((role) => role === 'divisionapprover' || role === 'officeapprover') ||
            normalizedPrimaryRoles.some((role) => role === 'APPROVER');
   }, [userInfo, normalizedWorkflowRoles, normalizedPrimaryRoles]);
 
