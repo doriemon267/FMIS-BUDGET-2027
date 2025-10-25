@@ -35,16 +35,15 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
         return next();
       }
 
-      // Check if user has budget role or workflow role - these use budgetRoleAccessControl middleware instead
+      // Check if user has budget role or 6-step workflow role - these use budgetRoleAccessControl middleware instead
       const hasBudgetRole = userRoles && (
         userRoles.includes('BUDGET_ADMIN') ||
-        userRoles.includes('BUDGET_MANAGER') ||
-        userRoles.includes('BUDGET_OFFICER') ||
-        userRoles.includes('BUDGET_ANALYST') ||
         // 6-step workflow roles
         userRoles.includes('PREPARER') ||
         userRoles.includes('REVIEWER') ||
         userRoles.includes('APPROVER') ||
+        userRoles.includes('BUDGET_ANALYST') ||
+        userRoles.includes('BUDGET_OFFICER') ||
         userRoles.includes('OVERALL_BUDGET_APPROVER')
       );
       
@@ -875,7 +874,7 @@ const validateHierarchicalAccess = async (req, assignment, isNewStructure = fals
  * Draft → Division Submitted → Forwarded to Officer → Officer Approved → Forwarded to Manager → Finalized
  */
 const submissionWorkflowTransitions = {
-  // Step 1→2: Analyst submits to Coordinator (Draft → Division Submitted)
+  // Step 1→2: Analyst submits to Reviewer (Draft → Division Submitted)
   responsibilityCenterSubmitToOffice: async (req, res) => {
     try {
       const { ids = [], entity = 'personnel', submissionNote } = req.body;
@@ -1067,7 +1066,7 @@ const submissionWorkflowTransitions = {
     }
   },
 
-  // Step 2→3: Coordinator approves responsibility center submission (Responsibility Center Submitted → Forwarded to Officer)
+  // Step 2→3: Reviewer approves responsibility center submission (Responsibility Center Submitted → Forwarded to Officer)
   officeVerifySubmission: async (req, res) => {
     try {
       const { ids = [], entity = 'personnel', verificationNote } = req.body;
@@ -1123,7 +1122,7 @@ const submissionWorkflowTransitions = {
           },
           $push: {
             workflowHistory: {
-              action: 'COORDINATOR_APPROVE',
+              action: 'REVIEWER_APPROVE',
               toStatus: 'Forwarded to Officer',
               byUserId: userId,
               byName: (req.user?.FirstName && req.user?.LastName) ? `${req.user.FirstName} ${req.user.LastName}` : (req.user?.name || req.user?.username || 'system'),

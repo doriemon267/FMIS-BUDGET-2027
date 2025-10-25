@@ -1,7 +1,7 @@
 /**
  * Fix User Roles - Correct Assignment
  * 
- * Joshua Demafelez (345220) - BUDGET ANALYST - divisionCreator ✅
+ * Joshua Demafelez (345220) - PREPARER - divisionCreator ✅
  * Andrie Barrameda (751754) - BUDGET OFFICER - officeverifier, officeConsolidator
  * Nelson Eloso (416461) - BUDGET COORDINATOR - divisionapprover
  * Reymund Edra (909549) - BUDGET MANAGER - FULL access (keep as is)
@@ -19,8 +19,8 @@ async function fixUserRoles() {
     await mongoose.connect(MONGODB_URI);
     console.log('✅ Connected to MongoDB\n');
 
-    // Fix Joshua Demafelez - BUDGET ANALYST
-    console.log('👤 Fixing Joshua Demafelez (BUDGET ANALYST)...');
+    // Fix Joshua Demafelez - PREPARER
+    console.log('👤 Fixing Joshua Demafelez (PREPARER)...');
     const joshua = await HierarchicalUserAssignment.findOne({ 
       userId: '345220', 
       isActive: true 
@@ -32,7 +32,7 @@ async function fixUserRoles() {
       await joshua.save();
       console.log(`   Old roles: ${oldRoles.join(', ')}`);
       console.log(`   New roles: ${joshua.workflowRoles.join(', ')}`);
-      console.log('   ✅ Updated to BUDGET ANALYST\n');
+      console.log('   ✅ Updated to PREPARER\n');
     } else {
       console.log('   ❌ User not found\n');
     }
@@ -94,7 +94,7 @@ async function fixUserRoles() {
     console.log('✅ All user roles fixed successfully!');
     console.log('\n📋 Final Role Summary:');
     console.log('==========================================');
-    console.log('Joshua Demafelez - BUDGET ANALYST (divisionCreator)');
+    console.log('Joshua Demafelez - PREPARER (divisionCreator)');
     console.log('Andrie Barrameda - BUDGET OFFICER (officeConsolidator, officeFinalVerifier)');
     console.log('Nelson Eloso - BUDGET COORDINATOR (divisionApprover)');
     console.log('Reymund Edra - BUDGET MANAGER (regionFinalVerifier)');

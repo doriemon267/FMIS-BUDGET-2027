@@ -76,10 +76,10 @@ function getWorkflowRoles(userRole, assignmentLevel) {
       // Analysts are creators - division or office level
       return assignmentLevel === 'OFFICE' ? ['officeCreator'] : ['divisionCreator'];
     
-    case 'BUDGET_COORDINATOR':
-    case 'BUDGETCOORDINATOR':
-    case 'COORDINATOR':
-      // Coordinators approve division submissions
+    case 'BUDGET_REVIEWER':
+    case 'BUDGETREVIEWER':
+    case 'REVIEWER':
+      // Reviewers approve division submissions
       return ['divisionApprover'];
     
     case 'BUDGET_OFFICER':

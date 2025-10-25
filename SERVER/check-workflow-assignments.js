@@ -39,7 +39,7 @@ async function checkAssignments() {
       if ((hasCreator && hasApprover) || (hasCreator && hasVerifier)) {
         console.log(`   ⚠️  CONFLICT: Has both CREATOR and APPROVER/VERIFIER roles!`);
       } else if (hasCreator) {
-        console.log(`   ✅ BUDGET ANALYST (Creator)`);
+        console.log(`   ✅ PREPARER (Creator)`);
       } else if (hasApprover && !hasVerifier) {
         console.log(`   ✅ BUDGET COORDINATOR (Approver)`);
       } else if (hasVerifier) {

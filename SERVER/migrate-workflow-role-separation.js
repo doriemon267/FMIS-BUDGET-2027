@@ -6,7 +6,7 @@
  * to the same user (e.g., divisionCreator + divisionApprover).
  * 
  * New Workflow (October 2025):
- * - BUDGET ANALYST = divisioncreator (RC) OR officecreator (Office) - CREATOR ONLY
+ * - PREPARER = divisioncreator (RC) OR officecreator (Office) - CREATOR ONLY
  * - BUDGET COORDINATOR = divisionapprover - APPROVER ONLY
  * - BUDGET OFFICER = officeverifier/officeconsolidator - VERIFIER ONLY
  * - BUDGET MANAGER = managerapprover/regionfinalverifier - FINAL APPROVER ONLY

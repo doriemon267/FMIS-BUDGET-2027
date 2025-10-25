@@ -22,11 +22,11 @@ router.use(checkToken);
 router.use(loadHierarchicalAssignment);
 
 /**
- * Custom middleware to check if user is a Budget Officer, Budget Coordinator, Budget Analyst, Approver, or Reviewer
+ * Custom middleware to check if user is a Budget Officer, Budget Reviewer, Preparer, Approver, or Reviewer
  * Budget Officers are users with DEPARTMENT, OFFICE, REGION, or FULL assignment level
  * OR users with specific workflow roles
- * Budget Coordinators have DIVISION level or divisionapprover role
- * Budget Analysts have BUDGET_ANALYST user role
+ * Budget Reviewers have DIVISION level or divisionapprover role
+ * Preparers have PREPARER user role
  * Approvers have APPROVER user role or approver workflow roles
  * Reviewers have REVIEWER user role or reviewer workflow roles
  */
@@ -35,11 +35,11 @@ const requireBudgetOfficerAccess = (req, res, next) => {
   const workflowRoles = assignment?.workflowRoles || [];
   const userRoles = req.user?.Roles || [];
   
-  // Check assignment level (includes Budget Officer levels + Budget Coordinator DIVISION level)
+  // Check assignment level (includes Budget Officer levels + Budget Reviewer DIVISION level)
   const validLevels = ['DIVISION', 'DEPARTMENT', 'OFFICE', 'REGION', 'FULL'];
   const hasValidLevel = validLevels.includes(assignment?.assignmentLevel);
   
-  // Check workflow roles (includes Budget Officer roles + Budget Coordinator divisionapprover role + APPROVER roles + REVIEWER roles)
+  // Check workflow roles (includes Budget Officer roles + Budget Reviewer divisionapprover role + APPROVER roles + REVIEWER roles)
   const validRoles = ['divisionapprover', 'officeapprover', 'departmentConsolidator', 'officeConsolidator', 'regionFinalVerifier', 'divisionReviewer', 'officeReviewer'];
   const hasValidRole = validRoles.some(role => workflowRoles.includes(role));
   
@@ -55,25 +55,25 @@ const requireBudgetOfficerAccess = (req, res, next) => {
   
   return res.status(403).json({
     success: false,
-    message: 'Access denied: Budget Officer, Budget Coordinator, Budget Analyst, Approver, or Reviewer access required',
+    message: 'Access denied: Budget Officer, Budget Reviewer, Preparer, Approver, or Reviewer access required',
     code: 'INSUFFICIENT_PERMISSIONS',
-    required: 'Budget Officer, Budget Coordinator, Budget Analyst, Approver, or Reviewer access'
+    required: 'Budget Officer, Budget Reviewer, Preparer, Approver, or Reviewer access'
   });
 };
 
-// Get proposal data for editing (Budget Officer or Budget Coordinator)
+// Get proposal data for editing (Budget Officer or Budget Reviewer)
 router.get('/proposal-for-edit', 
   requireBudgetOfficerAccess,
   getProposalForEdit
 );
 
-// Save draft edit (Budget Officer or Budget Coordinator)
-router.post('/draft',
+// Save draft edit (Budget Officer or Budget Reviewer)
+router.post('/save-draft-edit',
   requireBudgetOfficerAccess,
   saveDraftEdit
 );
 
-// Submit edit for approval (Budget Officer or Budget Coordinator)
+// Submit edit for approval (Budget Officer or Budget Reviewer)
 router.post('/submit',
   requireBudgetOfficerAccess,
   submitEdit
@@ -82,7 +82,7 @@ router.post('/submit',
 // ⚠️ IMPORTANT: Specific routes MUST come BEFORE generic /:id route!
 // Otherwise Express will match /:id first and fail for /comparison/:proposalId and /proposal/:proposalId
 
-// Get comparison data (for Budget Analyst to see changes) - NO AUTH REQUIRED
+// Get comparison data (for Preparer to see changes) - NO AUTH REQUIRED
 const comparisonRouter = express.Router();
 comparisonRouter.get('/comparison/:proposalId', getComparisonData);
 

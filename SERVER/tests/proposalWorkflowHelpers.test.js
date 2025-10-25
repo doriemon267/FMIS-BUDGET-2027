@@ -23,33 +23,33 @@ describe('proposalWorkflowController helpers', () => {
     test('updates assignment fields when provided', () => {
       const proposal = {
         currentStep: 'ANALYST_DRAFT',
-        currentAssigneeRole: 'BUDGET_ANALYST',
-        pendingWithRoles: ['BUDGET_ANALYST']
+        currentAssigneeRole: 'BUDGET_PLANNING_ANALYST',
+        pendingWithRoles: ['BUDGET_PLANNING_ANALYST']
       };
 
       updateAssignment(proposal, {
-        step: 'COORDINATOR_REVIEW',
-        assigneeRole: 'BUDGET_COORDINATOR',
-        pendingRoles: ['BUDGET_COORDINATOR']
+        step: 'REVIEWER_REVIEW',
+        assigneeRole: 'APPROVER',
+        pendingRoles: ['APPROVER']
       });
 
-      expect(proposal.currentStep).toBe('COORDINATOR_REVIEW');
-      expect(proposal.currentAssigneeRole).toBe('BUDGET_COORDINATOR');
-      expect(proposal.pendingWithRoles).toEqual(['BUDGET_COORDINATOR']);
+      expect(proposal.currentStep).toBe('REVIEWER_REVIEW');
+      expect(proposal.currentAssigneeRole).toBe('APPROVER');
+      expect(proposal.pendingWithRoles).toEqual(['APPROVER']);
     });
 
     test('leaves fields untouched when undefined', () => {
       const proposal = {
         currentStep: 'ANALYST_DRAFT',
-        currentAssigneeRole: 'BUDGET_ANALYST',
-        pendingWithRoles: ['BUDGET_ANALYST']
+        currentAssigneeRole: 'BUDGET_PLANNING_ANALYST',
+        pendingWithRoles: ['BUDGET_PLANNING_ANALYST']
       };
 
       updateAssignment(proposal, {});
 
       expect(proposal.currentStep).toBe('ANALYST_DRAFT');
-      expect(proposal.currentAssigneeRole).toBe('BUDGET_ANALYST');
-      expect(proposal.pendingWithRoles).toEqual(['BUDGET_ANALYST']);
+      expect(proposal.currentAssigneeRole).toBe('BUDGET_PLANNING_ANALYST');
+      expect(proposal.pendingWithRoles).toEqual(['BUDGET_PLANNING_ANALYST']);
     });
   });
 

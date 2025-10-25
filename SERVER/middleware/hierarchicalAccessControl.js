@@ -455,12 +455,12 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
             } else {
               workflowRoles = ['divisionApprover']; // Default to division approver
             }
-          } else if (userMainRoles.includes('BUDGET_ANALYST')) {
-            // BUDGET_ANALYST: Budget analyst (from Budget and Revenue Division)
+          } else if (userMainRoles.includes('BUDGET_PLANNING_ANALYST')) {
+            // BUDGET_PLANNING_ANALYST: Budget planning analyst (from Budget and Revenue Division)
             workflowRoles = ['budgetAnalyst'];
           } else if (userMainRoles.includes('BUDGET_OFFICER') || userMainRoles.includes('SUPERVISOR')) {
             workflowRoles = ['officeFinalVerifier'];
-          } else if (userMainRoles.includes('BUDGET_MANAGER') || userMainRoles.includes('DEPARTMENT_HEAD')) {
+          } else if (userMainRoles.includes('OVERALL_BUDGET_APPROVER') || userMainRoles.includes('DEPARTMENT_HEAD')) {
             workflowRoles = ['departmentConsolidator', 'regionFinalVerifier'];
           } else if (userMainRoles.includes('BUDGET_ADMIN') || userMainRoles.includes('SUPER ADMIN') || userMainRoles.includes('ADMIN')) {
             workflowRoles = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier', 'regionCreator', 'superAdmin','regionFinalVerifier'];
@@ -473,8 +473,8 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
           }
         }
         
-        // Ensure BUDGET_ANALYST role is included in workflowRoles if user has BUDGET_ANALYST role
-        if (userRoles.includes('BUDGET_ANALYST') && !workflowRoles.includes('budgetAnalyst')) {
+        // Ensure BUDGET_PLANNING_ANALYST role is included in workflowRoles if user has BUDGET_PLANNING_ANALYST role
+        if (userRoles.includes('BUDGET_PLANNING_ANALYST') && !workflowRoles.includes('budgetAnalyst')) {
           workflowRoles = [...workflowRoles, 'budgetAnalyst'];
           // Update the assignment document
           assignmentDoc.workflowRoles = workflowRoles;
@@ -585,8 +585,8 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
         };
         defaultWorkflowRoles = ['divisionApprover'];
       }
-      // Special handling for BUDGET_ANALYST - give them appropriate scope and permissions
-      else if (userRoles.includes('BUDGET_ANALYST')) {
+      // Special handling for BUDGET_PLANNING_ANALYST - give them appropriate scope and permissions
+      else if (userRoles.includes('BUDGET_PLANNING_ANALYST')) {
         defaultScope = 'OFFICE';
         defaultRolePermissions = {
           CreateProposals: false,
@@ -661,7 +661,7 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
       const userMainRoles = userRoles || [];
       if (userMainRoles.includes('BUDGET_OFFICER') || userMainRoles.includes('SUPERVISOR')) {
         workflowRoles = ['officeFinalVerifier'];
-      } else if (userMainRoles.includes('BUDGET_MANAGER') || userMainRoles.includes('DEPARTMENT_HEAD')) {
+      } else if (userMainRoles.includes('OVERALL_BUDGET_APPROVER') || userMainRoles.includes('DEPARTMENT_HEAD')) {
         workflowRoles = ['departmentConsolidator', 'regionFinalVerifier'];
       } else if (userMainRoles.includes('BUDGET_ADMIN') || userMainRoles.includes('SUPER ADMIN') || userMainRoles.includes('ADMIN')) {
         workflowRoles = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier', 'regionCreator', 'superAdmin', 'regionFinalVerifier'];

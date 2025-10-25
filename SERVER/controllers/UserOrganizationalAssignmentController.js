@@ -32,7 +32,7 @@ const createOrUpdateOrganizationalAssignment = async (req, res) => {
       userId,
       userName,
       email,
-      userRole, // 'BUDGET_ANALYST', 'BUDGET_COORDINATOR', 'BUDGET_OFFICER', 'BUDGET_MANAGER', 'BUDGET_ADMIN'
+      userRole, // 'BUDGET_ANALYST', 'BUDGET_REVIEWER', 'BUDGET_OFFICER', 'BUDGET_MANAGER', 'BUDGET_ADMIN'
       accessScope, // 'RESPONSIBILITY_CENTER', 'OFFICE', 'FULL', 'OWN_ONLY'
       officeId,
       responsibilityCenterName,
@@ -115,31 +115,31 @@ const createOrUpdateOrganizationalAssignment = async (req, res) => {
 
     // Auto-assign workflow roles based on userRole and accessScope
     // NEW WORKFLOW RULES (October 2025):
-    // - BUDGET ANALYST (Creator): divisioncreator (RC level) OR officecreator (Office level)
-    // - BUDGET_COORDINATOR (Approver): divisionapprover only
+    // - PREPARER (Creator): divisioncreator (RC level) OR officecreator (Office level)
+    // - BUDGET_REVIEWER (Approver): divisionapprover only
     // - BUDGET OFFICER (Verifier): officeconsolidator, officeFinalVerifier
     // - BUDGET MANAGER (Final Approver): managerapprover, regionfinalverifier
     // - BUDGET ADMIN (Full Access): all roles for administrative purposes
     const autoAssignedWorkflowRoles = [];
     
-    if (userRole === 'BUDGET_ANALYST') {
-      // BUDGET ANALYST: Creator only, based on assignment level
+    if (userRole === 'PREPARER') {
+      // PREPARER: Creator only, based on assignment level
       if (accessScope === 'OFFICE') {
-        // Office Level: User submits DIRECTLY to BUDGET OFFICER (skip coordinator)
+        // Office Level: User submits DIRECTLY to BUDGET OFFICER (skip reviewer)
         autoAssignedWorkflowRoles.push('officeCreator');
       } else if (accessScope === 'RESPONSIBILITY_CENTER') {
-        // RC/Division Level: User submits to BUDGET COORDINATOR → BUDGET OFFICER → BUDGET MANAGER
+        // RC/Division Level: User submits to BUDGET REVIEWER → BUDGET OFFICER → BUDGET MANAGER
         autoAssignedWorkflowRoles.push('divisionCreator');
       }
-    } else if (userRole === 'BUDGET_COORDINATOR') {
-      // BUDGET COORDINATOR: Division approver only (no creator role)
+    } else if (userRole === 'REVIEWER') {
+      // STEP 2: REVIEWER: Division approver only (no creator role)
       autoAssignedWorkflowRoles.push('divisionApprover');
     } else if (userRole === 'BUDGET_OFFICER') {
-      // BUDGET OFFICER: Office consolidator and verifier (no creator role)
+      // STEP 5: BUDGET_OFFICER: Office consolidator and verifier (no creator role)
       autoAssignedWorkflowRoles.push('officeConsolidator', 'officeFinalVerifier');
-    } else if (userRole === 'BUDGET_MANAGER') {
-      // BUDGET MANAGER: Final approver and regional verifier (no creator role)
-      autoAssignedWorkflowRoles.push('managerapprover', 'regionFinalVerifier');
+    } else if (userRole === 'OVERALL_BUDGET_APPROVER') {
+      // STEP 6: OVERALL_BUDGET_APPROVER: Final approver and regional verifier (no creator role)
+      autoAssignedWorkflowRoles.push('regionFinalVerifier');
     } else if (userRole === 'BUDGET_ADMIN' || accessScope === 'FULL') {
       // BUDGET ADMIN or FULL access: All roles for administrative purposes
       autoAssignedWorkflowRoles.push('officeCreator', 'officeFinalVerifier', 'regionFinalVerifier');

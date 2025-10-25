@@ -2,20 +2,18 @@ const checkToken = require('./checkToken');
 const checkDueDate = require('./checkDueDate');
 const checkRegionAccess = require('./checkRegionAccess');
 const { checkUserRegionAccess } = require('./checkRegionAccess');
-// Permission levels constants (aligned with 6-step workflow hierarchy)
+// Permission levels constants (6-step workflow hierarchy)
 const PERMISSION_LEVELS = {
   USER: 'USER',
   ADMIN: 'ADMIN',
   SUPER_ADMIN: 'SUPER_ADMIN',
   BUDGET_ADMIN: 'BUDGET_ADMIN',
-  BUDGET_MANAGER: 'BUDGET_MANAGER',
-  OVERALL_BUDGET_APPROVER: 'OVERALL_BUDGET_APPROVER',  // Step 6: Executive approval
-  BUDGET_OFFICER: 'BUDGET_OFFICER',                    // Step 5: Operational approval
-  BUDGET_ANALYST: 'BUDGET_ANALYST',                    // Step 4: Technical review
-  APPROVER: 'APPROVER',                                // Step 3: Division/Office approval
-  REVIEWER: 'REVIEWER',                                // Step 2: Division review
-  PREPARER: 'PREPARER',                                // Step 1: Proposal creation
-  BUDGET_COORDINATOR: 'BUDGET_COORDINATOR'             // Legacy: Department/Region level
+  PREPARER: 'PREPARER',                                // STEP 1: Proposal creation
+  REVIEWER: 'REVIEWER',                                // STEP 2: Division review
+  APPROVER: 'APPROVER',                                // STEP 3: Division/Office approval
+  BUDGET_ANALYST: 'BUDGET_ANALYST',                    // STEP 4: Technical review
+  BUDGET_OFFICER: 'BUDGET_OFFICER',                    // STEP 5: Operational approval
+  OVERALL_BUDGET_APPROVER: 'OVERALL_BUDGET_APPROVER'   // STEP 6: Executive approval
 };
 // Access scope constants
 const ACCESS_SCOPE = {
@@ -42,20 +40,18 @@ const hasFullAccess = (userRoles) => {
     PERMISSION_LEVELS.ADMIN,
     'ADMIN',        // Support both variants
     PERMISSION_LEVELS.BUDGET_ADMIN,
-    PERMISSION_LEVELS.BUDGET_ANALYST,
-    PERMISSION_LEVELS.BUDGET_MANAGER,
-    PERMISSION_LEVELS.BUDGET_OFFICER,  // Budget Officer for approval permissions
-    'BUDGET_COORDINATOR',               // Budget Coordinator for assignment access
-    PERMISSION_LEVELS.PREPARER,         // 6-step workflow: Step 1 - Proposal creation
-    PERMISSION_LEVELS.REVIEWER,         // 6-step workflow: Step 2 - Division review
-    PERMISSION_LEVELS.APPROVER,         // 6-step workflow: Step 3 - Division/Office approval
-    PERMISSION_LEVELS.OVERALL_BUDGET_APPROVER  // 6-step workflow: Step 6 - Executive approval
+    PERMISSION_LEVELS.PREPARER,         // STEP 1: Proposal creation
+    PERMISSION_LEVELS.REVIEWER,         // STEP 2: Division review
+    PERMISSION_LEVELS.APPROVER,         // STEP 3: Division/Office approval
+    PERMISSION_LEVELS.BUDGET_ANALYST,   // STEP 4: Technical review
+    PERMISSION_LEVELS.BUDGET_OFFICER,   // STEP 5: Operational approval
+    PERMISSION_LEVELS.OVERALL_BUDGET_APPROVER  // STEP 6: Executive approval
   ];
   const result = hasRequiredRole(userRoles, requiredRoles);
   
   // 🔍 DEBUG for workflow roles
-  if (Array.isArray(userRoles) && (userRoles.includes('BUDGET_OFFICER') || userRoles.includes('BUDGET_COORDINATOR') || userRoles.includes('REVIEWER') || userRoles.includes('APPROVER') || userRoles.includes('OVERALL_BUDGET_APPROVER'))) {
-    console.log('🔍 hasFullAccess check for workflow/budget role:', {
+  if (Array.isArray(userRoles) && (userRoles.includes('BUDGET_OFFICER') || userRoles.includes('REVIEWER') || userRoles.includes('APPROVER') || userRoles.includes('OVERALL_BUDGET_APPROVER'))) {
+    console.log('🔍 hasFullAccess check for 6-step workflow role:', {
       userRoles,
       result,
       hasRequiredRoleDebug: userRoles.some(role => requiredRoles.includes(role))

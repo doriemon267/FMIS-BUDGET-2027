@@ -34,7 +34,7 @@ describe('Role visibility - integration', () => {
     await mongoose.disconnect();
   });
 
-  test('Budget Analyst sees own and division proposals, Officer sees approved/finalized, Manager sees submitted/finalized', async () => {
+  test('Preparer sees own and division proposals, Officer sees approved/finalized, Manager sees submitted/finalized', async () => {
     if (SKIP) {
       expect(true).toBe(true);
       return;
@@ -48,7 +48,7 @@ describe('Role visibility - integration', () => {
     // 1) Analyst request (simulate req with user and hierarchical assignment)
   const reqAnalyst = { 
     query: { limit: '2000', visibilityFilter: { processBy: 'system-test' }, search: 'TEST-ROLE-VIS-ANALYST' }, 
-    user: { id: 'user-analyst', Roles: ['BUDGET_ANALYST'], FirstName: 'A', LastName: 'Analyst' }, 
+    user: { id: 'user-analyst', Roles: ['BUDGET_PLANNING_ANALYST'], FirstName: 'A', LastName: 'Analyst' }, 
     userHierarchicalAssignment: { divisionName: 'D1' }, 
     hierarchicalFilters: { division: 'D1' }
   };

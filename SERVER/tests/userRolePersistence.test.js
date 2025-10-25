@@ -17,25 +17,25 @@ describe('HierarchicalUserAssignment userRole persistence', () => {
     await mongoose.disconnect();
   });
 
-  test('persists BUDGET_COORDINATOR on RC level', async () => {
+  test('persists APPROVER on RC level', async () => {
     const created = await HierarchicalUserAssignment.create({
       userId: 'test-user-role',
       userName: 'Test User',
       email: 'test@user.local',
-      userRole: 'BUDGET_COORDINATOR',
+      userRole: 'APPROVER',
       assignmentLevel: 'DIVISION', // RC maps to DIVISION in model
       regionId: new mongoose.Types.ObjectId(),
       departmentId: new mongoose.Types.ObjectId(),
       divisionName: 'TEST-RC',
     });
 
-    expect(created.userRole).toBe('BUDGET_COORDINATOR');
+    expect(created.userRole).toBe('APPROVER');
 
     // Update should not drop userRole
     created.divisionName = 'TEST-RC-2';
     await created.save();
 
     const reloaded = await HierarchicalUserAssignment.findById(created._id);
-    expect(reloaded.userRole).toBe('BUDGET_COORDINATOR');
+    expect(reloaded.userRole).toBe('APPROVER');
   });
 });

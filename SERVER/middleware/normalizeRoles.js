@@ -11,7 +11,7 @@
  * - BUDGET_ANALYST        → Step 4: Technical budget review
  * - BUDGET_OFFICER        → Step 5: Operational budget approval
  * - OVERALL_BUDGET_APPROVER → Step 6: Executive budget approval
- * - BUDGET_COORDINATOR    → Department/Region level (legacy)
+ * - BUDGET_COORDINATOR    → REVIEWER (Step 2: Division/Department reviewers)
  * - BUDGET_MANAGER        → Upper management (legacy)
  */
 

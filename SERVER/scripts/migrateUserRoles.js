@@ -4,7 +4,7 @@
  * Purpose: Migrate legacy role names to standardized workflow roles
  * 
  * Standard Workflow Roles:
- * - divisionCreator     → BUDGET ANALYST (Division level creators)
+ * - divisionCreator     → PREPARER (Division level creators)
  * - departmentCreator   → BUDGET COORDINATOR (Department/Region level creators)
  * - departmentVerifier  → BUDGET OFFICER (Department/Region level verifiers)
  * - budgetManager       → BUDGET MANAGER (Budget Office final approvers)

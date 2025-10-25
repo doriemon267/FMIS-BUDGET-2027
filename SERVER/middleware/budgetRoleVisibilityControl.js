@@ -1,10 +1,13 @@
 /**
  * 🔐 Budget Role Visibility Control Middleware
  * 
- * Implements role-based data visibility rules:
- * - BUDGET_ANALYST: Can see own proposals and division proposals (all statuses)
- * - BUDGET_OFFICER: Can see approved/submitted proposals only (no drafts from others)
- * - BUDGET_MANAGER/ADMIN: Can see submitted proposals only (after officer submission)
+ * Implements 6-step workflow role-based data visibility rules:
+ * - STEP 1 (PREPARER): Can see own proposals and division proposals (all statuses)
+ * - STEP 2 (REVIEWER): Can see proposals forwarded to review
+ * - STEP 3 (APPROVER): Can see proposals forwarded to approval
+ * - STEP 4 (BUDGET_PLANNING_ANALYST): Can see proposals forwarded for analysis
+ * - STEP 5 (BUDGET_OFFICER): Can see proposals for final decision
+ * - STEP 6 (OVERALL_APPROVER): Can see submitted proposals (after officer submission)
  */
 
 const { hasFullAccess } = require('./securityMiddleware');
@@ -33,14 +36,12 @@ const budgetRoleVisibilityControl = () => {
       let budgetRole = null;
       if (userRoles.includes('BUDGET_ADMIN') || workflowRoles.includes('BUDGET_ADMIN')) {
         budgetRole = 'BUDGET_ADMIN';
-      } else if (userRoles.includes('BUDGET_MANAGER') || workflowRoles.includes('BUDGET_ADMIN')) {
-        budgetRole = 'BUDGET_MANAGER';
-      } else if (userRoles.includes('BUDGET_OFFICER') || workflowRoles.includes('BUDGET_OFFICER')) {
-        budgetRole = 'BUDGET_OFFICER';
-      } else if (userRoles.includes('BUDGET_ANALYST') || workflowRoles.includes('BUDGET_ANALYST')) {
-        budgetRole = 'BUDGET_ANALYST';
       } else if (userRoles.includes('OVERALL_BUDGET_APPROVER') || workflowRoles.includes('OVERALL_BUDGET_APPROVER')) {
         budgetRole = 'OVERALL_BUDGET_APPROVER';
+      } else if (userRoles.includes('BUDGET_OFFICER') || workflowRoles.includes('BUDGET_OFFICER')) {
+        budgetRole = 'BUDGET_OFFICER';
+      } else if (userRoles.includes('BUDGET_PLANNING_ANALYST') || workflowRoles.includes('BUDGET_PLANNING_ANALYST')) {
+        budgetRole = 'BUDGET_PLANNING_ANALYST';
       } else if (userRoles.includes('APPROVER') || workflowRoles.includes('APPROVER') || workflowRoles.includes('divisionApprover') || workflowRoles.includes('officeApprover')) {
         budgetRole = 'APPROVER';
       } else if (userRoles.includes('REVIEWER') || workflowRoles.includes('REVIEWER') || workflowRoles.includes('divisionReviewer')) {
@@ -65,16 +66,16 @@ const budgetRoleVisibilityControl = () => {
       const userRegion = assignment.regionId || req.user?.region || null;
 
       switch (budgetRole) {
-        case 'BUDGET_ANALYST':
-          // STEP 4 of 6-step workflow: PREPARER → REVIEWER → APPROVER → [BUDGET_ANALYST] → BUDGET_OFFICER → OVERALL_APPROVER
-          // BUDGET_ANALYST can see proposals forwarded by APPROVER
+        case 'BUDGET_PLANNING_ANALYST':
+          // STEP 4 of 6-step workflow: PREPARER → REVIEWER → APPROVER → [BUDGET_PLANNING_ANALYST] → BUDGET_OFFICER → OVERALL_APPROVER
+          // BUDGET_PLANNING_ANALYST can see proposals forwarded by APPROVER
           visibilityFilter = {
             $or: [
               { createdByUserId: userId },
               { processBy: userId },
               ...(userDivision ? [{ division: userDivision }] : []),
-              { currentAssigneeRole: 'BUDGET_ANALYST' },
-              { pendingWithRoles: 'BUDGET_ANALYST' },
+              { currentAssigneeRole: 'BUDGET_PLANNING_ANALYST' },
+              { pendingWithRoles: 'BUDGET_PLANNING_ANALYST' },
               {
                 status: {
                   $in: [
@@ -114,28 +115,9 @@ const budgetRoleVisibilityControl = () => {
           };
           break;
 
-        case 'BUDGET_MANAGER':
         case 'BUDGET_ADMIN':
-          // STEP 6 of 6-step workflow: PREPARER → REVIEWER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → [OVERALL_APPROVER]
-          // OVERALL_APPROVER/BUDGET_ADMIN can see proposals forwarded by BUDGET_OFFICER for final approval
-          visibilityFilter = {
-            $or: [
-              {
-                status: {
-                  $in: [
-                    'Forwarded to Manager',
-                    'FORWARDED_TO_MANAGER',
-                    'Finalized',
-                    'Approved',
-                    'Final Approved',
-                    'FINAL_APPROVED'
-                  ]
-                }
-              },
-              { currentAssigneeRole: { $in: ['BUDGET_MANAGER', 'OVERALL_BUDGET_APPROVER'] } },
-              { pendingWithRoles: { $in: ['BUDGET_MANAGER', 'OVERALL_BUDGET_APPROVER'] } }
-            ]
-          };
+          // ADMIN: Can see all proposals regardless of status
+          visibilityFilter = {}; // No filter for admins
           break;
 
         case 'PREPARER':
@@ -165,14 +147,11 @@ const budgetRoleVisibilityControl = () => {
                 $or: [
                   { currentAssigneeRole: 'REVIEWER' },
                   { pendingWithRoles: 'REVIEWER' },
-                  { currentAssigneeRole: 'BUDGET_COORDINATOR' },
-                  { pendingWithRoles: 'BUDGET_COORDINATOR' },
                   {
                     status: {
                       $in: [
                         'Forwarded to Reviewer',
                         'Under Review by Reviewer',
-                        'UNDER REVIEW BY COORDINATOR',
                         'Division Submitted',
                         'DIVISION SUBMITTED',
                         'Department Submitted',
@@ -220,7 +199,7 @@ const budgetRoleVisibilityControl = () => {
 
         case 'OVERALL_BUDGET_APPROVER':
           // STEP 6 of 6-step workflow: PREPARER → REVIEWER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → [OVERALL_APPROVER]
-          // Same as BUDGET_MANAGER above - final approval step
+          // Final approval step - sees proposals forwarded by BUDGET_OFFICER
           visibilityFilter = {
             $or: [
               // Own proposals created by this user
@@ -250,9 +229,9 @@ const budgetRoleVisibilityControl = () => {
                   ]
                 }
               },
-              // Proposals assigned to OVERALL_BUDGET_APPROVER/BUDGET_MANAGER
-              { currentAssigneeRole: { $in: ['OVERALL_BUDGET_APPROVER', 'BUDGET_MANAGER'] } },
-              { pendingWithRoles: { $in: ['OVERALL_BUDGET_APPROVER', 'BUDGET_MANAGER'] } }
+              // Proposals assigned to OVERALL_BUDGET_APPROVER
+              { currentAssigneeRole: 'OVERALL_BUDGET_APPROVER' },
+              { pendingWithRoles: 'OVERALL_BUDGET_APPROVER' }
             ]
           };
           break;

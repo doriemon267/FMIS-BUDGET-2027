@@ -17,8 +17,7 @@ const Department = require('../models/Department');
 // Role aliasing: map internal persisted roles to 6-step display roles
 const ROLE_ALIAS_TO_DISPLAY = {
   PREPARER: 'PREPARER',
-  BUDGET_ANALYST: 'PREPARER', // Legacy analyst acting as preparer in 6-step
-  BUDGET_COORDINATOR: 'REVIEWER',
+  BUDGET_PLANNING_ANALYST: 'BUDGET_PLANNING_ANALYST',
   REVIEWER: 'REVIEWER',
   APPROVER: 'APPROVER',
   BUDGET_OFFICER: 'BUDGET_OFFICER',
@@ -31,9 +30,11 @@ const toDisplayRole = (role) => ROLE_ALIAS_TO_DISPLAY[role] || role;
 
 // Reverse aliasing: allow lookups when assignments use display roles instead of persisted ones
 const DISPLAY_TO_PERSISTED = {
-  PREPARER: ['BUDGET_ANALYST', 'PREPARER'],
-  REVIEWER: ['BUDGET_COORDINATOR', 'REVIEWER'],
-  APPROVER: ['BUDGET_OFFICER', 'APPROVER'],
+  PREPARER: ['PREPARER'],
+  REVIEWER: ['REVIEWER'],
+  APPROVER: ['APPROVER'],
+  BUDGET_PLANNING_ANALYST: ['BUDGET_PLANNING_ANALYST'],
+  BUDGET_OFFICER: ['BUDGET_OFFICER'],
   OVERALL_BUDGET_APPROVER: ['BUDGET_MANAGER', 'OVERALL_BUDGET_APPROVER'],
   BUDGET_ADMIN: ['BUDGET_ADMIN']
 };
@@ -174,7 +175,7 @@ const findUsersByRoleAndLocation = async (targetRole, region, department) => {
 };
 
 /**
- * Apply Budget Officer/Coordinator edits to the original proposal documents
+ * Apply Budget Officer edits to the original proposal documents
  * This updates the actual Income, PS, MOOE, and CO documents with the edited values
  * @param {Object} budgetOfficerEdit - The BudgetOfficerEdit document containing the edits
  * @returns {Promise<Object>} - Summary of applied changes
@@ -516,8 +517,8 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
 
 const WORKFLOW_STATUS_MAPPING = {
   'Division Submitted': 'Division Submitted',
-  'Under Review by Coordinator': 'Division Submitted',
-  'Coordinator Approved': 'Division Submitted',
+  'Under Review by Reviewer': 'Division Submitted',
+  'Reviewer Approved': 'Division Submitted',
   'Forwarded to Officer': 'Department Verified',
   'Under Review by Officer': 'Department Verified',
   'Officer Approved': 'Department Submitted',
@@ -528,7 +529,7 @@ const WORKFLOW_STATUS_MAPPING = {
 };
 
 const WORKFLOW_LEVEL_MAPPING = {
-  COORDINATOR: 'DIVISION',
+  REVIEWER: 'DIVISION',
   OFFICER: 'DEPARTMENT',
   MANAGER: 'REGION',
   FINALIZED: 'FINALIZED'
@@ -605,7 +606,7 @@ exports.getProposalForEdit = async (req, res) => {
     const userRoles = req.user?.Roles || [];
     const isBudgetManager = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN');
     const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
-    const isBudgetAnalyst = userRoles.includes('BUDGET_ANALYST');
+    const isBudgetAnalyst = userRoles.includes('BUDGET_PLANNING_ANALYST');
     
     // Check if proposal is already submitted or approved - prevent further editing
     // BUDGET_MANAGER can view "Forwarded to Manager" proposals (to approve/reject)
@@ -629,9 +630,9 @@ exports.getProposalForEdit = async (req, res) => {
     }
     
     // Check if there's an existing edit
-    // Budget Manager should ONLY see edits submitted by Budget Officer (not Budget Coordinator)
-    // Budget Officer should see their own Draft or edits from Budget Coordinator
-    // Budget Analyst should see edits from Approver or their own edits
+    // Budget Manager should ONLY see edits submitted by Budget Officer (not Budget Reviewer)
+    // Budget Officer should see their own Draft or edits from Budget Reviewer
+    // Preparer should see edits from Approver or their own edits
     let existingEdit;
     if (isBudgetManager && !isBudgetOfficer) {
       // Budget Manager: Only show edits submitted by BUDGET_OFFICER
@@ -641,14 +642,14 @@ exports.getProposalForEdit = async (req, res) => {
         'editedBy.role': 'BUDGET_OFFICER'
       }).sort({ updatedAt: -1 });
     } else if (isBudgetAnalyst) {
-      // Budget Analyst (user role): Show edits from APPROVER or their own edits
+      // Preparer (user role): Show edits from APPROVER or their own edits
       existingEdit = await BudgetOfficerEdit.findOne({
         proposalId: proposal._id,
         status: { $in: ['Draft', 'Submitted'] },
-        'editedBy.role': { $in: ['APPROVER', 'BUDGET_ANALYST'] }
+        'editedBy.role': { $in: ['APPROVER', 'BUDGET_PLANNING_ANALYST'] }
       }).sort({ updatedAt: -1 });
     } else {
-      // Budget Officer: Show Draft or Submitted edits (including from Budget Coordinator)
+      // Budget Officer: Show Draft or Submitted edits (including from Budget Reviewer)
       existingEdit = await BudgetOfficerEdit.findOne({
         proposalId: proposal._id,
         status: { $in: ['Draft', 'Submitted'] }
@@ -806,7 +807,7 @@ exports.saveDraftEdit = async (req, res) => {
     const userRoles = req.user?.Roles || [];
     const isBudgetManager = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN');
     const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
-    const isBudgetAnalyst = userRoles.includes('BUDGET_ANALYST');
+    const isBudgetAnalyst = userRoles.includes('BUDGET_PLANNING_ANALYST');
     
     // Check if proposal is already submitted or approved - prevent further editing
     // BUDGET_MANAGER can view "Forwarded to Manager" proposals (to approve/reject)
@@ -851,13 +852,13 @@ exports.saveDraftEdit = async (req, res) => {
       ? 'BUDGET_MANAGER'
       : userRoles.includes('APPROVER') || userRoles.includes('BUDGET_OFFICER')
       ? 'BUDGET_OFFICER'
-      : userRoles.includes('REVIEWER') || userRoles.includes('BUDGET_COORDINATOR')
-      ? 'BUDGET_COORDINATOR'
-      : userRoles.includes('BUDGET_ANALYST')
-      ? 'BUDGET_ANALYST'
+      : userRoles.includes('REVIEWER') || userRoles.includes('APPROVER')
+      ? 'APPROVER'
+      : userRoles.includes('BUDGET_PLANNING_ANALYST')
+      ? 'BUDGET_PLANNING_ANALYST'
       : 'PREPARER';
-    // Map editor role for BudgetOfficerEdit.editedBy.role enum (no PREPARER in schema)
-    const editDocRole = editorRole === 'PREPARER' ? 'BUDGET_ANALYST' : editorRole;
+    // Map editor role for BudgetOfficerEdit.editedBy.role enum
+    const editDocRole = editorRole;
     
     if (budgetOfficerEdit) {
       // Update existing draft
@@ -1208,7 +1209,7 @@ exports.submitEdit = async (req, res) => {
     const userRoles = req.user?.Roles || [];
     const isBudgetManager = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN');
     const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
-    const isBudgetAnalyst = userRoles.includes('BUDGET_ANALYST');
+    const isBudgetAnalyst = userRoles.includes('BUDGET_PLANNING_ANALYST');
     
     // Check if proposal is already submitted or approved - prevent further editing
     // BUDGET_MANAGER can view "Forwarded to Manager" proposals (to approve/reject)
@@ -1253,13 +1254,13 @@ exports.submitEdit = async (req, res) => {
       ? 'APPROVER'
       : userRoles.includes('BUDGET_OFFICER')
       ? 'BUDGET_OFFICER'
-      : userRoles.includes('REVIEWER') || userRoles.includes('BUDGET_COORDINATOR')
-      ? 'BUDGET_COORDINATOR'
-      : userRoles.includes('BUDGET_ANALYST')
-      ? 'BUDGET_ANALYST'
+      : userRoles.includes('REVIEWER') || userRoles.includes('APPROVER')
+      ? 'APPROVER'
+      : userRoles.includes('BUDGET_PLANNING_ANALYST')
+      ? 'BUDGET_PLANNING_ANALYST'
       : 'PREPARER';
-    // Map editor role for BudgetOfficerEdit.editedBy.role enum (no PREPARER in schema)
-    const editDocRole = editorRole === 'PREPARER' ? 'BUDGET_ANALYST' : editorRole;
+    // Map editor role for BudgetOfficerEdit.editedBy.role enum
+    const editDocRole = editorRole;
     
     // Check if there's an existing draft
     let budgetOfficerEdit = await BudgetOfficerEdit.findOne({
@@ -1308,7 +1309,7 @@ exports.submitEdit = async (req, res) => {
     await budgetOfficerEdit.save();
     
     // Apply the edits to the original documents BEFORE updating status
-    // This ensures that when Budget Officer loads the proposal, they see the Coordinator's changes
+    // This ensures that when Budget Officer loads the proposal, they see the Reviewer's changes
     console.log('📝 Applying edits to original documents before status update...', {
       editorRole: editorRole,
       proposalId: proposalId,
@@ -1328,7 +1329,7 @@ exports.submitEdit = async (req, res) => {
     const now = new Date();
 
     let newStatus = previousStatus;
-    let newWorkflowLevel = proposal.workflowLevel || 'COORDINATOR';
+    let newWorkflowLevel = proposal.workflowLevel || 'REVIEWER';
     let historyAction = 'EDIT';
     let historyComment = comments || `${editorRole} submitted edits`;
     let currentStep = proposal.currentStep;
@@ -1338,38 +1339,38 @@ exports.submitEdit = async (req, res) => {
     if (editorRole === 'PREPARER') {
       // PREPARER submits to REVIEWER
       newStatus = 'Forwarded to Reviewer';
-      newWorkflowLevel = 'COORDINATOR';
+      newWorkflowLevel = 'REVIEWER';
       historyAction = 'PREPARER_SUBMIT_TO_REVIEWER';
       historyComment = comments || 'Preparer submitted edits to Reviewer';
-      currentStep = 'COORDINATOR_REVIEW';
-      currentAssigneeRole = 'BUDGET_COORDINATOR';
-      pendingRoles = ['BUDGET_COORDINATOR'];
+      currentStep = 'REVIEWER_REVIEW';
+      currentAssigneeRole = 'REVIEWER';
+      pendingRoles = ['REVIEWER'];
       proposal.submittedByRole = 'PREPARER';
       proposal.submittedToDivisionAt = now;
       proposal.submittedToDivisionBy = { userId, userName };
-    } else if (editorRole === 'BUDGET_ANALYST') {
-      // New BUDGET_ANALYST role submits to BUDGET_OFFICER
+    } else if (editorRole === 'BUDGET_PLANNING_ANALYST') {
+      // New BUDGET_PLANNING_ANALYST role submits to BUDGET_OFFICER
       newStatus = 'Forwarded to Budget Officer';
       newWorkflowLevel = 'OFFICER';
       historyAction = 'ANALYST_SUBMIT_TO_OFFICER';
-      historyComment = comments || 'Budget Analyst submitted for Officer review';
+      historyComment = comments || 'Budget Planning Analyst submitted for Officer review';
       currentStep = 'OFFICER_REVIEW';
       currentAssigneeRole = 'BUDGET_OFFICER';
       pendingRoles = ['BUDGET_OFFICER'];
-      proposal.submittedByRole = 'BUDGET_ANALYST';
+      proposal.submittedByRole = 'BUDGET_PLANNING_ANALYST';
       proposal.forwardedToOfficerAt = now;
       proposal.forwardedToOfficerBy = { userId, userName };
-    } else if (editorRole === 'BUDGET_COORDINATOR') {
+    } else if (editorRole === 'APPROVER') {
       // Check if reviewer wants to bypass officer and submit directly to manager
       if (submitTargetRole === 'BUDGET_MANAGER') {
         newStatus = 'Forwarded to Manager';
         newWorkflowLevel = 'MANAGER';
-        historyAction = 'COORDINATOR_SUBMIT_TO_MANAGER';
-        historyComment = comments || 'Coordinator submitted edits to Budget Manager';
+        historyAction = 'REVIEWER_SUBMIT_TO_MANAGER';
+        historyComment = comments || 'Reviewer submitted edits to Budget Manager';
         currentStep = 'MANAGER_REVIEW';
         currentAssigneeRole = 'BUDGET_MANAGER';
         pendingRoles = ['BUDGET_MANAGER'];
-        proposal.submittedByRole = 'BUDGET_COORDINATOR';
+        proposal.submittedByRole = 'APPROVER';
         proposal.forwardedToManagerAt = now;
         proposal.forwardedToManagerBy = { userId, userName };
         proposal.bypassedOfficerReview = true;
@@ -1378,25 +1379,25 @@ exports.submitEdit = async (req, res) => {
         // Retain legacy status label for backward compatibility; UI will show alias as needed
         newStatus = 'Forwarded to Approver';
         newWorkflowLevel = 'OFFICER';
-        historyAction = 'COORDINATOR_SUBMIT_TO_OFFICER';
-        historyComment = comments || 'Coordinator submitted edits to Approver';
+        historyAction = 'REVIEWER_SUBMIT_TO_OFFICER';
+        historyComment = comments || 'Reviewer submitted edits to Approver';
         currentStep = 'OFFICER_REVIEW';
         currentAssigneeRole = 'APPROVER';
         pendingRoles = ['APPROVER'];
-        proposal.submittedByRole = 'BUDGET_COORDINATOR';
+        proposal.submittedByRole = 'APPROVER';
         proposal.forwardedToOfficerAt = now;
         proposal.forwardedToOfficerBy = { userId, userName };
         proposal.bypassedOfficerReview = false;
       }
     } else if (editorRole === 'APPROVER') {
-      // APPROVER approves and forwards to BUDGET_ANALYST
+      // APPROVER approves and forwards to BUDGET_PLANNING_ANALYST
       newStatus = 'Forwarded to Analyst';
       newWorkflowLevel = 'ANALYST';
       historyAction = 'APPROVER_APPROVE_TO_ANALYST';
-      historyComment = comments || 'Approver approved and forwarded to Budget Analyst';
+      historyComment = comments || 'Approver approved and forwarded to Budget Planning Analyst';
       currentStep = 'ANALYST_REVIEW';
-      currentAssigneeRole = 'BUDGET_ANALYST';
-      pendingRoles = ['BUDGET_ANALYST'];
+      currentAssigneeRole = 'BUDGET_PLANNING_ANALYST';
+      pendingRoles = ['BUDGET_PLANNING_ANALYST'];
       proposal.submittedByRole = 'APPROVER';
       proposal.forwardedToAnalystAt = now;
       proposal.forwardedToAnalystBy = { userId, userName };
@@ -1457,16 +1458,16 @@ exports.submitEdit = async (req, res) => {
     let logSummary = 'Submitted edits for approval';
     if (editorRole === 'PREPARER') {
       logSummary = 'Submitted edits to Reviewer';
-    } else if (editorRole === 'BUDGET_ANALYST') {
+    } else if (editorRole === 'BUDGET_PLANNING_ANALYST') {
       logSummary = 'Submitted analysis to Budget Officer';
-    } else if (editorRole === 'BUDGET_COORDINATOR') {
+    } else if (editorRole === 'APPROVER') {
       if (submitTargetRole === 'BUDGET_MANAGER') {
         logSummary = 'Submitted edits directly to Budget Manager (bypassed Officer)';
       } else {
         logSummary = 'Submitted edits to Budget Officer';
       }
     } else if (editorRole === 'APPROVER') {
-      logSummary = 'Approved and forwarded to Budget Analyst';
+      logSummary = 'Approved and forwarded to Budget Planning Analyst';
     } else if (editorRole === 'BUDGET_OFFICER') {
       logSummary = 'Submitted edits to Budget Manager';
     } else if (editorRole === 'BUDGET_MANAGER') {
@@ -1535,29 +1536,29 @@ exports.submitEdit = async (req, res) => {
   let notificationTitle = `Proposal Submitted for ${displayTargetRole} Review`;
   let notificationMessage = `${displaySubmitterRole} has submitted the proposal "${proposal.title}" for your review. Fiscal Year: ${proposal.fiscalYear} - ${proposal.budgetType}`;
 
-      if (editorRole === 'BUDGET_ANALYST') {
+      if (editorRole === 'BUDGET_PLANNING_ANALYST') {
         notificationTitle = 'Proposal Submitted for BUDGET_OFFICER Review';
-        notificationMessage = `BUDGET_ANALYST has submitted the proposal "${proposal.title}" for your review. Fiscal Year: ${proposal.fiscalYear} - ${proposal.budgetType}`;
+        notificationMessage = `BUDGET_PLANNING_ANALYST has submitted the proposal "${proposal.title}" for your review. Fiscal Year: ${proposal.fiscalYear} - ${proposal.budgetType}`;
         displayTargetRole = 'BUDGET_OFFICER';
         displayRoleForResponse = 'BUDGET_OFFICER';
-      } else if (editorRole === 'BUDGET_COORDINATOR') {
+      } else if (editorRole === 'APPROVER') {
         if (currentAssigneeRole === 'BUDGET_MANAGER') {
           notificationTitle = 'Proposal Submitted for OVERALL_BUDGET_APPROVER Review (Bypassed Officer)';
-          notificationMessage = `REVIEWER has submitted the proposal "${proposal.title}" directly to you for final review. Fiscal Year: ${proposal.fiscalYear} - ${proposal.budgetType}`;
+          notificationMessage = `APPROVER has submitted the proposal "${proposal.title}" directly to you for final review. Fiscal Year: ${proposal.fiscalYear} - ${proposal.budgetType}`;
           displayTargetRole = 'OVERALL_BUDGET_APPROVER';
           displayRoleForResponse = 'OVERALL_BUDGET_APPROVER';
         } else {
-          // Reviewer forwarding to Approver (maps to persisted BUDGET_OFFICER)
-          notificationTitle = 'Proposal Submitted for APPROVER Review';
-          notificationMessage = `REVIEWER has submitted the proposal "${proposal.title}" for your review. Fiscal Year: ${proposal.fiscalYear} - ${proposal.budgetType}`;
-          displayTargetRole = 'APPROVER';
-          displayRoleForResponse = 'APPROVER';
+          // Approver forwarding to Budget Planning Analyst
+          notificationTitle = 'Proposal Submitted for BUDGET_PLANNING_ANALYST Review';
+          notificationMessage = `APPROVER has submitted the proposal "${proposal.title}" for your review. Fiscal Year: ${proposal.fiscalYear} - ${proposal.budgetType}`;
+          displayTargetRole = 'BUDGET_PLANNING_ANALYST';
+          displayRoleForResponse = 'BUDGET_PLANNING_ANALYST';
         }
       } else if (editorRole === 'APPROVER') {
         notificationTitle = 'Proposal Approved and Forwarded';
         notificationMessage = `APPROVER has approved and forwarded the proposal "${proposal.title}" for your review. Fiscal Year: ${proposal.fiscalYear} - ${proposal.budgetType}`;
-        displayTargetRole = 'BUDGET_ANALYST';
-        displayRoleForResponse = 'BUDGET_ANALYST';
+        displayTargetRole = 'BUDGET_PLANNING_ANALYST';
+        displayRoleForResponse = 'BUDGET_PLANNING_ANALYST';
       } else if (editorRole === 'BUDGET_OFFICER') {
         notificationTitle = 'Proposal Submitted for OVERALL_BUDGET_APPROVER Review';
         notificationMessage = `BUDGET_OFFICER has submitted the proposal "${proposal.title}" for your final review and approval. Fiscal Year: ${proposal.fiscalYear} - ${proposal.budgetType}`;
@@ -1730,7 +1731,7 @@ exports.getEditsByProposal = async (req, res) => {
 };
 
 /**
- * Get comparison data for Budget Analyst
+ * Get comparison data for Preparer
  * Shows original vs edited data with highlights
  */
 exports.getComparisonData = async (req, res) => {
@@ -2112,7 +2113,7 @@ exports.approveEdit = async (req, res) => {
         userAgent: req.get('user-agent')
       });
       
-      // Notify Budget Analyst
+      // Notify Preparer
       await createNotification({
         userId: edit.processBy,
         type: 'PROPOSAL_APPROVED',

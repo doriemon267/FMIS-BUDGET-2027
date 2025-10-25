@@ -223,9 +223,9 @@ const WORKFLOW_PATHS = {
 const WORKFLOW_ROLE_DESCRIPTIONS = {
   [WORKFLOW_ROLES.DIVISION_CREATOR]: 'Creates and edits division-level budget proposals',
   [WORKFLOW_ROLES.DIVISION_REVIEWER]: 'Reviews division-level submissions before approval',
-  [WORKFLOW_ROLES.DIVISION_APPROVER]: 'Approves division-level submissions and routes to budget analyst',
+  [WORKFLOW_ROLES.DIVISION_APPROVER]: 'Approves division-level submissions and routes to preparer',
   [WORKFLOW_ROLES.OFFICE_CREATOR]: 'Creates and edits office/department-level budget proposals',
-  [WORKFLOW_ROLES.OFFICE_APPROVER]: 'Approves office-level submissions and routes to budget analyst (skips coordinator)',
+  [WORKFLOW_ROLES.OFFICE_APPROVER]: 'Approves office-level submissions and routes to preparer (skips coordinator)',
   [WORKFLOW_ROLES.BUDGET_ANALYST]: 'Performs technical review of all submissions',
   [WORKFLOW_ROLES.BUDGET_OFFICER]: 'Provides operational approval after technical review',
   [WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER]: 'Executive authorization and final budget approval',

@@ -55,7 +55,7 @@ router.post(
   submissionWorkflowTransitions.officeReturnToResponsibilityCenter
 );
 
-// Step 3→4: Coordinator approves and forwards to Officer (Division Submitted → Forwarded to Officer)
+// Step 3→4: Reviewer approves and forwards to Officer (Division Submitted → Forwarded to Officer)
 router.post(
   '/office/verify-submission',
   submissionWorkflowControl('update'),

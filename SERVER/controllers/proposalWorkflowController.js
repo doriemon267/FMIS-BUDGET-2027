@@ -163,8 +163,8 @@ const budgetRoleAccessControl = (operation = 'read') => {
         } else if (isOverallBudgetApprover) {
           // Overall Budget Approvers can see all proposals
           visibilityFilter.status = { $in: ['Division Submitted', 'Under Review', 'Reviewed', 'Pending Approval', 'Approved', 'Finalized', 'Officer Approved', 'Forwarded to Manager'] };
-        } else if (isBudgetAnalyst) {
-          // Budget Analysts: prefer to show only own proposals, but also include other proposals
+        } else if (isPreparer) {
+          // Preparers: prefer to show only own proposals, but also include other proposals
           // from the same division so that approvals by the Officer don't make them disappear.
           if (userDivision) {
             visibilityFilter.$or = [
@@ -559,9 +559,9 @@ exports.checkAnalystSubmissionPrerequisites = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Proposal ID is required' });
     }
 
-  const isBudgetAnalyst = hasRole(userRoles, 'BUDGET_ANALYST');
-    if (!isBudgetAnalyst) {
-      return res.status(403).json({ success: false, message: 'Only Budget Analysts can validate submission prerequisites' });
+  const isPreparer = hasRole(userRoles, 'PREPARER');
+    if (!isPreparer) {
+      return res.status(403).json({ success: false, message: 'Only Preparers can validate submission prerequisites' });
     }
 
     let proposal = await Proposal.findById(proposalId);
@@ -815,11 +815,11 @@ exports.submitDirectToManager = async (req, res) => {
     const userName = req.user.FirstName + ' ' + req.user.LastName;
     const userRoles = extractUserRoles(req.user);
 
-    // Only BUDGET_ANALYST can use this endpoint
-    if (!hasRole(userRoles, 'BUDGET_ANALYST')) {
+    // Only PREPARER can use this endpoint
+    if (!hasRole(userRoles, 'PREPARER')) {
       return res.status(403).json({ 
         success: false, 
-        message: 'Only Budget Analysts can submit directly to Budget Manager' 
+        message: 'Only Preparers can submit directly to Budget Manager' 
       });
     }
 
@@ -918,7 +918,7 @@ exports.submitDirectToManager = async (req, res) => {
     await sendNotification({
       recipientRole: 'BUDGET_MANAGER',
       title: 'New Proposal Submitted (Direct)',
-  message: `Proposal "${proposal.title}" submitted directly from ${proposal.division || proposal.department} by ${userName} (Budget Analyst). Comment: ${sanitizedComment}`,
+  message: `Proposal "${proposal.title}" submitted directly from ${proposal.division || proposal.department} by ${userName} (Preparer). Comment: ${sanitizedComment}`,
       entity: 'proposal',
       recordIds: [proposal._id],
       org: {
@@ -945,7 +945,7 @@ exports.submitDirectToManager = async (req, res) => {
   }
 };
 
-// Save draft progress (Budget Analyst)
+// Save draft progress (Preparer)
 exports.saveDraft = async (req, res) => {
   try {
     const { proposalId, comment, updates } = req.body;
@@ -958,13 +958,13 @@ exports.saveDraft = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Proposal not found' });
     }
 
-  const isBudgetAnalyst = hasRole(userRoles, 'BUDGET_ANALYST');
+  const isPreparer = hasRole(userRoles, 'PREPARER');
     const isCreator = proposal.createdByUserId === userId;
 
-    if (!isBudgetAnalyst && !isCreator) {
+    if (!isPreparer && !isCreator) {
       return res.status(403).json({
         success: false,
-        message: 'Only the assigned Budget Analyst can save this draft'
+        message: 'Only the assigned Preparer can save this draft'
       });
     }
 
@@ -1095,13 +1095,13 @@ exports.submitProposal = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Proposal not found' });
     }
 
-  const isBudgetAnalyst = hasRole(userRoles, 'BUDGET_ANALYST');
+  const isPreparer = hasRole(userRoles, 'PREPARER');
     const isCreator = proposal.createdByUserId === userId;
 
-    if (!isBudgetAnalyst && !isCreator) {
+    if (!isPreparer && !isCreator) {
       return res.status(403).json({
         success: false,
-        message: 'Only the assigned Budget Analyst can submit this proposal'
+        message: 'Only the assigned Preparer can submit this proposal'
       });
     }
 

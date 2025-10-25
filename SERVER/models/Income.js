@@ -50,7 +50,7 @@ const incomeSchema = new mongoose.Schema(
         'Division Submitted',  // Analyst submits to Division
         'Department Verified',
         'Department Submitted',
-        'Forwarded to Officer',  // Coordinator approves (new workflow)
+        'Forwarded to Officer',  // Reviewer approves (new workflow)
         'Officer Approved',      // Officer approves (new workflow)
         'Forwarded to Manager',  // Officer submits to Manager (new workflow)
         'Region Approved',       // Legacy status

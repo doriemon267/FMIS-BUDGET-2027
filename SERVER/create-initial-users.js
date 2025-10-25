@@ -1,11 +1,11 @@
 /**
  * Create Initial Hierarchical User Assignments
  * 
- * This script creates the 4 main budget users with correct workflow roles:
- * - Joshua Demafelez - BUDGET_ANALYST (divisionCreator)
- * - Andrie Barrameda - BUDGET_OFFICER (officeConsolidator, officeFinalVerifier)
- * - Nelson Eloso - BUDGET_COORDINATOR (divisionApprover)
- * - Reymund Edra - BUDGET_MANAGER (regionFinalVerifier)
+ * This script creates the 4 main budget users with 6-step workflow roles:
+ * - Joshua Demafelez - BUDGET_ANALYST (STEP 4 - divisionCreator)
+ * - Andrie Barrameda - BUDGET_OFFICER (STEP 5 - officeConsolidator, officeFinalVerifier)
+ * - Nelson Eloso - REVIEWER (STEP 2 - divisionReviewer)
+ * - Reymund Edra - OVERALL_BUDGET_APPROVER (STEP 6 - regionFinalVerifier)
  */
 
 require('dotenv').config();
@@ -69,14 +69,14 @@ const initialUsers = [
     userId: 'nelson.eloso',
     userName: 'Nelson Eloso',
     email: 'nelson.eloso@dreed.gov.ph',
-    userRole: 'BUDGET_COORDINATOR',
+    userRole: 'REVIEWER',
     accessScope: 'DIVISION',
     assignmentLevel: 'DIVISION',
     regionId: NCR_REGION_ID,
     departmentId: PLANNING_DEPT_ID,
     divisionName: 'Budget Division',
-    primaryRoles: ['BUDGET_COORDINATOR'],
-    workflowRoles: ['divisionApprover'],
+    primaryRoles: ['REVIEWER'],
+    workflowRoles: ['divisionReviewer'],
     rolePermissions: {
       CreateProposals: true,
       EditOwnProposals: true,
@@ -92,13 +92,13 @@ const initialUsers = [
     userId: 'reymund.edra',
     userName: 'Reymund Edra',
     email: 'reymund.edra@dreed.gov.ph',
-    userRole: 'BUDGET_MANAGER',
+    userRole: 'OVERALL_BUDGET_APPROVER',
     accessScope: 'FULL',
     assignmentLevel: 'FULL',
     regionId: null,
     departmentId: null,
     divisionName: null,
-    primaryRoles: ['BUDGET_MANAGER'],
+    primaryRoles: ['OVERALL_BUDGET_APPROVER'],
     workflowRoles: ['regionFinalVerifier'],
     rolePermissions: {
       CreateProposals: true,
@@ -146,17 +146,21 @@ async function createInitialUsers() {
     const count = await HierarchicalUserAssignment.countDocuments({ isActive: true });
     console.log(`Total active assignments: ${count}`);
     
-    // Show summary by role
-    console.log('\n📈 Summary by Role:');
+    // Show summary by 6-step workflow roles
+    console.log('\n📈 Summary by 6-Step Workflow Role:');
+    const preparers = await HierarchicalUserAssignment.countDocuments({ userRole: 'PREPARER', isActive: true });
+    const reviewers = await HierarchicalUserAssignment.countDocuments({ userRole: 'REVIEWER', isActive: true });
+    const approvers = await HierarchicalUserAssignment.countDocuments({ userRole: 'APPROVER', isActive: true });
     const analysts = await HierarchicalUserAssignment.countDocuments({ userRole: 'BUDGET_ANALYST', isActive: true });
-    const coordinators = await HierarchicalUserAssignment.countDocuments({ userRole: 'BUDGET_COORDINATOR', isActive: true });
     const officers = await HierarchicalUserAssignment.countDocuments({ userRole: 'BUDGET_OFFICER', isActive: true });
-    const managers = await HierarchicalUserAssignment.countDocuments({ userRole: 'BUDGET_MANAGER', isActive: true });
+    const approversOverall = await HierarchicalUserAssignment.countDocuments({ userRole: 'OVERALL_BUDGET_APPROVER', isActive: true });
     
-    console.log(`   BUDGET_ANALYST: ${analysts}`);
-    console.log(`   BUDGET_COORDINATOR: ${coordinators}`);
-    console.log(`   BUDGET_OFFICER: ${officers}`);
-    console.log(`   BUDGET_MANAGER: ${managers}`);
+    console.log(`   STEP 1 - PREPARER: ${preparers}`);
+    console.log(`   STEP 2 - REVIEWER: ${reviewers}`);
+    console.log(`   STEP 3 - APPROVER: ${approvers}`);
+    console.log(`   STEP 4 - BUDGET_ANALYST: ${analysts}`);
+    console.log(`   STEP 5 - BUDGET_OFFICER: ${officers}`);
+    console.log(`   STEP 6 - OVERALL_BUDGET_APPROVER: ${approversOverall}`);
 
     console.log('\n✅ Initial users created successfully!');
 
