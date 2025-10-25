@@ -1814,16 +1814,10 @@ exports.getComparisonData = async (req, res) => {
       );
 
       edited.forEach(editedItem => {
-        const changeType = editedItem?.changeType || (editedItem?.originalId ? 'modified' : 'added');
+        const changeType = editedItem?.changeType || 'modified';
         let originalItem = editedItem?.originalValues || null;
 
-        // If no originalValues, try to find the original item from the DB data
-        if (!originalItem && editedItem?.originalId) {
-          const matchKey = editedItem.originalId.toString();
-          originalItem = original.find(item => item?._id?.toString() === matchKey) || null;
-        }
-
-        if ((changeType === 'added' && !originalItem) || (!originalItem && changeType === 'added')) {
+        if (changeType === 'added') {
           comparison.push({
             type: 'added',
             edited: editedItem,
@@ -1832,7 +1826,7 @@ exports.getComparisonData = async (req, res) => {
           return;
         }
 
-        if (changeType === 'deleted' && originalItem) {
+        if (changeType === 'deleted') {
           comparison.push({
             type: 'deleted',
             edited: null,
@@ -1844,8 +1838,13 @@ exports.getComparisonData = async (req, res) => {
           return;
         }
 
+        // For modified items
         if (!originalItem) {
-          // If we couldn't find original, treat as added
+          // Fallback to DB data
+          originalItem = original.find(item => item?._id?.toString() === editedItem?.originalId?.toString()) || null;
+        }
+
+        if (!originalItem) {
           comparison.push({
             type: 'added',
             edited: editedItem,
@@ -1877,7 +1876,7 @@ exports.getComparisonData = async (req, res) => {
         });
 
         const hasChanges = Object.keys(changes).length > 0;
-        const entryType = changeType === 'unchanged' || !hasChanges ? 'unchanged' : 'modified';
+        const entryType = hasChanges ? 'modified' : 'unchanged';
 
         comparison.push({
           type: entryType,
@@ -1891,13 +1890,13 @@ exports.getComparisonData = async (req, res) => {
         }
       });
 
-      // For deleted items that are not in edited array
-      edited.filter(item => item?.changeType === 'deleted').forEach(deletedItem => {
-        if (deletedItem?.originalValues) {
+      // Unchanged items from DB that were not processed
+      original.forEach(item => {
+        if (item?._id && !processedOriginalIds.has(item._id.toString())) {
           comparison.push({
-            type: 'deleted',
-            edited: null,
-            original: deletedItem.originalValues
+            type: 'unchanged',
+            edited: item, // Since DB is updated, edited = original
+            original: item
           });
         }
       });
