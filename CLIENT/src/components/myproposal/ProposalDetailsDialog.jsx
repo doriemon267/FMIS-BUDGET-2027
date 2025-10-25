@@ -107,12 +107,13 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     return status === 'Forwarded to Manager' || status === 'Officer Approved';
   }, [isManagerLevel, normalizedPrimaryRoles, displayedProposal?.status, proposal?.status]);
 
-  // APPROVER: Division approvers (divisionapprover) - STRICT workflow role check only
+  // APPROVER: Division approvers (divisionapprover) or users with APPROVER role
   const isDivisionApprover = useMemo(() => {
     if (!userInfo) return false;
-    // ONLY check for 'divisionapprover' workflow role - no assignmentLevel fallback
-    return normalizedWorkflowRoles.some((role) => role === 'divisionapprover');
-  }, [userInfo, normalizedWorkflowRoles]);
+    // Check for 'divisionapprover' workflow role OR 'APPROVER' primary role
+    return normalizedWorkflowRoles.some((role) => role === 'divisionapprover') ||
+           normalizedPrimaryRoles.some((role) => role === 'APPROVER');
+  }, [userInfo, normalizedWorkflowRoles, normalizedPrimaryRoles]);
 
   // Reviewer: Division reviewers (divisionreviewer) - can view and review proposals
   const isReviewer = useMemo(() => {
