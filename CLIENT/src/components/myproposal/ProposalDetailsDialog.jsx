@@ -112,9 +112,23 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
   // APPROVER: Division approvers (divisionapprover), Office approvers (officeapprover), or users with APPROVER role
   const isDivisionApprover = useMemo(() => {
     if (!userInfo) return false;
-    // Check for 'divisionapprover' or 'officeapprover' workflow role OR 'APPROVER' primary role
-    return normalizedWorkflowRoles.some((role) => role === 'divisionapprover' || role === 'officeapprover') ||
-           normalizedPrimaryRoles.some((role) => role === 'APPROVER');
+    // Check for 'divisionapprover' or 'officeapprover' workflow role OR 'APPROVER' in workflow or primary roles
+    const hasWorkflowRole = normalizedWorkflowRoles.some((role) => role === 'divisionapprover' || role === 'officeapprover' || role === 'approver');
+    const hasPrimaryRole = normalizedPrimaryRoles.some((role) => 
+      role === 'APPROVER' || 
+      role === 'DIVISION APPROVER' || 
+      role === 'OFFICE APPROVER' ||
+      role.includes('APPROVER')
+    );
+    const result = hasWorkflowRole || hasPrimaryRole;
+    console.log('🔍 isDivisionApprover check:', {
+      hasWorkflowRole,
+      hasPrimaryRole,
+      normalizedWorkflowRoles,
+      normalizedPrimaryRoles,
+      result
+    });
+    return result;
   }, [userInfo, normalizedWorkflowRoles, normalizedPrimaryRoles]);
 
   // Reviewer: Division reviewers (divisionreviewer) - can view and review proposals
@@ -961,7 +975,17 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                       handleClose();
                     }, 1500); // Give time to show success toast before closing
                   }}
-                  variant={isManagerLevel ? 'manager' : isDivisionApprover ? 'approver' : isReviewer ? 'reviewer' : isPreparer ? 'preparer' : 'officer'}
+                  variant={(() => {
+                    const variant = isManagerLevel ? 'manager' : isDivisionApprover ? 'approver' : isReviewer ? 'reviewer' : isPreparer ? 'preparer' : 'officer';
+                    console.log('🎭 Variant determination:', {
+                      isManagerLevel,
+                      isDivisionApprover,
+                      isReviewer,
+                      isPreparer,
+                      variant
+                    });
+                    return variant;
+                  })()}
                   allowSubmit={!managerCanEditNow && !isViewOnlyAfterSubmission}
                   showTables={officerShowTables || isViewOnlyAfterSubmission}
                   readOnly={isViewOnlyAfterSubmission}
