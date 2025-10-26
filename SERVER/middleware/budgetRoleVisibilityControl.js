@@ -68,12 +68,10 @@ const budgetRoleVisibilityControl = () => {
       switch (budgetRole) {
         case 'BUDGET_PLANNING_ANALYST':
           // STEP 4 of 6-step workflow: PREPARER → REVIEWER → APPROVER → [BUDGET_PLANNING_ANALYST] → BUDGET_OFFICER → OVERALL_APPROVER
-          // BUDGET_PLANNING_ANALYST can see proposals forwarded by APPROVER
+          // BUDGET_PLANNING_ANALYST can see proposals forwarded by APPROVER AND proposals they've worked on
           visibilityFilter = {
             $or: [
-              { createdByUserId: userId },
-              { processBy: userId },
-              ...(userDivision ? [{ division: userDivision }] : []),
+              // Proposals currently assigned to BUDGET_PLANNING_ANALYST
               { currentAssigneeRole: 'BUDGET_PLANNING_ANALYST' },
               { pendingWithRoles: 'BUDGET_PLANNING_ANALYST' },
               {
@@ -83,18 +81,23 @@ const budgetRoleVisibilityControl = () => {
                     'FORWARDED_TO_ANALYST'
                   ]
                 }
-              }
+              },
+              // Proposals BUDGET_PLANNING_ANALYST has previously worked on (retain visibility)
+              { 'workflowHistory.userId': userId },
+              // Own proposals and organizational scope
+              { createdByUserId: userId },
+              { processBy: userId },
+              ...(userDivision ? [{ division: userDivision }] : [])
             ]
           };
           break;
 
         case 'BUDGET_OFFICER':
           // STEP 5 of 6-step workflow: PREPARER → REVIEWER → APPROVER → BUDGET_ANALYST → [BUDGET_OFFICER] → OVERALL_APPROVER
-          // BUDGET_OFFICER can see proposals forwarded by BUDGET_ANALYST
+          // BUDGET_OFFICER can see proposals forwarded by BUDGET_ANALYST AND proposals they've worked on
           visibilityFilter = {
             $or: [
-              { createdByUserId: userId },
-              { processBy: userId },
+              // Proposals currently assigned to BUDGET_OFFICER
               {
                 status: {
                   $in: [
@@ -110,7 +113,12 @@ const budgetRoleVisibilityControl = () => {
                 }
               },
               { currentAssigneeRole: 'BUDGET_OFFICER' },
-              { pendingWithRoles: 'BUDGET_OFFICER' }
+              { pendingWithRoles: 'BUDGET_OFFICER' },
+              // Proposals BUDGET_OFFICER has previously worked on (retain visibility)
+              { 'workflowHistory.userId': userId },
+              // Own proposals
+              { createdByUserId: userId },
+              { processBy: userId }
             ]
           };
           break;
@@ -139,74 +147,88 @@ const budgetRoleVisibilityControl = () => {
 
         case 'REVIEWER':
           // STEP 2 of 6-step workflow: PREPARER → [REVIEWER] → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER
-          // REVIEWER can see proposals forwarded to them by PREPARER
+          // REVIEWER can see proposals forwarded to them AND proposals they've previously worked on
           visibilityFilter = {
-            $and: [
-              { status: { $ne: 'Draft' } },
+            $or: [
+              // Proposals currently assigned to REVIEWER
               {
-                $or: [
-                  { currentAssigneeRole: 'REVIEWER' },
-                  { pendingWithRoles: 'REVIEWER' },
+                $and: [
+                  { status: { $ne: 'Draft' } },
                   {
-                    status: {
-                      $in: [
-                        'Forwarded to Reviewer',
-                        'Under Review by Reviewer',
-                        'Division Submitted',
-                        'DIVISION SUBMITTED',
-                        'Department Submitted',
-                        'DEPARTMENT SUBMITTED'
-                      ]
-                    }
+                    $or: [
+                      { currentAssigneeRole: 'REVIEWER' },
+                      { pendingWithRoles: 'REVIEWER' },
+                      {
+                        status: {
+                          $in: [
+                            'Forwarded to Reviewer',
+                            'Under Review by Reviewer',
+                            'Division Submitted',
+                            'DIVISION SUBMITTED',
+                            'Department Submitted',
+                            'DEPARTMENT SUBMITTED'
+                          ]
+                        }
+                      }
+                    ]
                   }
                 ]
-              }
+              },
+              // Proposals REVIEWER has previously worked on (retain visibility)
+              { 'workflowHistory.userId': userId },
+              // Own proposals
+              { createdByUserId: userId },
+              { processBy: userId }
             ]
           };
           break;
 
         case 'APPROVER':
           // STEP 3 of 6-step workflow: PREPARER → REVIEWER → [APPROVER] → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER
-          // APPROVER can see proposals forwarded by REVIEWER
+          // APPROVER can see proposals forwarded to them AND proposals they've previously worked on
           visibilityFilter = {
-            $and: [
-              { status: { $ne: 'Draft' } },
+            $or: [
+              // Proposals currently assigned to APPROVER
               {
-                $or: [
-                  { currentAssigneeRole: { $in: ['BUDGET_OFFICER', 'APPROVER'] } },
-                  { pendingWithRoles: { $in: ['BUDGET_OFFICER', 'APPROVER'] } },
+                $and: [
+                  { status: { $ne: 'Draft' } },
                   {
-                    status: {
-                      $in: [
-                        'Forwarded to Approver',
-                        'Forwarded to Officer',
-                        'Under Review by Officer',
-                        'UNDER REVIEW BY OFFICER',
-                        'Department Verified',
-                        'DEPARTMENT VERIFIED',
-                        'Department Submitted',
-                        'DEPARTMENT SUBMITTED'
-                      ]
-                    }
-                  },
-                  { createdByUserId: userId },
-                  { processBy: userId }
+                    $or: [
+                      { currentAssigneeRole: { $in: ['BUDGET_OFFICER', 'APPROVER'] } },
+                      { pendingWithRoles: { $in: ['BUDGET_OFFICER', 'APPROVER'] } },
+                      {
+                        status: {
+                          $in: [
+                            'Forwarded to Approver',
+                            'Forwarded to Officer',
+                            'Under Review by Officer',
+                            'UNDER REVIEW BY OFFICER',
+                            'Department Verified',
+                            'DEPARTMENT VERIFIED',
+                            'Department Submitted',
+                            'DEPARTMENT SUBMITTED'
+                          ]
+                        }
+                      }
+                    ]
+                  }
                 ]
-              }
+              },
+              // Proposals APPROVER has previously worked on (retain visibility)
+              { 'workflowHistory.userId': userId },
+              // Own proposals
+              { createdByUserId: userId },
+              { processBy: userId }
             ]
           };
           break;
 
         case 'OVERALL_BUDGET_APPROVER':
           // STEP 6 of 6-step workflow: PREPARER → REVIEWER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → [OVERALL_APPROVER]
-          // Final approval step - sees proposals forwarded by BUDGET_OFFICER
+          // Final approval step - sees proposals forwarded by BUDGET_OFFICER AND proposals they've worked on
           visibilityFilter = {
             $or: [
-              // Own proposals created by this user
-              { createdByUserId: userId },
-              // Proposals assigned/processed by this user
-              { processBy: userId },
-              // Proposals in any submitted/verified/approved status
+              // Proposals currently assigned to OVERALL_BUDGET_APPROVER
               {
                 status: {
                   $in: [
@@ -229,9 +251,13 @@ const budgetRoleVisibilityControl = () => {
                   ]
                 }
               },
-              // Proposals assigned to OVERALL_BUDGET_APPROVER
               { currentAssigneeRole: 'OVERALL_BUDGET_APPROVER' },
-              { pendingWithRoles: 'OVERALL_BUDGET_APPROVER' }
+              { pendingWithRoles: 'OVERALL_BUDGET_APPROVER' },
+              // Proposals OVERALL_BUDGET_APPROVER has previously worked on (retain visibility)
+              { 'workflowHistory.userId': userId },
+              // Own proposals
+              { createdByUserId: userId },
+              { processBy: userId }
             ]
           };
           break;

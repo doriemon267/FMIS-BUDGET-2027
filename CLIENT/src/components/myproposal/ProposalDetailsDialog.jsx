@@ -54,6 +54,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
   const cacheRef = useRef(new Map());
   const abortControllerRef = useRef(null);
   const workflowActionsRef = useRef(null);
+  const budgetOfficerEditViewRef = useRef(null);
   const proposalKey = proposal?._id || null;
 
   const normalizedAssignmentLevel = useMemo(() => {
@@ -459,8 +460,8 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
 
       // Prefetch comparison data only for roles that need it
       // Note: This may fail if no edits exist yet, which is normal
-      // Fetch for PREPARERs, Budget Officers, Reviewers, and read-only statuses (where comparison view is shown)
-      if (isPreparer || isBudgetOfficer || isBudgetPlanningAnalystRole || isReviewer || requiresReadOnlyData) {
+      // Fetch for PREPARERs, Budget Officers, Reviewers, Approvers, and read-only statuses (where comparison view is shown)
+      if (isPreparer || isBudgetOfficer || isBudgetPlanningAnalystRole || isReviewer || isDivisionApprover || requiresReadOnlyData) {
         requests.push(
           getComparisonData(proposalKey, { signal: controller.signal })
             .then((response) => {
@@ -704,13 +705,26 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
   // Do not allow rendering the full edit view when officer comparison-only tables are active
   // OR when user is viewing after their submission step (should only see comparison view)
   const canRenderEditView = !isReadOnlyMode && proposalData && !officerReadOnlyTables && !isViewOnlyAfterSubmission && proposal?.status !== 'Officer Approved' && proposal?.status !== 'Approved' && (
-    (isBudgetOfficer && !isManagerLevel) || 
-    approverCanEditNow || 
-    preparerCanEditNow || 
-    reviewerCanEditNow || 
-    managerCanEditNow || 
+    (isBudgetOfficer && !isManagerLevel) ||
+    approverCanEditNow ||
+    preparerCanEditNow ||
+    reviewerCanEditNow ||
+    managerCanEditNow ||
     (isApprover && proposal?.status === 'Forwarded to Approver') ||
     (proposal?.status === 'Draft' && !isBudgetOfficer && !isPreparer && !isDivisionApprover && !isManagerLevel && !isApprover && !isReviewer)
+  );
+
+  // Determine if user should see comparison/audit trail view instead of editable tables
+  const shouldShowComparisonView = !isReadOnlyMode && comparisonData && (
+    isViewOnlyAfterSubmission ||
+    (!approverCanEditNow && isApprover) ||
+    (!reviewerCanEditNow && isReviewer) ||
+    (!preparerCanEditNow && isPreparer)
+  );
+
+  // Determine if user should see read-only tables (for APPROVER when they can't edit but have no comparison data)
+  const shouldShowReadOnlyTables = !isReadOnlyMode && proposalData && !officerReadOnlyTables && !isViewOnlyAfterSubmission && !shouldShowComparisonView && (
+    (!approverCanEditNow && isApprover && (proposal?.status === 'Approver Approved' || proposal?.status === 'Forwarded to Analyst'))
   );
 
   return (
@@ -944,6 +958,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                   </Alert>
                 )}
                 <BudgetOfficerEditView 
+                  ref={budgetOfficerEditViewRef}
                   proposal={proposal}
                   proposalData={proposalData}
                   onSaveSuccess={async () => {
@@ -1016,7 +1031,67 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                   })()}
                   allowSubmit={!managerCanEditNow && !isViewOnlyAfterSubmission}
                   showTables={officerShowTables || isViewOnlyAfterSubmission}
-                  readOnly={isViewOnlyAfterSubmission}
+                  readOnly={isViewOnlyAfterSubmission || (!approverCanEditNow && isApprover) || (!reviewerCanEditNow && isReviewer) || (!preparerCanEditNow && isPreparer)}
+                  showSaveDraftButton={false}
+                />
+              </>
+            )}
+
+            {/* ✅ READ-ONLY TABLES: Show read-only tables for APPROVER when they can't edit and have no comparison data */}
+            {shouldShowReadOnlyTables && (
+              <>
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <Typography variant="body2">
+                    <strong>📊 View Mode:</strong> You have already approved this proposal.
+                    {proposal?.status === 'Approver Approved' && ' The proposal has been forwarded to Budget Planning Analyst for review.'}
+                    {proposal?.status === 'Forwarded to Analyst' && ' The proposal is now with the Budget Planning Analyst.'}
+                    <br />
+                    <em>Status: {proposal?.status} • You cannot edit at this stage</em>
+                  </Typography>
+                </Alert>
+                <BudgetOfficerEditView
+                  ref={budgetOfficerEditViewRef}
+                  proposal={proposal}
+                  proposalData={proposalData}
+                  variant="approver"
+                  allowSubmit={false}
+                  showTables={true}
+                  readOnly={true}
+                  showSaveDraftButton={false}
+                />
+              </>
+            )}
+
+            {/* ✅ COMPARISON VIEW: Show audit trail with change indicators for PREPARER, REVIEWER, APPROVER when they can't edit */}
+            {shouldShowComparisonView && (
+              <>
+                {console.log('🔍 Rendering COMPARISON VIEW for:', {
+                  isPreparer,
+                  isDivisionApprover,
+                  isReviewer,
+                  isBudgetPlanningAnalystRole,
+                  isBudgetOfficer,
+                  isManagerLevel,
+                  status: proposal?.status,
+                  hasComparisonData: !!comparisonData,
+                  isViewOnlyAfterSubmission
+                })}
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <Typography variant="body2">
+                    <strong>📊 Audit Trail - Changes Made by Next Step:</strong>
+                    {isPreparer && ' See what the Reviewer/Approver changed after you submitted.'}
+                    {isReviewer && ' See what the Approver changed after you approved.'}
+                    {isDivisionApprover && ' See what the Budget Planning Analyst changed after you approved.'}
+                    {isBudgetPlanningAnalystRole && ' See what the Budget Officer changed after you submitted.'}
+                    {isBudgetOfficer && ' See what the Budget Manager changed after you submitted.'}
+                    {isManagerLevel && ' Final approval changes visible.'}
+                    <br />
+                    <em>Status: {proposal?.status} • You cannot edit at this stage</em>
+                  </Typography>
+                </Alert>
+                <BudgetAnalystComparisonView
+                  comparisonData={comparisonData}
+                  proposal={proposal}
                 />
               </>
             )}
@@ -1071,20 +1146,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
               </>
             )}
 
-            {/* Legacy comparison views - now consolidated into the isViewOnlyAfterSubmission section above */}
-            {!isReadOnlyMode && isDivisionApprover && !approverCanEditNow && comparisonData && !isViewOnlyAfterSubmission && (
-              <BudgetAnalystComparisonView 
-                comparisonData={comparisonData}
-                proposal={proposal}
-              />
-            )}
-
-            {!isReadOnlyMode && isReviewer && !reviewerCanEditNow && comparisonData && !isViewOnlyAfterSubmission && (
-              <BudgetAnalystComparisonView 
-                comparisonData={comparisonData}
-                proposal={proposal}
-              />
-            )}
+            {/* Legacy comparison views - now consolidated into the shouldShowComparisonView section above */}
 
             {/* TEMPORARILY HIDDEN - APPROVER warnings */}
             {false && isDivisionApprover && !proposalData && !approverCanEditNow && !loading && (
@@ -1197,6 +1259,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
               ref={workflowActionsRef}
               proposal={proposal}
               userInfo={userInfo}
+              getTableData={() => budgetOfficerEditViewRef.current?.getCurrentEditData?.()}
               onRefresh={(updatedProposal, forceFlag, triggeredAction) => {
                 console.log('🔄 onRefresh callback triggered:', {
                   hasUpdatedProposal: !!updatedProposal,

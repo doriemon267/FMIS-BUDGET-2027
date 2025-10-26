@@ -42,6 +42,7 @@ const proposalSchema = new mongoose.Schema({
       "Forwarded to Reviewer",          // PREPARER submits to REVIEWER
       "Division Submitted",             // ANALYST submits
       "Forwarded to Approver",           // REVIEWER approves and forwards to APPROVER
+      "Approver Approved",              // APPROVER approves and forwards to BUDGET_PLANNING_ANALYST
       "Forwarded to Budget Officer",    // BUDGET_ANALYST submits to BUDGET_OFFICER
       "Forwarded to Analyst",           // APPROVER approves and forwards to Analyst
       "Officer Approved",               // OFFICER approves
@@ -63,7 +64,7 @@ const proposalSchema = new mongoose.Schema({
   // Enhanced workflow tracking for budget roles
   workflowLevel: {
     type: String,
-    enum: ["ANALYST", "REVIEWER", "OFFICER", "MANAGER", "FINALIZED"],
+    enum: ["PREPARER", "ANALYST", "REVIEWER", "APPROVER", "BUDGET_PLANNING_ANALYST", "OFFICER", "MANAGER", "FINALIZED"],
     default: "ANALYST"
   },
   currentStep: {
@@ -71,6 +72,8 @@ const proposalSchema = new mongoose.Schema({
     enum: [
       "ANALYST_DRAFT",
       "REVIEWER_REVIEW",
+      "APPROVER_REVIEW",
+      "BUDGET_PLANNING_ANALYST_REVIEW",
       "OFFICER_REVIEW",
       "ANALYST_REVIEW",
       "MANAGER_REVIEW",
@@ -120,6 +123,10 @@ const proposalSchema = new mongoose.Schema({
         "OFFICER_SUBMIT_TO_MANAGER",
         "OFFICER_SAVE_EDITS",
         "APPROVER_APPROVE_TO_ANALYST",
+        "APPROVER_APPROVE_FORWARD_ANALYST",
+        "APPROVER_SUBMIT_TO_OFFICER",
+        "APPROVER_RETURN",
+        "APPROVER_SAVE_EDITS",
         "PREPARER_SUBMIT_TO_REVIEWER",
         "MANAGER_APPROVE",
         "MANAGER_RETURN",
@@ -147,6 +154,9 @@ const proposalSchema = new mongoose.Schema({
           "OFFICER_APPROVE",
           "OFFICER_RETURN",
           "OFFICER_SUBMIT_TO_MANAGER",
+          "APPROVER_APPROVE_FORWARD_ANALYST",
+          "APPROVER_SUBMIT_TO_OFFICER",
+          "APPROVER_RETURN",
           "MANAGER_APPROVE",
           "MANAGER_RETURN",
           "ANALYST_SUBMIT_TO_REVIEWER"

@@ -27,7 +27,7 @@ const MODULE_SUMMARY_LABELS = {
  * Provides action buttons for the role-based workflow based on user role and current status:
  * Draft → Division Submitted → Forwarded to Officer → Officer Approved → Forwarded to Manager → Finalized
  */
-const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, showHeader = true, showTrackInMenu = true, showViewInMenu = true }, ref) => {
+const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, showHeader = true, showTrackInMenu = true, showViewInMenu = true, getTableData }, ref) => {
   const [loading, setLoading] = useState(false);
   const [historyItems, setHistoryItems] = useState(Array.isArray(proposal?.workflowHistory) ? proposal.workflowHistory : []);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -115,7 +115,6 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
 
     const roleSynonyms = {
       ANALYST: 'PREPARER',
-      BUDGETANALYST: 'PREPARER',
       BUDGET_ANALYST: 'PREPARER',
       BUDGET_OFFICER_ANALYST: 'PREPARER',
       BA: 'PREPARER',
@@ -140,10 +139,14 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       BUDGET_SPECIALIST: 'BUDGET_OFFICER',
       OFFICE_VERIFIER: 'BUDGET_OFFICER',
       OFFICEVERIFIER: 'BUDGET_OFFICER',
-      OFFICE_APPROVER: 'BUDGET_OFFICER',
-      OFFICEAPPROVER: 'BUDGET_OFFICER',
+      OFFICE_APPROVER: 'APPROVER',
+      OFFICEAPPROVER: 'APPROVER',
       OFFICE_CONSOLIDATOR: 'BUDGET_OFFICER',
       BUDGET_SUPERVISOR: 'BUDGET_OFFICER',
+
+      BUDGET_PLANNING_ANALYST: 'BUDGET_PLANNING_ANALYST',
+      BUDGETANALYST: 'BUDGET_PLANNING_ANALYST',
+      PLANNING_ANALYST: 'BUDGET_PLANNING_ANALYST',
 
       BUDGETMANAGER: 'BUDGET_MANAGER',
       BUDGET_MANAGER: 'BUDGET_MANAGER',
@@ -155,6 +158,8 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       REGION_FINAL_VERIFIER: 'BUDGET_MANAGER',
       REGIONAL_FINAL_VERIFIER: 'BUDGET_MANAGER',
       REGION_MANAGER: 'BUDGET_MANAGER',
+      OVERALL_APPROVER: 'BUDGET_MANAGER',
+      OVERALL_BUDGET_APPROVER: 'BUDGET_MANAGER',
 
       BUDGETADMIN: 'BUDGET_ADMIN',
       FULL: 'BUDGET_MANAGER'  // Map 'FULL' to manager role
@@ -250,15 +255,17 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     // Check if user has the required role for actions
     const isPreparer = normalizedRoles.includes('PREPARER');
     const isBudgetReviewer = normalizedRoles.includes('BUDGET_REVIEWER');
+    const isApprover = normalizedRoles.includes('APPROVER');
+    const isBudgetPlanningAnalyst = normalizedRoles.includes('BUDGET_PLANNING_ANALYST');
     const isBudgetOfficer = normalizedRoles.includes('BUDGET_OFFICER');
-    const isBudgetManager = normalizedRoles.includes('BUDGET_MANAGER');
+    const isOverallApprover = normalizedRoles.includes('BUDGET_MANAGER');
     const isBudgetAdmin = normalizedRoles.includes('BUDGET_ADMIN');
 
     // ROLE HIERARCHY PROTECTION: Use highest role in hierarchy
-    // Hierarchy: PREPARER < REVIEWER < OFFICER < MANAGER
+    // Hierarchy: PREPARER < REVIEWER < APPROVER < BUDGET_PLANNING_ANALYST < BUDGET_OFFICER < MANAGER
     // Only block higher actions if user has ONLY PREPARER role
-    const isPreparerOnly = isPreparer && !isBudgetReviewer && !isBudgetOfficer && !isBudgetManager && !isBudgetAdmin;
-    const hasHigherRole = isBudgetReviewer || isBudgetOfficer || isBudgetManager || isBudgetAdmin;
+    const isPreparerOnly = isPreparer && !isBudgetReviewer && !isApprover && !isBudgetPlanningAnalyst && !isBudgetOfficer && !isOverallApprover && !isBudgetAdmin;
+    const hasHigherRole = isBudgetReviewer || isApprover || isBudgetPlanningAnalyst || isBudgetOfficer || isOverallApprover || isBudgetAdmin;
     
     // Block manager actions only if user is PREPARER ONLY (no other roles)
     const shouldBlockManagerActions = isPreparerOnly;
@@ -274,8 +281,10 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       normalizedRoles,
       isPreparer,
       isBudgetReviewer,
+      isApprover,
+      isBudgetPlanningAnalyst,
       isBudgetOfficer,
-      isBudgetManager,
+      isOverallApprover,
       isBudgetAdmin,
       isPreparerOnly,
       shouldBlockManagerActions,
@@ -294,16 +303,6 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       const isReturnedToAnalyst = normalizedStatus === 'RETURNED' || (status === 'Returned' && proposal?.workflowLevel === 'ANALYST');
 
       if (isDraft || isReturnedToAnalyst) {
-        actions.push({
-          label: 'Save Draft',
-          action: 'save-draft',
-          color: 'bg-slate-500 hover:bg-slate-600',
-          icon: '💾',
-          description: 'Save current changes without routing',
-          requiresComment: false,
-          allowOptionalComment: true
-        });
-
         actions.push({
           label: 'Submit to Reviewer',
           action: 'submit-to-reviewer',
@@ -335,19 +334,19 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           allowOptionalComment: true
         });
         actions.push({
-          label: 'Approve & Forward to Officer',
-          action: 'reviewer-approve-forward-officer',
+          label: 'Approve & Forward to Approver',
+          action: 'reviewer-approve-forward-approver',
           color: 'bg-green-500 hover:bg-green-600',
           icon: '✅',
-          description: 'Approve and forward to Budget Officer for verification',
+          description: 'Approve and forward to Approver for verification',
           requiresComment: true
         });
         actions.push({
-          label: 'Submit to Manager (Skip Officer)',
-          action: 'reviewer-submit-to-manager',
+          label: 'Submit to Officer (Skip Approver)',
+          action: 'reviewer-submit-to-officer',
           color: 'bg-purple-500 hover:bg-purple-600',
           icon: '⚡',
-          description: 'Submit proposal directly to Budget Manager (bypasses Officer review)',
+          description: 'Submit proposal directly to Budget Officer (bypasses Approver review)',
           requiresComment: true
         });
         actions.push({
@@ -361,12 +360,53 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       }
     }
 
-    // BUDGET OFFICER Actions (Approval Level)
+    // APPROVER Actions (Division/Office Approver Level)
+    if (isApprover) {
+      // Can review and edit proposals forwarded by reviewer (but NOT when already approved)
+      if (normalizedStatus === "FORWARDED TO APPROVER" || status === "Forwarded to Approver" ||
+          normalizedStatus === "DIVISION SUBMITTED" || status === "Division Submitted") {
+        actions.push({
+          label: "Save Edits",
+          action: "approver-save-edits",
+          color: "bg-gray-500 hover:bg-gray-600",
+          icon: "💾",
+          description: "Save changes without forwarding",
+          requiresComment: false,
+          allowOptionalComment: true
+        });
+        actions.push({
+          label: "Approve & Forward to Budget Planning Analyst",
+          action: "approver-approve-forward-analyst",
+          color: "bg-green-500 hover:bg-green-600",
+          icon: "✅",
+          description: "Approve and forward to Budget Planning Analyst for review",
+          requiresComment: true
+        });
+        actions.push({
+          label: "Submit to Budget Officer (Skip Analyst)",
+          action: "approver-submit-to-officer",
+          color: "bg-purple-500 hover:bg-purple-600",
+          icon: "⚡",
+          description: "Submit proposal directly to Budget Officer (bypasses Analyst review)",
+          requiresComment: true
+        });
+        actions.push({
+          label: "Return to Reviewer",
+          action: "approver-return",
+          color: "bg-red-500 hover:bg-red-600",
+          icon: "↩️",
+          description: "Send back to reviewer for revisions",
+          requiresComment: true
+        });
+      }
+    }
+
+    // BUDGET OFFICER Actions (Final Approval Level)
     if (isBudgetOfficer && !shouldBlockOfficerActions) {
-      // Can review and edit proposals forwarded by reviewer
+      // Can review and edit proposals forwarded by approver
       if (normalizedStatus === "FORWARDED TO OFFICER" || status === "Forwarded to Officer" ||
           normalizedStatus === "OFFICER APPROVED" || status === "Officer Approved" ||
-          normalizedStatus === "DIVISION SUBMITTED" || status === "Division Submitted") {
+          normalizedStatus === "APPROVER APPROVED" || status === "Approver Approved") {
         actions.push({
           label: "Save Edits",
           action: "officer-save-edits",
@@ -385,11 +425,11 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           requiresComment: true
         });
         actions.push({
-          label: "Return to Reviewer",
+          label: "Return to Approver",
           action: "officer-return",
           color: "bg-red-500 hover:bg-red-600",
           icon: "↩️",
-          description: "Return proposal to reviewer for revisions",
+          description: "Return proposal to approver for revisions",
           requiresComment: true
         });
       }
@@ -408,7 +448,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     }
 
     // BUDGET MANAGER & BUDGET ADMIN Actions (Finalization Level)
-    if ((isBudgetManager || isBudgetAdmin) && !shouldBlockManagerActions) {
+    if ((isOverallApprover || isBudgetAdmin) && !shouldBlockManagerActions) {
       const managerStatuses = [
         'FORWARDED TO MANAGER',
         'OFFICER APPROVED'
@@ -446,7 +486,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
 
     // FALLBACK: If BUDGET_MANAGER and no actions found but status is "Forwarded to Manager", ensure Return action is available
     // This handles cases where role detection might fail but manager user can still perform manager actions
-    if (isBudgetManager && !shouldBlockManagerActions && actions.length === 0 && 
+    if (isOverallApprover && !shouldBlockManagerActions && actions.length === 0 && 
         (normalizedStatus === 'FORWARDED TO MANAGER' || status === 'Forwarded to Manager')) {
       console.warn('⚠️ Role detection may have failed, but adding fallback manager actions for "Forwarded to Manager" status');
       actions.push({
@@ -477,7 +517,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     }
 
     // Log if actions are being blocked due to role hierarchy
-    if (shouldBlockManagerActions && (isBudgetManager || isBudgetAdmin)) {
+    if (shouldBlockManagerActions && (isOverallApprover || isBudgetAdmin)) {
       console.warn('🚫 BLOCKED: Manager actions blocked for BUDGET_ANALYST user (role hierarchy protection active)');
     }
     if (shouldBlockOfficerActions && isBudgetOfficer) {
@@ -492,6 +532,8 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
   const roleLabelMap = useMemo(() => ({
     PREPARER: 'Preparer',
     BUDGET_REVIEWER: 'Budget Reviewer',
+    APPROVER: 'Approver',
+    BUDGET_PLANNING_ANALYST: 'Budget Planning Analyst',
     BUDGET_OFFICER: 'Budget Officer',
     BUDGET_MANAGER: 'Budget Manager',
     BUDGET_ADMIN: 'Budget Admin'
@@ -562,7 +604,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     // 1. Draft → PREPARER
     // 2. Division Submitted → REVIEWER
     // 3. Forwarded to Officer → APPROVER
-    // 4. Officer Approved → BUDGET_ANALYST
+    // 4. Officer Approved → BUDGET_PLANNING_ANALYST
     // 5. Forwarded to Manager → BUDGET_OFFICER
     // 6. Finalized → OVERALL_BUDGET_APPROVER
     
@@ -577,10 +619,10 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       derived.assignee = 'APPROVER';
       derived.pending = ['APPROVER'];
     } else if (s.includes('OFFICER APPROVED')) {
-      // Step 4: BUDGET_ANALYST reviews (after officer approval)
-      derived.step = 'BUDGET_ANALYST_REVIEW';
-      derived.assignee = 'BUDGET_ANALYST';
-      derived.pending = ['BUDGET_ANALYST'];
+      // Step 4: BUDGET_PLANNING_ANALYST reviews (after officer approval)
+      derived.step = 'BUDGET_PLANNING_ANALYST_REVIEW';
+      derived.assignee = 'BUDGET_PLANNING_ANALYST';
+      derived.pending = ['BUDGET_PLANNING_ANALYST'];
     } else if (s.includes('FORWARDED TO MANAGER') || s.includes('SUBMITTED TO MANAGER')) {
       // Step 5: BUDGET_OFFICER reviews
       derived.step = 'BUDGET_OFFICER_REVIEW';
@@ -624,7 +666,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     let successMessage = "";
     
     try {
-      if (action === 'submit-to-reviewer' && normalizedRoles.includes('BUDGET_ANALYST') && proposal?._id) {
+      if (action === 'submit-to-reviewer' && normalizedRoles.includes('BUDGET_PLANNING_ANALYST') && proposal?._id) {
         try {
           const readinessResponse = await api.get(`/api/workflow/submit/prerequisites/${proposal._id}`);
           if (readinessResponse?.data?.success && readinessResponse.data.ready === false) {
@@ -638,10 +680,6 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       }
 
       switch (action) {
-        case "save-draft":
-          endpoint = "/api/workflow/draft/save";
-          successMessage = "Draft saved successfully";
-          break;
         case "submit-to-reviewer":
           endpoint = "/api/workflow/submit";
           successMessage = "Proposal submitted to Budget Reviewer successfully";
@@ -654,9 +692,13 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           endpoint = "/api/workflow/reviewer/approve";
           successMessage = "Proposal approved by Reviewer successfully";
           break;
-        case "reviewer-approve-forward-officer":
-          endpoint = "/api/workflow/reviewer/approve-and-forward-to-officer";
-          successMessage = "Proposal approved and forwarded to Budget Officer successfully";
+        case "reviewer-approve-forward-approver":
+          endpoint = "/api/workflow/reviewer/approve-and-forward-to-approver";
+          successMessage = "Proposal approved and forwarded to Approver successfully";
+          break;
+        case "reviewer-submit-to-officer":
+          endpoint = "/api/workflow/reviewer/submit-to-officer";
+          successMessage = "Proposal submitted directly to Budget Officer (bypassed Approver review)";
           break;
         case "reviewer-return":
           endpoint = "/api/workflow/reviewer/return";
@@ -673,6 +715,22 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
         case "reviewer-save-edits":
           endpoint = "/api/workflow/preparer/save-edits";
           successMessage = "Changes saved successfully";
+          break;
+        case "approver-save-edits":
+          endpoint = "/api/workflow/approver/save-edits";
+          successMessage = "Changes saved successfully";
+          break;
+        case "approver-approve-forward-analyst":
+          endpoint = "/api/workflow/approver/approve-and-forward-to-analyst";
+          successMessage = "Proposal approved and forwarded to Budget Planning Analyst successfully";
+          break;
+        case "approver-submit-to-officer":
+          endpoint = "/api/workflow/approver/submit-to-officer";
+          successMessage = "Proposal submitted directly to Budget Officer (bypassed Analyst review)";
+          break;
+        case "approver-return":
+          endpoint = "/api/workflow/approver/return";
+          successMessage = "Proposal returned to Reviewer successfully";
           break;
         case "officer-verify":
           endpoint = "/api/workflow/verify";
@@ -755,18 +813,35 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       // Prepare request data based on action
       let requestData = { proposalId: proposal._id };
 
-      if (action === "save-draft") {
+      if (action === "approver-save-edits") {
+        // Send current proposal data as updates for approver draft saving
+        const tableData = getTableData ? getTableData() : null;
         requestData = {
           proposalId: proposal._id,
           comment: noteValue || "",
-          updates: {}
+          updates: {
+            title: proposal.title,
+            description: proposal.description,
+            categoryBreakdown: proposal.categoryBreakdown,
+            proposedBudget: proposal.proposedBudget,
+            totalExpenses: proposal.totalExpenses,
+            totalIncome: proposal.totalIncome,
+            projectedCorporateIncome: proposal.projectedCorporateIncome,
+            projectedSubsidy: proposal.projectedSubsidy,
+            cobExpenditures: proposal.cobExpenditures
+          },
+          ...(tableData && { tableData }) // Include table data if available
         };
       } else if ([
         "submit-to-reviewer",
         "submit-direct-to-manager",
         "reviewer-approve",
-        "reviewer-approve-forward-officer",
+        "reviewer-approve-forward-approver",
+        "reviewer-submit-to-officer",
         "reviewer-return",
+        "approver-approve-forward-analyst",
+        "approver-submit-to-officer",
+        "approver-return",
         "preparer-submit-to-officer",
         "preparer-submit-to-manager",
         "preparer-save-edits",
@@ -937,7 +1012,12 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     'submit-to-reviewer',
     'submit-direct-to-manager',
     'reviewer-approve',
+    'reviewer-approve-forward-approver',
+    'reviewer-submit-to-officer',
     'reviewer-return',
+    'approver-approve-forward-analyst',
+    'approver-submit-to-officer',
+    'approver-return',
     'preparer-submit-to-officer',
     'preparer-submit-to-manager',
     'officer-verify',
@@ -1033,8 +1113,6 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     };
     const color = iconColorMap[action] || 'inherit';
     switch (action) {
-      case 'save-draft':
-        return <SaveIcon fontSize="small" color={color} />;
       case 'submit-to-reviewer':
       case 'preparer-submit-to-officer':
       // case 'preparer-submit-to-manager': // DEPRECATED

@@ -42,6 +42,19 @@ router.post('/preparer/submit-to-manager', proposalWorkflowController.coordinato
 // PREPARER saves edits without forwarding
 router.post('/preparer/save-edits', proposalWorkflowController.coordinatorSaveEdits);
 
+// === APPROVER WORKFLOW ROUTES ===
+// APPROVER saves edits without forwarding
+router.post('/approver/save-edits', proposalWorkflowController.approverSaveEdits);
+
+// APPROVER approves and forwards to BUDGET_PLANNING_ANALYST
+router.post('/approver/approve-and-forward-to-analyst', proposalWorkflowController.approverApproveForwardAnalyst);
+
+// APPROVER submits directly to BUDGET_OFFICER (bypasses BUDGET_PLANNING_ANALYST)
+router.post('/approver/submit-to-officer', proposalWorkflowController.approverSubmitToOfficer);
+
+// APPROVER returns proposal to REVIEWER
+router.post('/approver/return', proposalWorkflowController.approverReturn);
+
 // === BUDGET OFFICER WORKFLOW ROUTES ===
 // BUDGET_OFFICER approves proposal
 router.post('/officer/approve', proposalWorkflowController.officerApproveProposal);

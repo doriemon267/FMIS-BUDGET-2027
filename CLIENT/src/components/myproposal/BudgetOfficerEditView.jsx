@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, forwardRef, useImperativeHandle } from 'react';
 import {
   Box,
   Tabs,
@@ -25,15 +25,16 @@ import EditablePersonnelTable from './tables/EditablePersonnelTable';
 import EditableMOOETable from './tables/EditableMOOETable';
 import EditableCapitalOutlayTable from './tables/EditableCapitalOutlayTable';
 
-const BudgetOfficerEditView = ({
+const BudgetOfficerEditView = forwardRef(({
   proposalData,
   proposal,
   onSaveSuccess,
   variant = 'officer',
   allowSubmit = true,
   showTables = true,
-  readOnly = false
-}) => {
+  readOnly = false,
+  showSaveDraftButton = true
+}, ref) => {
   const [activeTab, setActiveTab] = useState(0);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -82,6 +83,17 @@ const BudgetOfficerEditView = ({
   const [personnelData, setPersonnelData] = useState([]);
   const [mooeData, setMooeData] = useState([]);
   const [capitalOutlayData, setCapitalOutlayData] = useState([]);
+
+  // Expose methods to parent component via ref
+  useImperativeHandle(ref, () => ({
+    getCurrentEditData: () => ({
+      editedIncome: incomeData,
+      editedPersonnelServices: personnelData,
+      editedMOOE: mooeData,
+      editedCapitalOutlay: capitalOutlayData,
+      comments: comments.trim() || undefined
+    })
+  }));
 
   useEffect(() => {
     if (proposalData) {
@@ -545,14 +557,16 @@ const BudgetOfficerEditView = ({
 
       {/* Action Buttons */}
       <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 3 }}>
-        <Button
-          variant="outlined"
-          startIcon={saving ? <CircularProgress size={20} /> : <SaveIcon />}
-          onClick={handleSaveDraft}
-          disabled={saving || submitting}
-        >
-          {saving ? 'Saving...' : (variant === 'manager' ? 'Save Changes' : 'Save Draft')}
-        </Button>
+        {showSaveDraftButton && (
+          <Button
+            variant="outlined"
+            startIcon={saving ? <CircularProgress size={20} /> : <SaveIcon />}
+            onClick={handleSaveDraft}
+            disabled={saving || submitting}
+          >
+            {saving ? 'Saving...' : (variant === 'manager' ? 'Save Changes' : 'Save Draft')}
+          </Button>
+        )}
         {allowSubmit && (
           <Button
             variant="contained"
@@ -651,6 +665,6 @@ const BudgetOfficerEditView = ({
       )}
     </Box>
   );
-};
+});
 
 export default BudgetOfficerEditView;

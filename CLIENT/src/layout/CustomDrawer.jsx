@@ -39,11 +39,31 @@ import { useUser } from "../context/UserContext";
 const CustomDrawer = ({ collapsed = false }) => {
   const [openSettings, setOpenSettings] = useState(false);
   const { currentUser } = useUser();
-  // Simple role flags
+  // Simple role flags - check both primary roles and workflow roles
   const roles = (currentUser?.Roles || []).map(String);
-  const isBudgetManager = roles.includes("BUDGET MANAGER");
+  const workflowRoles = (currentUser?.workflowRoles || []).map(String);
+  const allRoles = [...roles, ...workflowRoles];
+  
+  // Helper function to check if user has any approver role
+  const hasApproverRole = () => {
+    const approverWorkflowRoles = ['divisionapprover', 'officeapprover', 'approver'];
+    const approverPrimaryRoles = ['APPROVER', 'DIVISION APPROVER', 'OFFICE APPROVER'];
+    
+    const hasWorkflowApprover = workflowRoles.some(role => 
+      approverWorkflowRoles.includes(role.toLowerCase())
+    );
+    const hasPrimaryApprover = roles.some(role => 
+      approverPrimaryRoles.some(approverRole => role.toUpperCase().includes(approverRole))
+    );
+    
+    return hasWorkflowApprover || hasPrimaryApprover;
+  };
+  
+  const isOverallApprover = roles.includes("BUDGET MANAGER");
   const isBudgetOfficer = roles.includes("BUDGET OFFICER");
-  const isBudgetReviewer = roles.includes("APPROVER");
+  const isApprover = hasApproverRole();
+  const isReviewer = roles.includes("REVIEWER");
+  const isBudgetPlanningAnalyst = roles.includes("BUDGET_PLANNING_ANALYST");
   return (
     <Box
       sx={{
@@ -81,9 +101,9 @@ const CustomDrawer = ({ collapsed = false }) => {
                 isAllow:
                   (hasPermission(currentUser, "CreateProposals") ||
                     hasPermission(currentUser, "EditOwnProposals")) &&
-                  !isBudgetManager &&
+                  !isOverallApprover &&
                   !isBudgetOfficer &&
-                  !isBudgetReviewer,
+                  !isApprover,
                 icon: <FaFileAlt />,
               },
 
@@ -96,7 +116,7 @@ const CustomDrawer = ({ collapsed = false }) => {
               // {
               //   link: "/myProposals",
               //   name: "My Proposals",
-              //   isAllow: hasPermission(currentUser, 'EditOwnProposals') && !isBudgetManager && !isBudgetOfficer,
+              //   isAllow: hasPermission(currentUser, 'EditOwnProposals') && !isOverallApprover && !isBudgetOfficer,
               //   icon: <FaClipboardList />,
               // },
               // {
@@ -187,7 +207,7 @@ const CustomDrawer = ({ collapsed = false }) => {
             link="/Employee"
             isAllow={
               hasPermission(currentUser, "EditAllProposals") &&
-              !isBudgetManager &&
+              !isOverallApprover &&
               !isBudgetOfficer
             }
             collapsed={collapsed}
@@ -199,7 +219,7 @@ const CustomDrawer = ({ collapsed = false }) => {
             link="/employeeBenefits"
             isAllow={
               hasPermission(currentUser, "EditAllProposals") &&
-              !isBudgetManager &&
+              !isOverallApprover &&
               !isBudgetOfficer
             }
             collapsed={collapsed}
@@ -210,7 +230,7 @@ const CustomDrawer = ({ collapsed = false }) => {
             icon={<IoSettingsOutline />}
             name="Settings"
             isAllow={
-              hasPermission(currentUser, "ManageSettings") || isBudgetManager
+              hasPermission(currentUser, "ManageSettings") || isOverallApprover
             }
             collapsed={collapsed}
             iconRight={<FaChevronCircleDown />}
@@ -220,7 +240,7 @@ const CustomDrawer = ({ collapsed = false }) => {
                 name: "Set Cut-Off",
                 isAllow:
                   hasPermission(currentUser, "ManageSettings") ||
-                  isBudgetManager,
+                  isOverallApprover,
                 icon: <IoSettingsOutline />,
               },
               {
@@ -228,7 +248,7 @@ const CustomDrawer = ({ collapsed = false }) => {
                 name: "Compensation Settings",
                 isAllow:
                   hasPermission(currentUser, "ManageSettings") ||
-                  isBudgetManager,
+                  isOverallApprover,
                 icon: <IoSettingsOutline />,
               },
               // {
@@ -241,7 +261,7 @@ const CustomDrawer = ({ collapsed = false }) => {
                 name: "RATA",
                 isAllow:
                   hasPermission(currentUser, "ManageSettings") ||
-                  isBudgetManager,
+                  isOverallApprover,
                 icon: <IoSettingsOutline />,
               },
 
@@ -250,7 +270,7 @@ const CustomDrawer = ({ collapsed = false }) => {
                 name: "Capital Outlay",
                 isAllow:
                   hasPermission(currentUser, "ManageSettings") ||
-                  isBudgetManager,
+                  isOverallApprover,
                 icon: <IoSettingsOutline />,
               },
 
@@ -259,7 +279,7 @@ const CustomDrawer = ({ collapsed = false }) => {
                 name: "Income Management",
                 isAllow:
                   hasPermission(currentUser, "ManageSettings") ||
-                  isBudgetManager,
+                  isOverallApprover,
                 icon: <TbCategory />,
               },
 

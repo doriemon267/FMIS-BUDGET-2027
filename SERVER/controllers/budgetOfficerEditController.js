@@ -14,16 +14,18 @@ const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment
 const Region = require('../models/Region');
 const Department = require('../models/Department');
 
-// Role aliasing: map internal persisted roles to 6-step display roles
-const ROLE_ALIAS_TO_DISPLAY = {
-  PREPARER: 'PREPARER',
-  BUDGET_PLANNING_ANALYST: 'BUDGET_PLANNING_ANALYST',
-  REVIEWER: 'REVIEWER',
-  APPROVER: 'APPROVER',
-  BUDGET_OFFICER: 'BUDGET_OFFICER',
-  BUDGET_MANAGER: 'OVERALL_BUDGET_APPROVER',
-  OVERALL_BUDGET_APPROVER: 'OVERALL_BUDGET_APPROVER',
-  BUDGET_ADMIN: 'BUDGET_ADMIN'
+// Helper function to check if user has APPROVER role (handles different formats)
+const hasApproverRole = (userRoles) => {
+  if (!Array.isArray(userRoles)) return false;
+  return userRoles.some(role => {
+    const roleStr = String(role || '').toUpperCase();
+    return roleStr === 'APPROVER' ||
+           roleStr === 'DIVISION APPROVER' ||
+           roleStr === 'OFFICE APPROVER' ||
+           roleStr === 'DIVISIONAPPROVER' ||
+           roleStr === 'OFFICEAPPROVER' ||
+           roleStr.includes('APPROVER');
+  });
 };
 
 const toDisplayRole = (role) => ROLE_ALIAS_TO_DISPLAY[role] || role;
@@ -604,9 +606,10 @@ exports.getProposalForEdit = async (req, res) => {
     
     // Get user roles
     const userRoles = req.user?.Roles || [];
-    const isBudgetManager = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN');
+    const isOverallApprover = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN');
     const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
     const isBudgetAnalyst = userRoles.includes('BUDGET_PLANNING_ANALYST');
+    const isApproverLevel = hasApproverRole(userRoles);
     
     // Get current user ID for filtering own edits
     const usernameArray = Array.isArray(req.user?.Username)
@@ -625,12 +628,28 @@ exports.getProposalForEdit = async (req, res) => {
       ''
     ).trim();
     
+    console.log('🔍 User ID resolution details:', {
+      rawUser: {
+        userId: req.user?.userId,
+        id: req.user?.id,
+        Id: req.user?.Id,
+        userCode: req.user?.userCode,
+        Username: req.user?.Username,
+        username: req.user?.username,
+        name: req.user?.name
+      },
+      resolvedUserId: userId,
+      usernameArray
+    });
+    
     console.log('🔐 getProposalForEdit - User identification:', {
       userId,
       userRoles,
-      isBudgetManager,
+      isOverallApprover,
       isBudgetOfficer,
-      isBudgetAnalyst
+      isBudgetAnalyst,
+      isApproverLevel,
+      hasApproverRole: hasApproverRole(userRoles)
     });
     
     // Check if proposal is already submitted or approved - prevent further editing
@@ -638,7 +657,7 @@ exports.getProposalForEdit = async (req, res) => {
     // BUDGET_OFFICER cannot edit "Forwarded to Manager", "Officer Approved", or "Approved" proposals
     if (proposal.status === 'Forwarded to Manager' || proposal.status === 'Office Submitted') {
       // Allow BUDGET_MANAGER to view, block BUDGET_OFFICER
-      if (isBudgetOfficer && !isBudgetManager) {
+      if (isBudgetOfficer && !isOverallApprover) {
         return res.status(403).json({
           success: false,
           message: 'This proposal has already been submitted to Budget Manager and cannot be edited',
@@ -662,14 +681,14 @@ exports.getProposalForEdit = async (req, res) => {
     let existingEdit;
     let fetchQuery;
     
-    if (isBudgetManager && !isBudgetOfficer) {
-      // Budget Manager: Only show edits submitted by BUDGET_OFFICER
+    if (isOverallApprover && !isBudgetOfficer) {
+      // Overall Approver: Only show edits submitted by BUDGET_OFFICER
       fetchQuery = {
         proposalId: proposal._id,
         status: 'Submitted',
         'editedBy.role': 'BUDGET_OFFICER'
       };
-      console.log('📋 BUDGET_MANAGER querying for submitted BUDGET_OFFICER edits:', fetchQuery);
+      console.log('📋 OVERALL_APPROVER querying for submitted BUDGET_OFFICER edits:', fetchQuery);
       existingEdit = await BudgetOfficerEdit.findOne(fetchQuery).sort({ updatedAt: -1 });
     } else if (isBudgetAnalyst) {
       // Budget Planning Analyst: Show edits from APPROVER or their own edits
@@ -681,17 +700,33 @@ exports.getProposalForEdit = async (req, res) => {
       console.log('📋 BUDGET_PLANNING_ANALYST querying for APPROVER/BUDGET_PLANNING_ANALYST edits:', fetchQuery);
       existingEdit = await BudgetOfficerEdit.findOne(fetchQuery).sort({ updatedAt: -1 });
     } else {
-      // Others (BUDGET_OFFICER, APPROVER, etc.): Show their own Draft or Submitted edits ONLY
-      // ⚠️ FIX: Added userId filter to ensure users only see their own edits, not others'
-      fetchQuery = {
-        proposalId: proposal._id,
-        status: { $in: ['Draft', 'Submitted'] },
-        'editedBy.userId': userId
-      };
-      console.log('📋 Other roles querying for THEIR OWN drafts/submitted edits:', {
-        searchUserId: userId,
-        queryObject: fetchQuery
-      });
+      // APPROVER_LEVEL: Can see their own Draft edits OR Submitted edits from PREPARER/BUDGET_PLANNING_ANALYST
+      if (isApproverLevel) {
+        fetchQuery = {
+          proposalId: proposal._id,
+          $or: [
+            { status: 'Draft', 'editedBy.userId': userId },
+            { status: 'Submitted', 'editedBy.role': { $in: ['PREPARER', 'BUDGET_PLANNING_ANALYST'] } }
+          ]
+        };
+        console.log('📋 APPROVER_LEVEL querying for own drafts OR PREPARER/BUDGET_PLANNING_ANALYST submissions:', {
+          fetchQuery,
+          userId,
+          isApproverLevel,
+          userRoles
+        });
+      } else {
+        // Others (BUDGET_OFFICER, etc.): Show their own Draft or Submitted edits ONLY
+        fetchQuery = {
+          proposalId: proposal._id,
+          status: { $in: ['Draft', 'Submitted'] },
+          'editedBy.userId': userId
+        };
+        console.log('📋 Other roles querying for THEIR OWN drafts/submitted edits:', {
+          searchUserId: userId,
+          queryObject: fetchQuery
+        });
+      }
       existingEdit = await BudgetOfficerEdit.findOne(fetchQuery).sort({ updatedAt: -1 });
       
       if (existingEdit) {
@@ -751,7 +786,7 @@ exports.getProposalForEdit = async (req, res) => {
       hasEditedCapitalOutlay: !!existingEdit?.editedCapitalOutlay?.length,
       editedCapitalOutlayCount: existingEdit?.editedCapitalOutlay?.length || 0,
       queryUsed: fetchQuery,
-      rolesChecked: { isBudgetManager, isBudgetOfficer, isBudgetAnalyst }
+      rolesChecked: { isOverallApprover, isBudgetOfficer, isBudgetAnalyst, isApproverLevel }
     });
     
     // If no edit found, let's see what's in the database
@@ -846,6 +881,16 @@ exports.getProposalForEdit = async (req, res) => {
       };
       responseData.editComments = existingEdit.comments;
       responseData.editStatus = existingEdit.status;
+      
+      console.log('📝 Returning edited data for APPROVER:', {
+        hasEditedMOOE: !!existingEdit.editedMOOE?.length,
+        mooeSample: existingEdit.editedMOOE?.[0] ? {
+          id: existingEdit.editedMOOE[0]._id || existingEdit.editedMOOE[0].id,
+          particular: existingEdit.editedMOOE[0].particular,
+          amount: existingEdit.editedMOOE[0].amount,
+          subsidyAmount: existingEdit.editedMOOE[0].subsidyAmount
+        } : 'No edited MOOE data'
+      });
     }
     
     res.json({
@@ -888,7 +933,14 @@ exports.saveDraftEdit = async (req, res) => {
       editedPersonnelServicesLength: editedPersonnelServices?.length,
       editedMOOELength: editedMOOE?.length,
       editedCapitalOutlayLength: editedCapitalOutlay?.length,
-      comments
+      comments,
+      // Debug MOOE data specifically
+      mooeSample: editedMOOE?.[0] ? {
+        id: editedMOOE[0]._id || editedMOOE[0].id,
+        particular: editedMOOE[0].particular,
+        amount: editedMOOE[0].amount,
+        subsidyAmount: editedMOOE[0].subsidyAmount
+      } : 'No MOOE data'
     });
     
     const auditContext = await buildRequestAuditContext(req);
@@ -916,7 +968,7 @@ exports.saveDraftEdit = async (req, res) => {
     
     // Get user roles
     const userRoles = req.user?.Roles || [];
-    const isBudgetManager = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN');
+    const isOverallApprover = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN');
     const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
     const isBudgetAnalyst = userRoles.includes('BUDGET_PLANNING_ANALYST');
     
@@ -925,7 +977,7 @@ exports.saveDraftEdit = async (req, res) => {
     // BUDGET_OFFICER cannot edit "Forwarded to Manager", "Officer Approved", or "Approved" proposals
     if (proposal.status === 'Forwarded to Manager' || proposal.status === 'Office Submitted') {
       // Allow BUDGET_MANAGER to view, block BUDGET_OFFICER
-      if (isBudgetOfficer && !isBudgetManager) {
+      if (isBudgetOfficer && !isOverallApprover) {
         return res.status(403).json({
           success: false,
           message: 'This proposal has already been submitted to Budget Manager and cannot be edited',
@@ -952,10 +1004,11 @@ exports.saveDraftEdit = async (req, res) => {
       cobExpenditures: proposal.cobExpenditures
     });
     
-    // Check if there's an existing draft
+    // Check if there's an existing draft - ONLY allow editing own drafts
     let budgetOfficerEdit = await BudgetOfficerEdit.findOne({
       proposalId,
-      status: 'Draft'
+      status: 'Draft',
+      'editedBy.userId': userId  // Only find drafts owned by current user
     });
     
     // Determine the role of the editor - PRIORITY ORDER MATTERS!
@@ -965,7 +1018,7 @@ exports.saveDraftEdit = async (req, res) => {
       editorRole = 'BUDGET_MANAGER';
     } else if (userRoles.includes('BUDGET_OFFICER')) {
       editorRole = 'BUDGET_OFFICER';
-    } else if (userRoles.includes('APPROVER')) {
+    } else if (hasApproverRole(userRoles)) {
       editorRole = 'APPROVER';
     } else if (userRoles.includes('BUDGET_PLANNING_ANALYST')) {
       editorRole = 'BUDGET_PLANNING_ANALYST';
@@ -978,7 +1031,7 @@ exports.saveDraftEdit = async (req, res) => {
     console.log('🔍 Editor role determination:', {
       userRoles,
       editorRole,
-      isBudgetManager,
+      isOverallApprover,
       isBudgetOfficer,
       isBudgetAnalyst
     });
@@ -1031,7 +1084,14 @@ exports.saveDraftEdit = async (req, res) => {
       _id: budgetOfficerEdit._id,
       proposalId: budgetOfficerEdit.proposalId,
       status: budgetOfficerEdit.status,
-      cobExpenditures: budgetOfficerEdit.cobExpenditures
+      cobExpenditures: budgetOfficerEdit.cobExpenditures,
+      editedMOOELength: budgetOfficerEdit.editedMOOE?.length,
+      mooeSample: budgetOfficerEdit.editedMOOE?.[0] ? {
+        id: budgetOfficerEdit.editedMOOE[0]._id || budgetOfficerEdit.editedMOOE[0].id,
+        particular: budgetOfficerEdit.editedMOOE[0].particular,
+        amount: budgetOfficerEdit.editedMOOE[0].amount,
+        subsidyAmount: budgetOfficerEdit.editedMOOE[0].subsidyAmount
+      } : 'No MOOE data in saved edit'
     });
     
     await budgetOfficerEdit.save();
@@ -1338,16 +1398,16 @@ exports.submitEdit = async (req, res) => {
     
     // Get user roles
     const userRoles = req.user?.Roles || [];
-    const isBudgetManager = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN');
+    const isOverallApprover = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN');
     const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
     const isBudgetAnalyst = userRoles.includes('BUDGET_PLANNING_ANALYST');
     
     // Check if proposal is already submitted or approved - prevent further editing
-    // BUDGET_MANAGER can view "Forwarded to Manager" proposals (to approve/reject)
+    // OVERALL_APPROVER can view "Forwarded to Manager" proposals (to approve/reject)
     // BUDGET_OFFICER cannot submit "Forwarded to Manager", "Officer Approved", or "Approved" proposals
     if (proposal.status === 'Forwarded to Manager' || proposal.status === 'Office Submitted') {
-      // Allow BUDGET_MANAGER to view, block BUDGET_OFFICER from submitting
-      if (isBudgetOfficer && !isBudgetManager) {
+      // Allow OVERALL_APPROVER to view, block BUDGET_OFFICER from submitting
+      if (isBudgetOfficer && !isOverallApprover) {
         return res.status(403).json({
           success: false,
           message: 'This proposal has already been submitted to Budget Manager and cannot be submitted again',
@@ -1381,11 +1441,9 @@ exports.submitEdit = async (req, res) => {
     // Determine the role of the editor
     const editorRole = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN')
       ? 'BUDGET_MANAGER'
-      : userRoles.includes('APPROVER')
-      ? 'APPROVER'
       : userRoles.includes('BUDGET_OFFICER')
       ? 'BUDGET_OFFICER'
-      : userRoles.includes('REVIEWER') || userRoles.includes('APPROVER')
+      : hasApproverRole(userRoles)
       ? 'APPROVER'
       : userRoles.includes('BUDGET_PLANNING_ANALYST')
       ? 'BUDGET_PLANNING_ANALYST'
@@ -1393,10 +1451,11 @@ exports.submitEdit = async (req, res) => {
     // Map editor role for BudgetOfficerEdit.editedBy.role enum
     const editDocRole = editorRole;
     
-    // Check if there's an existing draft
+    // Check if there's an existing draft - ONLY allow submitting own drafts
     let budgetOfficerEdit = await BudgetOfficerEdit.findOne({
       proposalId,
-      status: 'Draft'
+      status: 'Draft',
+      'editedBy.userId': userId  // Only find drafts owned by current user
     });
     
     if (budgetOfficerEdit) {
