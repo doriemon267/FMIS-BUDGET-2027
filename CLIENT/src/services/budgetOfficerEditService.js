@@ -25,7 +25,7 @@ export const getProposalForEdit = async (proposalId, options = {}) => {
  * @returns {Promise} API response
  */
 export const saveDraftEdit = async (editData) => {
-  const response = await api.post('/api/budget-officer-edits/draft', editData);
+  const response = await api.post('/api/budget-officer-edits/save-draft-edit', editData);
   return response.data;
 };
 

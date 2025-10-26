@@ -608,6 +608,31 @@ exports.getProposalForEdit = async (req, res) => {
     const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
     const isBudgetAnalyst = userRoles.includes('BUDGET_PLANNING_ANALYST');
     
+    // Get current user ID for filtering own edits
+    const usernameArray = Array.isArray(req.user?.Username)
+      ? req.user.Username
+      : req.user?.Username
+      ? [req.user.Username]
+      : [];
+    const userId = String(
+      req.user?.userId || 
+      req.user?.id || 
+      req.user?.Id || 
+      req.user?.userCode || 
+      usernameArray[0] || 
+      req.user?.username || 
+      req.user?.name || 
+      ''
+    ).trim();
+    
+    console.log('🔐 getProposalForEdit - User identification:', {
+      userId,
+      userRoles,
+      isBudgetManager,
+      isBudgetOfficer,
+      isBudgetAnalyst
+    });
+    
     // Check if proposal is already submitted or approved - prevent further editing
     // BUDGET_MANAGER can view "Forwarded to Manager" proposals (to approve/reject)
     // BUDGET_OFFICER cannot edit "Forwarded to Manager", "Officer Approved", or "Approved" proposals
@@ -632,28 +657,114 @@ exports.getProposalForEdit = async (req, res) => {
     // Check if there's an existing edit
     // Budget Manager should ONLY see edits submitted by Budget Officer (not Budget Reviewer)
     // Budget Officer should see their own Draft or edits from Budget Reviewer
-    // Preparer should see edits from Approver or their own edits
+    // APPROVER should see their own Draft or Submitted edits
+    // Budget Planning Analyst should see edits from APPROVER or their own edits
     let existingEdit;
+    let fetchQuery;
+    
     if (isBudgetManager && !isBudgetOfficer) {
       // Budget Manager: Only show edits submitted by BUDGET_OFFICER
-      existingEdit = await BudgetOfficerEdit.findOne({
+      fetchQuery = {
         proposalId: proposal._id,
         status: 'Submitted',
         'editedBy.role': 'BUDGET_OFFICER'
-      }).sort({ updatedAt: -1 });
+      };
+      console.log('📋 BUDGET_MANAGER querying for submitted BUDGET_OFFICER edits:', fetchQuery);
+      existingEdit = await BudgetOfficerEdit.findOne(fetchQuery).sort({ updatedAt: -1 });
     } else if (isBudgetAnalyst) {
-      // Preparer (user role): Show edits from APPROVER or their own edits
-      existingEdit = await BudgetOfficerEdit.findOne({
+      // Budget Planning Analyst: Show edits from APPROVER or their own edits
+      fetchQuery = {
         proposalId: proposal._id,
         status: { $in: ['Draft', 'Submitted'] },
         'editedBy.role': { $in: ['APPROVER', 'BUDGET_PLANNING_ANALYST'] }
-      }).sort({ updatedAt: -1 });
+      };
+      console.log('📋 BUDGET_PLANNING_ANALYST querying for APPROVER/BUDGET_PLANNING_ANALYST edits:', fetchQuery);
+      existingEdit = await BudgetOfficerEdit.findOne(fetchQuery).sort({ updatedAt: -1 });
     } else {
-      // Budget Officer: Show Draft or Submitted edits (including from Budget Reviewer)
-      existingEdit = await BudgetOfficerEdit.findOne({
+      // Others (BUDGET_OFFICER, APPROVER, etc.): Show their own Draft or Submitted edits ONLY
+      // ⚠️ FIX: Added userId filter to ensure users only see their own edits, not others'
+      fetchQuery = {
         proposalId: proposal._id,
-        status: { $in: ['Draft', 'Submitted'] }
-      }).sort({ updatedAt: -1 });
+        status: { $in: ['Draft', 'Submitted'] },
+        'editedBy.userId': userId
+      };
+      console.log('📋 Other roles querying for THEIR OWN drafts/submitted edits:', {
+        searchUserId: userId,
+        queryObject: fetchQuery
+      });
+      existingEdit = await BudgetOfficerEdit.findOne(fetchQuery).sort({ updatedAt: -1 });
+      
+      if (existingEdit) {
+        console.log('✅ Found existing edit:', {
+          editId: existingEdit._id,
+          documentUserId: existingEdit.editedBy?.userId,
+          documentUserName: existingEdit.editedBy?.userName,
+          userIdMatch: existingEdit.editedBy?.userId === userId,
+          searchedUserId: userId
+        });
+      } else {
+        console.log('❌ NO existing edit found. Checking what edits exist in DB for this proposal...');
+        const allEdits = await BudgetOfficerEdit.find({
+          proposalId: proposal._id,
+          status: { $in: ['Draft', 'Submitted'] }
+        });
+        console.log('📊 All edits for this proposal:', allEdits.map(e => ({
+          _id: e._id,
+          editedByUserId: e.editedBy?.userId,
+          editedByUserName: e.editedBy?.userName,
+          status: e.status
+        })));
+      }
+      
+      // Fallback: If no edit found with userId, check if there are any drafts without editedBy.userId
+      // This handles edge cases with legacy documents
+      if (!existingEdit) {
+        console.log('⚠️  No edit found with userId filter, checking for legacy documents...');
+        const legacyEdit = await BudgetOfficerEdit.findOne({
+          proposalId: proposal._id,
+          status: { $in: ['Draft', 'Submitted'] },
+          'editedBy.userId': { $exists: false }
+        }).sort({ updatedAt: -1 });
+        
+        if (legacyEdit) {
+          console.log('⚠️  Found legacy document without editedBy.userId:', {
+            editId: legacyEdit._id,
+            processBy: legacyEdit.processBy
+          });
+          existingEdit = legacyEdit;
+        }
+      }
+    }
+    
+    console.log('🔍 Existing edit search result:', {
+      found: !!existingEdit,
+      editId: existingEdit?._id,
+      editStatus: existingEdit?.status,
+      editedByRole: existingEdit?.editedBy?.role,
+      editedByUserId: existingEdit?.editedBy?.userId,
+      hasEditedIncome: !!existingEdit?.editedIncome?.length,
+      editedIncomeCount: existingEdit?.editedIncome?.length || 0,
+      hasEditedPersonnel: !!existingEdit?.editedPersonnelServices?.length,
+      editedPersonnelCount: existingEdit?.editedPersonnelServices?.length || 0,
+      hasEditedMOOE: !!existingEdit?.editedMOOE?.length,
+      editedMOOECount: existingEdit?.editedMOOE?.length || 0,
+      hasEditedCapitalOutlay: !!existingEdit?.editedCapitalOutlay?.length,
+      editedCapitalOutlayCount: existingEdit?.editedCapitalOutlay?.length || 0,
+      queryUsed: fetchQuery,
+      rolesChecked: { isBudgetManager, isBudgetOfficer, isBudgetAnalyst }
+    });
+    
+    // If no edit found, let's see what's in the database
+    if (!existingEdit) {
+      console.log('⚠️ NO EXISTING EDIT FOUND - Let\'s check what\'s in the database for this proposal:');
+      const allEdits = await BudgetOfficerEdit.find({ proposalId: proposal._id }).lean();
+      console.log('📊 All drafts/submissions for this proposal:', allEdits.map(e => ({
+        _id: e._id,
+        status: e.status,
+        role: e.editedBy?.role,
+        incomeCount: e.editedIncome?.length,
+        personnelCount: e.editedPersonnelServices?.length
+      })));
     }
     
     // Fetch all data for the proposal
@@ -847,16 +958,31 @@ exports.saveDraftEdit = async (req, res) => {
       status: 'Draft'
     });
     
-    // Determine the role of the editor
-    const editorRole = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN')
-      ? 'BUDGET_MANAGER'
-      : userRoles.includes('APPROVER') || userRoles.includes('BUDGET_OFFICER')
-      ? 'BUDGET_OFFICER'
-      : userRoles.includes('REVIEWER') || userRoles.includes('APPROVER')
-      ? 'APPROVER'
-      : userRoles.includes('BUDGET_PLANNING_ANALYST')
-      ? 'BUDGET_PLANNING_ANALYST'
-      : 'PREPARER';
+    // Determine the role of the editor - PRIORITY ORDER MATTERS!
+    // Must check specific roles BEFORE generic ones to avoid misclassification
+    let editorRole;
+    if (userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN')) {
+      editorRole = 'BUDGET_MANAGER';
+    } else if (userRoles.includes('BUDGET_OFFICER')) {
+      editorRole = 'BUDGET_OFFICER';
+    } else if (userRoles.includes('APPROVER')) {
+      editorRole = 'APPROVER';
+    } else if (userRoles.includes('BUDGET_PLANNING_ANALYST')) {
+      editorRole = 'BUDGET_PLANNING_ANALYST';
+    } else if (userRoles.includes('REVIEWER')) {
+      editorRole = 'REVIEWER';
+    } else {
+      editorRole = 'PREPARER';
+    }
+    
+    console.log('🔍 Editor role determination:', {
+      userRoles,
+      editorRole,
+      isBudgetManager,
+      isBudgetOfficer,
+      isBudgetAnalyst
+    });
+    
     // Map editor role for BudgetOfficerEdit.editedBy.role enum
     const editDocRole = editorRole;
     
@@ -868,8 +994,13 @@ exports.saveDraftEdit = async (req, res) => {
       budgetOfficerEdit.editedCapitalOutlay = editedCapitalOutlay || [];
       budgetOfficerEdit.comments = comments;
       budgetOfficerEdit.updatedAt = new Date();
-      // Update the role if it changed
-  budgetOfficerEdit.editedBy.role = editDocRole;
+      // Update the entire editedBy object (handle missing editedBy for backward compatibility)
+      budgetOfficerEdit.editedBy = {
+        userId,
+        userName,
+        email: userEmail,
+        role: editDocRole
+      };
     } else {
       // Create new draft
       budgetOfficerEdit = new BudgetOfficerEdit({
@@ -1361,40 +1492,11 @@ exports.submitEdit = async (req, res) => {
       proposal.forwardedToOfficerAt = now;
       proposal.forwardedToOfficerBy = { userId, userName };
     } else if (editorRole === 'APPROVER') {
-      // Check if reviewer wants to bypass officer and submit directly to manager
-      if (submitTargetRole === 'BUDGET_MANAGER') {
-        newStatus = 'Forwarded to Manager';
-        newWorkflowLevel = 'MANAGER';
-        historyAction = 'REVIEWER_SUBMIT_TO_MANAGER';
-        historyComment = comments || 'Reviewer submitted edits to Budget Manager';
-        currentStep = 'MANAGER_REVIEW';
-        currentAssigneeRole = 'BUDGET_MANAGER';
-        pendingRoles = ['BUDGET_MANAGER'];
-        proposal.submittedByRole = 'APPROVER';
-        proposal.forwardedToManagerAt = now;
-        proposal.forwardedToManagerBy = { userId, userName };
-        proposal.bypassedOfficerReview = true;
-      } else {
-        // Standard flow: submit to APPROVER (first approval step in new workflow)
-        // Retain legacy status label for backward compatibility; UI will show alias as needed
-        newStatus = 'Forwarded to Approver';
-        newWorkflowLevel = 'OFFICER';
-        historyAction = 'REVIEWER_SUBMIT_TO_OFFICER';
-        historyComment = comments || 'Reviewer submitted edits to Approver';
-        currentStep = 'OFFICER_REVIEW';
-        currentAssigneeRole = 'APPROVER';
-        pendingRoles = ['APPROVER'];
-        proposal.submittedByRole = 'APPROVER';
-        proposal.forwardedToOfficerAt = now;
-        proposal.forwardedToOfficerBy = { userId, userName };
-        proposal.bypassedOfficerReview = false;
-      }
-    } else if (editorRole === 'APPROVER') {
-      // APPROVER approves and forwards to BUDGET_PLANNING_ANALYST
+      // APPROVER forwards to BUDGET_PLANNING_ANALYST (next step in workflow)
       newStatus = 'Forwarded to Analyst';
       newWorkflowLevel = 'ANALYST';
-      historyAction = 'APPROVER_APPROVE_TO_ANALYST';
-      historyComment = comments || 'Approver approved and forwarded to Budget Planning Analyst';
+      historyAction = 'APPROVER_SUBMIT_TO_ANALYST';
+      historyComment = comments || 'Approver submitted edits to Budget Planning Analyst';
       currentStep = 'ANALYST_REVIEW';
       currentAssigneeRole = 'BUDGET_PLANNING_ANALYST';
       pendingRoles = ['BUDGET_PLANNING_ANALYST'];
@@ -1461,13 +1563,7 @@ exports.submitEdit = async (req, res) => {
     } else if (editorRole === 'BUDGET_PLANNING_ANALYST') {
       logSummary = 'Submitted analysis to Budget Officer';
     } else if (editorRole === 'APPROVER') {
-      if (submitTargetRole === 'BUDGET_MANAGER') {
-        logSummary = 'Submitted edits directly to Budget Manager (bypassed Officer)';
-      } else {
-        logSummary = 'Submitted edits to Budget Officer';
-      }
-    } else if (editorRole === 'APPROVER') {
-      logSummary = 'Approved and forwarded to Budget Planning Analyst';
+      logSummary = 'Submitted edits to Budget Planning Analyst';
     } else if (editorRole === 'BUDGET_OFFICER') {
       logSummary = 'Submitted edits to Budget Manager';
     } else if (editorRole === 'BUDGET_MANAGER') {

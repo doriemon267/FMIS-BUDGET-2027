@@ -395,12 +395,29 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
           })()
         );
       } else if (isBudgetOfficer || isManagerLevel || requiresReadOnlyData) {
-        console.log('📝 Fetching Budget Officer Edit data for BUDGET_OFFICER/MANAGER');
+        console.log('📝 Fetching Budget Officer Edit data for BUDGET_OFFICER/MANAGER', {
+          isBudgetOfficer,
+          isManagerLevel,
+          requiresReadOnlyData
+        });
         requests.push(
           (async () => {
             try {
               const response = await getProposalForEdit(proposalKey, { signal: controller.signal });
               const data = response?.data || response;
+              console.log('✅ getProposalForEdit response:', {
+                hasExistingEdit: data?.hasExistingEdit,
+                editedDataExists: !!data?.editedData,
+                editStatus: data?.editStatus,
+                incomeCount: data?.income?.length,
+                editedIncomeCount: data?.editedData?.income?.length,
+                personnelCount: data?.personnelServices?.length,
+                editedPersonnelCount: data?.editedData?.personnelServices?.length,
+                mooeCount: data?.mooe?.length,
+                editedMooeCount: data?.editedData?.mooe?.length,
+                capitalOutlayCount: data?.capitalOutlay?.length,
+                editedCapitalOutlayCount: data?.editedData?.capitalOutlay?.length
+              });
               setProposalData(data);
               cacheUpdate.proposalData = data;
             } catch (err) {
@@ -909,22 +926,6 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
               </>
             )}
 
-            {/* Show comparison view for users viewing after their submission step (EXCLUDE BUDGET_ANALYST - they have their own view) */}
-            {isViewOnlyAfterSubmission && !isReadOnlyMode && !isBudgetPlanningAnalystRole && comparisonData && (
-              <>
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  <Typography variant="body2">
-                    <strong>View Only:</strong> This proposal has progressed beyond your workflow step (current status: {proposal?.status}). 
-                    You can view the current state but cannot make further edits.
-                  </Typography>
-                </Alert>
-                <BudgetAnalystComparisonView 
-                  comparisonData={comparisonData}
-                  proposal={proposal}
-                />
-              </>
-            )}
-
             {/* Show edit view for Budget Officer (when in edit mode), APPROVER (when editable), BUDGET_PLANNING_ANALYST (when editable), and Budget Manager (when Forwarded to Manager) */}
             {canRenderEditView && (
               <>
@@ -946,8 +947,6 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                   proposal={proposal}
                   proposalData={proposalData}
                   onSaveSuccess={async () => {
-                    setOfficerEditMode(false);
-                    
                     // IMPORTANT: Fetch updated proposal to show new status immediately
                     try {
                       const updatedProposal = await api.get(`/proposals/${proposalKey}`);
@@ -957,30 +956,59 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                           newStatus: updatedProposal.data.status 
                         });
                         setDisplayedProposal(updatedProposal.data);
+                        
+                        // Check if status actually changed
+                        const statusChanged = updatedProposal.data.status !== displayedProposal?.status;
+                        
+                        if (statusChanged) {
+                          console.log('📤 Status changed - this was a SUBMIT operation, closing dialog');
+                          // Refresh all data after submission since status changed
+                          loadData(true);
+                          
+                          // Close dialog after 1.5 seconds
+                          setTimeout(() => {
+                            handleClose();
+                          }, 1500);
+                        } else {
+                          console.log('💾 DRAFT saved - fetching fresh data to verify edits persisted');
+                          // 🔧 FIX: After draft save, FORCE refresh to fetch fresh data including draft edits
+                          // This ensures proposalData is updated with hasExistingEdit=true and editedData
+                          const cacheSize = cacheRef.current.size;
+                          cacheRef.current.clear();
+                          console.log('🗑️ Cache cleared - removed', cacheSize, 'items');
+                          console.log('📊 Cache size after clear:', cacheRef.current.size);
+                          
+                          // Force a data refresh to load the newly saved draft edits
+                          // The delay ensures the backend has processed the save
+                          setTimeout(() => {
+                            console.log('⏳ Calling loadData(true) after 500ms delay');
+                            console.log('📊 Cache size before loadData:', cacheRef.current.size);
+                            loadData(true);
+                          }, 500);
+                          
+                          setOfficerEditMode(false);
+                          
+                          // Just refresh the parent list so it shows updated timestamps
+                          onRefresh?.();
+                        }
                       }
                     } catch (error) {
                       console.error('Could not fetch updated proposal immediately:', error);
-                      // Continue anyway - will be updated by loadData refresh
+                      setOfficerEditMode(false);
+                      // Refresh parent list anyway
+                      onRefresh?.();
                     }
-                    
-                    // Refresh proposal data (income, ps, mooe, co)
-                    loadData(true);
-                    
-                    // Refresh parent proposal list
-                    onRefresh?.();
-                    
-                    // 🔄 AUTO-CLOSE DIALOG AND REFRESH TABLE after successful submission
-                    setTimeout(() => {
-                      console.log('🔄 Auto-closing dialog after successful submission...');
-                      handleClose();
-                    }, 1500); // Give time to show success toast before closing
                   }}
                   variant={(() => {
-                    const variant = isManagerLevel ? 'manager' : isDivisionApprover ? 'approver' : isReviewer ? 'reviewer' : isPreparer ? 'preparer' : 'officer';
+                    // ⚠️ FIX: Check specific workflow roles BEFORE generic manager level
+                    // When user is APPROVER, show 'approver' variant even if they also have manager permissions
+                    // Priority: APPROVER → REVIEWER → BUDGET_OFFICER → PREPARER → MANAGER
+                    const variant = isDivisionApprover ? 'approver' : isReviewer ? 'reviewer' : isBudgetOfficer ? 'officer' : isPreparer ? 'preparer' : isManagerLevel ? 'manager' : 'officer';
                     console.log('🎭 Variant determination:', {
                       isManagerLevel,
                       isDivisionApprover,
                       isReviewer,
+                      isBudgetOfficer,
                       isPreparer,
                       variant
                     });
@@ -993,9 +1021,38 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
               </>
             )}
 
-            {/* Approved warning removed in view-only mode */}
+            {/* ✅ AUDIT TRAIL VIEW: Show comparison data for ALL roles after they submit (isViewOnlyAfterSubmission) */}
+            {isViewOnlyAfterSubmission && !isReadOnlyMode && comparisonData && (
+              <>
+                {console.log('🔍 Rendering AUDIT TRAIL for:', {
+                  isPreparer,
+                  isDivisionApprover,
+                  isBudgetPlanningAnalystRole,
+                  isBudgetOfficer,
+                  isManagerLevel,
+                  status: proposal?.status,
+                  hasComparisonData: !!comparisonData
+                })}
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <Typography variant="body2">
+                    <strong>📊 Audit Trail - Changes Made by Next Step:</strong> 
+                    {isPreparer && ' See what the Approver/Reviewer changed after you submitted.'}
+                    {isDivisionApprover && ' See what the Budget Planning Analyst changed after you submitted.'}
+                    {isBudgetPlanningAnalystRole && ' See what the Budget Officer changed after you submitted.'}
+                    {isBudgetOfficer && ' See what the Budget Manager changed after you submitted.'}
+                    {isManagerLevel && ' Final approval changes visible.'}
+                    <br />
+                    <em>Status: {proposal?.status} • You cannot edit at this stage</em>
+                  </Typography>
+                </Alert>
+                <BudgetAnalystComparisonView 
+                  comparisonData={comparisonData}
+                  proposal={proposal}
+                />
+              </>
+            )}
 
-            {/* View-only mode: show a single comparison view for all roles; fallback to submission view if comparison not ready */}
+            {/* ✅ VIEW-ONLY MODE: Show comparison or full submission view when proposal is Finalized */}
             {isReadOnlyMode && !managerCanEditNow && (
               <>
                 {comparisonData ? (
@@ -1014,42 +1071,15 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
               </>
             )}
 
-            {/* BUDGET_PLANNING_ANALYST comparison view - BUDGET_PLANNING_ANALYST (workflow role) or BUDGET_PLANNING_ANALYST (user role) can view comparison when available (only when they CANNOT edit) */}
-            {!isReadOnlyMode && isBudgetPlanningAnalystRole && comparisonData && !preparerCanEditNow && (
-              <>
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  <Typography variant="body2">
-                    <strong>Analysis View:</strong> This proposal is available for your review.
-                    No further edits are allowed at this stage.
-                  </Typography>
-                </Alert>
-                <BudgetAnalystComparisonView
-                  comparisonData={comparisonData}
-                  proposal={proposal}
-                />
-              </>
-            )}
-
-            {/* PREPARER view after submission - show status message instead of comparison */}
-            {!isReadOnlyMode && isPreparer && !preparerCanEditNow && (
-              <Alert severity="success" sx={{ mb: 2 }}>
-                <Typography variant="body2">
-                  <strong>Proposal Submitted:</strong> Your proposal has been successfully submitted for review.
-                  You will be notified when there are updates on its status.
-                </Typography>
-              </Alert>
-            )}
-
-            {/* APPROVER comparison view when NOT in edit mode (APPROVER can only view when status is NOT Division Submitted) */}
-            {!isReadOnlyMode && isDivisionApprover && !approverCanEditNow && comparisonData && (
+            {/* Legacy comparison views - now consolidated into the isViewOnlyAfterSubmission section above */}
+            {!isReadOnlyMode && isDivisionApprover && !approverCanEditNow && comparisonData && !isViewOnlyAfterSubmission && (
               <BudgetAnalystComparisonView 
                 comparisonData={comparisonData}
                 proposal={proposal}
               />
             )}
 
-            {/* Reviewer comparison view when NOT in edit mode */}
-            {!isReadOnlyMode && isReviewer && !reviewerCanEditNow && comparisonData && (
+            {!isReadOnlyMode && isReviewer && !reviewerCanEditNow && comparisonData && !isViewOnlyAfterSubmission && (
               <BudgetAnalystComparisonView 
                 comparisonData={comparisonData}
                 proposal={proposal}

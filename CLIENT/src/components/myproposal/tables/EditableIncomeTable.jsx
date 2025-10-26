@@ -330,7 +330,7 @@ const EditableIncomeTable = ({ data = [], onChange }) => {
                         <Box component="span">{rowData.category}</Box>
                       </TableCell>
                       <TableCell></TableCell>
-                      <TableCell sx={{ fontWeight: 'bold', textAlign: 'right' }}>
+                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>
                         {formatCurrency(rowData.items.reduce((sum, item) => sum + (item.changeType !== 'deleted' ? (item.amount || 0) : 0), 0))}
                       </TableCell>
                       <TableCell></TableCell>
@@ -348,24 +348,23 @@ const EditableIncomeTable = ({ data = [], onChange }) => {
                           {item.subcategory || item.subCategory || 'No sub-category'}
                         </Typography>
                       </TableCell>
-                      <TableCell sx={{ textAlign: 'right', paddingRight: 2 }}>
+                      <TableCell align="right" sx={{ paddingRight: 2 }}>
                         {canEditAmount ? (
-                          <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                            <TextField
-                              value={item.amount || 0}
-                              onChange={(e) => handleAmountChange(item.originalIndex, e.target.value)}
-                              size="small"
-                              variant="outlined"
-                              disabled={item.changeType === 'deleted'}
-                              InputProps={{ inputComponent: NumericFormatInput }}
-                              inputProps={{ name: 'amount' }}
-                              sx={{
-                                width: '120px',
-                                '& .MuiInputBase-root': { textAlign: 'right' },
-                                '& .MuiInputBase-input': { textAlign: 'right' }
-                              }}
-                            />
-                          </Box>
+                          <TextField
+                            value={item.amount || 0}
+                            onChange={(e) => handleAmountChange(item.originalIndex, e.target.value)}
+                            size="small"
+                            variant="outlined"
+                            disabled={item.changeType === 'deleted'}
+                            InputProps={{ inputComponent: NumericFormatInput }}
+                            inputProps={{ name: 'amount' }}
+                            sx={{
+                              width: '100%',
+                              maxWidth: '140px',
+                              '& .MuiInputBase-root': { textAlign: 'right' },
+                              '& .MuiInputBase-input': { textAlign: 'right' }
+                            }}
+                          />
                         ) : (
                           <Typography variant="body2" sx={{ fontWeight: 500, textAlign: 'right' }}>
                             {formatCurrency(item.amount || 0)}
@@ -405,6 +404,16 @@ const EditableIncomeTable = ({ data = [], onChange }) => {
                   );
                 }
               })
+            )}
+
+            {Object.keys(groupedData).length > 0 && (
+              <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
+                <TableCell colSpan={2} sx={{ fontWeight: 'bold' }}>Grand Total</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 'bold' }}>
+                  {formatCurrency(data.reduce((sum, item) => sum + (item.changeType !== 'deleted' ? (item.amount || 0) : 0), 0))}
+                </TableCell>
+                <TableCell colSpan={2}></TableCell>
+              </TableRow>
             )}
           </TableBody>
         </Table>

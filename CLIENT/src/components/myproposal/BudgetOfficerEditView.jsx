@@ -85,13 +85,32 @@ const BudgetOfficerEditView = ({
 
   useEffect(() => {
     if (proposalData) {
-      console.log('BudgetOfficerEditView - proposalData:', proposalData);
-      console.log('BudgetOfficerEditView - capitalOutlay data:', proposalData.capitalOutlay);
-      console.log('BudgetOfficerEditView - hasExistingEdit:', proposalData.hasExistingEdit);
-      console.log('BudgetOfficerEditView - editedData:', proposalData.editedData);
+      console.log('🔄 BudgetOfficerEditView - proposalData received:', {
+        hasProposalData: !!proposalData,
+        hasExistingEdit: proposalData.hasExistingEdit,
+        hasEditedData: !!proposalData.editedData,
+        incomeCount: proposalData.income?.length,
+        personnelCount: proposalData.personnelServices?.length,
+        mooeCount: proposalData.mooe?.length,
+        capitalOutlayCount: proposalData.capitalOutlay?.length,
+        editedIncomeCount: proposalData.editedData?.income?.length,
+        editedPersonnelCount: proposalData.editedData?.personnelServices?.length,
+        editedMooeCount: proposalData.editedData?.mooe?.length,
+        editedCapitalOutlayCount: proposalData.editedData?.capitalOutlay?.length,
+        editComments: proposalData.editComments,
+        editStatus: proposalData.editStatus
+      });
       
       // If there's existing edited data, use it but merge with fresh data to get categoryName and details
       if (proposalData.hasExistingEdit && proposalData.editedData) {
+        console.log('✅ Using EDITED data because hasExistingEdit=true and editedData exists');
+        console.log('📋 EDITED DATA DETAILS:', {
+          editedIncome: proposalData.editedData.income?.map(i => ({ id: i._id, amount: i.amount })),
+          editedPersonnel: proposalData.editedData.personnelServices?.map(p => ({ id: p._id, Total: p.Total })),
+          editedMOOE: proposalData.editedData.mooe?.map(m => ({ id: m._id, amount: m.amount })),
+          editedCapitalOutlay: proposalData.editedData.capitalOutlay?.map(c => ({ id: c._id, cost: c.cost }))
+        });
+        
         // Merge edited data with fresh data for Capital Outlay
         const mergedCapitalOutlay = (proposalData.editedData.capitalOutlay || []).map(editedItem => {
           // Find the corresponding fresh item by originalId or _id
@@ -116,7 +135,12 @@ const BudgetOfficerEditView = ({
           return merged;
         });
         
-        console.log('BudgetOfficerEditView - merged capitalOutlay:', mergedCapitalOutlay);
+        console.log('📊 Setting state with edited data:', {
+          incomeRows: proposalData.editedData.income?.length,
+          personnelRows: proposalData.editedData.personnelServices?.length,
+          mooeRows: proposalData.editedData.mooe?.length,
+          capitalOutlayRows: mergedCapitalOutlay.length
+        });
         
         setIncomeData(proposalData.editedData.income || []);
         setPersonnelData(proposalData.editedData.personnelServices || []);
@@ -125,6 +149,20 @@ const BudgetOfficerEditView = ({
         setComments(proposalData.editComments || ''); // Load existing comments
       } else {
         // No existing edit, use fresh data
+        console.log('ℹ️ Using FRESH data - no existing edits (hasExistingEdit=' + proposalData.hasExistingEdit + ')');
+        console.log('📊 Setting state with fresh data:', {
+          incomeRows: proposalData.income?.length,
+          personnelRows: proposalData.personnelServices?.length,
+          mooeRows: proposalData.mooe?.length,
+          capitalOutlayRows: proposalData.capitalOutlay?.length
+        });
+        console.log('📋 FRESH DATA (first item from each):', {
+          firstIncome: proposalData.income?.[0],
+          firstPersonnel: proposalData.personnelServices?.[0],
+          firstMOOE: proposalData.mooe?.[0],
+          firstCapitalOutlay: proposalData.capitalOutlay?.[0]
+        });
+        
         setIncomeData(proposalData.income || []);
         setPersonnelData(proposalData.personnelServices || []);
         setMooeData(proposalData.mooe || []);
@@ -278,14 +316,19 @@ const BudgetOfficerEditView = ({
       }
       const res = await submitEdit(editData);
 
-      const routedRole = res?.data?.displayCurrentAssigneeRole || (submitTarget === 'BUDGET_MANAGER' ? 'OVERALL_BUDGET_APPROVER' : 'APPROVER');
+      const routedRole = res?.data?.displayCurrentAssigneeRole || 'NEXT_APPROVER';
       const forwardedCount = res?.data?.forwardedToUsersCount;
-      const targetLabel = submitTarget === 'BUDGET_OFFICER' ? 'Budget Officer (Approver)' : 'Budget Manager (Overall Approver)';
-      const extraHint = routedRole === 'APPROVER'
-        ? `You can track it under statuses like "Forwarded to Approver" or "Under Review by Approver" in All Proposals.`
-        : routedRole === 'OVERALL_BUDGET_APPROVER'
-        ? `You can track it under statuses like "Forwarded to Manager" or "Under Review by Manager" in All Proposals.`
-        : '';
+      
+      let targetLabel = 'Next Approver';
+      let extraHint = '';
+      
+      if (routedRole === 'BUDGET_PLANNING_ANALYST') {
+        extraHint = `You can track it under statuses like "Forwarded to Analyst" or "Under Review by Analyst" in All Proposals.`;
+      } else if (routedRole === 'BUDGET_OFFICER') {
+        extraHint = `You can track it under statuses like "Forwarded to Officer" or "Under Review by Officer" in All Proposals.`;
+      } else if (routedRole === 'OVERALL_BUDGET_APPROVER') {
+        extraHint = `You can track it under statuses like "Forwarded to Manager" or "Under Review by Manager" in All Proposals.`;
+      }
 
       const recipientsNote = typeof forwardedCount === 'number'
         ? ` Notified recipients: ${forwardedCount}.`
@@ -315,13 +358,18 @@ const BudgetOfficerEditView = ({
       const editData = prepareEditData();
       const res = await submitEdit(editData);
 
-      const routedRole = res?.data?.displayCurrentAssigneeRole || 'NEXT APPROVER';
+      const routedRole = res?.data?.displayCurrentAssigneeRole || 'NEXT_APPROVER';
       const forwardedCount = res?.data?.forwardedToUsersCount;
-      const extraHint = routedRole === 'APPROVER'
-        ? `You can track it under statuses like "Forwarded to Approver" or "Under Review by Approver" in All Proposals.`
-        : routedRole === 'OVERALL_BUDGET_APPROVER'
-        ? `You can track it under statuses like "Forwarded to Manager" or "Under Review by Manager" in All Proposals.`
-        : '';
+      
+      let extraHint = '';
+      if (routedRole === 'BUDGET_PLANNING_ANALYST') {
+        extraHint = `You can track it under statuses like "Forwarded to Analyst" or "Under Review by Analyst" in All Proposals.`;
+      } else if (routedRole === 'BUDGET_OFFICER') {
+        extraHint = `You can track it under statuses like "Forwarded to Officer" or "Under Review by Officer" in All Proposals.`;
+      } else if (routedRole === 'OVERALL_BUDGET_APPROVER') {
+        extraHint = `You can track it under statuses like "Forwarded to Manager" or "Under Review by Manager" in All Proposals.`;
+      }
+      
       const recipientsNote = typeof forwardedCount === 'number'
         ? ` Notified recipients: ${forwardedCount}.`
         : '';
