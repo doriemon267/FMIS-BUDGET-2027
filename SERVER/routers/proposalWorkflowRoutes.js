@@ -96,4 +96,11 @@ router.post('/consolidate', proposalWorkflowController.consolidateProposals);
 // Get proposal workflow history
 router.get('/history/:proposalId', proposalWorkflowController.getProposalHistory);
 
+// === AUDIT LOGGING ROUTES ===
+// Get detailed field-level edit logs for a proposal (shows all changes with old/new values)
+router.get('/audit/proposal/:proposalId', proposalWorkflowController.getProposalEditLogs);
+
+// Get user activity logs (all changes made by a specific user)
+router.get('/audit/user/:userId', proposalWorkflowController.getUserActivityLogs);
+
 module.exports = router;

@@ -9,6 +9,7 @@ const CapitalOutlay = require('../models/CapitalOutlay');
 const mooeProposals = require('../models/mooeProposals');
 const Income = require('../models/Income');
 const BudgetOfficerEdit = require('../models/BudgetOfficerEdit');
+const ProposalEditLog = require('../models/ProposalEditLog');
 const { applyEditsToOriginalDocuments } = require('./budgetOfficerEditController');
 
 // Labels used when reporting missing budget modules during analyst submission validation
@@ -4511,9 +4512,223 @@ const __private = {
   recordWorkflowEvent
 };
 
+// AUDIT LOGGING METHODS
+
+/**
+ * Get detailed field-level edit logs for a specific proposal
+ * Returns all changes made to the proposal with old/new values, timestamps, and user information
+ */
+const getProposalEditLogs = async (req, res) => {
+  try {
+    const { proposalId } = req.params;
+    const { 
+      entityType, 
+      startDate, 
+      endDate, 
+      limit = 100,
+      page = 1 
+    } = req.query;
+
+    // Validate proposalId
+    if (!mongoose.Types.ObjectId.isValid(proposalId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid proposal ID format'
+      });
+    }
+
+    // Check if user has access to this proposal
+    const proposal = await Proposal.findById(proposalId);
+    if (!proposal) {
+      return res.status(404).json({
+        success: false,
+        message: 'Proposal not found'
+      });
+    }
+
+    // Get user's hierarchical assignment for access control
+    const userAssignment = req.userHierarchicalAssignment;
+    if (!userAssignment) {
+      return res.status(403).json({
+        success: false,
+        message: 'User assignment not found'
+      });
+    }
+
+    // Check if user has access to view this proposal's audit logs
+    const hasAccess = await budgetRoleAccessControl.checkProposalAccess(
+      proposal, 
+      req.user, 
+      userAssignment, 
+      'read'
+    );
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied: You do not have permission to view audit logs for this proposal'
+      });
+    }
+
+    // Build query options
+    const options = {
+      limit: parseInt(limit) || 100,
+      page: parseInt(page) || 1
+    };
+
+    if (entityType) options.entityType = entityType;
+    if (startDate) options.startDate = startDate;
+    if (endDate) options.endDate = endDate;
+
+    // Get edit logs
+    const logs = await ProposalEditLog.getProposalHistory(proposalId, options);
+
+    // Format logs for display
+    const formattedLogs = logs.map(log => ({
+      id: log._id,
+      timestamp: log.timestamp,
+      user: {
+        id: log.changedBy.userId,
+        name: log.changedBy.userName,
+        role: log.changedBy.userRole
+      },
+      action: log.changeType,
+      entity: log.entityType,
+      summary: log.summary || 'Field modifications',
+      changes: log.changes.map(change => ({
+        field: change.field,
+        oldValue: change.oldValue,
+        newValue: change.newValue,
+        fieldType: change.fieldType || 'unknown'
+      })),
+      metadata: log.metadata || {}
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        proposalId,
+        logs: formattedLogs,
+        total: formattedLogs.length,
+        pagination: {
+          page: options.page,
+          limit: options.limit,
+          hasMore: formattedLogs.length === options.limit
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching proposal edit logs:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch proposal edit logs',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get user activity logs - all changes made by a specific user
+ * Useful for compliance and audit trails
+ */
+const getUserActivityLogs = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { 
+      startDate, 
+      endDate, 
+      limit = 100,
+      page = 1,
+      entityType
+    } = req.query;
+
+    // Validate userId
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user ID format'
+      });
+    }
+
+    // Check if requesting user has permission to view activity logs
+    // Only admins or the user themselves should be able to view activity logs
+    const requestingUserId = req.user._id.toString();
+    const isAdmin = req.user.Roles?.includes('ADMIN') || req.user.Roles?.includes('SYSTEM_ADMIN');
+    const isSelf = requestingUserId === userId;
+
+    if (!isAdmin && !isSelf) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied: You can only view your own activity logs'
+      });
+    }
+
+    // Build query options
+    const options = {
+      limit: parseInt(limit) || 100,
+      page: parseInt(page) || 1
+    };
+
+    if (startDate) options.startDate = startDate;
+    if (endDate) options.endDate = endDate;
+
+    // Get user activity logs
+    const logs = await ProposalEditLog.getUserActivity(userId, options);
+
+    // Filter by entity type if specified
+    let filteredLogs = logs;
+    if (entityType) {
+      filteredLogs = logs.filter(log => log.entityType === entityType);
+    }
+
+    // Format logs for display
+    const formattedLogs = filteredLogs.map(log => ({
+      id: log._id,
+      timestamp: log.timestamp,
+      proposalId: log.proposalId,
+      action: log.changeType,
+      entity: log.entityType,
+      summary: log.summary || 'Field modifications',
+      changes: log.changes.map(change => ({
+        field: change.field,
+        oldValue: change.oldValue,
+        newValue: change.newValue,
+        fieldType: change.fieldType || 'unknown'
+      })),
+      metadata: log.metadata || {}
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        userId,
+        logs: formattedLogs,
+        total: formattedLogs.length,
+        pagination: {
+          page: options.page,
+          limit: options.limit,
+          hasMore: filteredLogs.length === options.limit
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching user activity logs:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch user activity logs',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   ...exports,
   budgetRoleAccessControl,
   // validateAnalystSubmissionReadiness,  // REMOVED: Not used externally, causes circular dependency
-  __private
+  __private,
+  // Audit logging methods
+  getProposalEditLogs,
+  getUserActivityLogs
 };

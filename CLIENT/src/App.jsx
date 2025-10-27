@@ -47,6 +47,7 @@ import ConsolidatedPersonnelServicesReportsPage from "./components/reports/Conso
 import ComprehensiveReportsPage from "./components/reports/ComprehensiveReportsPage";
 import DatabaseBackupPage from "./pages/DatabaseBackupPage";
 import HierarchicalUserAssignmentPage from "./pages/HierarchicalUserAssignmentPage";
+import AuditLogsPage from "./pages/AuditLogsPage";
 const App = () => {
   return (
     <Routes>
@@ -156,6 +157,17 @@ const App = () => {
               excludeRoles={["preparer", "reviewer", "approver"]}
             >
               <SettingsManagement />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/audit-logs"
+          element={
+            <ProtectedRoute
+              requiredPermissions={["ManageSettings"]}
+              requiredWorkflowRoles={["regionCreator", "superAdmin", "overallBudgetApprover"]}
+            >
+              <AuditLogsPage />
             </ProtectedRoute>
           }
         />

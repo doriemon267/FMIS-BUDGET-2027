@@ -21,7 +21,7 @@ import { TbReportAnalytics } from "react-icons/tb";
 import { FiUsers } from "react-icons/fi";
 import { IoSettingsOutline } from "react-icons/io5";
 import { HiOutlineBanknotes } from "react-icons/hi2";
-import { MdOutlineContactSupport } from "react-icons/md";
+import { MdOutlineContactSupport, MdHistory } from "react-icons/md";
 import { FaBriefcase } from "react-icons/fa";
 import { FaGavel } from "react-icons/fa";
 import { FaClock } from "react-icons/fa";
@@ -251,6 +251,16 @@ const CustomDrawer = ({ collapsed = false }) => {
                   isOverallApprover,
                 icon: <IoSettingsOutline />,
               },
+
+              {
+                link: "/audit-logs",
+                name: "Audit Logs",
+                isAllow:
+                  hasPermission(currentUser, "ManageSettings") ||
+                  isOverallApprover,
+                icon: <MdHistory />,
+              },
+
               // {
               //   link: "/settings",
               //   name: "Settings Management",
