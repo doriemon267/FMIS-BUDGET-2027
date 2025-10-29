@@ -32,7 +32,7 @@ import {
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { NumericFormat } from "react-number-format";
 import api from "../../config/api";
 import { toast } from "react-hot-toast";
@@ -143,11 +143,39 @@ const CompensationStandaloneDialog = ({
   open,
   onClose,
   editData,
-  onSaved
+  onSaved,
+  existingCompensations = []
 }) => {
   const theme = useTheme();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState(0);
+  const [copiedFromId, setCopiedFromId] = useState(null);
+
+  // ✅ Fetch existing compensations if not provided
+  const { data: fetchedCompensations = [] } = useQuery({
+    queryKey: ["compensationList"],
+    queryFn: async () => {
+      try {
+        const response = await api.get("/compensation");
+        let data = response.data?.compensationSettings || response.data?.data || response.data || [];
+        if (Array.isArray(data)) {
+          data = data.map(item => ({
+            ...item,
+            linkedFiscalYears: item.linkedFiscalYears || [],
+            linkedBudgetTypes: item.linkedBudgetTypes || []
+          }));
+        }
+        return Array.isArray(data) ? data : [];
+      } catch (error) {
+        console.error("Failed to fetch compensation settings:", error);
+        return [];
+      }
+    },
+    enabled: open && existingCompensations.length === 0
+  });
+
+  // Use provided compensations or fetched ones
+  const compensationsForCopy = existingCompensations.length > 0 ? existingCompensations : fetchedCompensations;
 
   const {
     control,
@@ -228,9 +256,32 @@ const CompensationStandaloneDialog = ({
     }
   });
 
+  const handleCopyFromExisting = (compensationId) => {
+    if (!compensationId) {
+      setCopiedFromId(null);
+      reset();
+      return;
+    }
+
+    const sourceCompensation = compensationsForCopy.find(c => c._id === compensationId);
+    if (sourceCompensation) {
+      setCopiedFromId(compensationId);
+      
+      // Create a copy without the _id so it creates a new record
+      const { _id, createdAt, updatedAt, linkedFiscalYears, linkedBudgetTypes, ...copyData } = sourceCompensation;
+      
+      // Pre-fill name with " - Copy" suffix
+      copyData.name = `${copyData.name} - Copy`;
+      
+      reset(copyData);
+      toast.success(`Compensation "${sourceCompensation.name}" loaded. Edit and save as new.`);
+    }
+  };
+
   const handleDialogClose = () => {
     reset();
     setActiveTab(0);
+    setCopiedFromId(null);
     onClose();
   };
 
@@ -291,6 +342,39 @@ const CompensationStandaloneDialog = ({
           </Alert>
 
           <Stack spacing={3}>
+            {/* Copy From Existing - Only Show in Create Mode */}
+            {!editData && compensationsForCopy.length > 0 && (
+              <Box sx={{ p: 2.5, backgroundColor: '#fff3cd', borderRadius: 2, border: '1px solid #ffc107' }}>
+                <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: '#d39e00' }}>
+                  📋 Copy From Existing (Optional)
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 2, color: '#666' }}>
+                  Select an existing compensation to copy its settings. All fields will be pre-filled with its values.
+                </Typography>
+                <TextField
+                  select
+                  fullWidth
+                  label="Select Compensation to Copy"
+                  value={copiedFromId || ''}
+                  onChange={(e) => handleCopyFromExisting(e.target.value)}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      '&:hover fieldset': { borderColor: '#d39e00' },
+                      '&.Mui-focused fieldset': { borderColor: '#d39e00' }
+                    },
+                    '& .MuiInputLabel-root.Mui-focused': { color: '#d39e00' }
+                  }}
+                >
+                  <MenuItem value="">-- Start Fresh (Default values) --</MenuItem>
+                  {compensationsForCopy.map((comp) => (
+                    <MenuItem key={comp._id} value={comp._id}>
+                      {comp.name} {comp.linkedFiscalYears?.length > 0 && `(Linked to ${comp.linkedFiscalYears.length} FY)`}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Box>
+            )}
+
             {/* Name & Description Section */}
             <Box sx={{ p: 2.5, backgroundColor: '#ffffff', borderRadius: 2, border: '1px solid #e0e0e0' }}>
               <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: '#264524' }}>

@@ -444,6 +444,7 @@ const CompensationManagementPage = () => {
         onClose={handleDialogClose}
         editData={selectedData}
         onSaved={handleDialogClose}
+        existingCompensations={compensationList}
       />
 
       {/* Link Fiscal Years Dialog */}
