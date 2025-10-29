@@ -1170,13 +1170,33 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
   ];
 
   // Map alternate/legacy status labels to canonical step keys
+  // Handles both uppercase (database) and title-case (UI) variants
   const stepKeySynonyms = {
+    // Forwarded to Officer variants
     'Submitted to Officer': 'Forwarded to Officer',
+    'SUBMITTED TO OFFICER': 'Forwarded to Officer',
     'Office Verified': 'Forwarded to Officer',
+    'OFFICE VERIFIED': 'Forwarded to Officer',
+    'FORWARDED_TO_OFFICER': 'Forwarded to Officer',
+    // Division Submitted variants
     'Responsibility Center Submitted': 'Division Submitted',
-    'Forwarded to Manager': 'Forwarded to Manager',
+    'RESPONSIBILITY_CENTER_SUBMITTED': 'Division Submitted',
+    'DIVISION SUBMITTED': 'Division Submitted',
+    // Officer Approved variants
     'Officer Approved': 'Officer Approved',
-    'Submitted to Manager': 'Forwarded to Manager'
+    'OFFICER APPROVED': 'Officer Approved',
+    'APPROVER APPROVED': 'Officer Approved',
+    'Approver Approved': 'Officer Approved',
+    // Forwarded to Manager variants
+    'Forwarded to Manager': 'Forwarded to Manager',
+    'Submitted to Manager': 'Forwarded to Manager',
+    'FORWARDED_TO_MANAGER': 'Forwarded to Manager',
+    'SUBMITTED_TO_MANAGER': 'Forwarded to Manager',
+    'FORWARDED TO MANAGER': 'Forwarded to Manager',
+    'SUBMITTED TO MANAGER': 'Forwarded to Manager',
+    // Finalized variants
+    'FINALIZED': 'Finalized',
+    'Manager Approved': 'Finalized'
   };
   const normalizedStatusForStep = stepKeySynonyms[proposal?.status] || proposal?.status || 'Draft';
   const currentStepIndex = Math.max(steps.findIndex(s => s.key === normalizedStatusForStep), 0);
