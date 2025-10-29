@@ -26,7 +26,7 @@ import ProtectedRoute from "./middleware/ProtectedRoute";
 import NotAuthorized from "./pages/NotAuthorizedPage";
 import ProposalSummaryPage from "./pages/ProposalSummaryPage";
 import FiscalYearSettingsPage from "./pages/FiscalYearSettingsPage";
-import CompensationSettingsPage from "./pages/CompensationSettingsPage";
+import CompensationManagementPage from "./pages/CompensationManagementPage";
 import UploaderPage from "./pages/TestPage";
 import MealAllowancePage from "./pages/MealAllowancePage";
 import MedicalAllowancePage from "./pages/MedicalAllowancePage";
@@ -136,18 +136,20 @@ const App = () => {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/compsettings"
+
+ <Route
+          path="/compensation-management"
           element={
             <ProtectedRoute
               requiredPermissions={["ManageSettings"]}
               requiredWorkflowRoles={["regionCreator", "superAdmin"]}
               excludeRoles={["preparer", "reviewer", "approver"]}
             >
-              <CompensationSettingsPage />
+              <CompensationManagementPage />
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/settings"
           element={

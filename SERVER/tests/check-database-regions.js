@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 // Check database for NCR and all regions
 async function checkDatabaseRegions() {
-    const dbUrl = 'mongodb://localhost:27017/fmis_budget';
+    const dbUrl = 'mongodb://172.16.4.98:27017/fmis_budget';
 
     console.log('🔍 Checking database for NCR and all regions...\n');
 

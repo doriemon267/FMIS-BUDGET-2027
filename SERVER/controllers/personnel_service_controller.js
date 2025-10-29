@@ -5,6 +5,7 @@ const Settings = require("../models/Settings");
 const Proposal = require('../models/Proposal');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
+const { getActiveSettingsWithCompensation, getCompensationField } = require("../utils/settingsUtils");
 // Import ChildrenAllowance model safely
 const ChildrenAllowance =
   mongoose.models.ChildrenAllowance || require("../models/childrenAllowance");
@@ -100,7 +101,7 @@ async function syncMealAllowanceData(employeeNumber, fiscalYear) {
 // Add a new endpoint to sync all meal allowances
 exports.syncAllMealAllowances = async (req, res) => {
   try {
-    const activeSettings = await Settings.findOne({ isActive: true });
+    const activeSettings = await getActiveSettingsWithCompensation();
     if (!activeSettings) {
       return res
         .status(400)
@@ -182,7 +183,7 @@ exports.getAllPersonnelServices = async (req, res) => {
     const pageNum = Math.max(1, Number(page));
     const limitNum = Math.max(1, Number(limit));
     const skip = (pageNum - 1) * limitNum;
-    const activeSettings = await Settings.findOne({ isActive: true });
+    const activeSettings = await getActiveSettingsWithCompensation();
     if (!activeSettings) {
       return res
         .status(400)

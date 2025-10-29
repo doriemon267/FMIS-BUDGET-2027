@@ -33,7 +33,9 @@ import {
   AiOutlinePlus
 } from "react-icons/ai";
 import { useQuery } from "@tanstack/react-query";
-import AddSettingsDialog from "../components/settings/AddSettingsDialog";
+import AddSettingsDialog_Enhanced from "../components/settings/AddSettingsDialog_Enhanced";
+import BudgetPeriodActions from "../components/settings/BudgetPeriodActions";
+import { Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material";
 import ProposalActionsButton from "../global/components/ProposalActionsButton";
 import CustomPage from "../global/components/CustomPage";
 import api from "../config/api";
@@ -42,6 +44,8 @@ const FiscalYearSettingsPage = () => {
   const theme = useTheme();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedData, setSelectedData] = useState(null);
+  const [showPeriodsDialog, setShowPeriodsDialog] = useState(false);
+  const [selectedForPeriods, setSelectedForPeriods] = useState(null);
 
   // Fetch settings data for summary cards
   const { data: settingsData, isLoading: settingsLoading, refetch, error } = useQuery({
@@ -93,6 +97,11 @@ const FiscalYearSettingsPage = () => {
     refetch(); // Refresh data after dialog closes
   };
 
+  const handleOpenPeriodsDialog = (row) => {
+    setSelectedForPeriods(row);
+    setShowPeriodsDialog(true);
+  };
+
   const handleExport = () => {
     // Export functionality
   };
@@ -104,6 +113,20 @@ const FiscalYearSettingsPage = () => {
       label: "Actions",
       customRender: (row) => (
         <Stack direction="row" spacing={1}>
+          <Tooltip title="Manage Periods">
+            <IconButton
+              size="small"
+              onClick={() => handleOpenPeriodsDialog(row)}
+              sx={{
+                color: theme.palette.warning.main,
+                '&:hover': {
+                  backgroundColor: alpha(theme.palette.warning.main, 0.1)
+                }
+              }}
+            >
+              <MdDateRange />
+            </IconButton>
+          </Tooltip>
           <Tooltip title="Edit Cut Off Settings">
             <IconButton
               size="small"
@@ -193,6 +216,41 @@ const FiscalYearSettingsPage = () => {
           color={row.isActive ? "success" : "default"}
           variant="filled"
           size="small"
+        />
+      )
+    },
+    budgetPeriods: {
+      type: "custom",
+      label: "Budget Periods",
+      show: true,
+      customRender: (row) => (
+        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+          {row.budgetPeriods && row.budgetPeriods.length > 0 ? (
+            row.budgetPeriods.map((p, idx) => (
+              <Chip
+                key={idx}
+                label={p.periodName}
+                color={p.isActive ? "success" : "default"}
+                variant={p.isActive ? "filled" : "outlined"}
+                size="small"
+              />
+            ))
+          ) : (
+            <Typography variant="caption" color="text.secondary">No periods</Typography>
+          )}
+        </Stack>
+      )
+    },
+    applicableRegions: {
+      type: "custom",
+      label: "Regions",
+      show: true,
+      customRender: (row) => (
+        <Chip
+          label={row.applicableRegions?.includes("All") ? "NIA-Wide" : `${row.applicableRegions?.length || 0} Region(s)`}
+          size="small"
+          color={row.applicableRegions?.includes("All") ? "primary" : "default"}
+          variant="outlined"
         />
       )
     },
@@ -431,11 +489,33 @@ const FiscalYearSettingsPage = () => {
 
       {/* Enhanced Dialog */}
       {isAddDialogOpen && (
-        <AddSettingsDialog
+        <AddSettingsDialog_Enhanced
           open={isAddDialogOpen}
           onCloseDialog={handleCloseAddDialog}
           row={selectedData}
         />
+      )}
+
+      {/* Budget Periods Management Dialog */}
+      {showPeriodsDialog && selectedForPeriods && (
+        <Dialog open={showPeriodsDialog} onClose={() => setShowPeriodsDialog(false)} maxWidth="lg" fullWidth>
+          <DialogTitle>
+            Manage Budget Periods - FY {selectedForPeriods.fiscalYear}
+          </DialogTitle>
+          <DialogContent sx={{ p: 3 }}>
+            <BudgetPeriodActions
+              settingId={selectedForPeriods._id}
+              budgetPeriods={selectedForPeriods.budgetPeriods || []}
+              onUpdate={() => {
+                setShowPeriodsDialog(false);
+                refetch();
+              }}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setShowPeriodsDialog(false)}>Close</Button>
+          </DialogActions>
+        </Dialog>
       )}
     </Box>
   );

@@ -1,0 +1,87 @@
+// models/CompensationSettings.js
+const mongoose = require("mongoose");
+
+const compensationSettingsSchema = new mongoose.Schema(
+  {
+    // ✅ STRICT SEPARATION: Compensation Settings are STANDALONE, NOT tied to fiscal years
+    // Multiple fiscal years can share the SAME compensation settings
+    // This prevents auto-creation of compensation during fiscal year creation
+    
+    // Compensation name for identification (e.g., "COMPENSATION 1", "Standard 2025")
+    name: { type: String, required: true },
+    
+    // Description/Notes
+    description: { type: String },
+    
+    // Personnel Services Compensation
+    hazardPay: { type: Number },
+    subsistenceAllowance: { type: Number },
+    honoraria: { type: Number },
+    PERA: { type: Number },
+    uniformAllowance: { type: Number },
+    productivityIncentive: { type: Number },
+    
+    // Allowances
+    medicalAllowance: { type: Number, default: 200 }, // Fixed 200 pesos per month per dependent
+    childrenAllowance: { type: Number },
+    meal: { type: Number, default: 200 }, // Fixed 200 pesos per month for eligible employees
+    cashGift: { type: Number },
+    courtAppearance: { type: Number },
+    
+    // Premium/Contributions
+    gsisPremium: { type: Number },
+    philhealthPremium: { type: Number },
+    pagibigPremium: { type: Number },
+    employeeCompensation: { type: Number },
+    
+    // Leave & Benefits
+    earnedLeaves: { type: Number },
+    retirementBenefits: { type: Number },
+    terminalLeave: { type: Number },
+    
+    // Overtime Rates
+    weekdayMultiplier: { type: Number },
+    weekendMultiplier: { type: Number },
+    
+    // Subsistence Allowance Rates
+    subsistenceAllowanceRate: { type: Number },
+    subsistenceAllowanceSTRates: {
+      highRisk: {
+        fifteenOrMoreDays: { type: Number },
+        eightToFourteenDays: { type: Number },
+        lessThanEightDays: { type: Number },
+      },
+      lowRisk: {
+        fifteenOrMoreDays: { type: Number },
+        eightToFourteenDays: { type: Number },
+        lessThanEightDays: { type: Number },
+      },
+    },
+    
+    // Loyalty Pay Configuration
+    loyaltyPay: {
+      baseYears: { type: Number }, // First 10 years
+      baseAmount: { type: Number }, // ₱10,000
+      succeedingInterval: { type: Number }, // Every 5 years
+      succeedingAmount: { type: Number }, // ₱5,000
+      cutoffDate: {
+        type: String,
+        default: "06-22", // MM-DD format for June 22 cutoff
+      },
+    },
+    
+    // Audit trail
+    lastModifiedBy: { type: String }, // User ID or username
+    lastModifiedReason: { type: String }, // Why it was modified
+    notes: { type: String },
+  },
+  { timestamps: true }
+);
+
+// ✅ NO UNIQUE INDEX on fiscal year - compensation settings are truly standalone and reusable
+// Users can reuse the same compensation across multiple fiscal years
+
+module.exports = mongoose.model(
+  "CompensationSettings",
+  compensationSettingsSchema
+);

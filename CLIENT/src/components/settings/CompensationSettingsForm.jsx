@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Accordion,
   AccordionSummary,
@@ -14,13 +14,18 @@ import {
   DialogActions,
   Box,
   Stack,
-  Chip
+  Chip,
+  MenuItem,
+  Select,
+  FormControl,
+  InputLabel,
+  CircularProgress
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { NumericFormat } from "react-number-format";
 import api from "../../config/api";
 import { toast, ToastContainer } from "react-toastify";
@@ -30,7 +35,9 @@ import {
   MdAccountBalance,
   MdAccessTime,
   MdEmojiEvents,
-  MdSettings
+  MdSettings,
+  MdCalendarToday,
+  MdCategory
 } from "react-icons/md";
 
 // Component for numeric input formatting (for monetary values)
@@ -85,6 +92,8 @@ const EarnedLeavesFormatCustom = React.forwardRef(function EarnedLeavesFormatCus
 
 // Validation schema
 const advancedSchema = yup.object().shape({
+  fiscalYear: yup.string().required("Fiscal year is required"),
+  budgetType: yup.string().required("Budget type is required"),
   PERA: yup.number().min(0),
   uniformAllowance: yup.number().min(0),
   productivityIncentive: yup.number().min(0),
@@ -125,6 +134,95 @@ const advancedSchema = yup.object().shape({
     }),
   }),
 });
+
+// Fiscal Year & Budget Type Section Component
+const FiscalYearBudgetTypeSection = ({ control, errors, fiscalYears, isEditMode, isLoading }) => (
+  <Box sx={{ mb: 3, p: 2.5, backgroundColor: '#ffffff', borderRadius: 2, border: '1px solid #e0e0e0' }}>
+    <Stack spacing={2.5}>
+      <Stack direction="row" alignItems="center" spacing={2}>
+        <Box sx={{ color: '#264524', fontSize: '1.5rem' }}>
+          <MdCalendarToday />
+        </Box>
+        <Typography variant="h6" sx={{ fontWeight: 600, color: '#264524' }}>
+          Fiscal Year & Budget Type
+        </Typography>
+      </Stack>
+      
+      <Grid container spacing={2}>
+        {/* Fiscal Year Field */}
+        <Grid item xs={12} sm={6}>
+          <Controller
+            name="fiscalYear"
+            control={control}
+            render={({ field }) => (
+              <FormControl fullWidth error={!!errors.fiscalYear}>
+                <InputLabel>Fiscal Year</InputLabel>
+                <Select
+                  {...field}
+                  label="Fiscal Year"
+                  disabled={isEditMode || isLoading}
+                >
+                  <MenuItem value="" disabled>
+                    {isLoading ? "Loading fiscal years..." : "Select a fiscal year"}
+                  </MenuItem>
+                  {fiscalYears?.map((fy) => (
+                    <MenuItem key={fy} value={fy}>
+                      FY {fy}
+                    </MenuItem>
+                  ))}
+                </Select>
+                {errors.fiscalYear && (
+                  <Typography variant="caption" sx={{ color: '#d32f2f', mt: 0.5, display: 'block' }}>
+                    {errors.fiscalYear.message}
+                  </Typography>
+                )}
+              </FormControl>
+            )}
+          />
+        </Grid>
+
+        {/* Budget Type Field */}
+        <Grid item xs={12} sm={6}>
+          <Controller
+            name="budgetType"
+            control={control}
+            render={({ field }) => (
+              <FormControl fullWidth error={!!errors.budgetType}>
+                <InputLabel>Budget Type</InputLabel>
+                <Select
+                  {...field}
+                  label="Budget Type"
+                  disabled={isEditMode}
+                >
+                  <MenuItem value="" disabled>
+                    Select a budget type
+                  </MenuItem>
+                  <MenuItem value="Initial">Initial Budget</MenuItem>
+                  <MenuItem value="GAA">General Appropriations Act (GAA)</MenuItem>
+                  <MenuItem value="NEP">Normative/Emergency/Priority (NEP)</MenuItem>
+                  <MenuItem value="Supplemental">Supplemental Budget</MenuItem>
+                </Select>
+                {errors.budgetType && (
+                  <Typography variant="caption" sx={{ color: '#d32f2f', mt: 0.5, display: 'block' }}>
+                    {errors.budgetType.message}
+                  </Typography>
+                )}
+              </FormControl>
+            )}
+          />
+        </Grid>
+      </Grid>
+
+      <Box sx={{ p: 1.5, backgroundColor: '#f0f7f0', borderRadius: 1, borderLeft: '3px solid #264524' }}>
+        <Typography variant="caption" color="text.secondary">
+          <strong>Note:</strong> {isEditMode ? 
+            "Fiscal year and budget type cannot be changed when editing." : 
+            "Select the fiscal year and budget type for these compensation settings. This creates a unique record for tracking."}
+        </Typography>
+      </Box>
+    </Stack>
+  </Box>
+);
 
 // Enhanced Accordion Section Component
 const AccordionSection = ({ title, children, icon }) => (
@@ -579,6 +677,22 @@ const CompensationSettingsDialogForm = ({
   onClose,
 }) => {
   const queryClient = useQueryClient();
+  const [isEditMode] = useState(!!editData?._id);
+
+  // Fetch available fiscal years
+  const { data: fiscalYears = [], isLoading: isLoadingFiscalYears } = useQuery({
+    queryKey: ["fiscal-years"],
+    queryFn: async () => {
+      try {
+        const response = await api.get('/settings/fiscal-years');
+        return Array.isArray(response.data) ? response.data : [];
+      } catch (error) {
+        console.error("Failed to fetch fiscal years:", error);
+        return [];
+      }
+    },
+  });
+
   const {
     control,
     handleSubmit,
@@ -587,6 +701,8 @@ const CompensationSettingsDialogForm = ({
   } = useForm({
     resolver: yupResolver(advancedSchema),
     defaultValues: {
+      fiscalYear: "",
+      budgetType: "Initial",
       PERA: 0,
       uniformAllowance: 0,
       productivityIncentive: 0,
@@ -627,6 +743,8 @@ const CompensationSettingsDialogForm = ({
   useEffect(() => {
     if (editData) {
       reset({
+        fiscalYear: editData.fiscalYear || "",
+        budgetType: editData.budgetType || "Initial",
         PERA: editData.PERA,
         uniformAllowance: editData.uniformAllowance,
         productivityIncentive: editData.productivityIncentive,
@@ -665,34 +783,24 @@ const CompensationSettingsDialogForm = ({
     }
   }, [editData, reset]);
 
-  // When creating new settings (no editData), auto-prefill from the most recent previous fiscal year
+  // When creating new settings (no editData), set fiscal year and auto-prefill from previous FY
   useEffect(() => {
     const prefillFromPreviousFY = async () => {
       try {
-        if (!open || editData) return;
-        // Fetch list of fiscal years (sorted ascending by route implementation)
-        const { data: fiscalYearsRaw } = await api.get('/settings/fiscal-years');
-        if (!Array.isArray(fiscalYearsRaw) || fiscalYearsRaw.length === 0) return;
-        // De-duplicate fiscal years in case multiple budget types exist per FY
-        const fiscalYears = Array.from(new Set(fiscalYearsRaw.map(y => String(y))));
+        if (!open || editData || !fiscalYear) return;
 
-        // Determine previous FY relative to provided fiscalYear; otherwise use latest available
-        let prevFY = null;
-        if (fiscalYear) {
-          const sorted = [...fiscalYears].sort((a, b) => Number(a) - Number(b));
-          const idx = sorted.findIndex(y => String(y) === String(fiscalYear));
-          if (idx > 0) prevFY = sorted[idx - 1];
-          else prevFY = sorted[sorted.length - 1];
-        } else {
-          prevFY = fiscalYears[fiscalYears.length - 1];
-        }
-        if (!prevFY) return;
+        // Set the fiscal year to the one from URL params
+        reset((current) => ({
+          ...current,
+          fiscalYear: fiscalYear || "",
+        }));
 
         // Fetch advanced settings for the previous FY and use them as defaults
-        const { data: advanced } = await api.get(`/settings/advanced/${prevFY}`);
+        const { data: advanced } = await api.get(`/settings/advanced/${fiscalYear}`);
         if (advanced && typeof advanced === 'object') {
           reset((current) => ({
             ...current,
+            fiscalYear: fiscalYear || "",
             PERA: advanced.PERA ?? current.PERA,
             uniformAllowance: advanced.uniformAllowance ?? current.uniformAllowance,
             productivityIncentive: advanced.productivityIncentive ?? current.productivityIncentive,
@@ -710,10 +818,21 @@ const CompensationSettingsDialogForm = ({
             subsistenceAllowanceRate: advanced.subsistenceAllowanceRate ?? current.subsistenceAllowanceRate,
             earnedLeaves: advanced.earnedLeaves ?? current.earnedLeaves,
           }));
-          toast.info(`Prefilled from previous fiscal year (FY ${prevFY}).`, { autoClose: 2000 });
+          toast.info(`Prefilled from previous fiscal year settings.`, { autoClose: 2000 });
+        } else {
+          // Just set the fiscal year even if no previous settings
+          reset((current) => ({
+            ...current,
+            fiscalYear: fiscalYear || "",
+          }));
         }
       } catch (err) {
         console.error('[CompensationSettingsDialogForm] Prefill error:', err);
+        // Still set the fiscal year
+        reset((current) => ({
+          ...current,
+          fiscalYear: fiscalYear || "",
+        }));
       }
     };
 
@@ -723,15 +842,20 @@ const CompensationSettingsDialogForm = ({
   // Mutation definition
   const mutation = useMutation({
     mutationFn: async (data) => {
-      const effectiveFiscalYear = fiscalYear || editData?.fiscalYear;
+      const effectiveFiscalYear = data.fiscalYear || editData?.fiscalYear;
       if (!effectiveFiscalYear) {
         throw new Error("Fiscal year is missing.");
       }
-      const res = await api.put(`/settings/advanced/${effectiveFiscalYear}`, data, { params: { budgetType: editData?.budgetType } });
+      // Extract fiscal year and budget type from form data
+      const { fiscalYear: fy, budgetType, ...compensationData } = data;
+      const res = await api.put(`/settings/advanced/${effectiveFiscalYear}`, compensationData, { 
+        params: { budgetType: budgetType || editData?.budgetType } 
+      });
       return res.data.message;
     },
     onSuccess: (message) => {
       queryClient.invalidateQueries(["settings"]);
+      queryClient.invalidateQueries(["fiscal-years"]);
       const updatedMessage = message.replace("Advanced settings", "Compensation Settings");
       toast.success(updatedMessage);
       if (onSaved) onSaved();
@@ -744,7 +868,7 @@ const CompensationSettingsDialogForm = ({
   });
 
   const onSubmit = (data) => {
-    const effectiveFiscalYear = fiscalYear || editData?.fiscalYear;
+    const effectiveFiscalYear = data.fiscalYear || editData?.fiscalYear;
     if (!effectiveFiscalYear) {
       toast.error("Fiscal year is missing. Please provide a valid fiscal year.");
       return;
@@ -782,18 +906,25 @@ const CompensationSettingsDialogForm = ({
             <Typography variant="body2" sx={{ opacity: 0.9, mt: 1 }} component="div">
               Configure compensation rates, allowances, and government contributions
             </Typography>
-            {editData && (
-              <Chip
-                label={`Fiscal Year: ${editData.fiscalYear}`}
-                size="small"
-                sx={{
-                  position: 'absolute',
-                  top: 16,
-                  right: 16,
-                  backgroundColor: 'rgba(255,255,255,0.2)',
-                  color: 'white'
-                }}
-              />
+            {isEditMode && editData && (
+              <Stack direction="row" spacing={1} sx={{ position: 'absolute', top: 16, right: 16 }}>
+                <Chip
+                  label={`Fiscal Year: ${editData.fiscalYear}`}
+                  size="small"
+                  sx={{
+                    backgroundColor: 'rgba(255,255,255,0.2)',
+                    color: 'white'
+                  }}
+                />
+                <Chip
+                  label={`${editData.budgetType || 'N/A'}`}
+                  size="small"
+                  sx={{
+                    backgroundColor: 'rgba(255,255,255,0.2)',
+                    color: 'white'
+                  }}
+                />
+              </Stack>
             )}
           </Box>
         </DialogTitle>
@@ -805,6 +936,16 @@ const CompensationSettingsDialogForm = ({
           }}
         >
           <Box sx={{ p: 3 }}>
+            {/* Fiscal Year & Budget Type Section */}
+            <FiscalYearBudgetTypeSection 
+              control={control} 
+              errors={errors} 
+              fiscalYears={fiscalYears}
+              isEditMode={isEditMode}
+              isLoading={isLoadingFiscalYears}
+            />
+            
+            <Divider sx={{ my: 3 }} />
             <CompensationSection control={control} errors={errors} />
             <Divider sx={{ my: 3 }} />
             <GovernmentShareSection control={control} errors={errors} />

@@ -169,6 +169,59 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser());
 app.get("/", (req, res) => res.json({ message: "server is UP!" }));
 
+// Temporary public endpoint for compensation settings (for management page)
+app.get("/compensation", async (req, res) => {
+  try {
+    const CompensationSettings = require("./models/CompensationSettings");
+    const Settings = require("./models/Settings");
+    
+    const compensations = await CompensationSettings.find().sort({
+      createdAt: -1,
+    });
+
+    // ✅ CRITICAL FIX: Enrich compensation data with linkedFiscalYears and budgetTypes
+    // Without this, the frontend always shows "Not linked" even after linking
+    const enrichedCompensations = await Promise.all(
+      compensations.map(async (compensation) => {
+        // Find all fiscal years linked to this compensation
+        const linkedSettings = await Settings.find({
+          compensationSettingsId: compensation._id,
+        }).select("_id fiscalYear budgetType");
+
+        // Extract the IDs for display purposes
+        const linkedFiscalYears = linkedSettings.map((setting) => setting._id);
+        
+        // Extract budgetTypes from linked fiscal years
+        const linkedBudgetTypes = linkedSettings
+          .map((setting) => setting.budgetType)
+          .filter(Boolean)
+          .filter((v, i, a) => a.indexOf(v) === i); // Remove duplicates
+
+        // Debug log
+        if (linkedSettings.length > 0) {
+          console.log(`Compensation: ${compensation.name}, Linked Settings: ${linkedSettings.length}, BudgetTypes: ${linkedBudgetTypes.join(", ")}`);
+        }
+
+        return {
+          ...compensation.toObject(),
+          linkedFiscalYears,
+          linkedBudgetTypes, // ✅ NEW: Include budgetTypes from linked fiscal years
+          linkedCount: linkedFiscalYears.length,
+        };
+      })
+    );
+
+    res.status(200).json({
+      message: "Compensation settings retrieved successfully",
+      count: enrichedCompensations.length,
+      compensationSettings: enrichedCompensations,
+    });
+  } catch (error) {
+    console.error("Error in getCompensationSettings:", error.stack);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
 // Temporary public template download endpoint (for testing)
 app.get("/api/excel-upload/template", checkToken, async (req, res) => {
   try {
@@ -235,7 +288,11 @@ app.get('/test', (req, res) => {
 // Global organizational enforcement for all mutating routes (non-GET)
 app.use((req, res, next) => {
   try {
-    if (req.method === 'GET') return next();
+    if (req.method === 'GET') {
+      // Allow GET requests to compensation settings for the management page
+      if (req.path === '/compensation') return next();
+      return next();
+    }
     // Skip enforcement for hierarchical assignment management endpoints
     const p = (req.path || '').toLowerCase();
     if (p.startsWith('/api/hierarchical-rbac/assignments')) {

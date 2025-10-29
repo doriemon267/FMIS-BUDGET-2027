@@ -244,14 +244,13 @@ const CustomDrawer = ({ collapsed = false }) => {
                 icon: <IoSettingsOutline />,
               },
               {
-                link: "/compsettings",
-                name: "Compensation Settings",
+                link: "/compensation-management",
+                name: "Compensation Management Settings",
                 isAllow:
                   hasPermission(currentUser, "ManageSettings") ||
                   isOverallApprover,
                 icon: <IoSettingsOutline />,
               },
-
               {
                 link: "/audit-logs",
                 name: "Audit Logs",

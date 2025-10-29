@@ -1,61 +1,60 @@
 // models/Settings.js
 const mongoose = require("mongoose");
+
+const budgetPeriodSchema = new mongoose.Schema(
+  {
+    periodName: { type: String, required: true }, // e.g., "Phase 1", "Phase 2", "Extension"
+    startDate: { type: Date, required: true },
+    dueDate: { type: Date, required: true },
+    isActive: { type: Boolean, default: false },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: true }
+);
+
 const settingsSchema = new mongoose.Schema(
   {
     fiscalYear: { type: String, required: true },
+    budgetType: { type: String, enum: ["Initial", "NEP", "GAA"], required: true },
+    
+    // Region-based application (NEW)
+    applicableRegions: {
+      type: [String], // ["All"] or specific region IDs
+      default: ["All"],
+    },
+    
+    // Budget periods with versioning (NEW)
+    budgetPeriods: [budgetPeriodSchema],
+    
+    // Backward compatibility fields (deprecated but kept for migration)
     startDate: { type: Date },
     dueDate: { type: Date },
-    budgetType: { type: String, enum: ["Initial", "NEP", "GAA"], required: true },
-    hazardPay: { type: Number },
-    subsistenceAllowance: { type: Number },
-    honoraria: { type: Number},
-    PERA: { type: Number},
-    uniformAllowance: { type: Number},
-    productivityIncentive: { type: Number },
-    medicalAllowance: { type: Number, default: 200 }, // Fixed 200 pesos per month per dependent
-    childrenAllowance: { type: Number },
-    meal: { type: Number, default: 200 }, // Fixed 200 pesos per month for eligible employees
-    cashGift: { type: Number },
-    gsisPremium: { type: Number },
-    philhealthPremium: { type: Number },
-    pagibigPremium: { type: Number },
-    employeeCompensation: { type: Number },
-    earnedLeaves: { type: Number },
-    retirementBenefits: { type: Number },
-    terminalLeave: { type: Number },
-    courtAppearance: { type: Number },
-    weekdayMultiplier: { type: Number },
-    weekendMultiplier: { type: Number},
-// -    RATA: [{ type: mongoose.Schema.Types.ObjectId, ref: "RATA" }],
-// +    // RATA field is now deprecated in settings.
-// +    // RATA: [{ type: mongoose.Schema.Types.ObjectId, ref: "RATA" }],
-    subsistenceAllowanceRate: { type: Number },
-    subsistenceAllowanceSTRates: {
-      highRisk: {
-        fifteenOrMoreDays: { type: Number },
-        eightToFourteenDays: { type: Number },
-        lessThanEightDays: { type: Number },
-      },
-      lowRisk: {
-        fifteenOrMoreDays: { type: Number },
-        eightToFourteenDays: { type: Number },
-        lessThanEightDays: { type: Number },
-      },
-    },
-    loyaltyPay: {
-      baseYears: { type: Number}, // First 10 years
-      baseAmount: { type: Number }, // ₱10,000
-      succeedingInterval: { type: Number }, // Every 5 years
-      succeedingAmount: { type: Number }, // ₱5,000
-      cutoffDate: {
-        type: String,
-        default: "06-22" // MM-DD format for June 22 cutoff
-      },
-    },
+    
+    // Compensation settings reference (moved to separate model)
+    compensationSettingsId: { type: mongoose.Schema.Types.ObjectId, ref: "CompensationSettings" },
+    
+    // Overall activation status
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true }
 );
+
 // Ensure compound unique index on (fiscalYear, budgetType)
 settingsSchema.index({ fiscalYear: 1, budgetType: 1 }, { unique: true });
+
+// ✅ STRICT SEPARATION: Pre-save hook to ensure compensation is never auto-created
+// This is the final safety check - NEW fiscal years should NEVER get auto-linked compensation
+settingsSchema.pre('save', function(next) {
+  // Only apply this check for NEW documents (not updates)
+  if (this.isNew) {
+    // Verify: new fiscal years MUST have null compensationSettingsId
+    if (this.compensationSettingsId !== null && this.compensationSettingsId !== undefined) {
+      const error = new Error('STRICT SEPARATION VIOLATION: New fiscal year settings cannot have compensation auto-linked');
+      error.code = 'COMPENSATION_AUTO_LINK_PREVENTED';
+      return next(error);
+    }
+  }
+  next();
+});
+
 module.exports = mongoose.model("Settings", settingsSchema);
