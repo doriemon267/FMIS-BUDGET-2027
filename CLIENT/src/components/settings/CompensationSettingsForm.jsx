@@ -685,7 +685,8 @@ const CompensationSettingsDialogForm = ({
     queryFn: async () => {
       try {
         const response = await api.get('/settings/fiscal-years');
-        return Array.isArray(response.data) ? response.data : [];
+        const yearsData = response.data?.data || response.data || [];
+        return Array.isArray(yearsData) ? yearsData : [];
       } catch (error) {
         console.error("Failed to fetch fiscal years:", error);
         return [];

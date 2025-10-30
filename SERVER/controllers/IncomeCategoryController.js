@@ -77,7 +77,9 @@ exports.addIncomeCategory = async (req, res) => {
       description, 
       incomeSubcategoryName,
       isGlobal,
-      regions
+      regions,
+      groupId,
+      fiscalYears
     } = req.body;
     const categoryName = (incomeCategoryName || name)?.trim();
     if (!categoryName) {
@@ -114,9 +116,12 @@ exports.addIncomeCategory = async (req, res) => {
       incomeSubcategoryName: incomeSubcategoryName || [],
       description: description || "",
       isGlobal: isGlobal || false,
-      regions: regions || []
+      regions: regions || [],
+      groupId: groupId || null,
+      fiscalYears: fiscalYears || []
     });
     await newIncomeCategory.save();
+    await newIncomeCategory.populate("fiscalYears", "fiscalYearName fiscalYearCode budgetType");
     return res.status(201).json({
       message: "Income category created successfully.",
       incomeCategory: newIncomeCategory,
@@ -235,7 +240,9 @@ exports.createCategory = async (req, res) => {
       description, 
       incomeSubcategoryName, 
       isGlobal, 
-      regions 
+      regions,
+      groupId,
+      fiscalYears
     } = req.body;
     const categoryName = incomeCategoryName || name;
     if (!categoryName) {
@@ -280,11 +287,14 @@ exports.createCategory = async (req, res) => {
       incomeSubcategoryName: incomeSubcategoryName || [],
       description: description || "",
       isGlobal: isGlobal || false,
-      regions: regions || []
+      regions: regions || [],
+      groupId: groupId || null,
+      fiscalYears: fiscalYears || []
     });
     // Save with detailed error handling
     try {
       await newCategory.save();
+      await newCategory.populate("fiscalYears", "fiscalYearName fiscalYearCode budgetType");
       } catch (saveError) {
       console.error("Error saving category to database:", saveError);
       console.error("Save error details:", saveError.message);
@@ -445,4 +455,80 @@ exports.getAllCategoriesFiltered = async (req, res) => {
       success: false
     });
   }
-};
+};
+
+// Copy category with new name and optional modifications
+exports.copyCategory = async (req, res) => {
+  try {
+    const { sourceId } = req.params;
+    const { 
+      newName, 
+      description, 
+      groupId,
+      fiscalYears 
+    } = req.body;
+
+    if (!isValidObjectId(sourceId)) {
+      return res.status(400).json({ error: "Invalid source category ID" });
+    }
+
+    if (!newName || newName.trim() === "") {
+      return res.status(400).json({ error: "New category name is required" });
+    }
+
+    // Get the source category
+    const sourceCategory = await IncomeCat.findById(sourceId);
+    if (!sourceCategory) {
+      return res.status(404).json({ error: "Source category not found" });
+    }
+
+    // Check for duplicate name with region-aware validation
+    const existingCategory = await IncomeCat.findOne({
+      incomeCategoryName: newName.trim()
+    });
+
+    if (existingCategory) {
+      // If existing category is global, don't allow any duplicates
+      if (existingCategory.isGlobal === true) {
+        return res.status(400).json({ error: "A global category with this name already exists." });
+      }
+      // If new category is global, don't allow if any category with same name exists
+      if (sourceCategory.isGlobal === true) {
+        return res.status(400).json({ error: "Cannot create global category - a regional category with this name already exists." });
+      }
+      // For regional categories, check if there's overlap in assigned regions
+      const existingRegions = existingCategory.regions || [];
+      const sourceRegions = sourceCategory.regions || [];
+      const hasOverlap = existingRegions.some(region => sourceRegions.includes(region));
+      if (hasOverlap) {
+        const overlappingRegions = existingRegions.filter(region => sourceRegions.includes(region));
+        return res.status(400).json({ 
+          error: `A category with this name already exists in regions: ${overlappingRegions.join(', ')}` 
+        });
+      }
+    }
+
+    // Create new category with copied properties
+    const newCategory = new IncomeCat({
+      incomeCategoryName: newName.trim(),
+      name: newName.trim(),
+      description: description || sourceCategory.description || "",
+      incomeSubcategoryName: sourceCategory.incomeSubcategoryName || [],
+      isGlobal: sourceCategory.isGlobal || false,
+      regions: sourceCategory.regions || [],
+      groupId: groupId || sourceCategory.groupId || null,
+      fiscalYears: fiscalYears || sourceCategory.fiscalYears || [],
+    });
+
+    await newCategory.save();
+    await newCategory.populate("fiscalYears", "fiscalYearName fiscalYearCode budgetType");
+
+    return res.status(201).json({
+      message: "Category copied successfully.",
+      category: newCategory,
+    });
+  } catch (error) {
+    console.error("Error in copyCategory:", error);
+    return res.status(500).json({ error: "Failed to copy category." });
+  }
+};

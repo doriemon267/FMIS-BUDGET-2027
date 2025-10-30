@@ -12,6 +12,7 @@ import {
 import { MdCategory, MdList, MdAttachMoney } from "react-icons/md";
 import IncomeCategoriesCustomPage from "../components/incomecategories/IncomeCategoriesCustomPage";
 import IncomeCategoriesCustomCreateUpdateDialog from "../components/incomecategories/IncomeCategoriesCustomCreateUpdateDialog";
+import EnhancedIncomeCategoriesDialog from "../components/incomecategories/EnhancedIncomeCategoriesDialog";
 import api from "../config/api";
 
 const IncomeCategoryPage = () => {
@@ -164,12 +165,11 @@ const schema = {
             title=""
             description=""
             searchable={false}
-            hasAdd={true}
+            hasAdd={false}
             hasEdit={false}
             hasDelete={true}
             customAddElement={
-              <IncomeCategoriesCustomCreateUpdateDialog
-                schema={schema}
+              <EnhancedIncomeCategoriesDialog
                 endpoint="/income-categories"
                 dataListName="income-categories"
               />

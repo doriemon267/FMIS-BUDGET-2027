@@ -31,15 +31,13 @@ const IncomeCategoriesCustomPage = ({
         description={pageDescription}
         searchable={searchable}
         childElement={
-          hasAdd ? (
-            customAddElement || (
-              <CustomCreateUpdateDialog
-                endpoint={apiPath}
-                schema={schema}
-                dataListName={dataListName}
-              />
-            )
-          ) : null
+          customAddElement || (hasAdd && (
+            <CustomCreateUpdateDialog
+              endpoint={apiPath}
+              schema={schema}
+              dataListName={dataListName}
+            />
+          ))
         }
       />
 

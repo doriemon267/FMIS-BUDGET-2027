@@ -16,18 +16,25 @@ import {
   MenuItem,
   Alert,
   Divider,
-  InputAdornment
+  InputAdornment,
+  FormGroup,
+  FormControlLabel,
+  Checkbox,
+  Card,
+  CardContent,
+  CircularProgress
 } from "@mui/material";
 import {
   MdGrade,
   MdAttachMoney,
   MdSave,
-  MdAdd
+  MdAdd,
+  MdCalendarToday
 } from "react-icons/md";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import { NumericFormat } from "react-number-format";
 import api from "../../config/api";
@@ -78,6 +85,27 @@ const EnhancedRataDialog = ({ open, onClose, editData = null }) => {
   const theme = useTheme();
   const queryClient = useQueryClient();
   const isEditing = Boolean(editData);
+  const [selectedFiscalYears, setSelectedFiscalYears] = useState([]);
+
+  // Fetch available fiscal years from settings
+  const { data: fiscalYearsData = [], isLoading: fiscalYearsLoading } = useQuery({
+    queryKey: ["fiscalYearsForRataAdd"],
+    queryFn: async () => {
+      try {
+        const response = await api.get("/settings", {
+          params: {
+            page: 1,
+            limit: 100
+          }
+        });
+        return response.data?.settings || [];
+      } catch (error) {
+        console.error("Failed to fetch fiscal years:", error);
+        return [];
+      }
+    },
+    enabled: open && !isEditing
+  });
 
   const {
     control,
@@ -97,7 +125,7 @@ const EnhancedRataDialog = ({ open, onClose, editData = null }) => {
   // Watch form values for real-time calculations
   const watchedValues = watch();
 
-  // Reset form when editData changes
+  // Reset form when editData changes or dialog opens
   useEffect(() => {
     if (editData) {
       reset({
@@ -105,16 +133,18 @@ const EnhancedRataDialog = ({ open, onClose, editData = null }) => {
         RA: editData.RA || 0,
         TA: editData.TA || 0
       });
+      setSelectedFiscalYears([]); // Don't allow linking on edit
     } else {
       reset({
         SG: "",
         RA: 0,
         TA: 0
       });
+      setSelectedFiscalYears([]);
     }
-  }, [editData, reset]);
+  }, [editData, reset, open]);
 
-  // Mutation for saving RATA
+  // Mutation for saving RATA and linking fiscal years
   const mutation = useMutation({
     mutationFn: async (data) => {
       // Always send RATA as RA + TA for backend compatibility
@@ -126,11 +156,25 @@ const EnhancedRataDialog = ({ open, onClose, editData = null }) => {
       const url = isEditing ? `/ratas/${editData._id}` : "/ratas";
       const method = isEditing ? api.put : api.post;
       const response = await method(url, payload);
+      
+      // If creating new RATA and fiscal years are selected, link them
+      if (!isEditing && selectedFiscalYears.length > 0 && response.data?.data?._id) {
+        const rataId = response.data.data._id;
+        await api.put(`/ratas/${rataId}/link-fiscal-years`, {
+          fiscalYearIds: selectedFiscalYears
+        });
+      }
+      
       return response.data;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries(["ratas"]);
-      toast.success(data.message || `RATA ${isEditing ? "updated" : "created"} successfully`);
+      const message = isEditing 
+        ? "RATA updated successfully" 
+        : selectedFiscalYears.length > 0
+          ? `RATA created and linked to ${selectedFiscalYears.length} fiscal year(s)`
+          : "RATA created successfully";
+      toast.success(data.message || message);
       onClose();
     },
     onError: (error) => {
@@ -145,8 +189,25 @@ const EnhancedRataDialog = ({ open, onClose, editData = null }) => {
 
   const handleClose = () => {
     reset();
+    setSelectedFiscalYears([]);
     onClose();
   };
+
+  const handleFiscalYearToggle = (fiscalYearId) => {
+    setSelectedFiscalYears(prev =>
+      prev.includes(fiscalYearId)
+        ? prev.filter(id => id !== fiscalYearId)
+        : [...prev, fiscalYearId]
+    );
+  };
+
+  // Group fiscal years by budget type
+  const groupedByBudgetType = fiscalYearsData.reduce((acc, fy) => {
+    const budgetType = fy.budgetType || "Other";
+    if (!acc[budgetType]) acc[budgetType] = [];
+    acc[budgetType].push(fy);
+    return acc;
+  }, {});
 
   // Calculate annual RATA
   const monthlyRata = (parseFloat(watchedValues.RA) || 0) + (parseFloat(watchedValues.TA) || 0);
@@ -437,6 +498,70 @@ const EnhancedRataDialog = ({ open, onClose, editData = null }) => {
               </Box>
             </>
           )}
+
+          {/* Fiscal Year Linking Section (Only for New RATA) */}
+          {!isEditing && (
+            <>
+              <Divider sx={{ my: 3 }} />
+              <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600, color: '#375e38' }}>
+                📅 Link to Fiscal Years (Optional)
+              </Typography>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                  You can optionally link this RATA to specific fiscal year/budget type combinations now, or link them later using the "Link to Fiscal Years" action.
+                </Typography>
+              </Alert>
+
+              {fiscalYearsLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                  <CircularProgress size={30} />
+                </Box>
+              ) : fiscalYearsData.length === 0 ? (
+                <Alert severity="warning">
+                  No fiscal years available. Create fiscal year settings first to enable linking.
+                </Alert>
+              ) : (
+                <Stack spacing={2}>
+                  {Object.entries(groupedByBudgetType).map(([budgetType, fiscalYears]) => (
+                    <Card key={budgetType} sx={{ backgroundColor: alpha(theme.palette.primary.main, 0.02) }}>
+                      <CardContent>
+                        <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 2, color: theme.palette.primary.main }}>
+                          {budgetType}
+                        </Typography>
+                        <FormGroup>
+                          {fiscalYears.map(fy => (
+                            <FormControlLabel
+                              key={fy._id}
+                              control={
+                                <Checkbox
+                                  checked={selectedFiscalYears.includes(fy._id)}
+                                  onChange={() => handleFiscalYearToggle(fy._id)}
+                                  disabled={mutation.isPending}
+                                />
+                              }
+                              label={
+                                <Typography variant="body2">
+                                  {fy.fiscalYear} • {new Date(fy.createdAt).toLocaleDateString()}
+                                </Typography>
+                              }
+                            />
+                          ))}
+                        </FormGroup>
+                      </CardContent>
+                    </Card>
+                  ))}
+
+                  {selectedFiscalYears.length > 0 && (
+                    <Alert severity="success">
+                      <Typography variant="body2">
+                        ✅ <strong>{selectedFiscalYears.length}</strong> fiscal year/budget type combination(s) will be linked
+                      </Typography>
+                    </Alert>
+                  )}
+                </Stack>
+              )}
+            </>
+          )}
         </Box>
       </DialogContent>
 
@@ -457,8 +582,8 @@ const EnhancedRataDialog = ({ open, onClose, editData = null }) => {
         <Button
           onClick={handleSubmit(onSubmit)}
           variant="contained"
-          disabled={mutation.isLoading}
-          startIcon={mutation.isLoading ? null : isEditing ? <MdSave /> : <MdAdd />}
+          disabled={mutation.isPending}
+          startIcon={mutation.isPending ? null : isEditing ? <MdSave /> : <MdAdd />}
           sx={{
             background: 'linear-gradient(45deg, #264524 30%, #375e38 90%)',
             boxShadow: '0 3px 5px 2px rgba(38, 69, 36, 0.3)',
@@ -474,7 +599,7 @@ const EnhancedRataDialog = ({ open, onClose, editData = null }) => {
             }
           }}
         >
-          {mutation.isLoading ? "Saving..." : isEditing ? "Update RATA" : "Save RATA"}
+          {mutation.isPending ? "Saving..." : isEditing ? "Update RATA" : "Save RATA"}
         </Button>
       </DialogActions>
     </Dialog>

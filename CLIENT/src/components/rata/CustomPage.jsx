@@ -30,12 +30,14 @@ const CustomPage = ({
         description={pageDescription}
         searchable={searchable}
         childElement={
-          (hasAdd && customAddElement) || (
-            <CustomCreateUpdateDialog
-              endpoint={apiPath}
-              schema={schema}
-              dataListName={dataListName}
-            />
+          customAddElement || (
+            hasAdd && (
+              <CustomCreateUpdateDialog
+                endpoint={apiPath}
+                schema={schema}
+                dataListName={dataListName}
+              />
+            )
           )
         }
       />

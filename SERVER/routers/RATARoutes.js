@@ -4,6 +4,10 @@ const {
   createRATA,
   updateRATA,
   deleteRATA,
+  getLinkedFiscalYears,
+  linkRATAToFiscalYears,
+  unlinkRATAFromFiscalYear,
+  clearAllRATALinks,
 } = require("../controllers/rataController");
 const Router = require("express").Router;
 const checkToken = require('../middleware/checkToken');
@@ -20,4 +24,15 @@ rataRouter.post("/ratas", createRATA);
 rataRouter.put("/ratas/:id", updateRATA);
 // Delete a RATA
 rataRouter.delete("/ratas/:id", deleteRATA);
+
+// ✅ NEW: Linking endpoints
+// Get linked fiscal years for a RATA
+rataRouter.get("/ratas/:id/linked-fiscal-years", getLinkedFiscalYears);
+// Link RATA to fiscal years
+rataRouter.put("/ratas/:rataId/link-fiscal-years", linkRATAToFiscalYears);
+// Unlink RATA from a specific fiscal year
+rataRouter.put("/ratas/:rataId/unlink-fiscal-year/:settingsId", unlinkRATAFromFiscalYear);
+// Clear all links
+rataRouter.put("/ratas/:rataId/clear-links", clearAllRATALinks);
+
 module.exports = rataRouter;

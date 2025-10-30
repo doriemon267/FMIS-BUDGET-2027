@@ -6,6 +6,17 @@ const incomeCategorySchema = new mongoose.Schema({
   incomeSubcategoryName: [{ type: String }],
   isGlobal: { type: Boolean, default: false }, // Add isGlobal field
   regions: [{ type: String }], // Add regions array field
+  groupId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "IncomeCategoryGroup",
+    default: null,
+  }, // Reference to category group
+  fiscalYears: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "FiscalYear",
+    },
+  ], // Array of linked fiscal years
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
@@ -24,4 +35,4 @@ incomeCategorySchema.pre('save', function(next) {
 incomeCategorySchema.index({ incomeCategoryName: 1, isGlobal: 1 });
 incomeCategorySchema.index({ incomeCategoryName: 1, regions: 1 });
 const IncomeCat = mongoose.model("IncomeCategory", incomeCategorySchema);
-module.exports = IncomeCat;
+module.exports = IncomeCat;

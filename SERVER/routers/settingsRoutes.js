@@ -63,13 +63,22 @@ settingsRouter.get("/settings/active", getActiveSettings);
 settingsRouter.get("/settings/advanced/:fiscalYear", getAdvancedSettings);
 settingsRouter.put("/settings/advanced/:fiscalYear", updateAdvancedSettings);
 
-// Get all fiscal years from settings
+// Get all fiscal years from settings (with budgetType and _id)
 settingsRouter.get("/settings/fiscal-years", async (req, res) => {
   try {
     const Settings = require("../models/Settings");
-    const settings = await Settings.find({}, { fiscalYear: 1, _id: 0 }).sort({ fiscalYear: 1 });
-    const fiscalYears = settings.map(setting => setting.fiscalYear);
-    res.status(200).json(fiscalYears);
+    const settings = await Settings.find({}, { fiscalYear: 1, budgetType: 1, _id: 1 })
+      .sort({ fiscalYear: 1, budgetType: 1 });
+    
+    // Return full objects with _id, fiscalYear, and budgetType
+    const fiscalYears = settings.map(setting => ({
+      _id: setting._id,
+      fiscalYear: setting.fiscalYear,
+      fiscalYearCode: setting.fiscalYear, // Alias for frontend compatibility
+      budgetType: setting.budgetType,
+    }));
+    
+    res.status(200).json({ data: fiscalYears });
   } catch (error) {
     console.error("Error fetching fiscal years:", error);
     res.status(500).json({ message: "Server error", error });

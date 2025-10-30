@@ -32,6 +32,7 @@ import MealAllowancePage from "./pages/MealAllowancePage";
 import MedicalAllowancePage from "./pages/MedicalAllowancePage";
 import ChildrenAllowancePage from "./pages/ChildrenAllowancePage";
 import IncomeManagementPage from "./pages/IncomeManagementPage";
+import GroupedIncomeCategoryPage from "./pages/GroupedIncomeCategoryPage";
 import RetireePage from "./pages/RetireePage";
 
 import SubsidyMonitoringPage from "./pages/SubsidyMonitoringPage";
@@ -192,6 +193,18 @@ const App = () => {
               requiredWorkflowRoles={["superAdmin"]}
             >
               <IncomeManagementPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/grouped-income-categories"
+          element={
+            <ProtectedRoute
+              requiredPermissions={["ManageSettings"]}
+              requiredWorkflowRoles={["superAdmin"]}
+            >
+              <GroupedIncomeCategoryPage />
             </ProtectedRoute>
           }
         />

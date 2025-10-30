@@ -1980,13 +1980,10 @@ const CustomPage = ({
       // Fetch all available fiscal years (in a separate try/catch to avoid one failure affecting the other)
       try {
         const fiscalYearsResponse = await api.get("/settings/fiscal-years");
-        if (
-          fiscalYearsResponse.data &&
-          Array.isArray(fiscalYearsResponse.data)
-        ) {
+        const yearsData = fiscalYearsResponse.data?.data || fiscalYearsResponse.data || [];
+        if (Array.isArray(yearsData)) {
           // Make sure we have at least the active fiscal year in the list
-          const years = fiscalYearsResponse.data;
-          setAvailableFiscalYears(years);
+          setAvailableFiscalYears(yearsData);
         } else {
           console.warn("No fiscal years data returned or data is not an array");
           // If we don't get a valid response, at least include the active fiscal year

@@ -27,7 +27,9 @@ import {
   MdTrendingUp,
   MdSettings,
   MdPeople,
-  MdCalculate
+  MdCalculate,
+  MdLink,
+  MdCalendarToday
 } from "react-icons/md";
 import {
   AiOutlineEdit,
@@ -39,6 +41,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import CustomPage from "../components/rata/CustomPage";
 import EnhancedRataDialog from "../components/rata/EnhancedRataDialog";
+import LinkRATAToFiscalYearsDialog from "../components/rata/LinkRATAToFiscalYearsDialog";
 import api from "../config/api";
 
 const RataPage = () => {
@@ -47,6 +50,8 @@ const RataPage = () => {
   const [selectedData, setSelectedData] = useState(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [viewData, setViewData] = useState(null);
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [selectedForLinking, setSelectedForLinking] = useState(null);
 
   // Fetch RATA data for summary cards
   const { data: rataData, isLoading: rataLoading, refetch } = useQuery({
@@ -83,6 +88,17 @@ const RataPage = () => {
   const handleViewDialogClose = () => {
     setViewDialogOpen(false);
     setViewData(null);
+  };
+
+  const handleLinkFiscalYears = (rata) => {
+    setSelectedForLinking(rata);
+    setLinkDialogOpen(true);
+  };
+
+  const handleLinkDialogClose = () => {
+    setLinkDialogOpen(false);
+    setSelectedForLinking(null);
+    refetch();
   };
 
   const handleExport = () => {
@@ -133,6 +149,53 @@ const RataPage = () => {
           variant="outlined"
           size="small"
           icon={<MdGrade />}
+        />
+      )
+    },
+    linkedBudgetTypes: {
+      type: "text",
+      label: "Budget Types",
+      show: true,
+      searchable: false,
+      customRender: (row) => (
+        <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+          {(row.linkedBudgetTypes && row.linkedBudgetTypes.length > 0) ? (
+            row.linkedBudgetTypes.map((bt, idx) => (
+              <Chip
+                key={idx}
+                label={bt}
+                color="info"
+                variant="outlined"
+                size="small"
+              />
+            ))
+          ) : (
+            <Chip
+              label="Not Linked"
+              color="default"
+              variant="outlined"
+              size="small"
+            />
+          )}
+        </Box>
+      )
+    },
+    linkedFiscalYears: {
+      type: "text",
+      label: "Linked FY Count",
+      show: true,
+      searchable: false,
+      customRender: (row) => (
+        <Chip
+          icon={<MdCalendarToday />}
+          label={
+            (row.linkedFiscalYears && row.linkedFiscalYears.length > 0)
+              ? `${row.linkedFiscalYears.length} FY`
+              : "Not linked"
+          }
+          color={(row.linkedFiscalYears && row.linkedFiscalYears.length > 0) ? "primary" : "default"}
+          variant="outlined"
+          size="small"
         />
       )
     },
@@ -205,6 +268,19 @@ const RataPage = () => {
         <AiOutlineEye />
         View Details
       </MenuItem>
+    ),
+    ({ row, parentClose }) => (
+      <MenuItem
+        key="link-fiscal-years"
+        onClick={() => {
+          handleLinkFiscalYears(row);
+          parentClose();
+        }}
+        sx={{ display: "flex", gap: 1 }}
+      >
+        <MdLink />
+        Link to Fiscal Years
+      </MenuItem>
     )
   ];
 
@@ -219,6 +295,9 @@ const RataPage = () => {
     const highestGrade = rataRecords.length > 0
       ? Math.max(...rataRecords.map(r => parseInt(r.SG) || 0))
       : 0;
+    // ✅ NEW: Count linked RATA records
+    const linkedCount = rataRecords.filter(r => r.linkedFiscalYears?.length > 0).length;
+    const totalFYLinks = rataRecords.reduce((sum, r) => sum + (r.linkedFiscalYears?.length || 0), 0);
 
     const statBoxStyle = (color) => ({
       px: 3,
@@ -278,6 +357,21 @@ const RataPage = () => {
               <Typography variant="h6" fontWeight="bold" color={theme.palette.warning.main}>{highestGrade > 0 ? `SG-${highestGrade}` : "N/A"}</Typography>
             </Box>
           </Paper>
+          {/* ✅ NEW: Linked RATA statistics */}
+          <Paper elevation={0} sx={{ ...statBoxStyle(theme.palette.success.main), flex: 1, minWidth: 0, mx: 0.5 }}>
+            <MdLink style={{ verticalAlign: 'middle', fontSize: 22, color: theme.palette.success.main }} />
+            <Box>
+              <Typography variant="caption" color="text.secondary">Linked to FY</Typography>
+              <Typography variant="h6" fontWeight="bold" color={theme.palette.success.main}>{linkedCount}</Typography>
+            </Box>
+          </Paper>
+          <Paper elevation={0} sx={{ ...statBoxStyle(theme.palette.primary.main), flex: 1, minWidth: 0, mx: 0.5 }}>
+            <MdCalendarToday style={{ verticalAlign: 'middle', fontSize: 22, color: theme.palette.primary.main }} />
+            <Box>
+              <Typography variant="caption" color="text.secondary">Total FY Links</Typography>
+              <Typography variant="h6" fontWeight="bold" color={theme.palette.primary.main}>{totalFYLinks}</Typography>
+            </Box>
+          </Paper>
         </Stack>
       </Box>
     );
@@ -300,7 +394,7 @@ const RataPage = () => {
               RATA Settings
             </Typography>
             <Typography variant="body1" sx={{ opacity: 0.9 }}>
-              Manage Representation and Transportation Allowance rates by salary grade
+              Manage Representation and Transportation Allowance rates by salary grade. Link them to specific fiscal years and budget types.
             </Typography>
           </Box>
           <Stack direction="row" spacing={2}>
@@ -339,6 +433,16 @@ const RataPage = () => {
       {!rataLoading && (!rataData?.ratas || rataData.ratas.length === 0) && (
         <Alert severity="info" sx={{ mb: 3 }}>
           No RATA records found. Please add RATA rates for different salary grades to enable proper allowance calculations.
+        </Alert>
+      )}
+
+      {/* ✅ NEW: Info Alert for linking workflow */}
+      {!rataLoading && rataData?.ratas && rataData.ratas.length > 0 && (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          <Typography variant="body2">
+            <strong>Workflow:</strong> Create RATA rates independently (no fiscal year required),
+            then link them to one or more fiscal year/budget type combinations. You can reuse the same RATA rate across multiple fiscal years.
+          </Typography>
         </Alert>
       )}
 
@@ -515,6 +619,15 @@ const RataPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Link to Fiscal Years Dialog */}
+      <LinkRATAToFiscalYearsDialog
+        open={linkDialogOpen}
+        onClose={handleLinkDialogClose}
+        rataId={selectedForLinking?._id}
+        rataName={selectedForLinking ? `SG-${selectedForLinking.SG}` : ""}
+        onSaved={handleLinkDialogClose}
+      />
     </Box>
   );
 };

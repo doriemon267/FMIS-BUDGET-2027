@@ -150,3 +150,133 @@ exports.deleteRATA = async (req, res) => {
     res.status(500).json({ error: 'An error occurred while deleting the RATA.' });
   }
 };
+
+// ✅ NEW: Get currently linked fiscal years for a RATA
+exports.getLinkedFiscalYears = async (req, res) => {
+  try {
+    const rata = await RATA.findById(req.params.id).populate('linkedFiscalYears.settingsId');
+    if (!rata) {
+      return res.status(404).json({ error: 'RATA not found' });
+    }
+    res.status(200).json({
+      linkedFiscalYears: rata.linkedFiscalYears || [],
+      linkedBudgetTypes: rata.linkedBudgetTypes || []
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch linked fiscal years.' });
+  }
+};
+
+// ✅ NEW: Link RATA to multiple fiscal years
+exports.linkRATAToFiscalYears = async (req, res) => {
+  try {
+    const { rataId } = req.params;
+    const { fiscalYearIds } = req.body; // Array of Settings IDs
+
+    if (!Array.isArray(fiscalYearIds) || fiscalYearIds.length === 0) {
+      return res.status(400).json({ error: 'fiscalYearIds must be a non-empty array' });
+    }
+
+    const rata = await RATA.findById(rataId);
+    if (!rata) {
+      return res.status(404).json({ error: 'RATA not found' });
+    }
+
+    // Import Settings model to fetch fiscal year details
+    const Settings = require('../models/Settings');
+    
+    // Get all settings to fetch their fiscal year and budget type info
+    const settingsRecords = await Settings.find({ _id: { $in: fiscalYearIds } });
+    
+    if (settingsRecords.length !== fiscalYearIds.length) {
+      return res.status(400).json({ error: 'Some fiscal years not found' });
+    }
+
+    // Build new linked entries
+    const newLinkedEntries = settingsRecords.map(setting => ({
+      settingsId: setting._id,
+      fiscalYear: setting.fiscalYear,
+      budgetType: setting.budgetType
+    }));
+
+    // Merge with existing (avoid duplicates by settingsId)
+    const existingIds = new Set(rata.linkedFiscalYears.map(l => l.settingsId.toString()));
+    const toAdd = newLinkedEntries.filter(entry => !existingIds.has(entry.settingsId.toString()));
+
+    rata.linkedFiscalYears.push(...toAdd);
+
+    // Update linkedBudgetTypes array (unique budget types)
+    const allBudgetTypes = rata.linkedFiscalYears.map(l => l.budgetType);
+    rata.linkedBudgetTypes = [...new Set(allBudgetTypes)];
+
+    await rata.save();
+
+    res.status(200).json({
+      message: 'RATA linked to fiscal years successfully',
+      rata,
+      linkedFiscalYears: rata.linkedFiscalYears,
+      linkedBudgetTypes: rata.linkedBudgetTypes
+    });
+  } catch (error) {
+    console.error('linkRATAToFiscalYears error:', error);
+    res.status(500).json({ error: 'Failed to link RATA to fiscal years.', details: error.message });
+  }
+};
+
+// ✅ NEW: Unlink RATA from a specific fiscal year
+exports.unlinkRATAFromFiscalYear = async (req, res) => {
+  try {
+    const { rataId, settingsId } = req.params;
+
+    const rata = await RATA.findById(rataId);
+    if (!rata) {
+      return res.status(404).json({ error: 'RATA not found' });
+    }
+
+    // Remove the linked entry
+    rata.linkedFiscalYears = rata.linkedFiscalYears.filter(
+      entry => entry.settingsId.toString() !== settingsId
+    );
+
+    // Update linkedBudgetTypes
+    const allBudgetTypes = rata.linkedFiscalYears.map(l => l.budgetType);
+    rata.linkedBudgetTypes = [...new Set(allBudgetTypes)];
+
+    await rata.save();
+
+    res.status(200).json({
+      message: 'RATA unlinked from fiscal year successfully',
+      rata,
+      linkedFiscalYears: rata.linkedFiscalYears,
+      linkedBudgetTypes: rata.linkedBudgetTypes
+    });
+  } catch (error) {
+    console.error('unlinkRATAFromFiscalYear error:', error);
+    res.status(500).json({ error: 'Failed to unlink RATA from fiscal year.', details: error.message });
+  }
+};
+
+// ✅ NEW: Clear all links (unlink from all fiscal years)
+exports.clearAllRATALinks = async (req, res) => {
+  try {
+    const { rataId } = req.params;
+
+    const rata = await RATA.findById(rataId);
+    if (!rata) {
+      return res.status(404).json({ error: 'RATA not found' });
+    }
+
+    rata.linkedFiscalYears = [];
+    rata.linkedBudgetTypes = [];
+
+    await rata.save();
+
+    res.status(200).json({
+      message: 'All RATA links cleared successfully',
+      rata
+    });
+  } catch (error) {
+    console.error('clearAllRATALinks error:', error);
+    res.status(500).json({ error: 'Failed to clear RATA links.', details: error.message });
+  }
+};

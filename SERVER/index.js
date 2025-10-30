@@ -47,6 +47,7 @@ const uploadstatuses = require("./routers/uploader/statuses");
 const uploadratas = require("./routers/uploader/ratas");
 const mealAllowance = require("./routers/mealAllowanceRoutes")
 const incomeCategoryRouter = require("./routers/incomeCategoryRoutes")
+const incomeCategoryGroupRouter = require("./routers/incomeCategoryGroupRoutes")
 const incomeSubcategoryRouter = require("./routers/incomeSubcategoryRoutes")
 const incomeSubcategoryRoutes = require("./routers/income_subcategories");
 const statsRouter = require("./routers/statsRoutes");
@@ -368,6 +369,7 @@ app.use(uploadstatuses);
 app.use(uploadratas);
 app.use(mealAllowance);
 app.use(incomeCategoryRouter);
+app.use(incomeCategoryGroupRouter);
 app.use(incomeSubcategoryRouter);
 app.use(incomeSubcategoryRoutes);
 app.use("/stats", statsRouter);
