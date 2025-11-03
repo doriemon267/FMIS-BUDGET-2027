@@ -152,6 +152,11 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     return result;
   }, [userInfo, normalizedWorkflowRoles, normalizedPrimaryRoles]);
 
+  // Robust reviewer alias usable across conditions
+  const isBudgetReviewerRole = useMemo(() => {
+    return isReviewer || normalizedPrimaryRoles.includes('BUDGET REVIEWER') || normalizedPrimaryRoles.includes('REVIEWER');
+  }, [isReviewer, normalizedPrimaryRoles]);
+
   // PREPARER: Check for PREPARER role in user roles or workflow roles
   const isPreparer = useMemo(() => {
     if (!userInfo || isManagerLevel) return false;
@@ -334,7 +339,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     // Allow fetching for read-only final statuses even if role detection says no
   const requiresReadOnlyData = isReadOnlyMode;
 
-    if (!isBudgetOfficer && !isPreparer && !isDivisionApprover && !isReviewer && !isManagerLevel && !isApprover && !isBudgetPlanningAnalystRole && !requiresReadOnlyData) {
+    if (!isBudgetOfficer && !isPreparer && !isDivisionApprover && !isBudgetReviewerRole && !isManagerLevel && !isApprover && !isBudgetPlanningAnalystRole && !requiresReadOnlyData) {
       console.log('❌ No permission to view proposal details');
       setLoading(false);
       setRefreshing(false);
@@ -361,13 +366,13 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     try {
       const requests = [];
 
-      // APPROVER, Preparer (creators), and REVIEWER should fetch raw proposal data, not Budget Officer Edit records
-      if (isDivisionApprover || isPreparer || isBudgetPlanningAnalystRole || isReviewer) {
+      // APPROVER, PREPARER, ANALYST, and REVIEWER should fetch raw proposal data, not Budget Officer Edit records
+      if (isDivisionApprover || isPreparer || isBudgetPlanningAnalystRole || isBudgetReviewerRole) {
         console.log('✅ Fetching raw proposal data for APPROVER/PREPARER/BUDGET_ANALYST_USER/REVIEWER', {
           isDivisionApprover,
           isPreparer,
           isBudgetPlanningAnalystRole,
-          isReviewer,
+          isReviewer: isBudgetReviewerRole,
           proposalId: proposalKey
         });
         requests.push(
@@ -474,7 +479,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
       // Prefetch comparison data only for roles that need it
       // Note: This may fail if no edits exist yet, which is normal
       // Fetch for PREPARERs, Budget Officers, Reviewers, Approvers, and read-only statuses (where comparison view is shown)
-      if (isPreparer || isBudgetOfficer || isBudgetPlanningAnalystRole || isReviewer || isDivisionApprover || requiresReadOnlyData) {
+      if (isPreparer || isBudgetOfficer || isBudgetPlanningAnalystRole || isBudgetReviewerRole || isDivisionApprover || requiresReadOnlyData) {
         requests.push(
           getComparisonData(proposalKey, { signal: controller.signal })
             .then((response) => {
@@ -517,7 +522,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
         setRefreshing(false);
       }
     }
-  }, [proposalKey, userInfo, isBudgetOfficer, isPreparer, isDivisionApprover, isManagerLevel, isApprover, isBudgetPlanningAnalystRole, proposal, isReadOnlyMode]);
+  }, [proposalKey, userInfo, isBudgetOfficer, isPreparer, isDivisionApprover, isManagerLevel, isApprover, isBudgetPlanningAnalystRole, proposal, isReadOnlyMode, isBudgetReviewerRole]);
 
   useEffect(() => {
     if (open && proposalKey && userInfo) {
@@ -648,7 +653,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
   );
 
   // Reviewer can edit when proposal is Forwarded to Reviewer or Division Submitted
-  const reviewerCanEditNow = isReviewer && (
+  const reviewerCanEditNow = isBudgetReviewerRole && (
     proposal?.status === 'Forwarded to Reviewer' || 
     proposal?.status === 'Division Submitted'
   );
@@ -699,7 +704,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
   };
 
   const getUserWorkflowStep = () => {
-    if (isReviewer) return 2; // REVIEWER
+    if (isBudgetReviewerRole) return 2; // REVIEWER
     if (isDivisionApprover) return 3; // APPROVER
     if (isBudgetPlanningAnalystRole) return 4; // BUDGET_PLANNING_ANALYST
     if (isBudgetOfficer && !isManagerLevel) return 5; // BUDGET_OFFICER
@@ -724,14 +729,14 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     reviewerCanEditNow ||
     managerCanEditNow ||
     (isApprover && proposal?.status === 'Forwarded to Approver') ||
-    (proposal?.status === 'Draft' && !isBudgetOfficer && !isPreparer && !isDivisionApprover && !isManagerLevel && !isApprover && !isReviewer)
+    (proposal?.status === 'Draft' && !isBudgetOfficer && !isPreparer && !isDivisionApprover && !isManagerLevel && !isApprover && !isBudgetReviewerRole)
   );
 
   // Determine if user should see comparison/audit trail view instead of editable tables
   const shouldShowComparisonView = !isReadOnlyMode && comparisonData && (
     isViewOnlyAfterSubmission ||
     (!approverCanEditNow && isApprover) ||
-    (!reviewerCanEditNow && isReviewer) ||
+    (!reviewerCanEditNow && isBudgetReviewerRole) ||
     (!preparerCanEditNow && isPreparer)
   );
 
@@ -739,7 +744,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
   // Show for APPROVER and REVIEWER as a fallback when comparison data is not available
   const shouldShowReadOnlyTables = !isReadOnlyMode && proposalData && !officerReadOnlyTables && !comparisonData && (
     (!approverCanEditNow && isApprover) ||
-    (!reviewerCanEditNow && isReviewer)
+    (!reviewerCanEditNow && isBudgetReviewerRole)
   );
 
   return (
@@ -1046,7 +1051,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                   })()}
                   allowSubmit={!managerCanEditNow && !isViewOnlyAfterSubmission}
                   showTables={officerShowTables || isViewOnlyAfterSubmission}
-                  readOnly={isViewOnlyAfterSubmission || (!approverCanEditNow && isApprover) || (!reviewerCanEditNow && isReviewer) || (!preparerCanEditNow && isPreparer)}
+                  readOnly={isViewOnlyAfterSubmission || (!approverCanEditNow && isApprover) || (!reviewerCanEditNow && isBudgetReviewerRole) || (!preparerCanEditNow && isPreparer)}
                   showSaveDraftButton={false}
                 />
               </>
