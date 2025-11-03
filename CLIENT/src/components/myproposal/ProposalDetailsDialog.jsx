@@ -718,7 +718,26 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
   const isViewOnlyAfterSubmission = currentProposalStep > userStep;
 
   const officerModeActive = !isReadOnlyMode && isBudgetOfficer && !isManagerLevel;
-  const officerReadOnlyTables = officerModeActive && Boolean(comparisonData) && !officerEditMode;
+  // Consider comparison "present" only if it has meaningful changes/content
+  const hasComparisonData = useMemo(() => {
+    const d = comparisonData;
+    if (!d) return false;
+    // Common shapes: arrays per module or a generic changes list/flags
+    const arrays = [
+      d?.income,
+      d?.personnelServices,
+      d?.mooe,
+      d?.capitalOutlay,
+      d?.changes,
+      d?.items
+    ].filter(Array.isArray);
+    if (arrays.some(arr => arr && arr.length > 0)) return true;
+    // Fallback booleans that some services return
+    if (d?.hasChanges === true || d?.hasDiff === true) return true;
+    return false;
+  }, [comparisonData]);
+
+  const officerReadOnlyTables = officerModeActive && hasComparisonData && !officerEditMode;
   const officerShowTables = officerModeActive ? (!comparisonData || officerEditMode) : true;
   // Do not allow rendering the full edit view when officer comparison-only tables are active
   // OR when user is viewing after their submission step (should only see comparison view)
@@ -733,7 +752,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
   );
 
   // Determine if user should see comparison/audit trail view instead of editable tables
-  const shouldShowComparisonView = !isReadOnlyMode && comparisonData && (
+  const shouldShowComparisonView = !isReadOnlyMode && hasComparisonData && (
     isViewOnlyAfterSubmission ||
     (!approverCanEditNow && isApprover) ||
     (!reviewerCanEditNow && isBudgetReviewerRole) ||
@@ -742,7 +761,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
 
   // Determine if user should see read-only tables when they cannot edit and no comparison data exists
   // Show for APPROVER and REVIEWER as a fallback when comparison data is not available
-  const shouldShowReadOnlyTables = !isReadOnlyMode && proposalData && !officerReadOnlyTables && !comparisonData && (
+  const shouldShowReadOnlyTables = !isReadOnlyMode && proposalData && !officerReadOnlyTables && !hasComparisonData && (
     (!approverCanEditNow && isApprover) ||
     (!reviewerCanEditNow && isBudgetReviewerRole)
   );
@@ -1073,7 +1092,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                   ref={budgetOfficerEditViewRef}
                   proposal={proposal}
                   proposalData={proposalData}
-                  variant={isApprover ? 'approver' : (isReviewer ? 'reviewer' : 'officer')}
+                  variant={isApprover ? 'approver' : (isBudgetReviewerRole ? 'reviewer' : 'officer')}
                   allowSubmit={false}
                   showTables={true}
                   readOnly={true}
