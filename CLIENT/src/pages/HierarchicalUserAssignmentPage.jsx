@@ -1219,9 +1219,12 @@ const HierarchicalUserAssignmentPage = () => {
                     )}
                     renderOption={(props, option) => {
                       const { key, ...otherProps } = props;
-                      const displayName = option.region && option.region !== 'All Regions' 
-                        ? `${option.name} - ${option.region}` 
-                        : option.name;
+                      // Prefer Office name over Region in the option display for clarity (e.g., MARIIS)
+                      const displayName = (option.officeName && option.officeName.trim().length > 0)
+                        ? `${option.name} - ${option.officeName}`
+                        : (option.region && option.region !== 'All Regions' 
+                          ? `${option.name} - ${option.region}` 
+                          : option.name);
                       return (
                         <Box component="li" key={key} {...otherProps}>
                           <Box>
@@ -1267,9 +1270,14 @@ const HierarchicalUserAssignmentPage = () => {
                       }) || []}
                     getOptionLabel={(option) => {
                       if (typeof option === 'string') return option;
-                      return option.region && option.region !== 'All Regions' 
-                        ? `${option.name} - ${option.region}` 
-                        : option.name || '';
+                      // Prefer Office name over Region in the RC label, especially when editing
+                      if (option.officeName && option.officeName.trim().length > 0) {
+                        return `${option.name} - ${option.officeName}`;
+                      }
+                      if (option.region && option.region !== 'All Regions') {
+                        return `${option.name} - ${option.region}`;
+                      }
+                      return option.name || '';
                     }}
                     value={organizationStructure?.availableUnits?.responsibilityCenters
                       ?.find(rc => rc.name === formData.responsibilityCenterName) || null}
