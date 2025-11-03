@@ -1162,9 +1162,14 @@ const HierarchicalUserAssignmentPage = () => {
                     options={organizationStructure?.availableUnits?.offices || []}
                     getOptionLabel={(option) => {
                       if (typeof option === 'string') return option;
-                      return option.region && option.region !== 'All Regions' 
-                        ? `${option.name} - ${option.region}` 
-                        : option.name || '';
+                      // Prefer Office name over Region in the RC label to reflect the selected office (e.g., MARIIS)
+                      if (option.officeName && option.officeName.trim().length > 0) {
+                        return `${option.name} - ${option.officeName}`;
+                      }
+                      if (option.region && option.region !== 'All Regions') {
+                        return `${option.name} - ${option.region}`;
+                      }
+                      return option.name || '';
                     }}
                     value={(() => {
                       // ✅ Better matching: try different ID field combinations
@@ -1286,9 +1291,12 @@ const HierarchicalUserAssignmentPage = () => {
                     )}
                     renderOption={(props, option) => {
                       const { key, ...otherProps } = props;
-                      const displayName = option.region && option.region !== 'All Regions' 
-                        ? `${option.name} - ${option.region}` 
-                        : option.name;
+                      // Prefer Office name over Region in the option display
+                      const displayName = option.officeName && option.officeName.trim().length > 0
+                        ? `${option.name} - ${option.officeName}`
+                        : (option.region && option.region !== 'All Regions' 
+                          ? `${option.name} - ${option.region}` 
+                          : option.name);
                       return (
                         <Box component="li" key={key} {...otherProps}>
                           <Box>
