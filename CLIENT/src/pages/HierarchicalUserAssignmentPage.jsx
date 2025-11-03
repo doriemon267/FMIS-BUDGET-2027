@@ -1280,7 +1280,20 @@ const HierarchicalUserAssignmentPage = () => {
                       return option.name || '';
                     }}
                     value={organizationStructure?.availableUnits?.responsibilityCenters
-                      ?.find(rc => rc.name === formData.responsibilityCenterName) || null}
+                      ?.find(rc => {
+                        const selectedOfficeId = String(formData.officeId || '');
+                        return (
+                          rc.name === formData.responsibilityCenterName &&
+                          String(rc.officeId || '') === selectedOfficeId
+                        );
+                      }) || null}
+                    isOptionEqualToValue={(option, value) => {
+                      if (!option || !value) return false;
+                      return (
+                        String(option.name || '') === String(value.name || '') &&
+                        String(option.officeId || '') === String(value.officeId || '')
+                      );
+                    }}
                     onChange={(event, newValue) => {
                       // Handle both object (selected option) and string (free text) cases
                       const centerName = (typeof newValue === 'object' && newValue?.name) ? newValue.name : '';
