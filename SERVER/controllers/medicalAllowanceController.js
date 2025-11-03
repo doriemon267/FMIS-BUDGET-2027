@@ -2,7 +2,7 @@ const MedicalAllowance = require("../models/medicalAllowance");
 const Employee = require("../models/employee_master");
 const Settings = require("../models/Settings");
 const { calculateMedicalAllowance, getAllowanceRates } = require("../utils/allowanceUtils");
-const PersonnelServices = require("../models/personnelServices");
+const PersonnelService = require('../models/PersonnelServices');
 // Function to sync medical allowance with personnel services
 async function syncWithPersonnelServices(employeeNumber, fiscalYear, amount, noOfDependents) {
   try {

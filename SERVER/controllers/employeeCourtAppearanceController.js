@@ -1,6 +1,6 @@
 const EmployeeCourtAppearance = require("../models/employeeCourtAppearance");
 const Settings = require("../models/Settings");
-const PersonnelServices = require("../models/personnelServices");
+const PersonnelService = require('../models/PersonnelServices');
 const {
   numberFilter,
   dateFilter,

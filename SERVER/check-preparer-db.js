@@ -19,20 +19,20 @@ async function checkDatabase() {
     const HierarchicalUserAssignment = require('./models/HierarchicalUserAssignment');
 
     const count = await HierarchicalUserAssignment.countDocuments({
-      workflowRoles: { $in: ['PREPARER', 'divisionCreator', 'officeCreator'] }
+      workflowRoles: { $in: ['BUDGET PREPARER', 'divisionCreator', 'officeCreator'] }
     });
 
-    console.log('✅ PREPARER assignments found:', count);
+    console.log('✅ BUDGET PREPARER assignments found:', count);
 
     if (count > 0) {
       const sample = await HierarchicalUserAssignment.findOne({
-        workflowRoles: { $in: ['PREPARER', 'divisionCreator', 'officeCreator'] }
+        workflowRoles: { $in: ['BUDGET PREPARER', 'divisionCreator', 'officeCreator'] }
       });
       console.log('Sample user:', sample.userName);
       console.log('Roles:', sample.workflowRoles);
       console.log('Assignment level:', sample.assignmentLevel);
     } else {
-      console.log('⚠️  No PREPARER assignments found. Users may need workflow roles assigned.');
+      console.log('⚠️  No BUDGET PREPARER assignments found. Users may need workflow roles assigned.');
     }
 
     await mongoose.disconnect();

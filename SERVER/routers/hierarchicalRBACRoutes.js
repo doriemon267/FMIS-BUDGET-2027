@@ -751,17 +751,6 @@ router.get(
                             departmentName: mapping.departmentName
                           };
                           
-                          // Debug logging for split departments
-                          if (isSplitDepartment) {
-                            console.log('📍 Creating RC for split department:', {
-                              rcName: rcData.name,
-                              officeId: rcData.officeId,
-                              officeName: rcData.officeName,
-                              region: rcData.region,
-                              isSplit: isSplitDepartment
-                            });
-                          }
-                          
                           responsibilityCentersMap.set(rcId, rcData);
                         });
                       }

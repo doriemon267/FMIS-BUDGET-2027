@@ -1,5 +1,5 @@
 const Proposal = require("../models/Proposal");
-const PersonnelServices = require("../models/personnelServices");
+const PersonnelService = require('../models/PersonnelServices');
 const MOOEProposal = require("../models/mooeProposals");
 const CapitalOutlay = require("../models/CapitalOutlay");
 const BudgetarySupport = require("../models/BudgetarySupport");
@@ -43,19 +43,19 @@ exports.getOverviewStats = async (req, res) => {
       rejectedCapital,
       rejectedBudgetarySupport
     ] = await Promise.all([
-      PersonnelServices.countDocuments(baseFilter),
+      PersonnelService.countDocuments(baseFilter),
       MOOEProposal.countDocuments(baseFilter),
       CapitalOutlay.countDocuments(baseFilter),
       BudgetarySupport.countDocuments(baseFilter),
-      PersonnelServices.countDocuments(pendingFilter),
+      PersonnelService.countDocuments(pendingFilter),
       MOOEProposal.countDocuments(pendingFilter),
       CapitalOutlay.countDocuments(pendingFilter),
       BudgetarySupport.countDocuments(pendingFilter),
-      PersonnelServices.countDocuments(approvedFilter),
+      PersonnelService.countDocuments(approvedFilter),
       MOOEProposal.countDocuments(approvedFilter),
       CapitalOutlay.countDocuments(approvedFilter),
       BudgetarySupport.countDocuments(approvedFilter),
-      PersonnelServices.countDocuments(rejectedFilter),
+      PersonnelService.countDocuments(rejectedFilter),
       MOOEProposal.countDocuments(rejectedFilter),
       CapitalOutlay.countDocuments(rejectedFilter),
       BudgetarySupport.countDocuments(rejectedFilter)
@@ -83,4 +83,4 @@ exports.getOverviewStats = async (req, res) => {
     console.error("Error fetching overview stats:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
-};
+};

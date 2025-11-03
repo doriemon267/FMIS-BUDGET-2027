@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const PersonnelService = require('./models/personnelServices');
+const PersonnelService = require('./models/PersonnelServices');
 
 async function checkDivisionWorkflow() {
   try {

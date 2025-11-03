@@ -39,8 +39,8 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
       const hasBudgetRole = userRoles && (
         userRoles.includes('BUDGET_ADMIN') ||
         // 6-step workflow roles
-        userRoles.includes('PREPARER') ||
-        userRoles.includes('REVIEWER') ||
+        userRoles.includes('BUDGET PREPARER') ||
+        userRoles.includes('BUDGET REVIEWER') ||
         userRoles.includes('APPROVER') ||
         userRoles.includes('BUDGET_ANALYST') ||
         userRoles.includes('BUDGET_OFFICER') ||
@@ -73,7 +73,7 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
 
       if (!assignment) {
         try {
-          assignment = await HierarchicalUserAssignment.getUserPermissions(userId);
+          assignment = await HierarchicalUserAssignment.getUserPermissions(userId, req.user?.Roles);
           isNewStructure = false;
         } catch (error) {
           // Old assignment model not available
@@ -874,7 +874,7 @@ const validateHierarchicalAccess = async (req, assignment, isNewStructure = fals
  * Draft → Division Submitted → Forwarded to Officer → Officer Approved → Forwarded to Manager → Finalized
  */
 const submissionWorkflowTransitions = {
-  // Step 1→2: Analyst submits to Reviewer (Draft → Division Submitted)
+  // Step 1→2: Analyst submits to Budget Reviewer (Draft → Division Submitted)
   responsibilityCenterSubmitToOffice: async (req, res) => {
     try {
       const { ids = [], entity = 'personnel', submissionNote } = req.body;
@@ -1066,7 +1066,7 @@ const submissionWorkflowTransitions = {
     }
   },
 
-  // Step 2→3: Reviewer approves responsibility center submission (Responsibility Center Submitted → Forwarded to Officer)
+  // Step 2→3: Budget Reviewer approves responsibility center submission (Responsibility Center Submitted → Forwarded to Officer)
   officeVerifySubmission: async (req, res) => {
     try {
       const { ids = [], entity = 'personnel', verificationNote } = req.body;

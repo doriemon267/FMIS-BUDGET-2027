@@ -148,7 +148,7 @@ const budgetOfficerEditSchema = new mongoose.Schema({
     email: String,
     role: {
       type: String,
-      enum: ['PREPARER', 'REVIEWER', 'APPROVER', 'BUDGET_PLANNING_ANALYST', 'BUDGET_OFFICER', 'OVERALL_APPROVER'],
+      enum: ['BUDGET PREPARER', 'BUDGET REVIEWER', 'BUDGET APPROVER', 'BUDGET_PLANNING_ANALYST', 'BUDGET_OFFICER', 'OVERALL_APPROVER'],
       default: 'BUDGET_OFFICER'
     }
   },
@@ -181,7 +181,7 @@ const budgetOfficerEditSchema = new mongoose.Schema({
   },
   forwardedTo_Role: {
     type: String,
-    enum: ['BUDGET_ANALYST', 'REVIEWER', 'BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER'],
+    enum: ['BUDGET_ANALYST', 'BUDGET REVIEWER', 'BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER'],
     required: false
   },
   

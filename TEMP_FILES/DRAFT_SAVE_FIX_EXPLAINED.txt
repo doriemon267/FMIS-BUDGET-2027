@@ -7,7 +7,7 @@ PROBLEM SUMMARY
 After saving draft edits ("SAVE DRAFT" button), changes were stored in DB.
 But upon page refresh (F5), the UI showed OLD amounts instead of saved edits.
 
-This happened specifically for APPROVER users and other non-standard roles.
+This happened specifically for BUDGET APPROVER users and other non-standard roles.
 
 Example:
 - User edits amounts in tables
@@ -55,7 +55,7 @@ WHY IT'S WRONG:
 ISSUE #3: Query Finding Wrong User's Edit
 -------------------------------------------
 PROBLEM:
-For non-standard roles (APPROVER, REVIEWER, etc.), fetch had NO userId filter:
+For non-standard roles (BUDGET APPROVER, REVIEWER, etc.), fetch had NO userId filter:
 
   OLD CODE (lines 686-689):
   fetchQuery = {
@@ -65,7 +65,7 @@ For non-standard roles (APPROVER, REVIEWER, etc.), fetch had NO userId filter:
   };
 
 THE CONSEQUENCE:
-If User A (APPROVER) and User B (APPROVER) edit same proposal:
+If User A (BUDGET APPROVER) and User B (BUDGET APPROVER) edit same proposal:
 - User A saves edit at 3:00 PM
 - User B saves edit at 3:05 PM
 - User B refreshes → findOne().sort({updatedAt: -1}) returns User A's NEWER edit
@@ -120,7 +120,7 @@ AFTER:
 WHY THIS WORKS:
 ✅ Ensures users ONLY see their own edits
 ✅ Prevents another user's newer edit from overwriting your view
-✅ Multiple APPROVER users can edit same proposal safely
+✅ Multiple BUDGET APPROVER users can edit same proposal safely
 ✅ Each user sees their OWN saved drafts on F5 refresh
 
 
@@ -192,7 +192,7 @@ Without this, the fetch query won't find old documents!
 STEP 3: TEST THE FIX
 
 Test Case 1: Single User Draft Save
-1. Login as APPROVER
+1. Login as BUDGET APPROVER
 2. Open a proposal
 3. Edit amounts in any table
 4. Click "SAVE DRAFT"
@@ -200,8 +200,8 @@ Test Case 1: Single User Draft Save
 6. ✅ Should see newly saved amounts (NOT old ones)
 
 Test Case 2: Multiple Users
-1. User A (APPROVER) edits proposal and saves draft
-2. User B (APPROVER) edits SAME proposal and saves draft
+1. User A (BUDGET APPROVER) edits proposal and saves draft
+2. User B (BUDGET APPROVER) edits SAME proposal and saves draft
 3. User A refreshes → Should see User A's data
 4. User B refreshes → Should see User B's data
 5. ✅ No cross-user data leaks
@@ -219,8 +219,8 @@ After deployment, verify:
 
 □ Migration script ran with 0 errors
 □ No errors in application logs related to editedBy
-□ APPROVER users can save and retrieve drafts correctly
-□ Multiple APPROVER users can edit same proposal without seeing each other's data
+□ BUDGET APPROVER users can save and retrieve drafts correctly
+□ Multiple BUDGET APPROVER users can edit same proposal without seeing each other's data
 □ Page refresh (F5) shows correct user's draft edits
 □ No cross-user data leaks observed
 □ Fallback logging shows no more legacy documents

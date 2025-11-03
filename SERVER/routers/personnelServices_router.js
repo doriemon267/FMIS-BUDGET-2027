@@ -11,7 +11,7 @@ const {
   getPersonnelHiredBeforeJune1988
 } = require("../controllers/personnel_service_controller");
 // Import the model directly to ensure it's available
-const PersonnelServicesModel = require("../models/personnelServices");
+const PersonnelService = require('../models/PersonnelServices');
 const checkDueDate = require("../middleware/checkDueDate");
 const checkToken = require('../middleware/checkToken');
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
@@ -82,11 +82,11 @@ personnelServicesRouter.get("/getpersonnels/byParams", async (req, res) => {
     if (region) query.region = region;
     if (status) query.status = status;
     // Ensure we have a model to work with
-    if (!PersonnelServicesModel) {
+    if (!PersonnelService) {
       console.error("PersonnelServices model is not available");
       return res.status(500).json({ message: "Internal server error: Model not available" });
     }
-    const personnel = await PersonnelServicesModel.find(query).lean();
+    const personnel = await PersonnelService.find(query).lean();
     res.status(200).json(personnel);
   } catch (error) {
     console.error("Error fetching personnel by params:", error);
@@ -105,11 +105,11 @@ personnelServicesRouter.get("/api/personnel/getByParams", async (req, res) => {
     if (region) query.region = region;
     if (status) query.status = status;
     // Ensure we have a model to work with
-    if (!PersonnelServicesModel) {
+    if (!PersonnelService) {
       console.error("PersonnelServices model is not available");
       return res.status(500).json({ message: "Internal server error: Model not available" });
     }
-    const personnel = await PersonnelServicesModel.find(query).lean();
+    const personnel = await PersonnelService.find(query).lean();
     res.status(200).json(personnel);
   } catch (error) {
     console.error("Error fetching personnel by params:", error);

@@ -101,7 +101,7 @@ const budgetRoleAccessControl = (operation = 'read') => {
       
       const isPreparer = userRoles.includes('PREPARER') || workflowRoles.includes('PREPARER') || workflowRoles.includes('divisionCreator') || workflowRoles.includes('officeCreator');
       const isReviewer = userRoles.includes('REVIEWER') || workflowRoles.includes('REVIEWER') || workflowRoles.includes('divisionReviewer');
-      const isApprover = userRoles.includes('APPROVER') || workflowRoles.includes('APPROVER') || workflowRoles.includes('divisionApprover') || workflowRoles.includes('officeApprover');
+      const isApprover = userRoles.includes('BUDGET APPROVER') || workflowRoles.includes('APPROVER') || workflowRoles.includes('divisionApprover') || workflowRoles.includes('officeApprover');
       const isBudgetPlanningAnalyst = userRoles.includes('BUDGET_PLANNING_ANALYST') || workflowRoles.includes('BUDGET_PLANNING_ANALYST');
       const isOverallBudgetApprover = userRoles.includes('OVERALL_BUDGET_APPROVER') || workflowRoles.includes('OVERALL_BUDGET_APPROVER');
       const isBudgetAnalyst = userRoles.includes('BUDGET_ANALYST') || workflowRoles.includes('BUDGET_ANALYST');
@@ -253,7 +253,7 @@ function checkProposalAccess(proposal, userId, userRoles) {
   // 6-step workflow roles
   const isPreparer = userRoles.includes('PREPARER');
   const isReviewer = userRoles.includes('REVIEWER');
-  const isApprover = userRoles.includes('APPROVER');
+  const isApprover = userRoles.includes('BUDGET APPROVER');
   const isBudgetPlanningAnalyst = userRoles.includes('BUDGET_PLANNING_ANALYST');
   const isOverallBudgetApprover = userRoles.includes('OVERALL_BUDGET_APPROVER');
   // Legacy budget roles
@@ -2328,7 +2328,7 @@ exports.coordinatorApproveAndForwardToOfficer = async (req, res) => {
 
     // Update proposal - forward to APPROVER
     proposal.status = newStatus;
-    proposal.workflowLevel = 'APPROVER';
+    proposal.workflowLevel = 'BUDGET APPROVER';
     proposal.submittedByRole = 'REVIEWER';
     proposal.approvedByCoordinator = {
       userId,
@@ -2340,8 +2340,8 @@ exports.coordinatorApproveAndForwardToOfficer = async (req, res) => {
 
     updateAssignment(proposal, {
       step: 'APPROVER_REVIEW',
-      assigneeRole: 'APPROVER',
-      pendingRoles: ['APPROVER']
+      assigneeRole: 'BUDGET APPROVER',
+      pendingRoles: ['BUDGET APPROVER']
     });
 
     // Record TWO events: approval + forward
@@ -2362,7 +2362,7 @@ exports.coordinatorApproveAndForwardToOfficer = async (req, res) => {
       userName,
       previousStatus: 'Reviewer Approved',
       newStatus,
-      targetRole: 'APPROVER'
+      targetRole: 'BUDGET APPROVER'
     });
 
     await proposal.save();
@@ -2385,9 +2385,9 @@ exports.coordinatorApproveAndForwardToOfficer = async (req, res) => {
       createdBy: { userId, name: userName }
     });
 
-    // Send notification to APPROVER
+    // Send notification to BUDGET APPROVER
     await sendNotification({
-      recipientRole: 'APPROVER',
+      recipientRole: 'BUDGET APPROVER',
       title: 'New Proposal for Review',
       message: `Proposal "${proposal.title}" approved and forwarded by ${userName} (Reviewer) from ${proposal.division || proposal.department} for review. Comment: ${comment}`,
       entity: 'proposal',
@@ -2570,7 +2570,7 @@ exports.approverSaveEdits = async (req, res) => {
     const workflowRoles = req.user.workflowRoles || [];
     const allRoles = [...primaryRoles, ...workflowRoles];
     
-    const hasApproverRole = primaryRoles.includes('APPROVER') || 
+    const hasApproverRole = primaryRoles.includes('BUDGET APPROVER') || 
                            workflowRoles.includes('officeapprover') || 
                            workflowRoles.includes('divisionapprover') ||
                            workflowRoles.includes('approver');
@@ -2581,7 +2581,7 @@ exports.approverSaveEdits = async (req, res) => {
       allRoles,
       hasApproverRole,
       checkingConditions: {
-        primaryAPPROVER: primaryRoles.includes('APPROVER'),
+        primaryAPPROVER: primaryRoles.includes('BUDGET APPROVER'),
         workflowOfficeApprover: workflowRoles.includes('officeapprover'),
         workflowDivisionApprover: workflowRoles.includes('divisionapprover'),
         workflowApprover: workflowRoles.includes('approver')
@@ -2629,7 +2629,7 @@ exports.approverSaveEdits = async (req, res) => {
     }
 
     const previousStatus = proposal.status;
-    const performedByRole = 'APPROVER';
+    const performedByRole = 'BUDGET APPROVER';
 
     // Record workflow event for save edits
     recordWorkflowEvent(proposal, {
@@ -2639,7 +2639,7 @@ exports.approverSaveEdits = async (req, res) => {
       userName,
       previousStatus,
       newStatus: previousStatus, // Status remains the same
-      targetRole: 'APPROVER'
+      targetRole: 'BUDGET APPROVER'
     });
 
     await proposal.save();

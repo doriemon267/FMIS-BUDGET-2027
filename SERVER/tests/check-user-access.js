@@ -6,7 +6,7 @@ async function checkUserAccess() {
     await mongoose.connect(process.env.MONGODB_URL);
 
     const UserAssignment = require('./models/HierarchicalUserAssignment');
-    const PersonnelService = require('./models/personnelServices');
+    const PersonnelService = require('./models/PersonnelServices');
 
     console.log('🔍 Checking Department user access to Division proposals...\n');
 

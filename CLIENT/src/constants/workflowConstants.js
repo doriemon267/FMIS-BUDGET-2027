@@ -16,7 +16,7 @@ export const ASSIGNMENT_LEVELS = {
 // Workflow Roles (standardized across all levels)
 export const WORKFLOW_ROLES = {
   // Preparer roles
-  PREPARER: 'PREPARER',
+  BUDGET_PREPARER: 'BUDGET PREPARER',
   
   // Review/Approval roles
   REVIEWER: 'REVIEWER',
@@ -33,8 +33,8 @@ export const WORKFLOW_ROLES = {
 export const WORKFLOW_STEPS = [
   {
     step: 1,
-    role: WORKFLOW_ROLES.PREPARER,
-    label: 'Preparer',
+    role: WORKFLOW_ROLES.BUDGET_PREPARER,
+    label: 'Budget Preparer',
     description: 'Creates and edits proposals',
     icon: 'edit',
     statuses: ['Draft'],
@@ -43,7 +43,7 @@ export const WORKFLOW_STEPS = [
   {
     step: 2,
     role: WORKFLOW_ROLES.REVIEWER,
-    label: 'Reviewer',
+    label: 'Budget Reviewer',
     description: 'Reviews proposal quality',
     icon: 'visibility',
     statuses: ['Submitted for Review'],
@@ -52,7 +52,7 @@ export const WORKFLOW_STEPS = [
   {
     step: 3,
     role: WORKFLOW_ROLES.APPROVER,
-    label: 'Approver',
+    label: 'Budget Approver',
     description: 'Approves proposal',
     icon: 'verified_user',
     statuses: ['Submitted for Approval'],
@@ -103,8 +103,8 @@ export const WORKFLOW_STATUSES = {
 export const OFFICE_WORKFLOW_STEPS = [
   {
     step: 1,
-    role: WORKFLOW_ROLES.PREPARER,
-    label: 'Preparer',
+    role: WORKFLOW_ROLES.BUDGET_PREPARER,
+    label: 'Budget Preparer',
     description: 'Creates and edits proposals',
     icon: 'edit',
     statuses: ['Draft']
@@ -112,7 +112,7 @@ export const OFFICE_WORKFLOW_STEPS = [
   {
     step: 2,
     role: WORKFLOW_ROLES.APPROVER,
-    label: 'Approver',
+    label: 'Budget Approver',
     description: 'Approves proposal',
     icon: 'verified_user',
     statuses: ['Submitted for Approval']
@@ -145,9 +145,9 @@ export const OFFICE_WORKFLOW_STEPS = [
 
 // Role display names
 export const ROLE_LABELS = {
-  [WORKFLOW_ROLES.PREPARER]: 'Preparer',
-  [WORKFLOW_ROLES.REVIEWER]: 'Reviewer',
-  [WORKFLOW_ROLES.APPROVER]: 'Approver',
+  [WORKFLOW_ROLES.BUDGET_PREPARER]: 'Budget Preparer',
+  [WORKFLOW_ROLES.REVIEWER]: 'Budget Reviewer',
+  [WORKFLOW_ROLES.APPROVER]: 'Budget Approver',
   [WORKFLOW_ROLES.BUDGET_PLANNING_ANALYST]: 'Budget Planning Analyst',
   [WORKFLOW_ROLES.BUDGET_OFFICER]: 'Budget Officer',
   [WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER]: 'Overall Budget Approver',

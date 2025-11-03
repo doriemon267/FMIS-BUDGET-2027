@@ -1,7 +1,7 @@
 // controllers/loyaltyPayController.js
 const LoyaltyPay        = require("../models/loyaltyPay");
 const Settings          = require("../models/Settings");
-const PersonnelServices = require("../models/personnelServices");
+const PersonnelService = require('../models/PersonnelServices');
 const {
   calculateLoyaltyPayYearsOfService,
   isEligibleForLoyaltyPay,

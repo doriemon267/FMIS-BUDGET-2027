@@ -146,7 +146,6 @@ async function consolidateDraftProposal(criteria) {
  */
 async function consolidateAllDrafts() {
   try {
-    console.log('🔄 Starting auto-consolidation of all Draft items...');
 
     // Get all unique combinations of organizational criteria from Draft items
     const [personnelGroups, mooeGroups, capitalGroups, incomeGroups] = await Promise.all([
@@ -223,8 +222,6 @@ async function consolidateAllDrafts() {
       }
     });
 
-    console.log(`📊 Found ${uniqueGroups.size} unique Draft groups to consolidate`);
-
     // Consolidate each group
     const results = [];
     for (const criteria of uniqueGroups.values()) {
@@ -234,7 +231,6 @@ async function consolidateAllDrafts() {
       }
     }
 
-    console.log(`✅ Consolidated ${results.length} Draft proposals`);
     return results;
 
   } catch (error) {

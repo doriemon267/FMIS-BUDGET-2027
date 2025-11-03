@@ -4,7 +4,7 @@
  * NEW HIERARCHICAL STRUCTURE:
  * ===========================
  * 1. DIVISION_LEVEL (Responsibility Center Level)
- *    - Roles: REVIEWER, APPROVER
+ *    - Roles: BUDGET REVIEWER, APPROVER
  *    - Preparer auto-assigned as divisionCreator (via divisionalSubmitter)
  *
  * 2. DEPARTMENT_REGIONAL_LEVEL (Office Level)
@@ -18,14 +18,14 @@
  * ============================================
  * STEP 1: PREPARER (divisionCreator or officeCreator)
  *         - Creates and edits proposals
- *         - Submits to REVIEWER
+ *         - Submits to BUDGET REVIEWER
  *
- * STEP 2: REVIEWER (divisionReviewer)
+ * STEP 2: BUDGET REVIEWER (divisionReviewer)
  *         - Reviews division-level submissions
  *         - Routes to APPROVER for approval
  *
  * STEP 3: APPROVER (divisionApprover or officeApprover)
- *         - Approves/verifies PREPARER or REVIEWER submissions
+ *         - Approves/verifies PREPARER or BUDGET REVIEWER submissions
  *         - Routes to BUDGET_ANALYST
  *
  * STEP 4: BUDGET_ANALYST (from Budget and Revenue Division)
@@ -50,9 +50,9 @@ const ASSIGNMENT_LEVELS = {
 
 // User Roles
 const USER_ROLES = {
-  PREPARER: 'PREPARER',
-  REVIEWER: 'REVIEWER',
-  APPROVER: 'APPROVER',
+  BUDGET_PREPARER: 'BUDGET PREPARER',
+  BUDGET_REVIEWER: 'BUDGET REVIEWER',
+  APPROVER: 'BUDGET APPROVER',
   BUDGET_ANALYST: 'BUDGET_ANALYST',
   BUDGET_OFFICER: 'BUDGET_OFFICER',
   OVERALL_BUDGET_APPROVER: 'OVERALL_BUDGET_APPROVER',
@@ -84,21 +84,21 @@ const WORKFLOW_ROLES = {
 
 // Workflow Step Definitions
 const WORKFLOW_STEPS = {
-  PREPARER: {
+  BUDGET_PREPARER: {
     step: 1,
-    name: 'PREPARER',
+    name: 'BUDGET PREPARER',
     description: 'Creates and edits proposals',
-    nextStep: 'REVIEWER'
+    nextStep: 'BUDGET_REVIEWER'
   },
-  REVIEWER: {
+  BUDGET_REVIEWER: {
     step: 2,
-    name: 'REVIEWER',
+    name: 'BUDGET REVIEWER',
     description: 'Reviews division-level submissions',
-    nextStep: 'APPROVER'
+    nextStep: 'BUDGET APPROVER'
   },
   APPROVER: {
     step: 3,
-    name: 'APPROVER',
+    name: 'BUDGET APPROVER',
     description: 'Approves/verifies submissions',
     nextStep: 'BUDGET_ANALYST'
   },
@@ -148,7 +148,7 @@ const ASSIGNMENT_LEVEL_WORKFLOW_MAPPING = {
       WORKFLOW_ROLES.OFFICE_CREATOR,
       WORKFLOW_ROLES.OFFICE_APPROVER
     ],
-    description: 'Handles department/regional office level submissions (skips REVIEWER)'
+    description: 'Handles department/regional office level submissions (skips BUDGET REVIEWER)'
   },
   [ASSIGNMENT_LEVELS.BUDGET_AND_REVENUE_DIVISION]: {
     assignmentLevelName: 'Budget and Revenue Division',
@@ -199,9 +199,9 @@ const WORKFLOW_PATHS = {
   DIVISION_SUBMISSION: {
     name: 'Division Level Submission',
     steps: [
-      'PREPARER',      // divisionCreator
-      'REVIEWER',      // divisionReviewer
-      'APPROVER',      // divisionApprover
+      'BUDGET PREPARER',      // divisionCreator
+      'BUDGET REVIEWER',      // divisionReviewer
+      'BUDGET APPROVER',      // divisionApprover
       'BUDGET_ANALYST',
       'BUDGET_OFFICER',
       'OVERALL_BUDGET_APPROVER'
@@ -210,8 +210,8 @@ const WORKFLOW_PATHS = {
   OFFICE_SUBMISSION: {
     name: 'Office/Department Level Submission',
     steps: [
-      'PREPARER',      // officeCreator (skips BUDGET_COORDINATOR)
-      'APPROVER',      // officeApprover (skips REVIEWER)
+      'BUDGET PREPARER',      // officeCreator (skips BUDGET_COORDINATOR)
+      'BUDGET APPROVER',      // officeApprover (skips BUDGET REVIEWER)
       'BUDGET_ANALYST',
       'BUDGET_OFFICER',
       'OVERALL_BUDGET_APPROVER'

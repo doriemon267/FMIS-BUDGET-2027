@@ -18,7 +18,7 @@ module.exports = async function enforceOrgAccess(req, res, next) {
     const hasFullRole = roles.includes('SUPER ADMIN') || roles.includes('BUDGET MANAGER');
     if (hasFullRole) return next();
   // Get assignment
-    const assignment = await HierarchicalUserAssignment.getUserPermissions(userId);
+    const assignment = await HierarchicalUserAssignment.getUserPermissions(userId, req.user?.Roles);
     // OWN_ONLY or missing assignment -> deny transactional access
     if (!assignment || assignment.accessScope === 'OWN_ONLY') {
       return res.status(403).json({ message: 'Access denied. No organizational assignment.' });
@@ -112,12 +112,12 @@ module.exports = async function enforceOrgAccess(req, res, next) {
         }
         const getModelByEntity = (e) => {
           switch ((e || '').toLowerCase()) {
-            case 'personnel': return require('../models/personnelServices');
+            case 'personnel': return require('../models/PersonnelServices');
             case 'mooe': return require('../models/mooeProposals');
             case 'capital': return require('../models/CapitalOutlay');
             case 'income': return require('../models/Income');
             case 'budgetarysupport': return require('../models/BudgetarySupport');
-            default: return require('../models/personnelServices');
+            default: return require('../models/PersonnelServices');
           }
         };
         const Model = getModelByEntity(entity);
@@ -153,7 +153,7 @@ module.exports = async function enforceOrgAccess(req, res, next) {
       try {
         // Attempt to infer model by route
         if ((req.originalUrl || '').includes('/personnelServices/')) {
-          const PersonnelServices = require('../models/personnelServices');
+          const PersonnelServices = require('../models/PersonnelServices');
           const existing = await PersonnelServices.findById(req.params.id).lean();
           if (!existing) {
             return res.status(404).json({ message: 'Target record not found' });

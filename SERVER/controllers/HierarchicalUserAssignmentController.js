@@ -413,39 +413,23 @@ const getHierarchicalAssignment = async (req, res) => {
     const { userId } = req.params;
     const currentUserRoles = req.user.Roles;
     
-    // 🔍 DEBUG: Log the access check details
-    console.log('🔍 DEBUG getHierarchicalAssignment:', {
-      requestedUserId: userId,
-      currentUserId: req.user.id,
-      currentUserRoles: currentUserRoles,
-      userIdMatch: String(req.user.id) === String(userId),
-      hasFullAccess: hasFullAccess(currentUserRoles),
-      headers: {
-        'x-dev-user-id': req.headers['x-dev-user-id'],
-        'x-dev-roles': req.headers['x-dev-roles'],
-        'authorization': req.headers.authorization ? 'present' : 'missing'
-      }
-    });
-    
     // Check if user can view this assignment
-    // BUDGET_OFFICER should have hasFullAccess=true, so this check should pass
-    if (!hasFullAccess(currentUserRoles) && String(req.user.id) !== String(userId)) {
-      console.log('❌ ACCESS DENIED:', {
-        reason: 'hasFullAccess is false AND userId mismatch',
-        hasFullAccess: hasFullAccess(currentUserRoles),
-        userIdMatch: String(req.user.id) === String(userId)
-      });
+    // Allow access if user has full access OR if the requested userId matches any of the authenticated user's IDs
+    const authenticatedUserIds = [
+      String(req.user.id || ''),
+      String(req.user.userId || ''),
+      String(req.user.UserId || ''),
+      ...(Array.isArray(req.user.Username) ? req.user.Username.map(u => String(u || '')) : [String(req.user.Username || '')]),
+      ...(Array.isArray(req.user.username) ? req.user.username.map(u => String(u || '')) : [String(req.user.username || '')])
+    ].filter(id => id && id !== '');
+    
+    const isOwnAssignment = authenticatedUserIds.includes(String(userId));
+    
+    if (!hasFullAccess(currentUserRoles) && !isOwnAssignment) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. You can only view your own assignment.',
-        code: 'ACCESS_DENIED',
-        debug: {
-          hasFullAccess: hasFullAccess(currentUserRoles),
-          userIdMatch: String(req.user.id) === String(userId),
-          requestedUserId: userId,
-          currentUserId: req.user.id,
-          roles: currentUserRoles
-        }
+        code: 'ACCESS_DENIED'
       });
     }
     const assignment = await HierarchicalUserAssignment

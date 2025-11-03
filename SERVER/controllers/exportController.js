@@ -1,7 +1,7 @@
 const PDFDocument = require('pdfkit');
 const ExcelJS = require('exceljs');
 // Import models for data fetching
-const PersonnelServices = require('../models/personnelServices');
+const PersonnelService = require('../models/PersonnelServices');
 const COSPersonnel = require('../models/COSPersonnel');
 const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');

@@ -9,7 +9,7 @@
  *         - divisionCreator (Division Level) OR officeCreator (Department/Regional Level)
  *         - Creates and edits proposals
  *
- * STEP 2: REVIEWER
+ * STEP 2: BUDGET REVIEWER
  *         - divisionReviewer (Division Level only)
  *         - Reviews submissions before approval
  *
@@ -31,8 +31,8 @@
  *         - Executive authorization and final approval
  * 
  * WORKFLOW PATHS:
- * - Division Level:   PREPARER → REVIEWER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER
- * - Office Level:     PREPARER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER (skips REVIEWER)
+ * - Division Level:   PREPARER → BUDGET REVIEWER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER
+ * - Office Level:     PREPARER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER (skips BUDGET REVIEWER)
  */
 
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
@@ -320,9 +320,9 @@ const getWorkflowPath = (normalizedLevel) => {
     [ASSIGNMENT_LEVELS.DIVISION_LEVEL]: {
       name: 'Division Level Submission',
       steps: [
-        { step: 1, role: WORKFLOW_ROLES.DIVISION_CREATOR, name: 'PREPARER' },
-        { step: 2, role: WORKFLOW_ROLES.DIVISION_REVIEWER, name: 'REVIEWER' },
-        { step: 3, role: WORKFLOW_ROLES.DIVISION_APPROVER, name: 'APPROVER' },
+        { step: 1, role: WORKFLOW_ROLES.DIVISION_CREATOR, name: 'BUDGET PREPARER' },
+        { step: 2, role: WORKFLOW_ROLES.DIVISION_REVIEWER, name: 'BUDGET REVIEWER' },
+        { step: 3, role: WORKFLOW_ROLES.DIVISION_APPROVER, name: 'BUDGET APPROVER' },
         { step: 4, role: WORKFLOW_ROLES.BUDGET_ANALYST, name: 'BUDGET_ANALYST' },
         { step: 5, role: WORKFLOW_ROLES.BUDGET_OFFICER, name: 'BUDGET_OFFICER' },
         { step: 6, role: WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER, name: 'OVERALL_BUDGET_APPROVER' }
@@ -331,8 +331,8 @@ const getWorkflowPath = (normalizedLevel) => {
     [ASSIGNMENT_LEVELS.DEPARTMENT_REGIONAL_LEVEL]: {
       name: 'Office/Department Level Submission',
       steps: [
-        { step: 1, role: WORKFLOW_ROLES.OFFICE_CREATOR, name: 'PREPARER' },
-        { step: 2, role: WORKFLOW_ROLES.OFFICE_APPROVER, name: 'APPROVER' },
+        { step: 1, role: WORKFLOW_ROLES.OFFICE_CREATOR, name: 'BUDGET PREPARER' },
+        { step: 2, role: WORKFLOW_ROLES.OFFICE_APPROVER, name: 'BUDGET APPROVER' },
         { step: 3, role: WORKFLOW_ROLES.BUDGET_ANALYST, name: 'BUDGET_ANALYST' },
         { step: 4, role: WORKFLOW_ROLES.BUDGET_OFFICER, name: 'BUDGET_OFFICER' },
         { step: 5, role: WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER, name: 'OVERALL_BUDGET_APPROVER' }

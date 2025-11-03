@@ -8,12 +8,13 @@ const PERMISSION_LEVELS = {
   ADMIN: 'ADMIN',
   SUPER_ADMIN: 'SUPER_ADMIN',
   BUDGET_ADMIN: 'BUDGET_ADMIN',
-  PREPARER: 'PREPARER',                                // STEP 1: Proposal creation
-  REVIEWER: 'REVIEWER',                                // STEP 2: Division review
-  APPROVER: 'APPROVER',                                // STEP 3: Division/Office approval
-  BUDGET_ANALYST: 'BUDGET_ANALYST',                    // STEP 4: Technical review
-  BUDGET_OFFICER: 'BUDGET_OFFICER',                    // STEP 5: Operational approval
-  OVERALL_BUDGET_APPROVER: 'OVERALL_BUDGET_APPROVER'   // STEP 6: Executive approval
+  BUDGET_PREPARER: 'BUDGET_PREPARER',                                // STEP 1: Proposal creation
+  BUDGET_REVIEWER: 'BUDGET_REVIEWER',                                // STEP 2: Division review
+  APPROVER: 'BUDGET_APPROVER',                                       // STEP 3: Division/Office approval
+  BUDGET_ANALYST: 'BUDGET_ANALYST',                                  // STEP 4: Technical review
+  BUDGET_OFFICER: 'BUDGET_OFFICER',                                  // STEP 5: Operational approval
+  BUDGET_MANAGER: 'BUDGET_MANAGER',                                  // Legacy: replaced by OVERALL_BUDGET_APPROVER
+  OVERALL_BUDGET_APPROVER: 'OVERALL_BUDGET_APPROVER'                 // STEP 6: Executive approval
 };
 // Access scope constants
 const ACCESS_SCOPE = {
@@ -40,17 +41,17 @@ const hasFullAccess = (userRoles) => {
     PERMISSION_LEVELS.ADMIN,
     'ADMIN',        // Support both variants
     PERMISSION_LEVELS.BUDGET_ADMIN,
-    PERMISSION_LEVELS.PREPARER,         // STEP 1: Proposal creation
-    PERMISSION_LEVELS.REVIEWER,         // STEP 2: Division review
-    PERMISSION_LEVELS.APPROVER,         // STEP 3: Division/Office approval
-    PERMISSION_LEVELS.BUDGET_ANALYST,   // STEP 4: Technical review
-    PERMISSION_LEVELS.BUDGET_OFFICER,   // STEP 5: Operational approval
+    PERMISSION_LEVELS.BUDGET_PREPARER,         // STEP 1: Proposal creation
+    PERMISSION_LEVELS.BUDGET_REVIEWER,         // STEP 2: Division review
+    PERMISSION_LEVELS.APPROVER,                // STEP 3: Division/Office approval
+    PERMISSION_LEVELS.BUDGET_ANALYST,          // STEP 4: Technical review
+    PERMISSION_LEVELS.BUDGET_OFFICER,          // STEP 5: Operational approval
     PERMISSION_LEVELS.OVERALL_BUDGET_APPROVER  // STEP 6: Executive approval
   ];
   const result = hasRequiredRole(userRoles, requiredRoles);
   
   // 🔍 DEBUG for workflow roles
-  if (Array.isArray(userRoles) && (userRoles.includes('BUDGET_OFFICER') || userRoles.includes('REVIEWER') || userRoles.includes('APPROVER') || userRoles.includes('OVERALL_BUDGET_APPROVER'))) {
+  if (Array.isArray(userRoles) && (userRoles.includes('BUDGET_OFFICER') || userRoles.includes('BUDGET REVIEWER') || userRoles.includes('APPROVER') || userRoles.includes('OVERALL_BUDGET_APPROVER'))) {
     console.log('🔍 hasFullAccess check for 6-step workflow role:', {
       userRoles,
       result,
@@ -224,7 +225,7 @@ const ownerOnlyRoute = () => {
     }
   ];
 };
-// Workflow staff access (for PREPARER, REVIEWER, APPROVER to view proposals)
+// Workflow staff access (for PREPARER, BUDGET REVIEWER, APPROVER to view proposals)
 const workflowStaffRoute = (allowedOperations = ['read']) => {
   return [
     checkToken,
@@ -244,8 +245,8 @@ const workflowStaffRoute = (allowedOperations = ['read']) => {
         PERMISSION_LEVELS.BUDGET_MANAGER,
         PERMISSION_LEVELS.BUDGET_OFFICER,
         // Workflow staff roles - can now view proposals
-        PERMISSION_LEVELS.PREPARER,
-        PERMISSION_LEVELS.REVIEWER,
+        PERMISSION_LEVELS.BUDGET_PREPARER,
+        PERMISSION_LEVELS.BUDGET_REVIEWER,
         PERMISSION_LEVELS.APPROVER,
         PERMISSION_LEVELS.OVERALL_BUDGET_APPROVER
       ];

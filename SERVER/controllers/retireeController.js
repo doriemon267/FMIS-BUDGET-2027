@@ -1,5 +1,5 @@
 const Retiree = require("../models/Retiree");
-const PersonnelServices = require("../models/personnelServices");
+const PersonnelService = require('../models/PersonnelServices');
 const Settings = require("../models/Settings");
 /**
  * Get all retirees with pagination

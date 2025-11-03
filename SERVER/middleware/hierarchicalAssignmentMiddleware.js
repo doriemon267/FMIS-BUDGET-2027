@@ -55,7 +55,7 @@ const loadHierarchicalAssignment = async (req, res, next) => {
     }
     const userId = req.user.id;
     // Get the user's hierarchical assignment
-    const assignment = await HierarchicalUserAssignment.getUserPermissions(userId);
+    const assignment = await HierarchicalUserAssignment.getUserPermissions(userId, req.user.Roles);
     // Add to request object
     req.userHierarchicalAssignment = assignment;
     // Also add convenience flags

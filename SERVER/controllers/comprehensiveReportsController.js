@@ -1,4 +1,4 @@
-const PersonnelServices = require('../models/personnelServices');
+const PersonnelService = require('../models/PersonnelServices');
 const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const Income = require('../models/Income');

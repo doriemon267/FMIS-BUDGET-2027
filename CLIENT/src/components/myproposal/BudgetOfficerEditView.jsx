@@ -53,9 +53,9 @@ const BudgetOfficerEditView = forwardRef(({
         };
       case 'preparer':
         return {
-          title: 'Submit to Reviewer',
-          message: 'This will submit your proposal to the Reviewer for approval. You will not be able to edit again until it is returned.',
-          confirmLabel: 'Submit to Reviewer'
+          title: 'Submit to Budget Reviewer',
+          message: 'This will submit your proposal to the Budget Reviewer for approval. You will not be able to edit again until it is returned.',
+          confirmLabel: 'Submit to Budget Reviewer'
         };
       case 'approver':
         return {
@@ -576,13 +576,13 @@ const BudgetOfficerEditView = forwardRef(({
             disabled={saving || submitting || !isFormValid}
             title={!isFormValid ? `Missing required modules: ${summaryMissingModules.join(', ')}` : 'Submit for approval'}
           >
-            {submitting ? 'Submitting...' : 
-             !isFormValid ? `❌ Complete all modules to submit` :
-             variant === 'analyst' ? 'Submit to Budget Officer' :
-             variant === 'preparer' ? 'Submit to Reviewer' :
-             variant === 'approver' ? 'Submit to Budget Planning Analyst' :
-             variant === 'reviewer' ? 'Submit to Approver' :
-             'Submit to Overall Budget Approver'}
+        {submitting ? 'Submitting...' : 
+         !isFormValid ? `❌ Complete all modules to submit` :
+         variant === 'analyst' ? 'Submit to Budget Officer' :
+         variant === 'preparer' ? 'Submit to Budget Reviewer' :
+         variant === 'approver' ? 'Submit to Budget Planning Analyst' :
+         variant === 'reviewer' ? 'Submit to Budget Approver' :
+         'Submit to Overall Budget Approver'}
           </Button>
         )}
       </Box>

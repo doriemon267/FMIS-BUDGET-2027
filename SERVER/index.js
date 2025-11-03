@@ -198,11 +198,6 @@ app.get("/compensation", async (req, res) => {
           .filter(Boolean)
           .filter((v, i, a) => a.indexOf(v) === i); // Remove duplicates
 
-        // Debug log
-        if (linkedSettings.length > 0) {
-          console.log(`Compensation: ${compensation.name}, Linked Settings: ${linkedSettings.length}, BudgetTypes: ${linkedBudgetTypes.join(", ")}`);
-        }
-
         return {
           ...compensation.toObject(),
           linkedFiscalYears,

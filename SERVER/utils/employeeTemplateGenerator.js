@@ -57,7 +57,7 @@ const generateFilteredSampleData = (region, scope, accessibleDepartments, access
           'Department*': 'Finance Department',
           'Division': 'Budget Division',
           'Section': 'Planning Section',
-          'PositionTitle*': 'Preparer',
+          'PositionTitle*': 'Budget Preparer',
           'StatusOfAppointment*': 'Permanent',
           'DateOfAppointment*': '2020-04-15',
           'Status*': 'Active',

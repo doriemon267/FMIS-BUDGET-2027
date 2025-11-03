@@ -1,7 +1,7 @@
 // controllers/subsistenceAllowanceSTController.js
 const SubsistenceAllowanceST = require("../models/subsistenceAllowanceST");
 const Settings               = require("../models/Settings");
-const PersonnelServices      = require("../models/personnelServices");  // :contentReference[oaicite:0]{index=0}&#8203;:contentReference[oaicite:1]{index=1}
+const PersonnelService = require('../models/PersonnelServices');  // :contentReference[oaicite:0]{index=0}&#8203;:contentReference[oaicite:1]{index=1}
 /**
  * Helper: compute combined ST (sum of all ST entries) for an employee in a fiscal year
  */

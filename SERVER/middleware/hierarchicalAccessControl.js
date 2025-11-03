@@ -55,7 +55,7 @@ const hierarchicalAccessControl = (operation = 'read', options = {}) => {
         // Do not return here; continue to load assignment
       }
       // Get user's hierarchical assignments
-      const assignment = await HierarchicalUserAssignment.getUserPermissions(userId);
+      const assignment = await HierarchicalUserAssignment.getUserPermissions(userId, req.user?.Roles);
       if (!assignment || assignment.assignmentLevel === 'NONE') {
         if (strictMode) {
           return res.status(403).json({
@@ -434,8 +434,8 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
         if (!workflowRoles || workflowRoles.length === 0) {
           // Determine workflow roles based on user's main roles
           const userMainRoles = userRoles || [];
-          if (userMainRoles.includes('PREPARER')) {
-            // PREPARER: Division or Office creator based on assignment level
+          if (userMainRoles.includes('BUDGET PREPARER')) {
+            // BUDGET PREPARER: Division or Office creator based on assignment level
             if (assignmentDoc.assignmentLevel === 'DIVISION' || assignmentDoc.assignmentLevel === 'RESPONSIBILITY_CENTER') {
               workflowRoles = ['divisionCreator'];
             } else if (assignmentDoc.assignmentLevel === 'OFFICE' || assignmentDoc.assignmentLevel === 'DEPARTMENT') {
@@ -443,8 +443,8 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
             } else {
               workflowRoles = ['divisionCreator']; // Default to division creator
             }
-          } else if (userMainRoles.includes('REVIEWER')) {
-            // REVIEWER: Division reviewer
+          } else if (userMainRoles.includes('BUDGET REVIEWER')) {
+            // BUDGET REVIEWER: Division reviewer
             workflowRoles = ['divisionReviewer'];
           } else if (userMainRoles.includes('APPROVER')) {
             // APPROVER: Division or Office approver based on assignment level
@@ -540,8 +540,8 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
         };
         defaultWorkflowRoles = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier', 'regionCreator','superAdmin', 'regionFinalVerifier'];
       }
-      // Special handling for PREPARER - give them DIVISION scope and creator permissions
-      else if (userRoles.includes('PREPARER')) {
+      // Special handling for BUDGET PREPARER - give them DIVISION scope and creator permissions
+      else if (userRoles.includes('BUDGET PREPARER')) {
         defaultScope = 'DIVISION';
         defaultRolePermissions = {
           CreateProposals: true,
@@ -555,8 +555,8 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
         };
         defaultWorkflowRoles = ['divisionCreator'];
       }
-      // Special handling for REVIEWER - give them DIVISION scope and reviewer permissions
-      else if (userRoles.includes('REVIEWER')) {
+      // Special handling for BUDGET REVIEWER - give them DIVISION scope and reviewer permissions
+      else if (userRoles.includes('BUDGET REVIEWER')) {
         defaultScope = 'DIVISION';
         defaultRolePermissions = {
           CreateProposals: false,
@@ -743,7 +743,7 @@ const enforceWorkflowTransition = (transition) => {
       }
       
       // Reuse same source of truth for assignments
-      const assignment = await HierarchicalUserAssignment.getUserPermissions(userId);
+      const assignment = await HierarchicalUserAssignment.getUserPermissions(userId, req.user?.Roles);
       if (!assignment) {
         return res.status(403).json({ message: 'No organizational assignment', code: 'NO_ORG_ASSIGNMENT' });
       }

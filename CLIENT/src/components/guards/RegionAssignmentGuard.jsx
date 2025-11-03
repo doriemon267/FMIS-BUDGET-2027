@@ -118,7 +118,9 @@ const AccessGuard = ({ children }) => {
     'BUDGET COORDINATOR',
     'BUDGET MANAGER',
     'BUDGET OFFICER',
-    'PREPARER',
+    'BUDGET PREPARER',
+    'BUDGET REVIEWER',
+    'BUDGET APPROVER',
     'REVIEWER',
     'APPROVER',
     'OVERALL_BUDGET_APPROVER'

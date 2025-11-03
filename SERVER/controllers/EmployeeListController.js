@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const Employee = require("../models/EmployeeList");
-const PersonnelServices = require("../models/personnelServices");
+const PersonnelService = require('../models/PersonnelServices');
 const {
   numberFilter,
   dateFilter,
@@ -145,7 +145,6 @@ exports.getAllEmployees = async (req, res) => {
       } else if (userLevel === 'DIVISION' || userLevel === 'DEPARTMENT') {
         // For Division/Department level users, they can only see their assigned scope
         // Region parameter is ignored - they stay within their hierarchical constraints
-        console.log(`User at ${userLevel} level requested region: ${region}, but access restricted to assigned scope only`);
       } else {
         // For other levels (FULL, NONE), use region parameter if provided
         if (!query.Region) {

@@ -1,5 +1,5 @@
 const PersonnelServicesAnnexes = require("../models/PS_Annexes");
-const PersonnelServices = require("../models/PersonnelServices");
+const PersonnelService = require('../models/PersonnelServices');
 const AnnexName = require("../models/Annex");
 exports.getAllPersonnelServicesAnnexes = async (req, res) => {
     try {
@@ -124,4 +124,4 @@ exports.getPersonnelServicesLegal = async (_, res) => {
     console.error("Error fetching personnel services:", error);
     res.status(500).json({ error: "Failed to retrieve personnel services." });
   }
-};
+};

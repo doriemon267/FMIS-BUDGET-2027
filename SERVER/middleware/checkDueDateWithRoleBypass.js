@@ -9,7 +9,7 @@ const checkDueDateWithRoleBypass = async (req, res, next) => {
         role.includes('ADMIN') ||
         role.includes('SUPER') ||
         role.includes('BUDGET ADMIN') ||
-        role.includes('PREPARER')
+        role.includes('BUDGET PREPARER')
       );
     });
     // If user is admin, bypass due date check

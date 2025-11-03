@@ -1,5 +1,5 @@
 const Settings = require("../models/Settings");
-const PersonnelServices = require("../models/personnelServices");
+const PersonnelService = require('../models/PersonnelServices');
 const MOOEProposal = require("../models/mooeProposals");
 const CapitalOutlay = require("../models/CapitalOutlay");
 const Category = require("../models/Category");

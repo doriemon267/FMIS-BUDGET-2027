@@ -1,6 +1,6 @@
 const CapitalOutlay = require("../models/CapitalOutlay");
 const MOOEProposal = require("../models/mooeProposals");
-const PersonnelServices = require("../models/personnelServices");
+const PersonnelService = require('../models/PersonnelServices');
 // Kumuha ng combined proposal summary
 // Kumuha ng combined proposal summary
 exports.getProposalSummary = async (req, res) => {

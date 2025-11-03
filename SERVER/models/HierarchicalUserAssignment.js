@@ -22,9 +22,9 @@ const HierarchicalUserAssignmentSchema = new mongoose.Schema({
   userRole: {
     type: String,
     enum: [
-      'PREPARER',         // STEP 1: Creates draft proposals
-      'REVIEWER',         // STEP 2: Reviews and approves/rejects
-      'APPROVER',         // STEP 3: Approves and forwards to analyst
+      'BUDGET PREPARER',         // STEP 1: Creates draft proposals
+      'BUDGET REVIEWER',         // STEP 2: Reviews and approves/rejects
+      'BUDGET APPROVER',         // STEP 3: Approves and forwards to analyst
       'BUDGET_PLANNING_ANALYST',   // STEP 4: Analyzes and forwards to officer
       'BUDGET_OFFICER',   // STEP 5: Makes final budget decisions
       'OVERALL_BUDGET_APPROVER', // STEP 6: Final approval
@@ -98,7 +98,7 @@ const HierarchicalUserAssignmentSchema = new mongoose.Schema({
       'budgetAnalyst', 'budgetOfficer', 'overallBudgetApprover',
       'budgetAdmin',
       // NEW USER-FACING ROLE NAMES (September 2025 system)
-      'PREPARER', 'REVIEWER', 'APPROVER',
+      'BUDGET PREPARER', 'BUDGET REVIEWER', 'BUDGET APPROVER',
       'BUDGET_PLANNING_ANALYST', 'BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_ADMIN',
       // Legacy roles (for backward compatibility)
       'departmentCreator', 'departmentConsolidator', 'departmentSubmission',
@@ -147,7 +147,7 @@ HierarchicalUserAssignmentSchema.pre('save', function(next) {
   next();
 });
 // Static method to get user permissions for access control
-HierarchicalUserAssignmentSchema.statics.getUserPermissions = async function(userId) {
+HierarchicalUserAssignmentSchema.statics.getUserPermissions = async function(userId, userRoles = []) {
   let doc = await this.findOne({ userId, isActive: true })
     .populate('regionId', 'regionName Region RegionName')
     .populate('departmentId', 'Department departmentName DepartmentName');
@@ -174,7 +174,39 @@ HierarchicalUserAssignmentSchema.statics.getUserPermissions = async function(use
     }
   }
   if (!doc) {
-    // Return a safe default object with stubbed access-check methods
+    // Check if user has workflow roles that grant default permissions
+    const workflowRoles = Array.isArray(userRoles) ? userRoles : [];
+    const hasWorkflowRole = workflowRoles.some(role => 
+      ['BUDGET_PREPARER', 'BUDGET_REVIEWER', 'BUDGET_APPROVER', 'BUDGET_ANALYST', 'BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER'].includes(role)
+    );
+    
+    if (hasWorkflowRole) {
+      // Grant default permissions for workflow users
+      return {
+        userId,
+        assignmentLevel: 'WORKFLOW', // Special level for workflow users
+        accessScope: 'WORKFLOW_ACCESS',
+        regions: [], // Workflow users can access data based on their role permissions
+        departments: [],
+        divisions: [],
+        workflowRoles: workflowRoles,
+        rolePermissions: {
+          CreateProposals: workflowRoles.includes('BUDGET_PREPARER'),
+          EditOwnProposals: true, // All workflow users can edit their own proposals
+          EditAllProposals: ['BUDGET_REVIEWER', 'BUDGET_APPROVER', 'BUDGET_ANALYST', 'BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER'].some(role => workflowRoles.includes(role)),
+          DeleteProposals: ['BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER'].some(role => workflowRoles.includes(role)),
+          ApproveProposals: ['BUDGET_APPROVER', 'BUDGET_ANALYST', 'BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER'].some(role => workflowRoles.includes(role)),
+          ViewReports: true, // All workflow users can view reports
+          ManageUsers: ['BUDGET_ADMIN', 'OVERALL_BUDGET_APPROVER'].some(role => workflowRoles.includes(role)),
+          ManageSettings: ['BUDGET_ADMIN', 'OVERALL_BUDGET_APPROVER'].some(role => workflowRoles.includes(role))
+        },
+        hasRegionAccess: () => true, // Workflow users have access to view data
+        hasDepartmentAccess: () => true,
+        hasDivisionAccess: () => true
+      };
+    }
+    
+    // Return a safe default object with stubbed access-check methods for users without assignments
     return {
       userId,
       assignmentLevel: 'NONE',

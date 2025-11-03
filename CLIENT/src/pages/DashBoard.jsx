@@ -160,7 +160,7 @@ const HomePage = () => {
     : currentUser?.Roles
       ? [currentUser.Roles]
       : [];
-  const isPreparer = userRoles.includes('PREPARER');
+  const isPreparer = userRoles.includes('BUDGET PREPARER');
 
   // Get user's hierarchical access information
   const userAccessLevel = currentUser?.hierarchicalAccess?.scope || 'REGION';

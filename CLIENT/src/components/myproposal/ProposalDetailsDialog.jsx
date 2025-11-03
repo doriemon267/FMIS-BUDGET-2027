@@ -151,7 +151,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
       ...(userInfo?.workflowRoles || [])
     ].map(role => String(role).toUpperCase());
     
-    const hasPreparerRole = allRoles.includes('PREPARER');
+    const hasPreparerRole = allRoles.includes('BUDGET PREPARER');
     
     // Also check for workflow roles as fallback
     const hasWorkflowRole = normalizedWorkflowRoles.some((role) => 

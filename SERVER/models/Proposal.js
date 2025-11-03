@@ -39,9 +39,9 @@ const proposalSchema = new mongoose.Schema({
     type: String,
     enum: [
       "Draft",                          // ANALYST creates
-      "Forwarded to Reviewer",          // PREPARER submits to REVIEWER
+      "Forwarded to Reviewer",          // PREPARER submits to BUDGET REVIEWER
       "Division Submitted",             // ANALYST submits
-      "Forwarded to Approver",           // REVIEWER approves and forwards to APPROVER
+      "Forwarded to Approver",           // BUDGET REVIEWER approves and forwards to APPROVER
       "Approver Approved",              // APPROVER approves and forwards to BUDGET_PLANNING_ANALYST
       "Forwarded to Budget Officer",    // BUDGET_ANALYST submits to BUDGET_OFFICER
       "Forwarded to Analyst",           // APPROVER approves and forwards to Analyst
@@ -64,14 +64,14 @@ const proposalSchema = new mongoose.Schema({
   // Enhanced workflow tracking for budget roles
   workflowLevel: {
     type: String,
-    enum: ["PREPARER", "ANALYST", "REVIEWER", "APPROVER", "BUDGET_PLANNING_ANALYST", "OFFICER", "MANAGER", "FINALIZED"],
+    enum: ["BUDGET PREPARER", "ANALYST", "BUDGET REVIEWER", "APPROVER", "BUDGET_PLANNING_ANALYST", "OFFICER", "MANAGER", "FINALIZED"],
     default: "ANALYST"
   },
   currentStep: {
     type: String,
     enum: [
       "ANALYST_DRAFT",
-      "REVIEWER_REVIEW",
+      "BUDGET_REVIEWER_REVIEW",
       "APPROVER_REVIEW",
       "BUDGET_PLANNING_ANALYST_REVIEW",
       "OFFICER_REVIEW",
@@ -85,7 +85,7 @@ const proposalSchema = new mongoose.Schema({
   currentAssigneeRole: {
     type: String,
     enum: [
-      "PREPARER",
+      "BUDGET PREPARER",
       "BUDGET_PLANNING_ANALYST",
       "APPROVER",
       "BUDGET_OFFICER",
@@ -93,12 +93,12 @@ const proposalSchema = new mongoose.Schema({
       "OVERALL_BUDGET_APPROVER",
       "BUDGET_ADMIN"
     ],
-    default: "PREPARER"
+    default: "BUDGET PREPARER"
   },
   pendingWithRoles: {
     type: [String],
     default: function() {
-      return ["PREPARER"];
+      return ["BUDGET PREPARER"];
     }
   },
   // Workflow history with comments and user tracking
@@ -113,11 +113,11 @@ const proposalSchema = new mongoose.Schema({
         "EDIT",
         "VERIFY",
         "SUBMIT_DIRECT_TO_MANAGER",
-        "REVIEWER_APPROVE",
-        "REVIEWER_RETURN",
-        "REVIEWER_SUBMIT_TO_OFFICER",
-        "REVIEWER_SUBMIT_TO_MANAGER",
-        "REVIEWER_SAVE_EDITS",
+        "BUDGET_REVIEWER_APPROVE",
+        "BUDGET_REVIEWER_RETURN",
+        "BUDGET_REVIEWER_SUBMIT_TO_OFFICER",
+        "BUDGET_REVIEWER_SUBMIT_TO_MANAGER",
+        "BUDGET_REVIEWER_SAVE_EDITS",
         "OFFICER_APPROVE",
         "OFFICER_RETURN",
         "OFFICER_SUBMIT_TO_MANAGER",
@@ -127,11 +127,11 @@ const proposalSchema = new mongoose.Schema({
         "APPROVER_SUBMIT_TO_OFFICER",
         "APPROVER_RETURN",
         "APPROVER_SAVE_EDITS",
-        "PREPARER_SUBMIT_TO_REVIEWER",
+        "PREPARER_SUBMIT_TO_BUDGET_REVIEWER",
         "MANAGER_APPROVE",
         "MANAGER_RETURN",
         "MANAGER_SAVE_EDITS",
-        "ANALYST_SUBMIT_TO_REVIEWER",
+        "ANALYST_SUBMIT_TO_BUDGET_REVIEWER",
         "ANALYST_SUBMIT_TO_OFFICER",
         "SAVE_DRAFT",
         "AUTO_SYNC"
@@ -147,10 +147,10 @@ const proposalSchema = new mongoose.Schema({
           "RETURN",
           "VERIFY",
           "SUBMIT_DIRECT_TO_MANAGER",
-          "REVIEWER_APPROVE",
-          "REVIEWER_RETURN",
-          "REVIEWER_SUBMIT_TO_OFFICER",
-          "REVIEWER_SUBMIT_TO_MANAGER",
+          "BUDGET_REVIEWER_APPROVE",
+          "BUDGET_REVIEWER_RETURN",
+          "BUDGET_REVIEWER_SUBMIT_TO_OFFICER",
+          "BUDGET_REVIEWER_SUBMIT_TO_MANAGER",
           "OFFICER_APPROVE",
           "OFFICER_RETURN",
           "OFFICER_SUBMIT_TO_MANAGER",
@@ -159,7 +159,7 @@ const proposalSchema = new mongoose.Schema({
           "APPROVER_RETURN",
           "MANAGER_APPROVE",
           "MANAGER_RETURN",
-          "ANALYST_SUBMIT_TO_REVIEWER"
+          "ANALYST_SUBMIT_TO_BUDGET_REVIEWER"
         ];
         return actionsRequiringComment.includes(this.action);
       }
@@ -184,13 +184,13 @@ const proposalSchema = new mongoose.Schema({
   // Budget role specific tracking
   submittedByRole: String, // PREPARER, APPROVER, BUDGET_PLANNING_ANALYST, BUDGET_OFFICER
   // BUDGET_REVIEWER tracking
-  approvedByReviewer: {
+  approvedByBudgetReviewer: {
     userId: String,
     userName: String,
     date: Date,
     comment: String
   },
-  returnedByReviewer: {
+  returnedByBudgetReviewer: {
     userId: String,
     userName: String,
     date: Date,

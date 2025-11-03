@@ -5,7 +5,7 @@ async function checkProposalFields() {
   try {
     await mongoose.connect(process.env.MONGODB_URL);
 
-    const PersonnelService = require('./models/personnelServices');
+    const PersonnelService = require('./models/PersonnelServices');
 
     console.log('🔍 Checking actual proposal data fields...');
 

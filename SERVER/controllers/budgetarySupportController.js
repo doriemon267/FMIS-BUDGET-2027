@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const BudgetarySupport = require('../models/BudgetarySupport');
-const PersonnelServices = require('../models/personnelServices');
+const PersonnelService = require('../models/PersonnelServices');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const mooeProposals = require('../models/mooeProposals');
 const IAsOMCost = require('../models/IAsOMCost');
@@ -146,18 +146,8 @@ const getAllBudgetarySupport = async (req, res) => {
       query.region = region;
     }
 
-    console.log('Final query for BudgetarySupport.find():', JSON.stringify(query, null, 2));
-    console.log('Query context:', {
-      fiscalYear,
-      budgetType,
-      region,
-      userScope: req.hierarchicalAccessInfo?.scope,
-      hasSubmissionFilters: !!req.submissionWorkflowFilters
-    });
-
     try {
       const data = await BudgetarySupport.find(query);
-      console.log(`Found ${data.length} budgetary support records`);
       return res.json(data);
     } catch (dbError) {
       console.error('Database query error in getAllBudgetarySupport:', {
@@ -284,15 +274,6 @@ const calculateBudgetarySupport = async (req, res) => {
     let totalSubsidy = 0;
     let breakdown = [];
 
-    console.log('=== CALCULATE BUDGETARY SUPPORT STARTED ===');
-    console.log('Request parameters:', { fiscalYear, budgetType, region });
-    console.log('User access info:', {
-      scope: req.hierarchicalAccessInfo?.scope,
-      hasSubmissionWorkflowFilters: !!req.submissionWorkflowFilters,
-      accessibleRegions: req.hierarchicalAccessInfo?.accessibleRegions?.[0]?.regionName,
-      accessibleDepartments: req.hierarchicalAccessInfo?.accessibleDepartments?.[0]?.departmentName
-    });
-
     // Build base query conditions
     let queryConditions = {};
     if (fiscalYear) queryConditions.fiscalYear = fiscalYear;
@@ -305,12 +286,6 @@ const calculateBudgetarySupport = async (req, res) => {
       // Properly merge with existing query conditions
       const existingConditions = { ...queryConditions };
       const submissionFilters = req.submissionWorkflowFilters;
-
-      console.log('Calculate Budgetary Support Debug - Using submission workflow filters:', {
-        existingConditions,
-        submissionFilters,
-        userLevel: req.hierarchicalAccessInfo?.scope
-      });
 
       // If submission filters have $and, merge properly
       if (submissionFilters.$and) {
@@ -334,7 +309,6 @@ const calculateBudgetarySupport = async (req, res) => {
         queryConditions = { ...existingConditions, ...submissionFilters };
       }
 
-      console.log('Calculate Budgetary Support Debug - Final query:', queryConditions);
     } else {
       // Fallback to hierarchical access info with submission workflow logic
       const accessInfo = req.hierarchicalAccessInfo;
@@ -412,15 +386,9 @@ const calculateBudgetarySupport = async (req, res) => {
       personnelQueryConditions.fiscal_year = Number(fiscalYear);
     }
 
-    console.log('Final query conditions for data sources:', {
-      baseQueryConditions: JSON.stringify(queryConditions, null, 2),
-      personnelQueryConditions: JSON.stringify(personnelQueryConditions, null, 2),
-      userLevel: req.hierarchicalAccessInfo?.scope
-    });
     // 1. Personnel Services (B.1.1) - ENTIRE AMOUNT IS GOVERNMENT SUBSIDY
     try {
       const personnelServices = await PersonnelServices.find(personnelQueryConditions);
-      console.log(`Found ${personnelServices.length} Personnel Services records for budgetary support calculation`);
 
       const personnelTotal = personnelServices.reduce((sum, item) => {
         return sum + (Number(item.Total) || Number(item.annualSalary) || Number(item.total) || 0);
@@ -434,7 +402,6 @@ const calculateBudgetarySupport = async (req, res) => {
           description: 'Government funding for all personnel services'
         });
       } else {
-        console.log('No Personnel Services data available or total is zero');
       }
     } catch (error) {
       console.error('Personnel Services query error:', {
@@ -447,7 +414,6 @@ const calculateBudgetarySupport = async (req, res) => {
     // 2. Capital Outlay (B.2) - ENTIRE AMOUNT IS TYPICALLY GOVERNMENT FUNDED
     try {
       const capitalOutlays = await CapitalOutlay.find(queryConditions);
-      console.log(`Found ${capitalOutlays.length} Capital Outlay records for budgetary support calculation`);
 
       const capitalTotal = capitalOutlays.reduce((sum, item) => {
         return sum + (Number(item.subsidy) || Number(item.amount) || 0);
@@ -461,7 +427,6 @@ const calculateBudgetarySupport = async (req, res) => {
           description: 'Government funding for capital expenditures'
         });
       } else {
-        console.log('No Capital Outlay data available or total is zero');
       }
     } catch (error) {
       console.error('Capital Outlay query error:', {
@@ -519,10 +484,7 @@ const calculateBudgetarySupport = async (req, res) => {
         }
       }
 
-      console.log('MOOE Query Debug:', JSON.stringify(mooeQueryConditions, null, 2));
-
       const mooeData = await mooeProposals.find(mooeQueryConditions);
-      console.log(`Found ${mooeData.length} MOOE records for budgetary support calculation`);
 
       const mooeTotal = mooeData.reduce((sum, item) => {
         return sum + (Number(item.subsidy) || Number(item.totalSubsidy) || 0);
@@ -536,7 +498,6 @@ const calculateBudgetarySupport = async (req, res) => {
           description: 'Government subsidy for maintenance and operating expenses'
         });
       } else {
-        console.log('No MOOE data available or total is zero');
       }
     } catch (error) {
       console.error('MOOE Data query error:', {
@@ -559,10 +520,8 @@ const calculateBudgetarySupport = async (req, res) => {
             description: 'Government subsidy for Irrigation Associations O&M'
           });
         } else {
-          console.log('IAs O&M Cost data found but subsidy amounts are zero');
         }
       } else {
-        console.log('No IAs O&M Cost data found for the given criteria');
       }
     } catch (error) {
       console.error('IAs O&M Cost query error:', {
@@ -579,15 +538,6 @@ const calculateBudgetarySupport = async (req, res) => {
       budgetType,
       region,
       calculatedAt: new Date().toISOString()
-    });
-
-    console.log('=== CALCULATE BUDGETARY SUPPORT COMPLETED ===');
-    console.log('Final results:', {
-      totalSubsidy,
-      breakdownCount: breakdown.length,
-      fiscalYear,
-      budgetType,
-      region
     });
 
   } catch (error) {

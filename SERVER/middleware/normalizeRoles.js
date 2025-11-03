@@ -6,31 +6,32 @@
  * 
  * Standard Workflow Roles (6-Step Workflow):
  * - PREPARER              → Step 1: Initial proposal creators
- * - REVIEWER              → Step 2: Division level reviewers
+ * - BUDGET REVIEWER              → Step 2: Division level reviewers
  * - APPROVER              → Step 3: Division/Office level approvers
  * - BUDGET_ANALYST        → Step 4: Technical budget review
  * - BUDGET_OFFICER        → Step 5: Operational budget approval
  * - OVERALL_BUDGET_APPROVER → Step 6: Executive budget approval
- * - BUDGET_COORDINATOR    → REVIEWER (Step 2: Division/Department reviewers)
+ * - BUDGET_COORDINATOR    → BUDGET REVIEWER (Step 2: Division/Department reviewers)
  * - BUDGET_MANAGER        → Upper management (legacy)
  */
 
 // Role synonym mapping - maps various role names to standardized workflow roles
 const ROLE_SYNONYMS = {
-  // PREPARER synonyms (Initial proposal creators)
-  'PREPARER': 'PREPARER',
+  // BUDGET PREPARER synonyms (Initial proposal creators)
+  'BUDGET PREPARER': 'BUDGET PREPARER',
+  'PREPARER': 'BUDGET PREPARER',
   
-  // REVIEWER synonyms (Division level review)
-  'REVIEWER': 'REVIEWER',
-  'DIVISION_REVIEWER': 'REVIEWER',
-  'DIVISIONREVIEWER': 'REVIEWER',
-  'BUDGET_COORDINATOR': 'REVIEWER',        // Old role mapping
-  'DEPARTMENTCREATOR': 'REVIEWER',          // Legacy mapping
-  'DEPARTMENT_CREATOR': 'REVIEWER',         // Legacy mapping
-  'DEPARTMENT_COORDINATOR': 'REVIEWER',     // Legacy mapping
-  'REGIONCREATOR': 'REVIEWER',              // Legacy mapping
-  'REGION_CREATOR': 'REVIEWER',             // Legacy mapping
-  'REGION_COORDINATOR': 'REVIEWER',         // Legacy mapping
+  // BUDGET REVIEWER synonyms (Division level review)
+  'REVIEWER': 'BUDGET REVIEWER',
+  'DIVISION_REVIEWER': 'BUDGET REVIEWER',
+  'DIVISIONREVIEWER': 'BUDGET REVIEWER',
+  'BUDGET_COORDINATOR': 'BUDGET REVIEWER',        // Old role mapping
+  'DEPARTMENTCREATOR': 'BUDGET REVIEWER',          // Legacy mapping
+  'DEPARTMENT_CREATOR': 'BUDGET REVIEWER',         // Legacy mapping
+  'DEPARTMENT_COORDINATOR': 'BUDGET REVIEWER',     // Legacy mapping
+  'REGIONCREATOR': 'BUDGET REVIEWER',              // Legacy mapping
+  'REGION_CREATOR': 'BUDGET REVIEWER',             // Legacy mapping
+  'REGION_COORDINATOR': 'BUDGET REVIEWER',         // Legacy mapping
   
   // APPROVER synonyms (Division/Office level approval)
   'APPROVER': 'APPROVER',

@@ -51,8 +51,8 @@ export const setupRegionInterceptor = () => {
             config.params = {};
           }
 
-          // Don't override if region is already specified in the request
-          if (!config.params.region && activeRegion) {
+          // Don't override if region is already specified in the request URL or params
+          if (!config.params.region && !config.url.includes('region=') && activeRegion) {
             config.params.region = activeRegion.name || activeRegion.regionName;
           }
         } catch (error) {

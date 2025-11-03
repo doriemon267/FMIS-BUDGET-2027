@@ -137,10 +137,6 @@ exports.getAllUserBudgetItems = async (req, res) => {
       .sort({ updatedAt: -1 })
       .lean();
 
-    // Log the results
-    console.log(`📊 getAllUserBudgetItems results (Consolidated):`);
-    console.log(`- Total consolidated proposals: ${proposals.length}`);
-
     res.status(200).json({
       success: true,
       data: proposals,

@@ -19,7 +19,7 @@ async function demonstrateRegionLevelAccess() {
     console.log('🌍 Region Level Hierarchical Access Control - Concepts & Implementation\n');
 
     // Check existing data
-    const PersonnelServices = require('./models/personnelServices');
+    const PersonnelService = require('../models/PersonnelServices');
     const totalRecords = await PersonnelServices.countDocuments();
     console.log(`📊 Current Personnel Services records: ${totalRecords}`);
 

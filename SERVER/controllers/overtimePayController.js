@@ -1,7 +1,7 @@
 // controllers/overtimePayController.js
 const OvertimePay       = require("../models/overtimePay");
 const Settings          = require("../models/Settings");
-const PersonnelServices = require("../models/personnelServices");
+const PersonnelService = require('../models/PersonnelServices');
 /**
  * Helper: compute total overtime for an employee in a fiscal year
  */

@@ -80,7 +80,7 @@ budgetManagerOrgRouter.post(
       // Create REAL proposal in database based on type
       switch (proposalType) {
         case 'personnel':
-          const PersonnelServices = require('../models/personnelServices');
+          const PersonnelServices = require('../models/PersonnelServices');
           createdProposal = await PersonnelServices.create({
             ...proposalData,
             region: region,
@@ -184,7 +184,7 @@ budgetManagerOrgRouter.get(
       const { region, department, division, category } = req.query;
       const budgetManagerContext = req.budgetManagerContext;
       // Import real models
-      const PersonnelServices = require('../models/personnelServices');
+      const PersonnelServices = require('../models/PersonnelServices');
       const MooeProposal = require('../models/mooeProposals');
       const CapitalOutlay = require('../models/CapitalOutlay');
       const COSPersonnel = require('../models/COSPersonnel');
@@ -405,7 +405,7 @@ budgetManagerOrgRouter.get(
   async (req, res) => {
     try {
       // Import models
-      const PersonnelServices = require('../models/personnelServices');
+      const PersonnelServices = require('../models/PersonnelServices');
       const MooeProposal = require('../models/mooeProposals');
       const CapitalOutlay = require('../models/CapitalOutlay');
       const COSPersonnel = require('../models/COSPersonnel');

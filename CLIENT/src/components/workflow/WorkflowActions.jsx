@@ -297,14 +297,14 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       }
     });
 
-    // PREPARER Actions (Draft control & submission)
+  // PREPARER Actions (Draft control & submission)
     if (isPreparer) {
       const isDraft = normalizedStatus === 'DRAFT' || status === 'Draft';
       const isReturnedToAnalyst = normalizedStatus === 'RETURNED' || (status === 'Returned' && proposal?.workflowLevel === 'ANALYST');
 
       if (isDraft || isReturnedToAnalyst) {
         actions.push({
-          label: 'Submit to Reviewer',
+          label: 'Submit to Budget Reviewer',
           action: 'submit-to-reviewer',
           color: 'bg-blue-500 hover:bg-blue-600',
           icon: '📤',
@@ -319,7 +319,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       }
     }
 
-    // BUDGET REVIEWER Actions (Review & routing)
+  // BUDGET REVIEWER Actions (Review & routing)
     if (isBudgetReviewer) {
       // Can review and edit proposals submitted by analysts
       if (normalizedStatus === 'DIVISION SUBMITTED' || status === 'Division Submitted' || 
@@ -334,19 +334,19 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           allowOptionalComment: true
         });
         actions.push({
-          label: 'Approve & Forward to Approver',
+          label: 'Approve & Forward to Budget Approver',
           action: 'reviewer-approve-forward-approver',
           color: 'bg-green-500 hover:bg-green-600',
           icon: '✅',
-          description: 'Approve and forward to Approver for verification',
+          description: 'Approve and forward to Budget Approver for verification',
           requiresComment: true
         });
         actions.push({
-          label: 'Submit to Officer (Skip Approver)',
+          label: 'Submit to Officer (Skip Budget Approver)',
           action: 'reviewer-submit-to-officer',
           color: 'bg-purple-500 hover:bg-purple-600',
           icon: '⚡',
-          description: 'Submit proposal directly to Budget Officer (bypasses Approver review)',
+          description: 'Submit proposal directly to Budget Officer (bypasses Budget Approver review)',
           requiresComment: true
         });
         actions.push({
@@ -360,7 +360,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       }
     }
 
-    // APPROVER Actions (Division/Office Approver Level)
+  // APPROVER Actions (Division/Office Budget Approver Level)
     if (isApprover) {
       // Can review and edit proposals forwarded by reviewer (but NOT when already approved)
       if (normalizedStatus === "FORWARDED TO APPROVER" || status === "Forwarded to Approver" ||
@@ -391,11 +391,11 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           requiresComment: true
         });
         actions.push({
-          label: "Return to Reviewer",
+          label: "Return to Budget Reviewer",
           action: "approver-return",
           color: "bg-red-500 hover:bg-red-600",
           icon: "↩️",
-          description: "Send back to reviewer for revisions",
+          description: "Send back to Budget Reviewer for revisions",
           requiresComment: true
         });
       }
@@ -425,11 +425,11 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           requiresComment: true
         });
         actions.push({
-          label: "Return to Approver",
+          label: "Return to Budget Approver",
           action: "officer-return",
           color: "bg-red-500 hover:bg-red-600",
           icon: "↩️",
-          description: "Return proposal to approver for revisions",
+          description: "Return proposal to Budget Approver for revisions",
           requiresComment: true
         });
       }
@@ -530,9 +530,9 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
   };
 
   const roleLabelMap = useMemo(() => ({
-    PREPARER: 'Preparer',
+    PREPARER: 'Budget Preparer',
     BUDGET_REVIEWER: 'Budget Reviewer',
-    APPROVER: 'Approver',
+    APPROVER: 'Budget Approver',
     BUDGET_PLANNING_ANALYST: 'Budget Planning Analyst',
     BUDGET_OFFICER: 'Budget Officer',
     BUDGET_MANAGER: 'Budget Manager',

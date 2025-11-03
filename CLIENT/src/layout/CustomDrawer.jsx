@@ -47,7 +47,7 @@ const CustomDrawer = ({ collapsed = false }) => {
   // Helper function to check if user has any approver role
   const hasApproverRole = () => {
     const approverWorkflowRoles = ['divisionapprover', 'officeapprover', 'approver'];
-    const approverPrimaryRoles = ['APPROVER', 'DIVISION APPROVER', 'OFFICE APPROVER'];
+    const approverPrimaryRoles = ['APPROVER', 'DIVISION APPROVER', 'OFFICE APPROVER', 'BUDGET APPROVER'];
     
     const hasWorkflowApprover = workflowRoles.some(role => 
       approverWorkflowRoles.includes(role.toLowerCase())
@@ -62,7 +62,7 @@ const CustomDrawer = ({ collapsed = false }) => {
   const isOverallApprover = roles.includes("BUDGET MANAGER");
   const isBudgetOfficer = roles.includes("BUDGET OFFICER");
   const isApprover = hasApproverRole();
-  const isReviewer = roles.includes("REVIEWER");
+  const isReviewer = roles.includes("BUDGET REVIEWER");
   const isBudgetPlanningAnalyst = roles.includes("BUDGET_PLANNING_ANALYST");
   return (
     <Box

@@ -28,14 +28,14 @@ describe('proposalWorkflowController helpers', () => {
       };
 
       updateAssignment(proposal, {
-        step: 'REVIEWER_REVIEW',
-        assigneeRole: 'APPROVER',
-        pendingRoles: ['APPROVER']
+        step: 'BUDGET_REVIEWER_REVIEW',
+        assigneeRole: 'BUDGET APPROVER',
+        pendingRoles: ['BUDGET APPROVER']
       });
 
-      expect(proposal.currentStep).toBe('REVIEWER_REVIEW');
-      expect(proposal.currentAssigneeRole).toBe('APPROVER');
-      expect(proposal.pendingWithRoles).toEqual(['APPROVER']);
+      expect(proposal.currentStep).toBe('BUDGET_REVIEWER_REVIEW');
+      expect(proposal.currentAssigneeRole).toBe('BUDGET APPROVER');
+      expect(proposal.pendingWithRoles).toEqual(['BUDGET APPROVER']);
     });
 
     test('leaves fields untouched when undefined', () => {

@@ -9,18 +9,18 @@ proposal system.
 
 STANDARD WORKFLOW ROLES:
 ------------------------
-1. divisionCreator    - PREPARER (Division level creators)
+1. divisionCreator    - BUDGET PREPARER (Division level creators)
 2. departmentCreator  - BUDGET COORDINATOR (Department/Region level creators)
 3. departmentVerifier - BUDGET OFFICER (Department/Region level verifiers)
 4. budgetManager      - BUDGET MANAGER (Budget Office final approvers)
 
 WORKFLOW:
 ---------
-PREPARER → BUDGET OFFICER → BUDGET MANAGER
+BUDGET PREPARER → BUDGET OFFICER → BUDGET MANAGER
 BUDGET COORDINATOR → BUDGET OFFICER → BUDGET MANAGER
 
 With flexibility:
-PREPARER/COORDINATOR can bypass OFFICER and submit directly to MANAGER
+BUDGET PREPARER/COORDINATOR can bypass OFFICER and submit directly to MANAGER
 
 HOW TO RUN:
 -----------

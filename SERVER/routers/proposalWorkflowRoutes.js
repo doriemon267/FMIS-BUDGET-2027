@@ -20,26 +20,26 @@ router.post('/submit', proposalWorkflowController.submitProposal);
 // Validate analyst submission prerequisites without attempting submission
 router.get('/submit/prerequisites/:proposalId', proposalWorkflowController.checkAnalystSubmissionPrerequisites);
 
-// Submit proposal directly to Budget Manager (BUDGET_ANALYST only - DEPRECATED, use reviewer routes)
+// Submit proposal directly to Budget Manager (BUDGET_ANALYST only - DEPRECATED, use budget reviewer routes)
 router.post('/submit-direct-to-manager', proposalWorkflowController.submitDirectToManager);
 
-// === NEW REVIEWER WORKFLOW ROUTES ===
-// REVIEWER approves proposal from PREPARER
+// === NEW BUDGET REVIEWER WORKFLOW ROUTES ===
+// BUDGET REVIEWER approves proposal from BUDGET PREPARER
 router.post('/reviewer/approve', proposalWorkflowController.coordinatorApproveProposal);
 
-// REVIEWER approves AND forwards to BUDGET_OFFICER in one action
+// BUDGET REVIEWER approves AND forwards to BUDGET_OFFICER in one action
 router.post('/reviewer/approve-and-forward-to-officer', proposalWorkflowController.coordinatorApproveAndForwardToOfficer);
 
-// REVIEWER returns proposal to PREPARER
+// BUDGET REVIEWER returns proposal to BUDGET PREPARER
 router.post('/reviewer/return', proposalWorkflowController.coordinatorReturnProposal);
 
-// PREPARER submits to BUDGET_OFFICER for verification
+// BUDGET PREPARER submits to BUDGET_OFFICER for verification
 router.post('/preparer/submit-to-officer', proposalWorkflowController.coordinatorSubmitToOfficer);
 
-// PREPARER submits directly to BUDGET_MANAGER (bypass Officer)
+// BUDGET PREPARER submits directly to BUDGET_MANAGER (bypass Officer)
 router.post('/preparer/submit-to-manager', proposalWorkflowController.coordinatorSubmitToManager);
 
-// PREPARER saves edits without forwarding
+// BUDGET PREPARER saves edits without forwarding
 router.post('/preparer/save-edits', proposalWorkflowController.coordinatorSaveEdits);
 
 // === APPROVER WORKFLOW ROUTES ===
@@ -52,14 +52,14 @@ router.post('/approver/approve-and-forward-to-analyst', proposalWorkflowControll
 // APPROVER submits directly to BUDGET_OFFICER (bypasses BUDGET_PLANNING_ANALYST)
 router.post('/approver/submit-to-officer', proposalWorkflowController.approverSubmitToOfficer);
 
-// APPROVER returns proposal to REVIEWER
+// APPROVER returns proposal to BUDGET REVIEWER
 router.post('/approver/return', proposalWorkflowController.approverReturn);
 
 // === BUDGET OFFICER WORKFLOW ROUTES ===
 // BUDGET_OFFICER approves proposal
 router.post('/officer/approve', proposalWorkflowController.officerApproveProposal);
 
-// BUDGET_OFFICER returns proposal to REVIEWER
+// BUDGET_OFFICER returns proposal to BUDGET REVIEWER
 router.post('/officer/return', proposalWorkflowController.officerReturnProposal);
 
 // BUDGET_OFFICER submits to BUDGET_MANAGER

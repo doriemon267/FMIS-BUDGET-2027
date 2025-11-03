@@ -1,6 +1,6 @@
 const ChildrenAllowance = require("../models/childrenAllowance");
 const Settings = require("../models/Settings");
-const PersonnelServices = require("../models/personnelServices");
+const PersonnelService = require('../models/PersonnelServices');
 // Function to sync children allowance with personnel services
 async function syncWithPersonnelServices(employeeNumber, fiscalYear, amount, noOfDependents) {
   try {

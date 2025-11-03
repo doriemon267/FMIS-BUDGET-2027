@@ -53,23 +53,23 @@ const ACCESS_LEVELS = [
 
 // New unified workflow roles (September 2025)
 const USER_ROLES = [
-  { 
-    value: 'PREPARER', 
-    label: 'Preparer', 
+  {
+    value: 'BUDGET PREPARER',
+    label: 'Budget Preparer',
     description: 'Creates and edits budget proposals',
-    workflowRoles: 'PREPARER (creates proposals)',
+    workflowRoles: 'BUDGET PREPARER (creates proposals)',
     assignmentLevels: ['DIVISION_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL']
   },
   { 
-    value: 'REVIEWER', 
-    label: 'Reviewer', 
+    value: 'BUDGET REVIEWER', 
+    label: 'Budget Reviewer', 
     description: 'Reviews proposals for quality assurance (Division level only)',
-    workflowRoles: 'REVIEWER (mandatory review step)',
+    workflowRoles: 'BUDGET REVIEWER (mandatory review step)',
     assignmentLevels: ['DIVISION_LEVEL']
   },
   { 
-    value: 'APPROVER', 
-    label: 'Approver', 
+    value: 'BUDGET APPROVER', 
+    label: 'Budget Approver', 
     description: 'Approves proposals after review/creation',
     workflowRoles: 'APPROVER (approves proposals)',
     assignmentLevels: ['DIVISION_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL']
@@ -386,7 +386,7 @@ const HierarchicalUserAssignmentPage = () => {
       handleFormChange('userId', userLookupData.userId || '');
       handleFormChange('userName', userLookupData.userName || '');
       handleFormChange('email', userLookupData.email || '');
-      const budgetRole = userLookupData.budgetRole || 'PREPARER';
+      const budgetRole = userLookupData.budgetRole || 'BUDGET PREPARER';
       handleFormChange('userRole', budgetRole);
 
       // Auto-set assignment level and permissions based on the budget role
@@ -403,7 +403,7 @@ const HierarchicalUserAssignmentPage = () => {
           ManageSettings: false
         });
         handleFormChange('workflowRoles', null);
-      } else if (budgetRole === 'APPROVER') {
+      } else if (budgetRole === 'BUDGET APPROVER') {
         handleFormChange('assignmentLevel', 'OFFICE');
         handleFormChange('rolePermissions', {
           CreateProposals: true,
@@ -844,7 +844,7 @@ const HierarchicalUserAssignmentPage = () => {
                           handleFormChange('email', data.email || '');
                           
                           // Use the budgetRole directly from server - no client-side mapping needed
-                          const budgetRole = data.budgetRole || 'PREPARER';
+                          const budgetRole = data.budgetRole || 'BUDGET PREPARER';
                           handleFormChange('userRole', budgetRole);
                         }
                       }).catch((error) => {
@@ -944,14 +944,14 @@ const HierarchicalUserAssignmentPage = () => {
                       };
                       
                       // Set permissions based on role
-                      if (newValue.value === 'APPROVER') {
+                      if (newValue.value === 'BUDGET APPROVER') {
                         rolePerms.EditOwnProposals = true;
                         rolePerms.EditAllProposals = true;
                         rolePerms.ApproveProposals = true;
-                      } else if (newValue.value === 'REVIEWER') {
+                      } else if (newValue.value === 'BUDGET REVIEWER') {
                         rolePerms.EditOwnProposals = true;
                         rolePerms.EditAllProposals = true;
-                      } else if (newValue.value === 'PREPARER') {
+                      } else if (newValue.value === 'BUDGET PREPARER') {
                         rolePerms.CreateProposals = true;
                         rolePerms.EditOwnProposals = true;
                       } else if (newValue.value === 'BUDGET_ANALYST' || newValue.value === 'BUDGET_OFFICER' || newValue.value === 'OVERALL_BUDGET_APPROVER') {
@@ -1041,7 +1041,7 @@ const HierarchicalUserAssignmentPage = () => {
                         ManageSettings: false
                       });
                       // Update user role - default to PREPARER for OWN_ONLY
-                      handleFormChange('userRole', 'PREPARER');
+                      handleFormChange('userRole', 'BUDGET PREPARER');
                     } else if (isRC) {
                       // Only RC roles allowed
                       setRole('divisionCreator', !!nextRoles.divisionCreator);
@@ -1064,7 +1064,7 @@ const HierarchicalUserAssignmentPage = () => {
                         });
                       }
                       // Update user role - default to PREPARER for Responsibility Center level
-                      handleFormChange('userRole', formData.userRole || 'PREPARER');
+                      handleFormChange('userRole', formData.userRole || 'BUDGET PREPARER');
                     } else if (isOffice) {
                       // Office roles allowed; RC creator optional -> keep selection
                       setRole('officeCreator', !!nextRoles.officeCreator);
@@ -1088,7 +1088,7 @@ const HierarchicalUserAssignmentPage = () => {
                         });
                       }
                       // Update user role - default to PREPARER for Office level, preserve any explicit choice
-                      handleFormChange('userRole', formData.userRole || 'PREPARER');
+                      handleFormChange('userRole', formData.userRole || 'BUDGET PREPARER');
                     } else if (isFull) {
                       // All roles permitted; automatically grant all workflow roles for FULL access
                       Object.keys(nextRoles).forEach(k => { nextRoles[k] = true; });
@@ -1388,17 +1388,17 @@ const HierarchicalUserAssignmentPage = () => {
                                 // NEW ROLE INFERENCE LOGIC (September 2025)
                                 if (level === 'RESPONSIBILITY_CENTER' || level === 'DIVISION' || level === 'DIVISION_LEVEL') {
                                   if (perms.ApproveProposals) {
-                                    return 'Approver'; // New role for approvers at division level
+                                    return 'Budget Approver'; // New role for approvers at division level
                                   } else if (perms.EditAllProposals) {
-                                    return 'Reviewer'; // New role for reviewers
+                                    return 'Budget Reviewer'; // New role for reviewers
                                   } else {
-                                    return 'Preparer'; // Default preparer at division/responsibility center level
+                                    return 'Budget Preparer'; // Default budget preparer at division/responsibility center level
                                   }
                                 } else if (level === 'OFFICE' || level === 'DEPARTMENT' || level === 'DEPARTMENT_REGIONAL_LEVEL') {
                                   if (perms.ApproveProposals) {
-                                    return 'Approver'; // New role for approvers at office level
+                                    return 'Budget Approver'; // New role for approvers at office level
                                   } else {
-                                    return 'Preparer'; // Default preparer at office level
+                                    return 'Budget Preparer'; // Default budget preparer at office level
                                   }
                                 } else if (level === 'BUDGET_AND_REVENUE_DIVISION') {
                                   if (perms.ManageSettings) {
@@ -1406,7 +1406,7 @@ const HierarchicalUserAssignmentPage = () => {
                                   } else if (perms.EditAllProposals && perms.ApproveProposals) {
                                     return 'Budget Officer';
                                   } else {
-                                    return 'Preparer';
+                                    return 'Budget Preparer';
                                   }
                                 } else if (level === 'FULL') {
                                   if (perms.ManageSettings) {
@@ -1543,7 +1543,7 @@ const HierarchicalUserAssignmentPage = () => {
                                     if (perms.ApproveProposals) {
                                       inferredRole = 'BUDGET_OFFICER';
                                     } else {
-                                      inferredRole = 'APPROVER';
+                                      inferredRole = 'BUDGET APPROVER';
                                     }
                                   } else if (level === 'FULL') {
                                     if (perms.ManageSettings) {

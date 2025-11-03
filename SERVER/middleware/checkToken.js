@@ -50,6 +50,8 @@ module.exports = async (req, res, next) => {
       
       // Allow dev header to override identity in development mode
       const devUserId = req.headers['x-dev-user-id'] || req.headers['X-Dev-User-Id'];
+      const hasDevHeaders = !!devUserId;
+      
       if (devUserId) {
         userId = String(devUserId).trim();
       } else if (!userId) {
@@ -98,10 +100,20 @@ module.exports = async (req, res, next) => {
         Roles: userRoles,
         name: payload.name || payload.username || String(userId)
       };
-      const identity = await resolveUserIdentity({ req });
+      
+      // Only call resolveUserIdentity if we don't have dev headers (to avoid overriding dev identity)
+      let identity = null;
+      if (!hasDevHeaders) {
+        identity = await resolveUserIdentity({ req });
+      } else {
+        identity = { userId: userId, displayName: req.user.name, email: req.user.email, source: 'dev-headers' };
+      }
+      
       req.identity = identity;
+      
       if (req.user) {
-        if (identity.userId && identity.userId !== req.user.userId) {
+        // Only update user IDs from identity if we don't have dev headers
+        if (!hasDevHeaders && identity.userId && identity.userId !== req.user.userId) {
           req.user.userId = identity.userId;
           req.user.id = identity.userId;
         }

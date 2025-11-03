@@ -32,23 +32,23 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
   // NEW 6-STEP WORKFLOW (Division/Responsibility Center Level)
   const divisionSteps = [
     {
-      label: 'PREPARER',
+      label: 'BUDGET PREPARER',
       role: 'Creates',
-      shortLabel: 'Preparer',
+      shortLabel: 'Budget Preparer',
       statuses: ['Draft'],
       icon: <PersonIcon />
     },
     {
-      label: 'REVIEWER',
+      label: 'BUDGET REVIEWER',
       role: 'Reviews',
-      shortLabel: 'Reviewer',
+      shortLabel: 'Budget Reviewer',
       statuses: ['Division Submitted', 'Forwarded to Reviewer'],
       icon: <GroupIcon />
     },
     {
-      label: 'APPROVER',
+      label: 'BUDGET APPROVER',
       role: 'Approves',
-      shortLabel: 'Approver',
+      shortLabel: 'Budget Approver',
       statuses: ['Forwarded to Approver', 'Forwarded to Officer', 'Approver Approved'],
       icon: <VerifiedUserIcon />
     },
@@ -78,16 +78,16 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
   // NEW 5-STEP WORKFLOW (Office Level - skips Reviewer)
   const officeSteps = [
     {
-      label: 'PREPARER',
+      label: 'BUDGET PREPARER',
       role: 'Creates',
-      shortLabel: 'Preparer',
+      shortLabel: 'Budget Preparer',
       statuses: ['Draft'],
       icon: <PersonIcon />
     },
     {
-      label: 'APPROVER',
+      label: 'BUDGET APPROVER',
       role: 'Approves',
-      shortLabel: 'Approver',
+      shortLabel: 'Budget Approver',
       statuses: ['Forwarded to Approver', 'Forwarded to Officer', 'Approver Approved'],
       icon: <VerifiedUserIcon />
     },

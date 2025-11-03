@@ -79,7 +79,7 @@ function getWorkflowRoles(userRole, assignmentLevel) {
     case 'BUDGET_REVIEWER':
     case 'BUDGETREVIEWER':
     case 'REVIEWER':
-      // Reviewers approve division submissions
+      // BUDGET REVIEWER (formerly REVIEWER) approves division submissions
       return ['divisionApprover'];
     
     case 'BUDGET_OFFICER':

@@ -3,8 +3,8 @@
  * 
  * Implements 6-step workflow role-based data visibility rules:
  * - STEP 1 (PREPARER): Can see own proposals and division proposals (all statuses)
- * - STEP 2 (REVIEWER): Can see proposals forwarded to review
- * - STEP 3 (APPROVER): Can see proposals forwarded to approval
+ * - STEP 2 (BUDGET REVIEWER): Can see proposals forwarded to review
+ * - STEP 3 (BUDGET APPROVER): Can see proposals forwarded to approval
  * - STEP 4 (BUDGET_PLANNING_ANALYST): Can see proposals forwarded for analysis
  * - STEP 5 (BUDGET_OFFICER): Can see proposals for final decision
  * - STEP 6 (OVERALL_APPROVER): Can see submitted proposals (after officer submission)
@@ -23,7 +23,6 @@ const budgetRoleVisibilityControl = () => {
       
       // Super admins bypass all filters - check for both 'SUPER_ADMIN' (with underscore) and 'SUPER ADMIN' (with space)
       if (userRoles.includes('SUPER_ADMIN') || userRoles.includes('SUPER ADMIN')) {
-        console.log('[budgetRoleVisibilityControl] SUPER ADMIN detected, bypassing filters');
         return next();
       }
 
@@ -42,12 +41,12 @@ const budgetRoleVisibilityControl = () => {
         budgetRole = 'BUDGET_OFFICER';
       } else if (userRoles.includes('BUDGET_PLANNING_ANALYST') || workflowRoles.includes('BUDGET_PLANNING_ANALYST')) {
         budgetRole = 'BUDGET_PLANNING_ANALYST';
-      } else if (userRoles.includes('APPROVER') || workflowRoles.includes('APPROVER') || workflowRoles.includes('divisionApprover') || workflowRoles.includes('officeApprover')) {
-        budgetRole = 'APPROVER';
-      } else if (userRoles.includes('REVIEWER') || workflowRoles.includes('REVIEWER') || workflowRoles.includes('divisionReviewer')) {
-        budgetRole = 'REVIEWER';
-      } else if (userRoles.includes('PREPARER') || workflowRoles.includes('PREPARER') || workflowRoles.includes('divisionCreator') || workflowRoles.includes('officeCreator')) {
-        budgetRole = 'PREPARER';
+      } else if (userRoles.includes('BUDGET APPROVER') || workflowRoles.includes('APPROVER') || workflowRoles.includes('divisionApprover') || workflowRoles.includes('officeApprover')) {
+        budgetRole = 'BUDGET APPROVER';
+      } else if (userRoles.includes('BUDGET REVIEWER') || workflowRoles.includes('BUDGET REVIEWER') || workflowRoles.includes('divisionReviewer')) {
+        budgetRole = 'BUDGET REVIEWER';
+      } else if (userRoles.includes('BUDGET PREPARER') || workflowRoles.includes('BUDGET PREPARER') || workflowRoles.includes('divisionCreator') || workflowRoles.includes('officeCreator')) {
+        budgetRole = 'BUDGET PREPARER';
       }
 
       if (!budgetRole) {
@@ -67,8 +66,8 @@ const budgetRoleVisibilityControl = () => {
 
       switch (budgetRole) {
         case 'BUDGET_PLANNING_ANALYST':
-          // STEP 4 of 6-step workflow: PREPARER → REVIEWER → APPROVER → [BUDGET_PLANNING_ANALYST] → BUDGET_OFFICER → OVERALL_APPROVER
-          // BUDGET_PLANNING_ANALYST can see proposals forwarded by APPROVER AND proposals they've worked on
+          // STEP 4 of 6-step workflow: PREPARER → BUDGET REVIEWER → BUDGET APPROVER → [BUDGET_PLANNING_ANALYST] → BUDGET_OFFICER → OVERALL_APPROVER
+          // BUDGET_PLANNING_ANALYST can see proposals forwarded by BUDGET APPROVER AND proposals they've worked on
           visibilityFilter = {
             $or: [
               // Proposals currently assigned to BUDGET_PLANNING_ANALYST
@@ -93,7 +92,7 @@ const budgetRoleVisibilityControl = () => {
           break;
 
         case 'BUDGET_OFFICER':
-          // STEP 5 of 6-step workflow: PREPARER → REVIEWER → APPROVER → BUDGET_ANALYST → [BUDGET_OFFICER] → OVERALL_APPROVER
+          // STEP 5 of 6-step workflow: PREPARER → BUDGET REVIEWER → BUDGET APPROVER → BUDGET_ANALYST → [BUDGET_OFFICER] → OVERALL_APPROVER
           // BUDGET_OFFICER can see proposals forwarded by BUDGET_ANALYST AND proposals they've worked on
           visibilityFilter = {
             $or: [
@@ -128,9 +127,9 @@ const budgetRoleVisibilityControl = () => {
           visibilityFilter = {}; // No filter for admins
           break;
 
-        case 'PREPARER':
-          // STEP 1 of 6-step workflow: [PREPARER] → REVIEWER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER
-          // PREPARER creates drafts and can see all their proposals
+        case 'BUDGET PREPARER':
+          // STEP 1 of 6-step workflow: [BUDGET PREPARER] → BUDGET REVIEWER → BUDGET APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER
+          // BUDGET PREPARER creates drafts and can see all their proposals
           visibilityFilter = {
             $or: [
               // Own proposals created by this user
@@ -145,19 +144,19 @@ const budgetRoleVisibilityControl = () => {
           };
           break;
 
-        case 'REVIEWER':
-          // STEP 2 of 6-step workflow: PREPARER → [REVIEWER] → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER
-          // REVIEWER can see proposals forwarded to them AND proposals they've previously worked on
+        case 'BUDGET REVIEWER':
+          // STEP 2 of 6-step workflow: PREPARER → [BUDGET REVIEWER] → BUDGET APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER
+          // BUDGET REVIEWER can see proposals forwarded to them AND proposals they've previously worked on
           visibilityFilter = {
             $or: [
-              // Proposals currently assigned to REVIEWER
+              // Proposals currently assigned to BUDGET REVIEWER
               {
                 $and: [
                   { status: { $ne: 'Draft' } },
                   {
                     $or: [
-                      { currentAssigneeRole: 'REVIEWER' },
-                      { pendingWithRoles: 'REVIEWER' },
+                      { currentAssigneeRole: 'BUDGET REVIEWER' },
+                      { pendingWithRoles: 'BUDGET REVIEWER' },
                       {
                         status: {
                           $in: [
@@ -174,7 +173,7 @@ const budgetRoleVisibilityControl = () => {
                   }
                 ]
               },
-              // Proposals REVIEWER has previously worked on (retain visibility)
+              // Proposals BUDGET REVIEWER has previously worked on (retain visibility)
               { 'workflowHistory.userId': userId },
               // Own proposals
               { createdByUserId: userId },
@@ -183,8 +182,8 @@ const budgetRoleVisibilityControl = () => {
           };
           break;
 
-        case 'APPROVER':
-          // STEP 3 of 6-step workflow: PREPARER → REVIEWER → [APPROVER] → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER
+        case 'BUDGET APPROVER':
+          // STEP 3 of 6-step workflow: PREPARER → BUDGET REVIEWER → [BUDGET APPROVER] → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER
           // APPROVER can see proposals forwarded to them AND proposals they've previously worked on
           visibilityFilter = {
             $or: [
@@ -194,8 +193,8 @@ const budgetRoleVisibilityControl = () => {
                   { status: { $ne: 'Draft' } },
                   {
                     $or: [
-                      { currentAssigneeRole: { $in: ['BUDGET_OFFICER', 'APPROVER'] } },
-                      { pendingWithRoles: { $in: ['BUDGET_OFFICER', 'APPROVER'] } },
+                      { currentAssigneeRole: { $in: ['BUDGET_OFFICER', 'BUDGET APPROVER'] } },
+                      { pendingWithRoles: { $in: ['BUDGET_OFFICER', 'BUDGET APPROVER'] } },
                       {
                         status: {
                           $in: [
@@ -224,7 +223,7 @@ const budgetRoleVisibilityControl = () => {
           break;
 
         case 'OVERALL_BUDGET_APPROVER':
-          // STEP 6 of 6-step workflow: PREPARER → REVIEWER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → [OVERALL_APPROVER]
+          // STEP 6 of 6-step workflow: PREPARER → BUDGET REVIEWER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → [OVERALL_APPROVER]
           // Final approval step - sees proposals forwarded by BUDGET_OFFICER AND proposals they've worked on
           visibilityFilter = {
             $or: [

@@ -1,6 +1,6 @@
 const MealAllowance = require("../models/mealAllowance");
 const Settings = require("../models/Settings");
-const PersonnelServices = require("../models/personnelServices");
+const PersonnelService = require('../models/PersonnelServices');
 const { body, validationResult } = require("express-validator");
 const { calculateMealAllowance, calculateMonthlyMealAllowance, getAllowanceRates } = require("../utils/allowanceUtils");
 const validateMealAllowance = [

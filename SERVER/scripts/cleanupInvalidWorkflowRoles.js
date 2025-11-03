@@ -21,7 +21,7 @@ const VALID_WORKFLOW_ROLES = [
   'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier',
   'regionCreator', 'regionFinalVerifier',
   // NEW ROLE NAMES (September 2025 workflow system)
-  'PREPARER', 'REVIEWER', 'APPROVER',
+  'BUDGET PREPARER', 'BUDGET REVIEWER', 'APPROVER',
   'BUDGET_ANALYST', 'BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_ADMIN',
   // NEW INTERNAL ROLE NAMES (used in workflowConstants)
   'divisionCreator', 'divisionReviewer', 'divisionApprover',
