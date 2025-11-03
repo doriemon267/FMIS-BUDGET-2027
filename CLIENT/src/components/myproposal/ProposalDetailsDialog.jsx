@@ -735,9 +735,11 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     (!preparerCanEditNow && isPreparer)
   );
 
-  // Determine if user should see read-only tables (for APPROVER when they can't edit but have no comparison data)
-  const shouldShowReadOnlyTables = !isReadOnlyMode && proposalData && !officerReadOnlyTables && !isViewOnlyAfterSubmission && !shouldShowComparisonView && (
-    (!approverCanEditNow && isApprover && (proposal?.status === 'Approver Approved' || proposal?.status === 'Forwarded to Analyst'))
+  // Determine if user should see read-only tables when they cannot edit and no comparison data exists
+  // Show for APPROVER and REVIEWER as a fallback when comparison data is not available
+  const shouldShowReadOnlyTables = !isReadOnlyMode && proposalData && !officerReadOnlyTables && !comparisonData && (
+    (!approverCanEditNow && isApprover) ||
+    (!reviewerCanEditNow && isReviewer)
   );
 
   return (
@@ -1066,7 +1068,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                   ref={budgetOfficerEditViewRef}
                   proposal={proposal}
                   proposalData={proposalData}
-                  variant="approver"
+                  variant={isApprover ? 'approver' : (isReviewer ? 'reviewer' : 'officer')}
                   allowSubmit={false}
                   showTables={true}
                   readOnly={true}
