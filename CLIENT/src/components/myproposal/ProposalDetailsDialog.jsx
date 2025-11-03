@@ -132,12 +132,25 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     return result;
   }, [userInfo, normalizedWorkflowRoles, normalizedPrimaryRoles]);
 
-  // Reviewer: Division reviewers (divisionreviewer) - can view and review proposals
+  // Reviewer: Detect via workflowRoles OR primary roles (supports new label "BUDGET REVIEWER")
   const isReviewer = useMemo(() => {
     if (!userInfo) return false;
-    // Check for 'divisionreviewer' workflow role
-    return normalizedWorkflowRoles.some((role) => role === 'divisionreviewer');
-  }, [userInfo, normalizedWorkflowRoles]);
+    // Accept either explicit workflow role or generic alias
+    const hasWorkflowRole = normalizedWorkflowRoles.some((role) => 
+      role === 'divisionreviewer' || role === 'reviewer'
+    );
+    // Also accept primary role labels
+    const hasPrimaryRole = normalizedPrimaryRoles.some((role) => 
+      role === 'BUDGET REVIEWER' || role === 'REVIEWER'
+    );
+    const result = hasWorkflowRole || hasPrimaryRole;
+    if (result) {
+      console.log('✅ isReviewer: TRUE', { hasWorkflowRole, hasPrimaryRole, normalizedWorkflowRoles, normalizedPrimaryRoles });
+    } else {
+      console.log('ℹ️ isReviewer: FALSE', { hasWorkflowRole, hasPrimaryRole, normalizedWorkflowRoles, normalizedPrimaryRoles });
+    }
+    return result;
+  }, [userInfo, normalizedWorkflowRoles, normalizedPrimaryRoles]);
 
   // PREPARER: Check for PREPARER role in user roles or workflow roles
   const isPreparer = useMemo(() => {
