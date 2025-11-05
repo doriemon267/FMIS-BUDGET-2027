@@ -542,6 +542,8 @@ const WORKFLOW_STATUS_MAPPING = {
   'Under Review by Officer': 'Department Verified',
   'Officer Approved': 'Department Submitted',
   'Forwarded to Manager': 'Region Approved',
+  // New explicit status name (Nov 2025)
+  'Forwarded to Overall Budget Approver': 'Region Approved',
   'Under Review by Manager': 'Region Approved',
   'Finalized': 'Finalized',
   Returned: 'Returned'
@@ -670,9 +672,9 @@ exports.getProposalForEdit = async (req, res) => {
     });
     
     // Check if proposal is already submitted or approved - prevent further editing
-    // BUDGET_MANAGER can view "Forwarded to Manager" proposals (to approve/reject)
-    // BUDGET_OFFICER cannot edit "Forwarded to Manager", "Officer Approved", or "Approved" proposals
-    if (proposal.status === 'Forwarded to Manager' || proposal.status === 'Office Submitted') {
+    // OVERALL_BUDGET_APPROVER can view proposals forwarded to them (to approve/reject)
+    // BUDGET_OFFICER cannot edit proposals forwarded to manager, officer approved, or approved
+    if (['Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Office Submitted'].includes(proposal.status)) {
       // Allow BUDGET_MANAGER to view, block BUDGET_OFFICER
       if (isBudgetOfficer && !isOverallApprover) {
         return res.status(403).json({
@@ -990,9 +992,9 @@ exports.saveDraftEdit = async (req, res) => {
     const isBudgetAnalyst = userRoles.includes('BUDGET_PLANNING_ANALYST');
     
     // Check if proposal is already submitted or approved - prevent further editing
-    // BUDGET_MANAGER can view "Forwarded to Manager" proposals (to approve/reject)
-    // BUDGET_OFFICER cannot edit "Forwarded to Manager", "Officer Approved", or "Approved" proposals
-    if (proposal.status === 'Forwarded to Manager' || proposal.status === 'Office Submitted') {
+    // OVERALL_BUDGET_APPROVER can view proposals forwarded to them (to approve/reject)
+    // BUDGET_OFFICER cannot edit proposals forwarded to manager, officer approved, or approved
+    if (['Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Office Submitted'].includes(proposal.status)) {
       // Allow BUDGET_MANAGER to view, block BUDGET_OFFICER
       if (isBudgetOfficer && !isOverallApprover) {
         return res.status(403).json({
@@ -1420,9 +1422,9 @@ exports.submitEdit = async (req, res) => {
     const isBudgetAnalyst = userRoles.includes('BUDGET_PLANNING_ANALYST');
     
     // Check if proposal is already submitted or approved - prevent further editing
-    // OVERALL_APPROVER can view "Forwarded to Manager" proposals (to approve/reject)
-    // BUDGET_OFFICER cannot submit "Forwarded to Manager", "Officer Approved", or "Approved" proposals
-    if (proposal.status === 'Forwarded to Manager' || proposal.status === 'Office Submitted') {
+    // OVERALL_APPROVER can view proposals forwarded to them (to approve/reject)
+    // BUDGET_OFFICER cannot submit proposals forwarded to manager, officer approved, or approved
+    if (['Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Office Submitted'].includes(proposal.status)) {
       // Allow OVERALL_APPROVER to view, block BUDGET_OFFICER from submitting
       if (isBudgetOfficer && !isOverallApprover) {
         return res.status(403).json({
@@ -1569,11 +1571,11 @@ exports.submitEdit = async (req, res) => {
       proposal.forwardedToOfficerBy = { userId, userName };
     } else if (editorRole === 'APPROVER') {
       // APPROVER forwards to BUDGET_PLANNING_ANALYST (next step in workflow)
-      newStatus = 'Forwarded to Analyst';
-      newWorkflowLevel = 'ANALYST';
+      newStatus = 'Forwarded to Budget Planning Analyst';
+      newWorkflowLevel = 'BUDGET_PLANNING_ANALYST';
       historyAction = 'APPROVER_SUBMIT_TO_ANALYST';
       historyComment = comments || 'Approver submitted edits to Budget Planning Analyst';
-      currentStep = 'ANALYST_REVIEW';
+      currentStep = 'BUDGET_PLANNING_ANALYST_REVIEW';
       currentAssigneeRole = 'BUDGET_PLANNING_ANALYST';
       pendingRoles = ['BUDGET_PLANNING_ANALYST'];
       proposal.submittedByRole = 'APPROVER';
@@ -1581,10 +1583,10 @@ exports.submitEdit = async (req, res) => {
       proposal.forwardedToAnalystBy = { userId, userName };
     } else if (editorRole === 'BUDGET_OFFICER') {
       // Officer submits to Manager
-      newStatus = 'Forwarded to Manager';
+      newStatus = 'Forwarded to Overall Budget Approver';
       newWorkflowLevel = 'MANAGER';
       historyAction = 'OFFICER_SUBMIT_TO_MANAGER';
-      historyComment = comments || 'Budget Officer submitted edits to Budget Manager';
+      historyComment = comments || 'Budget Officer submitted edits to Overall Budget Approver';
       currentStep = 'MANAGER_REVIEW';
       currentAssigneeRole = 'BUDGET_MANAGER';
       pendingRoles = ['BUDGET_MANAGER'];

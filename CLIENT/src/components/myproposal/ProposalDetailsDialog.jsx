@@ -63,6 +63,19 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     return direct || hier;
   }, [userInfo]);
 
+  // Derive a concise current role label for display (UI badge)
+  const currentRoleLabel = useMemo(() => {
+    if (!userInfo) return null;
+    // Priority: Manager > Officer > Analyst > Approver > Reviewer > Preparer
+    if (isManagerLevel) return 'Budget Manager';
+    if (userInfo && normalizedWorkflowRoles.some(r => ['officeverifier','officefinalverifier','officeconsolidator'].includes(r))) return 'Budget Officer';
+    if (isBudgetPlanningAnalystRole) return 'Budget Planning Analyst';
+    if (isDivisionApprover) return 'Budget Approver';
+    if (isReviewer) return 'Budget Reviewer';
+    if (isPreparer) return 'Budget Preparer';
+    return null;
+  }, [userInfo, isManagerLevel, isBudgetPlanningAnalystRole, isDivisionApprover, isReviewer, isPreparer, normalizedWorkflowRoles]);
+
   const normalizedWorkflowRoles = useMemo(() => {
     const a = (userInfo?.workflowRoles || []).map((role) => String(role || '').toLowerCase());
     const b = (userInfo?.workflowRoles || []).map((role) => String(role || '').toLowerCase());
@@ -863,6 +876,14 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
           <Typography variant="h5">Proposal Details</Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            {currentRoleLabel && (
+              <Chip 
+                label={currentRoleLabel} 
+                color="primary" 
+                variant="outlined"
+                sx={{ fontWeight: 600 }}
+              />
+            )}
             <Chip 
               label={displayedProposal?.status || 'Unknown'} 
               color={getStatusColor(displayedProposal?.status)} 

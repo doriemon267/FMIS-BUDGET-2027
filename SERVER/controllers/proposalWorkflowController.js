@@ -105,7 +105,8 @@ const budgetRoleAccessControl = (operation = 'read') => {
       const isApprover = userRoles.includes('BUDGET APPROVER') || workflowRoles.includes('APPROVER') || workflowRoles.includes('divisionApprover') || workflowRoles.includes('officeApprover');
       const isBudgetPlanningAnalyst = userRoles.includes('BUDGET_PLANNING_ANALYST') || workflowRoles.includes('BUDGET_PLANNING_ANALYST');
       const isOverallBudgetApprover = userRoles.includes('OVERALL_BUDGET_APPROVER') || workflowRoles.includes('OVERALL_BUDGET_APPROVER');
-      const isBudgetAnalyst = userRoles.includes('BUDGET_ANALYST') || workflowRoles.includes('BUDGET_ANALYST');
+  // Deprecated alias kept for backward-compatibility (no literal BUDGET_ANALYST role in system)
+  const isBudgetAnalyst = isBudgetPlanningAnalyst;
       const isBudgetCoordinator = userRoles.includes('BUDGET_COORDINATOR');
       const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER') || workflowRoles.includes('BUDGET_OFFICER');
       const isOverallApprover = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN') || workflowRoles.includes('BUDGET_ADMIN');
@@ -168,7 +169,7 @@ const budgetRoleAccessControl = (operation = 'read') => {
           visibilityFilter.status = { $in: ['Approver Approved'] };
         } else if (isOverallBudgetApprover) {
           // Overall Budget Approvers can see all proposals
-          visibilityFilter.status = { $in: ['Division Submitted', 'Under Review', 'Reviewed', 'Pending Approval', 'Approved', 'Finalized', 'Officer Approved', 'Forwarded to Manager'] };
+          visibilityFilter.status = { $in: ['Division Submitted', 'Under Review', 'Reviewed', 'Pending Approval', 'Approved', 'Finalized', 'Officer Approved', 'Forwarded to Overall Budget Approver', 'Forwarded to Manager'] };
         } else if (isPreparer) {
           // Preparers: prefer to show only own proposals, but also include other proposals
           // from the same division so that approvals by the Officer don't make them disappear.
@@ -190,13 +191,13 @@ const budgetRoleAccessControl = (operation = 'read') => {
           if (userDivision) {
             visibilityFilter.$or = [
               { createdByUserId: userId },
-              { division: userDivision, status: { $in: ['Division Submitted', 'Forwarded to Officer', 'Officer Approved', 'Forwarded to Manager', 'Finalized'] } }
+              { division: userDivision, status: { $in: ['Division Submitted', 'Forwarded to Officer', 'Officer Approved', 'Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Finalized'] } }
             ];
           } else {
             // Fallback: show proposals needing coordinator action
             visibilityFilter.$or = [
               { createdByUserId: userId },
-              { status: { $in: ['Division Submitted', 'Forwarded to Officer', 'Officer Approved', 'Forwarded to Manager'] } }
+              { status: { $in: ['Division Submitted', 'Forwarded to Officer', 'Officer Approved', 'Forwarded to Overall Budget Approver', 'Forwarded to Manager'] } }
             ];
           }
         } else if (isBudgetOfficer) {
@@ -205,11 +206,11 @@ const budgetRoleAccessControl = (operation = 'read') => {
           // 2. Proposals they have approved (Officer Approved)
           // 3. Proposals they have forwarded to manager (Forwarded to Manager)
           // 4. Finalized proposals for reference
-          visibilityFilter.status = { $in: ['Forwarded to Officer', 'Officer Approved', 'Forwarded to Manager', 'Finalized'] };
+          visibilityFilter.status = { $in: ['Forwarded to Officer', 'Officer Approved', 'Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Finalized'] };
         } else if (isOverallApprover) {
           // Budget Managers: primarily see items forwarded to them (Forwarded to Manager)
           // Also allow viewing of items that reached 'Officer Approved' or 'Finalized' so managers can review completed items
-          visibilityFilter.status = { $in: ['Forwarded to Manager', 'Officer Approved', 'Finalized'] };
+          visibilityFilter.status = { $in: ['Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Officer Approved', 'Finalized'] };
         }
 
         // Apply the filter to the query
@@ -258,7 +259,8 @@ function checkProposalAccess(proposal, userId, userRoles) {
   const isBudgetPlanningAnalyst = userRoles.includes('BUDGET_PLANNING_ANALYST');
   const isOverallBudgetApprover = userRoles.includes('OVERALL_BUDGET_APPROVER');
   // Legacy budget roles
-  const isBudgetAnalyst = userRoles.includes('BUDGET_ANALYST');
+  // No literal BUDGET_ANALYST role; use BUDGET_PLANNING_ANALYST
+  const isBudgetAnalyst = false;
   const isBudgetCoordinator = userRoles.includes('BUDGET_COORDINATOR');
   const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
   const isOverallApprover = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN');
@@ -293,13 +295,13 @@ function checkProposalAccess(proposal, userId, userRoles) {
   }
 
   // LEGACY BUDGET ROLE ACCESS
-  if (isBudgetOfficer && ['Division Submitted', 'Forwarded to Officer', 'Officer Approved', 'Forwarded to Manager', 'Finalized'].includes(proposal.status)) {
+  if (isBudgetOfficer && ['Division Submitted', 'Forwarded to Officer', 'Officer Approved', 'Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Finalized'].includes(proposal.status)) {
     return true;
   }
 
   if (isOverallApprover) {
     // Managers only have access when the proposal has been forwarded to them
-    if (['Forwarded to Manager', 'Officer Approved', 'Finalized'].includes(proposal.status)) return true;
+  if (['Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Officer Approved', 'Finalized'].includes(proposal.status)) return true;
     return false;
   }
 
@@ -640,7 +642,8 @@ async function syncBudgetItemsStatus(proposal) {
       'Division Submitted': 'Division Submitted',
       'Forwarded to Officer': 'Department Verified',
       'Officer Approved': 'Department Submitted',
-      'Forwarded to Manager': 'Region Approved',
+  'Forwarded to Manager': 'Region Approved', // legacy
+  'Forwarded to Overall Budget Approver': 'Region Approved',
       'Finalized': 'Finalized',
       'Returned': 'Returned',
       // Legacy mappings for backward compatibility
@@ -869,7 +872,7 @@ exports.submitDirectToManager = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Proposal not found' });
     }
 
-    // Verify the analyst owns this proposal
+  // Verify the preparer owns this proposal
     if (proposal.createdByUserId !== userId) {
       return res.status(403).json({ 
         success: false, 
@@ -894,12 +897,12 @@ exports.submitDirectToManager = async (req, res) => {
 
     // Update proposal status - submit directly to Manager level
     const previousStatus = proposal.status;
-    const newStatus = 'Forwarded to Manager';
+  const newStatus = 'Forwarded to Overall Budget Approver';
     const workflowLevel = 'MANAGER';
 
     proposal.status = newStatus;
     proposal.workflowLevel = workflowLevel;
-    proposal.submittedByRole = 'BUDGET_ANALYST';
+  proposal.submittedByRole = 'PREPARER';
     proposal.submittedDate = new Date();
     proposal.directSubmissionToManager = true; // Flag to indicate this bypassed Officer review
   proposal.bypassedOfficerReview = true;
@@ -1041,9 +1044,9 @@ exports.saveDraft = async (req, res) => {
     });
 
     updateAssignment(proposal, {
-      step: 'ANALYST_DRAFT',
-      assigneeRole: 'BUDGET_ANALYST',
-      pendingRoles: ['BUDGET_ANALYST']
+      step: 'PREPARER_DRAFT',
+      assigneeRole: 'PREPARER',
+      pendingRoles: ['PREPARER']
     });
 
     recordWorkflowEvent(proposal, {
@@ -1053,7 +1056,7 @@ exports.saveDraft = async (req, res) => {
       userName,
       previousStatus: proposal.status,
       newStatus: proposal.status,
-      targetRole: 'BUDGET_ANALYST',
+      targetRole: 'PREPARER',
       metadata: {
         updatedFields: appliedFields
       }
@@ -1078,7 +1081,7 @@ exports.saveDraft = async (req, res) => {
   }
 };
 
-// Submit proposal to Budget Officer
+// Submit proposal along the strict 6-step path
 exports.submitProposal = async (req, res) => {
   try {
     const { proposalId, comment } = req.body;
@@ -1088,7 +1091,7 @@ exports.submitProposal = async (req, res) => {
 
     let sanitizedComment;
     try {
-      sanitizedComment = validateAndNormalizeComment(comment, 'submit the proposal to the budget officer');
+      sanitizedComment = validateAndNormalizeComment(comment, 'submit the proposal');
     } catch (commentError) {
       return res.status(400).json({ success: false, message: commentError.message });
     }
@@ -1113,24 +1116,90 @@ exports.submitProposal = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Proposal not found' });
     }
 
-  const isPreparer = hasRole(userRoles, 'PREPARER');
+  const isPreparer = hasRole(userRoles, 'PREPARER', 'BUDGET_PREPARER');
+    const isBudgetAnalyst = hasRole(userRoles, 'BUDGET_PLANNING_ANALYST');
     const isCreator = proposal.createdByUserId === userId;
 
-    if (!isPreparer && !isCreator) {
+    if (!isPreparer && !isBudgetAnalyst && !isCreator) {
       return res.status(403).json({
         success: false,
-        message: 'Only the assigned Preparer can submit this proposal'
+        message: 'Only the assigned Preparer or Budget Planning Analyst can submit this proposal'
       });
     }
 
-    if (proposal.status !== 'Draft') {
+    // Branch by role and current status
+    if (isPreparer) {
+      if (proposal.status !== 'Draft') {
+        return res.status(400).json({
+          success: false,
+          message: `Proposal must be in Draft status before submission to Reviewer. Current status: ${proposal.status}`
+        });
+      }
+    const previousStatus = proposal.status;
+    const newStatus = 'Forwarded to Reviewer';
+
+    proposal.status = newStatus;
+  proposal.workflowLevel = 'REVIEWER';
+      proposal.submittedByRole = 'PREPARER';
+      proposal.submittedDate = new Date();
+      proposal.bypassedOfficerReview = false;
+
+      updateAssignment(proposal, {
+        step: 'REVIEWER_REVIEW',
+        assigneeRole: 'REVIEWER',
+        pendingRoles: ['REVIEWER']
+      });
+
+      recordWorkflowEvent(proposal, {
+        action: 'PREPARER_SUBMIT_TO_REVIEWER',
+        comment: sanitizedComment,
+        userId,
+        userName,
+        previousStatus,
+        newStatus,
+        targetRole: 'REVIEWER'
+      });
+
+      await proposal.save();
+
+      await syncBudgetItemsStatus(proposal);
+
+      await sendNotification({
+        recipientRole: 'REVIEWER',
+        title: 'Proposal Submitted for Review',
+        message: `Proposal "${proposal.title}" from ${proposal.division || proposal.department} has been submitted by ${userName}. Comment: ${sanitizedComment}`,
+        entity: 'proposal',
+        recordIds: [proposal._id],
+        org: {
+          region: proposal.region,
+          department: proposal.department,
+          division: proposal.division
+        },
+        createdBy: { userId, name: userName }
+      });
+
+      return res.json({
+        success: true,
+        message: 'Proposal submitted to Budget Reviewer successfully',
+        proposal: {
+          id: proposal._id,
+          status: proposal.status,
+          workflowLevel: proposal.workflowLevel,
+          currentStep: proposal.currentStep,
+          pendingWithRoles: proposal.pendingWithRoles
+        }
+      });
+    }
+
+    // Analyst path: forward to Budget Officer after Approver stage
+    if (!['Forwarded to Approver', 'Approver Approved', 'Forwarded to Budget Planning Analyst'].includes(proposal.status)) {
       return res.status(400).json({
         success: false,
-        message: `Proposal must be in Draft status before submission. Current status: ${proposal.status}`
+        message: `Cannot submit at this stage. Current status: ${proposal.status}`
       });
     }
 
-    if (isBudgetAnalyst) {
+  if (isBudgetAnalyst) {
       const readiness = await validateAnalystSubmissionReadiness(proposal);
 
       if (readiness.missingModules.length) {
@@ -1153,11 +1222,11 @@ exports.submitProposal = async (req, res) => {
     }
 
     const previousStatus = proposal.status;
-    const newStatus = 'Division Submitted';
+    const newStatus = 'Forwarded to Budget Officer';
 
     proposal.status = newStatus;
     proposal.workflowLevel = 'OFFICER';
-    proposal.submittedByRole = 'BUDGET_ANALYST';
+    proposal.submittedByRole = 'BUDGET_PLANNING_ANALYST';
     proposal.submittedDate = new Date();
     proposal.bypassedOfficerReview = false;
 
@@ -1300,8 +1369,8 @@ exports.approveProposal = async (req, res) => {
       nextStep = 'OFFICER_REVIEW';
       targetRole = 'BUDGET_OFFICER';
     } else if (previousStatus === 'Officer Approved' && userRoles.includes('BUDGET_OFFICER')) {
-      // BUDGET_OFFICER submits to BUDGET_MANAGER → Forwarded to Manager
-      newStatus = 'Forwarded to Manager';
+      // BUDGET_OFFICER submits to OVERALL_BUDGET_APPROVER (Budget Manager)
+      newStatus = 'Forwarded to Overall Budget Approver';
       approvalField = 'submittedByOfficer';
       proposal.workflowLevel = 'MANAGER';
       proposal.submittedByRole = 'BUDGET_OFFICER';
@@ -1310,13 +1379,13 @@ exports.approveProposal = async (req, res) => {
       nextPendingRoles = ['BUDGET_MANAGER'];
       nextStep = 'MANAGER_REVIEW';
       targetRole = 'BUDGET_MANAGER';
-    } else if ((previousStatus === 'Forwarded to Manager' || previousStatus === 'Office Submitted') && (userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN'))) {
+  } else if ((previousStatus === 'Forwarded to Overall Budget Approver' || previousStatus === 'Forwarded to Manager' || previousStatus === 'Office Submitted') && (userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN'))) {
       // BUDGET_MANAGER final approval
       newStatus = 'Finalized';
       approvalField = 'approvedByManager';
       proposal.workflowLevel = 'FINALIZED';
       console.log('✅ BUDGET_MANAGER final approval (Forwarded to Manager → Finalized)');
-      nextAssigneeRole = 'BUDGET_MANAGER';
+  nextAssigneeRole = 'BUDGET_MANAGER';
       nextPendingRoles = [];
       nextStep = 'FINALIZED';
     } else if (previousStatus === 'Division Submitted' && (userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN')) && !userRoles.includes('BUDGET_OFFICER')) {
@@ -1338,7 +1407,7 @@ exports.approveProposal = async (req, res) => {
         success: false, 
         message: `Cannot approve proposal with status "${previousStatus}". Expected status: ${
           userRoles.includes('BUDGET_OFFICER') ? 'Officer Approved' : 
-          userRoles.includes('BUDGET_MANAGER') ? 'Forwarded to Manager' : 
+      userRoles.includes('BUDGET_MANAGER') ? 'Forwarded to Overall Budget Approver' : 
           'Unknown'
         }` 
       });
@@ -1398,7 +1467,7 @@ exports.approveProposal = async (req, res) => {
       // BUDGET_OFFICER approved the proposal
       entityStatus = 'Department Submitted';
       entityWorkflowLevel = 'OFFICER';
-    } else if (newStatus === 'Forwarded to Manager') {
+    } else if (newStatus === 'Forwarded to Overall Budget Approver') {
       // BUDGET_OFFICER submitted to BUDGET_MANAGER for approval
       entityStatus = 'Region Approved';
       entityWorkflowLevel = 'MANAGER';
@@ -1512,7 +1581,7 @@ exports.returnProposal = async (req, res) => {
     const newStatus = 'Returned';
     const performedByRole = (userRoles.find(role => String(role).toUpperCase().startsWith('BUDGET_')) || userRoles[0] || '').toUpperCase();
     let returnField;
-    let returnToLevel = 'ANALYST';
+  let returnToLevel = 'BUDGET_PLANNING_ANALYST';
     let notificationMessage;
     let targetRole = null;
     let assignmentStep = proposal.currentStep;
@@ -1536,18 +1605,18 @@ exports.returnProposal = async (req, res) => {
 
     // Determine return path based on current status and user role
     if (userRoles.includes('BUDGET_OFFICER')) {
-      // BUDGET_OFFICER returns to BUDGET_ANALYST
-      if (proposal.status === 'Office') {
+      // BUDGET_OFFICER returns to BUDGET_PLANNING_ANALYST
+      if (['Forwarded to Budget Officer', 'Officer Approved'].includes(proposal.status)) {
         returnField = 'returnedByOfficer';
-        proposal.workflowLevel = 'ANALYST';
-        returnToLevel = 'ANALYST';
+  proposal.workflowLevel = 'BUDGET_PLANNING_ANALYST';
+  returnToLevel = 'BUDGET_PLANNING_ANALYST';
         notificationMessage = `Proposal "${proposal.title}" has been returned by ${userName} (Budget Officer) for revisions. Reason: ${sanitizedComment}`;
-        targetRole = 'BUDGET_ANALYST';
-        assignmentStep = 'ANALYST_REVIEW';
-        assignmentRole = 'BUDGET_ANALYST';
-        assignmentPendingRoles = ['BUDGET_ANALYST'];
+        targetRole = 'BUDGET_PLANNING_ANALYST';
+        assignmentStep = 'BUDGET_PLANNING_ANALYST_REVIEW';
+        assignmentRole = 'BUDGET_PLANNING_ANALYST';
+        assignmentPendingRoles = ['BUDGET_PLANNING_ANALYST'];
         notificationPayloads.push({
-          recipientRole: 'BUDGET_ANALYST',
+          recipientRole: 'BUDGET_PLANNING_ANALYST',
           title: 'Proposal Returned by Officer',
           message: notificationMessage,
           ...baseNotificationFields,
@@ -1564,7 +1633,7 @@ exports.returnProposal = async (req, res) => {
             previousStatus,
             newStatus,
             returnToLevel,
-            targetRole: 'BUDGET_ANALYST',
+            targetRole: 'BUDGET_PLANNING_ANALYST',
             performedBy: {
               userId,
               name: userName,
@@ -1576,12 +1645,12 @@ exports.returnProposal = async (req, res) => {
       } else {
         return res.status(400).json({ 
           success: false, 
-          message: `Cannot return proposal with status "${proposal.status}". Expected status: Officer Approved` 
+          message: `Cannot return proposal with status "${proposal.status}". Expected status: Forwarded to Budget Officer or Officer Approved` 
         });
       }
     } else if (userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN')) {
       // BUDGET_MANAGER returns based on who submitted
-      if (proposal.status === 'Forwarded to Manager' || proposal.status === 'Office Submitted') {
+  if (proposal.status === 'Forwarded to Overall Budget Approver' || proposal.status === 'Forwarded to Manager' || proposal.status === 'Office Submitted') {
         returnField = 'returnedByManager';
         
         // Check if proposal bypassed officer review
@@ -1661,7 +1730,7 @@ exports.returnProposal = async (req, res) => {
       } else {
         return res.status(400).json({ 
           success: false, 
-          message: `Cannot return proposal with status "${proposal.status}". Expected status: Forwarded to Manager` 
+          message: `Cannot return proposal with status "${proposal.status}". Expected status: Forwarded to Overall Budget Approver` 
         });
       }
     } else {
@@ -2192,7 +2261,7 @@ exports.coordinatorApproveProposal = async (req, res) => {
     }
 
     // Verify proposal is in correct status (can approve from Division Submitted or Under Review by Coordinator)
-    const validStatuses = ['Division Submitted', 'Under Review by Coordinator'];
+  const validStatuses = ['Division Submitted', 'Under Review by Coordinator', 'Forwarded to Reviewer', 'Under Review by Reviewer'];
     if (!validStatuses.includes(proposal.status)) {
       return res.status(400).json({ 
         success: false, 
@@ -2303,8 +2372,8 @@ exports.coordinatorApproveAndForwardToOfficer = async (req, res) => {
       });
     }
 
-    const previousStatus = proposal.status;
-    const newStatus = 'Forwarded to Officer';
+  const previousStatus = proposal.status;
+  const newStatus = 'Forwarded to Approver';
 
     // Check if there are edits to apply
     const budgetOfficerEdit = await BudgetOfficerEdit.findOne({ 
@@ -2341,7 +2410,7 @@ exports.coordinatorApproveAndForwardToOfficer = async (req, res) => {
       });
     }
 
-    // Update proposal - forward to APPROVER
+  // Update proposal - forward to APPROVER
     proposal.status = newStatus;
     proposal.workflowLevel = 'BUDGET APPROVER';
     proposal.submittedByRole = 'REVIEWER';
@@ -2420,7 +2489,7 @@ exports.coordinatorApproveAndForwardToOfficer = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Proposal approved and forwarded to Budget Officer successfully',
+      message: 'Proposal approved and forwarded to Budget Approver successfully',
       proposal: updatedProposal, // Return full proposal for real-time UI update
       shortProposal: {
         id: proposal._id,
@@ -2435,7 +2504,7 @@ exports.coordinatorApproveAndForwardToOfficer = async (req, res) => {
   }
 };
 
-// BUDGET_COORDINATOR returns proposal to BUDGET_ANALYST
+// BUDGET_COORDINATOR returns proposal to BUDGET_PLANNING_ANALYST
 exports.coordinatorReturnProposal = async (req, res) => {
   try {
     const { proposalId, comment } = req.body;
@@ -2536,8 +2605,8 @@ exports.coordinatorReturnProposal = async (req, res) => {
         comment,
         previousStatus,
         newStatus,
-        returnToLevel: 'ANALYST',
-        targetRole: 'BUDGET_ANALYST',
+  returnToLevel: 'ANALYST',
+  targetRole: 'BUDGET_PLANNING_ANALYST',
         performedBy: {
           userId,
           name: userName,
@@ -2774,8 +2843,8 @@ exports.approverApproveForwardAnalyst = async (req, res) => {
       });
     }
 
-    const previousStatus = proposal.status;
-    const newStatus = 'Approver Approved';
+  const previousStatus = proposal.status;
+  const newStatus = 'Forwarded to Budget Planning Analyst';
     const performedByRole = 'APPROVER';
 
     // Update proposal
@@ -2919,7 +2988,7 @@ exports.approverApproveForwardAnalyst = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Proposal approved and forwarded to Budget Planning Analyst successfully',
+      message: 'Proposal forwarded to Budget Planning Analyst successfully',
       proposal: {
         id: proposal._id,
         status: proposal.status,
@@ -3881,7 +3950,7 @@ exports.officerApproveProposal = async (req, res) => {
   }
 };
 
-// BUDGET_OFFICER returns proposal to BUDGET_COORDINATOR
+// BUDGET_OFFICER returns proposal to BUDGET_PLANNING_ANALYST
 exports.officerReturnProposal = async (req, res) => {
   try {
     const { proposalId, comment } = req.body;
@@ -3908,7 +3977,7 @@ exports.officerReturnProposal = async (req, res) => {
     }
 
     // Verify proposal is in correct status
-    const validStatuses = ['Forwarded to Officer', 'Under Review by Officer', 'Officer Approved', 'Office'];
+  const validStatuses = ['Forwarded to Officer', 'Forwarded to Budget Officer', 'Under Review by Officer', 'Officer Approved', 'Office'];
     if (!validStatuses.includes(proposal.status)) {
       return res.status(400).json({ 
         success: false, 
@@ -3922,7 +3991,7 @@ exports.officerReturnProposal = async (req, res) => {
 
     // Update proposal
     proposal.status = newStatus;
-    proposal.workflowLevel = 'ANALYST';
+  proposal.workflowLevel = 'BUDGET_PLANNING_ANALYST';
     proposal.returnedByOfficer = {
       userId,
       userName,
@@ -3931,9 +4000,9 @@ exports.officerReturnProposal = async (req, res) => {
     };
 
     updateAssignment(proposal, {
-      step: 'ANALYST_REVIEW',
-      assigneeRole: 'BUDGET_ANALYST',
-      pendingRoles: ['BUDGET_ANALYST']
+  step: 'BUDGET_PLANNING_ANALYST_REVIEW',
+  assigneeRole: 'BUDGET_PLANNING_ANALYST',
+  pendingRoles: ['BUDGET_PLANNING_ANALYST']
     });
 
     recordWorkflowEvent(proposal, {
@@ -3943,7 +4012,7 @@ exports.officerReturnProposal = async (req, res) => {
       userName,
       previousStatus,
       newStatus,
-      targetRole: 'BUDGET_COORDINATOR'
+      targetRole: 'BUDGET_PLANNING_ANALYST'
     });
 
     await proposal.save();
@@ -3951,7 +4020,7 @@ exports.officerReturnProposal = async (req, res) => {
     // Sync status to all related budget items
     await syncBudgetItemsStatus(proposal);
 
-    const coordinatorRecipientId = proposal.approvedByCoordinator?.userId;
+  const coordinatorRecipientId = undefined; // direct to analyst role
     const baseNotificationFields = {
       entity: 'proposal',
       recordIds: [proposal._id],
@@ -3968,10 +4037,9 @@ exports.officerReturnProposal = async (req, res) => {
     };
 
     await sendNotification({
-      recipientUserId: coordinatorRecipientId || undefined,
-      recipientRole: coordinatorRecipientId ? undefined : 'BUDGET_COORDINATOR',
+      recipientRole: 'BUDGET_PLANNING_ANALYST',
       title: 'Proposal Returned by Officer',
-      message: `Proposal "${proposal.title}" has been returned by ${userName} (Budget Officer) for further review. Reason: ${comment}`,
+      message: `Proposal "${proposal.title}" has been returned by ${userName} (Budget Officer) for further analysis. Reason: ${comment}`,
       ...baseNotificationFields,
       metadata: {
         proposalId: String(proposal._id),
@@ -3985,21 +4053,21 @@ exports.officerReturnProposal = async (req, res) => {
         comment,
         previousStatus,
         newStatus,
-        returnToLevel: 'COORDINATOR',
-        targetRole: 'BUDGET_COORDINATOR',
+        returnToLevel: 'ANALYST',
+        targetRole: 'BUDGET_PLANNING_ANALYST',
         performedBy: {
           userId,
           name: userName,
           role: performedByRole
         },
-        recipientType: coordinatorRecipientId ? 'USER' : 'ROLE'
+        recipientType: 'ROLE'
       }
     });
 
     await sendNotification({
       recipientUserId: proposal.createdByUserId,
       title: 'Proposal Returned by Officer',
-      message: `Your proposal "${proposal.title}" has been returned by ${userName} (Budget Officer). Please coordinate with your approver. Reason: ${comment}`,
+  message: `Your proposal "${proposal.title}" has been returned by ${userName} (Budget Officer). It will be reviewed by the Budget Planning Analyst. Reason: ${comment}`,
       ...baseNotificationFields,
       metadata: {
         proposalId: String(proposal._id),
@@ -4013,8 +4081,8 @@ exports.officerReturnProposal = async (req, res) => {
         comment,
         previousStatus,
         newStatus,
-        returnToLevel: 'COORDINATOR',
-        targetRole: 'BUDGET_COORDINATOR',
+  returnToLevel: 'ANALYST',
+  targetRole: 'BUDGET_PLANNING_ANALYST',
         performedBy: {
           userId,
           name: userName,
@@ -4322,9 +4390,9 @@ exports.managerReturnProposal = async (req, res) => {
     if (returnTo === 'REVIEWER' || proposal.bypassedOfficerReview) {
       targetRole = 'REVIEWER';
       targetWorkflowLevel = 'REVIEWER';
-    } else if (returnTo === 'ANALYST') {
-      targetRole = 'BUDGET_ANALYST';
-      targetWorkflowLevel = 'ANALYST';
+    } else if (returnTo === 'BUDGET_PLANNING_ANALYST') {
+      targetRole = 'BUDGET_PLANNING_ANALYST';
+      targetWorkflowLevel = 'BUDGET_PLANNING_ANALYST';
     }
 
     // Update proposal
@@ -4338,7 +4406,7 @@ exports.managerReturnProposal = async (req, res) => {
     };
 
     updateAssignment(proposal, {
-      step: targetWorkflowLevel === 'ANALYST' ? 'ANALYST_DRAFT' : 
+  step: targetWorkflowLevel === 'BUDGET_PLANNING_ANALYST' ? 'BUDGET_PLANNING_ANALYST_REVIEW' : 
             targetWorkflowLevel === 'REVIEWER' ? 'REVIEWER_REVIEW' : 'OFFICER_REVIEW',
       assigneeRole: targetRole,
       pendingRoles: [targetRole]
@@ -4359,7 +4427,7 @@ exports.managerReturnProposal = async (req, res) => {
     // Sync status to all related budget items
     await syncBudgetItemsStatus(proposal);
 
-    const targetRecipientUserId = targetRole === 'BUDGET_ANALYST'
+  const targetRecipientUserId = targetRole === 'BUDGET_PLANNING_ANALYST'
       ? proposal.createdByUserId
       : targetRole === 'BUDGET_COORDINATOR'
         ? proposal.approvedByCoordinator?.userId
@@ -4414,7 +4482,7 @@ exports.managerReturnProposal = async (req, res) => {
       }
     });
 
-    if (targetRole !== 'BUDGET_ANALYST') {
+  if (targetRole !== 'BUDGET_PLANNING_ANALYST') {
       await sendNotification({
         recipientUserId: proposal.createdByUserId,
         title: 'Proposal Returned by Manager',

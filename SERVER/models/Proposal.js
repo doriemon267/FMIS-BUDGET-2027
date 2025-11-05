@@ -38,15 +38,15 @@ const proposalSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: [
-      "Draft",                          // ANALYST creates
+      "Draft",                          // PREPARER creates
       "Forwarded to Reviewer",          // PREPARER submits to BUDGET REVIEWER
-      "Division Submitted",             // ANALYST submits
-      "Forwarded to Approver",           // BUDGET REVIEWER approves and forwards to APPROVER
+      "Division Submitted",             // Legacy alias (pre-6-step)
+      "Forwarded to Approver",          // BUDGET REVIEWER approves and forwards to APPROVER
       "Approver Approved",              // APPROVER approves and forwards to BUDGET_PLANNING_ANALYST
-      "Forwarded to Budget Officer",    // BUDGET_ANALYST submits to BUDGET_OFFICER
-      "Forwarded to Analyst",           // APPROVER approves and forwards to Analyst
-      "Officer Approved",               // OFFICER approves
-      "Forwarded to Manager",           // OFFICER submits to Manager
+  "Forwarded to Budget Officer",    // BUDGET_PLANNING_ANALYST submits to BUDGET_OFFICER
+  "Forwarded to Budget Planning Analyst", // APPROVER approves and forwards to Budget Planning Analyst
+  "Officer Approved",               // OFFICER approves
+  "Forwarded to Overall Budget Approver", // OFFICER submits to OVERALL BUDGET APPROVER (Budget Manager)
       "Finalized",                      // MANAGER approves
       "Returned",                       // Rejected at any level
       // Legacy statuses (for backward compatibility during migration)
@@ -57,48 +57,69 @@ const proposalSchema = new mongoose.Schema({
       "Under Review by Manager",
       "Office",                         // Legacy: will be mapped to "Forwarded to Officer"
       "Office Approved",                // Legacy: will be mapped to "Officer Approved"
-      "Office Submitted"                // Legacy: will be mapped to "Forwarded to Manager"
+  "Office Submitted"                // Legacy: will be mapped to "Forwarded to Overall Budget Approver"
     ],
     default: "Draft"
   },
   // Enhanced workflow tracking for budget roles
   workflowLevel: {
     type: String,
-    enum: ["BUDGET PREPARER", "ANALYST", "BUDGET REVIEWER", "APPROVER", "BUDGET_PLANNING_ANALYST", "OFFICER", "MANAGER", "FINALIZED"],
-    default: "ANALYST"
+    enum: [
+      "BUDGET PREPARER",
+      "PREPARER",
+      "BUDGET REVIEWER",
+      "REVIEWER",
+      "APPROVER",
+      "BUDGET_PLANNING_ANALYST",
+      "OFFICER",
+      "BUDGET_OFFICER",
+      "MANAGER",
+      "BUDGET_MANAGER",
+      "OVERALL_BUDGET_APPROVER",
+      "FINALIZED"
+    ],
+    default: "BUDGET PREPARER"
   },
   currentStep: {
     type: String,
     enum: [
-      "ANALYST_DRAFT",
-      "BUDGET_REVIEWER_REVIEW",
+      // Canonical 6-step steps
+      "PREPARER_DRAFT",
+      "REVIEWER_REVIEW",
       "APPROVER_REVIEW",
       "BUDGET_PLANNING_ANALYST_REVIEW",
       "OFFICER_REVIEW",
-      "ANALYST_REVIEW",
       "MANAGER_REVIEW",
       "RETURNED",
       "FINALIZED"
+      ,
+      // Legacy/compat (kept to avoid breaking existing records during migration)
+      "ANALYST_DRAFT",
+      "BUDGET_REVIEWER_REVIEW",
+      "ANALYST_REVIEW"
     ],
-    default: "ANALYST_DRAFT"
+    default: "PREPARER_DRAFT"
   },
   currentAssigneeRole: {
     type: String,
     enum: [
       "BUDGET PREPARER",
+      "PREPARER",
       "BUDGET_REVIEWER",
+      "REVIEWER",
       "BUDGET_PLANNING_ANALYST",
       "APPROVER",
       "BUDGET_OFFICER",
+      "BUDGET_MANAGER",
       "OVERALL_BUDGET_APPROVER",
       "BUDGET_ADMIN"
     ],
-    default: "BUDGET PREPARER"
+    default: "PREPARER"
   },
   pendingWithRoles: {
     type: [String],
     default: function() {
-      return ["BUDGET PREPARER"];
+      return ["PREPARER"];
     }
   },
   // Workflow history with comments and user tracking
@@ -128,6 +149,7 @@ const proposalSchema = new mongoose.Schema({
         "APPROVER_RETURN",
         "APPROVER_SAVE_EDITS",
         "PREPARER_SUBMIT_TO_BUDGET_REVIEWER",
+        "PREPARER_SUBMIT_TO_REVIEWER",
         "MANAGER_APPROVE",
         "MANAGER_RETURN",
         "MANAGER_SAVE_EDITS",

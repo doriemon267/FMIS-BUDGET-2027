@@ -357,19 +357,11 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           requiresComment: true
         });
         actions.push({
-          label: 'Submit to Officer (Skip Budget Approver)',
-          action: 'reviewer-submit-to-officer',
-          color: 'bg-purple-500 hover:bg-purple-600',
-          icon: '⚡',
-          description: 'Submit proposal directly to Budget Officer (bypasses Budget Approver review)',
-          requiresComment: true
-        });
-        actions.push({
-          label: 'Return to Analyst',
+          label: 'Return to Preparer',
           action: 'reviewer-return',
           color: 'bg-red-500 hover:bg-red-600',
           icon: '↩️',
-          description: 'Send back to analyst for revisions',
+          description: 'Send back to preparer for revisions',
           requiresComment: true
         });
       }
@@ -395,14 +387,6 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           color: "bg-green-500 hover:bg-green-600",
           icon: "✅",
           description: "Approve and forward to Budget Planning Analyst for review",
-          requiresComment: true
-        });
-        actions.push({
-          label: "Submit to Budget Officer (Skip Analyst)",
-          action: "approver-submit-to-officer",
-          color: "bg-purple-500 hover:bg-purple-600",
-          icon: "⚡",
-          description: "Submit proposal directly to Budget Officer (bypasses Analyst review)",
           requiresComment: true
         });
         actions.push({
@@ -440,11 +424,11 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           requiresComment: true
         });
         actions.push({
-          label: "Return to Budget Approver",
+          label: "Return to Budget Planning Analyst",
           action: "officer-return",
           color: "bg-red-500 hover:bg-red-600",
           icon: "↩️",
-          description: "Return proposal to Budget Approver for revisions",
+          description: "Return proposal to Budget Planning Analyst for revisions",
           requiresComment: true
         });
       }
@@ -571,7 +555,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
   }, []);
 
   const stepLabelMap = useMemo(() => ({
-    ANALYST_DRAFT: { label: 'Analyst Draft', tooltip: 'Draft in progress with Analyst' },
+    PREPARER_DRAFT: { label: 'Preparer Draft', tooltip: 'Draft in progress with Preparer' },
     REVIEWER_REVIEW: { label: 'Reviewer Review', tooltip: 'Awaiting Budget Reviewer action' },
     OFFICER_REVIEW: { label: 'Officer Review', tooltip: 'Awaiting Budget Officer verification' },
     MANAGER_REVIEW: { label: 'Manager Review', tooltip: 'Awaiting Budget Manager decision' },
@@ -638,7 +622,11 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       derived.step = 'BUDGET_PLANNING_ANALYST_REVIEW';
       derived.assignee = 'BUDGET_PLANNING_ANALYST';
       derived.pending = ['BUDGET_PLANNING_ANALYST'];
-    } else if (s.includes('FORWARDED TO MANAGER') || s.includes('SUBMITTED TO MANAGER')) {
+    } else if (
+      s.includes('FORWARDED TO OVERALL BUDGET APPROVER') ||
+      s.includes('FORWARDED TO MANAGER') ||
+      s.includes('SUBMITTED TO MANAGER')
+    ) {
       // Step 5: BUDGET_OFFICER reviews
       derived.step = 'BUDGET_OFFICER_REVIEW';
       derived.assignee = 'BUDGET_OFFICER';
@@ -708,12 +696,9 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           successMessage = "Proposal approved by Reviewer successfully";
           break;
         case "reviewer-approve-forward-approver":
-          endpoint = "/api/workflow/reviewer/approve-and-forward-to-approver";
+          // Backend route name targets 'officer' but assigns to Approver; keep label consistent with role assignment
+          endpoint = "/api/workflow/reviewer/approve-and-forward-to-officer";
           successMessage = "Proposal approved and forwarded to Approver successfully";
-          break;
-        case "reviewer-submit-to-officer":
-          endpoint = "/api/workflow/reviewer/submit-to-officer";
-          successMessage = "Proposal submitted directly to Budget Officer (bypassed Approver review)";
           break;
         case "reviewer-return":
           endpoint = "/api/workflow/reviewer/return";
@@ -739,10 +724,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           endpoint = "/api/workflow/approver/approve-and-forward-to-analyst";
           successMessage = "Proposal approved and forwarded to Budget Planning Analyst successfully";
           break;
-        case "approver-submit-to-officer":
-          endpoint = "/api/workflow/approver/submit-to-officer";
-          successMessage = "Proposal submitted directly to Budget Officer (bypassed Analyst review)";
-          break;
+        // REMOVED: approver-submit-to-officer (bypass) for strict 6-step flow
         case "approver-return":
           endpoint = "/api/workflow/approver/return";
           successMessage = "Proposal returned to Reviewer successfully";
@@ -852,10 +834,10 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
         "submit-direct-to-manager",
         "reviewer-approve",
         "reviewer-approve-forward-approver",
-        "reviewer-submit-to-officer",
+  // removed bypass: "reviewer-submit-to-officer",
         "reviewer-return",
         "approver-approve-forward-analyst",
-        "approver-submit-to-officer",
+  // removed bypass: "approver-submit-to-officer",
         "approver-return",
         "preparer-submit-to-officer",
         "preparer-submit-to-manager",

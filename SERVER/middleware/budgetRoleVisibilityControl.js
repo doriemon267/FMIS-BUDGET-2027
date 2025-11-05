@@ -89,7 +89,8 @@ const budgetRoleVisibilityControl = () => {
             {
               status: {
                 $in: [
-                  'Forwarded to Analyst',
+                  'Forwarded to Budget Planning Analyst',
+                  'Forwarded to Analyst', // legacy
                   'FORWARDED_TO_ANALYST'
                 ]
               }
@@ -134,7 +135,8 @@ const budgetRoleVisibilityControl = () => {
                   $in: [
                     'Forwarded to Budget Officer',
                     'FORWARDED_TO_BUDGET_OFFICER',
-                    'Forwarded to Manager',
+                    'Forwarded to Overall Budget Approver',
+                    'Forwarded to Manager', // legacy
                     'FORWARDED_TO_MANAGER',
                     'Officer Approved',
                     'OFFICER_APPROVED',
@@ -273,6 +275,7 @@ const budgetRoleVisibilityControl = () => {
                     'RESPONSIBILITY_CENTER_SUBMITTED',
                     'Office Verified',
                     'OFFICE VERIFIED',
+                    'Forwarded to Overall Budget Approver',
                     'Forwarded to Manager',
                     'FORWARDED_TO_MANAGER',
                     'Officer Approved',

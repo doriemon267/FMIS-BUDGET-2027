@@ -18,13 +18,14 @@ const WorkflowStatusBadge = ({ status, step, assignee, pendingRoles = [], classN
     'FORWARDED TO OFFICER': { color: 'bg-indigo-200 text-indigo-800', icon: '📮', label: 'Forwarded to Approver', defaultStep: '3/6' },
     'FORWARDED TO BUDGET OFFICER': { color: 'bg-cyan-200 text-cyan-800', icon: '📬', label: 'Forwarded to Budget Officer', defaultStep: '5/6' },
     'OFFICER APPROVED': { color: 'bg-green-200 text-green-800', icon: '✅', label: 'Officer Approved', defaultStep: '4/6' },
-    'FORWARDED TO MANAGER': { color: 'bg-purple-200 text-purple-800', icon: '🚀', label: 'Forwarded to Manager', defaultStep: '5/6' },
+  'FORWARDED TO MANAGER': { color: 'bg-purple-200 text-purple-800', icon: '🚀', label: 'Forwarded to Manager', defaultStep: '5/6' },
+  'FORWARDED TO OVERALL BUDGET APPROVER': { color: 'bg-purple-200 text-purple-800', icon: '🚀', label: 'Forwarded to Overall Budget Approver', defaultStep: '5/6' },
     'RETURNED': { color: 'bg-red-200 text-red-800', icon: '↩️', label: 'Returned', defaultStep: '—' },
     'FINALIZED': { color: 'bg-emerald-200 text-emerald-800', icon: '🏆', label: 'Finalized', defaultStep: '6/6' }
   };
 
   const stepMap = {
-    'ANALYST_DRAFT': '1/6',
+  'PREPARER_DRAFT': '1/6',
     'ANALYST_DIVISION_SUBMITTED': '2/6',
     'APPROVER_FORWARDED': '3/6',
     'OFFICER_APPROVED': '4/6',
