@@ -26,14 +26,18 @@ const lookupUserFromMainDB = async (req, res) => {
     const currentUserId = req.user.id;
 
     // Define role hierarchy for access control (based on 6-step workflow)
+    // 📋 ONLY these roles are valid: SUPER_ADMIN, ADMIN, BUDGET_ADMIN (admins)
+    //    + BUDGET_PREPARER, BUDGET_REVIEWER, BUDGET_APPROVER, BUDGET_PLANNING_ANALYST, BUDGET_OFFICER, OVERALL_BUDGET_APPROVER (6-step workflow)
     const roleHierarchy = {
-      'BUDGET_ADMIN': 7,                        // Admin override
+      'SUPER_ADMIN': 7,                         // Admin override (highest)
+      'ADMIN': 7,                               // Admin override (highest)
+      'BUDGET_ADMIN': 7,                        // Admin override (highest)
       'OVERALL_BUDGET_APPROVER': 6,             // STEP 6: Executive budget approval
       'BUDGET_OFFICER': 5,                      // STEP 5: Operational approval
-      'BUDGET_ANALYST': 4,                      // STEP 4: Technical review
-      'APPROVER': 3,                            // STEP 3: Division/Office approval
-      'REVIEWER': 2,                            // STEP 2: Division review
-      'PREPARER': 1                             // STEP 1: Proposal creation
+      'BUDGET_PLANNING_ANALYST': 4,             // STEP 4: Technical review
+      'BUDGET_APPROVER': 3,                     // STEP 3: Division/Office approval
+      'BUDGET_REVIEWER': 2,                     // STEP 2: Division review
+      'BUDGET_PREPARER': 1                      // STEP 1: Proposal creation
     };
 
     // Get current user's highest role level
@@ -93,30 +97,32 @@ const lookupUserFromMainDB = async (req, res) => {
 
     // Determine the appropriate budget role based on user's main roles
     // Following the 6-step workflow hierarchy
-    let budgetRole = 'PREPARER'; // default
+    //  ONLY accept these role names - 6-step workflow + 3 admin roles
+    // Map ANY incoming role name to standardized versions ONLY
+    let budgetRole = 'BUDGET_PREPARER'; // default (STEP 1)
 
     console.log(`🔍 User ${userId} roles from DB:`, roleNames);
 
-    if (roleNames.includes('SUPER ADMIN') || roleNames.includes('ADMIN') || roleNames.includes('BUDGET ADMIN')) {
+    if (roleNames.includes('SUPER ADMIN') || roleNames.includes('SUPER_ADMIN') || roleNames.includes('ADMIN') || roleNames.includes('BUDGET ADMIN') || roleNames.includes('BUDGET_ADMIN')) {
       budgetRole = 'BUDGET_ADMIN';
-    } else if (roleNames.includes('OVERALL_BUDGET_APPROVER') || roleNames.includes('OVERALL BUDGET APPROVER') || roleNames.includes('BUDGET MANAGER') || roleNames.includes('DEPARTMENT_HEAD')) {
-      // STEP 6: OVERALL_BUDGET_APPROVER (replaces legacy BUDGET_MANAGER)
+    } else if (roleNames.includes('OVERALL_BUDGET_APPROVER') || roleNames.includes('OVERALL BUDGET APPROVER')) {
+      // STEP 6: OVERALL_BUDGET_APPROVER
       budgetRole = 'OVERALL_BUDGET_APPROVER';
-    } else if (roleNames.includes('BUDGET OFFICER') || roleNames.includes('SUPERVISOR')) {
+    } else if (roleNames.includes('BUDGET OFFICER') || roleNames.includes('BUDGET_OFFICER')) {
       // STEP 5: BUDGET_OFFICER
       budgetRole = 'BUDGET_OFFICER';
-    } else if (roleNames.includes('BUDGET ANALYST') || roleNames.includes('BUDGET_ANALYST')) {
-      // STEP 4: BUDGET_ANALYST (technical review from Budget and Revenue Division)
-      budgetRole = 'BUDGET_ANALYST';
-    } else if (roleNames.includes('APPROVER') || roleNames.includes('OFFICE APPROVER') || roleNames.includes('DIVISION APPROVER') || roleNames.includes('OFFICEAPPROVER') || roleNames.includes('DIVISIONAPPROVER')) {
-      // STEP 3: APPROVER
-      budgetRole = 'APPROVER';
-    } else if (roleNames.includes('REVIEWER') || roleNames.includes('DIVISION REVIEWER') || roleNames.includes('BUDGET COORDINATOR') || roleNames.includes('DIVISIONREVIEWER')) {
-      // STEP 2: REVIEWER (replaces legacy BUDGET_COORDINATOR)
-      budgetRole = 'REVIEWER';
-    } else if (roleNames.includes('PREPARER') || roleNames.includes('SENIOR_STAFF') || roleNames.includes('STAFF')) {
-      // STEP 1: PREPARER
-      budgetRole = 'PREPARER';
+    } else if (roleNames.includes('BUDGET PLANNING ANALYST') || roleNames.includes('BUDGET_PLANNING_ANALYST')) {
+      // STEP 4: BUDGET_PLANNING_ANALYST
+      budgetRole = 'BUDGET_PLANNING_ANALYST';
+    } else if (roleNames.includes('BUDGET APPROVER') || roleNames.includes('BUDGET_APPROVER')) {
+      // STEP 3: BUDGET_APPROVER
+      budgetRole = 'BUDGET_APPROVER';
+    } else if (roleNames.includes('BUDGET REVIEWER') || roleNames.includes('BUDGET_REVIEWER')) {
+      // STEP 2: BUDGET_REVIEWER
+      budgetRole = 'BUDGET_REVIEWER';
+    } else if (roleNames.includes('BUDGET PREPARER') || roleNames.includes('BUDGET_PREPARER')) {
+      // STEP 1: BUDGET_PREPARER
+      budgetRole = 'BUDGET_PREPARER';
     }
 
     console.log(`📋 Determined budgetRole for user ${userId}: ${budgetRole}`);
@@ -242,20 +248,19 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
 
     const approvalLevels = ['REGION', 'FULL', 'OFFICE', 'RESPONSIBILITY_CENTER'];
     
-    // ✅ NEW: Support BOTH old and new workflow role names (September 2025 system)
+    // ✅ ONLY accept VALID 6-STEP WORKFLOW roles + 3 admin roles
+    // DO NOT accept legacy role names like PREPARER, REVIEWER, APPROVER
+    // These should already be standardized to BUDGET_PREPARER, BUDGET_REVIEWER, BUDGET_APPROVER
     const VALID_WORKFLOW_ROLES = [
-      // OLD ROLE NAMES (Legacy system)
-      'divisionCreator', 'divisionApprover', 'divisionReviewer',
-      'departmentCreator', 'departmentConsolidator', 'departmentSubmission',
-      'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier',
-      'regionCreator', 'regionFinalVerifier',
-      // NEW ROLE NAMES (September 2025 workflow system)
-      'PREPARER', 'REVIEWER', 'APPROVER',
-      'BUDGET_ANALYST', 'BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_ADMIN',
-      // NEW INTERNAL ROLE NAMES (used in workflowConstants)
-      'divisionCreator', 'divisionReviewer', 'divisionApprover',
-      'officeCreator', 'officeApprover',
-      'budgetAnalyst', 'budgetOfficer', 'overallBudgetApprover', 'budgetAdmin'
+      // Admin roles (3 only)
+      'SUPER_ADMIN', 'ADMIN', 'BUDGET_ADMIN',
+      // 6-STEP WORKFLOW ROLES (standardized names ONLY)
+      'BUDGET_PREPARER',           // STEP 1
+      'BUDGET_REVIEWER',           // STEP 2
+      'BUDGET_APPROVER',           // STEP 3
+      'BUDGET_PLANNING_ANALYST',   // STEP 4
+      'BUDGET_OFFICER',            // STEP 5
+      'OVERALL_BUDGET_APPROVER'    // STEP 6
     ];
     
     const hasExplicitWorkflowRoles = Array.isArray(req.body.workflowRoles);
@@ -281,6 +286,18 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       regionId: assignmentData.regions?.[0] || null,
       departmentId: assignmentData.departments?.[0] || null,
       divisionName: assignmentData.divisions?.[0] || null,
+      // NEW: Budget Planning Analyst region configuration
+      isNIAWide: req.body.isNIAWide === true,
+      assignedRegions: (userRole === 'BUDGET_PLANNING_ANALYST' && Array.isArray(req.body.assignedRegions)) 
+        ? req.body.assignedRegions.filter(id => {
+            // Accept non-empty strings (region codes like "MARIIS", "CALABARZON")
+            const isValidString = typeof id === 'string' && id.trim().length > 0;
+            if (!isValidString) {
+              console.warn(`⚠️ Invalid region value (must be non-empty string): ${id}`);
+            }
+            return isValidString;
+          })
+        : [],
       rolePermissions: {
         // Default permissions based on assignment level
         CreateProposals: true,
@@ -335,9 +352,12 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       console.log('💾 Saving assignment:', {
         userId: assignment.userId,
         assignmentLevel: assignment.assignmentLevel,
+        userRole: assignment.userRole,
         regionId: assignment.regionId,
         departmentId: assignment.departmentId,
-        divisionName: assignment.divisionName
+        divisionName: assignment.divisionName,
+        isNIAWide: assignment.isNIAWide,
+        assignedRegionsCount: assignment.assignedRegions?.length || 0
       });
       
       await assignment.save();
@@ -355,6 +375,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       .findById(assignment._id)
       .populate('regionId', 'Region regionName RegionName _id')
       .populate('departmentId', 'Department departmentName DepartmentName _id')
+      .populate('assignedRegions', 'Region regionName RegionName _id')
       .lean();
 
     // Emit WebSocket event for real-time permission updates
@@ -416,6 +437,7 @@ const getHierarchicalAssignment = async (req, res) => {
     // Check if user can view this assignment
     // Allow access if user has full access OR if the requested userId matches any of the authenticated user's IDs
     const authenticatedUserIds = [
+      String(req.user.Id || ''),  // Check uppercase Id first (from dev headers)
       String(req.user.id || ''),
       String(req.user.userId || ''),
       String(req.user.UserId || ''),
@@ -639,16 +661,18 @@ const updateWorkflowRoles = async (req, res) => {
     const { userId } = req.params;
     const { workflowRoles = [] } = req.body;
     
-    // ✅ NEW: Build allowed workflow roles from BOTH new and legacy systems
+    // ✅ ONLY accept VALID 6-STEP WORKFLOW roles + 3 admin roles
+    // DO NOT accept any legacy role names
     const ALLOWED_WORKFLOW_ROLES = [
-      ...Object.values(WORKFLOW_ROLES),
-      // NEW USER-FACING ROLE NAMES (September 2025 system)
-      'PREPARER', 'REVIEWER', 'APPROVER',
-      'BUDGET_ANALYST', 'BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_ADMIN',
-      // Legacy roles for backward compatibility
-      'departmentCreator', 'departmentConsolidator', 'departmentSubmission',
-      'officeConsolidator', 'officeSubmission', 'officeFinalVerifier',
-      'regionCreator', 'regionFinalVerifier', 'superAdmin'
+      // Admin roles (3 only)
+      'SUPER_ADMIN', 'ADMIN', 'BUDGET_ADMIN',
+      // 6-STEP WORKFLOW ROLES (standardized names ONLY)
+      'BUDGET_PREPARER',           // STEP 1
+      'BUDGET_REVIEWER',           // STEP 2
+      'BUDGET_APPROVER',           // STEP 3
+      'BUDGET_PLANNING_ANALYST',   // STEP 4
+      'BUDGET_OFFICER',            // STEP 5
+      'OVERALL_BUDGET_APPROVER'    // STEP 6
     ];
     
     if (!Array.isArray(workflowRoles)) {
@@ -656,7 +680,12 @@ const updateWorkflowRoles = async (req, res) => {
     }
     const invalid = workflowRoles.filter(r => !ALLOWED_WORKFLOW_ROLES.includes(r));
     if (invalid.length > 0) {
-      return res.status(400).json({ success: false, message: `Invalid workflowRoles: ${invalid.join(', ')}`, allowed: ALLOWED_WORKFLOW_ROLES, code: 'INVALID_WORKFLOW_ROLES' });
+      return res.status(400).json({ 
+        success: false, 
+        message: `Invalid workflowRoles: ${invalid.join(', ')}. Only use: ${ALLOWED_WORKFLOW_ROLES.join(', ')}`, 
+        allowed: ALLOWED_WORKFLOW_ROLES, 
+        code: 'INVALID_WORKFLOW_ROLES' 
+      });
     }
     const assignment = await HierarchicalUserAssignment.findOne({ userId, isActive: true });
     if (!assignment) {
@@ -1084,42 +1113,41 @@ function applyOfficeDefaults(assignmentDoc, sanitizedWorkflowRoles, normalizedLe
   const level = normalizedLevel || assignmentDoc.assignmentLevel || '';
   const userRole = assignmentDoc.userRole;
   
-  // If explicit workflow roles provided, use them
+  // If explicit workflow roles provided, use them (must be from VALID_WORKFLOW_ROLES)
   if (hasExplicitWorkflowRoles) {
     assignmentDoc.workflowRoles = sanitizedWorkflowRoles;
   } else if (userRole) {
-    // NEW LOGIC: Auto-assign based on userRole instead of level
+    // ✅ ONLY accept standardized 6-STEP WORKFLOW role names
     console.log('🔍 Auto-assigning workflow roles based on userRole:', { userRole, level });
     
-    if (userRole === 'PREPARER') {
-      // PREPARER: Creator only, based on assignment level
-      if (level === 'OFFICE' || level === 'DEPARTMENT') {
-        assignmentDoc.workflowRoles = ['officeCreator'];
-      } else if (level === 'RESPONSIBILITY_CENTER' || level === 'DIVISION') {
-        assignmentDoc.workflowRoles = ['divisionCreator'];
-      }
-    } else if (userRole === 'REVIEWER') {
-      // STEP 2: REVIEWER: Division reviewer only (no creator role)
-      assignmentDoc.workflowRoles = ['divisionReviewer'];
+    if (userRole === 'BUDGET_PREPARER') {
+      // STEP 1: BUDGET_PREPARER (no internal roles assigned - they just create proposals)
+      assignmentDoc.workflowRoles = [];
+    } else if (userRole === 'BUDGET_REVIEWER') {
+      // STEP 2: BUDGET_REVIEWER (no internal roles - they just review)
+      assignmentDoc.workflowRoles = [];
+    } else if (userRole === 'BUDGET_APPROVER') {
+      // STEP 3: BUDGET_APPROVER (no internal roles - they just approve)
+      assignmentDoc.workflowRoles = [];
+    } else if (userRole === 'BUDGET_PLANNING_ANALYST') {
+      // STEP 4: BUDGET_PLANNING_ANALYST (no internal roles - they provide technical analysis)
+      assignmentDoc.workflowRoles = [];
     } else if (userRole === 'BUDGET_OFFICER') {
-      // STEP 5: BUDGET_OFFICER: Office consolidator and verifier (no creator role)
-      assignmentDoc.workflowRoles = ['officeConsolidator', 'officeFinalVerifier'];
+      // STEP 5: BUDGET_OFFICER (no internal roles - they manage at officer level)
+      assignmentDoc.workflowRoles = [];
     } else if (userRole === 'OVERALL_BUDGET_APPROVER') {
-      // STEP 6: OVERALL_BUDGET_APPROVER: Regional verifier (no creator role)
-      assignmentDoc.workflowRoles = ['regionFinalVerifier'];
-    } else if (userRole === 'BUDGET_ADMIN') {
-      // BUDGET ADMIN: All roles for administrative purposes
-      assignmentDoc.workflowRoles = ['regionCreator', 'regionFinalVerifier', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier'];
+      // STEP 6: OVERALL_BUDGET_APPROVER (no internal roles - they provide final approval)
+      assignmentDoc.workflowRoles = [];
+    } else if (userRole === 'BUDGET_ADMIN' || userRole === 'ADMIN' || userRole === 'SUPER_ADMIN') {
+      // ADMIN roles have no internal workflow roles (full access overrides)
+      assignmentDoc.workflowRoles = [];
     }
     
     console.log('✅ Auto-assigned workflow roles:', assignmentDoc.workflowRoles);
   } else {
-    // FALLBACK: Old logic using level defaults (for backward compatibility)
-    const levelDefaults = DEFAULT_WORKFLOW_ROLES_BY_LEVEL[level];
-    if (Array.isArray(levelDefaults)) {
-      console.log('⚠️ Using fallback level defaults (no userRole):', levelDefaults);
-      assignmentDoc.workflowRoles = [...levelDefaults];
-    }
+    // No userRole provided - start with empty (cannot auto-assign without role)
+    assignmentDoc.workflowRoles = [];
+    console.log('⚠️ No userRole provided, workflow roles set to empty');
   }
 
   ensureApprovalFlagConsistency(assignmentDoc, sanitizedWorkflowRoles, normalizedLevel, hasExplicitWorkflowRoles);

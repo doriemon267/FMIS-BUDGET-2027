@@ -14,8 +14,15 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
   // Get hierarchical access info
   const hierarchicalAccess = currentUser.hierarchicalAccess;
 
-  // If no hierarchical access (user not properly configured), deny access
-  if (!hierarchicalAccess) {
+  // ✅ Allow users without hierarchical access if they have specific job roles
+  // BUDGET_PLANNING_ANALYST, BUDGET MANAGER, BUDGET OFFICER can access without hierarchical assignment
+  const userJobRoles = currentUser.Roles || [];
+  const staffRolesWithoutAssignment = ['BUDGET_PLANNING_ANALYST', 'BUDGET PLANNING ANALYST', 'BUDGET_MANAGER', 'BUDGET MANAGER', 'BUDGET_OFFICER', 'BUDGET OFFICER'];
+  const hasStaffRole = userJobRoles.some(role => staffRolesWithoutAssignment.includes(role));
+  
+  // If no hierarchical access and not a staff role, deny access
+  // But if they have a staff role, allow them to proceed (they might not have assignment yet)
+  if (!hierarchicalAccess && !hasStaffRole) {
     return <Navigate to="/not-authorized" />;
   }
 
@@ -25,7 +32,8 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
     requiredWorkflowRoles,
     userRoles: currentUser.Roles,
     hierarchicalAccess: hierarchicalAccess,
-    allFields: Object.keys(hierarchicalAccess)
+    allFields: hierarchicalAccess ? Object.keys(hierarchicalAccess) : 'NO HIERARCHICAL ACCESS',
+    hasStaffRole: hasStaffRole
   });
 
   // Use the hasPermission function from permissions.js for consistency
@@ -37,20 +45,20 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
     });
 
   // Check workflow roles - try multiple possible field names
-  const userWorkflowRoles = hierarchicalAccess.workflowRoles ||
-                           hierarchicalAccess.roles ||
-                           hierarchicalAccess.userRoles ||
+  const userWorkflowRoles = hierarchicalAccess?.workflowRoles ||
+                           hierarchicalAccess?.roles ||
+                           hierarchicalAccess?.userRoles ||
                            [];
 
   // Special handling for FULL access users - ensure they have regionCreator role
   let effectiveWorkflowRoles = [...userWorkflowRoles];
-  if (hierarchicalAccess.scope === 'FULL' && !effectiveWorkflowRoles.includes('regionCreator')) {
+  if (hierarchicalAccess?.scope === 'FULL' && !effectiveWorkflowRoles.includes('regionCreator')) {
     console.log('🔧 Adding regionCreator role for FULL access user');
     effectiveWorkflowRoles.push('regionCreator');
   }
 
   // ✅ Check job position Roles for budget staff (SUPER ADMIN, BUDGET ADMIN, BUDGET STAFF)
-  const userJobRoles = currentUser.Roles || [];
+  // NOTE: userJobRoles already declared above
   const budgetAdminRoles = ['SUPER ADMIN', 'SUPER_ADMIN', 'BUDGET ADMIN'];
   const budgetStaffRoles = ['BUDGET_PLANNING_ANALYST', 'BUDGET MANAGER', 'BUDGET OFFICER'];
   

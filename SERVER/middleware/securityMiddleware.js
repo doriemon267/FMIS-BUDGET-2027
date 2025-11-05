@@ -10,8 +10,9 @@ const PERMISSION_LEVELS = {
   BUDGET_ADMIN: 'BUDGET_ADMIN',
   BUDGET_PREPARER: 'BUDGET_PREPARER',                                // STEP 1: Proposal creation
   BUDGET_REVIEWER: 'BUDGET_REVIEWER',                                // STEP 2: Division review
-  APPROVER: 'BUDGET_APPROVER',                                       // STEP 3: Division/Office approval
+  BUDGET_APPROVER: 'BUDGET_APPROVER',                                // STEP 3: Division/Office approval
   BUDGET_ANALYST: 'BUDGET_ANALYST',                                  // STEP 4: Technical review
+  BUDGET_PLANNING_ANALYST: 'BUDGET_PLANNING_ANALYST',                // STEP 4: Technical review (variant)
   BUDGET_OFFICER: 'BUDGET_OFFICER',                                  // STEP 5: Operational approval
   BUDGET_MANAGER: 'BUDGET_MANAGER',                                  // Legacy: replaced by OVERALL_BUDGET_APPROVER
   OVERALL_BUDGET_APPROVER: 'OVERALL_BUDGET_APPROVER'                 // STEP 6: Executive approval
@@ -43,15 +44,17 @@ const hasFullAccess = (userRoles) => {
     PERMISSION_LEVELS.BUDGET_ADMIN,
     PERMISSION_LEVELS.BUDGET_PREPARER,         // STEP 1: Proposal creation
     PERMISSION_LEVELS.BUDGET_REVIEWER,         // STEP 2: Division review
-    PERMISSION_LEVELS.APPROVER,                // STEP 3: Division/Office approval
+    PERMISSION_LEVELS.BUDGET_APPROVER,         // STEP 3: Division/Office approval
     PERMISSION_LEVELS.BUDGET_ANALYST,          // STEP 4: Technical review
+    PERMISSION_LEVELS.BUDGET_PLANNING_ANALYST, // STEP 4: Technical review (variant)
+    'BUDGET PLANNING ANALYST',                 // Support display format from database
     PERMISSION_LEVELS.BUDGET_OFFICER,          // STEP 5: Operational approval
     PERMISSION_LEVELS.OVERALL_BUDGET_APPROVER  // STEP 6: Executive approval
   ];
   const result = hasRequiredRole(userRoles, requiredRoles);
   
   // 🔍 DEBUG for workflow roles
-  if (Array.isArray(userRoles) && (userRoles.includes('BUDGET_OFFICER') || userRoles.includes('BUDGET REVIEWER') || userRoles.includes('APPROVER') || userRoles.includes('OVERALL_BUDGET_APPROVER'))) {
+  if (Array.isArray(userRoles) && (userRoles.includes('BUDGET_OFFICER') || userRoles.includes('BUDGET REVIEWER') || userRoles.includes('APPROVER') || userRoles.includes('OVERALL_BUDGET_APPROVER') || userRoles.includes('BUDGET PLANNING ANALYST'))) {
     console.log('🔍 hasFullAccess check for 6-step workflow role:', {
       userRoles,
       result,
@@ -136,6 +139,8 @@ const adminRoute = () => {
         PERMISSION_LEVELS.SUPER_ADMIN,
         PERMISSION_LEVELS.BUDGET_ADMIN,
         PERMISSION_LEVELS.BUDGET_ANALYST,
+        PERMISSION_LEVELS.BUDGET_PLANNING_ANALYST, // ✅ NEW: Support BUDGET PLANNING ANALYST role
+        'BUDGET PLANNING ANALYST',                 // Support display format
         PERMISSION_LEVELS.BUDGET_MANAGER
       ];
       if (!hasRequiredRole(req.user?.Roles, adminRoles)) {
@@ -166,6 +171,7 @@ const dueDateProtectedRoute = (permissionLevel = PERMISSION_LEVELS.USER, accessS
           requiredRoles = [
             PERMISSION_LEVELS.BUDGET_ADMIN,
             PERMISSION_LEVELS.BUDGET_ANALYST,
+            PERMISSION_LEVELS.BUDGET_PLANNING_ANALYST, // ✅ NEW: Support BUDGET PLANNING ANALYST
             PERMISSION_LEVELS.BUDGET_MANAGER
           ];
           break;
@@ -173,7 +179,8 @@ const dueDateProtectedRoute = (permissionLevel = PERMISSION_LEVELS.USER, accessS
           requiredRoles = [
             PERMISSION_LEVELS.BUDGET_MANAGER,
             PERMISSION_LEVELS.BUDGET_ADMIN,
-            PERMISSION_LEVELS.BUDGET_ANALYST
+            PERMISSION_LEVELS.BUDGET_ANALYST,
+            PERMISSION_LEVELS.BUDGET_PLANNING_ANALYST  // ✅ NEW: Support BUDGET PLANNING ANALYST
           ];
           break;
         case PERMISSION_LEVELS.BUDGET_OFFICER:
@@ -242,12 +249,13 @@ const workflowStaffRoute = (allowedOperations = ['read']) => {
         // Budget staff roles
         PERMISSION_LEVELS.BUDGET_ADMIN,
         PERMISSION_LEVELS.BUDGET_ANALYST,
+        PERMISSION_LEVELS.BUDGET_PLANNING_ANALYST, // ✅ NEW: Support BUDGET PLANNING ANALYST
         PERMISSION_LEVELS.BUDGET_MANAGER,
         PERMISSION_LEVELS.BUDGET_OFFICER,
         // Workflow staff roles - can now view proposals
         PERMISSION_LEVELS.BUDGET_PREPARER,
         PERMISSION_LEVELS.BUDGET_REVIEWER,
-        PERMISSION_LEVELS.APPROVER,
+        PERMISSION_LEVELS.BUDGET_APPROVER,
         PERMISSION_LEVELS.OVERALL_BUDGET_APPROVER
       ];
       if (!hasRequiredRole(userRoles, allowedRoles)) {
@@ -276,6 +284,7 @@ const budgetOfficerRoute = (allowedOperations = ['read']) => {
       const allowedRoles = [
         PERMISSION_LEVELS.BUDGET_ADMIN,
         PERMISSION_LEVELS.BUDGET_ANALYST,
+        PERMISSION_LEVELS.BUDGET_PLANNING_ANALYST, // ✅ NEW: Support BUDGET PLANNING ANALYST
         PERMISSION_LEVELS.BUDGET_MANAGER,
         PERMISSION_LEVELS.BUDGET_OFFICER
       ];

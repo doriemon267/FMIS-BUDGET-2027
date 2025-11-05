@@ -11,6 +11,7 @@ const Income = require('../models/Income');
 const BudgetOfficerEdit = require('../models/BudgetOfficerEdit');
 const ProposalEditLog = require('../models/ProposalEditLog');
 const { applyEditsToOriginalDocuments } = require('./budgetOfficerEditController');
+const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 
 // Labels used when reporting missing budget modules during analyst submission validation
 const MODULE_LABELS = {
@@ -924,6 +925,13 @@ exports.submitDirectToManager = async (req, res) => {
     // Sync status to all related budget items
     await syncBudgetItemsStatus(proposal);
 
+    // Recalculate proposal totals so dashboards/overview are immediately accurate
+    try {
+      await recalculateAndSaveProposalTotals({ proposalId: proposal._id });
+    } catch (recalcErr) {
+      console.warn('⚠️ Totals recalculation failed after approver submit to officer:', recalcErr?.message || recalcErr);
+    }
+
     // Send notification to Budget Manager
     await sendNotification({
       recipientRole: 'BUDGET_MANAGER',
@@ -1172,6 +1180,13 @@ exports.submitProposal = async (req, res) => {
     await proposal.save();
 
     await syncBudgetItemsStatus(proposal);
+
+    // Ensure proposal overview totals are recalculated upon submission
+    try {
+      await recalculateAndSaveProposalTotals({ proposalId: proposal._id });
+    } catch (recalcErr) {
+      console.warn('⚠️ Totals recalculation failed after analyst submit:', recalcErr?.message || recalcErr);
+    }
 
     await sendNotification({
       recipientRole: 'BUDGET_OFFICER',
@@ -2720,7 +2735,7 @@ exports.approverSaveEdits = async (req, res) => {
 // APPROVER approves and forwards to BUDGET_PLANNING_ANALYST
 exports.approverApproveForwardAnalyst = async (req, res) => {
   try {
-    const { proposalId, comment } = req.body;
+    const { proposalId, comment, tableData } = req.body;
     const userId = req.user.id;
     const userName = req.user.FirstName + ' ' + req.user.LastName;
     const userRoles = req.user.Roles || [];
@@ -2792,6 +2807,63 @@ exports.approverApproveForwardAnalyst = async (req, res) => {
 
     await proposal.save();
 
+    // If approver forwarded without hitting "Save Edits" first but we have tableData,
+    // persist it into BudgetOfficerEdit as a Draft so the Analyst can see the latest numbers.
+    try {
+      if (tableData && typeof tableData === 'object') {
+        let budgetOfficerEdit = await BudgetOfficerEdit.findOne({ proposalId: proposalId });
+
+        if (budgetOfficerEdit) {
+          budgetOfficerEdit.editedIncome = tableData.editedIncome || [];
+          budgetOfficerEdit.editedPersonnelServices = tableData.editedPersonnelServices || [];
+          budgetOfficerEdit.editedMOOE = tableData.editedMOOE || [];
+          budgetOfficerEdit.editedCapitalOutlay = tableData.editedCapitalOutlay || [];
+          // Prefer explicit tableData.comments, otherwise reuse workflow comment
+          budgetOfficerEdit.comments = tableData.comments ?? comment;
+          budgetOfficerEdit.editedBy = {
+            userId: userId,
+            userName: userName,
+            email: req.user.email,
+            role: 'APPROVER'
+          };
+          // Keep as Draft at this stage; submission happens from Analyst or Officer later
+          if (!budgetOfficerEdit.status) budgetOfficerEdit.status = 'Draft';
+          budgetOfficerEdit.updatedAt = new Date();
+
+          await budgetOfficerEdit.save();
+          console.log('✅ Updated BudgetOfficerEdit (via approve-forward) with approver table data');
+        } else {
+          const newEdit = new BudgetOfficerEdit({
+            proposalId: proposalId,
+            fiscalYear: proposal.fiscalYear,
+            budgetType: proposal.budgetType,
+            region: proposal.region,
+            department: proposal.department,
+            division: proposal.division,
+            processBy: proposal.processBy,
+            cobExpenditures: proposal.cobExpenditures,
+            status: 'Draft',
+            editedIncome: tableData.editedIncome || [],
+            editedPersonnelServices: tableData.editedPersonnelServices || [],
+            editedMOOE: tableData.editedMOOE || [],
+            editedCapitalOutlay: tableData.editedCapitalOutlay || [],
+            comments: tableData.comments ?? comment,
+            editedBy: {
+              userId: userId,
+              userName: userName,
+              email: req.user.email,
+              role: 'APPROVER'
+            }
+          });
+          await newEdit.save();
+          console.log('✅ Created BudgetOfficerEdit (via approve-forward) with approver table data');
+        }
+      }
+    } catch (editPersistError) {
+      console.error('⚠️ Failed to persist tableData during approve-forward to analyst:', editPersistError);
+      // Non-fatal: workflow forward proceeds even if edit persistence fails
+    }
+
     const baseNotificationFields = {
       entity: 'proposal',
       recordIds: [proposal._id],
@@ -2809,6 +2881,13 @@ exports.approverApproveForwardAnalyst = async (req, res) => {
 
     // Sync status to all related budget items
     await syncBudgetItemsStatus(proposal);
+
+    // Recalculate proposal totals to ensure overview reflects current module data
+    try {
+      await recalculateAndSaveProposalTotals({ proposalId: proposal._id });
+    } catch (recalcErr) {
+      console.warn('⚠️ Totals recalculation failed after approve-forward to analyst:', recalcErr?.message || recalcErr);
+    }
 
     // Send notification to BUDGET_PLANNING_ANALYST users
     await sendNotification({

@@ -88,6 +88,7 @@ module.exports = async (req, res, next) => {
       // Enrich req.user with multiple identifier mirrors for downstream matching
       const usernameArr = Array.isArray(payload.Username) ? payload.Username : (payload.Username ? [payload.Username] : []);
       req.user = {
+        Id: userId,  // Uppercase Id for dev header compatibility
         id: userId,
         userId: userId,
         UserId: userId,

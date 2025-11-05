@@ -9,6 +9,7 @@ const CapitalOutlay = require('../models/CapitalOutlay');
 const CapitalOutlayDetails = require('../models/CapitalOutlayDetails');
 const { createNotification, createNotifications } = require('./notificationController');
 const { resolveUserIdentity, getClientIp } = require('../utils/requestContext');
+const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 // const { validateAnalystSubmissionReadiness } = require('./proposalWorkflowController'); // REMOVED: Unused import causing circular dependency
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const Region = require('../models/Region');
@@ -27,6 +28,21 @@ const hasApproverRole = (userRoles) => {
            roleStr === 'OFFICEAPPROVER' ||
            roleStr.includes('APPROVER');
   });
+};
+
+// Mapping from persisted/internal role names to display-friendly versions
+const ROLE_ALIAS_TO_DISPLAY = {
+  'BUDGET PREPARER': 'BUDGET PREPARER',
+  'BUDGET REVIEWER': 'BUDGET REVIEWER',
+  'BUDGET APPROVER': 'BUDGET APPROVER',
+  'BUDGET_PLANNING_ANALYST': 'BUDGET_PLANNING_ANALYST',
+  'BUDGET_OFFICER': 'BUDGET_OFFICER',
+  'BUDGET_MANAGER': 'OVERALL_BUDGET_APPROVER',
+  'OVERALL_BUDGET_APPROVER': 'OVERALL_BUDGET_APPROVER',
+  'BUDGET_ADMIN': 'BUDGET_ADMIN',
+  'PREPARER': 'BUDGET PREPARER',
+  'REVIEWER': 'BUDGET REVIEWER',
+  'APPROVER': 'BUDGET APPROVER'
 };
 
 const toDisplayRole = (role) => ROLE_ALIAS_TO_DISPLAY[role] || role;
@@ -438,7 +454,7 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
         // Aggregate totals from budget items SPECIFIC TO THIS PROPOSAL
         // Using proposalId to ensure we only sum items for this proposal
         const filterCriteria = {
-          proposalId: mongoose.Types.ObjectId(budgetOfficerEdit.proposalId)
+          proposalId: new mongoose.Types.ObjectId(budgetOfficerEdit.proposalId)
         };
 
         const [incomeTotal, psTotal, mooeTotal, coTotal] = await Promise.all([
@@ -1531,11 +1547,11 @@ exports.submitEdit = async (req, res) => {
       // BUDGET PREPARER submits to BUDGET REVIEWER
       newStatus = 'Forwarded to Reviewer';
       newWorkflowLevel = 'BUDGET REVIEWER';
-      historyAction = 'BUDGET_PREPARER_SUBMIT_TO_BUDGET_REVIEWER';
+      historyAction = 'PREPARER_SUBMIT_TO_BUDGET_REVIEWER';
       historyComment = comments || 'Budget Preparer submitted edits to Budget Reviewer';
       currentStep = 'BUDGET_REVIEWER_REVIEW';
-      currentAssigneeRole = 'BUDGET REVIEWER';
-      pendingRoles = ['BUDGET REVIEWER'];
+      currentAssigneeRole = 'BUDGET_REVIEWER';
+      pendingRoles = ['BUDGET_REVIEWER'];
       proposal.submittedByRole = 'BUDGET PREPARER';
       proposal.submittedToDivisionAt = now;
       proposal.submittedToDivisionBy = { userId, userName };
@@ -1608,6 +1624,30 @@ exports.submitEdit = async (req, res) => {
 
     await proposal.save();
     await syncRelatedBudgetItems(proposal);
+    
+    // Recalculate proposal totals after changes
+    try {
+      const totalsResult = await recalculateAndSaveProposalTotals({ proposalId: proposal._id });
+      // Reload proposal to get updated totals
+      const updatedProposal = await Proposal.findById(proposal._id);
+      if (updatedProposal) {
+        proposal.totalIncome = updatedProposal.totalIncome;
+        proposal.totalExpenses = updatedProposal.totalExpenses;
+        proposal.projectedSubsidy = updatedProposal.projectedSubsidy;
+        proposal.proposedBudget = updatedProposal.proposedBudget;
+      }
+      console.log('✅ Proposal totals recalculated:', {
+        proposalId: proposal._id.toString(),
+        totalIncome: totalsResult.totals.income,
+        totalExpenses: totalsResult.totals.expenses,
+        projectedSubsidy: totalsResult.totals.subsidies,
+        proposedBudget: totalsResult.totals.proposedBudget
+      });
+    } catch (calcError) {
+      console.warn('⚠️ Warning: Failed to recalculate proposal totals:', calcError.message);
+      // Continue even if recalculation fails - the workflow shouldn't fail
+    }
+    
     console.log('➡️ Workflow routed:', {
       proposalId: proposal._id.toString(),
       newStatus,

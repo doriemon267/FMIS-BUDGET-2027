@@ -266,19 +266,19 @@ exports.getAllPersonnelServices = async (req, res) => {
       const recalculatedOvertimePay = personnel.overtimePay || 0;
       const recalculatedAnnualSalary = personnel.monthlySalary * 12;
       const recalculatedRATA = personnel.RATA;
-      const recalculatedPERA = activeSettings.PERA * 12;
-      const recalculatedUniform = activeSettings.uniformAllowance;
+      const recalculatedPERA = (activeSettings.PERA || 0) * 12;
+      const recalculatedUniform = activeSettings.uniformAllowance || 0;
       const recalculatedProductivityIncentive =
-        activeSettings.productivityIncentive;
+        activeSettings.productivityIncentive || 0;
       const recalculatedMedical = personnel.medical || 0;
       const recalculatedMeal = personnel.meal || 0;
       const recalculatedChildrenAllowance = personnel.childrenAllowance || 0;
       const recalculatedMidyearBonus = personnel.midyearBonus || personnel.monthlySalary || 0;
-      const recalculatedCashGift = activeSettings.cashGift;
+      const recalculatedCashGift = activeSettings.cashGift || 0;
       const recalculatedYearEndBonus = personnel.yearEndBonus;
       const recalculatedCourtAppearanceAmount = personnel.courtAppearance || 0;
       const recalculatedGsis =
-        personnel.annualSalary * activeSettings.gsisPremium;
+        personnel.annualSalary * (activeSettings.gsisPremium || 0);
       // Calculate PhilHealth premium for 2025 per Circular 2019-0009
       let monthlyPhilhealthPremium;
       const monthlySalary = personnel.monthlySalary;
@@ -290,8 +290,8 @@ exports.getAllPersonnelServices = async (req, res) => {
         monthlyPhilhealthPremium = monthlySalary * 0.05; // 5% rate for 2025
       }
       const recalculatedPhilhealth = (monthlyPhilhealthPremium * 12) / 2;
-      const recalculatedPagibig = activeSettings.pagibigPremium * 12;
-      const recalculatedEmpComp = activeSettings.employeeCompensation * 12;
+      const recalculatedPagibig = (activeSettings.pagibigPremium || 0) * 12;
+      const recalculatedEmpComp = (activeSettings.employeeCompensation || 0) * 12;
       const recalculatedTerminalLeave = personnel.terminalLeave || 0;
       const recalculatedearnedLeaves = personnel.earnedLeaves || 0;
       const recalculatedTotal =
@@ -660,7 +660,7 @@ exports.bulkAddPersonnelServices = async (req, res) => {
         childrenAllowance: req.body.childrenAllowance || 0,
         annualSalary: annualSalary,
         RATA: rataAmount * 12,
-        PERA: (req.body.PERA || activeSettings.PERA) * 12,
+        PERA: (req.body.PERA || activeSettings.PERA || 0) * 12,
         uniformALLOWANCE: activeSettings.uniformAllowance || 0,
         productivityIncentive:
           req.body.compensation?.productivityIncentive || 0,
@@ -677,7 +677,7 @@ exports.bulkAddPersonnelServices = async (req, res) => {
         subsistenceAllowanceST: 0,
         overtimePay: 0,
         loyaltyAward: 0,
-        earnedLeaves: monthlySalary * 30 * activeSettings.earnedLeaves, // Assuming 12 months of leaves for each employee
+        earnedLeaves: monthlySalary * 30 * (activeSettings.earnedLeaves || 0), // Assuming 12 months of leaves for each employee
         retirementBenefits: 0,
         terminalLeave: 0,
         courtAppearance: 0,

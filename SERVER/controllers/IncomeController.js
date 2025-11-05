@@ -297,16 +297,23 @@ exports.getIncomeById = async (req, res) => {
 // Get income by parameters
 exports.getIncomeByParams = async (req, res) => {
   try {
-    const { fiscalYear, budgetType, processBy, region, status, department, division } = req.query;
+    const { proposalId, fiscalYear, budgetType, processBy, region, status, department, division } = req.query;
     // Base query from parameters
     const baseQuery = {};
-    if (fiscalYear) baseQuery.fiscalYear = fiscalYear;
-    if (budgetType) baseQuery.budgetType = budgetType;
-    if (processBy) baseQuery.processBy = processBy;
-    if (region) baseQuery.region = region;
-    if (status) baseQuery.status = status;
-    if (department) baseQuery.department = department;
-    if (division) baseQuery.division = division;
+    
+    // ✅ Primary filter: if proposalId is provided, use it
+    if (proposalId) {
+      baseQuery.proposalId = proposalId;
+    } else {
+      // Fallback: use individual parameters
+      if (fiscalYear) baseQuery.fiscalYear = fiscalYear;
+      if (budgetType) baseQuery.budgetType = budgetType;
+      if (processBy) baseQuery.processBy = processBy;
+      if (region) baseQuery.region = region;
+      if (status) baseQuery.status = status;
+      if (department) baseQuery.department = department;
+      if (division) baseQuery.division = division;
+    }
 
     // Merge submission workflow filters when available; fallback to hierarchical filters
     const submissionFilters = req.submissionWorkflowFilters || {};

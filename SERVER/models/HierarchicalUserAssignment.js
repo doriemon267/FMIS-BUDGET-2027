@@ -77,6 +77,17 @@ const HierarchicalUserAssignmentSchema = new mongoose.Schema({
       return ['DIVISION', 'RESPONSIBILITY_CENTER', 'DIVISION_LEVEL'].includes(this.assignmentLevel);
     }
   },
+  // NEW: Budget Planning Analyst Region Configuration (November 2025)
+  isNIAWide: {
+    type: Boolean,
+    default: false,
+    description: 'If true, Budget Planning Analyst can access proposals from all regions (NIA-Wide)'
+  },
+  assignedRegions: {
+    type: [String],
+    default: [],
+    description: 'Specific regions assigned to Budget Planning Analyst (region codes like "MARIIS", "CALABARZON", etc. - only used if isNIAWide is false)'
+  },
   rolePermissions: {
     CreateProposals: { type: Boolean, default: false },
     EditOwnProposals: { type: Boolean, default: false },
@@ -177,7 +188,7 @@ HierarchicalUserAssignmentSchema.statics.getUserPermissions = async function(use
     // Check if user has workflow roles that grant default permissions
     const workflowRoles = Array.isArray(userRoles) ? userRoles : [];
     const hasWorkflowRole = workflowRoles.some(role => 
-      ['BUDGET_PREPARER', 'BUDGET_REVIEWER', 'BUDGET_APPROVER', 'BUDGET_ANALYST', 'BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER'].includes(role)
+      ['BUDGET_PREPARER', 'BUDGET_REVIEWER', 'BUDGET_APPROVER', 'BUDGET_PLANNING_ANALYST', 'BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER'].includes(role)
     );
     
     if (hasWorkflowRole) {
@@ -193,9 +204,9 @@ HierarchicalUserAssignmentSchema.statics.getUserPermissions = async function(use
         rolePermissions: {
           CreateProposals: workflowRoles.includes('BUDGET_PREPARER'),
           EditOwnProposals: true, // All workflow users can edit their own proposals
-          EditAllProposals: ['BUDGET_REVIEWER', 'BUDGET_APPROVER', 'BUDGET_ANALYST', 'BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER'].some(role => workflowRoles.includes(role)),
+          EditAllProposals: ['BUDGET_REVIEWER', 'BUDGET_APPROVER', 'BUDGET_PLANNING_ANALYST', 'BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER'].some(role => workflowRoles.includes(role)),
           DeleteProposals: ['BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER'].some(role => workflowRoles.includes(role)),
-          ApproveProposals: ['BUDGET_APPROVER', 'BUDGET_ANALYST', 'BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER'].some(role => workflowRoles.includes(role)),
+          ApproveProposals: ['BUDGET_APPROVER', 'BUDGET_PLANNING_ANALYST', 'BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER'].some(role => workflowRoles.includes(role)),
           ViewReports: true, // All workflow users can view reports
           ManageUsers: ['BUDGET_ADMIN', 'OVERALL_BUDGET_APPROVER'].some(role => workflowRoles.includes(role)),
           ManageSettings: ['BUDGET_ADMIN', 'OVERALL_BUDGET_APPROVER'].some(role => workflowRoles.includes(role))

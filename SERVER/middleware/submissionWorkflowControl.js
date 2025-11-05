@@ -42,8 +42,8 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
         userRoles.includes('BUDGET PREPARER') ||
         userRoles.includes('BUDGET REVIEWER') ||
         userRoles.includes('APPROVER') ||
-        userRoles.includes('BUDGET_ANALYST') ||
-        userRoles.includes('BUDGET_OFFICER') ||
+        userRoles.includes('BUDGET_PLANNING_ANALYST') ||
+        userRoles.includes('BUDGET OFFICER') ||
         userRoles.includes('OVERALL_BUDGET_APPROVER')
       );
       

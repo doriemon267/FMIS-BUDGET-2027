@@ -86,10 +86,10 @@ const proposalSchema = new mongoose.Schema({
     type: String,
     enum: [
       "BUDGET PREPARER",
+      "BUDGET_REVIEWER",
       "BUDGET_PLANNING_ANALYST",
       "APPROVER",
       "BUDGET_OFFICER",
-      "OVERALL_BUDGET_APPROVER",
       "OVERALL_BUDGET_APPROVER",
       "BUDGET_ADMIN"
     ],

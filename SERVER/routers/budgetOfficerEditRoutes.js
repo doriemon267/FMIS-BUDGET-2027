@@ -43,8 +43,8 @@ const requireBudgetOfficerAccess = (req, res, next) => {
   const validRoles = ['divisionapprover', 'officeapprover', 'departmentConsolidator', 'officeConsolidator', 'regionFinalVerifier', 'divisionReviewer', 'officeReviewer'];
   const hasValidRole = validRoles.some(role => workflowRoles.includes(role));
   
-  // Check user roles (includes BUDGET_ANALYST, APPROVER, REVIEWER)
-  const hasValidUserRole = userRoles.includes('BUDGET_ANALYST') || userRoles.includes('BUDGET APPROVER') || userRoles.includes('REVIEWER');
+  // Check user roles (includes BUDGET_ANALYST, BUDGET_PLANNING_ANALYST, APPROVER, REVIEWER)
+  const hasValidUserRole = userRoles.includes('BUDGET_ANALYST') || userRoles.includes('BUDGET_PLANNING_ANALYST') || userRoles.includes('BUDGET PLANNING ANALYST') || userRoles.includes('BUDGET APPROVER') || userRoles.includes('REVIEWER');
   
   // Check if user has EditAllProposals permission
   const hasPermission = req.hierarchicalFlags?.canEditAllProposals === true;

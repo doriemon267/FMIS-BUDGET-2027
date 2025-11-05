@@ -64,6 +64,9 @@ const CustomDrawer = ({ collapsed = false }) => {
   const isApprover = hasApproverRole();
   const isReviewer = roles.includes("BUDGET REVIEWER");
   const isBudgetPlanningAnalyst = roles.includes("BUDGET_PLANNING_ANALYST");
+  
+  // BUDGET_PLANNING_ANALYST should have same access as APPROVER for menus
+  const isBudgetPlanningAnalystOrApprover = isBudgetPlanningAnalyst || isApprover;
   return (
     <Box
       sx={{
@@ -103,7 +106,8 @@ const CustomDrawer = ({ collapsed = false }) => {
                     hasPermission(currentUser, "EditOwnProposals")) &&
                   !isOverallApprover &&
                   !isBudgetOfficer &&
-                  !isApprover,
+                  !isApprover &&
+                  !isBudgetPlanningAnalyst,  // ✅ Block both BUDGET_PLANNING_ANALYST and APPROVER from creating proposals
                 icon: <FaFileAlt />,
               },
 
@@ -208,7 +212,8 @@ const CustomDrawer = ({ collapsed = false }) => {
             isAllow={
               hasPermission(currentUser, "EditAllProposals") &&
               !isOverallApprover &&
-              !isBudgetOfficer
+              !isBudgetOfficer &&
+              !isBudgetPlanningAnalystOrApprover
             }
             collapsed={collapsed}
           />
@@ -220,7 +225,8 @@ const CustomDrawer = ({ collapsed = false }) => {
             isAllow={
               hasPermission(currentUser, "EditAllProposals") &&
               !isOverallApprover &&
-              !isBudgetOfficer
+              !isBudgetOfficer &&
+              !isBudgetPlanningAnalystOrApprover
             }
             collapsed={collapsed}
           />

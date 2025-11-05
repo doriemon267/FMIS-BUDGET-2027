@@ -113,62 +113,76 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     const normalized = roleValue.trim().toUpperCase().replace(/\s+/g, '_');
     const camelCaseNormalized = normalized.replace(/[^A-Z0-9_]/g, '_');
 
+    // Map all role synonyms to standardized workflow roles
+    // Standardized workflow: BUDGET_PREPARER → BUDGET_REVIEWER → BUDGET_APPROVER → BUDGET_PLANNING_ANALYST → BUDGET_OFFICER → OVERALL_BUDGET_APPROVER
     const roleSynonyms = {
-      ANALYST: 'PREPARER',
-      BUDGET_ANALYST: 'PREPARER',
-      BUDGET_OFFICER_ANALYST: 'PREPARER',
-      BA: 'PREPARER',
-      OFFICE_ANALYST: 'PREPARER',
-      ANALYST_OFFICER: 'PREPARER',
-      RESPONSIBILITY_CENTER: 'PREPARER',
-      RC: 'PREPARER',
+      // BUDGET PREPARER synonyms
+      ANALYST: 'BUDGET_PREPARER',
+      BUDGET_OFFICER_ANALYST: 'BUDGET_PREPARER',
+      BA: 'BUDGET_PREPARER',
+      OFFICE_ANALYST: 'BUDGET_PREPARER',
+      ANALYST_OFFICER: 'BUDGET_PREPARER',
+      RESPONSIBILITY_CENTER: 'BUDGET_PREPARER',
+      RC: 'BUDGET_PREPARER',
+      PREPARER: 'BUDGET_PREPARER',
+      BUDGET_PREPARER: 'BUDGET_PREPARER',
 
-      REVIEWER: 'APPROVER',
-      BUDGET_REVIEWER: 'APPROVER',
-      BUDGETREVIEWER: 'APPROVER',
-      REV: 'APPROVER',
-      DIVISION_REVIEWER: 'APPROVER',
-      DIVISIONAPPROVER: 'APPROVER',
-      DIVISION_APPROVER: 'APPROVER',
-      DIVISIONVERIFIER: 'APPROVER',
-      DIVISION_VERIFIER: 'APPROVER',
+      // BUDGET REVIEWER synonyms
+      REVIEWER: 'BUDGET_REVIEWER',
+      BUDGET_REVIEWER: 'BUDGET_REVIEWER',
+      BUDGETREVIEWER: 'BUDGET_REVIEWER',
+      REV: 'BUDGET_REVIEWER',
+      DIVISION_REVIEWER: 'BUDGET_REVIEWER',
 
+      // BUDGET APPROVER synonyms
+      APPROVER: 'BUDGET_APPROVER',
+      BUDGET_APPROVER: 'BUDGET_APPROVER',
+      DIVISIONAPPROVER: 'BUDGET_APPROVER',
+      DIVISION_APPROVER: 'BUDGET_APPROVER',
+      DIVISIONVERIFIER: 'BUDGET_APPROVER',
+      DIVISION_VERIFIER: 'BUDGET_APPROVER',
+      OFFICE_APPROVER: 'BUDGET_APPROVER',
+      OFFICEAPPROVER: 'BUDGET_APPROVER',
+
+      // BUDGET PLANNING ANALYST
+      BUDGET_PLANNING_ANALYST: 'BUDGET_PLANNING_ANALYST',
+      BUDGETANALYST: 'BUDGET_PLANNING_ANALYST',
+      PLANNING_ANALYST: 'BUDGET_PLANNING_ANALYST',
+
+      // BUDGET OFFICER synonyms
       BUDGET_OFFICER: 'BUDGET_OFFICER',
       BUDGETOFFICER: 'BUDGET_OFFICER',
       OFFICER: 'BUDGET_OFFICER',
       BUDGET_SPECIALIST: 'BUDGET_OFFICER',
       OFFICE_VERIFIER: 'BUDGET_OFFICER',
       OFFICEVERIFIER: 'BUDGET_OFFICER',
-      OFFICE_APPROVER: 'APPROVER',
-      OFFICEAPPROVER: 'APPROVER',
       OFFICE_CONSOLIDATOR: 'BUDGET_OFFICER',
       BUDGET_SUPERVISOR: 'BUDGET_OFFICER',
 
-      BUDGET_PLANNING_ANALYST: 'BUDGET_PLANNING_ANALYST',
-      BUDGETANALYST: 'BUDGET_PLANNING_ANALYST',
-      PLANNING_ANALYST: 'BUDGET_PLANNING_ANALYST',
+      // OVERALL BUDGET APPROVER synonyms
+      OVERALL_BUDGET_APPROVER: 'OVERALL_BUDGET_APPROVER',
+      BUDGETMANAGER: 'OVERALL_BUDGET_APPROVER',
+      BUDGET_MANAGER: 'OVERALL_BUDGET_APPROVER',
+      BUDGET_OFFICE_HEAD: 'OVERALL_BUDGET_APPROVER',
+      BUDGET_DIRECTOR: 'OVERALL_BUDGET_APPROVER',
+      FINAL_APPROVER: 'OVERALL_BUDGET_APPROVER',
+      MANAGER_APPROVER: 'OVERALL_BUDGET_APPROVER',
+      MANAGERAPPROVER: 'OVERALL_BUDGET_APPROVER',
+      REGION_FINAL_VERIFIER: 'OVERALL_BUDGET_APPROVER',
+      REGIONAL_FINAL_VERIFIER: 'OVERALL_BUDGET_APPROVER',
+      REGION_MANAGER: 'OVERALL_BUDGET_APPROVER',
+      OVERALL_APPROVER: 'OVERALL_BUDGET_APPROVER',
 
-      BUDGETMANAGER: 'BUDGET_MANAGER',
-      BUDGET_MANAGER: 'BUDGET_MANAGER',
-      BUDGET_OFFICE_HEAD: 'BUDGET_MANAGER',
-      BUDGET_DIRECTOR: 'BUDGET_MANAGER',
-      FINAL_APPROVER: 'BUDGET_MANAGER',
-      MANAGER_APPROVER: 'BUDGET_MANAGER',
-      MANAGERAPPROVER: 'BUDGET_MANAGER',
-      REGION_FINAL_VERIFIER: 'BUDGET_MANAGER',
-      REGIONAL_FINAL_VERIFIER: 'BUDGET_MANAGER',
-      REGION_MANAGER: 'BUDGET_MANAGER',
-      OVERALL_APPROVER: 'BUDGET_MANAGER',
-      OVERALL_BUDGET_APPROVER: 'BUDGET_MANAGER',
-
+      // BUDGET ADMIN
       BUDGETADMIN: 'BUDGET_ADMIN',
-      FULL: 'BUDGET_MANAGER'  // Map 'FULL' to manager role
+      BUDGET_ADMIN: 'BUDGET_ADMIN',
+      FULL: 'OVERALL_BUDGET_APPROVER'  // Map 'FULL' access to OVERALL_BUDGET_APPROVER
     };
 
     const result = roleSynonyms[camelCaseNormalized] || camelCaseNormalized;
     
     // Debug log for mapping issues
-    if (roleValue && ['FULL', 'REGIONAL_FINAL_VERIFIER', 'REGION_FINAL_VERIFIER'].includes(camelCaseNormalized)) {
+    if (roleValue && ['FULL', 'REGIONAL_FINAL_VERIFIER', 'REGION_FINAL_VERIFIER', 'PREPARER', 'REVIEWER', 'APPROVER'].includes(camelCaseNormalized)) {
       console.log(`🔄 Role Mapping: "${roleValue}" → normalized: "${camelCaseNormalized}" → final: "${result}"`);
     }
     
@@ -253,21 +267,22 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     const normalizedStatus = String(status || '').toUpperCase().trim();
 
     // Check if user has the required role for actions
-    const isPreparer = normalizedRoles.includes('PREPARER');
-    const isBudgetReviewer = normalizedRoles.includes('BUDGET_REVIEWER');
-    const isApprover = normalizedRoles.includes('APPROVER');
+    // Use standardized role names: BUDGET PREPARER → BUDGET REVIEWER → BUDGET APPROVER → BUDGET PLANNING ANALYST → BUDGET OFFICER → OVERALL BUDGET APPROVER
+    const isPreparer = normalizedRoles.includes('BUDGET_PREPARER') || normalizedRoles.includes('PREPARER');
+    const isBudgetReviewer = normalizedRoles.includes('BUDGET_REVIEWER') || normalizedRoles.includes('REVIEWER');
+    const isApprover = normalizedRoles.includes('BUDGET_APPROVER') || normalizedRoles.includes('APPROVER');
     const isBudgetPlanningAnalyst = normalizedRoles.includes('BUDGET_PLANNING_ANALYST');
     const isBudgetOfficer = normalizedRoles.includes('BUDGET_OFFICER');
-    const isOverallApprover = normalizedRoles.includes('BUDGET_MANAGER');
+    const isOverallApprover = normalizedRoles.includes('OVERALL_BUDGET_APPROVER') || normalizedRoles.includes('BUDGET_MANAGER');
     const isBudgetAdmin = normalizedRoles.includes('BUDGET_ADMIN');
 
     // ROLE HIERARCHY PROTECTION: Use highest role in hierarchy
-    // Hierarchy: PREPARER < REVIEWER < APPROVER < BUDGET_PLANNING_ANALYST < BUDGET_OFFICER < MANAGER
-    // Only block higher actions if user has ONLY PREPARER role
+    // Hierarchy: BUDGET PREPARER < BUDGET REVIEWER < BUDGET APPROVER < BUDGET PLANNING ANALYST < BUDGET OFFICER < OVERALL BUDGET APPROVER
+    // Only block higher actions if user has ONLY BUDGET PREPARER role
     const isPreparerOnly = isPreparer && !isBudgetReviewer && !isApprover && !isBudgetPlanningAnalyst && !isBudgetOfficer && !isOverallApprover && !isBudgetAdmin;
     const hasHigherRole = isBudgetReviewer || isApprover || isBudgetPlanningAnalyst || isBudgetOfficer || isOverallApprover || isBudgetAdmin;
     
-    // Block manager actions only if user is PREPARER ONLY (no other roles)
+    // Block manager actions only if user is BUDGET PREPARER ONLY (no other roles)
     const shouldBlockManagerActions = isPreparerOnly;
     // Block officer actions only if user is PREPARER ONLY (no other roles)
     const shouldBlockOfficerActions = isPreparerOnly;
@@ -518,10 +533,10 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
 
     // Log if actions are being blocked due to role hierarchy
     if (shouldBlockManagerActions && (isOverallApprover || isBudgetAdmin)) {
-      console.warn('🚫 BLOCKED: Manager actions blocked for BUDGET_ANALYST user (role hierarchy protection active)');
+      console.warn('🚫 BLOCKED: Manager actions blocked for BUDGET_PLANNING_ANALYST user (role hierarchy protection active)');
     }
     if (shouldBlockOfficerActions && isBudgetOfficer) {
-      console.warn('🚫 BLOCKED: Officer actions blocked for BUDGET_ANALYST user (role hierarchy protection active)');
+      console.warn('🚫 BLOCKED: Officer actions blocked for BUDGET_PLANNING_ANALYST user (role hierarchy protection active)');
     }
 
     console.log('🎯 Available Actions:', actions.length, actions.map(a => a.label));
@@ -855,6 +870,13 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
         "manager-save-edits"
       ].includes(action)) {
         requestData.comment = noteValue;
+        // For approver forwarding/submission actions, include current table data if available
+        if ((action === 'approver-approve-forward-analyst' || action === 'approver-submit-to-officer') && typeof getTableData === 'function') {
+          const tableData = getTableData();
+          if (tableData) {
+            requestData.tableData = tableData;
+          }
+        }
       } else if (action === "submit-to-manager") {
         // For consolidation, we need multiple proposal IDs and consolidated title
         requestData = {

@@ -47,7 +47,7 @@ import { isTokenExpired } from '../utils/jwt';
 const ACCESS_LEVELS = [
   { value: 'RESPONSIBILITY_CENTER', label: 'Responsibility Center Level', icon: <BusinessIcon />, color: '#2196F3' },
   { value: 'OFFICE', label: 'Office Level', icon: <DomainIcon />, color: '#FF9800' },
-  { value: 'FULL', label: 'Budget Admin Level', icon: <HierarchyIcon />, color: '#9C27B0' },
+  { value: 'FULL', label: 'Budget Revenue Division Level', icon: <HierarchyIcon />, color: '#9C27B0' },
   { value: 'OWN_ONLY', label: 'Own Records Only', icon: <PersonIcon />, color: '#757575' }
 ];
 
@@ -71,14 +71,14 @@ const USER_ROLES = [
     value: 'BUDGET APPROVER', 
     label: 'Budget Approver', 
     description: 'Approves proposals after review/creation',
-    workflowRoles: 'APPROVER (approves proposals)',
+    workflowRoles: 'BUDGET_APPROVER (approves proposals)',
     assignmentLevels: ['DIVISION_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL']
   },
   { 
     value: 'BUDGET_PLANNING_ANALYST', 
     label: 'Budget Planning Analyst', 
     description: 'Performs technical analysis of proposals',
-    workflowRoles: 'BUDGET_ANALYST (analyzes budget proposals)',
+    workflowRoles: 'BUDGET_PLANNING_ANALYST (analyzes budget proposals)',
     assignmentLevels: ['BUDGET_AND_REVENUE_DIVISION']
   },
   { 
@@ -124,6 +124,9 @@ const HierarchicalUserAssignmentPage = () => {
     assignmentLevel: 'OFFICE', // Changed from assignmentLevel to match new structure
     officeId: '',
     responsibilityCenterName: '',
+    // Budget Planning Analyst specific fields
+    isNIAWide: false, // Toggle for NIA-Wide vs specific regions
+    assignedRegions: [], // List of region IDs assigned to Budget Planning Analyst
     rolePermissions: {
       CreateProposals: true,
       EditOwnProposals: true,
@@ -390,7 +393,7 @@ const HierarchicalUserAssignmentPage = () => {
       handleFormChange('userRole', budgetRole);
 
       // Auto-set assignment level and permissions based on the budget role
-      if (budgetRole === 'BUDGET_ANALYST') {
+      if (budgetRole === 'BUDGET_PLANNING_ANALYST') {
         handleFormChange('assignmentLevel', 'RESPONSIBILITY_CENTER');
         handleFormChange('rolePermissions', {
           CreateProposals: true,
@@ -562,6 +565,9 @@ const HierarchicalUserAssignmentPage = () => {
       assignmentLevel: 'OFFICE', // Keep assignmentLevel for form state
       officeId: '',
       responsibilityCenterName: '',
+      // Reset Budget Planning Analyst specific fields
+      isNIAWide: false,
+      assignedRegions: [],
       rolePermissions: {
         CreateProposals: true,
         EditOwnProposals: true,
@@ -593,6 +599,16 @@ const HierarchicalUserAssignmentPage = () => {
       setSnackbar({
         open: true,
         message: 'Please enter a valid email address',
+        severity: 'warning'
+      });
+      return;
+    }
+
+    // Validate Budget Planning Analyst region selection
+    if (formData.userRole === 'BUDGET_PLANNING_ANALYST' && !formData.isNIAWide && formData.assignedRegions.length === 0) {
+      setSnackbar({
+        open: true,
+        message: 'Budget Planning Analyst must be assigned to at least one region or have NIA-Wide access',
         severity: 'warning'
       });
       return;
@@ -635,6 +651,15 @@ const HierarchicalUserAssignmentPage = () => {
       accessScope: normalizedLevel,
       rolePermissions: formData.rolePermissions
     };
+
+    // Add Budget Planning Analyst region configuration
+    if (formData.userRole === 'BUDGET_PLANNING_ANALYST') {
+      payload.isNIAWide = formData.isNIAWide;
+      // Only include valid region IDs (filter out empty or invalid values)
+      payload.assignedRegions = formData.isNIAWide 
+        ? [] 
+        : (formData.assignedRegions || []).filter(id => id && String(id).trim().length > 0);
+    }
 
     // Only include organizational fields when they have values
     // Map officeId to departmentId and responsibilityCenterName to divisionName for server compatibility
@@ -954,7 +979,7 @@ const HierarchicalUserAssignmentPage = () => {
                       } else if (newValue.value === 'BUDGET PREPARER') {
                         rolePerms.CreateProposals = true;
                         rolePerms.EditOwnProposals = true;
-                      } else if (newValue.value === 'BUDGET_ANALYST' || newValue.value === 'BUDGET_OFFICER' || newValue.value === 'OVERALL_BUDGET_APPROVER') {
+                      } else if (newValue.value === 'BUDGET_PLANNING_ANALYST' || newValue.value === 'BUDGET_OFFICER' || newValue.value === 'OVERALL_BUDGET_APPROVER') {
                         rolePerms.EditAllProposals = true;
                         rolePerms.ApproveProposals = true;
                         if (newValue.value === 'OVERALL_BUDGET_APPROVER') {
@@ -1002,6 +1027,157 @@ const HierarchicalUserAssignmentPage = () => {
                   fullWidth
                 />
               </Grid>
+
+              {/* Budget Planning Analyst - Region Selection */}
+              {formData.userRole === 'BUDGET_PLANNING_ANALYST' && (
+                <>
+                  <Grid item xs={12}>
+                    <Alert severity="info" icon={<InfoIcon />}>
+                      <Typography variant="subtitle2">Region Assignment for Budget Planning Analyst</Typography>
+                      <Typography variant="body2">
+                        Choose whether this analyst can access proposals from all regions (NIA-Wide) or from specific regions only.
+                      </Typography>
+                    </Alert>
+                  </Grid>
+                  
+                  <Grid item xs={12}>
+                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                      <Button
+                        variant={formData.isNIAWide ? 'contained' : 'outlined'}
+                        color={formData.isNIAWide ? 'primary' : 'inherit'}
+                        onClick={() => {
+                          handleFormChange('isNIAWide', true);
+                          handleFormChange('assignedRegions', []);
+                        }}
+                        sx={{ flex: 1 }}
+                      >
+                        <Box sx={{ textAlign: 'left' }}>
+                          <Typography variant="body2" fontWeight="bold">
+                            ✓ NIA-Wide / All Regions
+                          </Typography>
+                          <Typography variant="caption">
+                            Access proposals from all regions
+                          </Typography>
+                        </Box>
+                      </Button>
+                      <Button
+                        variant={!formData.isNIAWide ? 'contained' : 'outlined'}
+                        color={!formData.isNIAWide ? 'primary' : 'inherit'}
+                        onClick={() => {
+                          handleFormChange('isNIAWide', false);
+                        }}
+                        sx={{ flex: 1 }}
+                      >
+                        <Box sx={{ textAlign: 'left' }}>
+                          <Typography variant="body2" fontWeight="bold">
+                            ✓ Specific Regions
+                          </Typography>
+                          <Typography variant="caption">
+                            Select specific regions only
+                          </Typography>
+                        </Box>
+                      </Button>
+                    </Box>
+                  </Grid>
+
+                  {!formData.isNIAWide && (
+                    <Grid item xs={12}>
+                      <Autocomplete
+                        multiple
+                        options={(() => {
+                          const offices = organizationStructure?.availableUnits?.offices || [];
+                          // Deduplicate by region - keep only one entry per region
+                          const seenRegions = new Set();
+                          return offices.filter(office => {
+                            const region = office.region || office.Region || office.officeName || office.name;
+                            if (seenRegions.has(region)) return false;
+                            seenRegions.add(region);
+                            return true;
+                          });
+                        })()}
+                        getOptionLabel={(option) => {
+                          if (typeof option === 'string') return option;
+                          // Show region/office name - prioritize more descriptive fields
+                          if (option.region && option.region !== 'All Regions') {
+                            return `${option.region}`;
+                          }
+                          if (option.officeName && option.officeName.trim().length > 0) {
+                            return `${option.officeName}`;
+                          }
+                          if (option.Region && option.Region !== 'All Regions') {
+                            return `${option.Region}`;
+                          }
+                          return option.name || 'Regional Office';
+                        }}
+                        value={(organizationStructure?.availableUnits?.offices || [])
+                          .filter((office, index, arr) => {
+                            // Deduplicate displayed values
+                            const region = office.region || office.Region || office.officeName;
+                            return arr.findIndex(o => (o.region || o.Region || o.officeName) === region) === index;
+                          })
+                          .filter(office => {
+                            const officeRegion = office.region || office.Region || office.officeName;
+                            return (formData.assignedRegions || []).includes(officeRegion) ||
+                                   (formData.assignedRegions || []).includes(office.id);
+                          })
+                        }
+                        isOptionEqualToValue={(option, value) => {
+                          if (!option || !value) return false;
+                          // Match by region name first
+                          const optionRegion = option.region || option.Region || option.officeName;
+                          const valueRegion = value.region || value.Region || value.officeName;
+                          if (optionRegion === valueRegion && optionRegion) return true;
+                          // Match by office ID as fallback
+                          return option.id === value.id;
+                        }}
+                        onChange={(event, newValue) => {
+                          // Extract unique region identifiers from selected options
+                          const regionValues = newValue.map(option => {
+                            // Use the region field as a unique identifier for the assignment
+                            return option.region || option.Region || option.officeName || option.id;
+                          });
+                          handleFormChange('assignedRegions', regionValues);
+                        }}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="Select Regions"
+                            placeholder="Search and select regions..."
+                            helperText="Select one or more regions where this analyst can access proposals"
+                          />
+                        )}
+                        renderOption={(props, option) => {
+                          const { key, ...otherProps } = props;
+                          // Show only region name - no department subtitle
+                          let displayName = 'Regional Office';
+                          if (option.region && option.region !== 'All Regions') {
+                            displayName = option.region;
+                          } else if (option.officeName && option.officeName.trim().length > 0) {
+                            displayName = option.officeName;
+                          } else if (option.Region && option.Region !== 'All Regions') {
+                            displayName = option.Region;
+                          } else if (option.name && option.name !== 'REGIONAL OFFICE') {
+                            displayName = option.name;
+                          }
+                          return (
+                            <Box component="li" key={key} {...otherProps}>
+                              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                {displayName}
+                              </Typography>
+                            </Box>
+                          );
+                        }}
+                        fullWidth
+                      />
+                      {(formData.assignedRegions || []).length === 0 && !formData.isNIAWide && (
+                        <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block' }}>
+                          ⚠️ Please select at least one region
+                        </Typography>
+                      )}
+                    </Grid>
+                  )}
+                </>
+              )}
 
               <Grid item xs={12}>
                 <Autocomplete
@@ -1124,7 +1300,7 @@ const HierarchicalUserAssignmentPage = () => {
                         key={key}
                         title={
                           option.value === 'FULL'
-                            ? 'Budget admin level access to all organizational levels (all permissions and workflow roles automatically granted)'
+                            ? 'Budget Revenue Division level access to all organizational levels (all permissions and workflow roles automatically granted)'
                             : option.value === 'RESPONSIBILITY_CENTER'
                               ? 'Access limited to responsibility center level'
                               : option.value === 'OFFICE'
@@ -1149,7 +1325,7 @@ const HierarchicalUserAssignmentPage = () => {
                   <Grid item xs={12}>
                     <Alert severity="success" sx={{ mt: 1 }}>
                       <Typography variant="body2">
-                        <strong>Budget Admin Level:</strong> All permissions and workflow roles are automatically granted for users with administrative access, including access to all settings pages.
+                        <strong>Budget Revenue Division Level:</strong> All permissions and workflow roles are automatically granted for users with administrative access, including access to all settings pages.
                       </Typography>
                     </Alert>
                   </Grid>
@@ -1567,7 +1743,7 @@ const HierarchicalUserAssignmentPage = () => {
                                   const perms = assignment.rolePermissions || {};
                                   
                                   if (level === 'RESPONSIBILITY_CENTER' || level === 'DIVISION') {
-                                    inferredRole = 'BUDGET_ANALYST';
+                                    inferredRole = 'BUDGET_PLANNING_ANALYST';
                                   } else if (level === 'OFFICE' || level === 'DEPARTMENT') {
                                     if (perms.ApproveProposals) {
                                       inferredRole = 'BUDGET_OFFICER';
@@ -1599,6 +1775,8 @@ const HierarchicalUserAssignmentPage = () => {
                                     assignmentLevel: reverseAssignmentLevelMap[assignment.assignmentLevel] || assignment.assignmentLevel,
                                     officeId: assignment.officeId || assignment.departmentId || '', // Use officeId if available, otherwise departmentId
                                     responsibilityCenterName: assignment.divisionName || '',
+                                    isNIAWide: assignment.isNIAWide || false, // Load NIA-Wide flag from assignment
+                                    assignedRegions: assignment.assignedRegions || [], // Load assigned regions from assignment
                                     rolePermissions: assignment.rolePermissions || {
                                       CreateProposals: true,
                                       EditOwnProposals: true,
@@ -1619,7 +1797,9 @@ const HierarchicalUserAssignmentPage = () => {
                                     // actualUserRole,
                                     assignmentLevel: formFields.assignmentLevel,
                                     officeId: formFields.officeId,
-                                    responsibilityCenter: formFields.responsibilityCenterName
+                                    responsibilityCenter: formFields.responsibilityCenterName,
+                                    isNIAWide: formFields.isNIAWide,
+                                    assignedRegions: formFields.assignedRegions
                                   });
                                 }}
                               >

@@ -91,12 +91,20 @@ personnelServicesRouter.get(
 // Get personnel by parameters (protected with hierarchical access control)
 personnelServicesRouter.get("/getpersonnels/byParams", async (req, res) => {
   try {
-    const { fiscalYear, budgetType, processBy, region, status } = req.query;
+    const { proposalId, fiscalYear, budgetType, processBy, region, status } = req.query;
     const query = {};
-    if (fiscalYear) query.fiscalYear = fiscalYear;
-    if (budgetType) query.budgetType = budgetType;
-    if (processBy) query.processBy = processBy;
-    if (status) query.status = status;
+    
+    // ✅ Primary filter: if proposalId is provided, use it
+    if (proposalId) {
+      query.proposalId = proposalId;
+    } else {
+      // Fallback: use individual parameters
+      if (fiscalYear) query.fiscalYear = fiscalYear;
+      if (budgetType) query.budgetType = budgetType;
+      if (processBy) query.processBy = processBy;
+      if (status) query.status = status;
+    }
+    
     // Apply hierarchical filters
     if (req.hierarchicalFilters && Object.keys(req.hierarchicalFilters).length > 0) {
       Object.assign(query, req.hierarchicalFilters);
@@ -118,12 +126,20 @@ personnelServicesRouter.get("/getpersonnels/byParams", async (req, res) => {
 // Keep the original route for backward compatibility (protected with hierarchical access control)
 personnelServicesRouter.get("/api/personnel/getByParams", async (req, res) => {
   try {
-    const { fiscalYear, budgetType, processBy, region, status } = req.query;
+    const { proposalId, fiscalYear, budgetType, processBy, region, status } = req.query;
     const query = {};
-    if (fiscalYear) query.fiscalYear = fiscalYear;
-    if (budgetType) query.budgetType = budgetType;
-    if (processBy) query.processBy = processBy;
-    if (status) query.status = status;
+    
+    // ✅ Primary filter: if proposalId is provided, use it
+    if (proposalId) {
+      query.proposalId = proposalId;
+    } else {
+      // Fallback: use individual parameters
+      if (fiscalYear) query.fiscalYear = fiscalYear;
+      if (budgetType) query.budgetType = budgetType;
+      if (processBy) query.processBy = processBy;
+      if (status) query.status = status;
+    }
+    
     // Apply hierarchical filters
     if (req.hierarchicalFilters && Object.keys(req.hierarchicalFilters).length > 0) {
       Object.assign(query, req.hierarchicalFilters);

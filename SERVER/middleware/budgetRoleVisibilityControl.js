@@ -68,27 +68,59 @@ const budgetRoleVisibilityControl = () => {
         case 'BUDGET_PLANNING_ANALYST':
           // STEP 4 of 6-step workflow: PREPARER → BUDGET REVIEWER → BUDGET APPROVER → [BUDGET_PLANNING_ANALYST] → BUDGET_OFFICER → OVERALL_APPROVER
           // BUDGET_PLANNING_ANALYST can see proposals forwarded by BUDGET APPROVER AND proposals they've worked on
-          visibilityFilter = {
-            $or: [
-              // Proposals currently assigned to BUDGET_PLANNING_ANALYST
-              { currentAssigneeRole: 'BUDGET_PLANNING_ANALYST' },
-              { pendingWithRoles: 'BUDGET_PLANNING_ANALYST' },
-              {
-                status: {
-                  $in: [
-                    'Forwarded to Analyst',
-                    'FORWARDED_TO_ANALYST'
-                  ]
-                }
-              },
-              // Proposals BUDGET_PLANNING_ANALYST has previously worked on (retain visibility)
-              { 'workflowHistory.userId': userId },
-              // Own proposals and organizational scope
-              { createdByUserId: userId },
-              { processBy: userId },
-              ...(userDivision ? [{ division: userDivision }] : [])
-            ]
-          };
+          // WITH REGION FILTERING: Can only see proposals from assigned regions (or all if NIA-Wide)
+          
+          // Get region assignment for BUDGET_PLANNING_ANALYST
+          const isNIAWide = hierarchicalAssignment.isNIAWide === true;
+          const assignedRegions = hierarchicalAssignment.assignedRegions || [];
+          
+          console.log('🔐 [budgetRoleVisibilityControl] BUDGET_PLANNING_ANALYST region filtering:', {
+            userId,
+            isNIAWide,
+            assignedRegions,
+            hierarchicalAssignment: hierarchicalAssignment
+          });
+          
+          // Build base visibility filter
+          const analystVisibilityOptions = [
+            // Proposals currently assigned to BUDGET_PLANNING_ANALYST
+            { currentAssigneeRole: 'BUDGET_PLANNING_ANALYST' },
+            { pendingWithRoles: 'BUDGET_PLANNING_ANALYST' },
+            {
+              status: {
+                $in: [
+                  'Forwarded to Analyst',
+                  'FORWARDED_TO_ANALYST'
+                ]
+              }
+            },
+            // Proposals BUDGET_PLANNING_ANALYST has previously worked on (retain visibility)
+            { 'workflowHistory.userId': userId },
+            // Own proposals and organizational scope
+            { createdByUserId: userId },
+            { processBy: userId },
+            ...(userDivision ? [{ division: userDivision }] : [])
+          ];
+          
+          // Apply region filtering based on assignment
+          if (isNIAWide) {
+            // NIA-Wide: No region restriction - can see all proposals
+            visibilityFilter = { $or: analystVisibilityOptions };
+            console.log('🌍 BUDGET_PLANNING_ANALYST has NIA-Wide access - showing all regions');
+          } else if (assignedRegions && assignedRegions.length > 0) {
+            // Specific regions: Can only see proposals from assigned regions
+            visibilityFilter = {
+              $and: [
+                { region: { $in: assignedRegions } },  // Region must match assigned regions
+                { $or: analystVisibilityOptions }       // And visibility rules must apply
+              ]
+            };
+            console.log(`🔒 BUDGET_PLANNING_ANALYST restricted to regions: ${assignedRegions.join(', ')}`);
+          } else {
+            // No region assignment yet - show nothing for safety
+            visibilityFilter = { _id: null }; // Return no proposals
+            console.log('⚠️  BUDGET_PLANNING_ANALYST has no region assignment - showing no proposals');
+          }
           break;
 
         case 'BUDGET_OFFICER':

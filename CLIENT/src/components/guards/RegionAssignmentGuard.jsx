@@ -110,20 +110,29 @@ const AccessGuard = ({ children }) => {
   // ✅ Check roles - Allow all Budget staff + SUPER ADMIN + Workflow roles
   const roles = currentUser?.Roles || [];
   
-  // Budget staff roles + Workflow roles that should have access
+  // Budget staff roles + Workflow roles that should have access (6-step workflow standardized names)
   const authorizedRoles = [
     'SUPER ADMIN',
     'SUPER_ADMIN',  // Handle underscore variant
+    'ADMIN',
+    'BUDGET_ADMIN',
     'BUDGET ADMIN',
     'BUDGET COORDINATOR',
     'BUDGET MANAGER',
+    'BUDGET_OFFICER',
     'BUDGET OFFICER',
+    'BUDGET_PREPARER',
     'BUDGET PREPARER',
+    'BUDGET_REVIEWER',
     'BUDGET REVIEWER',
+    'BUDGET_APPROVER',
     'BUDGET APPROVER',
+    'BUDGET_PLANNING_ANALYST',     // ✅ NEW: Add BUDGET_PLANNING_ANALYST (standardized)
+    'BUDGET PLANNING ANALYST',     // ✅ NEW: Add variant with spaces
+    'OVERALL_BUDGET_APPROVER',
+    'OVERALL BUDGET APPROVER',
     'REVIEWER',
-    'APPROVER',
-    'OVERALL_BUDGET_APPROVER'
+    'APPROVER'
   ];
   
   const isAuthorized = roles.some(role => authorizedRoles.includes(role));

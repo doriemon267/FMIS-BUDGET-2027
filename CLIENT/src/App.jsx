@@ -179,7 +179,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={[]}
-              requiredWorkflowRoles={["superAdmin", "preparer", "reviewer", "approver", "overallBudgetApprover"]}
+              requiredWorkflowRoles={["superAdmin", "preparer", "reviewer", "approver", "overallBudgetApprover", "budgetAnalyst"]}
             >
               <AllProposalsPage />
             </ProtectedRoute>
@@ -281,7 +281,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["ViewReports"]}
-              requiredWorkflowRoles={["superAdmin"]}
+              requiredWorkflowRoles={["superAdmin", "budgetAnalyst"]}
             >
               <ConsolidatedCorporateIncomePage />
             </ProtectedRoute>
@@ -303,7 +303,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["ViewReports"]}
-              requiredWorkflowRoles={["superAdmin"]}
+              requiredWorkflowRoles={["superAdmin", "budgetAnalyst"]}
             >
               <ConsolidatedReportsPage />
             </ProtectedRoute>
@@ -314,7 +314,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["ViewReports"]}
-              requiredWorkflowRoles={["superAdmin"]}
+              requiredWorkflowRoles={["superAdmin", "budgetAnalyst"]}
             >
               <ConsolidatedCapitalOutlayReportsPage />
             </ProtectedRoute>
@@ -325,7 +325,7 @@ const App = () => {
           element={
             <ProtectedRoute
               requiredPermissions={["ViewReports"]}
-              requiredWorkflowRoles={["superAdmin"]}
+              requiredWorkflowRoles={["superAdmin", "budgetAnalyst"]}
             >
               <ConsolidatedPersonnelServicesReportsPage />
             </ProtectedRoute>
@@ -334,7 +334,7 @@ const App = () => {
         <Route
           path="/comprehensive-reports"
           element={
-            <ProtectedRoute requiredPermissions={["ViewReports"]} requiredWorkflowRoles={["superAdmin"]}>
+            <ProtectedRoute requiredPermissions={["ViewReports"]} requiredWorkflowRoles={["superAdmin", "budgetAnalyst"]}>
               <ComprehensiveReportsPage />
             </ProtectedRoute>
           }

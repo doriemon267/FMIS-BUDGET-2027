@@ -2,7 +2,7 @@
  * Create Initial Hierarchical User Assignments
  * 
  * This script creates the 4 main budget users with 6-step workflow roles:
- * - Joshua Demafelez - BUDGET_ANALYST (STEP 4 - divisionCreator)
+ * - Joshua Demafelez - BUDGET_PLANNING_ANALYST (STEP 4 - divisionCreator)
  * - Andrie Barrameda - BUDGET_OFFICER (STEP 5 - officeConsolidator, officeFinalVerifier)
  * - Nelson Eloso - BUDGET REVIEWER (STEP 2 - divisionReviewer)
  * - Reymund Edra - OVERALL_BUDGET_APPROVER (STEP 6 - regionFinalVerifier)
@@ -23,13 +23,13 @@ const initialUsers = [
     userId: 'joshua.demafelez',
     userName: 'Joshua Demafelez',
     email: 'joshua.demafelez@dreed.gov.ph',
-    userRole: 'BUDGET_ANALYST',
+    userRole: 'BUDGET_PLANNING_ANALYST',
     accessScope: 'DIVISION',
     assignmentLevel: 'DIVISION',
     regionId: NCR_REGION_ID,
     departmentId: PLANNING_DEPT_ID,
     divisionName: 'Budget Division',
-    primaryRoles: ['BUDGET_ANALYST'],
+    primaryRoles: ['BUDGET_PLANNING_ANALYST'],
     workflowRoles: ['divisionCreator'],
     rolePermissions: {
       CreateProposals: true,
@@ -151,14 +151,14 @@ async function createInitialUsers() {
     const preparers = await HierarchicalUserAssignment.countDocuments({ userRole: 'BUDGET PREPARER', isActive: true });
     const reviewers = await HierarchicalUserAssignment.countDocuments({ userRole: 'BUDGET REVIEWER', isActive: true });
     const approvers = await HierarchicalUserAssignment.countDocuments({ userRole: 'BUDGET APPROVER', isActive: true });
-    const analysts = await HierarchicalUserAssignment.countDocuments({ userRole: 'BUDGET_ANALYST', isActive: true });
+    const analysts = await HierarchicalUserAssignment.countDocuments({ userRole: 'BUDGET_PLANNING_ANALYST', isActive: true });
     const officers = await HierarchicalUserAssignment.countDocuments({ userRole: 'BUDGET_OFFICER', isActive: true });
     const approversOverall = await HierarchicalUserAssignment.countDocuments({ userRole: 'OVERALL_BUDGET_APPROVER', isActive: true });
     
     console.log(`   STEP 1 - PREPARER: ${preparers}`);
     console.log(`   STEP 2 - BUDGET REVIEWER: ${reviewers}`);
     console.log(`   STEP 3 - BUDGET APPROVER: ${approvers}`);
-    console.log(`   STEP 4 - BUDGET_ANALYST: ${analysts}`);
+    console.log(`   STEP 4 - BUDGET_PLANNING_ANALYST: ${analysts}`);
     console.log(`   STEP 5 - BUDGET_OFFICER: ${officers}`);
     console.log(`   STEP 6 - OVERALL_BUDGET_APPROVER: ${approversOverall}`);
 

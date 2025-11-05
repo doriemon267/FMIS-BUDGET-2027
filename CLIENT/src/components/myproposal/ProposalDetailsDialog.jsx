@@ -366,25 +366,76 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     try {
       const requests = [];
 
-      // APPROVER, PREPARER, ANALYST, and REVIEWER should fetch raw proposal data, not Budget Officer Edit records
-      if (isDivisionApprover || isPreparer || isBudgetPlanningAnalystRole || isBudgetReviewerRole) {
-        console.log('✅ Fetching raw proposal data for APPROVER/PREPARER/BUDGET_ANALYST_USER/REVIEWER', {
-          isDivisionApprover,
-          isPreparer,
-          isBudgetPlanningAnalystRole,
-          isReviewer: isBudgetReviewerRole,
-          proposalId: proposalKey
-        });
+      // APPROVER, PREPARER, and REVIEWER fetch raw proposal data
+      // BUDGET PLANNING ANALYST should fetch via getProposalForEdit to include approver edits/comparisons
+      if (isBudgetPlanningAnalystRole) {
+        console.log('🔎 Fetching proposal FOR EDIT for ANALYST (includes approver edits if any)', { proposalId: proposalKey });
         requests.push(
           (async () => {
             try {
+              const response = await getProposalForEdit(proposalKey, { signal: controller.signal });
+              const data = response?.data || response;
+              console.log('✅ Analyst proposal-for-edit loaded:', {
+                hasExistingEdit: data?.hasExistingEdit,
+                editStatus: data?.editStatus,
+                counts: {
+                  income: data?.income?.length,
+                  personnelServices: data?.personnelServices?.length,
+                  mooe: data?.mooe?.length,
+                  capitalOutlay: data?.capitalOutlay?.length
+                }
+              });
+              setProposalData(data);
+              cacheUpdate.proposalData = data;
+            } catch (err) {
+              console.warn('⚠️ Analyst proposal-for-edit failed, falling back to raw datasets', err?.message);
+              // Fallback to raw datasets to avoid blank view
               const params = {
                 fiscalYear: proposal?.fiscalYear,
                 budgetType: proposal?.budgetType,
                 processBy: proposal?.processBy,
-                region: proposal?.region
+                region: proposal?.region,
+                status: proposal?.status
               };
-              console.log('📋 Fetching with params:', params);
+              const [incomeResp, psResp, mooeResp, coResp] = await Promise.all([
+                api.get('/income/getByParams', { params, signal: controller.signal }),
+                api.get('/getpersonnels/byParams', { params, signal: controller.signal }),
+                api.get('/mooe/getByParams', { params, signal: controller.signal }),
+                api.get('/capital-outlay/getByParams', { params, signal: controller.signal })
+              ]);
+              const normalize = (r) => Array.isArray(r?.data) ? r.data : (r?.data?.data || []);
+              const rawFallback = {
+                income: normalize(incomeResp),
+                personnelServices: normalize(psResp),
+                mooe: normalize(mooeResp),
+                capitalOutlay: normalize(coResp)
+              };
+              setProposalData(rawFallback);
+              cacheUpdate.proposalData = rawFallback;
+            }
+          })()
+        );
+      } else if (isDivisionApprover || isPreparer || isBudgetReviewerRole) {
+        console.log('✅✅✅ BUDGET REVIEWER DATA FETCH TRIGGERED', {
+          isDivisionApprover,
+          isPreparer,
+          isBudgetReviewerRole,
+          proposalId: proposalKey,
+          timestamp: new Date().toISOString()
+        });
+        requests.push(
+          (async () => {
+            try {
+              // FIX: Don't pass status for reviewers - proposal status changes don't update line item status
+              // This was causing empty results when proposal moved to "Forwarded to Reviewer" but line items still had "Draft"
+              const params = {
+                fiscalYear: proposal?.fiscalYear,
+                budgetType: proposal?.budgetType,
+                processBy: proposal?.processBy,
+                region: proposal?.region,
+                // Status removed: Line items retain original status when proposal status changes
+              };
+              console.log('📋 Fetching with params (status excluded for reviewer):', params);
               const [incomeResp, psResp, mooeResp, coResp] = await Promise.all([
                 api.get('/income/getByParams', { params, signal: controller.signal }),
                 api.get('/getpersonnels/byParams', { params, signal: controller.signal }),
@@ -403,7 +454,12 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                 psCount: rawData.personnelServices?.length || 0,
                 mooeCount: rawData.mooe?.length || 0,
                 coCount: rawData.capitalOutlay?.length || 0,
+                isBudgetReviewerRole,
                 rawData
+              });
+              console.log('🔥🔥🔥 SETTING proposalData for BUDGET REVIEWER:', {
+                hasData: !!rawData,
+                timestamp: new Date().toISOString()
               });
               setProposalData(rawData);
               cacheUpdate.proposalData = rawData;
@@ -641,11 +697,17 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
   const managerCanEditNow = isManagerLevel && proposal?.status === 'Forwarded to Manager';
 
   // PREPARER can edit when proposal is in Draft or Returned status (for creators)
-  // OR when BUDGET_PLANNING_ANALYST user role has proposals Forwarded to Analyst
+  // BUDGET PLANNING ANALYST can edit when APPROVER already approved ("Approver Approved")
+  //   or when explicitly forwarded to Analyst
   const preparerCanEditNow = (isPreparer && (
     proposal?.status === 'Draft' || 
     proposal?.status === 'Returned'
-  )) || (isBudgetPlanningAnalystRole && proposal?.status === 'Forwarded to Analyst');
+  )) || (
+    isBudgetPlanningAnalystRole && (
+      proposal?.status === 'Forwarded to Analyst' ||
+      proposal?.status === 'Approver Approved'
+    )
+  );
 
   // APPROVER can edit when proposal is Division Submitted (waiting for approver review)
   const approverCanEditNow = isDivisionApprover && (
@@ -687,6 +749,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
       'Division Submitted': 2,              // REVIEWER
       'Forwarded to Reviewer': 2,           // REVIEWER
       'Forwarded to Approver': 3,           // APPROVER
+      'Approver Approved': 4,               // After APPROVER approves, forward to BUDGET_PLANNING_ANALYST
       'Forwarded to Analyst': 4,            // BUDGET_PLANNING_ANALYST
       'Forwarded to Budget Officer': 5,     // BUDGET_OFFICER
       'Forwarded to Manager': 6,            // BUDGET_MANAGER
@@ -752,19 +815,36 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
   );
 
   // Determine if user should see comparison/audit trail view instead of editable tables
+  // NOTE: Budget Reviewers should use shouldShowReadOnlyTables instead when there's no comparison data
   const shouldShowComparisonView = !isReadOnlyMode && hasComparisonData && (
     isViewOnlyAfterSubmission ||
     (!approverCanEditNow && isApprover) ||
-    (!reviewerCanEditNow && isBudgetReviewerRole) ||
     (!preparerCanEditNow && isPreparer)
   );
 
   // Determine if user should see read-only tables when they cannot edit and no comparison data exists
   // Show for APPROVER and REVIEWER as a fallback when comparison data is not available
-  const shouldShowReadOnlyTables = !isReadOnlyMode && proposalData && !officerReadOnlyTables && !hasComparisonData && (
-    (!approverCanEditNow && isApprover) ||
-    (!reviewerCanEditNow && isBudgetReviewerRole)
+  // NOTE: Budget Reviewer should ALWAYS see tables if they have access (removing !hasComparisonData requirement for viewers)
+  const shouldShowReadOnlyTables = !isReadOnlyMode && proposalData && !officerReadOnlyTables && (
+    ((!approverCanEditNow && isApprover) && !hasComparisonData) ||
+    (!reviewerCanEditNow && isBudgetReviewerRole)  // Budget Reviewer shows read-only tables regardless of comparison data
   );
+  
+  // Debug: Log shouldShowReadOnlyTables calculation for Budget Reviewer
+  if (isBudgetReviewerRole) {
+    console.log('📊 shouldShowReadOnlyTables CALCULATION:', {
+      condition1: !isReadOnlyMode,
+      condition2_proposalData: !!proposalData,
+      condition3: !officerReadOnlyTables,
+      condition4_reviewer: !reviewerCanEditNow && isBudgetReviewerRole,
+      result: shouldShowReadOnlyTables,
+      isReadOnlyMode,
+      proposalData: proposalData ? `{income: ${proposalData.income?.length}, ps: ${proposalData.personnelServices?.length}, mooe: ${proposalData.mooe?.length}, co: ${proposalData.capitalOutlay?.length}}` : 'NULL',
+      officerReadOnlyTables,
+      reviewerCanEditNow,
+      proposal_status: proposal?.status
+    });
+  }
 
   return (
     <Dialog 
@@ -876,8 +956,30 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
             {/* Detailed Records Section */}
             <Typography variant="h6" gutterBottom>Detailed Records</Typography>
 
+            {/* DEBUG: Log all rendering conditions */}
+            {console.log('🎯 DETAILED RECORDS RENDERING DEBUG:', {
+              proposalStatus: proposal?.status,
+              isReadOnlyMode,
+              canRenderEditView,
+              shouldShowReadOnlyTables,
+              shouldShowComparisonView,
+              isViewOnlyAfterSubmission,
+              hasComparisonData,
+              proposalDataExists: !!proposalData,
+              comparisonDataExists: !!comparisonData,
+              currentStep: getWorkflowStepOrder(proposal?.status),
+              userStep: getUserWorkflowStep(),
+              isBudgetReviewerRole,
+              reviewerCanEditNow,
+              approverCanEditNow,
+              preparerCanEditNow,
+              managerCanEditNow,
+              officerReadOnlyTables,
+              officerModeActive
+            })}
+
             {/* TEMPORARILY HIDDEN - INFO: Show user's current role and workflow status */}
-            {false && (isPreparer || isDivisionApprover || isBudgetOfficer || isManagerLevel) && (
+            {false && (isPreparer || isDivisionApprover || isBudgetOfficer || isManagerLevel || isBudgetReviewerRole) && (
               <Alert 
                 severity={isPreparer && isDivisionApprover ? "warning" : "info"} 
                 sx={{ mb: 2 }}
@@ -1057,11 +1159,24 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                     // ⚠️ FIX: Check specific workflow roles BEFORE generic manager level
                     // When user is APPROVER, show 'approver' variant even if they also have manager permissions
                     // Priority: APPROVER → REVIEWER → BUDGET_OFFICER → PREPARER → MANAGER
-                    const variant = isDivisionApprover ? 'approver' : isReviewer ? 'reviewer' : isBudgetOfficer ? 'officer' : isPreparer ? 'preparer' : isManagerLevel ? 'manager' : 'officer';
+                    const variant = isDivisionApprover
+                      ? 'approver'
+                      : isReviewer
+                      ? 'reviewer'
+                      : isBudgetPlanningAnalystRole
+                      ? 'analyst'
+                      : isBudgetOfficer
+                      ? 'officer'
+                      : isPreparer
+                      ? 'preparer'
+                      : isManagerLevel
+                      ? 'manager'
+                      : 'officer';
                     console.log('🎭 Variant determination:', {
                       isManagerLevel,
                       isDivisionApprover,
                       isReviewer,
+                      isBudgetPlanningAnalystRole,
                       isBudgetOfficer,
                       isPreparer,
                       variant
@@ -1076,12 +1191,23 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
               </>
             )}
 
-            {/* ✅ READ-ONLY TABLES: Show read-only tables for APPROVER when they can't edit and have no comparison data */}
+            {/* ✅ READ-ONLY TABLES: Show read-only tables for APPROVER and BUDGET REVIEWER when they can't edit and have no comparison data */}
             {shouldShowReadOnlyTables && (
               <>
+                {console.log('✅ Rendering READ-ONLY TABLES for:', {
+                  isApprover,
+                  isBudgetReviewerRole,
+                  status: proposal?.status,
+                  hasComparisonData,
+                  proposalDataExists: !!proposalData
+                })}
                 <Alert severity="info" sx={{ mb: 2 }}>
                   <Typography variant="body2">
-                    <strong>📊 View Mode:</strong> You have already approved this proposal.
+                    <strong>📊 View Mode:</strong> {
+                      isApprover ? 'You have already approved this proposal.' :
+                      isBudgetReviewerRole ? 'You are reviewing this proposal.' :
+                      'You cannot edit at this stage.'
+                    }
                     {proposal?.status === 'Approver Approved' && ' The proposal has been forwarded to Budget Planning Analyst for review.'}
                     {proposal?.status === 'Forwarded to Analyst' && ' The proposal is now with the Budget Planning Analyst.'}
                     <br />
@@ -1099,6 +1225,60 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                   showSaveDraftButton={false}
                 />
               </>
+            )}
+
+            {/* MISSING DATA DEBUG: Show alert if BUDGET REVIEWER should see tables but proposalData is missing */}
+            {isBudgetReviewerRole && !proposalData && !loading && (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                  ⚠️ <strong>Proposal data is loading or unavailable.</strong> Please try refreshing the page. 
+                  <br />
+                  (Debug: Budget Reviewer role detected but proposalData is empty. Status: {proposal?.status})
+                </Typography>
+              </Alert>
+            )}
+
+            {/* DEBUG: Show detailed condition state for Budget Reviewer */}
+            {isBudgetReviewerRole && (
+              (() => {
+                const state = {
+                  isBudgetReviewerRole,
+                  shouldShowReadOnlyTables,
+                  shouldShowComparisonView,
+                  canRenderEditView,
+                  proposalData: !!proposalData,
+                  reviewerCanEditNow,
+                  hasComparisonData,
+                  officerReadOnlyTables,
+                  isReadOnlyMode,
+                  proposal_status: proposal?.status,
+                  loading
+                };
+                console.log('🔍 BUDGET REVIEWER CONDITION STATE:', state);
+                
+                // Determine which path will render
+                let renderPath = 'NONE';
+                if (canRenderEditView) renderPath = 'EDIT VIEW (canRenderEditView)';
+                else if (shouldShowComparisonView) renderPath = 'COMPARISON VIEW (shouldShowComparisonView)';
+                else if (shouldShowReadOnlyTables) renderPath = 'READ-ONLY TABLES (shouldShowReadOnlyTables at line 1104)';
+                else renderPath = '❌ NO RENDER PATH AVAILABLE ❌';
+                
+                console.log('📍 BUDGET REVIEWER RENDER PATH:', renderPath);
+                
+                return null;
+              })()
+            )}
+
+            {/* COMPREHENSIVE DEBUG: Show what conditions are preventing Budget Reviewer from seeing content */}
+            {isBudgetReviewerRole && !shouldShowReadOnlyTables && !shouldShowComparisonView && !canRenderEditView && !loading && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                  ❌ <strong>No rendering path available for Budget Reviewer.</strong>
+                  <br />
+                  Debug info: shouldShowReadOnlyTables={String(shouldShowReadOnlyTables)}, proposalData exists={!!proposalData}, 
+                  isViewOnlyAfterSubmission={String(isViewOnlyAfterSubmission)}, reviewerCanEditNow={String(reviewerCanEditNow)}, hasComparisonData={String(hasComparisonData)}
+                </Typography>
+              </Alert>
             )}
 
             {/* ✅ COMPARISON VIEW: Show audit trail with change indicators for PREPARER, REVIEWER, APPROVER when they can't edit */}
@@ -1135,36 +1315,8 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
               </>
             )}
 
-            {/* ✅ AUDIT TRAIL VIEW: Show comparison data for ALL roles after they submit (isViewOnlyAfterSubmission) */}
-            {isViewOnlyAfterSubmission && !isReadOnlyMode && comparisonData && (
-              <>
-                {console.log('🔍 Rendering AUDIT TRAIL for:', {
-                  isPreparer,
-                  isDivisionApprover,
-                  isBudgetPlanningAnalystRole,
-                  isBudgetOfficer,
-                  isManagerLevel,
-                  status: proposal?.status,
-                  hasComparisonData: !!comparisonData
-                })}
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  <Typography variant="body2">
-                    <strong>📊 Audit Trail - Changes Made by Next Step:</strong> 
-                    {isPreparer && ' See what the Approver/Reviewer changed after you submitted.'}
-                    {isDivisionApprover && ' See what the Budget Planning Analyst changed after you submitted.'}
-                    {isBudgetPlanningAnalystRole && ' See what the Budget Officer changed after you submitted.'}
-                    {isBudgetOfficer && ' See what the Budget Manager changed after you submitted.'}
-                    {isManagerLevel && ' Final approval changes visible.'}
-                    <br />
-                    <em>Status: {proposal?.status} • You cannot edit at this stage</em>
-                  </Typography>
-                </Alert>
-                <BudgetAnalystComparisonView 
-                  comparisonData={comparisonData}
-                  proposal={proposal}
-                />
-              </>
-            )}
+            {/* ℹ️ DUPLICATE REMOVED: This block was rendering AUDIT TRAIL twice when shouldShowComparisonView was already active */}
+            {/* The shouldShowComparisonView block (line 1150) now handles ALL cases including isViewOnlyAfterSubmission */}
 
             {/* ✅ VIEW-ONLY MODE: Show comparison or full submission view when proposal is Finalized */}
             {isReadOnlyMode && !managerCanEditNow && (
@@ -1224,6 +1376,27 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                 </Typography>
               </Alert>
             )}
+
+            {/* ✅ READ-ONLY VIEW FOR BUDGET REVIEWER: Show detailed records when reviewer cannot edit */}
+            {(() => {
+              const show = shouldShowReadOnlyTables && isBudgetReviewerRole && proposalData;
+              if (show) console.log('✅ Rendering BUDGET REVIEWER read-only tables view');
+              return show && (
+                <>
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    <Typography variant="body2">
+                      <strong>📋 Detailed Records (Read-Only):</strong> View the proposal details as submitted by the preparer.
+                      <br />
+                      <em>Status: {proposal?.status} • You cannot edit at this stage</em>
+                    </Typography>
+                  </Alert>
+                  <BudgetManagerSubmissionView 
+                    proposalData={proposalData}
+                    proposal={proposal}
+                  />
+                </>
+              );
+            })()}
 
             {/* TEMPORARILY HIDDEN - Permission denied alert */}
             {false && !isBudgetOfficer && !isBudgetAnalyst && !isDivisionApprover && !isManagerLevel && (

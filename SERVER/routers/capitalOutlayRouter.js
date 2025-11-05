@@ -69,15 +69,22 @@ capitalOutlayRouter.post("/seed-chart-of-accounts", async (req, res) => {
 // Get Capital Outlay by parameters
 capitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl('read'), async (req, res) => {
   try {
-    const { fiscalYear, budgetType, processBy, region, status, department, division } = req.query;
+    const { proposalId, fiscalYear, budgetType, processBy, region, status, department, division } = req.query;
     const query = {};
-    if (fiscalYear) query.fiscalYear = fiscalYear;
-    if (budgetType) query.budgetType = budgetType;
-    if (processBy) query.processBy = processBy;
-    if (region) query.region = region;
-    if (status) query.status = status;
-    if (department) query.department = department;
-    if (division) query.division = division;
+    
+    // ✅ Primary filter: if proposalId is provided, use it
+    if (proposalId) {
+      query.proposalId = proposalId;
+    } else {
+      // Fallback: use individual parameters
+      if (fiscalYear) query.fiscalYear = fiscalYear;
+      if (budgetType) query.budgetType = budgetType;
+      if (processBy) query.processBy = processBy;
+      if (region) query.region = region;
+      if (status) query.status = status;
+      if (department) query.department = department;
+      if (division) query.division = division;
+    }
     
     const capitalOutlay = await CapitalOutlay.find(query).lean();
     res.status(200).json(capitalOutlay);
