@@ -63,18 +63,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     return direct || hier;
   }, [userInfo]);
 
-  // Derive a concise current role label for display (UI badge)
-  const currentRoleLabel = useMemo(() => {
-    if (!userInfo) return null;
-    // Priority: Manager > Officer > Analyst > Approver > Reviewer > Preparer
-    if (isManagerLevel) return 'Budget Manager';
-    if (userInfo && normalizedWorkflowRoles.some(r => ['officeverifier','officefinalverifier','officeconsolidator'].includes(r))) return 'Budget Officer';
-    if (isBudgetPlanningAnalystRole) return 'Budget Planning Analyst';
-    if (isDivisionApprover) return 'Budget Approver';
-    if (isReviewer) return 'Budget Reviewer';
-    if (isPreparer) return 'Budget Preparer';
-    return null;
-  }, [userInfo, isManagerLevel, isBudgetPlanningAnalystRole, isDivisionApprover, isReviewer, isPreparer, normalizedWorkflowRoles]);
+  // moved: currentRoleLabel useMemo placed after dependencies are declared to avoid TDZ
 
   const normalizedWorkflowRoles = useMemo(() => {
     const a = (userInfo?.workflowRoles || []).map((role) => String(role || '').toLowerCase());
@@ -265,6 +254,19 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
            normalizedWorkflowRoles.includes('budget_analyst') || 
            normalizedWorkflowRoles.includes('BUDGET_PLANNING_ANALYST');
   }, [userInfo, normalizedWorkflowRoles]);
+
+  // Derive a concise current role label for display (UI badge)
+  const currentRoleLabel = useMemo(() => {
+    if (!userInfo) return null;
+    // Priority: Manager > Officer > Analyst > Approver > Reviewer > Preparer
+    if (isManagerLevel) return 'Budget Manager';
+    if (userInfo && normalizedWorkflowRoles.some(r => ['officeverifier','officefinalverifier','officeconsolidator'].includes(r))) return 'Budget Officer';
+    if (isBudgetPlanningAnalystRole) return 'Budget Planning Analyst';
+    if (isDivisionApprover) return 'Budget Approver';
+    if (isReviewer) return 'Budget Reviewer';
+    if (isPreparer) return 'Budget Preparer';
+    return null;
+  }, [userInfo, isManagerLevel, isBudgetPlanningAnalystRole, isDivisionApprover, isReviewer, isPreparer, normalizedWorkflowRoles]);
 
   // Read-only statuses (view mode) - MUST BE DEFINED BEFORE loadData callback
   const readOnlyStatuses = useMemo(() => (
