@@ -18,8 +18,8 @@ const excelUploadRouter = require("./routers/excelUpload");
 const capitalOutlayRouter = require("./routers/capitalOutlayRouter");
 const capitalOutlayDetailsRouter = require("./routers/capitalOutlayDetailsRouter");
 const categoryRouter = require("./routers/category");
-const proposalRouter = require("./routers/proposalRoutes");
-// const proposalRBACRouter = require("./routers/proposalRoutesRBAC");  // DISABLED - RBAC router causes issues
+// const proposalRouter = require("./routers/proposalRoutes");  // DISABLED - Using RBAC router instead
+const proposalRBACRouter = require("./routers/proposalRoutesRBAC");  // ✅ RBAC router with role-based visibility control
 const rataRoutes = require("./routers/RATARoutes");
 const regionRouter = require("./routers/RegionRoutes");
 const settings = require("./routers/settingsRoutes");
@@ -318,8 +318,8 @@ app.use("/api", excelUploadRouter); // Excel Upload Route
 app.use(capitalOutlayRouter);
 app.use("/api", capitalOutlayDetailsRouter);
 app.use(categoryRouter);
-app.use(proposalRouter);
-// app.use(proposalRBACRouter);  // DISABLED - use proposalRouter instead
+// app.use(proposalRouter);  // DISABLED - Using RBAC router instead
+app.use(proposalRBACRouter);  // ✅ RBAC router with role-based visibility control
 // Budget Officer Edit Routes
 const { comparisonRouter } = require("./routers/budgetOfficerEditRoutes");
 app.use('/api/budget-officer-edits', comparisonRouter);

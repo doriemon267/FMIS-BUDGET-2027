@@ -648,6 +648,19 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     setComparisonData(null);
     setError(null);
     setOfficerEditMode(false); // Reset edit mode
+    
+    // Clear the cache for this proposal to ensure fresh data on next open
+    if (proposalKey && cacheRef.current) {
+      console.log('🔄 ProposalDetailsDialog - Clearing cache for proposal:', proposalKey);
+      cacheRef.current.delete(proposalKey);
+    }
+    
+    // Trigger parent refresh if provided (e.g., to reload table after edits)
+    if (onRefresh && typeof onRefresh === 'function') {
+      console.log('🔄 ProposalDetailsDialog - Calling onRefresh after close');
+      onRefresh();
+    }
+    
     onClose();
   };
 

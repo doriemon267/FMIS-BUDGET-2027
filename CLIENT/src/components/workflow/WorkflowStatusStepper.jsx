@@ -63,14 +63,14 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
       label: 'BUDGET_OFFICER',
       role: 'Reviews',
       shortLabel: 'Officer',
-      statuses: ['Forwarded to Budget Officer', 'Forwarded to Manager', 'Officer Approved'],
+      statuses: ['Forwarded to Budget Officer', 'Officer Approved'],
       icon: <VerifiedUserIcon />
     },
     {
       label: 'OVERALL_BUDGET_APPROVER',
       role: 'Finalizes',
       shortLabel: 'Final Approver',
-      statuses: ['Finalized'],
+      statuses: ['Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Finalized'],
       icon: <GavelIcon />
     }
   ];
@@ -102,14 +102,14 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
       label: 'BUDGET_OFFICER',
       role: 'Reviews',
       shortLabel: 'Officer',
-      statuses: ['Forwarded to Budget Officer', 'Forwarded to Manager', 'Officer Approved'],
+      statuses: ['Forwarded to Budget Officer', 'Officer Approved'],
       icon: <VerifiedUserIcon />
     },
     {
       label: 'OVERALL_BUDGET_APPROVER',
       role: 'Finalizes',
       shortLabel: 'Final Approver',
-      statuses: ['Finalized'],
+      statuses: ['Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Finalized'],
       icon: <GavelIcon />
     }
   ];

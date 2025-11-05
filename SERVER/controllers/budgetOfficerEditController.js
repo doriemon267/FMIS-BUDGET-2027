@@ -251,6 +251,8 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
             if (edit.category !== undefined) updateData.category = edit.category;
             if (edit.subcategory !== undefined) updateData.subcategory = edit.subcategory;
             if (edit.particulars !== undefined) updateData.particulars = edit.particulars;
+            // Ensure proposalId is set for existing items
+            updateData.proposalId = budgetOfficerEdit.proposalId;
             
             const result = await Income.findByIdAndUpdate(
               targetId,
@@ -305,6 +307,8 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
             if (edit.monthlySalary !== undefined) updateData.monthlySalary = Number(edit.monthlySalary);
             if (edit.annualSalary !== undefined) updateData.annualSalary = Number(edit.annualSalary);
             if (edit.total !== undefined) updateData.total = Number(edit.total);
+            // Ensure proposalId is set for existing items
+            updateData.proposalId = budgetOfficerEdit.proposalId;
             
             const result = await PersonnelServices.findByIdAndUpdate(
               targetId,
@@ -356,6 +360,8 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
             if (edit.generalType !== undefined) updateData.generalType = edit.generalType;
             if (edit.category !== undefined) updateData.category = edit.category;
             if (edit.particulars !== undefined) updateData.particulars = edit.particulars;
+            // Ensure proposalId is set for existing items
+            updateData.proposalId = budgetOfficerEdit.proposalId;
             
             const result = await MOOE.findByIdAndUpdate(
               targetId,
@@ -425,6 +431,8 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
               updateData.cost = Number(edit.total);
               updateData.total = Number(edit.total);
             }
+            // Ensure proposalId is set for existing items
+            updateData.proposalId = budgetOfficerEdit.proposalId;
 
             const result = await CapitalOutlay.findByIdAndUpdate(
               targetId,
@@ -569,12 +577,26 @@ async function syncRelatedBudgetItems(proposal) {
       budgetType: proposal.budgetType
     };
 
+    // CRITICAL FIX: Also set proposalId to link line items to this proposal
+    // This ensures recalculateProposalTotals can find the correct line items
+    const updateFields = { 
+      status: mappedStatus, 
+      workflowLevel: mappedWorkflowLevel,
+      proposalId: proposal._id  // Link line items to this proposal
+    };
+
     await Promise.all([
-      Income.updateMany(criteria, { $set: { status: mappedStatus, workflowLevel: mappedWorkflowLevel } }),
-      PersonnelServices.updateMany(criteria, { $set: { status: mappedStatus, workflowLevel: mappedWorkflowLevel } }),
-      MOOE.updateMany(criteria, { $set: { status: mappedStatus, workflowLevel: mappedWorkflowLevel } }),
-      CapitalOutlay.updateMany(criteria, { $set: { status: mappedStatus, workflowLevel: mappedWorkflowLevel } })
+      Income.updateMany(criteria, { $set: updateFields }),
+      PersonnelServices.updateMany(criteria, { $set: updateFields }),
+      MOOE.updateMany(criteria, { $set: updateFields }),
+      CapitalOutlay.updateMany(criteria, { $set: updateFields })
     ]);
+
+    console.log(`✅ Synced budget items to proposal ${proposal._id}:`, {
+      status: mappedStatus,
+      workflowLevel: mappedWorkflowLevel,
+      itemsLinked: 'proposalId set'
+    });
   } catch (error) {
     console.error('❌ Failed to sync related budget items after workflow transition:', error);
   }
@@ -1137,6 +1159,21 @@ exports.saveDraftEdit = async (req, res) => {
     });
     
     await budgetOfficerEdit.save();
+    
+    // Recalculate proposal totals after saving draft
+    try {
+      const totalsResult = await recalculateAndSaveProposalTotals({ proposalId: proposal._id });
+      console.log('✅ Proposal totals recalculated after draft save:', {
+        proposalId: proposal._id.toString(),
+        totalIncome: totalsResult.totals.income,
+        totalExpenses: totalsResult.totals.expenses,
+        projectedSubsidy: totalsResult.totals.subsidies,
+        proposedBudget: totalsResult.totals.proposedBudget
+      });
+    } catch (calcError) {
+      console.warn('⚠️ Warning: Failed to recalculate proposal totals after draft save:', calcError.message);
+      // Continue even if recalculation fails - the draft save shouldn't fail
+    }
     
     // Log the action
     await ProposalEditLog.logChange({

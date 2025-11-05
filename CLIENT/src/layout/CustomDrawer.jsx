@@ -257,14 +257,14 @@ const CustomDrawer = ({ collapsed = false }) => {
                   isOverallApprover,
                 icon: <IoSettingsOutline />,
               },
-              {
-                link: "/audit-logs",
-                name: "Audit Logs",
-                isAllow:
-                  hasPermission(currentUser, "ManageSettings") ||
-                  isOverallApprover,
-                icon: <MdHistory />,
-              },
+              // {
+              //   link: "/audit-logs",
+              //   name: "Audit Logs",
+              //   isAllow:
+              //     hasPermission(currentUser, "ManageSettings") ||
+              //     isOverallApprover,
+              //   icon: <MdHistory />,
+              // },
 
               // {
               //   link: "/settings",

@@ -2081,40 +2081,11 @@ exports.getProposals = async (req, res) => {
       });
     }
 
-    // Remove duplicate entity/aggregate rows when a consolidated Proposal exists for the same org unit + fiscalYear + budgetType
-    // This prevents showing both the consolidated proposal and the aggregated entity rows for the same submission.
-    try {
-      const makeConsolidationKey = (doc) => {
-        const unit = doc.division || doc.department || doc.region || 'UNKNOWN';
-        const fy = doc.fiscalYear || 'UNKNOWN';
-        const bt = doc.budgetType || 'UNKNOWN';
-        return `${unit}_${fy}_${bt}`.toString().toUpperCase();
-      };
-
-      const consolidatedKeys = new Set(
-        finalProposals
-          .filter(p => String(p.modelType || '').toLowerCase() === 'proposal')
-          .map(p => makeConsolidationKey(p))
-      );
-
-      if (consolidatedKeys.size > 0) {
-        finalProposals = finalProposals.filter(item => {
-          // Always keep consolidated Proposal model rows
-          if (String(item.modelType || '').toLowerCase() === 'proposal') return true;
-
-          // Build key for this item and hide it if a consolidated proposal exists
-          const key = makeConsolidationKey(item);
-          if (consolidatedKeys.has(key)) {
-            // Hide aggregated entity row because consolidated proposal will be shown instead
-            return false;
-          }
-          return true;
-        });
-      }
-
-    } catch (dedupeErr) {
-      console.error('Error during deduplication of proposals:', dedupeErr?.message || dedupeErr);
-    }
+    // 🔧 FIXED: Keep line items visible alongside consolidated proposals
+    // Previously, this code was hiding all MOOE/Capital/Income line items when a Proposal existed,
+    // causing amounts to show as ₱0.00 because the Proposal model doesn't have individual line item fields.
+    // Now we keep both the consolidated Proposal AND the individual line items visible.
+    // This ensures the frontend can display the actual amounts from MOOE, Capital, Income records.
 
     // Sort combined results and apply pagination
     finalProposals.sort((a, b) => {

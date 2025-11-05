@@ -21,6 +21,23 @@ const budgetRoleVisibilityControl = () => {
       const userId = req.user?.id;
       const userRoles = req.user?.Roles || [];
       
+      console.log('🔐 [budgetRoleVisibilityControl] DEBUG REQUEST:', {
+        userId,
+        userRoles,
+        userObject: req.user ? {
+          id: req.user.id,
+          Roles: req.user.Roles,
+          roles: req.user.roles,
+          Role: req.user.Role,
+          role: req.user.role,
+          hierarchicalAssignment: req.user.hierarchicalAssignment
+        } : 'NO USER',
+        hierarchicalAssignment: req.userHierarchicalAssignment ? {
+          workflowRoles: req.userHierarchicalAssignment.workflowRoles,
+          assignmentLevel: req.userHierarchicalAssignment.assignmentLevel
+        } : 'NO HIERARCHICAL ASSIGNMENT'
+      });
+      
       // Super admins bypass all filters - check for both 'SUPER_ADMIN' (with underscore) and 'SUPER ADMIN' (with space)
       if (userRoles.includes('SUPER_ADMIN') || userRoles.includes('SUPER ADMIN')) {
         return next();
@@ -32,6 +49,8 @@ const budgetRoleVisibilityControl = () => {
 
       // Determine user's budget role (highest privilege takes precedence)
       // Check both main database roles and workflow roles from hierarchical assignment
+      // CRITICAL: Check from highest to lowest privilege EXCEPT put PREPARER before REVIEWER
+      // This ensures users with both REVIEWER and PREPARER roles get PREPARER access (can create/see Drafts)
       let budgetRole = null;
       if (userRoles.includes('BUDGET_ADMIN') || workflowRoles.includes('BUDGET_ADMIN')) {
         budgetRole = 'BUDGET_ADMIN';
@@ -41,12 +60,12 @@ const budgetRoleVisibilityControl = () => {
         budgetRole = 'BUDGET_OFFICER';
       } else if (userRoles.includes('BUDGET_PLANNING_ANALYST') || workflowRoles.includes('BUDGET_PLANNING_ANALYST')) {
         budgetRole = 'BUDGET_PLANNING_ANALYST';
-      } else if (userRoles.includes('BUDGET APPROVER') || workflowRoles.includes('APPROVER') || workflowRoles.includes('divisionApprover') || workflowRoles.includes('officeApprover')) {
+      } else if (userRoles.includes('BUDGET APPROVER') || userRoles.includes('BUDGET_APPROVER') || workflowRoles.includes('APPROVER') || workflowRoles.includes('divisionApprover') || workflowRoles.includes('officeApprover')) {
         budgetRole = 'BUDGET APPROVER';
-      } else if (userRoles.includes('BUDGET REVIEWER') || workflowRoles.includes('BUDGET REVIEWER') || workflowRoles.includes('divisionReviewer')) {
-        budgetRole = 'BUDGET REVIEWER';
-      } else if (userRoles.includes('BUDGET PREPARER') || workflowRoles.includes('BUDGET PREPARER') || workflowRoles.includes('divisionCreator') || workflowRoles.includes('officeCreator')) {
+      } else if (userRoles.includes('BUDGET PREPARER') || userRoles.includes('BUDGET_PREPARER') || workflowRoles.includes('BUDGET PREPARER') || workflowRoles.includes('BUDGET_PREPARER') || workflowRoles.includes('divisionCreator') || workflowRoles.includes('officeCreator')) {
         budgetRole = 'BUDGET PREPARER';
+      } else if (userRoles.includes('BUDGET REVIEWER') || userRoles.includes('BUDGET_REVIEWER') || workflowRoles.includes('BUDGET REVIEWER') || workflowRoles.includes('BUDGET_REVIEWER') || workflowRoles.includes('divisionReviewer')) {
+        budgetRole = 'BUDGET REVIEWER';
       }
 
       if (!budgetRole) {
@@ -54,6 +73,15 @@ const budgetRoleVisibilityControl = () => {
         console.log('[budgetRoleVisibilityControl] No budget or workflow role detected, skipping filters');
         return next();
       }
+
+      console.log('🔐 [budgetRoleVisibilityControl] Role determined:', {
+        userId,
+        budgetRole,
+        userRoles,
+        workflowRoles,
+        hasPreparer: userRoles.includes('BUDGET PREPARER') || userRoles.includes('BUDGET_PREPARER') || workflowRoles.includes('BUDGET PREPARER') || workflowRoles.includes('divisionCreator'),
+        hasReviewer: userRoles.includes('BUDGET REVIEWER') || workflowRoles.includes('BUDGET REVIEWER') || workflowRoles.includes('divisionReviewer')
+      });
 
       // Build visibility filters based on role
       let visibilityFilter = {};
@@ -84,8 +112,15 @@ const budgetRoleVisibilityControl = () => {
           // Build base visibility filter
           const analystVisibilityOptions = [
             // Proposals currently assigned to BUDGET_PLANNING_ANALYST
-            { currentAssigneeRole: 'BUDGET_PLANNING_ANALYST' },
-            { pendingWithRoles: 'BUDGET_PLANNING_ANALYST' },
+            {
+              $and: [
+                { $or: [
+                  { currentAssigneeRole: 'BUDGET_PLANNING_ANALYST' },
+                  { pendingWithRoles: 'BUDGET_PLANNING_ANALYST' }
+                ]},
+                { status: { $ne: 'Draft' } }
+              ]
+            },
             {
               status: {
                 $in: [
@@ -95,12 +130,30 @@ const budgetRoleVisibilityControl = () => {
                 ]
               }
             },
-            // Proposals BUDGET_PLANNING_ANALYST has previously worked on (retain visibility)
-            { 'workflowHistory.userId': userId },
-            // Own proposals and organizational scope
-            { createdByUserId: userId },
-            { processBy: userId },
-            ...(userDivision ? [{ division: userDivision }] : [])
+            // Proposals BUDGET_PLANNING_ANALYST has previously worked on (retain visibility) - but not Drafts
+            {
+              $and: [
+                { 'workflowHistory.userId': userId },
+                { status: { $ne: 'Draft' } }
+              ]
+            },
+            // Own proposals - but only if submitted (not Draft)
+            {
+              $and: [
+                { $or: [
+                  { createdByUserId: userId },
+                  { processBy: userId }
+                ]},
+                { status: { $ne: 'Draft' } }
+              ]
+            },
+            // Organizational division scope - but only if submitted (not Draft)
+            ...(userDivision ? [{
+              $and: [
+                { division: userDivision },
+                { status: { $ne: 'Draft' } }
+              ]
+            }] : [])
           ];
           
           // Apply region filtering based on assignment
@@ -127,6 +180,7 @@ const budgetRoleVisibilityControl = () => {
         case 'BUDGET_OFFICER':
           // STEP 5 of 6-step workflow: PREPARER → BUDGET REVIEWER → BUDGET APPROVER → BUDGET_ANALYST → [BUDGET_OFFICER] → OVERALL_APPROVER
           // BUDGET_OFFICER can see proposals forwarded by BUDGET_ANALYST AND proposals they've worked on
+          // BUT: Cannot see Draft proposals (must be submitted first)
           visibilityFilter = {
             $or: [
               // Proposals currently assigned to BUDGET_OFFICER
@@ -145,13 +199,32 @@ const budgetRoleVisibilityControl = () => {
                   ]
                 }
               },
-              { currentAssigneeRole: 'BUDGET_OFFICER' },
-              { pendingWithRoles: 'BUDGET_OFFICER' },
-              // Proposals BUDGET_OFFICER has previously worked on (retain visibility)
-              { 'workflowHistory.userId': userId },
-              // Own proposals
-              { createdByUserId: userId },
-              { processBy: userId }
+              {
+                $and: [
+                  { $or: [
+                    { currentAssigneeRole: 'BUDGET_OFFICER' },
+                    { pendingWithRoles: 'BUDGET_OFFICER' }
+                  ]},
+                  { status: { $ne: 'Draft' } }
+                ]
+              },
+              // Proposals BUDGET_OFFICER has previously worked on (retain visibility) - but not Drafts
+              {
+                $and: [
+                  { 'workflowHistory.userId': userId },
+                  { status: { $ne: 'Draft' } }
+                ]
+              },
+              // Own proposals - but only if submitted (not Draft)
+              {
+                $and: [
+                  { $or: [
+                    { createdByUserId: userId },
+                    { processBy: userId }
+                  ]},
+                  { status: { $ne: 'Draft' } }
+                ]
+              }
             ]
           };
           break;
@@ -181,6 +254,8 @@ const budgetRoleVisibilityControl = () => {
         case 'BUDGET REVIEWER':
           // STEP 2 of 6-step workflow: PREPARER → [BUDGET REVIEWER] → BUDGET APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER
           // BUDGET REVIEWER can see proposals forwarded to them AND proposals they've previously worked on
+          // CRITICAL: Cannot see Draft proposals AT ALL (must be submitted first)
+          // This ensures clear role separation between PREPARER (creates) and REVIEWER (reviews submitted)
           visibilityFilter = {
             $or: [
               // Proposals currently assigned to BUDGET REVIEWER
@@ -207,11 +282,23 @@ const budgetRoleVisibilityControl = () => {
                   }
                 ]
               },
-              // Proposals BUDGET REVIEWER has previously worked on (retain visibility)
-              { 'workflowHistory.userId': userId },
-              // Own proposals
-              { createdByUserId: userId },
-              { processBy: userId }
+              // Proposals BUDGET REVIEWER has previously worked on (retain visibility) - but NEVER Drafts
+              {
+                $and: [
+                  { 'workflowHistory.userId': userId },
+                  { status: { $ne: 'Draft' } }
+                ]
+              },
+              // Own submitted proposals ONLY - NEVER Drafts (even if they created it)
+              {
+                $and: [
+                  { $or: [
+                    { createdByUserId: userId },
+                    { processBy: userId }
+                  ]},
+                  { status: { $ne: 'Draft' } }
+                ]
+              }
             ]
           };
           break;
@@ -219,6 +306,7 @@ const budgetRoleVisibilityControl = () => {
         case 'BUDGET APPROVER':
           // STEP 3 of 6-step workflow: PREPARER → BUDGET REVIEWER → [BUDGET APPROVER] → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER
           // APPROVER can see proposals forwarded to them AND proposals they've previously worked on
+          // BUT: Cannot see Draft proposals (must be submitted first)
           visibilityFilter = {
             $or: [
               // Proposals currently assigned to APPROVER
@@ -247,11 +335,23 @@ const budgetRoleVisibilityControl = () => {
                   }
                 ]
               },
-              // Proposals APPROVER has previously worked on (retain visibility)
-              { 'workflowHistory.userId': userId },
-              // Own proposals
-              { createdByUserId: userId },
-              { processBy: userId }
+              // Proposals APPROVER has previously worked on (retain visibility) - but not Drafts
+              {
+                $and: [
+                  { 'workflowHistory.userId': userId },
+                  { status: { $ne: 'Draft' } }
+                ]
+              },
+              // Own proposals - but only if submitted (not Draft)
+              {
+                $and: [
+                  { $or: [
+                    { createdByUserId: userId },
+                    { processBy: userId }
+                  ]},
+                  { status: { $ne: 'Draft' } }
+                ]
+              }
             ]
           };
           break;
@@ -259,6 +359,7 @@ const budgetRoleVisibilityControl = () => {
         case 'OVERALL_BUDGET_APPROVER':
           // STEP 6 of 6-step workflow: PREPARER → BUDGET REVIEWER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → [OVERALL_APPROVER]
           // Final approval step - sees proposals forwarded by BUDGET_OFFICER AND proposals they've worked on
+          // BUT: Cannot see Draft proposals (must be submitted first)
           visibilityFilter = {
             $or: [
               // Proposals currently assigned to OVERALL_BUDGET_APPROVER
@@ -285,13 +386,32 @@ const budgetRoleVisibilityControl = () => {
                   ]
                 }
               },
-              { currentAssigneeRole: 'OVERALL_BUDGET_APPROVER' },
-              { pendingWithRoles: 'OVERALL_BUDGET_APPROVER' },
-              // Proposals OVERALL_BUDGET_APPROVER has previously worked on (retain visibility)
-              { 'workflowHistory.userId': userId },
-              // Own proposals
-              { createdByUserId: userId },
-              { processBy: userId }
+              {
+                $and: [
+                  { $or: [
+                    { currentAssigneeRole: 'OVERALL_BUDGET_APPROVER' },
+                    { pendingWithRoles: 'OVERALL_BUDGET_APPROVER' }
+                  ]},
+                  { status: { $ne: 'Draft' } }
+                ]
+              },
+              // Proposals OVERALL_BUDGET_APPROVER has previously worked on (retain visibility) - but not Drafts
+              {
+                $and: [
+                  { 'workflowHistory.userId': userId },
+                  { status: { $ne: 'Draft' } }
+                ]
+              },
+              // Own proposals - but only if submitted (not Draft)
+              {
+                $and: [
+                  { $or: [
+                    { createdByUserId: userId },
+                    { processBy: userId }
+                  ]},
+                  { status: { $ne: 'Draft' } }
+                ]
+              }
             ]
           };
           break;
@@ -303,6 +423,13 @@ const budgetRoleVisibilityControl = () => {
 
       // Attach visibility filter to request for use in controllers
       req.budgetRoleVisibilityFilter = visibilityFilter;
+      
+      console.log('🔐 [budgetRoleVisibilityControl] Filter applied:', {
+        budgetRole,
+        filterKeys: Object.keys(visibilityFilter),
+        filterOrCount: visibilityFilter.$or?.length || 'N/A',
+        sampleFilter: JSON.stringify(visibilityFilter).substring(0, 200) + '...'
+      });
       
       next();
     } catch (error) {

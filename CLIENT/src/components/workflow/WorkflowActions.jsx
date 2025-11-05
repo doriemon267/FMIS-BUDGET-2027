@@ -1262,44 +1262,53 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
 
   
 
-  // Step metadata for 6-step workflow progress tracking
-  // 1. Draft → 2. Division Submitted → 3. Forwarded to Officer → 4. Officer Approved → 5. Forwarded to Manager → 6. Finalized
+  // Step metadata for NEW 6-step workflow progress tracking
+  // 1. PREPARER → 2. REVIEWER → 3. APPROVER → 4. BUDGET_PLANNING_ANALYST → 5. BUDGET_OFFICER → 6. OVERALL_BUDGET_APPROVER
   const steps = [
     { key: 'Draft', label: 'Draft', stepNum: 1 },
-    { key: 'Division Submitted', label: 'Division Submitted', stepNum: 2, ts: 'divisionSubmittedAt', by: 'divisionSubmittedBy' },
-    { key: 'Forwarded to Officer', label: 'Forwarded to Officer', stepNum: 3, ts: 'forwardedToOfficerAt', by: 'forwardedToOfficerBy' },
-    { key: 'Officer Approved', label: 'Officer Approved', stepNum: 4, ts: 'officerApprovedAt', by: 'officerApprovedBy' },
-    { key: 'Forwarded to Manager', label: 'Forwarded to Manager', stepNum: 5, ts: 'forwardedToManagerAt', by: 'forwardedToManagerBy' },
-    { key: 'Finalized', label: 'Finalized', stepNum: 6, ts: 'finalizedAt', by: 'finalizedBy' }
+    { key: 'Forwarded to Reviewer', label: 'Forwarded to Reviewer', stepNum: 2, ts: 'forwardedToReviewerAt', by: 'forwardedToReviewerBy' },
+    { key: 'Forwarded to Approver', label: 'Forwarded to Approver', stepNum: 3, ts: 'forwardedToApproverAt', by: 'forwardedToApproverBy' },
+    { key: 'Forwarded to Budget Planning Analyst', label: 'Forwarded to Budget Planning Analyst', stepNum: 4, ts: 'forwardedToAnalystAt', by: 'forwardedToAnalystBy' },
+    { key: 'Forwarded to Budget Officer', label: 'Forwarded to Budget Officer', stepNum: 5, ts: 'forwardedToOfficerAt', by: 'forwardedToOfficerBy' },
+    { key: 'Forwarded to Overall Budget Approver', label: 'Forwarded to Overall Budget Approver', stepNum: 6, ts: 'forwardedToManagerAt', by: 'forwardedToManagerBy' },
+    { key: 'Finalized', label: 'Finalized', stepNum: 7, ts: 'finalizedAt', by: 'finalizedBy' }
   ];
 
   // Map alternate/legacy status labels to canonical step keys
   // Handles both uppercase (database) and title-case (UI) variants
   const stepKeySynonyms = {
-    // Forwarded to Officer variants
-    'Submitted to Officer': 'Forwarded to Officer',
-    'SUBMITTED TO OFFICER': 'Forwarded to Officer',
-    'Office Verified': 'Forwarded to Officer',
-    'OFFICE VERIFIED': 'Forwarded to Officer',
-    'FORWARDED_TO_OFFICER': 'Forwarded to Officer',
-    // Division Submitted variants
-    'Responsibility Center Submitted': 'Division Submitted',
-    'RESPONSIBILITY_CENTER_SUBMITTED': 'Division Submitted',
-    'DIVISION SUBMITTED': 'Division Submitted',
-    // Officer Approved variants
-    'Officer Approved': 'Officer Approved',
-    'OFFICER APPROVED': 'Officer Approved',
-    'APPROVER APPROVED': 'Officer Approved',
-    'Approver Approved': 'Officer Approved',
-    // Forwarded to Manager variants
-    'Forwarded to Manager': 'Forwarded to Manager',
-    'Submitted to Manager': 'Forwarded to Manager',
-    'FORWARDED_TO_MANAGER': 'Forwarded to Manager',
-    'SUBMITTED_TO_MANAGER': 'Forwarded to Manager',
-    'FORWARDED TO MANAGER': 'Forwarded to Manager',
-    'SUBMITTED TO MANAGER': 'Forwarded to Manager',
+    // Reviewer variants
+    'Division Submitted': 'Forwarded to Reviewer',
+    'DIVISION SUBMITTED': 'Forwarded to Reviewer',
+    'Responsibility Center Submitted': 'Forwarded to Reviewer',
+    'RESPONSIBILITY_CENTER_SUBMITTED': 'Forwarded to Reviewer',
+    'Forwarded to Reviewer': 'Forwarded to Reviewer',
+    'FORWARDED TO REVIEWER': 'Forwarded to Reviewer',
+    // Approver variants
+    'Forwarded to Approver': 'Forwarded to Approver',
+    'FORWARDED TO APPROVER': 'Forwarded to Approver',
+    'Approver Approved': 'Forwarded to Approver',
+    'APPROVER APPROVED': 'Forwarded to Approver',
+    // Budget Planning Analyst variants
+    'Forwarded to Budget Planning Analyst': 'Forwarded to Budget Planning Analyst',
+    'Forwarded to Analyst': 'Forwarded to Budget Planning Analyst',
+    'FORWARDED TO ANALYST': 'Forwarded to Budget Planning Analyst',
+    'FORWARDED TO BUDGET PLANNING ANALYST': 'Forwarded to Budget Planning Analyst',
+    // Budget Officer variants
+    'Forwarded to Budget Officer': 'Forwarded to Budget Officer',
+    'Forwarded to Officer': 'Forwarded to Budget Officer',
+    'FORWARDED TO OFFICER': 'Forwarded to Budget Officer',
+    'FORWARDED TO BUDGET OFFICER': 'Forwarded to Budget Officer',
+    'Officer Approved': 'Forwarded to Budget Officer',
+    'OFFICER APPROVED': 'Forwarded to Budget Officer',
+    // Overall Budget Approver variants
+    'Forwarded to Overall Budget Approver': 'Forwarded to Overall Budget Approver',
+    'Forwarded to Manager': 'Forwarded to Overall Budget Approver',
+    'FORWARDED TO MANAGER': 'Forwarded to Overall Budget Approver',
+    'FORWARDED TO OVERALL BUDGET APPROVER': 'Forwarded to Overall Budget Approver',
     // Finalized variants
     'FINALIZED': 'Finalized',
+    'Finalized': 'Finalized',
     'Manager Approved': 'Finalized'
   };
   const normalizedStatusForStep = stepKeySynonyms[proposal?.status] || proposal?.status || 'Draft';

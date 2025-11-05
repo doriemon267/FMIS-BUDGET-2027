@@ -38,8 +38,9 @@ import { useUser } from "../../context/UserContext";
 import ProposalDetailsDialog from "../myproposal/ProposalDetailsDialog";
 
 // View Proposal Button - Now uses ProposalDetailsDialog with Budget Officer Edit System
-export const ViewButton = ({ row }) => {
+export const ViewButton = ({ row, refreshData }) => {
   const [open, setOpen] = useState(false);
+  const queryClient = useQueryClient();
 
   const handleView = () => {
     setOpen(true);
@@ -47,6 +48,26 @@ export const ViewButton = ({ row }) => {
 
   const handleClose = () => {
     setOpen(false);
+  };
+
+  // Refresh table after dialog closes to ensure fresh data
+  const handleRefresh = async () => {
+    try {
+      console.log('🔄 ViewButton - Refreshing after edit');
+      
+      // Invalidate all proposal-related queries
+      await queryClient.invalidateQueries({ queryKey: ['proposals'] });
+      await queryClient.invalidateQueries({ queryKey: ['myProposals'] });
+      await queryClient.invalidateQueries({ queryKey: ['all-proposals'] });
+      
+      // Call parent's refresh if provided
+      if (refreshData && typeof refreshData === 'function') {
+        console.log('🔄 ViewButton - Calling refreshData callback');
+        await refreshData();
+      }
+    } catch (error) {
+      console.error('Error refreshing data after edit:', error);
+    }
   };
 
   // Allow external triggers (e.g., Actions menu) to open this view dialog
@@ -72,6 +93,7 @@ export const ViewButton = ({ row }) => {
         open={open}
         onClose={handleClose}
         proposal={row}
+        onRefresh={handleRefresh}
       />
     </>
   );
