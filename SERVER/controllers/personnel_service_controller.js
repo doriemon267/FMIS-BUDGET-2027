@@ -402,6 +402,8 @@ exports.bulkAddPersonnelServices = async (req, res) => {
     const hierarchicalFilters = req.hierarchicalFilters || {};
     // Get submission workflow data for correct org attribution
     const workflowData = req.submissionWorkflowData || {};
+    // CRITICAL: Extract proposalId to link personnel services to specific proposal
+    const proposalId = req.body.proposalId || workflowData.proposalId;
     const userLevel = userAssignment.assignmentLevel || workflowData.userLevel;
     
     // Get the user's ACTUAL assigned organizational units
@@ -689,7 +691,9 @@ exports.bulkAddPersonnelServices = async (req, res) => {
         // Track the user's assignment for workflow purposes (NOT the employee's org)
         processorRegion: ownerRegion || null,
         processorDepartment: ownerDepartment || null,
-        processorDivision: ownerDivision || null
+        processorDivision: ownerDivision || null,
+        // CRITICAL: Link to specific proposal to prevent cross-proposal data mixing
+        ...(proposalId && { proposalId })
       };
       if (statusAppointment === "COS") {
         personnelService = {

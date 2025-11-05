@@ -49,21 +49,21 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
       label: 'BUDGET APPROVER',
       role: 'Approves',
       shortLabel: 'Budget Approver',
-      statuses: ['Forwarded to Approver', 'Forwarded to Officer', 'Approver Approved'],
+      statuses: ['Forwarded to Approver', 'Approver Approved'],
       icon: <VerifiedUserIcon />
     },
     {
       label: 'BUDGET_PLANNING_ANALYST',
       role: 'Analyzes',
       shortLabel: 'Planning Analyst',
-      statuses: ['Forwarded to Analyst', 'Officer Approved'],
+      statuses: ['Forwarded to Budget Planning Analyst', 'Forwarded to Analyst'],
       icon: <PersonIcon />
     },
     {
       label: 'BUDGET_OFFICER',
-      role: 'Approves',
+      role: 'Reviews',
       shortLabel: 'Officer',
-      statuses: ['Forwarded to Budget Officer', 'Forwarded to Manager'],
+      statuses: ['Forwarded to Budget Officer', 'Forwarded to Manager', 'Officer Approved'],
       icon: <VerifiedUserIcon />
     },
     {
@@ -88,21 +88,21 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
       label: 'BUDGET APPROVER',
       role: 'Approves',
       shortLabel: 'Budget Approver',
-      statuses: ['Forwarded to Approver', 'Forwarded to Officer', 'Approver Approved'],
+      statuses: ['Forwarded to Approver', 'Approver Approved'],
       icon: <VerifiedUserIcon />
     },
     {
       label: 'BUDGET_PLANNING_ANALYST',
       role: 'Analyzes',
       shortLabel: 'Planning Analyst',
-      statuses: ['Forwarded to Analyst', 'Officer Approved'],
+      statuses: ['Forwarded to Budget Planning Analyst', 'Forwarded to Analyst'],
       icon: <PersonIcon />
     },
     {
       label: 'BUDGET_OFFICER',
-      role: 'Approves',
+      role: 'Reviews',
       shortLabel: 'Officer',
-      statuses: ['Forwarded to Budget Officer', 'Forwarded to Manager'],
+      statuses: ['Forwarded to Budget Officer', 'Forwarded to Manager', 'Officer Approved'],
       icon: <VerifiedUserIcon />
     },
     {
@@ -119,11 +119,43 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
 
   // Determine active step
   const getActiveStep = () => {
+    // First, try to match by status
     for (let i = 0; i < steps.length; i++) {
       if (steps[i].statuses.includes(status)) {
         return i;
       }
     }
+
+    // If status is "Returned", determine which step based on workflowLevel or currentAssigneeRole
+    if (status === 'Returned' || status === 'Rejected') {
+      const assigneeRole = proposal?.currentAssigneeRole || proposal?.workflowLevel;
+      if (assigneeRole) {
+        // Normalize role names for matching
+        const roleMap = {
+          'PREPARER': 'BUDGET PREPARER',
+          'BUDGET PREPARER': 'BUDGET PREPARER',
+          'REVIEWER': 'BUDGET REVIEWER',
+          'BUDGET_REVIEWER': 'BUDGET REVIEWER',
+          'BUDGET REVIEWER': 'BUDGET REVIEWER',
+          'APPROVER': 'BUDGET APPROVER',
+          'BUDGET APPROVER': 'BUDGET APPROVER',
+          'BUDGET_PLANNING_ANALYST': 'BUDGET_PLANNING_ANALYST',
+          'OFFICER': 'BUDGET_OFFICER',
+          'BUDGET_OFFICER': 'BUDGET_OFFICER',
+          'BUDGET_MANAGER': 'OVERALL_BUDGET_APPROVER',
+          'OVERALL_BUDGET_APPROVER': 'OVERALL_BUDGET_APPROVER'
+        };
+        
+        const normalizedRole = roleMap[assigneeRole] || assigneeRole;
+        
+        for (let i = 0; i < steps.length; i++) {
+          if (steps[i].label === normalizedRole) {
+            return i;
+          }
+        }
+      }
+    }
+
     return 0;
   };
 

@@ -928,6 +928,13 @@ exports.submitDirectToManager = async (req, res) => {
     // Sync status to all related budget items
     await syncBudgetItemsStatus(proposal);
 
+    // Recalculate proposal totals to keep overview figures accurate after reviewer action
+    try {
+      await recalculateAndSaveProposalTotals({ proposalId: proposal._id });
+    } catch (recalcErr) {
+      console.warn('⚠️ Totals recalculation failed after reviewer approve-forward:', recalcErr?.message || recalcErr);
+    }
+
     // Recalculate proposal totals so dashboards/overview are immediately accurate
     try {
       await recalculateAndSaveProposalTotals({ proposalId: proposal._id });
@@ -2236,15 +2243,15 @@ exports.getProposalHistory = async (req, res) => {
  */
 
 // REVIEWER approves proposal from PREPARER/APPROVER
-exports.coordinatorApproveProposal = async (req, res) => {
+exports.reviewerApproveProposal = async (req, res) => {
   try {
     const { proposalId, comment } = req.body;
     const userId = req.user.id;
     const userName = req.user.FirstName + ' ' + req.user.LastName;
     const userRoles = req.user.Roles || [];
 
-    // Verify user is REVIEWER (old BUDGET_COORDINATOR)
-    const hasReviewRole = userRoles.includes('REVIEWER') || userRoles.includes('BUDGET_COORDINATOR');
+  // Verify user is REVIEWER (accept normalized role only; legacy aliases are handled by middleware)
+  const hasReviewRole = userRoles.includes('REVIEWER') || userRoles.includes('BUDGET_REVIEWER');
     if (!hasReviewRole) {
       return res.status(403).json({
         success: false,
@@ -2260,8 +2267,8 @@ exports.coordinatorApproveProposal = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Proposal not found' });
     }
 
-    // Verify proposal is in correct status (can approve from Division Submitted or Under Review by Coordinator)
-  const validStatuses = ['Division Submitted', 'Under Review by Coordinator', 'Forwarded to Reviewer', 'Under Review by Reviewer'];
+    // Verify proposal is in correct status (canonical + legacy reviewer statuses)
+  const validStatuses = ['Division Submitted', 'Forwarded to Reviewer', 'Under Review by Reviewer', 'Under Review by Coordinator'];
     if (!validStatuses.includes(proposal.status)) {
       return res.status(400).json({ 
         success: false, 
@@ -2330,30 +2337,34 @@ exports.coordinatorApproveProposal = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error in coordinator approve:', error);
+    console.error('Error in reviewer approve:', error);
     res.status(500).json({ success: false, message: 'Failed to approve proposal', error: error.message });
   }
 };
 
 /**
- * BUDGET_COORDINATOR: Approve AND forward to BUDGET_OFFICER in one action
- * Combines coordinatorApproveProposal + coordinatorSubmitToOfficer
+ * REVIEWER: Approve AND forward to BUDGET APPROVER in one action
  */
-exports.coordinatorApproveAndForwardToOfficer = async (req, res) => {
+exports.reviewerApproveAndForwardToApprover = async (req, res) => {
   try {
     const { proposalId, comment } = req.body;
     const userId = req.user.id;
     const userName = req.user.FirstName + ' ' + req.user.LastName;
     const userRoles = req.user.Roles || [];
+    const assignment = req.userHierarchicalAssignment || req.user?.hierarchicalAssignment || {};
+    const workflowRoles = Array.isArray(assignment.workflowRoles)
+      ? assignment.workflowRoles.map(r => String(r).toLowerCase())
+      : [];
 
-    // Verify user is REVIEWER (old BUDGET_COORDINATOR)
-    const hasReviewRole = userRoles.includes('REVIEWER') || userRoles.includes('BUDGET_COORDINATOR');
-    if (!hasReviewRole) {
-      return res.status(403).json({
-        success: false,
-        message: 'Only Reviewers can approve and forward proposals'
-      });
-    }    if (!comment || comment.trim() === '') {
+    // Verify user is REVIEWER (legacy aliases normalized upstream)
+    let hasReviewRole =
+      userRoles.includes('REVIEWER') ||
+      userRoles.includes('BUDGET_REVIEWER') ||
+      workflowRoles.includes('divisionreviewer') ||
+      workflowRoles.includes('officereviewer') ||
+      workflowRoles.includes('reviewer');
+
+    if (!comment || comment.trim() === '') {
       return res.status(400).json({ success: false, message: 'Comment is required for approval' });
     }
 
@@ -2363,12 +2374,38 @@ exports.coordinatorApproveAndForwardToOfficer = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Proposal not found' });
     }
 
-    // Verify proposal is in correct status
-    const validStatuses = ['Division Submitted', 'Under Review by Coordinator'];
+    // Verify proposal is in correct status (support canonical + legacy reviewer statuses)
+    const validStatuses = [
+      'Division Submitted',
+      'Forwarded to Reviewer',
+      'Under Review by Reviewer',
+      // legacy status kept for backward compatibility
+      'Under Review by Coordinator',
+      'Responsibility Center Submitted'
+    ];
     if (!validStatuses.includes(proposal.status)) {
       return res.status(400).json({ 
         success: false, 
         message: `Cannot approve proposal with status "${proposal.status}". Expected status: ${validStatuses.join(' or ')}` 
+      });
+    }
+
+    // If roles are missing but this is clearly the reviewer stage, allow as reviewer
+    if (!hasReviewRole) {
+      const upperRoles = userRoles.map(r => String(r).toUpperCase());
+      const isManager = upperRoles.includes('BUDGET_MANAGER') || upperRoles.includes('BUDGET ADMIN') || upperRoles.includes('BUDGET_ADMIN');
+      const isOfficer = upperRoles.includes('BUDGET_OFFICER');
+      const isApprover = upperRoles.includes('BUDGET APPROVER') || upperRoles.includes('APPROVER') || upperRoles.includes('DIVISION APPROVER') || upperRoles.includes('OFFICE APPROVER') || upperRoles.includes('DIVISIONAPPROVER') || upperRoles.includes('OFFICEAPPROVER');
+      const isReviewerStage = ['Division Submitted', 'Forwarded to Reviewer', 'Under Review by Reviewer', 'Responsibility Center Submitted'].includes(proposal.status);
+      if (isReviewerStage && !isManager && !isOfficer && !isApprover) {
+        hasReviewRole = true;
+      }
+    }
+
+    if (!hasReviewRole) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only Reviewers can approve and forward proposals'
       });
     }
 
@@ -2499,21 +2536,21 @@ exports.coordinatorApproveAndForwardToOfficer = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error in coordinator approve and forward:', error);
+    console.error('Error in reviewer approve and forward:', error);
     res.status(500).json({ success: false, message: 'Failed to approve and forward proposal', error: error.message });
   }
 };
 
-// BUDGET_COORDINATOR returns proposal to BUDGET_PLANNING_ANALYST
-exports.coordinatorReturnProposal = async (req, res) => {
+// REVIEWER returns proposal to PREPARER
+exports.reviewerReturnProposal = async (req, res) => {
   try {
     const { proposalId, comment } = req.body;
     const userId = req.user.id;
     const userName = req.user.FirstName + ' ' + req.user.LastName;
     const userRoles = req.user.Roles || [];
 
-    // Verify user is REVIEWER (old BUDGET_COORDINATOR)
-    const hasReviewRole = userRoles.includes('REVIEWER') || userRoles.includes('BUDGET_COORDINATOR');
+  // Verify user is REVIEWER
+  const hasReviewRole = userRoles.includes('REVIEWER') || userRoles.includes('BUDGET_REVIEWER');
     if (!hasReviewRole) {
       return res.status(403).json({
         success: false,
@@ -2529,11 +2566,12 @@ exports.coordinatorReturnProposal = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Proposal not found' });
     }
 
-    // Verify proposal is in correct status
-    if (proposal.status !== 'Division Submitted') {
+    // Verify proposal is in correct status (allow canonical reviewer stages)
+    const validStatuses = ['Division Submitted', 'Forwarded to Reviewer', 'Under Review by Reviewer'];
+    if (!validStatuses.includes(proposal.status)) {
       return res.status(400).json({ 
         success: false, 
-        message: `Cannot return proposal with status "${proposal.status}". Expected status: Division Submitted` 
+        message: `Cannot return proposal with status "${proposal.status}". Expected status: ${validStatuses.join(' or ')}` 
       });
     }
 
@@ -2605,8 +2643,8 @@ exports.coordinatorReturnProposal = async (req, res) => {
         comment,
         previousStatus,
         newStatus,
-  returnToLevel: 'ANALYST',
-  targetRole: 'BUDGET_PLANNING_ANALYST',
+  returnToLevel: 'PREPARER',
+  targetRole: 'PREPARER',
         performedBy: {
           userId,
           name: userName,
@@ -2627,7 +2665,7 @@ exports.coordinatorReturnProposal = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error in coordinator return:', error);
+    console.error('Error in reviewer return:', error);
     res.status(500).json({ success: false, message: 'Failed to return proposal', error: error.message });
   }
 };
@@ -2640,7 +2678,7 @@ exports.approverSaveEdits = async (req, res) => {
     const { proposalId, comment, updates, tableData } = req.body;
     const userId = req.user.id;
     const userName = req.user.FirstName + ' ' + req.user.LastName;
-    const userRoles = req.user.Roles || [];
+    const userRoles = extractUserRoles(req.user);
 
     console.log('🔍 approverSaveEdits - User object:', {
       userId,
@@ -2649,30 +2687,8 @@ exports.approverSaveEdits = async (req, res) => {
       fullUser: req.user
     });
 
-    // Verify user is APPROVER - check both primary roles and workflow roles
-    const primaryRoles = req.user.Roles || [];
-    const workflowRoles = req.user.workflowRoles || [];
-    const allRoles = [...primaryRoles, ...workflowRoles];
-    
-    const hasApproverRole = primaryRoles.includes('BUDGET APPROVER') || 
-                           workflowRoles.includes('officeapprover') || 
-                           workflowRoles.includes('divisionapprover') ||
-                           workflowRoles.includes('approver');
-    
-    console.log('🔍 approverSaveEdits - Role check:', {
-      primaryRoles,
-      workflowRoles,
-      allRoles,
-      hasApproverRole,
-      checkingConditions: {
-        primaryAPPROVER: primaryRoles.includes('BUDGET APPROVER'),
-        workflowOfficeApprover: workflowRoles.includes('officeapprover'),
-        workflowDivisionApprover: workflowRoles.includes('divisionapprover'),
-        workflowApprover: workflowRoles.includes('approver')
-      }
-    });
-    
-    if (!hasApproverRole) {
+    // Verify user is APPROVER
+    if (!hasRole(userRoles, 'APPROVER', 'BUDGET_APPROVER', 'BUDGET APPROVER')) {
       return res.status(403).json({
         success: false,
         message: 'Only Approvers can save edits'
@@ -2686,11 +2702,18 @@ exports.approverSaveEdits = async (req, res) => {
     }
 
     // Verify proposal is in correct status for approver editing
+    // Approver can save edits when:
+    // 1. Proposal is forwarded to them ('Forwarded to Approver')
+    // 2. They already approved it ('Approver Approved')
+    // 3. Proposal was returned to them from a later stage ('Returned' with workflowLevel='APPROVER')
     const validStatuses = ['Forwarded to Approver', 'Approver Approved'];
-    if (!validStatuses.includes(proposal.status)) {
+    const isReturnedToApprover = proposal.status === 'Returned' && 
+                                 (proposal.workflowLevel === 'APPROVER' || proposal.currentAssigneeRole === 'APPROVER');
+    
+    if (!validStatuses.includes(proposal.status) && !isReturnedToApprover) {
       return res.status(400).json({
         success: false,
-        message: `Cannot save edits for proposal with status "${proposal.status}". Expected statuses: ${validStatuses.join(', ')}`
+        message: `Cannot save edits for proposal with status "${proposal.status}". Expected statuses: ${validStatuses.join(', ')} or Returned to Approver`
       });
     }
 
@@ -2807,17 +2830,10 @@ exports.approverApproveForwardAnalyst = async (req, res) => {
     const { proposalId, comment, tableData } = req.body;
     const userId = req.user.id;
     const userName = req.user.FirstName + ' ' + req.user.LastName;
-    const userRoles = req.user.Roles || [];
+    const userRoles = extractUserRoles(req.user);
 
-    // Verify user is APPROVER - check both primary roles and workflow roles
-    const primaryRoles = req.user.Roles || [];
-    const workflowRoles = req.user.workflowRoles || [];
-    const hasApproverRole = primaryRoles.includes('APPROVER') || 
-                           workflowRoles.includes('officeapprover') || 
-                           workflowRoles.includes('divisionapprover') ||
-                           workflowRoles.includes('approver');
-    
-    if (!hasApproverRole) {
+    // Verify user is APPROVER
+    if (!hasRole(userRoles, 'APPROVER', 'BUDGET_APPROVER', 'BUDGET APPROVER')) {
       return res.status(403).json({
         success: false,
         message: 'Only Approvers can approve and forward proposals'
@@ -2835,11 +2851,18 @@ exports.approverApproveForwardAnalyst = async (req, res) => {
     }
 
     // Verify proposal is in correct status
+    // Approver can approve and forward when:
+    // 1. Proposal is forwarded to them ('Forwarded to Approver')
+    // 2. They already approved it ('Approver Approved')
+    // 3. Proposal was returned to them from a later stage ('Returned' with workflowLevel='APPROVER')
     const validStatuses = ['Forwarded to Approver', 'Approver Approved'];
-    if (!validStatuses.includes(proposal.status)) {
+    const isReturnedToApprover = proposal.status === 'Returned' && 
+                                 (proposal.workflowLevel === 'APPROVER' || proposal.currentAssigneeRole === 'APPROVER');
+    
+    if (!validStatuses.includes(proposal.status) && !isReturnedToApprover) {
       return res.status(400).json({
         success: false,
-        message: `Cannot approve proposal with status "${proposal.status}". Expected statuses: ${validStatuses.join(', ')}`
+        message: `Cannot approve proposal with status "${proposal.status}". Expected statuses: ${validStatuses.join(', ')} or Returned to Approver`
       });
     }
 
@@ -3002,6 +3025,152 @@ exports.approverApproveForwardAnalyst = async (req, res) => {
   }
 };
 
+// APPROVER approves and forwards to BUDGET_OFFICER (new 6-step workflow option)
+exports.approverApproveForwardOfficer = async (req, res) => {
+  try {
+    const { proposalId, comment, tableData } = req.body;
+    const userId = req.user.id;
+    const userName = req.user.FirstName + ' ' + req.user.LastName;
+    const userRoles = extractUserRoles(req.user);
+
+    // Verify user is APPROVER
+    if (!hasRole(userRoles, 'APPROVER', 'BUDGET_APPROVER', 'BUDGET APPROVER')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only Approvers can approve and forward proposals'
+      });
+    }
+
+    if (!comment || comment.trim() === '') {
+      return res.status(400).json({ success: false, message: 'Comment is required for approval' });
+    }
+
+    // Find the proposal
+    let proposal = await Proposal.findById(proposalId);
+    if (!proposal) {
+      return res.status(404).json({ success: false, message: 'Proposal not found' });
+    }
+
+    // Verify proposal is in correct status
+    // Approver can approve and forward when:
+    // 1. Proposal is forwarded to them ('Forwarded to Approver')
+    // 2. They already approved it ('Approver Approved')
+    // 3. Proposal was returned to them from a later stage ('Returned' with workflowLevel='APPROVER')
+    const validStatuses = ['Forwarded to Approver', 'Approver Approved'];
+    const isReturnedToApprover = proposal.status === 'Returned' && 
+                                 (proposal.workflowLevel === 'APPROVER' || proposal.currentAssigneeRole === 'APPROVER');
+    
+    if (!validStatuses.includes(proposal.status) && !isReturnedToApprover) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot approve proposal with status "${proposal.status}". Expected statuses: ${validStatuses.join(', ')} or Returned to Approver`
+      });
+    }
+
+    const previousStatus = proposal.status;
+    const newStatus = 'Forwarded to Budget Officer';
+    const performedByRole = 'APPROVER';
+
+    // Update proposal - bypass BUDGET_PLANNING_ANALYST and forward directly to BUDGET_OFFICER
+    proposal.status = newStatus;
+    proposal.workflowLevel = 'BUDGET_OFFICER';
+    proposal.approverApprovedAt = new Date();
+    proposal.approverApprovedBy = {
+      userId,
+      userName,
+      date: new Date(),
+      comment
+    };
+
+    updateAssignment(proposal, {
+      step: 'BUDGET_OFFICER_REVIEW',
+      assigneeRole: 'BUDGET_OFFICER',
+      pendingRoles: ['BUDGET_OFFICER']
+    });
+
+    recordWorkflowEvent(proposal, {
+      action: 'APPROVER_SUBMIT_TO_OFFICER',
+      comment,
+      userId,
+      userName,
+      previousStatus,
+      newStatus,
+      targetRole: 'BUDGET_OFFICER'
+    });
+
+    await proposal.save();
+
+    // If approver forwarded without hitting "Save Edits" first but we have tableData,
+    // persist it into BudgetOfficerEdit as a Draft so the Officer can see the latest numbers.
+    try {
+      if (tableData && typeof tableData === 'object') {
+        let budgetOfficerEdit = await BudgetOfficerEdit.findOne({ proposalId: proposalId });
+
+        if (budgetOfficerEdit) {
+          budgetOfficerEdit.editedIncome = tableData.editedIncome || [];
+          budgetOfficerEdit.editedPersonnelServices = tableData.editedPersonnelServices || [];
+          budgetOfficerEdit.editedMOOE = tableData.editedMOOE || [];
+          budgetOfficerEdit.editedCapitalOutlay = tableData.editedCapitalOutlay || [];
+          budgetOfficerEdit.comments = tableData.comments ?? comment;
+          budgetOfficerEdit.editedBy = {
+            userId: userId,
+            userName: userName,
+            email: req.user.email,
+            role: 'APPROVER'
+          };
+          if (!budgetOfficerEdit.status) budgetOfficerEdit.status = 'Draft';
+          budgetOfficerEdit.updatedAt = new Date();
+
+          await budgetOfficerEdit.save();
+          console.log('✅ Updated BudgetOfficerEdit (via approve-forward-officer) with approver table data');
+        } else {
+          const newEdit = new BudgetOfficerEdit({
+            proposalId: proposalId,
+            fiscalYear: proposal.fiscalYear,
+            budgetType: proposal.budgetType,
+            region: proposal.region,
+            department: proposal.department,
+            division: proposal.division,
+            processBy: proposal.processBy,
+            status: 'Draft',
+            editedIncome: tableData.editedIncome || [],
+            editedPersonnelServices: tableData.editedPersonnelServices || [],
+            editedMOOE: tableData.editedMOOE || [],
+            editedCapitalOutlay: tableData.editedCapitalOutlay || [],
+            comments: tableData.comments ?? comment,
+            editedBy: {
+              userId: userId,
+              userName: userName,
+              email: req.user.email,
+              role: 'APPROVER'
+            }
+          });
+
+          await newEdit.save();
+          console.log('✅ Created BudgetOfficerEdit Draft (via approve-forward-officer)');
+        }
+      }
+    } catch (editError) {
+      console.error('Warning: Could not persist BudgetOfficerEdit:', editError);
+      // Don't fail the entire request if edit persistence fails
+    }
+
+    res.json({
+      success: true,
+      message: 'Proposal approved and forwarded to Budget Officer successfully',
+      proposal: {
+        id: proposal._id,
+        status: proposal.status,
+        workflowLevel: proposal.workflowLevel
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in approver approve forward officer:', error);
+    res.status(500).json({ success: false, message: 'Failed to approve and forward proposal', error: error.message });
+  }
+};
+
 // APPROVER submits directly to BUDGET_OFFICER (bypasses BUDGET_PLANNING_ANALYST)
 exports.approverSubmitToOfficer = async (req, res) => {
   try {
@@ -3145,17 +3314,10 @@ exports.approverReturn = async (req, res) => {
     const { proposalId, comment } = req.body;
     const userId = req.user.id;
     const userName = req.user.FirstName + ' ' + req.user.LastName;
-    const userRoles = req.user.Roles || [];
+    const userRoles = extractUserRoles(req.user);
 
-    // Verify user is APPROVER - check both primary roles and workflow roles
-    const primaryRoles = req.user.Roles || [];
-    const workflowRoles = req.user.workflowRoles || [];
-    const hasApproverRole = primaryRoles.includes('APPROVER') || 
-                           workflowRoles.includes('officeapprover') || 
-                           workflowRoles.includes('divisionapprover') ||
-                           workflowRoles.includes('approver');
-    
-    if (!hasApproverRole) {
+    // Verify user is APPROVER
+    if (!hasRole(userRoles, 'APPROVER', 'BUDGET_APPROVER', 'BUDGET APPROVER')) {
       return res.status(403).json({
         success: false,
         message: 'Only Approvers can return proposals'
@@ -3173,11 +3335,18 @@ exports.approverReturn = async (req, res) => {
     }
 
     // Verify proposal is in correct status
+    // Approver can return when: 
+    // 1. Proposal is forwarded to them ('Forwarded to Approver')
+    // 2. They already approved it ('Approver Approved')
+    // 3. Proposal was returned to them from a later stage ('Returned' with workflowLevel='APPROVER')
     const validStatuses = ['Forwarded to Approver', 'Approver Approved'];
-    if (!validStatuses.includes(proposal.status)) {
+    const isReturnedToApprover = proposal.status === 'Returned' && 
+                                 (proposal.workflowLevel === 'APPROVER' || proposal.currentAssigneeRole === 'APPROVER');
+    
+    if (!validStatuses.includes(proposal.status) && !isReturnedToApprover) {
       return res.status(400).json({
         success: false,
-        message: `Cannot return proposal with status "${proposal.status}". Expected statuses: ${validStatuses.join(', ')}`
+        message: `Cannot return proposal with status "${proposal.status}". Expected statuses: ${validStatuses.join(', ')} or Returned to Approver`
       });
     }
 
@@ -3585,6 +3754,166 @@ exports.coordinatorSaveEdits = async (req, res) => {
   } catch (error) {
     console.error('Error in coordinator save edits:', error);
     res.status(500).json({ success: false, message: 'Failed to save edits', error: error.message });
+  }
+};
+
+// BUDGET_PLANNING_ANALYST saves edits to proposal
+exports.analystSaveEdits = async (req, res) => {
+  try {
+    const { proposalId, comment } = req.body;
+    const userId = req.user.id;
+    const userName = req.user.FirstName + ' ' + req.user.LastName;
+    const userEmail = req.user.email;
+
+    const proposal = await Proposal.findById(proposalId);
+    if (!proposal) {
+      return res.status(404).json({ success: false, message: 'Proposal not found' });
+    }
+
+    if (!['Forwarded to Budget Planning Analyst', 'Forwarded to Analyst'].includes(proposal.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot save edits for proposal with status "${proposal.status}"`
+      });
+    }
+
+    recordWorkflowEvent(proposal, {
+      action: 'ANALYST_SAVE_EDITS',
+      comment: comment || 'Analyst saved edits',
+      userId,
+      userName
+    });
+
+    await proposal.save();
+
+    res.json({ success: true, message: 'Edits saved successfully', proposal: { id: proposal._id, status: proposal.status } });
+  } catch (error) {
+    console.error('Error in analyst save edits:', error);
+    res.status(500).json({ success: false, message: 'Failed to save edits', error: error.message });
+  }
+};
+
+// BUDGET_PLANNING_ANALYST submits analysis to BUDGET_OFFICER
+exports.analystSubmitToOfficer = async (req, res) => {
+  try {
+    const { proposalId, comment, tableData } = req.body;
+    const userId = req.user.id;
+    const userName = req.user.FirstName + ' ' + req.user.LastName;
+    const userEmail = req.user.email;
+
+    if (!comment || comment.trim() === '') {
+      return res.status(400).json({ success: false, message: 'Comment is required for submission' });
+    }
+
+    let proposal = await Proposal.findById(proposalId);
+    if (!proposal) {
+      return res.status(404).json({ success: false, message: 'Proposal not found' });
+    }
+
+    if (!['Forwarded to Budget Planning Analyst', 'Forwarded to Analyst'].includes(proposal.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot submit proposal with status "${proposal.status}"`
+      });
+    }
+
+    const previousStatus = proposal.status;
+    const newStatus = 'Forwarded to Budget Officer';
+
+    proposal.status = newStatus;
+    proposal.workflowLevel = 'BUDGET_OFFICER';
+
+    updateAssignment(proposal, {
+      step: 'BUDGET_OFFICER_REVIEW',
+      assigneeRole: 'BUDGET_OFFICER',
+      pendingRoles: ['BUDGET_OFFICER']
+    });
+
+    recordWorkflowEvent(proposal, {
+      action: 'ANALYST_SUBMIT_TO_OFFICER',
+      comment,
+      userId,
+      userName,
+      previousStatus,
+      newStatus,
+      targetRole: 'BUDGET_OFFICER'
+    });
+
+    await proposal.save();
+
+    // Recalculate totals after analyst submission
+    try {
+      await recalculateAndSaveProposalTotals(proposalId);
+    } catch (calcError) {
+      console.warn('Warning: Could not recalculate totals after analyst submission:', calcError);
+    }
+
+    res.json({
+      success: true,
+      message: 'Analysis submitted to Budget Officer successfully',
+      proposal: { id: proposal._id, status: proposal.status, workflowLevel: proposal.workflowLevel }
+    });
+  } catch (error) {
+    console.error('Error in analyst submit to officer:', error);
+    res.status(500).json({ success: false, message: 'Failed to submit analysis', error: error.message });
+  }
+};
+
+// BUDGET_PLANNING_ANALYST returns proposal to BUDGET_APPROVER
+exports.analystReturn = async (req, res) => {
+  try {
+    const { proposalId, comment } = req.body;
+    const userId = req.user.id;
+    const userName = req.user.FirstName + ' ' + req.user.LastName;
+
+    if (!comment || comment.trim() === '') {
+      return res.status(400).json({ success: false, message: 'Comment is required for return' });
+    }
+
+    let proposal = await Proposal.findById(proposalId);
+    if (!proposal) {
+      return res.status(404).json({ success: false, message: 'Proposal not found' });
+    }
+
+    if (!['Forwarded to Budget Planning Analyst', 'Forwarded to Analyst'].includes(proposal.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot return proposal with status "${proposal.status}"`
+      });
+    }
+
+    const previousStatus = proposal.status;
+    const newStatus = 'Returned';
+
+    proposal.status = newStatus;
+    proposal.workflowLevel = 'APPROVER';
+
+    updateAssignment(proposal, {
+      step: 'APPROVER_REVIEW',
+      assigneeRole: 'APPROVER',
+      pendingRoles: ['APPROVER']
+    });
+
+    recordWorkflowEvent(proposal, {
+      action: 'ANALYST_RETURN',
+      comment,
+      userId,
+      userName,
+      previousStatus,
+      newStatus,
+      targetRole: 'APPROVER'
+    });
+
+    await proposal.save();
+
+    res.json({
+      success: true,
+      message: 'Proposal returned to Budget Approver successfully',
+      proposal: { id: proposal._id, status: proposal.status, workflowLevel: proposal.workflowLevel }
+    });
+  } catch (error) {
+    console.error('Error in analyst return:', error);
+    res.status(500).json({ success: false, message: 'Failed to return proposal', error: error.message });
   }
 };
 

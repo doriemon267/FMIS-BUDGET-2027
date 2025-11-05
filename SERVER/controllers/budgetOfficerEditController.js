@@ -624,10 +624,16 @@ exports.getProposalForEdit = async (req, res) => {
     }
     
     // Get user roles
-    const userRoles = req.user?.Roles || [];
-    const isOverallApprover = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN');
-    const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
-    const isBudgetAnalyst = userRoles.includes('BUDGET_PLANNING_ANALYST');
+  const userRoles = req.user?.Roles || [];
+  const isOverallApprover = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN');
+  const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
+  const isBudgetAnalyst = userRoles.includes('BUDGET_PLANNING_ANALYST');
+  // Include hierarchical workflow roles for robust reviewer detection
+  const assignment = req.userHierarchicalAssignment || {};
+  const workflowRoles = Array.isArray(assignment.workflowRoles) ? assignment.workflowRoles.map(r => String(r).toLowerCase()) : [];
+  const isReviewerUserRole = userRoles.some(r => String(r).toUpperCase() === 'REVIEWER' || String(r).toUpperCase() === 'BUDGET_REVIEWER');
+  const isReviewerWorkflowRole = workflowRoles.includes('divisionreviewer') || workflowRoles.includes('officereviewer') || workflowRoles.includes('reviewer');
+  const isReviewer = isReviewerUserRole || isReviewerWorkflowRole;
     const isApproverLevel = hasApproverRole(userRoles);
     
     // Get current user ID for filtering own edits
@@ -990,6 +996,23 @@ exports.saveDraftEdit = async (req, res) => {
     const isOverallApprover = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN');
     const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
     const isBudgetAnalyst = userRoles.includes('BUDGET_PLANNING_ANALYST');
+
+    // Normalize workflow roles from hierarchical assignment for reviewer/approver detection
+    const assignment = req.userHierarchicalAssignment || req.user?.hierarchicalAssignment || {};
+    const workflowRoles = Array.isArray(assignment.workflowRoles)
+      ? assignment.workflowRoles.map((r) => String(r || '').toLowerCase())
+      : [];
+
+    // Reviewer detection (mirrors logic used elsewhere in this controller)
+    const isReviewerUserRole = Array.isArray(userRoles)
+      ? userRoles.some((r) => {
+          const s = String(r || '').toUpperCase();
+          return s === 'REVIEWER' || s === 'BUDGET REVIEWER' || s === 'BUDGET_REVIEWER';
+        })
+      : false;
+    const isReviewerWorkflowRole = workflowRoles.includes('divisionreviewer') || workflowRoles.includes('officereviewer') || workflowRoles.includes('reviewer');
+    const isReviewer = isReviewerUserRole || isReviewerWorkflowRole;
+    
     
     // Check if proposal is already submitted or approved - prevent further editing
     // OVERALL_BUDGET_APPROVER can view proposals forwarded to them (to approve/reject)
@@ -1421,6 +1444,22 @@ exports.submitEdit = async (req, res) => {
     const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
     const isBudgetAnalyst = userRoles.includes('BUDGET_PLANNING_ANALYST');
     
+    // Normalize workflow roles from hierarchical assignment for reviewer/approver detection
+    const assignment = req.userHierarchicalAssignment || req.user?.hierarchicalAssignment || {};
+    const workflowRoles = Array.isArray(assignment.workflowRoles)
+      ? assignment.workflowRoles.map((r) => String(r || '').toLowerCase())
+      : [];
+
+    // Reviewer detection (mirrors logic used elsewhere in this controller)
+    const isReviewerUserRole = Array.isArray(userRoles)
+      ? userRoles.some((r) => {
+          const s = String(r || '').toUpperCase();
+          return s === 'REVIEWER' || s === 'BUDGET REVIEWER' || s === 'BUDGET_REVIEWER';
+        })
+      : false;
+    const isReviewerWorkflowRole = workflowRoles.includes('divisionreviewer') || workflowRoles.includes('officereviewer') || workflowRoles.includes('reviewer');
+    const isReviewer = isReviewerUserRole || isReviewerWorkflowRole;
+    
     // Check if proposal is already submitted or approved - prevent further editing
     // OVERALL_APPROVER can view proposals forwarded to them (to approve/reject)
     // BUDGET_OFFICER cannot submit proposals forwarded to manager, officer approved, or approved
@@ -1466,7 +1505,19 @@ exports.submitEdit = async (req, res) => {
       ? 'APPROVER'
       : userRoles.includes('BUDGET_PLANNING_ANALYST')
       ? 'BUDGET_PLANNING_ANALYST'
+      : isReviewer
+      ? 'BUDGET_REVIEWER'
       : 'BUDGET PREPARER';
+    console.log('👤 Editor role resolution (submitEdit):', {
+      userRoles,
+      workflowRoles,
+      isOverallApprover,
+      isBudgetOfficer,
+      isBudgetAnalyst,
+      isReviewerUserRole,
+      isReviewerWorkflowRole,
+      resolvedEditorRole: editorRole
+    });
     // Map editor role for BudgetOfficerEdit.editedBy.role enum
     const editDocRole = editorRole;
     
@@ -1557,6 +1608,18 @@ exports.submitEdit = async (req, res) => {
       proposal.submittedByRole = 'BUDGET PREPARER';
       proposal.submittedToDivisionAt = now;
       proposal.submittedToDivisionBy = { userId, userName };
+    } else if (editorRole === 'BUDGET_REVIEWER' || editorRole === 'REVIEWER') {
+      // BUDGET REVIEWER submits to BUDGET APPROVER (strict 6-step flow)
+      newStatus = 'Forwarded to Approver';
+      newWorkflowLevel = 'BUDGET APPROVER';
+      historyAction = 'REVIEWER_SUBMIT_TO_APPROVER';
+      historyComment = comments || 'Budget Reviewer submitted edits to Budget Approver';
+      currentStep = 'APPROVER_REVIEW';
+      currentAssigneeRole = 'BUDGET_APPROVER';
+      pendingRoles = ['BUDGET_APPROVER'];
+      proposal.submittedByRole = 'REVIEWER';
+      proposal.forwardedToApproverAt = now;
+      proposal.forwardedToApproverBy = { userId, userName };
     } else if (editorRole === 'BUDGET_PLANNING_ANALYST') {
       // New BUDGET_PLANNING_ANALYST role submits to BUDGET_OFFICER
       newStatus = 'Forwarded to Budget Officer';

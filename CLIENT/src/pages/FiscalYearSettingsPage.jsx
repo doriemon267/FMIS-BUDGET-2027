@@ -159,7 +159,7 @@ const FiscalYearSettingsPage = () => {
     },
     fiscalYear: {
       type: "Text",
-      label: "Cut Off",
+      label: "Fiscal Year",
       required: true,
       unique: true,
       searchable: true,

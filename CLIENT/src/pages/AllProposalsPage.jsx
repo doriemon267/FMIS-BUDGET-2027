@@ -619,6 +619,7 @@ const AllProposalsPage = () => {
             <WorkflowActions
               proposal={row}
               userInfo={userInfoForWorkflow}
+              restrictToRole="BUDGET_PREPARER"
               onRefresh={refreshData}
               onView={() => {
                 window.dispatchEvent(new CustomEvent('open-proposal-view', { detail: { row } }));

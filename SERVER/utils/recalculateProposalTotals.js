@@ -1,3 +1,25 @@
+/**
+ * CRITICAL FIX: Cross-Proposal Data Mixing Prevention
+ * 
+ * ISSUE: When Budget Approver forwards a proposal to Budget Planning Analyst, the Income
+ * and MOOE values were changing/disappearing. This was caused by the recalculation logic
+ * falling back to aggregating by organization keys (fiscal year, region, budget type, etc.)
+ * when proposalId-based lookups returned no results.
+ * 
+ * PROBLEM: If multiple proposals existed with the same org keys, ALL their line items
+ * would be aggregated together, mixing data across different proposals.
+ * 
+ * SOLUTION:
+ * 1. When proposalId is provided (line 145), ONLY search for records with that proposalId
+ * 2. Do NOT fall back to org-key matching for proposalId-based searches
+ * 3. Ensure all line item creation endpoints (Income, MOOE, CapitalOutlay, PersonnelServices)
+ *    properly set proposalId when creating records
+ * 4. This guarantees each proposal only sees its own line items' totals
+ * 
+ * Changed: tryMatch() logic to remove count-check fallback (lines 79-88)
+ * Now: If proposalId provided → search ONLY by proposalId (strict mode)
+ *      If proposalId NOT provided → search by org keys (legacy fallback)
+ */
 const mongoose = require('mongoose');
 const Proposal = require('../models/Proposal');
 const Income = require('../models/Income');
@@ -14,25 +36,78 @@ async function aggregateSum(model, match, amountExpr) {
   return res?.[0]?.total || 0;
 }
 
-// Attempt to sum by proposalId first; if empty, fall back to org keys
-async function computeModuleTotals(filterKeys, proposalId) {
-  const { fiscalYear, budgetType, region, processBy } = filterKeys;
+// Build a resilient organizational match used when module rows lack proposalId
+function buildOrgMatch(filterKeys) {
+  const {
+    fiscalYear,
+    budgetType,
+    region,
+    processBy,
+    department,
+    division,
+    originalDepartment,
+    originalDivision
+  } = filterKeys || {};
+  const clauses = [];
 
-  // IMPORTANT: Match on the same keys used by edit views to avoid excluding items
-  // that are missing department/division. We intentionally DO NOT require
-  // department/division here because many legacy rows have empty or null values.
-  const baseMatch = { fiscalYear, budgetType, region, processBy };
+  // Fiscal year resilient match: allow both string and numeric, and both field names
+  if (fiscalYear !== undefined) {
+    const fyNum = Number(fiscalYear);
+    const fyOr = [{ fiscalYear }];
+    if (!Number.isNaN(fyNum)) {
+      fyOr.push({ fiscalYear: fyNum });
+      fyOr.push({ fiscal_year: fyNum });
+    }
+    fyOr.push({ fiscal_year: fiscalYear });
+    clauses.push({ $or: fyOr });
+  }
+
+  if (budgetType !== undefined) clauses.push({ budgetType });
+  if (region !== undefined) clauses.push({ region });
+
+  const ors = [];
+  const addOr = (extra) => {
+    const candidate = { ...extra };
+    // Remove empty string or undefined values so we don't over-filter
+    Object.keys(candidate).forEach((k) => {
+      if (candidate[k] === '' || candidate[k] === undefined || candidate[k] === null) {
+        delete candidate[k];
+      }
+    });
+    if (Object.keys(candidate).length) ors.push(candidate);
+  };
+
+  // Prefer more specific org keys first; many legacy rows only carry one of these
+  if (division) addOr({ division });
+  if (originalDivision) addOr({ division: originalDivision });
+  if (department) addOr({ department });
+  if (originalDepartment) addOr({ department: originalDepartment });
+  if (processBy) addOr({ processBy });
+
+  if (ors.length > 0) {
+    clauses.push({ $or: ors });
+  }
+
+  if (clauses.length === 0) return {};
+  if (clauses.length === 1) return clauses[0];
+  return { $and: clauses };
+}
+
+// Attempt to sum by proposalId first; if empty, fall back to resilient org keys
+async function computeModuleTotals(filterKeys, proposalId) {
+  const orgMatch = buildOrgMatch(filterKeys);
 
   // Helper: try with proposalId then fallback
   const tryMatch = async (model, withAmountExpr) => {
     if (proposalId) {
       const byProposal = { proposalId: new mongoose.Types.ObjectId(proposalId) };
-      const count = await model.countDocuments(byProposal);
-      if (count > 0) {
-        return aggregateSum(model, byProposal, withAmountExpr);
-      }
+      // When proposalId is provided, ONLY search by proposalId to prevent cross-proposal data mixing
+      // This ensures Budget Planning Analyst doesn't see data from other proposals
+      return aggregateSum(model, byProposal, withAmountExpr);
     }
-    return aggregateSum(model, baseMatch, withAmountExpr);
+    // Only fall back to orgMatch if proposalId is not provided
+    // orgMatch will look by fiscal year, budget type, region, department, division, processBy
+    return aggregateSum(model, orgMatch, withAmountExpr);
   };
 
   // Totals by module
@@ -78,7 +153,9 @@ async function recalculateAndSaveProposalTotals({ proposalId, keys } = {}) {
     region: proposal.region,
     processBy: proposal.processBy,
     department: proposal.department,
-    division: proposal.division
+    division: proposal.division,
+    originalDepartment: proposal.originalDepartment,
+    originalDivision: proposal.originalDivision
   };
 
   const {

@@ -25,13 +25,14 @@ router.post('/submit-direct-to-manager', proposalWorkflowController.submitDirect
 
 // === NEW BUDGET REVIEWER WORKFLOW ROUTES ===
 // BUDGET REVIEWER approves proposal from BUDGET PREPARER
-router.post('/reviewer/approve', proposalWorkflowController.coordinatorApproveProposal);
+router.post('/reviewer/approve', proposalWorkflowController.reviewerApproveProposal);
 
-// BUDGET REVIEWER approves AND forwards to BUDGET_OFFICER in one action
-router.post('/reviewer/approve-and-forward-to-officer', proposalWorkflowController.coordinatorApproveAndForwardToOfficer);
+// BUDGET REVIEWER approves AND forwards to BUDGET APPROVER in one action
+router.post('/reviewer/approve-and-forward-to-officer', proposalWorkflowController.reviewerApproveAndForwardToApprover); // legacy path kept
+router.post('/reviewer/approve-and-forward-to-approver', proposalWorkflowController.reviewerApproveAndForwardToApprover); // canonical path
 
 // BUDGET REVIEWER returns proposal to BUDGET PREPARER
-router.post('/reviewer/return', proposalWorkflowController.coordinatorReturnProposal);
+router.post('/reviewer/return', proposalWorkflowController.reviewerReturnProposal);
 
 // BUDGET PREPARER submits to BUDGET_OFFICER for verification
 router.post('/preparer/submit-to-officer', proposalWorkflowController.coordinatorSubmitToOfficer);
@@ -49,11 +50,24 @@ router.post('/approver/save-edits', proposalWorkflowController.approverSaveEdits
 // APPROVER approves and forwards to BUDGET_PLANNING_ANALYST
 router.post('/approver/approve-and-forward-to-analyst', proposalWorkflowController.approverApproveForwardAnalyst);
 
+// APPROVER approves and forwards to BUDGET_OFFICER (new 6-step workflow option)
+router.post('/approver/approve-and-forward-to-officer', proposalWorkflowController.approverApproveForwardOfficer);
+
 // APPROVER submits directly to BUDGET_OFFICER (bypasses BUDGET_PLANNING_ANALYST)
 router.post('/approver/submit-to-officer', proposalWorkflowController.approverSubmitToOfficer);
 
 // APPROVER returns proposal to BUDGET REVIEWER
 router.post('/approver/return', proposalWorkflowController.approverReturn);
+
+// === BUDGET PLANNING ANALYST WORKFLOW ROUTES ===
+// BUDGET_PLANNING_ANALYST saves edits without forwarding
+router.post('/analyst/save-edits', proposalWorkflowController.analystSaveEdits);
+
+// BUDGET_PLANNING_ANALYST submits analysis to BUDGET_OFFICER
+router.post('/analyst/submit-to-officer', proposalWorkflowController.analystSubmitToOfficer);
+
+// BUDGET_PLANNING_ANALYST returns proposal to BUDGET_APPROVER
+router.post('/analyst/return', proposalWorkflowController.analystReturn);
 
 // === BUDGET OFFICER WORKFLOW ROUTES ===
 // BUDGET_OFFICER approves proposal

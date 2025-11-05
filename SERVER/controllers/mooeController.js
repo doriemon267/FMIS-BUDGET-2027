@@ -901,8 +901,10 @@ exports.bulkSaveMOOE = async (req, res) => {
     if (workflowData.userLevel === 'DEPARTMENT') {
       ownerDivision = null;
     }
+    // CRITICAL: Link MOOE entries to specific proposal to prevent cross-proposal data mixing
+    const ownerProposalId = meta?.proposalId ?? workflowData.proposalId ?? req.body.proposalId;
     
-    console.log('   Resolved ownership:', { ownerRegion, ownerDepartment, ownerDivision });
+    console.log('   Resolved ownership:', { ownerRegion, ownerDepartment, ownerDivision, ownerProposalId });
     // Determine level tagging
     const derivedOriginalLevel = workflowData.userLevel === 'DIVISION'
       ? 'DIVISION'
@@ -1077,6 +1079,10 @@ exports.bulkSaveMOOE = async (req, res) => {
           }
         }
         updateObj.status = meta?.status || item.status || "Draft";
+        // Link to specific proposal if available to prevent cross-proposal mixing
+        if (ownerProposalId) {
+          updateObj.proposalId = ownerProposalId;
+        }
         return {
         updateOne: {
           filter: hasExistingId && mongoose.Types.ObjectId.isValid(item.id) ? 

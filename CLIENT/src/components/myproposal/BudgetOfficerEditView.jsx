@@ -40,7 +40,7 @@ const BudgetOfficerEditView = forwardRef(({
   const [submitting, setSubmitting] = useState(false);
   const [comments, setComments] = useState('');
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
-  const [submitTarget, setSubmitTarget] = useState('BUDGET_OFFICER');
+  const [submitTarget, setSubmitTarget] = useState('BUDGET_APPROVER');
   const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
 
   const submitConfirmationCopy = useMemo(() => {
@@ -621,7 +621,7 @@ const BudgetOfficerEditView = forwardRef(({
               onChange={(e) => setSubmitTarget(e.target.value)}
             >
               <FormControlLabel
-                value="BUDGET_OFFICER"
+                value="BUDGET_APPROVER"
                 control={<Radio />}
                 label={
                   <Box>

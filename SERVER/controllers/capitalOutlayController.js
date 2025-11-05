@@ -118,6 +118,7 @@ exports.addCapitalOutlay = async (req, res) => {
       sublineItem,
       accountingTitle,
       uacsCode,
+      proposalId,  // CRITICAL: Link to specific proposal to prevent cross-proposal data mixing
     } = req.body;
     
     console.log("Extracted fields:");
@@ -207,7 +208,8 @@ exports.addCapitalOutlay = async (req, res) => {
       // Tagging for submission workflow
       originalLevel: workflowData.originalLevel || (userLevel === 'DIVISION' ? 'DIVISION' : userLevel === 'DEPARTMENT' ? 'DEPARTMENT' : userLevel === 'REGION' ? 'REGION' : null),
       workflowLevel: workflowData.workflowLevel || (userLevel === 'DIVISION' ? 'DIVISION' : userLevel === 'DEPARTMENT' ? 'DEPARTMENT' : userLevel === 'REGION' ? 'REGION' : null),
-      status: req.body.status || 'Draft'
+      status: req.body.status || 'Draft',
+      proposalId: proposalId || workflowData.proposalId  // Link to specific proposal
     });
     
     console.log("Saving capital outlay to database...");

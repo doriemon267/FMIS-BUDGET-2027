@@ -20,6 +20,7 @@ exports.createIncome = async (req, res) => {
       division,
       processBy,
       processDate,
+      proposalId,  // CRITICAL: Link to specific proposal to prevent cross-proposal data mixing
     } = req.body;
     // Validate required fields
     if (!particulars || !incomecategory || amount === undefined || amount === null) {
@@ -49,7 +50,8 @@ exports.createIncome = async (req, res) => {
   workflowLevel: workflowData.workflowLevel || workflowData.originalLevel || 'DIVISION',
       processBy: processBy || req.user?.userName || req.user?.id,
       processDate: processDate || new Date(),
-      status: workflowData.status || "Draft" // Use new workflow status
+      status: workflowData.status || "Draft", // Use new workflow status
+      proposalId: proposalId || workflowData.proposalId  // Link to specific proposal
     });
     await newIncome.save();
     // Non-blocking: trigger Proposal totals recalculation for affected proposals
