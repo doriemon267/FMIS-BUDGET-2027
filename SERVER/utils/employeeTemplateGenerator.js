@@ -170,9 +170,9 @@ const generateFilteredSampleData = (region, scope, accessibleDepartments, access
           'StatusOfAppointment*': 'COS',
           'DateOfAppointment*': '01/15/2024',
           'Status*': 'Active',
-          'SG': '',
-          'JG': '',
-          'Step': '',
+          'SG*': '',
+          'JG*': '',
+          'Step*': '',
           'Rate': '30000'
         }
       );
@@ -311,9 +311,9 @@ const generateEmployeeTemplate = (options = {}) => {
       'StatusOfAppointment*': 'Permanent',
       'DateOfAppointment*': '01/15/2024',
       'Status*': 'Active',
-      'SG': 10, // Salary Grade - required for Permanent/Contractual, optional for COS
-      'JG': 'JG-10', // Job Grade - required for Permanent/Contractual, optional for COS
-      'Step': 1, // Step - required for Permanent/Contractual, optional for COS
+      'SG*': 10, // Salary Grade - required for Permanent/Contractual, optional for COS
+      'JG*': 'JG-10', // Job Grade - required for Permanent/Contractual, optional for COS
+      'Step*': 1, // Step - required for Permanent/Contractual, optional for COS
       'Rate': '', // Will be auto-computed for Permanent/Contractual, manual entry for COS
     },
     {
@@ -329,9 +329,9 @@ const generateEmployeeTemplate = (options = {}) => {
       'StatusOfAppointment*': 'COS',
       'DateOfAppointment*': '06/01/2024',
       'Status*': 'Active',
-      'SG': '', // Not required for COS
-      'JG': '', // Not required for COS
-      'Step': '', // Not required for COS
+      'SG*': '', // Not required for COS
+      'JG*': '', // Not required for COS
+      'Step*': '', // Not required for COS
       'Rate': '25000', // Manual rate entry for COS
     },
     // Add filtered sample data based on access level
