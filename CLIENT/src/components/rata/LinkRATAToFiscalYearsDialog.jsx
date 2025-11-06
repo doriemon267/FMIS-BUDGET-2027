@@ -86,7 +86,12 @@ const LinkRATAToFiscalYearsDialog = ({
   const fetchCurrentLinks = async () => {
     try {
       const response = await api.get(`/ratas/${rataId}/linked-fiscal-years`);
-      const linkedIds = response.data?.linkedFiscalYears?.map(l => l.settingsId) || [];
+      console.log('🔗 [LinkRATADialog] Linked Fiscal Years Response:', response.data?.linkedFiscalYears);
+      const linkedIds = response.data?.linkedFiscalYears?.map(l => {
+        // Ensure we're getting the string ID regardless of format
+        return typeof l.settingsId === 'object' ? l.settingsId._id : l.settingsId;
+      }) || [];
+      console.log('🔗 [LinkRATADialog] Extracted Linked IDs:', linkedIds);
       setCurrentlyLinked(linkedIds);
       setSelectedFiscalYears(linkedIds);
     } catch (error) {
@@ -132,11 +137,14 @@ const LinkRATAToFiscalYearsDialog = ({
   });
 
   const handleFiscalYearToggle = (fiscalYearId) => {
-    setSelectedFiscalYears(prev =>
-      prev.includes(fiscalYearId)
-        ? prev.filter(id => id !== fiscalYearId)
-        : [...prev, fiscalYearId]
-    );
+    setSelectedFiscalYears(prev => {
+      const idString = String(fiscalYearId);
+      const updated = prev.some(id => String(id) === idString)
+        ? prev.filter(id => String(id) !== idString)
+        : [...prev, fiscalYearId];
+      console.log('🔗 [LinkRATADialog] Selected Fiscal Years:', updated);
+      return updated;
+    });
   };
 
   const handleSave = () => {
@@ -283,7 +291,7 @@ const LinkRATAToFiscalYearsDialog = ({
                             key={fy._id}
                             control={
                               <Checkbox
-                                checked={selectedFiscalYears.includes(fy._id)}
+                                checked={selectedFiscalYears.some(id => String(id) === String(fy._id))}
                                 onChange={() => handleFiscalYearToggle(fy._id)}
                                 disabled={isLoading}
                               />

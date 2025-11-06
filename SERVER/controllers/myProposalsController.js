@@ -109,7 +109,17 @@ exports.getAllUserBudgetItems = async (req, res) => {
       andFilters.push(orgFilter);
     }
     
-    // NOTE: region and processBy query params are IGNORED
+    // 3. Apply fiscal year and budget type filters from query params
+    // These are sent from the frontend to filter by active settings
+    const { fiscalYear, budgetType } = req.query;
+    if (fiscalYear) {
+      andFilters.push({ fiscalYear });
+    }
+    if (budgetType) {
+      andFilters.push({ budgetType });
+    }
+    
+    // NOTE: region and processBy query params are IGNORED by design
     // The middleware (budgetRoleVisibilityControl) already handles role-based filtering
     // These should not override the middleware's authorization decisions
 

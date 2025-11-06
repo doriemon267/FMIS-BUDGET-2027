@@ -298,14 +298,14 @@ const CustomDrawer = ({ collapsed = false }) => {
                 icon: <TbCategory />,
               },
 
-              {
-                link: "/grouped-income-categories",
-                name: "Grouped Income Categories",
-                isAllow:
-                  hasPermission(currentUser, "ManageSettings") ||
-                  isOverallApprover,
-                icon: <TbCategory />,
-              },
+              // {
+              //   link: "/grouped-income-categories",
+              //   name: "Grouped Income Categories",
+              //   isAllow:
+              //     hasPermission(currentUser, "ManageSettings") ||
+              //     isOverallApprover,
+              //   icon: <TbCategory />,
+              // },
 
               // {
               //   link: "/corporate-income-upload",

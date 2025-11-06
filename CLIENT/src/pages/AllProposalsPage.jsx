@@ -4,6 +4,7 @@ import TextSearchable from "../global/components/TextSearchable";
 import { ViewButton } from "../components/allproposals/ProposalActions";
 import WorkflowActions from "../components/workflow/WorkflowActions";
 import { useUser } from "../context/UserContext";
+import { useQuery } from "@tanstack/react-query";
 import { 
   Box, 
   Button, 
@@ -52,6 +53,20 @@ const AllProposalsPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [deepLinkProposalId, setDeepLinkProposalId] = useState(null);
+
+  // Fetch active fiscal year and budget type settings
+  const { data: activeSettings } = useQuery({
+    queryKey: ["activeSettings"],
+    queryFn: async () => {
+      try {
+        const res = await api.get("/settings/active");
+        return res.data;
+      } catch (error) {
+        console.error("Error fetching active settings:", error);
+        return null;
+      }
+    },
+  });
 
   // Handle table row selection changes
   const handleRowSelectionChange = (selectedIds) => {
@@ -293,7 +308,9 @@ const AllProposalsPage = () => {
         params: { 
           includeFinalized: includeFinalized || undefined,
           processBy: currentUser?.Username,
-          region: currentUser?.Region
+          region: currentUser?.Region,
+          fiscalYear: activeSettings?.fiscalYear,
+          budgetType: activeSettings?.budgetType
         } 
       });
 
@@ -768,7 +785,9 @@ const AllProposalsPage = () => {
             apiParams={{ 
               includeFinalized,
               processBy: currentUser?.Username,
-              region: currentUser?.Region
+              region: currentUser?.Region,
+              fiscalYear: activeSettings?.fiscalYear,
+              budgetType: activeSettings?.budgetType
             }}
             groupBy={null} // No grouping - show individual entries
             showTotals={true}

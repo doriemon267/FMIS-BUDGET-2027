@@ -105,7 +105,14 @@ const BudgetPeriodsManager = ({ control, watch, setValue, errors, periods = [] }
 
   const handleEditPeriod = (index) => {
     setEditingIndex(index);
-    setTempPeriod(watchedPeriods[index]);
+    const period = watchedPeriods[index];
+    // Ensure dates are in YYYY-MM-DD format for date input
+    const formattedPeriod = {
+      ...period,
+      startDate: period.startDate ? new Date(period.startDate).toISOString().split('T')[0] : '',
+      dueDate: period.dueDate ? new Date(period.dueDate).toISOString().split('T')[0] : ''
+    };
+    setTempPeriod(formattedPeriod);
     setShowAddDialog(true);
   };
 
@@ -214,9 +221,14 @@ const BudgetPeriodsManager = ({ control, watch, setValue, errors, periods = [] }
       {/* Add/Edit Period Dialog */}
       <Dialog open={showAddDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {editingIndex !== null ? "Edit Budget Period" : "Add Budget Period"}
+          {editingIndex !== null ? "View Budget Period (Read-Only)" : "Add Budget Period"}
         </DialogTitle>
         <DialogContent sx={{ pt: 2 }}>
+          {editingIndex !== null && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Existing phases cannot be modified. To extend the deadline, add a new phase or extension period.
+            </Alert>
+          )}
           <Stack spacing={2}>
             <TextField
               label="Period Name"
@@ -224,22 +236,41 @@ const BudgetPeriodsManager = ({ control, watch, setValue, errors, periods = [] }
               value={tempPeriod.periodName}
               onChange={(e) => setTempPeriod({ ...tempPeriod, periodName: e.target.value })}
               fullWidth
+              disabled={editingIndex !== null}
             />
             <TextField
               label="Start Date"
               type="date"
-              value={tempPeriod.startDate}
+              value={tempPeriod.startDate || ''}
               onChange={(e) => setTempPeriod({ ...tempPeriod, startDate: e.target.value })}
               fullWidth
               InputLabelProps={{ shrink: true }}
+              disabled={editingIndex !== null}
+              sx={{
+                '& .MuiInputBase-input:disabled': {
+                  color: 'rgba(0, 0, 0, 0.87)',
+                  WebkitTextFillColor: 'rgba(0, 0, 0, 0.87)',
+                  opacity: 1,
+                  backgroundColor: '#f5f5f5'
+                }
+              }}
             />
             <TextField
               label="Due Date"
               type="date"
-              value={tempPeriod.dueDate}
+              value={tempPeriod.dueDate || ''}
               onChange={(e) => setTempPeriod({ ...tempPeriod, dueDate: e.target.value })}
               fullWidth
               InputLabelProps={{ shrink: true }}
+              disabled={editingIndex !== null}
+              sx={{
+                '& .MuiInputBase-input:disabled': {
+                  color: 'rgba(0, 0, 0, 0.87)',
+                  WebkitTextFillColor: 'rgba(0, 0, 0, 0.87)',
+                  opacity: 1,
+                  backgroundColor: '#f5f5f5'
+                }
+              }}
             />
           </Stack>
         </DialogContent>

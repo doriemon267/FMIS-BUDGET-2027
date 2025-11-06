@@ -2791,7 +2791,7 @@ exports.getDraftProposal = async (req, res) => {
 // Add this function to get all user proposals including drafts
 exports.getAllUserProposals = async (req, res) => {
   try {
-    const { processBy, region } = req.query;
+    const { processBy, region, fiscalYear, budgetType } = req.query;
     if (!processBy) {
       return res.status(400).json({ message: "processBy parameter is required" });
     }
@@ -2801,6 +2801,8 @@ exports.getAllUserProposals = async (req, res) => {
 
     // Base query
     const baseQuery = { processBy, region };
+    if (fiscalYear) baseQuery.fiscalYear = fiscalYear;
+    if (budgetType) baseQuery.budgetType = budgetType;
 
   let visibilityGate = {};
   // Ensure scope is always defined for response payload
@@ -5867,7 +5869,7 @@ exports.getDraftProposal = async (req, res) => {
 // Add this function to get all user proposals including drafts
 exports.getAllUserProposals = async (req, res) => {
   try {
-    const { processBy, region } = req.query;
+    const { processBy, region, fiscalYear, budgetType } = req.query;
     if (!processBy) {
       return res.status(400).json({ message: "processBy parameter is required" });
     }
@@ -5877,6 +5879,8 @@ exports.getAllUserProposals = async (req, res) => {
 
     // Base query
     const baseQuery = { processBy, region };
+    if (fiscalYear) baseQuery.fiscalYear = fiscalYear;
+    if (budgetType) baseQuery.budgetType = budgetType;
 
   let visibilityGate = {};
   // Ensure scope is always defined for response payload
