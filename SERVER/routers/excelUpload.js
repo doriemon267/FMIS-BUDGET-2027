@@ -63,7 +63,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     const sheetName = workbook.SheetNames[0];
     const sheetData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { 
       raw: false, 
-      dateNF: 'yyyy-mm-dd',
+      dateNF: 'mm/dd/yyyy',
       defval: null
     });
 
