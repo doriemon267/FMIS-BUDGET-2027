@@ -34,8 +34,6 @@ import {
 } from "react-icons/ai";
 import { useQuery } from "@tanstack/react-query";
 import AddSettingsDialog_Enhanced from "../components/settings/AddSettingsDialog_Enhanced";
-import BudgetPeriodActions from "../components/settings/BudgetPeriodActions";
-import { Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material";
 import ProposalActionsButton from "../global/components/ProposalActionsButton";
 import CustomPage from "../global/components/CustomPage";
 import api from "../config/api";
@@ -44,8 +42,7 @@ const FiscalYearSettingsPage = () => {
   const theme = useTheme();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedData, setSelectedData] = useState(null);
-  const [showPeriodsDialog, setShowPeriodsDialog] = useState(false);
-  const [selectedForPeriods, setSelectedForPeriods] = useState(null);
+  // Periods are simplified to a single window; no separate manage dialog
 
   // Fetch settings data for summary cards
   const { data: settingsData, isLoading: settingsLoading, refetch, error } = useQuery({
@@ -97,10 +94,7 @@ const FiscalYearSettingsPage = () => {
     refetch(); // Refresh data after dialog closes
   };
 
-  const handleOpenPeriodsDialog = (row) => {
-    setSelectedForPeriods(row);
-    setShowPeriodsDialog(true);
-  };
+  // No-op: periods management removed in simplified flow
 
   const handleExport = () => {
     // Export functionality
@@ -113,33 +107,23 @@ const FiscalYearSettingsPage = () => {
       label: "Actions",
       customRender: (row) => (
         <Stack direction="row" spacing={1}>
-          <Tooltip title="Manage Periods">
-            <IconButton
-              size="small"
-              onClick={() => handleOpenPeriodsDialog(row)}
-              sx={{
-                color: theme.palette.warning.main,
-                '&:hover': {
-                  backgroundColor: alpha(theme.palette.warning.main, 0.1)
-                }
-              }}
-            >
-              <MdDateRange />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Edit Cut Off Settings">
-            <IconButton
-              size="small"
-              onClick={() => handleOpenAddDialog(row)}
-              sx={{
-                color: theme.palette.primary.main,
-                '&:hover': {
-                  backgroundColor: alpha(theme.palette.primary.main, 0.1)
-                }
-              }}
-            >
-              <AiOutlineEdit />
-            </IconButton>
+          {/* Manage Periods removed: single submission window now */}
+          <Tooltip title={row.isActive ? "Edit Cut Off Settings" : "Expired/inactive settings cannot be edited. Create a new one."}>
+            <span>
+              <IconButton
+                size="small"
+                onClick={() => row.isActive && handleOpenAddDialog(row)}
+                disabled={!row.isActive}
+                sx={{
+                  color: row.isActive ? theme.palette.primary.main : 'text.disabled',
+                  '&:hover': {
+                    backgroundColor: row.isActive ? alpha(theme.palette.primary.main, 0.1) : 'transparent'
+                  }
+                }}
+              >
+                <AiOutlineEdit />
+              </IconButton>
+            </span>
           </Tooltip>
           <Tooltip title="View Details">
             <IconButton
@@ -219,27 +203,12 @@ const FiscalYearSettingsPage = () => {
         />
       )
     },
+    // Window column removed per latest design; keep schema key hidden for backward compatibility
     budgetPeriods: {
       type: "custom",
-      label: "Budget Periods",
-      show: true,
-      customRender: (row) => (
-        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
-          {row.budgetPeriods && row.budgetPeriods.length > 0 ? (
-            row.budgetPeriods.map((p, idx) => (
-              <Chip
-                key={idx}
-                label={p.periodName}
-                color={p.isActive ? "success" : "default"}
-                variant={p.isActive ? "filled" : "outlined"}
-                size="small"
-              />
-            ))
-          ) : (
-            <Typography variant="caption" color="text.secondary">No periods</Typography>
-          )}
-        </Stack>
-      )
+      label: "Window",
+      show: false,
+      customRender: () => null
     },
     applicableRegions: {
       type: "custom",
@@ -496,27 +465,7 @@ const FiscalYearSettingsPage = () => {
         />
       )}
 
-      {/* Budget Periods Management Dialog */}
-      {showPeriodsDialog && selectedForPeriods && (
-        <Dialog open={showPeriodsDialog} onClose={() => setShowPeriodsDialog(false)} maxWidth="lg" fullWidth>
-          <DialogTitle>
-            Manage Budget Periods - FY {selectedForPeriods.fiscalYear}
-          </DialogTitle>
-          <DialogContent sx={{ p: 3 }}>
-            <BudgetPeriodActions
-              settingId={selectedForPeriods._id}
-              budgetPeriods={selectedForPeriods.budgetPeriods || []}
-              onUpdate={() => {
-                setShowPeriodsDialog(false);
-                refetch();
-              }}
-            />
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setShowPeriodsDialog(false)}>Close</Button>
-          </DialogActions>
-        </Dialog>
-      )}
+      {/* Periods management dialog removed in simplified flow */}
     </Box>
   );
 };

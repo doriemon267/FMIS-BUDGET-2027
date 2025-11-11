@@ -38,7 +38,7 @@ api.interceptors.request.use(
       if (currentUserStr) {
         const currentUser = JSON.parse(currentUserStr);
         // Prefer Username (often holds the external employee/user number used for assignments)
-        const devUserId = (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username) || currentUser?.userCode || currentUser?.UserCode || currentUser?.userId || currentUser?.Id || currentUser?.id;
+        const devUserId = (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username) || currentUser?.userId || currentUser?.id || currentUser?.userCode || currentUser?.UserCode || currentUser?.Id;
         if (devUserId) {
           config.headers['X-Dev-User-Id'] = String(devUserId);
         }

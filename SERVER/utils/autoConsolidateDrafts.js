@@ -131,7 +131,6 @@ async function consolidateDraftProposal(criteria) {
       }
     );
 
-    console.log(`✅ Consolidated Draft proposal: ${proposal._id} (${totalItems} items, ₱${totalExpenses.toLocaleString()})`);
     return proposal;
 
   } catch (error) {

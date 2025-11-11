@@ -75,28 +75,28 @@ const USER_ROLES = [
     assignmentLevels: ['DIVISION_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL']
   },
   { 
-    value: 'BUDGET_PLANNING_ANALYST', 
+    value: 'BUDGET PLANNING ANALYST', 
     label: 'Budget Planning Analyst', 
     description: 'Performs technical analysis of proposals',
     workflowRoles: 'BUDGET_PLANNING_ANALYST (analyzes budget proposals)',
     assignmentLevels: ['BUDGET_AND_REVENUE_DIVISION']
   },
   { 
-    value: 'BUDGET_OFFICER', 
+    value: 'BUDGET OFFICER', 
     label: 'Budget Officer', 
     description: 'Provides operational approval of proposals',
     workflowRoles: 'BUDGET_OFFICER (operational approval)',
     assignmentLevels: ['BUDGET_AND_REVENUE_DIVISION']
   },
   { 
-    value: 'OVERALL_BUDGET_APPROVER', 
-    label: 'Overall Budget Approver', 
+    value: 'OVERALL BUDGET APPROVER', 
+    label: 'Budget Manager', 
     description: 'Final executive-level approval authority',
     workflowRoles: 'OVERALL_BUDGET_APPROVER (executive approval)',
     assignmentLevels: ['BUDGET_AND_REVENUE_DIVISION']
   },
   { 
-    value: 'BUDGET_ADMIN', 
+    value: 'BUDGET ADMIN', 
     label: 'Budget Admin', 
     description: 'Full administrative access - manages all proposals, users, and system settings',
     workflowRoles: 'All workflow roles (full system access)',
@@ -393,7 +393,7 @@ const HierarchicalUserAssignmentPage = () => {
       handleFormChange('userRole', budgetRole);
 
       // Auto-set assignment level and permissions based on the budget role
-      if (budgetRole === 'BUDGET_PLANNING_ANALYST') {
+      if (budgetRole === 'BUDGET PLANNING ANALYST') {
         handleFormChange('assignmentLevel', 'RESPONSIBILITY_CENTER');
         handleFormChange('rolePermissions', {
           CreateProposals: true,
@@ -419,7 +419,7 @@ const HierarchicalUserAssignmentPage = () => {
           ManageSettings: false
         });
         handleFormChange('workflowRoles', null);
-      } else if (budgetRole === 'BUDGET_OFFICER') {
+      } else if (budgetRole === 'BUDGET OFFICER') {
         handleFormChange('assignmentLevel', 'OFFICE');
         handleFormChange('rolePermissions', {
           CreateProposals: true,
@@ -432,7 +432,7 @@ const HierarchicalUserAssignmentPage = () => {
           ManageSettings: false
         });
         handleFormChange('workflowRoles', null);
-      } else if (budgetRole === 'BUDGET_MANAGER') {
+      } else if (budgetRole === 'BUDGET MANAGER') {
         handleFormChange('assignmentLevel', 'DIVISION');
         handleFormChange('rolePermissions', {
           CreateProposals: true,
@@ -444,7 +444,7 @@ const HierarchicalUserAssignmentPage = () => {
           ManageUsers: true,
           ManageSettings: false
         });
-      } else if (budgetRole === 'BUDGET_ADMIN') {
+      } else if (budgetRole === 'BUDGET ADMIN') {
         handleFormChange('assignmentLevel', 'FULL');
         handleFormChange('rolePermissions', {
           CreateProposals: true,
@@ -605,7 +605,7 @@ const HierarchicalUserAssignmentPage = () => {
     }
 
     // Validate Budget Planning Analyst region selection
-    if (formData.userRole === 'BUDGET_PLANNING_ANALYST' && !formData.isNIAWide && formData.assignedRegions.length === 0) {
+    if (formData.userRole === 'BUDGET PLANNING ANALYST' && !formData.isNIAWide && formData.assignedRegions.length === 0) {
       setSnackbar({
         open: true,
         message: 'Budget Planning Analyst must be assigned to at least one region or have NIA-Wide access',
@@ -653,7 +653,7 @@ const HierarchicalUserAssignmentPage = () => {
     };
 
     // Add Budget Planning Analyst region configuration
-    if (formData.userRole === 'BUDGET_PLANNING_ANALYST') {
+    if (formData.userRole === 'BUDGET PLANNING ANALYST') {
       payload.isNIAWide = formData.isNIAWide;
       // Only include valid region IDs (filter out empty or invalid values)
       payload.assignedRegions = formData.isNIAWide 
@@ -979,13 +979,13 @@ const HierarchicalUserAssignmentPage = () => {
                       } else if (newValue.value === 'BUDGET PREPARER') {
                         rolePerms.CreateProposals = true;
                         rolePerms.EditOwnProposals = true;
-                      } else if (newValue.value === 'BUDGET_PLANNING_ANALYST' || newValue.value === 'BUDGET_OFFICER' || newValue.value === 'OVERALL_BUDGET_APPROVER') {
+                      } else if (newValue.value === 'BUDGET PLANNING ANALYST' || newValue.value === 'BUDGET OFFICER' || newValue.value === 'OVERALL BUDGET APPROVER') {
                         rolePerms.EditAllProposals = true;
                         rolePerms.ApproveProposals = true;
-                        if (newValue.value === 'OVERALL_BUDGET_APPROVER') {
+                        if (newValue.value === 'OVERALL BUDGET APPROVER') {
                           rolePerms.ManageSettings = true;
                         }
-                      } else if (newValue.value === 'BUDGET_ADMIN') {
+                      } else if (newValue.value === 'BUDGET ADMIN') {
                         rolePerms.CreateProposals = true;
                         rolePerms.EditOwnProposals = true;
                         rolePerms.EditAllProposals = true;
@@ -1029,7 +1029,7 @@ const HierarchicalUserAssignmentPage = () => {
               </Grid>
 
               {/* Budget Planning Analyst - Region Selection */}
-              {formData.userRole === 'BUDGET_PLANNING_ANALYST' && (
+              {formData.userRole === 'BUDGET PLANNING ANALYST' && (
                 <>
                   <Grid item xs={12}>
                     <Alert severity="info" icon={<InfoIcon />}>
@@ -1280,7 +1280,7 @@ const HierarchicalUserAssignmentPage = () => {
                         ManageSettings: true
                       });
                       // Update user role - FULL with ManageSettings = BUDGET_ADMIN
-                      handleFormChange('userRole', 'BUDGET_ADMIN');
+                      handleFormChange('userRole', 'BUDGET ADMIN');
                     }
 
                     handleFormChange('workflowRoles', nextRoles);
@@ -1607,7 +1607,7 @@ const HierarchicalUserAssignmentPage = () => {
                                   }
                                 } else if (level === 'BUDGET_AND_REVENUE_DIVISION') {
                                   if (perms.ManageSettings) {
-                                    return 'Overall Budget Approver';
+                                    return 'Budget Manager';
                                   } else if (perms.EditAllProposals && perms.ApproveProposals) {
                                     return 'Budget Officer';
                                   } else {
@@ -1743,18 +1743,18 @@ const HierarchicalUserAssignmentPage = () => {
                                   const perms = assignment.rolePermissions || {};
                                   
                                   if (level === 'RESPONSIBILITY_CENTER' || level === 'DIVISION') {
-                                    inferredRole = 'BUDGET_PLANNING_ANALYST';
+                                    inferredRole = 'BUDGET PLANNING ANALYST';
                                   } else if (level === 'OFFICE' || level === 'DEPARTMENT') {
                                     if (perms.ApproveProposals) {
-                                      inferredRole = 'BUDGET_OFFICER';
+                                      inferredRole = 'BUDGET OFFICER';
                                     } else {
                                       inferredRole = 'BUDGET APPROVER';
                                     }
                                   } else if (level === 'FULL') {
                                     if (perms.ManageSettings) {
-                                      inferredRole = 'BUDGET_ADMIN';
+                                      inferredRole = 'BUDGET ADMIN';
                                     } else {
-                                      inferredRole = 'BUDGET_MANAGER';
+                                      inferredRole = 'BUDGET MANAGER';
                                     }
                                   }
                                   

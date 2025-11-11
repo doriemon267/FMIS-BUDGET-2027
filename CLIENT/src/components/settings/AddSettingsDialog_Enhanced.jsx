@@ -38,7 +38,8 @@ import {
 } from "react-icons/md";
 import * as yup from "yup";
 import api from "../../config/api";
-import BudgetPeriodsManager from "./BudgetPeriodsManager";
+// Removed multi-period manager in favor of simple single start/due date fields
+// import BudgetPeriodsManager from "./BudgetPeriodsManager"; // Deprecated for simplified flow
 import RegionSelector from "./RegionSelector";
 
 /**
@@ -60,17 +61,15 @@ const enhancedSchema = yup.object().shape({
     .array()
     .min(1, "At least one region must be selected")
     .required("Regions are required"),
+  // We still keep budgetPeriods as an array for backend compatibility, but UI only edits index 0.
   budgetPeriods: yup
     .array()
-    .min(1, "At least one budget period is required")
-    .test("dates-valid", "Invalid period dates", function (periods) {
-      if (!periods) return true;
-      for (let period of periods) {
-        if (new Date(period.startDate) >= new Date(period.dueDate)) {
-          return false;
-        }
-      }
-      return true;
+    .min(1, "Start and Due date are required")
+    .test("single-period-valid", "Start date must be before due date", function (periods) {
+      if (!periods || periods.length === 0) return false;
+      const p = periods[0];
+      if (!p.startDate || !p.dueDate) return false;
+      return new Date(p.startDate) < new Date(p.dueDate);
     }),
   isActive: yup.boolean()
 });
@@ -111,14 +110,22 @@ const AddSettingsDialog_Enhanced = ({ row, onCloseDialog }) => {
       fiscalYear: row?.fiscalYear || new Date().getFullYear().toString(),
       budgetType: row?.budgetType || "Initial",
       applicableRegions: row?.applicableRegions || ["All"],
-      budgetPeriods: row?.budgetPeriods || [
-        {
-          periodName: "Phase 1",
-          startDate: "",
-          dueDate: "",
-          isActive: true
-        }
-      ],
+      // Normalize existing period dates to yyyy-MM-dd for date inputs; else initialize single period
+      budgetPeriods: row?.budgetPeriods && row?.budgetPeriods.length > 0
+        ? row.budgetPeriods.map((p, idx) => ({
+            periodName: p.periodName || (idx === 0 ? "Phase 1" : `Extension ${idx}`),
+            startDate: p.startDate ? new Date(p.startDate).toISOString().split('T')[0] : "",
+            dueDate: p.dueDate ? new Date(p.dueDate).toISOString().split('T')[0] : "",
+            isActive: p.isActive ?? (idx === 0)
+          }))
+        : [
+            {
+              periodName: "Phase 1",
+              startDate: "",
+              dueDate: "",
+              isActive: true
+            }
+          ],
       isActive: row?.isActive ?? true
     }
   });
@@ -405,9 +412,7 @@ const AddSettingsDialog_Enhanced = ({ row, onCloseDialog }) => {
               border: "1px solid #e0e0e0",
               boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
               "&:before": { display: "none" },
-              "&.Mui-expanded": {
-                margin: "0 0 16px 0"
-              }
+              "&.Mui-expanded": { margin: "0 0 16px 0" }
             }}
           >
             <AccordionSummary
@@ -416,38 +421,59 @@ const AddSettingsDialog_Enhanced = ({ row, onCloseDialog }) => {
                 backgroundColor: "#f8f9fa",
                 borderRadius: "8px 8px 0 0",
                 minHeight: 56,
-                "&.Mui-expanded": {
-                  minHeight: 56
-                },
-                "& .MuiAccordionSummary-content": {
-                  alignItems: "center"
-                }
+                "&.Mui-expanded": { minHeight: 56 },
+                "& .MuiAccordionSummary-content": { alignItems: "center" }
               }}
             >
               <Stack direction="row" alignItems="center" spacing={2}>
-                <Box
-                  sx={{
-                    color: "#264524",
-                    fontSize: "1.5rem",
-                    display: "flex",
-                    alignItems: "center"
-                  }}
-                >
+                <Box sx={{ color: "#264524", fontSize: "1.5rem", display: "flex", alignItems: "center" }}>
                   <MdDateRange />
                 </Box>
                 <Typography variant="h6" sx={{ fontWeight: 600, color: "#264524" }}>
-                  Budget Periods
+                  Submission Window
                 </Typography>
               </Stack>
             </AccordionSummary>
-
             <AccordionDetails sx={{ p: 3, backgroundColor: "#ffffff" }}>
-              <BudgetPeriodsManager
-                control={control}
-                watch={watch}
-                setValue={setValue}
-                errors={errors}
-              />
+              <Alert severity="info" sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                  Set the start and due date for this fiscal year budget submission. When the due date passes the fiscal year will automatically become inactive. To extend, create a new fiscal year settings entry with a later window.
+                </Typography>
+              </Alert>
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={6}>
+                  <Controller
+                    name="budgetPeriods.0.startDate"
+                    control={control}
+                    render={({ field }) => (
+                      <TextField
+                        {...field}
+                        label="Start Date"
+                        type="date"
+                        fullWidth
+                        InputLabelProps={{ shrink: true }}
+                        error={!!errors.budgetPeriods}
+                      />
+                    )}
+                  />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <Controller
+                    name="budgetPeriods.0.dueDate"
+                    control={control}
+                    render={({ field }) => (
+                      <TextField
+                        {...field}
+                        label="Due Date"
+                        type="date"
+                        fullWidth
+                        InputLabelProps={{ shrink: true }}
+                        error={!!errors.budgetPeriods}
+                      />
+                    )}
+                  />
+                </Grid>
+              </Grid>
               {errors.budgetPeriods && (
                 <Typography variant="caption" color="error" sx={{ mt: 1, display: "block" }}>
                   {errors.budgetPeriods.message}
@@ -536,8 +562,8 @@ const AddSettingsDialog_Enhanced = ({ row, onCloseDialog }) => {
           {mutation.isPending
             ? "Saving..."
             : isEditing
-            ? "Update Settings"
-            : "Create Settings"}
+            ? "Update"
+            : "Save"}
         </Button>
       </DialogActions>
     </Dialog>

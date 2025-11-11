@@ -23,7 +23,7 @@ import { getProposalForEdit, getComparisonData } from '../../services/budgetOffi
 import BudgetOfficerEditView from './BudgetOfficerEditView';
 import BudgetAnalystComparisonView from './BudgetAnalystComparisonView';
 import BudgetManagerSubmissionView from './BudgetManagerSubmissionView';
-import WorkflowActions from '../workflow/WorkflowActions';
+import WorkflowActionsRefactored from '../workflow/WorkflowActionsRefactored';
 import WorkflowStatusStepper from '../workflow/WorkflowStatusStepper';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import CheckIcon from '@mui/icons-material/Check';
@@ -94,10 +94,10 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     // Manager level must be explicitly designated as Budget Manager/Admin or manager-level workflow role.
     const hasManagerPrimaryRole = normalizedPrimaryRoles.some((role) => (
       role === 'BUDGET MANAGER' ||
-      role === 'BUDGET_MANAGER' ||
+      role === 'BUDGET MANAGER' ||
       role === 'BUDGET ADMIN' ||
-      role === 'BUDGET_ADMIN' ||
-      role === 'OVERALL_BUDGET_APPROVER'
+      role === 'BUDGET ADMIN' ||
+      role === 'OVERALL BUDGET APPROVER'
     ));
     if (hasManagerPrimaryRole) return true;
     return normalizedWorkflowRoles.some((role) => (
@@ -113,7 +113,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
       return false;
     }
     const status = displayedProposal?.status || proposal?.status;
-    return status === 'Forwarded to Overall Budget Approver' || status === 'Forwarded to Manager' || status === 'Officer Approved';
+    return status === 'Forwarded to Budget Manager' || status === 'Forwarded to Manager' || status === 'Officer Approved';
   }, [isManagerLevel, normalizedPrimaryRoles, displayedProposal?.status, proposal?.status]);
 
   // APPROVER: Division approvers (divisionapprover), Office approvers (officeapprover), or users with APPROVER role
@@ -254,10 +254,10 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
       // Ignore localStorage errors
     }
     
-    return allRoles.includes('BUDGET_PLANNING_ANALYST') || 
+    return allRoles.includes('BUDGET PLANNING ANALYST') || 
            normalizedWorkflowRoles.includes('budgetanalyst') ||
            normalizedWorkflowRoles.includes('budget_analyst') || 
-           normalizedWorkflowRoles.includes('BUDGET_PLANNING_ANALYST');
+           normalizedWorkflowRoles.includes('BUDGET PLANNING ANALYST');
   }, [userInfo, normalizedWorkflowRoles]);
 
   // Fallback: derive reviewer by current workflow status when roles are missing
@@ -285,7 +285,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
 
   // Canonical display label for the role chip
   const displayRoleLabel = useMemo(() => {
-    if (isManagerLevel) return 'Overall Budget Approver';
+    if (isManagerLevel) return 'Budget Manager';
     return currentRoleLabel;
   }, [isManagerLevel, currentRoleLabel]);
 
@@ -742,11 +742,11 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
       case 'Finalized': return 'success';
       case 'Officer Approved': return 'info';
       case 'Forwarded to Manager':
-      case 'Forwarded to Overall Budget Approver':
+      case 'Forwarded to Budget Manager':
       case 'Forwarded to Officer':
       case 'Forwarded to Budget Officer':
       case 'Forwarded to Analyst':
-      case 'Forwarded to Budget Planning Analyst':
+      case 'Forwarded to Budget/Planning Analyst':
         return 'secondary';
       case 'Division Submitted': return 'warning';
       case 'Returned': return 'error';
@@ -757,7 +757,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
 
   // Manager can edit when Forwarded to Manager (per requirement)
   const managerCanEditNow = isManagerLevel && (
-    proposal?.status === 'Forwarded to Overall Budget Approver' ||
+    proposal?.status === 'Forwarded to Budget Manager' ||
     proposal?.status === 'Forwarded to Manager' // legacy
   );
 
@@ -773,7 +773,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     ))
   )) || (
     isBudgetPlanningAnalystRole && (
-      proposal?.status === 'Forwarded to Budget Planning Analyst' ||
+      proposal?.status === 'Forwarded to Budget/Planning Analyst' ||
       proposal?.status === 'Forwarded to Analyst' || // legacy
       proposal?.status === 'Approver Approved'
     )
@@ -833,11 +833,11 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
       'Forwarded to Reviewer': 2,           // REVIEWER
       'Forwarded to Approver': 3,           // APPROVER
       'Approver Approved': 4,               // After APPROVER approves, forward to BUDGET_PLANNING_ANALYST
-      'Forwarded to Budget Planning Analyst': 4, // BUDGET_PLANNING_ANALYST (canonical)
+      'Forwarded to Budget/Planning Analyst': 4, // BUDGET_PLANNING_ANALYST (canonical)
       'Forwarded to Analyst': 4,            // BUDGET_PLANNING_ANALYST (legacy)
       'Forwarded to Budget Officer': 5,     // BUDGET_OFFICER
-      'Forwarded to Overall Budget Approver': 6, // OVERALL_BUDGET_APPROVER (canonical)
-      'Forwarded to Manager': 6,            // OVERALL_BUDGET_APPROVER (legacy)
+      'Forwarded to Budget Manager': 6, // BUDGET_MANAGER (canonical)
+      'Forwarded to Manager': 6,            // BUDGET_MANAGER (legacy)
       'Finalized': 7,                       // FINALIZED
       'Returned': 1,                        // RETURNED to PREPARER
       // Legacy statuses
@@ -1000,8 +1000,8 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
           <Alert severity="error">{error}</Alert>
         ) : (
           <>
-            {/* Verification and Consolidation Status */}
-            {(proposal?.verifiedByOfficer || proposal?.consolidatedOrigin) && (
+            {/* Verification and Consolidation Status - HIDDEN per enhancement request */}
+            {false && (proposal?.verifiedByOfficer || proposal?.consolidatedOrigin) && (
               <Paper elevation={2} sx={{ p: 2, mb: 3, backgroundColor: '#f5f5f5' }}>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
                   Workflow Status
@@ -1052,13 +1052,17 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
               </Paper>
             )}
 
-            <Divider sx={{ my: 2 }} />
+            {false && <Divider sx={{ my: 2 }} />}
 
-            {/* Workflow Status Visualization */}
-            <WorkflowStatusStepper 
-              proposal={proposal} 
-              isOfficeLevel={isOfficeCreator}
-            />
+            {/* Workflow Status Visualization - MINIMIZED per enhancement request */}
+            {false && (
+              <>
+                <WorkflowStatusStepper 
+                  proposal={proposal} 
+                  isOfficeLevel={isOfficeCreator}
+                />
+              </>
+            )}
 
             {/* Detailed Records Section */}
             <Typography variant="h6" gutterBottom>Detailed Records</Typography>
@@ -1122,8 +1126,8 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                   {isPreparer && proposal?.status === 'Draft' && 'Create and edit proposals, then submit for approval'}
                   {isPreparer && proposal?.status === 'Division Submitted' && 'Waiting for Approver review'}
                   {isDivisionApprover && proposal?.status === 'Division Submitted' && 'Review and approve/return this proposal'}
-                  {isBudgetOfficer && ((proposal?.status === 'Forwarded to Budget Officer' || proposal?.status === 'Forwarded to Officer') || proposal?.status === 'Officer Approved') && 'Verify and consolidate, then submit to Overall Budget Approver'}
-                  {isManagerLevel && (proposal?.status === 'Forwarded to Overall Budget Approver' || proposal?.status === 'Forwarded to Manager') && 'Final review and approval'}
+                  {isBudgetOfficer && ((proposal?.status === 'Forwarded to Budget Officer' || proposal?.status === 'Forwarded to Officer') || proposal?.status === 'Officer Approved') && 'Verify and consolidate, then submit to Budget Manager'}
+                  {isManagerLevel && (proposal?.status === 'Forwarded to Budget Manager' || proposal?.status === 'Forwarded to Manager') && 'Final review and approval'}
                   {proposal?.status === 'Finalized' && 'This proposal has been finalized'}
                 </Typography>
               </Alert>
@@ -1324,8 +1328,8 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                       isBudgetReviewerRole ? 'You are reviewing this proposal.' :
                       'You cannot edit at this stage.'
                     }
-                    {proposal?.status === 'Approver Approved' && ' The proposal has been forwarded to Budget Planning Analyst for review.'}
-                    {(proposal?.status === 'Forwarded to Budget Planning Analyst' || proposal?.status === 'Forwarded to Analyst') && ' The proposal is now with the Budget Planning Analyst.'}
+                    {proposal?.status === 'Approver Approved' && ' The proposal has been forwarded to Budget/Planning Analyst for review.'}
+                    {(proposal?.status === 'Forwarded to Budget/Planning Analyst' || proposal?.status === 'Forwarded to Analyst') && ' The proposal is now with the Budget/Planning Analyst.'}
                     <br />
                     <em>Status: {proposal?.status} • You cannot edit at this stage</em>
                   </Typography>
@@ -1589,26 +1593,40 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
               </Button>
             )}
             
-            <WorkflowActions
+            <WorkflowActionsRefactored
               ref={workflowActionsRef}
               proposal={proposal}
               userInfo={userInfo}
-              restrictToRole={
+              userRole={
                 isPreparer
-                  ? 'BUDGET_PREPARER'
+                  ? 'BUDGET PREPARER'
                   : effectiveBudgetReviewer
-                    ? 'BUDGET_REVIEWER'
+                    ? 'BUDGET REVIEWER'
                     : (isApprover || isDivisionApprover)
-                      ? 'BUDGET_APPROVER'
+                      ? 'BUDGET APPROVER'
                       : isBudgetPlanningAnalystRole
-                        ? 'BUDGET_PLANNING_ANALYST'
+                        ? 'BUDGET PLANNING ANALYST'
                         : isBudgetOfficer
-                          ? 'BUDGET_OFFICER'
+                          ? 'BUDGET OFFICER'
                           : isManagerLevel
-                            ? 'OVERALL_BUDGET_APPROVER'
+                            ? 'OVERALL BUDGET APPROVER'
                             : null
               }
-              getTableData={() => budgetOfficerEditViewRef.current?.getCurrentEditData?.()}
+              restrictToRole={
+                isPreparer
+                  ? 'BUDGET PREPARER'
+                  : effectiveBudgetReviewer
+                    ? 'BUDGET REVIEWER'
+                    : (isApprover || isDivisionApprover)
+                      ? 'BUDGET APPROVER'
+                      : isBudgetPlanningAnalystRole
+                        ? 'BUDGET PLANNING ANALYST'
+                        : isBudgetOfficer
+                          ? 'BUDGET OFFICER'
+                          : isManagerLevel
+                            ? 'OVERALL BUDGET APPROVER'
+                            : null
+              }
               onRefresh={(updatedProposal, forceFlag, triggeredAction) => {
                 console.log('🔄 onRefresh callback triggered:', {
                   hasUpdatedProposal: !!updatedProposal,
@@ -1643,10 +1661,6 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                   }, 1200);
                 }
               }}
-              onView={() => {}}
-              showHeader={true}
-              showTrackInMenu={false}
-              showViewInMenu={false}
             />
           </Box>
         )}

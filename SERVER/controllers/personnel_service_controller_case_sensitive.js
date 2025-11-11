@@ -93,15 +93,15 @@ const getAllPerServices = async (req, res) => {
       // Use regex for case-insensitive matching but with exact string
       // The ^ and $ ensure it matches the entire string, not a substring
       query.region = { $regex: new RegExp(`^${region}$`, 'i') };
-      : ${region}`);
+      console.log(`Region filter applied: ${region}`);
       // Log all available regions for debugging
       const allRegions = await PersonnelServices.distinct('region');
-      }`);
+      console.log(`Available regions: ${allRegions.join(', ')}`);
       // Check if any matching regions exist
       const matchingRegionsCount = await PersonnelServices.countDocuments({ 
         region: { $regex: new RegExp(`^${region}$`, 'i') } 
       });
-      `);
+      console.log(`Found ${matchingRegionsCount} matching regions for: ${region}`);
       // If no matching regions, return empty array
       if (matchingRegionsCount === 0) {
         return res.status(200).json([]);
@@ -110,16 +110,15 @@ const getAllPerServices = async (req, res) => {
       // If no region is provided, return an empty array
       return res.status(200).json([]);
     }
-    }`);
     // Get from PersonnelServices collection ONLY
     const personnelServices = await PersonnelServices.find(query);
     // Debug: Log a sample record if available
     if (personnelServices.length > 0) {
       // Log the first few records for debugging
       personnelServices.slice(0, 2).forEach((p, i) => {
-        });
-    } else {
-      }
+        console.log(`Sample record ${i + 1}:`, p);
+      });
+    }
     res.status(200).json(personnelServices);
   } catch (error) {
     console.error("Error fetching personnel services:", error);
@@ -138,13 +137,12 @@ const getPersonnelByParams = async (req, res) => {
     if (region) {
       // Use regex for case-insensitive matching but with exact string
       query.region = { $regex: new RegExp(`^${region}$`, 'i') };
-      : ${region}`);
+      console.log(`Region filter applied: ${region}`);
     } else {
       // If no region is provided, return an empty array
       return res.status(200).json([]);
     }
     if (status) query.status = status;
-    }`);
     const personnel = await PersonnelServices.find(query).lean();
     res.status(200).json(personnel);
   } catch (error) {
@@ -164,18 +162,19 @@ const getPersonnelHiredBeforeJune1988 = async (req, res) => {
     if (region) {
       // Use regex for case-insensitive matching but with exact string
       query.region = { $regex: new RegExp(`^${region}$`, 'i') };
-      : ${region}`);
+      console.log(`Region filter applied: ${region}`);
     } else {
       // If no region is provided, return an empty array
       return res.status(200).json([]);
     }
-    }`);
     const personnel = await PersonnelServices.find(query);
     // Log the first few records for debugging
     if (personnel.length > 0) {
       personnel.slice(0, 2).forEach((p, i) => {
-        });
+        console.log(`Sample record ${i + 1}:`, p);
+      });
     }
+    res.status(200).json(personnel);
     res.status(200).json(personnel);
   } catch (error) {
     console.error("Error fetching personnel:", error);

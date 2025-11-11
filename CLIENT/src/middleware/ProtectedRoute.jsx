@@ -15,9 +15,8 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
   const hierarchicalAccess = currentUser.hierarchicalAccess;
 
   // ✅ Allow users without hierarchical access if they have specific job roles
-  // BUDGET_PLANNING_ANALYST, BUDGET MANAGER, BUDGET OFFICER can access without hierarchical assignment
   const userJobRoles = currentUser.Roles || [];
-  const staffRolesWithoutAssignment = ['BUDGET_PLANNING_ANALYST', 'BUDGET PLANNING ANALYST', 'BUDGET_MANAGER', 'BUDGET MANAGER', 'BUDGET_OFFICER', 'BUDGET OFFICER'];
+  const staffRolesWithoutAssignment = ['BUDGET PLANNING ANALYST', 'BUDGET MANAGER', 'BUDGET OFFICER'];
   const hasStaffRole = userJobRoles.some(role => staffRolesWithoutAssignment.includes(role));
   
   // If no hierarchical access and not a staff role, deny access
@@ -57,10 +56,9 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
     effectiveWorkflowRoles.push('regionCreator');
   }
 
-  // ✅ Check job position Roles for budget staff (SUPER ADMIN, BUDGET ADMIN, BUDGET STAFF)
-  // NOTE: userJobRoles already declared above
-  const budgetAdminRoles = ['SUPER ADMIN', 'SUPER_ADMIN', 'BUDGET ADMIN'];
-  const budgetStaffRoles = ['BUDGET_PLANNING_ANALYST', 'BUDGET MANAGER', 'BUDGET OFFICER'];
+  // ✅ Check job position Roles for budget staff
+  const budgetAdminRoles = ['SUPER ADMIN', 'BUDGET ADMIN'];
+  const budgetStaffRoles = ['BUDGET PLANNING ANALYST', 'BUDGET MANAGER', 'BUDGET OFFICER'];
   
   const isBudgetAdmin = userJobRoles.some(role => budgetAdminRoles.includes(role));
   const isBudgetStaff = userJobRoles.some(role => budgetStaffRoles.includes(role));
@@ -80,12 +78,12 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
     }
   }
   
-  // Also check for workflow roles from Roles array (BUDGET PREPARER, BUDGET REVIEWER, APPROVER, OVERALL_BUDGET_APPROVER)
+  // Also check for workflow roles from Roles array
   const workflowRolesFromJobRoles = {
     'BUDGET PREPARER': 'preparer',
     'BUDGET REVIEWER': 'reviewer',
     'BUDGET APPROVER': 'approver',
-    'OVERALL_BUDGET_APPROVER': 'overallBudgetApprover'
+    'OVERALL BUDGET APPROVER': 'overallBudgetApprover'
   };
   
   userJobRoles.forEach(jobRole => {
@@ -96,9 +94,9 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
     }
   });
   
-  // If user is OVERALL_BUDGET_APPROVER, also add superAdmin role for access to reports, settings, etc.
-  if (userJobRoles.includes('OVERALL_BUDGET_APPROVER') && !effectiveWorkflowRoles.includes('superAdmin')) {
-    console.log('🔧 Adding superAdmin workflow role for OVERALL_BUDGET_APPROVER');
+  // If user is OVERALL BUDGET APPROVER, also add superAdmin role for access to reports, settings, etc.
+  if (userJobRoles.includes('OVERALL BUDGET APPROVER') && !effectiveWorkflowRoles.includes('superAdmin')) {
+    console.log('🔧 Adding superAdmin workflow role for OVERALL BUDGET APPROVER');
     effectiveWorkflowRoles.push('superAdmin');
   }
 

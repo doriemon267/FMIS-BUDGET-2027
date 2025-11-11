@@ -91,9 +91,8 @@ const getAllPerServices = async (req, res) => {
     // Add region filter if provided - IMPORTANT: This is the key filter
     if (region) {
       query.region = region;
-      : ${region}`);
+      console.log(`Region filter applied: ${region}`);
     }
-    }`);
     // Get from PersonnelServices collection ONLY
     const personnelServices = await PersonnelServices.find(query);
     // Debug: Log a sample record if available
@@ -137,14 +136,14 @@ const getPersonnelHiredBeforeJune1988 = async (req, res) => {
     // Add region filter if provided - IMPORTANT: This is the key filter
     if (region) {
       query.region = region;
-      : ${region}`);
+      console.log(`Region filter applied: ${region}`);
     }
-    }`);
     const personnel = await PersonnelServices.find(query);
     // Log the first few records for debugging
     if (personnel.length > 0) {
       personnel.slice(0, 2).forEach((p, i) => {
-        });
+        console.log(`Sample record ${i + 1}:`, p);
+      });
     }
     res.status(200).json(personnel);
   } catch (error) {

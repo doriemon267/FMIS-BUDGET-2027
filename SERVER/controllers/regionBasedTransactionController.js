@@ -18,7 +18,7 @@ const getUserRegionAccess = async (req, res) => {
     const userId = req.user.id;
     const userRoles = req.user.Roles;
     const userName = req.user.username || req.user.name;
-    `);
+    console.log('Checking region access for user:', userId);
     // Check if user has full access
     if (hasFullAccess(userRoles)) {
       const allRegions = await Region.find({}).select('Region RegionCode _id').lean();
@@ -362,4 +362,4 @@ module.exports = {
   createRegionBasedTransaction,
   getRegionFilteredTransactions,
   assignUserRegions
-};
+};

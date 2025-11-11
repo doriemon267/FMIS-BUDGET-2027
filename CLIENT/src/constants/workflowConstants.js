@@ -79,7 +79,7 @@ export const WORKFLOW_STEPS = [
   {
     step: 6,
     role: WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER,
-    label: 'Overall Budget Approver',
+    label: 'Budget Manager',
     description: 'Final executive approval',
     icon: 'verified',
     statuses: ['Finalized'],
@@ -136,7 +136,7 @@ export const OFFICE_WORKFLOW_STEPS = [
   {
     step: 5,
     role: WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER,
-    label: 'Overall Budget Approver',
+    label: 'Budget Manager',
     description: 'Final executive approval',
     icon: 'verified',
     statuses: ['Finalized']
@@ -150,7 +150,7 @@ export const ROLE_LABELS = {
   [WORKFLOW_ROLES.APPROVER]: 'Budget Approver',
   [WORKFLOW_ROLES.BUDGET_PLANNING_ANALYST]: 'Budget Planning Analyst',
   [WORKFLOW_ROLES.BUDGET_OFFICER]: 'Budget Officer',
-  [WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER]: 'Overall Budget Approver',
+  [WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER]: 'Budget Manager',
   [WORKFLOW_ROLES.BUDGET_ADMIN]: 'Budget Admin'
 };
 

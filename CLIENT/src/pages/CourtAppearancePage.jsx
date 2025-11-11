@@ -679,9 +679,7 @@ const EmployeeCourtAppearancePage = () => {
               )
             }
             disabled={
-              row.status === "Submitted" ||
-              row.status === "Approve" ||
-              row.status === "Approved"
+              row.status === "Finalized"
             }
             sx={{
               minWidth: 120,

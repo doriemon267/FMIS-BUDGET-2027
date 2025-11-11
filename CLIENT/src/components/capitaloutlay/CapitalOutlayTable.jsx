@@ -1429,7 +1429,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
   }, []);
 
   const isGroupSubmitted = useCallback(
-    (group) => group.items.length > 0 && group.items.every((item) => item.status === "Submitted" || item.status === "Approved"),
+    (group) => group.items.length > 0 && group.items.every((item) => item.status === "Finalized"),
     []
   );
 
@@ -1821,7 +1821,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                               <IconButton
                                 color="primary"
                                 onClick={() => handleOpenDetailsModal(item)}
-                                disabled={item.status === "Submitted" || item.status === "Approved"}
+                                disabled={item.status === "Finalized"}
                                 size="small"
                               >
                                 <Edit fontSize="small" />
@@ -1831,8 +1831,8 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
                             
                             <Tooltip 
                               title={
-                                item.status === "Submitted" || item.status === "Approved" 
-                                  ? "Cannot delete submitted/approved items"
+                                item.status === "Finalized" 
+                                  ? "Cannot delete finalized items"
                                   : !canDeleteItems 
                                     ? "Only admin users can delete items after the deadline"
                                     : "Delete item"

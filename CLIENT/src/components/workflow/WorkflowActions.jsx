@@ -117,66 +117,66 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     // Standardized workflow: BUDGET_PREPARER → BUDGET_REVIEWER → BUDGET_APPROVER → BUDGET_PLANNING_ANALYST → BUDGET_OFFICER → OVERALL_BUDGET_APPROVER
     const roleSynonyms = {
       // BUDGET PREPARER synonyms
-      ANALYST: 'BUDGET_PREPARER',
-      BUDGET_OFFICER_ANALYST: 'BUDGET_PREPARER',
-      BA: 'BUDGET_PREPARER',
-      OFFICE_ANALYST: 'BUDGET_PREPARER',
-      ANALYST_OFFICER: 'BUDGET_PREPARER',
-      RESPONSIBILITY_CENTER: 'BUDGET_PREPARER',
-      RC: 'BUDGET_PREPARER',
-      PREPARER: 'BUDGET_PREPARER',
-      BUDGET_PREPARER: 'BUDGET_PREPARER',
+      ANALYST: 'BUDGET PREPARER',
+      BUDGET_OFFICER_ANALYST: 'BUDGET PREPARER',
+      BA: 'BUDGET PREPARER',
+      OFFICE_ANALYST: 'BUDGET PREPARER',
+      ANALYST_OFFICER: 'BUDGET PREPARER',
+      RESPONSIBILITY_CENTER: 'BUDGET PREPARER',
+      RC: 'BUDGET PREPARER',
+      PREPARER: 'BUDGET PREPARER',
+      BUDGET_PREPARER: 'BUDGET PREPARER',
 
       // BUDGET REVIEWER synonyms
-      REVIEWER: 'BUDGET_REVIEWER',
-      BUDGET_REVIEWER: 'BUDGET_REVIEWER',
-      BUDGETREVIEWER: 'BUDGET_REVIEWER',
-      REV: 'BUDGET_REVIEWER',
-      DIVISION_REVIEWER: 'BUDGET_REVIEWER',
+      REVIEWER: 'BUDGET REVIEWER',
+      BUDGET_REVIEWER: 'BUDGET REVIEWER',
+      BUDGETREVIEWER: 'BUDGET REVIEWER',
+      REV: 'BUDGET REVIEWER',
+      DIVISION_REVIEWER: 'BUDGET REVIEWER',
 
       // BUDGET APPROVER synonyms
-      APPROVER: 'BUDGET_APPROVER',
-      BUDGET_APPROVER: 'BUDGET_APPROVER',
-      DIVISIONAPPROVER: 'BUDGET_APPROVER',
-      DIVISION_APPROVER: 'BUDGET_APPROVER',
-      DIVISIONVERIFIER: 'BUDGET_APPROVER',
-      DIVISION_VERIFIER: 'BUDGET_APPROVER',
-      OFFICE_APPROVER: 'BUDGET_APPROVER',
-      OFFICEAPPROVER: 'BUDGET_APPROVER',
+      APPROVER: 'BUDGET APPROVER',
+      BUDGET_APPROVER: 'BUDGET APPROVER',
+      DIVISIONAPPROVER: 'BUDGET APPROVER',
+      DIVISION_APPROVER: 'BUDGET APPROVER',
+      DIVISIONVERIFIER: 'BUDGET APPROVER',
+      DIVISION_VERIFIER: 'BUDGET APPROVER',
+      OFFICE_APPROVER: 'BUDGET APPROVER',
+      OFFICEAPPROVER: 'BUDGET APPROVER',
 
       // BUDGET PLANNING ANALYST
-      BUDGET_PLANNING_ANALYST: 'BUDGET_PLANNING_ANALYST',
-      BUDGETANALYST: 'BUDGET_PLANNING_ANALYST',
-      PLANNING_ANALYST: 'BUDGET_PLANNING_ANALYST',
+      BUDGET_PLANNING_ANALYST: 'BUDGET PLANNING ANALYST',
+      BUDGETANALYST: 'BUDGET PLANNING ANALYST',
+      PLANNING_ANALYST: 'BUDGET PLANNING ANALYST',
 
       // BUDGET OFFICER synonyms
-      BUDGET_OFFICER: 'BUDGET_OFFICER',
-      BUDGETOFFICER: 'BUDGET_OFFICER',
-      OFFICER: 'BUDGET_OFFICER',
-      BUDGET_SPECIALIST: 'BUDGET_OFFICER',
-      OFFICE_VERIFIER: 'BUDGET_OFFICER',
-      OFFICEVERIFIER: 'BUDGET_OFFICER',
-      OFFICE_CONSOLIDATOR: 'BUDGET_OFFICER',
-      BUDGET_SUPERVISOR: 'BUDGET_OFFICER',
+      BUDGET_OFFICER: 'BUDGET OFFICER',
+      BUDGETOFFICER: 'BUDGET OFFICER',
+      OFFICER: 'BUDGET OFFICER',
+      BUDGET_SPECIALIST: 'BUDGET OFFICER',
+      OFFICE_VERIFIER: 'BUDGET OFFICER',
+      OFFICEVERIFIER: 'BUDGET OFFICER',
+      OFFICE_CONSOLIDATOR: 'BUDGET OFFICER',
+      BUDGET_SUPERVISOR: 'BUDGET OFFICER',
 
-      // OVERALL BUDGET APPROVER synonyms
-      OVERALL_BUDGET_APPROVER: 'OVERALL_BUDGET_APPROVER',
-      BUDGETMANAGER: 'OVERALL_BUDGET_APPROVER',
-      BUDGET_MANAGER: 'OVERALL_BUDGET_APPROVER',
-      BUDGET_OFFICE_HEAD: 'OVERALL_BUDGET_APPROVER',
-      BUDGET_DIRECTOR: 'OVERALL_BUDGET_APPROVER',
-      FINAL_APPROVER: 'OVERALL_BUDGET_APPROVER',
-      MANAGER_APPROVER: 'OVERALL_BUDGET_APPROVER',
-      MANAGERAPPROVER: 'OVERALL_BUDGET_APPROVER',
-      REGION_FINAL_VERIFIER: 'OVERALL_BUDGET_APPROVER',
-      REGIONAL_FINAL_VERIFIER: 'OVERALL_BUDGET_APPROVER',
-      REGION_MANAGER: 'OVERALL_BUDGET_APPROVER',
-      OVERALL_APPROVER: 'OVERALL_BUDGET_APPROVER',
+      // BUDGET MANAGER synonyms
+      OVERALL_BUDGET_APPROVER: 'OVERALL BUDGET APPROVER',
+      BUDGETMANAGER: 'OVERALL BUDGET APPROVER',
+      BUDGET_MANAGER: 'OVERALL BUDGET APPROVER',
+      BUDGET_OFFICE_HEAD: 'OVERALL BUDGET APPROVER',
+      BUDGET_DIRECTOR: 'OVERALL BUDGET APPROVER',
+      FINAL_APPROVER: 'OVERALL BUDGET APPROVER',
+      MANAGER_APPROVER: 'OVERALL BUDGET APPROVER',
+      MANAGERAPPROVER: 'OVERALL BUDGET APPROVER',
+      REGION_FINAL_VERIFIER: 'OVERALL BUDGET APPROVER',
+      REGIONAL_FINAL_VERIFIER: 'OVERALL BUDGET APPROVER',
+      REGION_MANAGER: 'OVERALL BUDGET APPROVER',
+      OVERALL_APPROVER: 'OVERALL BUDGET APPROVER',
 
       // BUDGET ADMIN
-      BUDGETADMIN: 'BUDGET_ADMIN',
-      BUDGET_ADMIN: 'BUDGET_ADMIN',
-      FULL: 'OVERALL_BUDGET_APPROVER'  // Map 'FULL' access to OVERALL_BUDGET_APPROVER
+      BUDGETADMIN: 'BUDGET ADMIN',
+      BUDGET_ADMIN: 'BUDGET ADMIN',
+      FULL: 'OVERALL BUDGET APPROVER'  // Map 'FULL' access to OVERALL_BUDGET_APPROVER
     };
 
     const result = roleSynonyms[camelCaseNormalized] || camelCaseNormalized;
@@ -260,6 +260,44 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     }
   };
 
+  // Helper function to check if status matches any workflow stage (including legacy variants)
+  const isWorkflowStage = (stage) => {
+    const status = proposal?.status;
+    const normalizedStatus = String(status || '').toUpperCase().trim();
+    
+    const stagePatterns = {
+      'reviewer': [
+        'FORWARDED TO REVIEWER', 'Forwarded to Reviewer',
+        'DIVISION SUBMITTED', 'Division Submitted',
+        'RESPONSIBILITY CENTER SUBMITTED',
+        'REVIEWER_REVIEW'
+      ],
+      'approver': [
+        'FORWARDED TO APPROVER', 'Forwarded to Approver',
+        'APPROVER_REVIEW'
+      ],
+      'analyst': [
+        'FORWARDED TO ANALYST', 'Forwarded to Analyst',
+        'FORWARDED TO BUDGET/PLANNING ANALYST', 'Forwarded to Budget/Planning Analyst',
+        'FORWARDED TO BUDGET PLANNING ANALYST',
+        'ANALYST_REVIEW'
+      ],
+      'officer': [
+        'FORWARDED TO OFFICER', 'Forwarded to Officer',
+        'FORWARDED TO BUDGET OFFICER', 'Forwarded to Budget Officer',
+        'OFFICER_REVIEW'
+      ],
+      'manager': [
+        'FORWARDED TO MANAGER', 'Forwarded to Manager',
+        'FORWARDED TO OVERALL BUDGET APPROVER',
+        'MANAGER_REVIEW'
+      ]
+    };
+    
+    const patterns = stagePatterns[stage] || [];
+    return patterns.some(p => p === status || p === normalizedStatus);
+  };
+
   // Determine what actions are available based on user role and proposal status
   const getAvailableActions = () => {
     const actions = [];
@@ -267,17 +305,17 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     const normalizedStatus = String(status || '').toUpperCase().trim();
 
     // Check if user has the required role for actions
-    // Use standardized role names: BUDGET PREPARER → BUDGET REVIEWER → BUDGET APPROVER → BUDGET PLANNING ANALYST → BUDGET OFFICER → OVERALL BUDGET APPROVER
-  let isPreparer = normalizedRoles.includes('BUDGET_PREPARER') || normalizedRoles.includes('PREPARER');
-  const isBudgetReviewer = normalizedRoles.includes('BUDGET_REVIEWER') || normalizedRoles.includes('REVIEWER');
-  let isApprover = normalizedRoles.includes('BUDGET_APPROVER') || normalizedRoles.includes('APPROVER');
-  let isBudgetPlanningAnalyst = normalizedRoles.includes('BUDGET_PLANNING_ANALYST');
-  let isBudgetOfficer = normalizedRoles.includes('BUDGET_OFFICER');
-  let isOverallApprover = normalizedRoles.includes('OVERALL_BUDGET_APPROVER') || normalizedRoles.includes('BUDGET_MANAGER');
-  let isBudgetAdmin = normalizedRoles.includes('BUDGET_ADMIN');
+    // Use standardized role names: BUDGET PREPARER → BUDGET REVIEWER → BUDGET APPROVER → BUDGET/PLANNING ANALYST → BUDGET OFFICER → BUDGET MANAGER
+  let isPreparer = normalizedRoles.includes('BUDGET PREPARER') || normalizedRoles.includes('PREPARER');
+  const isBudgetReviewer = normalizedRoles.includes('BUDGET REVIEWER') || normalizedRoles.includes('REVIEWER');
+  let isApprover = normalizedRoles.includes('BUDGET APPROVER') || normalizedRoles.includes('APPROVER');
+  let isBudgetPlanningAnalyst = normalizedRoles.includes('BUDGET PLANNING ANALYST');
+  let isBudgetOfficer = normalizedRoles.includes('BUDGET OFFICER');
+  let isOverallApprover = normalizedRoles.includes('OVERALL BUDGET APPROVER') || normalizedRoles.includes('BUDGET MANAGER');
+  let isBudgetAdmin = normalizedRoles.includes('BUDGET ADMIN');
 
     // ROLE HIERARCHY PROTECTION: Use highest role in hierarchy
-    // Hierarchy: BUDGET PREPARER < BUDGET REVIEWER < BUDGET APPROVER < BUDGET PLANNING ANALYST < BUDGET OFFICER < OVERALL BUDGET APPROVER
+    // Hierarchy: BUDGET PREPARER < BUDGET REVIEWER < BUDGET APPROVER < BUDGET/PLANNING ANALYST < BUDGET OFFICER < BUDGET MANAGER
     // Only block higher actions if user has ONLY BUDGET PREPARER role
     const isPreparerOnly = isPreparer && !isBudgetReviewer && !isApprover && !isBudgetPlanningAnalyst && !isBudgetOfficer && !isOverallApprover && !isBudgetAdmin;
     const hasHigherRole = isBudgetReviewer || isApprover || isBudgetPlanningAnalyst || isBudgetOfficer || isOverallApprover || isBudgetAdmin;
@@ -288,11 +326,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     const shouldBlockOfficerActions = isPreparerOnly;
 
     // Recognize reviewer stage by status (canonical and legacy). When roles are missing, allow reviewer actions at this stage as a fallback.
-    const isReviewerStage = (
-      normalizedStatus === 'FORWARDED TO REVIEWER' || status === 'Forwarded to Reviewer' ||
-      normalizedStatus === 'DIVISION SUBMITTED' || status === 'Division Submitted' ||
-      normalizedStatus === 'RESPONSIBILITY CENTER SUBMITTED'
-    );
+    const isReviewerStage = isWorkflowStage('reviewer');
     let isBudgetReviewerEffective = isBudgetReviewer || (
       isReviewerStage && !isPreparer && !isApprover && !isBudgetPlanningAnalyst && !isBudgetOfficer && !isOverallApprover && !isBudgetAdmin
     );
@@ -300,13 +334,13 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     // Optional strict role restriction (e.g., in Budget Preparer module)
     const restrictRole = String(restrictToRole || '').toUpperCase().trim();
     if (restrictRole) {
-      isPreparer = restrictRole === 'BUDGET_PREPARER';
-      isBudgetReviewerEffective = restrictRole === 'BUDGET_REVIEWER' ? isBudgetReviewerEffective : false;
-      isApprover = restrictRole === 'BUDGET_APPROVER' ? isApprover : false;
-      isBudgetPlanningAnalyst = restrictRole === 'BUDGET_PLANNING_ANALYST' ? isBudgetPlanningAnalyst : false;
-      isBudgetOfficer = restrictRole === 'BUDGET_OFFICER' ? isBudgetOfficer : false;
-      isOverallApprover = (restrictRole === 'OVERALL_BUDGET_APPROVER' || restrictRole === 'BUDGET_MANAGER') ? isOverallApprover : false;
-      isBudgetAdmin = restrictRole === 'BUDGET_ADMIN' ? isBudgetAdmin : false;
+      isPreparer = restrictRole === 'BUDGET PREPARER';
+      isBudgetReviewerEffective = restrictRole === 'BUDGET REVIEWER' ? isBudgetReviewerEffective : false;
+      isApprover = restrictRole === 'BUDGET APPROVER' ? isApprover : false;
+      isBudgetPlanningAnalyst = restrictRole === 'BUDGET PLANNING ANALYST' ? isBudgetPlanningAnalyst : false;
+      isBudgetOfficer = restrictRole === 'BUDGET OFFICER' ? isBudgetOfficer : false;
+      isOverallApprover = (restrictRole === 'OVERALL BUDGET APPROVER' || restrictRole === 'BUDGET MANAGER') ? isOverallApprover : false;
+      isBudgetAdmin = restrictRole === 'BUDGET ADMIN' ? isBudgetAdmin : false;
     }
 
     console.log('🔍 WorkflowActions Debug:', {
@@ -364,11 +398,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
   // BUDGET REVIEWER Actions (Review & routing)
     if (isBudgetReviewerEffective) {
       // Can review and edit proposals submitted by analysts
-      if (
-        normalizedStatus === 'FORWARDED TO REVIEWER' || status === 'Forwarded to Reviewer' ||
-        normalizedStatus === 'DIVISION SUBMITTED' || status === 'Division Submitted' ||
-        normalizedStatus === 'RESPONSIBILITY CENTER SUBMITTED'
-      ) {
+      if (isWorkflowStage('reviewer')) {
         actions.push({
           label: 'Save Edits',
           action: 'reviewer-save-edits',
@@ -404,9 +434,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       const isReturnedToApprover = (normalizedStatus === 'RETURNED' || status === 'Returned') && 
                                   (proposal?.workflowLevel === 'APPROVER' || proposal?.currentAssigneeRole === 'APPROVER');
       
-      if (normalizedStatus === "FORWARDED TO APPROVER" || status === "Forwarded to Approver" ||
-          normalizedStatus === "DIVISION SUBMITTED" || status === "Division Submitted" ||
-          isReturnedToApprover) {
+      if (isWorkflowStage('approver') || isReturnedToApprover) {
         actions.push({
           label: "Save Edits",
           action: "approver-save-edits",
@@ -417,11 +445,11 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           allowOptionalComment: true
         });
         actions.push({
-          label: "Approve & Forward to Budget Planning Analyst",
+          label: "Approve & Forward to Budget/Planning Analyst",
           action: "approver-approve-forward-analyst",
           color: "bg-green-500 hover:bg-green-600",
           icon: "✅",
-          description: "Approve and forward to Budget Planning Analyst for review",
+          description: "Approve and forward to Budget/Planning Analyst for review",
           requiresComment: true
         });
         actions.push({
@@ -446,8 +474,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     // BUDGET PLANNING ANALYST Actions (Step 4 of 6-step workflow)
     if (isBudgetPlanningAnalyst) {
       // Can review and edit proposals forwarded by approver
-      if (normalizedStatus === "FORWARDED TO BUDGET PLANNING ANALYST" || status === "Forwarded to Budget Planning Analyst" ||
-          normalizedStatus === "FORWARDED TO ANALYST" || status === "Forwarded to Analyst") {
+      if (isWorkflowStage('analyst')) {
         actions.push({
           label: "Save Edits",
           action: "analyst-save-edits",
@@ -479,7 +506,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     // BUDGET OFFICER Actions (Final Approval Level)
     if (isBudgetOfficer && !shouldBlockOfficerActions) {
       // Can review and edit proposals forwarded by approver
-      if (normalizedStatus === "FORWARDED TO OFFICER" || status === "Forwarded to Officer" ||
+      if (isWorkflowStage('officer') || 
           normalizedStatus === "OFFICER APPROVED" || status === "Officer Approved" ||
           normalizedStatus === "APPROVER APPROVED" || status === "Approver Approved") {
         actions.push({
@@ -500,11 +527,11 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           requiresComment: true
         });
         actions.push({
-          label: "Return to Budget Planning Analyst",
+          label: "Return to Budget/Planning Analyst",
           action: "officer-return",
           color: "bg-red-500 hover:bg-red-600",
           icon: "↩️",
-          description: "Return proposal to Budget Planning Analyst for revisions",
+          description: "Return proposal to Budget/Planning Analyst for revisions",
           requiresComment: true
         });
       }
@@ -524,13 +551,8 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
 
     // BUDGET MANAGER & BUDGET ADMIN Actions (Finalization Level)
     if ((isOverallApprover || isBudgetAdmin) && !shouldBlockManagerActions) {
-      const managerStatuses = [
-        'FORWARDED TO MANAGER',
-        'OFFICER APPROVED'
-      ];
-
-      if (managerStatuses.includes(normalizedStatus) ||
-          ['Forwarded to Manager', 'Officer Approved'].includes(status)) {
+      if (isWorkflowStage('manager') || 
+          normalizedStatus === "OFFICER APPROVED" || status === "Officer Approved") {
         actions.push({
           label: "Save Edits",
           action: "manager-save-edits",
@@ -608,7 +630,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     PREPARER: 'Budget Preparer',
     BUDGET_REVIEWER: 'Budget Reviewer',
     APPROVER: 'Budget Approver',
-    BUDGET_PLANNING_ANALYST: 'Budget Planning Analyst',
+    BUDGET_PLANNING_ANALYST: 'Budget/Planning Analyst',
     BUDGET_OFFICER: 'Budget Officer',
     BUDGET_MANAGER: 'Budget Manager',
     BUDGET_ADMIN: 'Budget Admin'
@@ -696,17 +718,17 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     } else if (s.includes('OFFICER APPROVED')) {
       // Step 4: BUDGET_PLANNING_ANALYST reviews (after officer approval)
       derived.step = 'BUDGET_PLANNING_ANALYST_REVIEW';
-      derived.assignee = 'BUDGET_PLANNING_ANALYST';
-      derived.pending = ['BUDGET_PLANNING_ANALYST'];
+      derived.assignee = 'BUDGET PLANNING ANALYST';
+      derived.pending = ['BUDGET PLANNING ANALYST'];
     } else if (
-      s.includes('FORWARDED TO OVERALL BUDGET APPROVER') ||
+      s.includes('FORWARDED TO BUDGET MANAGER') ||
       s.includes('FORWARDED TO MANAGER') ||
       s.includes('SUBMITTED TO MANAGER')
     ) {
       // Step 5: BUDGET_OFFICER reviews
       derived.step = 'BUDGET_OFFICER_REVIEW';
-      derived.assignee = 'BUDGET_OFFICER';
-      derived.pending = ['BUDGET_OFFICER'];
+      derived.assignee = 'BUDGET OFFICER';
+      derived.pending = ['BUDGET OFFICER'];
     } else if (s.includes('RETURNED')) {
       // Return to PREPARER for revision
       derived.step = 'RETURNED';
@@ -715,7 +737,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     } else if (s.includes('FINALIZED')) {
       // Step 6: OVERALL_BUDGET_APPROVER finalizes
       derived.step = 'FINALIZED';
-      derived.assignee = 'OVERALL_BUDGET_APPROVER';
+      derived.assignee = 'OVERALL BUDGET APPROVER';
       derived.pending = [];
     }
     return derived;
@@ -745,7 +767,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     let successMessage = "";
     
     try {
-      if (action === 'submit-to-reviewer' && normalizedRoles.includes('BUDGET_PLANNING_ANALYST') && proposal?._id) {
+      if (action === 'submit-to-reviewer' && normalizedRoles.includes('BUDGET PLANNING ANALYST') && proposal?._id) {
         try {
           const readinessResponse = await api.get(`/api/workflow/submit/prerequisites/${proposal._id}`);
           if (readinessResponse?.data?.success && readinessResponse.data.ready === false) {
@@ -798,13 +820,8 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           break;
         case "approver-approve-forward-analyst":
           endpoint = "/api/workflow/approver/approve-and-forward-to-analyst";
-          successMessage = "Proposal approved and forwarded to Budget Planning Analyst successfully";
+          successMessage = "Proposal approved and forwarded to Budget/Planning Analyst successfully";
           break;
-        case "approver-approve-forward-officer":
-          endpoint = "/api/workflow/approver/approve-and-forward-to-officer";
-          successMessage = "Proposal approved and forwarded to Budget Officer successfully";
-          break;
-        // REMOVED: approver-submit-to-officer (bypass) for strict 6-step flow
         case "approver-return":
           endpoint = "/api/workflow/approver/return";
           successMessage = "Proposal returned to Reviewer successfully";
@@ -1263,49 +1280,54 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
   
 
   // Step metadata for NEW 6-step workflow progress tracking
-  // 1. PREPARER → 2. REVIEWER → 3. APPROVER → 4. BUDGET_PLANNING_ANALYST → 5. BUDGET_OFFICER → 6. OVERALL_BUDGET_APPROVER
+  // 1. PREPARER → 2. REVIEWER → 3. APPROVER → 4. BUDGET/PLANNING_ANALYST → 5. BUDGET_OFFICER → 6. BUDGET_MANAGER
   const steps = [
     { key: 'Draft', label: 'Draft', stepNum: 1 },
     { key: 'Forwarded to Reviewer', label: 'Forwarded to Reviewer', stepNum: 2, ts: 'forwardedToReviewerAt', by: 'forwardedToReviewerBy' },
     { key: 'Forwarded to Approver', label: 'Forwarded to Approver', stepNum: 3, ts: 'forwardedToApproverAt', by: 'forwardedToApproverBy' },
-    { key: 'Forwarded to Budget Planning Analyst', label: 'Forwarded to Budget Planning Analyst', stepNum: 4, ts: 'forwardedToAnalystAt', by: 'forwardedToAnalystBy' },
+    { key: 'Forwarded to Budget/Planning Analyst', label: 'Forwarded to Budget/Planning Analyst', stepNum: 4, ts: 'forwardedToAnalystAt', by: 'forwardedToAnalystBy' },
     { key: 'Forwarded to Budget Officer', label: 'Forwarded to Budget Officer', stepNum: 5, ts: 'forwardedToOfficerAt', by: 'forwardedToOfficerBy' },
-    { key: 'Forwarded to Overall Budget Approver', label: 'Forwarded to Overall Budget Approver', stepNum: 6, ts: 'forwardedToManagerAt', by: 'forwardedToManagerBy' },
+    { key: 'Forwarded to Budget Manager', label: 'Forwarded to Budget Manager', stepNum: 6, ts: 'forwardedToManagerAt', by: 'forwardedToManagerBy' },
     { key: 'Finalized', label: 'Finalized', stepNum: 7, ts: 'finalizedAt', by: 'finalizedBy' }
   ];
 
   // Map alternate/legacy status labels to canonical step keys
   // Handles both uppercase (database) and title-case (UI) variants
   const stepKeySynonyms = {
-    // Reviewer variants
+    // Reviewer variants (new and legacy)
     'Division Submitted': 'Forwarded to Reviewer',
     'DIVISION SUBMITTED': 'Forwarded to Reviewer',
     'Responsibility Center Submitted': 'Forwarded to Reviewer',
     'RESPONSIBILITY_CENTER_SUBMITTED': 'Forwarded to Reviewer',
     'Forwarded to Reviewer': 'Forwarded to Reviewer',
     'FORWARDED TO REVIEWER': 'Forwarded to Reviewer',
-    // Approver variants
+    'REVIEWER_REVIEW': 'Forwarded to Reviewer',
+    // Approver variants (new and legacy)
     'Forwarded to Approver': 'Forwarded to Approver',
     'FORWARDED TO APPROVER': 'Forwarded to Approver',
     'Approver Approved': 'Forwarded to Approver',
     'APPROVER APPROVED': 'Forwarded to Approver',
-    // Budget Planning Analyst variants
-    'Forwarded to Budget Planning Analyst': 'Forwarded to Budget Planning Analyst',
-    'Forwarded to Analyst': 'Forwarded to Budget Planning Analyst',
-    'FORWARDED TO ANALYST': 'Forwarded to Budget Planning Analyst',
-    'FORWARDED TO BUDGET PLANNING ANALYST': 'Forwarded to Budget Planning Analyst',
-    // Budget Officer variants
+    'APPROVER_REVIEW': 'Forwarded to Approver',
+    // Budget Planning Analyst variants (new and legacy)
+    'Forwarded to Budget Planning Analyst': 'Forwarded to Budget/Planning Analyst',
+    'Forwarded to Analyst': 'Forwarded to Budget/Planning Analyst',
+    'FORWARDED TO ANALYST': 'Forwarded to Budget/Planning Analyst',
+    'FORWARDED TO BUDGET PLANNING ANALYST': 'Forwarded to Budget/Planning Analyst',
+    'ANALYST_REVIEW': 'Forwarded to Budget/Planning Analyst',
+    // Budget Officer variants (new and legacy)
     'Forwarded to Budget Officer': 'Forwarded to Budget Officer',
     'Forwarded to Officer': 'Forwarded to Budget Officer',
     'FORWARDED TO OFFICER': 'Forwarded to Budget Officer',
     'FORWARDED TO BUDGET OFFICER': 'Forwarded to Budget Officer',
     'Officer Approved': 'Forwarded to Budget Officer',
     'OFFICER APPROVED': 'Forwarded to Budget Officer',
-    // Overall Budget Approver variants
-    'Forwarded to Overall Budget Approver': 'Forwarded to Overall Budget Approver',
-    'Forwarded to Manager': 'Forwarded to Overall Budget Approver',
-    'FORWARDED TO MANAGER': 'Forwarded to Overall Budget Approver',
-    'FORWARDED TO OVERALL BUDGET APPROVER': 'Forwarded to Overall Budget Approver',
+    'OFFICER_REVIEW': 'Forwarded to Budget Officer',
+    // Budget Manager variants (new and legacy)
+    'Forwarded to Overall Budget Approver': 'Forwarded to Budget Manager',
+    'Forwarded to Manager': 'Forwarded to Budget Manager',
+    'FORWARDED TO MANAGER': 'Forwarded to Budget Manager',
+    'FORWARDED TO OVERALL BUDGET APPROVER': 'Forwarded to Budget Manager',
+    'MANAGER_REVIEW': 'Forwarded to Budget Manager',
     // Finalized variants
     'FINALIZED': 'Finalized',
     'Finalized': 'Finalized',

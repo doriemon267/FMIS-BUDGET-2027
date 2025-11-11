@@ -226,7 +226,7 @@ const PS_AnnexesTable = () => {
                               size="small"
                               onClick={() => handleEditAnnex(item._id)}
                               color="primary"
-                              disabled={item.status === "Submitted"}
+                              disabled={item.status === "Finalized"}
                             >
                               <Edit />
                             </IconButton>
@@ -234,7 +234,7 @@ const PS_AnnexesTable = () => {
                               size="small"
                               onClick={() => handleDeleteAnnex(item._id)}
                               color="secondary"
-                              disabled={item.status === "Submitted"}
+                              disabled={item.status === "Finalized"}
                             >
                               <Delete />
                             </IconButton>

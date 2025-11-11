@@ -92,8 +92,8 @@ const getAllPerServices = async (req, res) => {
     // Add region filter if provided
     if (region) {
       query.region = region;
-      }
-    }`);
+      console.log(`Region filter applied: ${region}`);
+    }
     // Try to get from PersonnelServices collection first
     let personnelServices = await PersonnelServices.find(query);
     // If no results or very few results, try the Employee collection

@@ -183,8 +183,7 @@ const validateFileContent = async (req, res, next) => {
 // Audit logging for file uploads
 const auditFileUpload = (req, res, next) => {
   if (req.file) {
-    .toISOString()
-    });
+    console.log('File uploaded at:', new Date().toISOString());
   }
   next();
 };
@@ -196,4 +195,4 @@ module.exports = {
   handleUploadError,
   validateFileContent,
   auditFileUpload
-};
+};

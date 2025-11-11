@@ -17,105 +17,109 @@ import GavelIcon from '@mui/icons-material/Gavel';
 /**
  * WorkflowStatusStepper - Compact horizontal workflow progress indicator
  * 
- * Shows the current status and next steps in the budget proposal workflow
- * in a space-efficient horizontal layout
+ * Shows the current status and next steps in the 6-step budget proposal workflow:
+ * 1. BUDGET PREPARER - Creates proposal
+ * 2. BUDGET REVIEWER - Reviews and ensures quality
+ * 3. BUDGET APPROVER - Approves and chooses routing (standard or fast-track)
+ * 4. BUDGET PLANNING ANALYST - Technical analysis (optional, can be bypassed)
+ * 5. BUDGET OFFICER - Operational approval
+ * 6. OVERALL BUDGET APPROVER (Manager) - Final executive approval
  * 
- * NEW 6-STEP WORKFLOW (September 2025):
- * - Division Level: PREPARER → REVIEWER → APPROVER → BUDGET_PLANNING_ANALYST → BUDGET_OFFICER → OVERALL_BUDGET_APPROVER
- * - Office Level: PREPARER → APPROVER → BUDGET_PLANNING_ANALYST → BUDGET_OFFICER → OVERALL_BUDGET_APPROVER (skips REVIEWER)
+ * September 2025 Refactored Implementation
  */
-const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
+const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false, bypassedAnalyst = false }) => {
   if (!proposal) return null;
 
   const status = proposal.status || 'Draft';
 
-  // NEW 6-STEP WORKFLOW (Division/Responsibility Center Level)
-  const divisionSteps = [
+  // STANDARD 6-STEP WORKFLOW (Division/Responsibility Center Level)
+  const standardSteps = [
     {
       label: 'BUDGET PREPARER',
       role: 'Creates',
-      shortLabel: 'Budget Preparer',
+      shortLabel: 'Preparer',
       statuses: ['Draft'],
       icon: <PersonIcon />
     },
     {
       label: 'BUDGET REVIEWER',
       role: 'Reviews',
-      shortLabel: 'Budget Reviewer',
-      statuses: ['Division Submitted', 'Forwarded to Reviewer'],
+      shortLabel: 'Reviewer',
+      statuses: ['Forwarded to Reviewer'],
       icon: <GroupIcon />
     },
     {
       label: 'BUDGET APPROVER',
       role: 'Approves',
-      shortLabel: 'Budget Approver',
-      statuses: ['Forwarded to Approver', 'Approver Approved'],
+      shortLabel: 'Approver',
+      statuses: ['Forwarded to Approver'],
       icon: <VerifiedUserIcon />
     },
     {
-      label: 'BUDGET_PLANNING_ANALYST',
+      label: 'BUDGET PLANNING ANALYST',
       role: 'Analyzes',
-      shortLabel: 'Planning Analyst',
-      statuses: ['Forwarded to Budget Planning Analyst', 'Forwarded to Analyst'],
+      shortLabel: 'Analyst',
+      statuses: ['Forwarded to Analyst'],
       icon: <PersonIcon />
     },
     {
-      label: 'BUDGET_OFFICER',
-      role: 'Reviews',
+      label: 'BUDGET OFFICER',
+      role: 'Verifies',
       shortLabel: 'Officer',
-      statuses: ['Forwarded to Budget Officer', 'Officer Approved'],
+      statuses: ['Forwarded to Officer'],
       icon: <VerifiedUserIcon />
     },
     {
-      label: 'OVERALL_BUDGET_APPROVER',
+      label: 'OVERALL BUDGET APPROVER',
       role: 'Finalizes',
-      shortLabel: 'Final Approver',
-      statuses: ['Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Finalized'],
+      shortLabel: 'Manager',
+      statuses: ['Forwarded to Manager', 'Finalized'],
       icon: <GavelIcon />
     }
   ];
 
-  // NEW 5-STEP WORKFLOW (Office Level - skips Reviewer)
-  const officeSteps = [
+  // FAST-TRACK WORKFLOW (skips Analyst step)
+  const fastTrackSteps = [
     {
       label: 'BUDGET PREPARER',
       role: 'Creates',
-      shortLabel: 'Budget Preparer',
+      shortLabel: 'Preparer',
       statuses: ['Draft'],
       icon: <PersonIcon />
     },
     {
+      label: 'BUDGET REVIEWER',
+      role: 'Reviews',
+      shortLabel: 'Reviewer',
+      statuses: ['Forwarded to Reviewer'],
+      icon: <GroupIcon />
+    },
+    {
       label: 'BUDGET APPROVER',
       role: 'Approves',
-      shortLabel: 'Budget Approver',
-      statuses: ['Forwarded to Approver', 'Approver Approved'],
+      shortLabel: 'Approver',
+      statuses: ['Forwarded to Approver'],
       icon: <VerifiedUserIcon />
     },
     {
-      label: 'BUDGET_PLANNING_ANALYST',
-      role: 'Analyzes',
-      shortLabel: 'Planning Analyst',
-      statuses: ['Forwarded to Budget Planning Analyst', 'Forwarded to Analyst'],
-      icon: <PersonIcon />
-    },
-    {
-      label: 'BUDGET_OFFICER',
-      role: 'Reviews',
+      label: 'BUDGET OFFICER',
+      role: 'Verifies',
       shortLabel: 'Officer',
-      statuses: ['Forwarded to Budget Officer', 'Officer Approved'],
+      statuses: ['Forwarded to Officer'],
       icon: <VerifiedUserIcon />
     },
     {
-      label: 'OVERALL_BUDGET_APPROVER',
+      label: 'OVERALL BUDGET APPROVER',
       role: 'Finalizes',
-      shortLabel: 'Final Approver',
-      statuses: ['Forwarded to Overall Budget Approver', 'Forwarded to Manager', 'Finalized'],
+      shortLabel: 'Manager',
+      statuses: ['Forwarded to Manager', 'Finalized'],
       icon: <GavelIcon />
     }
   ];
 
-  // Select workflow based on level
-  const steps = isOfficeLevel ? officeSteps : divisionSteps;
+  // Select workflow based on path (standard vs fast-track)
+  // If bypassedAnalyst flag is true, use fast-track steps
+  const steps = bypassedAnalyst || proposal?.bypassedAnalyst ? fastTrackSteps : standardSteps;
 
   // Determine active step
   const getActiveStep = () => {
@@ -139,11 +143,15 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false }) => {
           'BUDGET REVIEWER': 'BUDGET REVIEWER',
           'APPROVER': 'BUDGET APPROVER',
           'BUDGET APPROVER': 'BUDGET APPROVER',
-          'BUDGET_PLANNING_ANALYST': 'BUDGET_PLANNING_ANALYST',
-          'OFFICER': 'BUDGET_OFFICER',
-          'BUDGET_OFFICER': 'BUDGET_OFFICER',
-          'BUDGET_MANAGER': 'OVERALL_BUDGET_APPROVER',
-          'OVERALL_BUDGET_APPROVER': 'OVERALL_BUDGET_APPROVER'
+          'BUDGET_PLANNING_ANALYST': 'BUDGET PLANNING ANALYST',
+          'BUDGET PLANNING ANALYST': 'BUDGET PLANNING ANALYST',
+          'OFFICER': 'BUDGET OFFICER',
+          'BUDGET_OFFICER': 'BUDGET OFFICER',
+          'BUDGET OFFICER': 'BUDGET OFFICER',
+          'BUDGET_MANAGER': 'OVERALL BUDGET APPROVER',
+          'BUDGET MANAGER': 'OVERALL BUDGET APPROVER',
+          'OVERALL_BUDGET_APPROVER': 'OVERALL BUDGET APPROVER',
+          'OVERALL BUDGET APPROVER': 'OVERALL BUDGET APPROVER'
         };
         
         const normalizedRole = roleMap[assigneeRole] || assigneeRole;

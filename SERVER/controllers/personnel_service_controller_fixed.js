@@ -92,8 +92,8 @@ const getAllPerServices = async (req, res) => {
     // Add region filter if provided
     if (region) {
       query.region = region;
-      }
-    }`);
+      console.log(`Region filter applied: ${region}`);
+    }
     // Try to get from PersonnelServices collection first
     let personnelServices = await PersonnelServices.find(query);
     // If no results or very few results, try the Employee collection
@@ -106,9 +106,8 @@ const getAllPerServices = async (req, res) => {
       if (region) {
         // Use exact match for region
         employeeQuery.Region = region;
-        : ${region}`);
+        console.log(`Employee region filter applied: ${region}`);
       }
-      );
       const employees = await EmployeeMaster.find(employeeQuery);
       // Map Employee fields to PersonnelServices fields
       personnelServices = employees.map(emp => ({
@@ -179,9 +178,8 @@ const getPersonnelHiredBeforeJune1988 = async (req, res) => {
       if (region) {
         // Use exact match for region
         employeeQuery.Region = region;
-        : ${region}`);
+        console.log(`Employee region filter applied: ${region}`);
       }
-      );
       const employees = await EmployeeMaster.find(employeeQuery);
       // Map Employee fields to PersonnelServices fields
       personnel = employees.map(emp => ({

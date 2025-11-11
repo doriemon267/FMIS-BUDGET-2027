@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect, useCallback } from "react";
 import ProposalCustomPage from "../components/allproposals/ProposalCustomPage";
 import TextSearchable from "../global/components/TextSearchable";
 import { ViewButton } from "../components/allproposals/ProposalActions";
-import WorkflowActions from "../components/workflow/WorkflowActions";
+import WorkflowActionsRefactored from "../components/workflow/WorkflowActionsRefactored";
 import { useUser } from "../context/UserContext";
 import { useQuery } from "@tanstack/react-query";
 import { 
@@ -268,7 +268,7 @@ const AllProposalsPage = () => {
 
     // Check if user is Budget Officer
     const userRoles = currentUser?.Roles || [];
-    if (!userRoles.includes('BUDGET_OFFICER')) {
+    if (!userRoles.includes('BUDGET OFFICER')) {
       toast.error('Only Budget Officers can perform bulk approvals.');
       return;
     }
@@ -541,14 +541,11 @@ const AllProposalsPage = () => {
             <Box sx={{ display: 'none' }}>
               <ViewButton row={row} refreshData={refreshData} />
             </Box>
-            <WorkflowActions
+            <WorkflowActionsRefactored
               proposal={row}
               userInfo={userInfoForWorkflow}
-              restrictToRole="BUDGET_PREPARER"
+              restrictToRole="BUDGET PREPARER"
               onRefresh={refreshData}
-              onView={() => {
-                window.dispatchEvent(new CustomEvent('open-proposal-view', { detail: { row } }));
-              }}
             />
           </Box>
         );
@@ -625,7 +622,7 @@ const AllProposalsPage = () => {
       </Box>
 
       {/* Bulk Actions Section - Only for Budget Officers */}
-      {currentUser?.Roles?.includes('BUDGET_OFFICER') && (
+      {currentUser?.Roles?.includes('BUDGET OFFICER') && (
         <Box sx={{ mb: 3, mx: 3 }}>
           <Card sx={{ p: 2 }}>
             <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>

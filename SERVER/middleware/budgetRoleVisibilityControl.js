@@ -21,23 +21,6 @@ const budgetRoleVisibilityControl = () => {
       const userId = req.user?.id;
       const userRoles = req.user?.Roles || [];
       
-      console.log('🔐 [budgetRoleVisibilityControl] DEBUG REQUEST:', {
-        userId,
-        userRoles,
-        userObject: req.user ? {
-          id: req.user.id,
-          Roles: req.user.Roles,
-          roles: req.user.roles,
-          Role: req.user.Role,
-          role: req.user.role,
-          hierarchicalAssignment: req.user.hierarchicalAssignment
-        } : 'NO USER',
-        hierarchicalAssignment: req.userHierarchicalAssignment ? {
-          workflowRoles: req.userHierarchicalAssignment.workflowRoles,
-          assignmentLevel: req.userHierarchicalAssignment.assignmentLevel
-        } : 'NO HIERARCHICAL ASSIGNMENT'
-      });
-      
       // Super admins bypass all filters - check for both 'SUPER_ADMIN' (with underscore) and 'SUPER ADMIN' (with space)
       if (userRoles.includes('SUPER_ADMIN') || userRoles.includes('SUPER ADMIN')) {
         return next();
@@ -70,18 +53,8 @@ const budgetRoleVisibilityControl = () => {
 
       if (!budgetRole) {
         // No budget role, skip filtering
-        console.log('[budgetRoleVisibilityControl] No budget or workflow role detected, skipping filters');
         return next();
       }
-
-      console.log('🔐 [budgetRoleVisibilityControl] Role determined:', {
-        userId,
-        budgetRole,
-        userRoles,
-        workflowRoles,
-        hasPreparer: userRoles.includes('BUDGET PREPARER') || userRoles.includes('BUDGET_PREPARER') || workflowRoles.includes('BUDGET PREPARER') || workflowRoles.includes('divisionCreator'),
-        hasReviewer: userRoles.includes('BUDGET REVIEWER') || workflowRoles.includes('BUDGET REVIEWER') || workflowRoles.includes('divisionReviewer')
-      });
 
       // Build visibility filters based on role
       let visibilityFilter = {};
@@ -101,13 +74,6 @@ const budgetRoleVisibilityControl = () => {
           // Get region assignment for BUDGET_PLANNING_ANALYST
           const isNIAWide = hierarchicalAssignment.isNIAWide === true;
           const assignedRegions = hierarchicalAssignment.assignedRegions || [];
-          
-          console.log('🔐 [budgetRoleVisibilityControl] BUDGET_PLANNING_ANALYST region filtering:', {
-            userId,
-            isNIAWide,
-            assignedRegions,
-            hierarchicalAssignment: hierarchicalAssignment
-          });
           
           // Build base visibility filter
           const analystVisibilityOptions = [
@@ -160,7 +126,6 @@ const budgetRoleVisibilityControl = () => {
           if (isNIAWide) {
             // NIA-Wide: No region restriction - can see all proposals
             visibilityFilter = { $or: analystVisibilityOptions };
-            console.log('🌍 BUDGET_PLANNING_ANALYST has NIA-Wide access - showing all regions');
           } else if (assignedRegions && assignedRegions.length > 0) {
             // Specific regions: Can only see proposals from assigned regions
             visibilityFilter = {
@@ -169,11 +134,9 @@ const budgetRoleVisibilityControl = () => {
                 { $or: analystVisibilityOptions }       // And visibility rules must apply
               ]
             };
-            console.log(`🔒 BUDGET_PLANNING_ANALYST restricted to regions: ${assignedRegions.join(', ')}`);
           } else {
             // No region assignment yet - show nothing for safety
             visibilityFilter = { _id: null }; // Return no proposals
-            console.log('⚠️  BUDGET_PLANNING_ANALYST has no region assignment - showing no proposals');
           }
           break;
 
@@ -423,13 +386,6 @@ const budgetRoleVisibilityControl = () => {
 
       // Attach visibility filter to request for use in controllers
       req.budgetRoleVisibilityFilter = visibilityFilter;
-      
-      console.log('🔐 [budgetRoleVisibilityControl] Filter applied:', {
-        budgetRole,
-        filterKeys: Object.keys(visibilityFilter),
-        filterOrCount: visibilityFilter.$or?.length || 'N/A',
-        sampleFilter: JSON.stringify(visibilityFilter).substring(0, 200) + '...'
-      });
       
       next();
     } catch (error) {

@@ -225,9 +225,9 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
   }, [categories]);
 
   const canDeleteItems = useMemo(() => {
-    return currentUser?.userRoles?.includes('SUPER_ADMIN') ||
-           currentUser?.userRoles?.includes('BUDGET_ADMIN') ||
-           currentUser?.userRoles?.includes('BUDGET_PLANNING_ANALYST');
+    return currentUser?.userRoles?.includes('SUPER ADMIN') ||
+           currentUser?.userRoles?.includes('BUDGET ADMIN') ||
+           currentUser?.userRoles?.includes('BUDGET PLANNING ANALYST');
   }, [currentUser]);
 
   // Other state
@@ -2020,7 +2020,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
         <Divider />
         <MenuItem 
           onClick={() => handleDeleteClick(actionsMenuRow?._id)}
-          disabled={!canDeleteItems || actionsMenuRow?.status === "Submitted" || actionsMenuRow?.status === "Approved"}
+          disabled={!canDeleteItems || actionsMenuRow?.status === "Finalized"}
           sx={{ color: 'error.main' }}
         >
           <Delete fontSize="small" sx={{ mr: 1 }} />

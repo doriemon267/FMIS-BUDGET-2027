@@ -49,6 +49,7 @@ import ComprehensiveReportsPage from "./components/reports/ComprehensiveReportsP
 import DatabaseBackupPage from "./pages/DatabaseBackupPage";
 import HierarchicalUserAssignmentPage from "./pages/HierarchicalUserAssignmentPage";
 import AuditLogsPage from "./pages/AuditLogsPage";
+import ProposalDetailsPage from "./components/workflow/ProposalDetailsPage";
 const App = () => {
   return (
     <Routes>
@@ -182,6 +183,17 @@ const App = () => {
               requiredWorkflowRoles={["superAdmin", "preparer", "reviewer", "approver", "overallBudgetApprover", "budgetAnalyst"]}
             >
               <AllProposalsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/proposal-details/:proposalId"
+          element={
+            <ProtectedRoute
+              requiredPermissions={[]}
+              requiredWorkflowRoles={["superAdmin", "preparer", "reviewer", "approver", "overallBudgetApprover", "budgetAnalyst"]}
+            >
+              <ProposalDetailsPage />
             </ProtectedRoute>
           }
         />

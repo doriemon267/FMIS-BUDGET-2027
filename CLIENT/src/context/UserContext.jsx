@@ -82,7 +82,7 @@ const UserProvider = ({ children }) => {
     try {
       const devHeaders = {};
       const cu = currentUser || JSON.parse(localStorage.getItem('currentUser') || 'null');
-      const devUserId = cu?.Id || cu?.id || cu?.userId || (Array.isArray(cu?.Username) ? cu.Username[0] : cu?.Username);
+      const devUserId = (Array.isArray(cu?.Username) ? cu.Username[0] : cu?.Username) || cu?.Id || cu?.id || cu?.userId;
       if (devUserId) devHeaders['X-Dev-User-Id'] = String(devUserId);
       if (cu?.Roles) devHeaders['X-Dev-Roles'] = (Array.isArray(cu.Roles) ? cu.Roles : [cu.Roles]).join(',');
       const haRes = await api.get("/api/hierarchical-rbac/my-access", { headers: devHeaders });
@@ -91,7 +91,7 @@ const UserProvider = ({ children }) => {
       // Also load current user's assignment to get workflow roles
       let userWorkflowRoles = [];
       try {
-        const userId = cu?.Id || cu?.id || cu?.userId || (Array.isArray(cu?.Username) ? cu.Username[0] : cu?.Username);
+        const userId = (Array.isArray(cu?.Username) ? cu.Username[0] : cu?.Username) || cu?.Id || cu?.id || cu?.userId;
         if (userId) {
           const assignmentRes = await api.get(`/api/hierarchical-rbac/assignments/${userId}`, { headers: devHeaders });
           if (assignmentRes?.data?.assignment?.workflowRoles) {
@@ -283,7 +283,7 @@ const UserProvider = ({ children }) => {
           try {
             // Attach dev identity explicitly on first load
             const devHeaders = {};
-            const devUserId = user?.Id || user?.id || user?.userId || (Array.isArray(user?.Username) ? user.Username[0] : user?.Username);
+            const devUserId = (Array.isArray(user?.Username) ? user.Username[0] : user?.Username) || user?.Id || user?.id || user?.userId;
             if (devUserId) devHeaders['X-Dev-User-Id'] = String(devUserId);
             if (user?.Roles) devHeaders['X-Dev-Roles'] = (Array.isArray(user.Roles) ? user.Roles : [user.Roles]).join(',');
 
@@ -306,7 +306,7 @@ const UserProvider = ({ children }) => {
             // Also load current user's assignment to get workflow roles
             let userWorkflowRoles = [];
             try {
-              const userId = user?.Id || user?.id || user?.userId || (Array.isArray(user?.Username) ? user.Username[0] : user?.Username);
+              const userId = (Array.isArray(user?.Username) ? user.Username[0] : user?.Username) || user?.Id || user?.id || user?.userId;
               if (userId) {
                 console.log('🔍 Fetching assignments for userId:', userId);
                 const assignmentRes = await api.get(`/api/hierarchical-rbac/assignments/${userId}`, { headers: devHeaders });

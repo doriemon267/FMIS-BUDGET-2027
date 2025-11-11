@@ -36,46 +36,30 @@ import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUser } from "../../context/UserContext";
 import ProposalDetailsDialog from "../myproposal/ProposalDetailsDialog";
+import { useNavigate } from "react-router-dom";
 
-// View Proposal Button - Now uses ProposalDetailsDialog with Budget Officer Edit System
+// View Proposal Button - Now navigates to ProposalDetailsPage (FULL PAGE, NOT DIALOG)
 export const ViewButton = ({ row, refreshData }) => {
-  const [open, setOpen] = useState(false);
-  const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
-  const handleView = () => {
-    setOpen(true);
-  };
-
-  const handleClose = () => {
-    setOpen(false);
-  };
-
-  // Refresh table after dialog closes to ensure fresh data
-  const handleRefresh = async () => {
-    try {
-      console.log('🔄 ViewButton - Refreshing after edit');
-      
-      // Invalidate all proposal-related queries
-      await queryClient.invalidateQueries({ queryKey: ['proposals'] });
-      await queryClient.invalidateQueries({ queryKey: ['myProposals'] });
-      await queryClient.invalidateQueries({ queryKey: ['all-proposals'] });
-      
-      // Call parent's refresh if provided
-      if (refreshData && typeof refreshData === 'function') {
-        console.log('🔄 ViewButton - Calling refreshData callback');
-        await refreshData();
-      }
-    } catch (error) {
-      console.error('Error refreshing data after edit:', error);
+  const handleView = (rowToView = row) => {
+    if (rowToView?._id) {
+      console.log('🔗 ViewButton: Navigating to FULL PAGE proposal details:', rowToView._id);
+      // Navigate with proposal data passed through state
+      navigate(`/proposal-details/${rowToView._id}`, { 
+        state: { proposal: rowToView }
+      });
     }
   };
 
-  // Allow external triggers (e.g., Actions menu) to open this view dialog
+  // Allow external triggers (e.g., Actions menu/deep links) to open full page view
   useEffect(() => {
     const handler = (e) => {
       const incoming = e?.detail?.row;
+      console.log('📢 open-proposal-view event received:', incoming?._id);
       if (incoming?._id && row?._id && String(incoming._id) === String(row._id)) {
-        handleView();
+        console.log('✅ Matching row found, triggering full page navigation...');
+        handleView(incoming);
       }
     };
     window.addEventListener('open-proposal-view', handler);
@@ -83,19 +67,11 @@ export const ViewButton = ({ row, refreshData }) => {
   }, [row?._id]);
 
   return (
-    <>
-      <Tooltip title="View Details">
-        <IconButton onClick={handleView} size="small">
-          <VisibilityIcon />
-        </IconButton>
-      </Tooltip>
-      <ProposalDetailsDialog
-        open={open}
-        onClose={handleClose}
-        proposal={row}
-        onRefresh={handleRefresh}
-      />
-    </>
+    <Tooltip title="View Full Proposal Details">
+      <IconButton onClick={() => handleView()} size="small">
+        <VisibilityIcon />
+      </IconButton>
+    </Tooltip>
   );
 };
 

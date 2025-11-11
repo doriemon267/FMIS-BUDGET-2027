@@ -58,7 +58,8 @@ const MooeRow = ({
   onSubsidyChange,
   disableIncomeInputs = false, // Add this prop with default value
 }) => {
-  const isEditable = ["Not Submitted", "Returned", "Draft"].includes(status);
+  // Per budget workflow: Data is editable until "Finalized"
+  const isEditable = status !== "Finalized";
 
   // Memoize calculations to prevent unnecessary recalculations
   const totals = useMemo(() => {

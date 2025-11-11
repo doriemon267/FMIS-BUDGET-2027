@@ -40,7 +40,7 @@ const BudgetOfficerEditView = forwardRef(({
   const [submitting, setSubmitting] = useState(false);
   const [comments, setComments] = useState('');
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
-  const [submitTarget, setSubmitTarget] = useState('BUDGET_APPROVER');
+  const [submitTarget, setSubmitTarget] = useState('BUDGET APPROVER');
   const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
 
   const submitConfirmationCopy = useMemo(() => {
@@ -65,9 +65,9 @@ const BudgetOfficerEditView = forwardRef(({
         };
       case 'officer':
         return {
-          title: 'Submit to Overall Budget Approver',
-          message: 'This will forward your reviewed proposal to the Overall Budget Approver for final approval. Ensure all edits are finalized before proceeding.',
-          confirmLabel: 'Submit to Overall Budget Approver'
+          title: 'Submit to Budget Manager',
+          message: 'This will forward your reviewed proposal to the Budget Manager for final approval. Ensure all edits are finalized before proceeding.',
+          confirmLabel: 'Submit to Budget Manager'
         };
       default:
         return {
@@ -334,11 +334,11 @@ const BudgetOfficerEditView = forwardRef(({
       let targetLabel = 'Next Approver';
       let extraHint = '';
       
-      if (routedRole === 'BUDGET_PLANNING_ANALYST') {
+      if (routedRole === 'BUDGET PLANNING ANALYST') {
         extraHint = `You can track it under statuses like "Forwarded to Analyst" or "Under Review by Analyst" in All Proposals.`;
-      } else if (routedRole === 'BUDGET_OFFICER') {
+      } else if (routedRole === 'BUDGET OFFICER') {
         extraHint = `You can track it under statuses like "Forwarded to Officer" or "Under Review by Officer" in All Proposals.`;
-      } else if (routedRole === 'OVERALL_BUDGET_APPROVER') {
+      } else if (routedRole === 'OVERALL BUDGET APPROVER') {
         extraHint = `You can track it under statuses like "Forwarded to Manager" or "Under Review by Manager" in All Proposals.`;
       }
 
@@ -374,11 +374,11 @@ const BudgetOfficerEditView = forwardRef(({
       const forwardedCount = res?.data?.forwardedToUsersCount;
       
       let extraHint = '';
-      if (routedRole === 'BUDGET_PLANNING_ANALYST') {
+      if (routedRole === 'BUDGET PLANNING ANALYST') {
         extraHint = `You can track it under statuses like "Forwarded to Analyst" or "Under Review by Analyst" in All Proposals.`;
-      } else if (routedRole === 'BUDGET_OFFICER') {
+      } else if (routedRole === 'BUDGET OFFICER') {
         extraHint = `You can track it under statuses like "Forwarded to Officer" or "Under Review by Officer" in All Proposals.`;
-      } else if (routedRole === 'OVERALL_BUDGET_APPROVER') {
+      } else if (routedRole === 'OVERALL BUDGET APPROVER') {
         extraHint = `You can track it under statuses like "Forwarded to Manager" or "Under Review by Manager" in All Proposals.`;
       }
       
@@ -580,9 +580,9 @@ const BudgetOfficerEditView = forwardRef(({
          !isFormValid ? `❌ Complete all modules to submit` :
          variant === 'analyst' ? 'Submit to Budget Officer' :
          variant === 'preparer' ? 'Submit to Budget Reviewer' :
-         variant === 'approver' ? 'Submit to Budget Planning Analyst' :
+         variant === 'approver' ? 'Submit to Budget/Planning Analyst' :
          variant === 'reviewer' ? 'Submit to Budget Approver' :
-         'Submit to Overall Budget Approver'}
+         'Submit to Budget Manager'}
           </Button>
         )}
       </Box>
@@ -621,7 +621,7 @@ const BudgetOfficerEditView = forwardRef(({
               onChange={(e) => setSubmitTarget(e.target.value)}
             >
               <FormControlLabel
-                value="BUDGET_APPROVER"
+                value="BUDGET APPROVER"
                 control={<Radio />}
                 label={
                   <Box>
@@ -635,15 +635,15 @@ const BudgetOfficerEditView = forwardRef(({
                 }
               />
               <FormControlLabel
-                value="BUDGET_MANAGER"
+                value="BUDGET MANAGER"
                 control={<Radio />}
                 label={
                   <Box>
                     <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                      Overall Budget Approver (Skip Approver)
+                      Budget Manager (Skip Approver)
                     </Typography>
                     <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      Send directly to the Overall Budget Approver for final approval
+                      Send directly to the Budget Manager for final approval
                     </Typography>
                   </Box>
                 }

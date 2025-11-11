@@ -52,13 +52,13 @@ export default function CustomMenu({
   const handleClick = (event) => setAnchorEl(event.currentTarget);
   const handleClose = () => setAnchorEl(null);
 
-  // Enhanced disable logic
+  // Enhanced disable logic - Per budget workflow: only locked when "Finalized"
   const isEditDisabled = disableEdit ||
-    row.status === "Submitted" ||
+    row.status === "Finalized" ||
     (activeFiscalYear && row.fiscalYear !== activeFiscalYear);
 
   const isDeleteDisabled = disableDelete ||
-    row.status === "Submitted" ||
+    row.status === "Finalized" ||
     (activeFiscalYear && row.fiscalYear !== activeFiscalYear);
 
   return (

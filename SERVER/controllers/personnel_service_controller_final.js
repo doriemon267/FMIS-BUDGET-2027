@@ -92,22 +92,21 @@ const getAllPerServices = async (req, res) => {
     if (region) {
       // Use exact match for region
       query.region = region;
-      : ${region}`);
+      console.log(`Region filter applied: ${region}`);
     } else {
       // If no region is provided, return an empty array
       // This ensures that if no region is selected, no employees are shown
       return res.status(200).json([]);
     }
-    }`);
     // Get from PersonnelServices collection ONLY
     const personnelServices = await PersonnelServices.find(query);
     // Debug: Log a sample record if available
     if (personnelServices.length > 0) {
       // Log the first few records for debugging
       personnelServices.slice(0, 2).forEach((p, i) => {
-        });
-    } else {
-      }
+        console.log(`Sample record ${i + 1}:`, p);
+      });
+    }
     res.status(200).json(personnelServices);
   } catch (error) {
     console.error("Error fetching personnel services:", error);
@@ -126,14 +125,13 @@ const getPersonnelByParams = async (req, res) => {
     if (region) {
       // Use exact match for region
       query.region = region;
-      : ${region}`);
+      console.log(`Region filter applied: ${region}`);
     } else {
       // If no region is provided, return an empty array
       // This ensures that if no region is selected, no employees are shown
       return res.status(200).json([]);
     }
     if (status) query.status = status;
-    }`);
     const personnel = await PersonnelServices.find(query).lean();
     res.status(200).json(personnel);
   } catch (error) {
@@ -153,18 +151,18 @@ const getPersonnelHiredBeforeJune1988 = async (req, res) => {
     if (region) {
       // Use exact match for region
       query.region = region;
-      : ${region}`);
+      console.log(`Region filter applied: ${region}`);
     } else {
       // If no region is provided, return an empty array
       // This ensures that if no region is selected, no employees are shown
       return res.status(200).json([]);
     }
-    }`);
     const personnel = await PersonnelServices.find(query);
     // Log the first few records for debugging
     if (personnel.length > 0) {
       personnel.slice(0, 2).forEach((p, i) => {
-        });
+        console.log(`Sample record ${i + 1}:`, p);
+      });
     }
     res.status(200).json(personnel);
   } catch (error) {

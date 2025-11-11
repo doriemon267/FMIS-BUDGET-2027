@@ -113,24 +113,24 @@ const AccessGuard = ({ children }) => {
   // Budget staff roles + Workflow roles that should have access (6-step workflow standardized names)
   const authorizedRoles = [
     'SUPER ADMIN',
-    'SUPER_ADMIN',  // Handle underscore variant
+    'SUPER ADMIN',  // Handle underscore variant
     'ADMIN',
-    'BUDGET_ADMIN',
+    'BUDGET ADMIN',
     'BUDGET ADMIN',
     'BUDGET COORDINATOR',
     'BUDGET MANAGER',
-    'BUDGET_OFFICER',
     'BUDGET OFFICER',
-    'BUDGET_PREPARER',
+    'BUDGET OFFICER',
     'BUDGET PREPARER',
-    'BUDGET_REVIEWER',
+    'BUDGET PREPARER',
     'BUDGET REVIEWER',
-    'BUDGET_APPROVER',
+    'BUDGET REVIEWER',
     'BUDGET APPROVER',
-    'BUDGET_PLANNING_ANALYST',     // ✅ NEW: Add BUDGET_PLANNING_ANALYST (standardized)
+    'BUDGET APPROVER',
+    'BUDGET PLANNING ANALYST',     // ✅ NEW: Add BUDGET_PLANNING_ANALYST (standardized)
     'BUDGET PLANNING ANALYST',     // ✅ NEW: Add variant with spaces
-    'OVERALL_BUDGET_APPROVER',
     'OVERALL BUDGET APPROVER',
+    'BUDGET MANAGER',
     'REVIEWER',
     'APPROVER'
   ];

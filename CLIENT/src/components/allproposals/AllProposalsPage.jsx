@@ -7,7 +7,7 @@ import {
   RejectMenuItem,
 } from "../../src/components/myproposal/ProposalActions";
 import WorkflowStatusBadge from "../workflow/WorkflowStatusBadge";
-import WorkflowActions from "../workflow/WorkflowActions";
+import WorkflowActionsRefactored from "../workflow/WorkflowActionsRefactored";
 import WorkflowSummary from "../workflow/WorkflowSummary";
 import { getUserInfo } from "../../utils/auth";
 
@@ -375,7 +375,7 @@ const AllProposalsPage = () => {
       label: "ACTIONS",
       customRender: (row) => (
         <div className="flex items-center justify-center">
-          <WorkflowActions 
+          <WorkflowActionsRefactored 
             proposal={row} 
             userInfo={userInfo} 
             onRefresh={refreshData} 

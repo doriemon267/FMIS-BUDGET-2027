@@ -25,34 +25,29 @@ import api from "../../config/api";
 import toast from "react-hot-toast";
 import ProposalDetailsDialog from "./ProposalDetailsDialog";
 import { goTo } from "../../global/navigation";
+import { useNavigate } from "react-router-dom";
 
 export function ViewMenuItem({ row, parentClose, refreshData }) {
-  const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
 
   const handleView = () => {
-    setOpen(true);
-  };
-
-  const handleClose = () => {
-    setOpen(false);
+    if (row?._id) {
+      console.log('🔗 ViewMenuItem: Navigating to FULL PAGE proposal details:', row._id);
+      // Navigate with proposal data passed through state
+      navigate(`/proposal-details/${row._id}`, { 
+        state: { proposal: row }
+      });
+    }
+    parentClose?.();
   };
 
   return (
-    <>
-      <MenuItem onClick={handleView}>
-        <ListItemIcon>
-          <VisibilityIcon fontSize="small" />
-        </ListItemIcon>
-        <ListItemText>View Details</ListItemText>
-      </MenuItem>
-
-      <ProposalDetailsDialog
-        open={open}
-        onClose={handleClose}
-        proposal={row}
-        onRefresh={refreshData}
-      />
-    </>
+    <MenuItem onClick={handleView}>
+      <ListItemIcon>
+        <VisibilityIcon fontSize="small" />
+      </ListItemIcon>
+      <ListItemText>View Details (Full Page)</ListItemText>
+    </MenuItem>
   );
 }
 

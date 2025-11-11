@@ -167,7 +167,9 @@ const securityLogger = (req, res, next) => {
   const sensitiveEndpoints = ['/upload', '/delete', '/admin', '/settings'];
   if (sensitiveOperations.includes(req.method) || 
       sensitiveEndpoints.some(endpoint => req.path.includes(endpoint))) {
-    ,
+    console.log('Sensitive operation detected:', {
+      method: req.method,
+      path: req.path,
       user: req.user?.id || 'anonymous',
       timestamp: new Date().toISOString()
     });
@@ -198,4 +200,4 @@ module.exports = {
   bruteForceLimiter,
   securityLogger,
   createIPWhitelist
-};
+};

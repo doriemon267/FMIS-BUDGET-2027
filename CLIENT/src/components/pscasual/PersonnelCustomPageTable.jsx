@@ -1098,8 +1098,8 @@ const PSCasualCustomPageTable = ({
                   schema={schema}
                   endpoint={apiPath}
                   dataListName={dataListName}
-                  disableEdit={row.status === "Submitted" || row.status === "Approved"}
-                  disableDelete={row.status === "Submitted" || row.status === "Approved"}
+                  disableEdit={row.status === "Finalized"}
+                  disableDelete={row.status === "Finalized"}
                 />
               );
             }

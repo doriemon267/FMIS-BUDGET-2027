@@ -20,7 +20,7 @@ exports.uploadCorporateIncome = async (req, res) => {
     // Shows the range being read
     // Convert to Array of Arrays first to see exact headers
     const rawData = xlsx.utils.sheet_to_json(worksheet, { header: 1 });
-    :', rawData[0]); // First row contains headers
+    console.log('Headers:', rawData[0]); // First row contains headers
     // Now convert to objects
     const sheetData = xlsx.utils.sheet_to_json(worksheet, {
       raw: false, // This will preserve formatting
@@ -28,7 +28,6 @@ exports.uploadCorporateIncome = async (req, res) => {
     });
     // Log the first row of processed data to see what we actually got
     if (sheetData.length > 0) {
-      );
     }
     if (sheetData.length === 0) {
       return res.status(400).json({ 
@@ -37,8 +36,7 @@ exports.uploadCorporateIncome = async (req, res) => {
       });
     }
     // Debug: Print the first row of data to see column names
-    );
-    );
+    console.log('First row:', sheetData[0]);
     // Validate the tabular format (categories as rows, regions as columns)
     const headers = Object.keys(sheetData[0]);
     // Must have at least Category column and one region column
@@ -153,16 +151,13 @@ exports.uploadCorporateIncome = async (req, res) => {
         // Debug: Log which region columns we're about to process
         // Process each region column
         for (const regionCol of regionColumns) {
-          try {
-            // Debug: Log EVERYTHING about this region column
-            ,
-              entireRecord: record
-            });
-            const amount = parseFloat(record[regionCol]);
-            // Skip if no amount for this region
-            if (isNaN(amount) || amount === 0) {
-              continue;
-            }
+          // Debug: Log EVERYTHING about this region column
+          console.log('Processing region column:', regionCol, 'entireRecord:', entireRecord);
+          const amount = parseFloat(record[regionCol]);
+          // Skip if no amount for this region
+          if (isNaN(amount) || amount === 0) {
+            continue;
+          }
             // Map the region name to standard format (be more flexible)
             const regionKey = regionCol.toLowerCase()
               .replace(/\s*-\s*/g, '-')
@@ -177,6 +172,7 @@ exports.uploadCorporateIncome = async (req, res) => {
               particulars = `${categoryInfo.name} (${standardRegion})`;
             }
             // Debug: Log what we're about to save
+            try {
             // Create income record
             await Income.create({
               incomecategory: categoryInfo.id,
@@ -210,7 +206,7 @@ exports.uploadCorporateIncome = async (req, res) => {
           }
         }
       } catch (error) {
-        console.error('Error processing category:', error);
+        console.error('Error processing record:', error);
         results.failed++;
         results.errors.push({
           category: record[headers[0]],

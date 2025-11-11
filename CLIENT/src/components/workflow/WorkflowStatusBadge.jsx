@@ -1,27 +1,31 @@
 import React from "react";
 
 // Workflow Status Badge: Displays status, step indicator, and assignment info
+// Supports new 6-step workflow (September 2025):
+// Draft → Forwarded to Reviewer → Forwarded to Approver → Forwarded to Analyst → Forwarded to Officer → Forwarded to Manager → Finalized
 const WorkflowStatusBadge = ({ status, step, assignee, pendingRoles = [], className = "" }) => {
-  // Normalize incoming status with simple synonyms
+  // Normalize incoming status with synonyms
   const raw = String(status || 'Draft');
   const u = raw.toUpperCase();
   const normalizedStatus = (
-    u === 'RESPONSIBILITY CENTER SUBMITTED' ? 'DIVISION SUBMITTED' :
+    u === 'RESPONSIBILITY CENTER SUBMITTED' ? 'FORWARDED TO REVIEWER' :
+    u === 'DIVISION SUBMITTED' ? 'FORWARDED TO REVIEWER' :
+    u === 'FORWARDED TO BUDGET/PLANNING ANALYST' ? 'FORWARDED TO ANALYST' :
+    u === 'FORWARDED TO BUDGET ANALYST' ? 'FORWARDED TO ANALYST' :
+    u === 'FORWARDED TO BUDGET OFFICER' ? 'FORWARDED TO OFFICER' :
+    u === 'FORWARDED TO BUDGET MANAGER' ? 'FORWARDED TO MANAGER' :
     u
   );
 
   const statusMap = {
     'DRAFT': { color: 'bg-gray-200 text-gray-800', icon: '📝', label: 'Draft', defaultStep: '1/6' },
-    'DIVISION SUBMITTED': { color: 'bg-blue-200 text-blue-800', icon: '📤', label: 'Division Submitted', defaultStep: '2/6' },
-    'FORWARDED TO REVIEWER': { color: 'bg-blue-200 text-blue-800', icon: '📤', label: 'Forwarded to Reviewer', defaultStep: '2/6' },
-    'FORWARDED TO APPROVER': { color: 'bg-indigo-200 text-indigo-800', icon: '📮', label: 'Forwarded to Approver', defaultStep: '3/6' },
-    'FORWARDED TO OFFICER': { color: 'bg-indigo-200 text-indigo-800', icon: '📮', label: 'Forwarded to Approver', defaultStep: '3/6' },
-    'FORWARDED TO BUDGET OFFICER': { color: 'bg-cyan-200 text-cyan-800', icon: '📬', label: 'Forwarded to Budget Officer', defaultStep: '5/6' },
-    'OFFICER APPROVED': { color: 'bg-green-200 text-green-800', icon: '✅', label: 'Officer Approved', defaultStep: '4/6' },
-  'FORWARDED TO MANAGER': { color: 'bg-purple-200 text-purple-800', icon: '🚀', label: 'Forwarded to Manager', defaultStep: '5/6' },
-  'FORWARDED TO OVERALL BUDGET APPROVER': { color: 'bg-purple-200 text-purple-800', icon: '🚀', label: 'Forwarded to Overall Budget Approver', defaultStep: '5/6' },
+    'FORWARDED TO REVIEWER': { color: 'bg-blue-200 text-blue-800', icon: '📤', label: 'Awaiting Reviewer', defaultStep: '2/6' },
+    'FORWARDED TO APPROVER': { color: 'bg-indigo-200 text-indigo-800', icon: '📮', label: 'Awaiting Approver', defaultStep: '3/6' },
+    'FORWARDED TO ANALYST': { color: 'bg-amber-200 text-amber-800', icon: '🔍', label: 'Awaiting Analyst', defaultStep: '4/6' },
+    'FORWARDED TO OFFICER': { color: 'bg-cyan-200 text-cyan-800', icon: '📬', label: 'Awaiting Officer', defaultStep: '5/6' },
+    'FORWARDED TO MANAGER': { color: 'bg-purple-200 text-purple-800', icon: '🚀', label: 'Awaiting Manager', defaultStep: '6/6' },
     'RETURNED': { color: 'bg-red-200 text-red-800', icon: '↩️', label: 'Returned', defaultStep: '—' },
-    'FINALIZED': { color: 'bg-emerald-200 text-emerald-800', icon: '🏆', label: 'Finalized', defaultStep: '6/6' }
+    'FINALIZED': { color: 'bg-emerald-200 text-emerald-800', icon: '✅', label: 'Finalized', defaultStep: '6/6' }
   };
 
   const stepMap = {

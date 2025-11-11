@@ -63,7 +63,7 @@ const CustomDrawer = ({ collapsed = false }) => {
   const isBudgetOfficer = roles.includes("BUDGET OFFICER");
   const isApprover = hasApproverRole();
   const isReviewer = roles.includes("BUDGET REVIEWER");
-  const isBudgetPlanningAnalyst = roles.includes("BUDGET_PLANNING_ANALYST");
+  const isBudgetPlanningAnalyst = roles.includes("BUDGET PLANNING ANALYST");
   
   // BUDGET_PLANNING_ANALYST should have same access as APPROVER for menus
   const isBudgetPlanningAnalystOrApprover = isBudgetPlanningAnalyst || isApprover;

@@ -19,9 +19,9 @@ const getAllEmployees = async (req, res) => {
     const skip = (pageNumber - 1) * limitNumber;
     // CRITICAL SECURITY CHECK: Ensure region is provided
     if (!region) {
-      // return res.status(400).json({ 
-        error: "Region parameter is required", 
-        message: "Please specify a region to view employees" 
+      return res.status(400).json({
+        error: "Region parameter is required",
+        message: "Please specify a region to view employees"
       });
     }
     // // DIRECT APPROACH: Use a raw MongoDB query for exact matching
@@ -92,9 +92,9 @@ const getEmployeeStats = async (req, res) => {
     const { region } = req.query;
     // CRITICAL SECURITY CHECK: Ensure region is provided
     if (!region) {
-      // return res.status(400).json({ 
-        error: "Region parameter is required", 
-        message: "Please specify a region to view employee statistics" 
+      return res.status(400).json({
+        error: "Region parameter is required",
+        message: "Please specify a region to view employee statistics"
       });
     }
     // // Import the correct Employee model
@@ -115,6 +115,12 @@ const getEmployeeStats = async (req, res) => {
     // // Get all unique regions for debugging
     const uniqueRegions = await Employee.distinct('Region');
     // res.status(200).json({
+    //   total,
+    //   active,
+    //   inactive,
+    //   region
+    // });
+    res.status(200).json({
       total,
       active,
       inactive,
@@ -229,7 +235,7 @@ const fixEmployeeRegions = async (req, res) => {
         { $set: { Region: region } }
       );
       results.updatedFromSourceRegion = updateFromSourceRegion.modifiedCount;
-      // }
+    }
     // Update employees without a Region field
     const updateWithoutRegion = await EmployeeMaster.updateMany(
       { Region: { $exists: false } },
