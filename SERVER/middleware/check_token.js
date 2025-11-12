@@ -46,6 +46,16 @@ module.exports = async (req, res, next) => {
     next();
   } catch (error) {
     console.error("Auth Middleware Error:", error);
-    return res.status(401).json({ error: "Access denied" });
+    console.error("Error details:", {
+      name: error.name,
+      message: error.message,
+      path: req.path,
+      method: req.method,
+      hasAuthHeader: !!req.headers.authorization
+    });
+    return res.status(401).json({ 
+      error: "Access denied",
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };

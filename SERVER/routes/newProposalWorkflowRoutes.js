@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const newProposalWorkflowController = require('../controllers/newProposalWorkflowController');
-const checkToken = require('../middleware/check_token');
+const checkToken = require('../middleware/checkToken');
 
 // Apply authentication middleware to all routes
 router.use(checkToken);

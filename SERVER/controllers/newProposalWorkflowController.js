@@ -1,4 +1,5 @@
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+const Proposal = require('../models/Proposal');
 const User = require('../models/User');
 
 // Workflow status transitions based on the specification
@@ -59,18 +60,28 @@ const WORKFLOW_TRANSITIONS = {
 // Get user's role from request
 const getUserRole = (req) => {
   const userRoles = req.user?.Roles || [];
-  // Return the first matching workflow role
-  const workflowRoles = ['BUDGET PREPARER', 'BUDGET REVIEWER', 'BUDGET APPROVER', 'BUDGET PLANNING ANALYST', 'BUDGET OFFICER', 'BUDGET MANAGER'];
+  
+  const roleMapping = {
+    'BUDGET_PREPARER': 'BUDGET PREPARER',
+    'BUDGET PREPARER': 'BUDGET PREPARER',
+    'BUDGET_REVIEWER': 'BUDGET REVIEWER',
+    'BUDGET REVIEWER': 'BUDGET REVIEWER',
+    'BUDGET_APPROVER': 'BUDGET APPROVER',
+    'BUDGET APPROVER': 'BUDGET APPROVER',
+    'BUDGET_PLANNING_ANALYST': 'BUDGET PLANNING ANALYST',
+    'BUDGET PLANNING ANALYST': 'BUDGET PLANNING ANALYST',
+    'BUDGET_OFFICER': 'BUDGET OFFICER',
+    'BUDGET OFFICER': 'BUDGET OFFICER',
+    'BUDGET_MANAGER': 'BUDGET MANAGER',
+    'BUDGET MANAGER': 'BUDGET MANAGER',
+    'SUPER_ADMIN': 'SUPER ADMIN',
+    'SUPER ADMIN': 'SUPER ADMIN'
+  };
 
-  for (const role of workflowRoles) {
-    if (userRoles.includes(role)) {
-      return role;
+  for (const role of userRoles) {
+    if (roleMapping[role]) {
+      return roleMapping[role];
     }
-  }
-
-  // Check for SUPER ADMIN as fallback
-  if (userRoles.includes('SUPER ADMIN')) {
-    return 'SUPER ADMIN';
   }
 
   return null;
@@ -152,8 +163,10 @@ exports.createProposal = async (req, res) => {
 // Get proposals based on user role and filters
 exports.getProposals = async (req, res) => {
   try {
+    console.log('[GET PROPOSALS] req.user object:', JSON.stringify(req.user, null, 2));
     const userRole = getUserRole(req);
     const userId = req.user.id;
+    const userName = req.user.name || `${req.user.FirstName || ''} ${req.user.LastName || ''}`.trim();
     const { status, modelType, fiscalYear, page = 1, limit = 10, view } = req.query;
 
     let query = {};
@@ -166,23 +179,40 @@ exports.getProposals = async (req, res) => {
     // Apply view-based and role-based filtering
     switch (view) {
       case 'my-proposals':
-        query.createdBy = userId;
+        query.createdBy = userName;
         break;
       case 'pending-review':
+        console.log('[PENDING-REVIEW] User Role:', userRole);
         if (userRole && WORKFLOW_TRANSITIONS[userRole]) {
           const allowedStatuses = Object.keys(WORKFLOW_TRANSITIONS[userRole]);
-          query.status = { $in: allowedStatuses };
+          console.log('[PENDING-REVIEW] Allowed Statuses:', allowedStatuses);
+          const pendingStatuses = allowedStatuses.filter(status => status !== 'DRAFT');
+          console.log('[PENDING-REVIEW] Pending Statuses (after filter):', pendingStatuses);
+          if (pendingStatuses.length === 0) {
+            console.log('[PENDING-REVIEW] No pending statuses, returning empty array');
+            return res.json({
+              success: true,
+              proposals: [],
+              pagination: { page: 1, limit: 10, total: 0, pages: 0 }
+            });
+          }
+          query.status = { $in: pendingStatuses };
+          console.log('[PENDING-REVIEW] Query:', JSON.stringify(query));
         } else {
-          // If no specific role/transitions, show nothing for this view
-          query.status = { $in: [] };
+          console.log('[PENDING-REVIEW] No user role or transitions, returning empty array');
+          return res.json({
+            success: true,
+            proposals: [],
+            pagination: { page: 1, limit: 10, total: 0, pages: 0 }
+          });
         }
         break;
       case 'all-proposals':
+        query.status = { $ne: 'Draft' };
         if (userRole !== 'SUPER ADMIN' && userRole !== 'BUDGET MANAGER') {
           // Restrict 'all' view for non-admins, e.g., to their region/department
           // This logic can be expanded based on hierarchical assignments
         }
-        // For admins, no extra query needed, they see all.
         break;
       default:
         // Default to 'my-proposals' if view is not specified
@@ -190,25 +220,65 @@ exports.getProposals = async (req, res) => {
         break;
     }
 
-    const options = {
-      page: parseInt(page),
-      limit: parseInt(limit),
-      sort: { createdAt: -1 },
-      populate: [
-        { path: 'region', select: 'name regionName' }
-      ]
+    // Map status from NewProposalWorkflow format to Proposal format
+    const statusMapping = {
+      'DRAFT': 'Draft',
+      'FORWARDED_TO_REVIEWER': 'Forwarded to Reviewer',
+      'FORWARDED_TO_APPROVER': 'Forwarded to Approver',
+      'FORWARDED_TO_BRD_ANALYST': 'Forwarded to Budget Planning Analyst',
+      'FORWARDED_TO_BRD_OFFICER': 'Forwarded to Budget Officer',
+      'FORWARDED_TO_BRD_MANAGER': 'Forwarded to Overall Budget Approver',
+      'FINALIZED': 'Finalized',
+      'RETURNED_TO_PREPARER': 'Returned',
+      'RETURNED_TO_REVIEWER': 'Returned',
+      'RETURNED_TO_APPROVER': 'Returned',
+      'RETURNED_TO_PLANNING_ANALYST': 'Returned',
+      'RETURNED_TO_OFFICER': 'Returned'
     };
 
-    const result = await NewProposalWorkflow.paginate(query, options);
+    // Convert query status to Proposal format
+    if (query.status && typeof query.status === 'string') {
+      query.status = statusMapping[query.status] || query.status;
+    } else if (query.status && query.status.$in) {
+      query.status.$in = query.status.$in.map(s => statusMapping[s] || s);
+    } else if (query.status && query.status.$ne) {
+      query.status.$ne = statusMapping[query.status.$ne] || query.status.$ne;
+    }
+
+    // Convert createdBy to processBy for Proposal model
+    if (query.createdBy) {
+      query.processBy = query.createdBy;
+      delete query.createdBy;
+    }
+
+    // Manual pagination
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
+    console.log('[GET PROPOSALS] View:', view);
+    console.log('[GET PROPOSALS] User ID:', userId);
+    console.log('[GET PROPOSALS] User Name:', userName);
+    console.log('[GET PROPOSALS] User Role:', userRole);
+    console.log('[GET PROPOSALS] Final Query:', JSON.stringify(query));
+
+    const total = await Proposal.countDocuments(query);
+    const proposals = await Proposal.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum);
+
+    console.log('[GET PROPOSALS] Total found:', total);
+    console.log('[GET PROPOSALS] Proposals returned:', proposals.length);
 
     res.json({
       success: true,
-      proposals: result.docs, // Changed 'data' to 'proposals' to match frontend
+      proposals: proposals,
       pagination: {
-        page: result.page,
-        limit: result.limit,
-        total: result.totalDocs,
-        pages: result.totalPages
+        page: pageNum,
+        limit: limitNum,
+        total: total,
+        pages: Math.ceil(total / limitNum)
       }
     });
   } catch (error) {

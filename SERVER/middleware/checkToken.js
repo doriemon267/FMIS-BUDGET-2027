@@ -16,6 +16,13 @@ module.exports = async (req, res, next) => {
     if (!payload) {
       return res.status(401).json({ error: "Access denied." });
     }
+    
+    // Debug: Log payload structure (only once per unique path to avoid spam)
+    if (!global._loggedPaths) global._loggedPaths = new Set();
+    if (!global._loggedPaths.has(req.path)) {
+      console.log(`🔍 JWT Payload structure for ${req.path}:`, Object.keys(payload));
+      global._loggedPaths.add(req.path);
+    }
     // Capture client IP early for downstream logging
     req.clientIp = getClientIp(req);
     // Extract access token (if needed)
@@ -55,11 +62,34 @@ module.exports = async (req, res, next) => {
       if (devUserId) {
         userId = String(devUserId).trim();
       } else if (!userId) {
-        // If still no user ID found in JWT, fail with guidance
-        console.error('❌ Unable to determine user identity from JWT or headers');
-        console.error('JWT Payload:', JSON.stringify(payload, null, 2));
-        console.error('Available headers:', Object.keys(req.headers));
-        return res.status(401).json({ error: "Authentication required: Unable to identify user" });
+        // FALLBACK: Try to use accessToken to fetch user from external API
+        if (payload.accessToken && process.env.ACCOUNT_USER_API_URL) {
+          try {
+            const userRes = await fetch(process.env.ACCOUNT_USER_API_URL, {
+              headers: { Authorization: `Bearer ${payload.accessToken}` },
+            });
+            if (userRes.ok) {
+              const user = await userRes.json();
+              userId = user.userId || user.id || user.Username?.[0] || user.username;
+              if (userId) {
+                console.log('✅ User ID retrieved from external API:', userId);
+              }
+            }
+          } catch (apiError) {
+            console.error('Failed to fetch user from external API:', apiError.message);
+          }
+        }
+        
+        // If still no user ID found, fail with guidance
+        if (!userId) {
+          console.error('❌ Unable to determine user identity from JWT or headers');
+          console.error('JWT Payload keys:', Object.keys(payload));
+          console.error('Available headers:', Object.keys(req.headers).filter(h => h.toLowerCase().includes('user') || h.toLowerCase().includes('auth')));
+          return res.status(401).json({ 
+            error: "Invalid token: No user identification found",
+            hint: "Please logout and login again to refresh your token"
+          });
+        }
       }
       
       // User authenticated successfully
@@ -102,19 +132,13 @@ module.exports = async (req, res, next) => {
         name: payload.name || payload.username || String(userId)
       };
       
-      // Only call resolveUserIdentity if we don't have dev headers (to avoid overriding dev identity)
-      let identity = null;
-      if (!hasDevHeaders) {
-        identity = await resolveUserIdentity({ req });
-      } else {
-        identity = { userId: userId, displayName: req.user.name, email: req.user.email, source: 'dev-headers' };
-      }
+      // Always call resolveUserIdentity to fetch user name from database
+      let identity = await resolveUserIdentity({ req });
       
       req.identity = identity;
       
       if (req.user) {
-        // Only update user IDs from identity if we don't have dev headers
-        if (!hasDevHeaders && identity.userId && identity.userId !== req.user.userId) {
+        if (identity.userId && identity.userId !== req.user.userId) {
           req.user.userId = identity.userId;
           req.user.id = identity.userId;
         }
@@ -159,6 +183,20 @@ module.exports = async (req, res, next) => {
     next();
   } catch (error) {
     console.error("❌ Auth Middleware Error:", error.message);
+    console.error("Error details:", {
+      name: error.name,
+      message: error.message,
+      path: req.path,
+      method: req.method,
+      hasAuthHeader: !!req.headers.authorization,
+      authHeaderPreview: req.headers.authorization ? req.headers.authorization.substring(0, 20) + '...' : 'none'
+    });
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: "Token expired", expired: true });
+    }
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ error: "Invalid token", invalid: true });
+    }
     return res.status(401).json({ error: "Access denied" });
   }
 };
