@@ -89,15 +89,15 @@ const USER_ROLES = [
     assignmentLevels: ['BUDGET_AND_REVENUE_DIVISION']
   },
   { 
-    value: 'OVERALL BUDGET APPROVER', 
+    value: 'BUDGET MANAGER', 
     label: 'Budget Manager', 
     description: 'Final executive-level approval authority',
-    workflowRoles: 'OVERALL_BUDGET_APPROVER (executive approval)',
+    workflowRoles: 'BUDGET MANAGER (executive approval)',
     assignmentLevels: ['BUDGET_AND_REVENUE_DIVISION']
   },
   { 
-    value: 'BUDGET ADMIN', 
-    label: 'Budget Admin', 
+    value: 'SUPER ADMIN', 
+    label: 'Super Admin', 
     description: 'Full administrative access - manages all proposals, users, and system settings',
     workflowRoles: 'All workflow roles (full system access)',
     assignmentLevels: ['FULL']
@@ -152,7 +152,6 @@ const HierarchicalUserAssignmentPage = () => {
 
   // Check if user is admin
   const isAdmin = currentUser?.Roles && (
-    currentUser.Roles.includes('BUDGET ADMIN') ||
     currentUser.Roles.includes('BUDGET MANAGER') ||
     currentUser.Roles.includes('BUDGET OFFICER') ||
     currentUser.Roles.includes('SUPER ADMIN') ||
@@ -277,7 +276,19 @@ const HierarchicalUserAssignmentPage = () => {
         }
         const deriveUserId = () => currentUser?.Username?.[0] || currentUser?.Id || currentUser?.id || currentUser?.userId;
 
-        if (isAdmin) {
+        // Allow all users with budget roles to see assignments, not just admins
+        const hasBudgetRole = currentUser?.Roles && (
+          currentUser.Roles.includes('BUDGET PREPARER') ||
+          currentUser.Roles.includes('BUDGET REVIEWER') ||
+          currentUser.Roles.includes('BUDGET APPROVER') ||
+          currentUser.Roles.includes('BUDGET PLANNING ANALYST') ||
+          currentUser.Roles.includes('BUDGET OFFICER') ||
+          currentUser.Roles.includes('BUDGET MANAGER') ||
+          currentUser.Roles.includes('SUPER ADMIN') ||
+          currentUser.Roles.includes('ADMIN')
+        );
+
+        if (isAdmin || hasBudgetRole) {
           try {
             // Use hierarchical assignments endpoint (focus on hierarchical system)
             const res = await api.get('/api/hierarchical-rbac/assignments');
@@ -444,19 +455,6 @@ const HierarchicalUserAssignmentPage = () => {
           ManageUsers: true,
           ManageSettings: false
         });
-      } else if (budgetRole === 'BUDGET ADMIN') {
-        handleFormChange('assignmentLevel', 'FULL');
-        handleFormChange('rolePermissions', {
-          CreateProposals: true,
-          EditOwnProposals: true,
-          EditAllProposals: true,
-          DeleteProposals: true,
-          ApproveProposals: true,
-          ViewReports: true,
-          ManageUsers: true,
-          ManageSettings: true
-        });
-        handleFormChange('workflowRoles', null);
       }
     }
   }, [userLookupData, editingAssignment]);
@@ -979,13 +977,13 @@ const HierarchicalUserAssignmentPage = () => {
                       } else if (newValue.value === 'BUDGET PREPARER') {
                         rolePerms.CreateProposals = true;
                         rolePerms.EditOwnProposals = true;
-                      } else if (newValue.value === 'BUDGET PLANNING ANALYST' || newValue.value === 'BUDGET OFFICER' || newValue.value === 'OVERALL BUDGET APPROVER') {
+                      } else if (newValue.value === 'BUDGET PLANNING ANALYST' || newValue.value === 'BUDGET OFFICER' || newValue.value === 'BUDGET MANAGER') {
                         rolePerms.EditAllProposals = true;
                         rolePerms.ApproveProposals = true;
-                        if (newValue.value === 'OVERALL BUDGET APPROVER') {
+                        if (newValue.value === 'BUDGET MANAGER') {
                           rolePerms.ManageSettings = true;
                         }
-                      } else if (newValue.value === 'BUDGET ADMIN') {
+                      } else if (newValue.value === 'SUPER ADMIN') {
                         rolePerms.CreateProposals = true;
                         rolePerms.EditOwnProposals = true;
                         rolePerms.EditAllProposals = true;
@@ -1279,8 +1277,8 @@ const HierarchicalUserAssignmentPage = () => {
                         ManageUsers: true,
                         ManageSettings: true
                       });
-                      // Update user role - FULL with ManageSettings = BUDGET_ADMIN
-                      handleFormChange('userRole', 'BUDGET ADMIN');
+                      // Update user role - FULL with ManageSettings = SUPER ADMIN
+                      handleFormChange('userRole', 'SUPER ADMIN');
                     }
 
                     handleFormChange('workflowRoles', nextRoles);
@@ -1365,12 +1363,6 @@ const HierarchicalUserAssignmentPage = () => {
                         );
                       }
                       
-                      console.log('🔍 Office matching:', {
-                        formDataOfficeId: formData.officeId,
-                        matchedOffice: matchedOffice ? matchedOffice.name : 'Not found',
-                        availableOffices: offices.map(o => ({ id: o.id, name: o.name }))
-                      });
-                      
                       return matchedOffice || null;
                     })()}
                     onChange={(event, newValue) => {
@@ -1432,14 +1424,6 @@ const HierarchicalUserAssignmentPage = () => {
                         // Convert both to strings for comparison
                         const rcOfficeId = String(rc.officeId || '');
                         const selectedOfficeId = String(formData.officeId || '');
-                        
-                        // Debug logging
-                        console.log('Filtering RC:', {
-                          rcName: rc.name,
-                          rcOfficeId,
-                          selectedOfficeId,
-                          matches: rcOfficeId === selectedOfficeId
-                        });
                         
                         // Direct comparison - both should be composite IDs for split departments
                         return rcOfficeId === selectedOfficeId;
@@ -1615,9 +1599,9 @@ const HierarchicalUserAssignmentPage = () => {
                                   }
                                 } else if (level === 'FULL') {
                                   if (perms.ManageSettings) {
-                                    return 'Budget Admin';
+                                    return 'Super Admin';
                                   } else {
-                                    return 'Budget Admin'; // FULL level is admin
+                                    return 'Super Admin'; // FULL level is admin
                                   }
                                 }
                                 return 'Unknown';
@@ -1752,7 +1736,7 @@ const HierarchicalUserAssignmentPage = () => {
                                     }
                                   } else if (level === 'FULL') {
                                     if (perms.ManageSettings) {
-                                      inferredRole = 'BUDGET ADMIN';
+                                      inferredRole = 'SUPER ADMIN';
                                     } else {
                                       inferredRole = 'BUDGET MANAGER';
                                     }

@@ -184,7 +184,7 @@ const UserProvider = ({ children }) => {
   //     }
 
   //     // Join admin room if user is admin
-  //     const isAdmin = user.Roles?.includes('SUPER ADMIN') || user.Roles?.includes('BUDGET ADMIN');
+  //     const isAdmin = user.Roles?.includes('SUPER ADMIN');
   //     if (isAdmin) {
   //       newSocket.emit('join-admin-room');
   //     }

@@ -148,10 +148,10 @@ const WorkflowStatusStepper = ({ proposal, isOfficeLevel = false, bypassedAnalys
           'OFFICER': 'BUDGET OFFICER',
           'BUDGET_OFFICER': 'BUDGET OFFICER',
           'BUDGET OFFICER': 'BUDGET OFFICER',
-          'BUDGET_MANAGER': 'OVERALL BUDGET APPROVER',
-          'BUDGET MANAGER': 'OVERALL BUDGET APPROVER',
-          'OVERALL_BUDGET_APPROVER': 'OVERALL BUDGET APPROVER',
-          'OVERALL BUDGET APPROVER': 'OVERALL BUDGET APPROVER'
+          'BUDGET_MANAGER': 'BUDGET MANAGER',
+          'BUDGET MANAGER': 'BUDGET MANAGER',
+          'OVERALL_BUDGET_APPROVER': 'BUDGET MANAGER',
+          'OVERALL BUDGET APPROVER': 'BUDGET MANAGER'
         };
         
         const normalizedRole = roleMap[assigneeRole] || assigneeRole;

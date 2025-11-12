@@ -26,13 +26,13 @@
  *         - budgetOfficer (Budget and Revenue Division)
  *         - Operational approval
  *
- * STEP 6: OVERALL_BUDGET_APPROVER
- *         - overallBudgetApprover (Budget and Revenue Division)
+ * STEP 6: BUDGET MANAGER
+ *         - budgetManager (Budget and Revenue Division)
  *         - Executive authorization and final approval
  * 
  * WORKFLOW PATHS:
- * - Division Level:   PREPARER → BUDGET REVIEWER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER
- * - Office Level:     PREPARER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER (skips BUDGET REVIEWER)
+ * - Division Level:   PREPARER → BUDGET REVIEWER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → BUDGET MANAGER
+ * - Office Level:     PREPARER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → BUDGET MANAGER (skips BUDGET REVIEWER)
  */
 
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
@@ -122,7 +122,7 @@ const getDefaultRolesForLevel = (level) => {
     'REGION': [
       WORKFLOW_ROLES.BUDGET_ANALYST,
       WORKFLOW_ROLES.BUDGET_OFFICER,
-      WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER
+      WORKFLOW_ROLES.BUDGET_MANAGER
     ],
     'FULL': Object.values(WORKFLOW_ROLES)
   };

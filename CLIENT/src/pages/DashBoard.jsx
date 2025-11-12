@@ -374,6 +374,19 @@ const HomePage = () => {
               </Grid>
             )}
 
+            {isPreparer && (
+              <Grid item xs={12} sm={6} md={4}>
+                <ActionCard
+                  title='New Proposal Workflow'
+                  description='Use the new 6-step proposal workflow system'
+                  icon={ListAltIcon}
+                  color='#ff9800'
+                  onClick={() => navigate('/new-proposal-workflow')}
+                  buttonText='Open Workflow'
+                />
+              </Grid>
+            )}
+
             <Grid item xs={12} sm={6} md={4}>
               <ActionCard
                 title='Generate Reports'

@@ -14,10 +14,9 @@ module.exports = async function enforceOrgAccess(req, res, next) {
     if (!userId) {
       return res.status(401).json({ message: 'Unauthorized: missing user' });
     }
-    // Full access roles can transact anywhere (SUPER_ADMIN, ADMIN, BUDGET_ADMIN, BUDGET_OFFICER, OVERALL_BUDGET_APPROVER)
+    // Full access roles can transact anywhere (SUPER_ADMIN, ADMIN, BUDGET_OFFICER, OVERALL_BUDGET_APPROVER)
     const hasFullRole = roles.includes('SUPER_ADMIN') || roles.includes('SUPER ADMIN') || 
                         roles.includes('ADMIN') || 
-                        roles.includes('BUDGET_ADMIN') || roles.includes('BUDGET ADMIN') ||
                         roles.includes('BUDGET_OFFICER') || roles.includes('BUDGET OFFICER') ||
                         roles.includes('OVERALL_BUDGET_APPROVER') || roles.includes('OVERALL BUDGET APPROVER') ||
                         roles.includes('BUDGET MANAGER'); // Legacy support

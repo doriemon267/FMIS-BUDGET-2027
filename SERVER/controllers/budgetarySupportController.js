@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const BudgetarySupport = require('../models/BudgetarySupport');
-const PersonnelService = require('../models/PersonnelServices');
+const PersonnelServices = require('../models/PersonnelServices');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const mooeProposals = require('../models/mooeProposals');
 const IAsOMCost = require('../models/IAsOMCost');

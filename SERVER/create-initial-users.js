@@ -5,7 +5,7 @@
  * - Joshua Demafelez - BUDGET_PLANNING_ANALYST (STEP 4 - divisionCreator)
  * - Andrie Barrameda - BUDGET_OFFICER (STEP 5 - officeConsolidator, officeFinalVerifier)
  * - Nelson Eloso - BUDGET REVIEWER (STEP 2 - divisionReviewer)
- * - Reymund Edra - OVERALL_BUDGET_APPROVER (STEP 6 - regionFinalVerifier)
+ * - Reymund Edra - BUDGET MANAGER (STEP 6 - regionFinalVerifier)
  */
 
 require('dotenv').config();
@@ -92,13 +92,13 @@ const initialUsers = [
     userId: 'reymund.edra',
     userName: 'Reymund Edra',
     email: 'reymund.edra@dreed.gov.ph',
-    userRole: 'OVERALL_BUDGET_APPROVER',
+    userRole: 'BUDGET MANAGER',
     accessScope: 'FULL',
     assignmentLevel: 'FULL',
     regionId: null,
     departmentId: null,
     divisionName: null,
-    primaryRoles: ['OVERALL_BUDGET_APPROVER'],
+    primaryRoles: ['BUDGET MANAGER'],
     workflowRoles: ['regionFinalVerifier'],
     rolePermissions: {
       CreateProposals: true,
@@ -153,14 +153,14 @@ async function createInitialUsers() {
     const approvers = await HierarchicalUserAssignment.countDocuments({ userRole: 'BUDGET APPROVER', isActive: true });
     const analysts = await HierarchicalUserAssignment.countDocuments({ userRole: 'BUDGET_PLANNING_ANALYST', isActive: true });
     const officers = await HierarchicalUserAssignment.countDocuments({ userRole: 'BUDGET_OFFICER', isActive: true });
-    const approversOverall = await HierarchicalUserAssignment.countDocuments({ userRole: 'OVERALL_BUDGET_APPROVER', isActive: true });
+    const approversOverall = await HierarchicalUserAssignment.countDocuments({ userRole: 'BUDGET MANAGER', isActive: true });
     
     console.log(`   STEP 1 - PREPARER: ${preparers}`);
     console.log(`   STEP 2 - BUDGET REVIEWER: ${reviewers}`);
     console.log(`   STEP 3 - BUDGET APPROVER: ${approvers}`);
     console.log(`   STEP 4 - BUDGET_PLANNING_ANALYST: ${analysts}`);
     console.log(`   STEP 5 - BUDGET_OFFICER: ${officers}`);
-    console.log(`   STEP 6 - OVERALL_BUDGET_APPROVER: ${approversOverall}`);
+    console.log(`   STEP 6 - BUDGET MANAGER: ${approversOverall}`);
 
     console.log('\n✅ Initial users created successfully!');
 

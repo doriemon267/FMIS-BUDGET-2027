@@ -19,14 +19,14 @@ export const WORKFLOW_ROLES = {
   BUDGET_PREPARER: 'BUDGET PREPARER',
   
   // Review/Approval roles
-  REVIEWER: 'REVIEWER',
-  APPROVER: 'APPROVER',
+  BUDGET_REVIEWER: 'BUDGET REVIEWER',
+  BUDGET_APPROVER: 'BUDGET APPROVER',
   
   // Budget authority roles
-  BUDGET_PLANNING_ANALYST: 'BUDGET_PLANNING_ANALYST',
-  BUDGET_OFFICER: 'BUDGET_OFFICER',
-  OVERALL_BUDGET_APPROVER: 'OVERALL_BUDGET_APPROVER',
-  BUDGET_ADMIN: 'BUDGET_ADMIN'
+  BUDGET_PLANNING_ANALYST: 'BUDGET PLANNING ANALYST',
+  BUDGET_OFFICER: 'BUDGET OFFICER',
+  BUDGET_MANAGER: 'BUDGET MANAGER',
+  SUPER_ADMIN: 'SUPER ADMIN'
 };
 
 // NEW 6-STEP WORKFLOW (all divisions follow this path)
@@ -38,20 +38,20 @@ export const WORKFLOW_STEPS = [
     description: 'Creates and edits proposals',
     icon: 'edit',
     statuses: ['Draft'],
-    nextRole: WORKFLOW_ROLES.REVIEWER
+    nextRole: WORKFLOW_ROLES.BUDGET_REVIEWER
   },
   {
     step: 2,
-    role: WORKFLOW_ROLES.REVIEWER,
+    role: WORKFLOW_ROLES.BUDGET_REVIEWER,
     label: 'Budget Reviewer',
     description: 'Reviews proposal quality',
     icon: 'visibility',
     statuses: ['Submitted for Review'],
-    nextRole: WORKFLOW_ROLES.APPROVER
+    nextRole: WORKFLOW_ROLES.BUDGET_APPROVER
   },
   {
     step: 3,
-    role: WORKFLOW_ROLES.APPROVER,
+    role: WORKFLOW_ROLES.BUDGET_APPROVER,
     label: 'Budget Approver',
     description: 'Approves proposal',
     icon: 'verified_user',
@@ -74,11 +74,11 @@ export const WORKFLOW_STEPS = [
     description: 'Operational approval',
     icon: 'gavel',
     statuses: ['At Officer'],
-    nextRole: WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER
+    nextRole: WORKFLOW_ROLES.BUDGET_MANAGER
   },
   {
     step: 6,
-    role: WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER,
+    role: WORKFLOW_ROLES.BUDGET_MANAGER,
     label: 'Budget Manager',
     description: 'Final executive approval',
     icon: 'verified',
@@ -111,7 +111,7 @@ export const OFFICE_WORKFLOW_STEPS = [
   },
   {
     step: 2,
-    role: WORKFLOW_ROLES.APPROVER,
+    role: WORKFLOW_ROLES.BUDGET_APPROVER,
     label: 'Budget Approver',
     description: 'Approves proposal',
     icon: 'verified_user',
@@ -135,7 +135,7 @@ export const OFFICE_WORKFLOW_STEPS = [
   },
   {
     step: 5,
-    role: WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER,
+    role: WORKFLOW_ROLES.BUDGET_MANAGER,
     label: 'Budget Manager',
     description: 'Final executive approval',
     icon: 'verified',
@@ -146,12 +146,12 @@ export const OFFICE_WORKFLOW_STEPS = [
 // Role display names
 export const ROLE_LABELS = {
   [WORKFLOW_ROLES.BUDGET_PREPARER]: 'Budget Preparer',
-  [WORKFLOW_ROLES.REVIEWER]: 'Budget Reviewer',
-  [WORKFLOW_ROLES.APPROVER]: 'Budget Approver',
+  [WORKFLOW_ROLES.BUDGET_REVIEWER]: 'Budget Reviewer',
+  [WORKFLOW_ROLES.BUDGET_APPROVER]: 'Budget Approver',
   [WORKFLOW_ROLES.BUDGET_PLANNING_ANALYST]: 'Budget Planning Analyst',
   [WORKFLOW_ROLES.BUDGET_OFFICER]: 'Budget Officer',
-  [WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER]: 'Budget Manager',
-  [WORKFLOW_ROLES.BUDGET_ADMIN]: 'Budget Admin'
+  [WORKFLOW_ROLES.BUDGET_MANAGER]: 'Budget Manager',
+  [WORKFLOW_ROLES.SUPER_ADMIN]: 'Super Admin'
 };
 
 // Assignment level display names

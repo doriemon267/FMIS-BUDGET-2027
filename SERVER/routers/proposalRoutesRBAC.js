@@ -16,7 +16,8 @@ const {
   returnProposal,
   getProposalDetails,
   saveDraftProposal,
-  getDraftProposal
+  getDraftProposal,
+  performProposalAction
 } = require("../controllers/proposalController");
 const Router = require("express").Router;
 const Proposal = require("../models/Proposal");
@@ -115,6 +116,13 @@ proposalRBACRouter.delete(
   proposalAccessControl('delete'),
   checkProposalOwnership(Proposal),
   deleteProposal
+);
+// Perform workflow action on proposal (Authenticated users with appropriate permissions)
+proposalRBACRouter.post(
+  "/proposals/:id/action",
+  ...authenticatedRoute(),
+  proposalAccessControl('update'),
+  performProposalAction
 );
 // Update proposal status (Budget Officer+ only)
 proposalRBACRouter.post(

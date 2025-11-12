@@ -9,9 +9,9 @@ const router = express.Router();
 // Store current test user (in production, this comes from JWT)
 let currentTestUser = {
   id: "909549",
-  name: "Test Budget Admin", 
-  email: "budgetadmin@example.com",
-  Roles: ["BUDGET ADMIN"]
+  name: "Test Super Admin", 
+  email: "superadmin@example.com",
+  Roles: ["SUPER ADMIN"]
 };
 /**
  * Get current test user
@@ -47,4 +47,4 @@ const injectTestUser = (req, res, next) => {
   req.user = currentTestUser;
   next();
 };
-module.exports = { router, injectTestUser, getCurrentTestUser: () => currentTestUser };
+module.exports = { router, injectTestUser, getCurrentTestUser: () => currentTestUser };

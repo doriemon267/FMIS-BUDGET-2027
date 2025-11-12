@@ -108,7 +108,7 @@ exports.finalVerifyAtRegion = async (req, res) => {
 };
 exports.updateProposalStatus = async (req, res) => {
   try {
-    console.log('🔄 updateProposalStatus called with payload:', {
+    console.log('ðŸ”„ updateProposalStatus called with payload:', {
       personnelIds: req.body.personnelIds?.length,
       mooeIds: req.body.mooeIds?.length,
       capitalOutlayIds: req.body.capitalOutlayIds?.length,
@@ -293,7 +293,7 @@ exports.updateProposalStatus = async (req, res) => {
       const deptRegion = req.hierarchicalAccess.accessibleRegions?.[0]?.regionName;
       const deptName = req.hierarchicalAccess.accessibleDepartments?.[0]?.departmentName;
 
-      console.log(`🔄 DEPARTMENT AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
+      console.log(`ðŸ”„ DEPARTMENT AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
 
       if (deptRegion && deptName) {
         // Get Department-level Personnel data
@@ -473,7 +473,7 @@ exports.updateProposalStatus = async (req, res) => {
       const deptRegion = req.hierarchicalAccess.accessibleRegions?.[0]?.regionName;
       const deptName = req.hierarchicalAccess.accessibleDepartments?.[0]?.departmentName;
 
-      console.log(`🔄 DEPARTMENT MOOE AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
+      console.log(`ðŸ”„ DEPARTMENT MOOE AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
 
       if (deptRegion && deptName) {
         // Get Department-level MOOE data
@@ -575,7 +575,7 @@ exports.updateProposalStatus = async (req, res) => {
       const deptRegion = req.hierarchicalAccess.accessibleRegions?.[0]?.regionName;
       const deptName = req.hierarchicalAccess.accessibleDepartments?.[0]?.departmentName;
 
-      console.log(`🔄 DEPARTMENT CAPITAL OUTLAY AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
+      console.log(`ðŸ”„ DEPARTMENT CAPITAL OUTLAY AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
 
       if (deptRegion && deptName) {
         // Get Department-level Capital Outlay data
@@ -765,7 +765,7 @@ exports.updateProposalStatus = async (req, res) => {
     // Convert to array and create bulk operations for consolidated proposals
     const consolidatedArray = Object.values(consolidatedProposals);
 
-    console.log('🔄 Creating consolidated proposals:', consolidatedArray.length);
+    console.log('ðŸ”„ Creating consolidated proposals:', consolidatedArray.length);
     if (consolidatedArray.length > 0) {
       console.log('Sample consolidated proposal:', consolidatedArray[0]);
     }
@@ -810,7 +810,7 @@ exports.updateProposalStatus = async (req, res) => {
         }
       }));
       const bulkResult = await Proposal.bulkWrite(bulkOps);
-      console.log('✅ Bulk write result:', bulkResult);
+      console.log('âœ… Bulk write result:', bulkResult);
       }
     return res.status(200).json({
       message: "Proposals status updated and summary saved successfully",
@@ -1102,67 +1102,9 @@ exports.saveAsDraft = async (req, res) => {
     });
   }
 };
-// ... (rest of the controller remains unchanged)
-exports.createProposal = async (req, res) => {
-  try {
-    const proposalData = { ...req.body };
-    // Apply hierarchical consolidation if user has assignment
-    if (req.userHierarchicalAssignment && req.userHierarchicalAssignment.assignmentLevel !== 'NONE') {
-      const assignment = req.userHierarchicalAssignment;
-      // Set the organizational context based on user's assignment level
-      switch (assignment.assignmentLevel) {
-        case 'DIVISION':
-          // Division users: data consolidates to department level, but track original division
-          proposalData.region = assignment.regions[0]?.regionName;
-          proposalData.department = assignment.departments[0]?.departmentName;
-          proposalData.division = assignment.divisions[0];
-          proposalData.originalDivision = assignment.divisions[0]; // Track original for reference
-          break;
-        case 'DEPARTMENT':
-          // Department users: data consolidates to region level, but track original department
-          proposalData.region = assignment.regions[0]?.regionName;
-          proposalData.department = assignment.departments[0]?.departmentName;
-          proposalData.originalDepartment = assignment.departments[0]?.departmentName;
-          break;
-        case 'REGION':
-          // Region users: data stays at region level
-          proposalData.region = assignment.regions[0]?.regionName;
-          break;
-        case 'FULL':
-          // Full access users can specify any organizational context
-          // Keep the data as provided in request
-          break;
-      }
-      // Add audit fields
-      proposalData.createdByAssignmentLevel = assignment.assignmentLevel;
-      proposalData.createdByUserId = req.user.id;
-      
-      // Add consolidation metadata
-      proposalData.consolidationMetadata = {
-        submittedBy: req.user.id,
-        submittedByLevel: assignment.assignmentLevel,
-        submissionTimestamp: new Date(),
-        consolidationApplied: true,
-        originalContext: {
-          region: req.body.region,
-          department: req.body.department,
-          division: req.body.division
-        },
-        consolidatedContext: {
-          region: proposalData.region,
-          department: proposalData.department,
-          division: proposalData.division
-        }
-      };
-    }
-    const newProposal = new Proposal(proposalData);
-    const savedProposal = await newProposal.save();
-    res.status(201).json(savedProposal);
-  } catch (error) {
-    console.error('Error creating proposal:', error);
-    res.status(400).json({ error: error.message });
-  }
-};
+
+// DEPRECATED: Duplicate removed. See line ~4150 for active createProposal function.
+
 exports.getProposals = async (req, res) => {
   try {
     const { 
@@ -1173,7 +1115,8 @@ exports.getProposals = async (req, res) => {
       search = "",
       filterField = "",
       filterValue = "",
-      filterOperator = "="
+      filterOperator = "=",
+      view = "all-proposals" // Default to 'all-proposals' if not specified
     } = req.query;
     // Convert page and limit to numbers
     const pageNum = parseInt(page);
@@ -1336,7 +1279,7 @@ exports.getProposals = async (req, res) => {
         else if (req.hierarchicalFilters) Object.assign(initialQuery, req.hierarchicalFilters);
         const sampleCount = await Proposal.countDocuments(initialQuery);
         if (sampleCount === 0) {
-          console.log('▶ No proposals matched office-scoped filter; falling back to department for visibility');
+          console.log('â–¶ No proposals matched office-scoped filter; falling back to department for visibility');
           // Replace office filter with department equal to office (common naming in DB)
           if (!initialQuery.department) {
             if (initialQuery.office) {
@@ -1802,7 +1745,7 @@ exports.getProposals = async (req, res) => {
     // CONSOLIDATE DRAFT PROPOSALS - Combine separate entity rows into one virtual row
     // AND AUTO-CREATE PROPOSAL DOCUMENTS IN DATABASE
     // ============================================================================
-    const consolidateDrafts = async (proposals) => {
+    const consolidateDrafts = (proposals) => {
       const draftMap = new Map();
       const nonDraftProposals = [];
       
@@ -1865,56 +1808,15 @@ exports.getProposals = async (req, res) => {
         }
       });
       
-      // Calculate combined totals and AUTO-CREATE Proposal documents in database
-      const consolidatedDrafts = await Promise.all(
-        Array.from(draftMap.values()).map(async (draft) => {
+      // Calculate combined totals for display only - DO NOT create Proposal documents
+      const consolidatedDrafts = Array.from(draftMap.values()).map((draft) => {
           const totalExpenses = (draft.personnelTotal || 0) + (draft.mooeTotal || 0) + (draft.capitalTotal || 0);
           const totalIncome = draft.incomeTotal || 0;
           
-          // Build filter to find/create Proposal document
-          const proposalFilter = {
-            fiscalYear: draft.fiscalYear,
-            budgetType: draft.budgetType,
-            processBy: draft.processBy,
-            region: draft.region,
-            status: 'Draft'
-          };
-          
-          if (draft.division) proposalFilter.division = draft.division;
-          if (draft.department) proposalFilter.department = draft.department;
-          if (draft.office) proposalFilter.office = draft.office;
-          
-          // Find existing or create new Proposal document
-          let proposalDoc = await Proposal.findOne(proposalFilter);
-          
-          if (!proposalDoc) {
-            // Auto-create Proposal document for this Draft group
-            const unit = draft.division || draft.department || draft.office || 'Unknown Unit';
-            const title = `${unit} - ${draft.fiscalYear} ${draft.budgetType} Budget`;
-            
-            proposalDoc = await Proposal.create({
-              ...proposalFilter,
-              title: title,
-              description: `Auto-consolidated draft proposal for ${unit}`,
-              personnelTotal: draft.personnelTotal || 0,
-              mooeTotal: draft.mooeTotal || 0,
-              capitalOutlayTotal: draft.capitalTotal || 0,
-              incomeTotal: draft.incomeTotal || 0,
-              totalExpenses: totalExpenses,
-              totalIncome: totalIncome,
-              proposedBudget: totalExpenses + totalIncome,
-              submittedBy: draft.submittedBy,
-              submittedAt: new Date(),
-              createdAt: draft.createdAt || new Date(),
-              updatedAt: new Date()
-            });
-            console.log(`✅ Auto-created Proposal document: ${proposalDoc._id} for ${unit} - "${title}"`);
-          }
-          
+          // Virtual aggregation only - no database persistence
           return {
             ...draft,
-            _id: proposalDoc._id, // Use Proposal ID from database
-            proposalId: proposalDoc._id,
+
             totalExpenses,
             totalIncome,
             proposedBudget: totalExpenses + totalIncome,
@@ -1930,13 +1832,12 @@ exports.getProposals = async (req, res) => {
               })
               .join(' + ')
           };
-        })
-      );
+        });
       
       return [...nonDraftProposals, ...consolidatedDrafts];
     };
     
-    finalProposals = await consolidateDrafts(finalProposals);
+    finalProposals = consolidateDrafts(finalProposals);  // No longer async
     // ============================================================================
 
     // For divisionOnly, aggregate by Division first (fallback to office/department/region) and compute proposedBudget
@@ -2081,9 +1982,9 @@ exports.getProposals = async (req, res) => {
       });
     }
 
-    // 🔧 FIXED: Keep line items visible alongside consolidated proposals
+    // ðŸ”§ FIXED: Keep line items visible alongside consolidated proposals
     // Previously, this code was hiding all MOOE/Capital/Income line items when a Proposal existed,
-    // causing amounts to show as ₱0.00 because the Proposal model doesn't have individual line item fields.
+    // causing amounts to show as â‚±0.00 because the Proposal model doesn't have individual line item fields.
     // Now we keep both the consolidated Proposal AND the individual line items visible.
     // This ensures the frontend can display the actual amounts from MOOE, Capital, Income records.
 
@@ -3152,7 +3053,7 @@ exports.finalVerifyAtRegion = async (req, res) => {
 };
 exports.updateProposalStatus = async (req, res) => {
   try {
-    console.log('🔄 updateProposalStatus called with payload:', {
+    console.log('ðŸ”„ updateProposalStatus called with payload:', {
       personnelIds: req.body.personnelIds?.length,
       mooeIds: req.body.mooeIds?.length,
       capitalOutlayIds: req.body.capitalOutlayIds?.length,
@@ -3337,7 +3238,7 @@ exports.updateProposalStatus = async (req, res) => {
       const deptRegion = req.hierarchicalAccess.accessibleRegions?.[0]?.regionName;
       const deptName = req.hierarchicalAccess.accessibleDepartments?.[0]?.departmentName;
 
-      console.log(`🔄 DEPARTMENT AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
+      console.log(`ðŸ”„ DEPARTMENT AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
 
       if (deptRegion && deptName) {
         // Get Department-level Personnel data
@@ -3517,7 +3418,7 @@ exports.updateProposalStatus = async (req, res) => {
       const deptRegion = req.hierarchicalAccess.accessibleRegions?.[0]?.regionName;
       const deptName = req.hierarchicalAccess.accessibleDepartments?.[0]?.departmentName;
 
-      console.log(`🔄 DEPARTMENT MOOE AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
+      console.log(`ðŸ”„ DEPARTMENT MOOE AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
 
       if (deptRegion && deptName) {
         // Get Department-level MOOE data
@@ -3619,7 +3520,7 @@ exports.updateProposalStatus = async (req, res) => {
       const deptRegion = req.hierarchicalAccess.accessibleRegions?.[0]?.regionName;
       const deptName = req.hierarchicalAccess.accessibleDepartments?.[0]?.departmentName;
 
-      console.log(`🔄 DEPARTMENT CAPITAL OUTLAY AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
+      console.log(`ðŸ”„ DEPARTMENT CAPITAL OUTLAY AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
 
       if (deptRegion && deptName) {
         // Get Department-level Capital Outlay data
@@ -3809,7 +3710,7 @@ exports.updateProposalStatus = async (req, res) => {
     // Convert to array and create bulk operations for consolidated proposals
     const consolidatedArray = Object.values(consolidatedProposals);
 
-    console.log('🔄 Creating consolidated proposals:', consolidatedArray.length);
+    console.log('ðŸ”„ Creating consolidated proposals:', consolidatedArray.length);
     if (consolidatedArray.length > 0) {
       console.log('Sample consolidated proposal:', consolidatedArray[0]);
     }
@@ -3854,7 +3755,7 @@ exports.updateProposalStatus = async (req, res) => {
         }
       }));
       const bulkResult = await Proposal.bulkWrite(bulkOps);
-      console.log('✅ Bulk write result:', bulkResult);
+      console.log('âœ… Bulk write result:', bulkResult);
       }
     return res.status(200).json({
       message: "Proposals status updated and summary saved successfully",
@@ -4199,6 +4100,22 @@ exports.createProposal = async (req, res) => {
         }
       };
     }
+    
+    // Calculate amount (PROPOSED BUDGET) from projectedCorporateIncome + projectedSubsidy
+    const projectedCorporateIncome = Number(proposalData.projectedCorporateIncome) || 0;
+    const projectedSubsidy = Number(proposalData.projectedSubsidy) || 0;
+    proposalData.amount = projectedCorporateIncome + projectedSubsidy;
+    
+    // Validate modelType (BUDGET TYPE) - must be one of: Initial, NEP, GAA
+    const validModelTypes = ['Initial', 'NEP', 'GAA'];
+    if (proposalData.modelType && !validModelTypes.includes(proposalData.modelType)) {
+      return res.status(400).json({ error: `Invalid Budget Type. Must be one of: ${validModelTypes.join(', ')}` });
+    }
+    // Default to 'Initial' if not provided
+    if (!proposalData.modelType) {
+      proposalData.modelType = 'Initial';
+    }
+    
     const newProposal = new Proposal(proposalData);
     const savedProposal = await newProposal.save();
     res.status(201).json(savedProposal);
@@ -4380,7 +4297,7 @@ exports.getProposals = async (req, res) => {
         else if (req.hierarchicalFilters) Object.assign(initialQuery, req.hierarchicalFilters);
         const sampleCount = await Proposal.countDocuments(initialQuery);
         if (sampleCount === 0) {
-          console.log('▶ No proposals matched office-scoped filter; falling back to department for visibility');
+          console.log('â–¶ No proposals matched office-scoped filter; falling back to department for visibility');
           // Replace office filter with department equal to office (common naming in DB)
           if (!initialQuery.department) {
             if (initialQuery.office) {
@@ -4851,7 +4768,7 @@ exports.getProposals = async (req, res) => {
     // CONSOLIDATE DRAFT PROPOSALS - Combine separate entity rows into one virtual row
     // AND AUTO-CREATE PROPOSAL DOCUMENTS IN DATABASE
     // ============================================================================
-    const consolidateDrafts = async (proposals) => {
+    const consolidateDrafts = (proposals) => {
       const draftMap = new Map();
       const nonDraftProposals = [];
       
@@ -4914,56 +4831,15 @@ exports.getProposals = async (req, res) => {
         }
       });
       
-      // Calculate combined totals and AUTO-CREATE Proposal documents in database
-      const consolidatedDrafts = await Promise.all(
-        Array.from(draftMap.values()).map(async (draft) => {
+      // Calculate combined totals for display only - DO NOT create Proposal documents
+      const consolidatedDrafts = Array.from(draftMap.values()).map((draft) => {
           const totalExpenses = (draft.personnelTotal || 0) + (draft.mooeTotal || 0) + (draft.capitalTotal || 0);
           const totalIncome = draft.incomeTotal || 0;
           
-          // Build filter to find/create Proposal document
-          const proposalFilter = {
-            fiscalYear: draft.fiscalYear,
-            budgetType: draft.budgetType,
-            processBy: draft.processBy,
-            region: draft.region,
-            status: 'Draft'
-          };
-          
-          if (draft.division) proposalFilter.division = draft.division;
-          if (draft.department) proposalFilter.department = draft.department;
-          if (draft.office) proposalFilter.office = draft.office;
-          
-          // Find existing or create new Proposal document
-          let proposalDoc = await Proposal.findOne(proposalFilter);
-          
-          if (!proposalDoc) {
-            // Auto-create Proposal document for this Draft group
-            const unit = draft.division || draft.department || draft.office || 'Unknown Unit';
-            const title = `${unit} - ${draft.fiscalYear} ${draft.budgetType} Budget`;
-            
-            proposalDoc = await Proposal.create({
-              ...proposalFilter,
-              title: title,
-              description: `Auto-consolidated draft proposal for ${unit}`,
-              personnelTotal: draft.personnelTotal || 0,
-              mooeTotal: draft.mooeTotal || 0,
-              capitalOutlayTotal: draft.capitalTotal || 0,
-              incomeTotal: draft.incomeTotal || 0,
-              totalExpenses: totalExpenses,
-              totalIncome: totalIncome,
-              proposedBudget: totalExpenses + totalIncome,
-              submittedBy: draft.submittedBy,
-              submittedAt: new Date(),
-              createdAt: draft.createdAt || new Date(),
-              updatedAt: new Date()
-            });
-            console.log(`✅ Auto-created Proposal document: ${proposalDoc._id} for ${unit} - "${title}"`);
-          }
-          
+          // Virtual aggregation only - no database persistence
           return {
             ...draft,
-            _id: proposalDoc._id, // Use Proposal ID from database
-            proposalId: proposalDoc._id,
+
             totalExpenses,
             totalIncome,
             proposedBudget: totalExpenses + totalIncome,
@@ -4979,13 +4855,12 @@ exports.getProposals = async (req, res) => {
               })
               .join(' + ')
           };
-        })
-      );
+        });
       
       return [...nonDraftProposals, ...consolidatedDrafts];
     };
     
-    finalProposals = await consolidateDrafts(finalProposals);
+    finalProposals = consolidateDrafts(finalProposals);  // No longer async
     // ============================================================================
 
     // For divisionOnly, aggregate by Division first (fallback to office/department/region) and compute proposedBudget
@@ -6205,7 +6080,7 @@ exports.consolidateProposals = async (req, res) => {
       });
     }
   } catch (error) {
-    console.error("❌ Error in consolidateProposals:", error);
+    console.error("âŒ Error in consolidateProposals:", error);
     res.status(500).json({
       message: "Failed to consolidate proposals",
       error: error.message
@@ -6248,4 +6123,124 @@ exports.recalculateProposalTotals = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to recalculate totals', error: error.message });
   }
 };
+
+// Handle proposal workflow actions for the new workflow page
+exports.performProposalAction = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action, comment = '' } = req.body;
+    const userId = req.user?.id;
+    const userName = req.user ? `${req.user.FirstName || req.user.name || ''} ${req.user.LastName || ''}`.trim() : 'Unknown User';
+
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'Proposal ID is required' });
+    }
+
+    // Get the proposal
+    const proposal = await Proposal.findById(id);
+    if (!proposal) {
+      return res.status(404).json({ success: false, message: 'Proposal not found' });
+    }
+
+    // Get user roles
+    const userRoles = req.user?.Roles || [];
+    const currentStatus = proposal.status;
+
+    // Define workflow transitions based on the corrected workflow order
+    const workflowTransitions = {
+      'Draft': {
+        'submit-to-reviewer': { newStatus: 'Forwarded to Reviewer', requiredRole: 'BUDGET PREPARER' }
+      },
+      'Forwarded to Reviewer': {
+        'submit-to-approver': { newStatus: 'Forwarded to Approver', requiredRole: 'BUDGET REVIEWER' },
+        'return-to-preparer': { newStatus: 'Draft', requiredRole: 'BUDGET REVIEWER' }
+      },
+      'Forwarded to Approver': {
+        'submit-to-analyst': { newStatus: 'Forwarded to Budget Planning Analyst', requiredRole: 'BUDGET APPROVER' },
+        'return-to-reviewer': { newStatus: 'Forwarded to Reviewer', requiredRole: 'BUDGET APPROVER' }
+      },
+      'Forwarded to Budget Planning Analyst': {
+        'forward-to-officer': { newStatus: 'Forwarded to Budget Officer', requiredRole: 'BUDGET PLANNING ANALYST' },
+        'return-to-approver': { newStatus: 'Forwarded to Approver', requiredRole: 'BUDGET PLANNING ANALYST' }
+      },
+      'Forwarded to Budget Officer': {
+        'forward-to-manager': { newStatus: 'Forwarded to Overall Budget Approver', requiredRole: 'BUDGET OFFICER' },
+        'return-to-analyst': { newStatus: 'Forwarded to Budget Planning Analyst', requiredRole: 'BUDGET OFFICER' }
+      },
+      'Forwarded to Overall Budget Approver': {
+        'finalize': { newStatus: 'Finalized', requiredRole: 'BUDGET MANAGER' },
+        'return-to-officer': { newStatus: 'Forwarded to Budget Officer', requiredRole: 'BUDGET MANAGER' }
+      }
+    };
+
+    // Check if the action is valid for the current status
+    const validActions = workflowTransitions[currentStatus];
+    if (!validActions || !validActions[action]) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid action '${action}' for status '${currentStatus}'`
+      });
+    }
+
+    // Check if user has the required role
+    const requiredRole = validActions[action].requiredRole;
+    if (!userRoles.includes(requiredRole)) {
+      return res.status(403).json({
+        success: false,
+        message: `Insufficient permissions. Required role: ${requiredRole}`
+      });
+    }
+
+    const newStatus = validActions[action].newStatus;
+    const previousStatus = currentStatus;
+
+    // Update the proposal
+    const updateData = {
+      status: newStatus,
+      processBy: null, // Clear processBy when status changes
+      updatedAt: new Date()
+    };
+
+    // Add workflow history
+    const workflowEntry = {
+      action: action.toUpperCase().replace(/-/g, '_'),
+      comment: comment || `${action} performed`,
+      userId: userId,
+      userName: userName,
+      timestamp: new Date(),
+      previousStatus: previousStatus,
+      newStatus: newStatus
+    };
+
+    await Proposal.findByIdAndUpdate(id, {
+      ...updateData,
+      $push: { workflowHistory: workflowEntry }
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Action '${action}' completed successfully`,
+      data: {
+        previousStatus,
+        newStatus,
+        action,
+        performedBy: userName
+      }
+    });
+
+  } catch (error) {
+    console.error('Error performing proposal action:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to perform action',
+      error: error.message
+    });
+  }
+};
+
+
+
+
+
+
 

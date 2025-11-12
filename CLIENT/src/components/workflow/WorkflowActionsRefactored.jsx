@@ -41,7 +41,7 @@ const WORKFLOW_ROLES = {
   'BUDGET PLANNING ANALYST': 'Analyst',
   'BUDGET OFFICER': 'Officer',
   'OVERALL BUDGET APPROVER': 'Manager',
-  'BUDGET ADMIN': 'Admin'
+  'SUPER ADMIN': 'Admin'
 };
 
 const normalizeRoleValue = (roleValue) => {
@@ -255,7 +255,7 @@ const WorkflowActionsRefactored = ({
       'BUDGET APPROVER',
       'BUDGET REVIEWER',
       'BUDGET PREPARER',
-      'BUDGET ADMIN'
+      'SUPER ADMIN'
     ];
     
     const sources = [

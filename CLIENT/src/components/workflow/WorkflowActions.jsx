@@ -114,7 +114,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     const camelCaseNormalized = normalized.replace(/[^A-Z0-9_]/g, '_');
 
     // Map all role synonyms to standardized workflow roles
-    // Standardized workflow: BUDGET_PREPARER → BUDGET_REVIEWER → BUDGET_APPROVER → BUDGET_PLANNING_ANALYST → BUDGET_OFFICER → OVERALL_BUDGET_APPROVER
+    // Standardized workflow: BUDGET PREPARER → BUDGET REVIEWER → BUDGET APPROVER → BUDGET PLANNING ANALYST → BUDGET OFFICER → BUDGET MANAGER
     const roleSynonyms = {
       // BUDGET PREPARER synonyms
       ANALYST: 'BUDGET PREPARER',
@@ -160,23 +160,23 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       BUDGET_SUPERVISOR: 'BUDGET OFFICER',
 
       // BUDGET MANAGER synonyms
-      OVERALL_BUDGET_APPROVER: 'OVERALL BUDGET APPROVER',
-      BUDGETMANAGER: 'OVERALL BUDGET APPROVER',
-      BUDGET_MANAGER: 'OVERALL BUDGET APPROVER',
-      BUDGET_OFFICE_HEAD: 'OVERALL BUDGET APPROVER',
-      BUDGET_DIRECTOR: 'OVERALL BUDGET APPROVER',
-      FINAL_APPROVER: 'OVERALL BUDGET APPROVER',
-      MANAGER_APPROVER: 'OVERALL BUDGET APPROVER',
-      MANAGERAPPROVER: 'OVERALL BUDGET APPROVER',
-      REGION_FINAL_VERIFIER: 'OVERALL BUDGET APPROVER',
-      REGIONAL_FINAL_VERIFIER: 'OVERALL BUDGET APPROVER',
-      REGION_MANAGER: 'OVERALL BUDGET APPROVER',
-      OVERALL_APPROVER: 'OVERALL BUDGET APPROVER',
+      OVERALL_BUDGET_APPROVER: 'BUDGET MANAGER',
+      BUDGETMANAGER: 'BUDGET MANAGER',
+      BUDGET_MANAGER: 'BUDGET MANAGER',
+      BUDGET_OFFICE_HEAD: 'BUDGET MANAGER',
+      BUDGET_DIRECTOR: 'BUDGET MANAGER',
+      FINAL_APPROVER: 'BUDGET MANAGER',
+      MANAGER_APPROVER: 'BUDGET MANAGER',
+      MANAGERAPPROVER: 'BUDGET MANAGER',
+      REGION_FINAL_VERIFIER: 'BUDGET MANAGER',
+      REGIONAL_FINAL_VERIFIER: 'BUDGET MANAGER',
+      REGION_MANAGER: 'BUDGET MANAGER',
+      OVERALL_APPROVER: 'BUDGET MANAGER',
 
-      // BUDGET ADMIN
-      BUDGETADMIN: 'BUDGET ADMIN',
-      BUDGET_ADMIN: 'BUDGET ADMIN',
-      FULL: 'OVERALL BUDGET APPROVER'  // Map 'FULL' access to OVERALL_BUDGET_APPROVER
+      // SUPER ADMIN
+      BUDGETADMIN: 'SUPER ADMIN',
+      BUDGET_ADMIN: 'SUPER ADMIN',
+      FULL: 'BUDGET MANAGER'  // Map 'FULL' access to BUDGET_MANAGER
     };
 
     const result = roleSynonyms[camelCaseNormalized] || camelCaseNormalized;
@@ -312,13 +312,13 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
   let isBudgetPlanningAnalyst = normalizedRoles.includes('BUDGET PLANNING ANALYST');
   let isBudgetOfficer = normalizedRoles.includes('BUDGET OFFICER');
   let isOverallApprover = normalizedRoles.includes('OVERALL BUDGET APPROVER') || normalizedRoles.includes('BUDGET MANAGER');
-  let isBudgetAdmin = normalizedRoles.includes('BUDGET ADMIN');
+  let isSuperAdmin = normalizedRoles.includes('SUPER ADMIN');
 
     // ROLE HIERARCHY PROTECTION: Use highest role in hierarchy
     // Hierarchy: BUDGET PREPARER < BUDGET REVIEWER < BUDGET APPROVER < BUDGET/PLANNING ANALYST < BUDGET OFFICER < BUDGET MANAGER
     // Only block higher actions if user has ONLY BUDGET PREPARER role
-    const isPreparerOnly = isPreparer && !isBudgetReviewer && !isApprover && !isBudgetPlanningAnalyst && !isBudgetOfficer && !isOverallApprover && !isBudgetAdmin;
-    const hasHigherRole = isBudgetReviewer || isApprover || isBudgetPlanningAnalyst || isBudgetOfficer || isOverallApprover || isBudgetAdmin;
+    const isPreparerOnly = isPreparer && !isBudgetReviewer && !isApprover && !isBudgetPlanningAnalyst && !isBudgetOfficer && !isOverallApprover && !isSuperAdmin;
+    const hasHigherRole = isBudgetReviewer || isApprover || isBudgetPlanningAnalyst || isBudgetOfficer || isOverallApprover || isSuperAdmin;
     
     // Block manager actions only if user is BUDGET PREPARER ONLY (no other roles)
     const shouldBlockManagerActions = isPreparerOnly;
@@ -328,7 +328,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     // Recognize reviewer stage by status (canonical and legacy). When roles are missing, allow reviewer actions at this stage as a fallback.
     const isReviewerStage = isWorkflowStage('reviewer');
     let isBudgetReviewerEffective = isBudgetReviewer || (
-      isReviewerStage && !isPreparer && !isApprover && !isBudgetPlanningAnalyst && !isBudgetOfficer && !isOverallApprover && !isBudgetAdmin
+      isReviewerStage && !isPreparer && !isApprover && !isBudgetPlanningAnalyst && !isBudgetOfficer && !isOverallApprover && !isSuperAdmin
     );
 
     // Optional strict role restriction (e.g., in Budget Preparer module)
@@ -340,7 +340,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       isBudgetPlanningAnalyst = restrictRole === 'BUDGET PLANNING ANALYST' ? isBudgetPlanningAnalyst : false;
       isBudgetOfficer = restrictRole === 'BUDGET OFFICER' ? isBudgetOfficer : false;
       isOverallApprover = (restrictRole === 'OVERALL BUDGET APPROVER' || restrictRole === 'BUDGET MANAGER') ? isOverallApprover : false;
-      isBudgetAdmin = restrictRole === 'BUDGET ADMIN' ? isBudgetAdmin : false;
+      isSuperAdmin = restrictRole === 'SUPER ADMIN' ? isSuperAdmin : false;
     }
 
     console.log('🔍 WorkflowActions Debug:', {
@@ -358,7 +358,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       isBudgetPlanningAnalyst,
       isBudgetOfficer,
       isOverallApprover,
-      isBudgetAdmin,
+      isSuperAdmin,
       isPreparerOnly,
       shouldBlockManagerActions,
       shouldBlockOfficerActions,
@@ -549,8 +549,8 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       }
     }
 
-    // BUDGET MANAGER & BUDGET ADMIN Actions (Finalization Level)
-    if ((isOverallApprover || isBudgetAdmin) && !shouldBlockManagerActions) {
+    // BUDGET MANAGER & SUPER ADMIN Actions (Finalization Level)
+    if ((isOverallApprover || isSuperAdmin) && !shouldBlockManagerActions) {
       if (isWorkflowStage('manager') || 
           normalizedStatus === "OFFICER APPROVED" || status === "Officer Approved") {
         actions.push({
@@ -614,7 +614,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     }
 
     // Log if actions are being blocked due to role hierarchy
-    if (shouldBlockManagerActions && (isOverallApprover || isBudgetAdmin)) {
+    if (shouldBlockManagerActions && (isOverallApprover || isSuperAdmin)) {
       console.warn('🚫 BLOCKED: Manager actions blocked for BUDGET_PLANNING_ANALYST user (role hierarchy protection active)');
     }
     if (shouldBlockOfficerActions && isBudgetOfficer) {
@@ -633,7 +633,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     BUDGET_PLANNING_ANALYST: 'Budget/Planning Analyst',
     BUDGET_OFFICER: 'Budget Officer',
     BUDGET_MANAGER: 'Budget Manager',
-    BUDGET_ADMIN: 'Budget Admin'
+    SUPER_ADMIN: 'Super Admin'
   }), []);
 
   const formatRoleLabel = useCallback((role) => {
@@ -703,7 +703,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     // 3. Forwarded to Officer → APPROVER
     // 4. Officer Approved → BUDGET_PLANNING_ANALYST
     // 5. Forwarded to Manager → BUDGET_OFFICER
-    // 6. Finalized → OVERALL_BUDGET_APPROVER
+    // 6. Finalized → BUDGET_MANAGER
     
     if (s.includes('DIVISION SUBMITTED') || s.includes('RESPONSIBILITY CENTER SUBMITTED')) {
       // Step 2: REVIEWER reviews (old BUDGET_COORDINATOR)
@@ -735,9 +735,9 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       derived.assignee = 'PREPARER';
       derived.pending = ['PREPARER'];
     } else if (s.includes('FINALIZED')) {
-      // Step 6: OVERALL_BUDGET_APPROVER finalizes
+      // Step 6: BUDGET_MANAGER finalizes
       derived.step = 'FINALIZED';
-      derived.assignee = 'OVERALL BUDGET APPROVER';
+      derived.assignee = 'BUDGET MANAGER';
       derived.pending = [];
     }
     return derived;

@@ -4,7 +4,7 @@ export const isSuperAdmin = (currentUser) => {
 }
 
 export const isBudgetAdmin = (currentUser) => {
-    if (currentUser?.Roles && currentUser.Roles.length >= 1) return currentUser.Roles.includes('BUDGET ADMIN')
+    if (currentUser?.Roles && currentUser.Roles.length >= 1) return currentUser.Roles.includes('SUPER ADMIN')
     return false;
 }
 

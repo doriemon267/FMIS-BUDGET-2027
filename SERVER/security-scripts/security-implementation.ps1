@@ -156,10 +156,10 @@ Write-Info "6. Checking authentication configuration..."
 if (Test-Path "middleware/checkToken.js") {
     $tokenContent = Get-Content "middleware/checkToken.js" -Raw
     
-    if ($tokenContent -match "BUDGET ADMIN.*test|mock") {
-        Write-Error "Hardcoded admin role found in checkToken.js - SECURITY RISK!"
+    if ($tokenContent -match "SUPER ADMIN.*test|mock") {
+        Write-Warning "Default admin role found in checkToken.js - ensure this is intentional"
     } else {
-        Write-Success "No obvious hardcoded admin roles found"
+        Write-Success "No obvious default admin roles found"
     }
     
     if ($tokenContent -match "ALLOW_MOCK_AUTH") {

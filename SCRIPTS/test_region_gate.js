@@ -85,7 +85,7 @@ async function restoreRegionAccess() {
     console.log('\n🔄 Restoring region assignment...');
     await UserRegionAssignment.create({
       userId: userId,
-      userName: 'Test Budget Admin',
+      userName: 'Test Super Admin',
       email: '909549@example.com',
       regions: [centralOfficeRegion._id]
     });

@@ -30,7 +30,7 @@ module.exports = async (req, res, next) => {
         id: userId,
         name: payload.name || payload.username || `User ${userId}`,
         email: payload.email || `${userId}@gov.ph`,
-        Roles: payload.roles || payload.role || ["BUDGET ADMIN"]
+        Roles: payload.roles || payload.role || ["SUPER ADMIN"]
       };
       return next();
     }

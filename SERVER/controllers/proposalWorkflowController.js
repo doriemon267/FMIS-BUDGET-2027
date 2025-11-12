@@ -109,12 +109,12 @@ const budgetRoleAccessControl = (operation = 'read') => {
   const isBudgetAnalyst = isBudgetPlanningAnalyst;
       const isBudgetCoordinator = userRoles.includes('BUDGET_COORDINATOR');
       const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER') || workflowRoles.includes('BUDGET_OFFICER');
-      const isOverallApprover = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN') || workflowRoles.includes('BUDGET_ADMIN');
+      const isOverallApprover = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('SUPER_ADMIN') || workflowRoles.includes('SUPER_ADMIN');
       // Check for both 'SUPER_ADMIN' (with underscore) and 'SUPER ADMIN' (with space) from database
       const isSuperAdmin = userRoles.includes('SUPER_ADMIN') || userRoles.includes('SUPER ADMIN');
 
-      // Super admin and budget admin can see everything
-      if (isSuperAdmin || userRoles.includes('BUDGET_ADMIN') || userRoles.includes('BUDGET ADMIN')) {
+      // Super admin can see everything
+      if (isSuperAdmin) {
         return next();
       }
 
@@ -263,12 +263,12 @@ function checkProposalAccess(proposal, userId, userRoles) {
   const isBudgetAnalyst = false;
   const isBudgetCoordinator = userRoles.includes('BUDGET_COORDINATOR');
   const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
-  const isOverallApprover = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN');
+  const isOverallApprover = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('SUPER_ADMIN');
   // Check for both 'SUPER_ADMIN' (with underscore) and 'SUPER ADMIN' (with space) from database
   const isSuperAdmin = userRoles.includes('SUPER_ADMIN') || userRoles.includes('SUPER ADMIN');
 
-  // Super admin and budget admin can access everything
-  if (isSuperAdmin || userRoles.includes('BUDGET_ADMIN') || userRoles.includes('BUDGET ADMIN')) {
+  // Super admin can access everything
+  if (isSuperAdmin) {
     return true;
   }
 
@@ -2393,7 +2393,7 @@ exports.reviewerApproveAndForwardToApprover = async (req, res) => {
     // If roles are missing but this is clearly the reviewer stage, allow as reviewer
     if (!hasReviewRole) {
       const upperRoles = userRoles.map(r => String(r).toUpperCase());
-      const isManager = upperRoles.includes('BUDGET_MANAGER') || upperRoles.includes('BUDGET ADMIN') || upperRoles.includes('BUDGET_ADMIN');
+      const isManager = upperRoles.includes('BUDGET_MANAGER') || upperRoles.includes('SUPER ADMIN') || upperRoles.includes('SUPER_ADMIN');
       const isOfficer = upperRoles.includes('BUDGET_OFFICER');
       const isApprover = upperRoles.includes('BUDGET APPROVER') || upperRoles.includes('APPROVER') || upperRoles.includes('DIVISION APPROVER') || upperRoles.includes('OFFICE APPROVER') || upperRoles.includes('DIVISIONAPPROVER') || upperRoles.includes('OFFICEAPPROVER');
       const isReviewerStage = ['Division Submitted', 'Forwarded to Reviewer', 'Under Review by Reviewer', 'Responsibility Center Submitted'].includes(proposal.status);

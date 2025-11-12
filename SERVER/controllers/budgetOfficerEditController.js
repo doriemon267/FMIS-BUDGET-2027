@@ -37,9 +37,8 @@ const ROLE_ALIAS_TO_DISPLAY = {
   'BUDGET APPROVER': 'BUDGET APPROVER',
   'BUDGET_PLANNING_ANALYST': 'BUDGET_PLANNING_ANALYST',
   'BUDGET_OFFICER': 'BUDGET_OFFICER',
-  'BUDGET_MANAGER': 'OVERALL_BUDGET_APPROVER',
-  'OVERALL_BUDGET_APPROVER': 'OVERALL_BUDGET_APPROVER',
-  'BUDGET_ADMIN': 'BUDGET_ADMIN',
+  'BUDGET_MANAGER': 'BUDGET MANAGER',
+  'SUPER ADMIN': 'SUPER ADMIN',
   'PREPARER': 'BUDGET PREPARER',
   'REVIEWER': 'BUDGET REVIEWER',
   'APPROVER': 'BUDGET APPROVER'
@@ -54,8 +53,8 @@ const DISPLAY_TO_PERSISTED = {
   'BUDGET APPROVER': ['BUDGET APPROVER'],
   BUDGET_PLANNING_ANALYST: ['BUDGET_PLANNING_ANALYST'],
   BUDGET_OFFICER: ['BUDGET_OFFICER'],
-  OVERALL_BUDGET_APPROVER: ['BUDGET_MANAGER', 'OVERALL_BUDGET_APPROVER'],
-  BUDGET_ADMIN: ['BUDGET_ADMIN']
+  'BUDGET MANAGER': ['BUDGET_MANAGER', 'BUDGET MANAGER'],
+  'SUPER ADMIN': ['SUPER ADMIN']
 };
 const roleVariantsForQuery = (role) => {
   const variants = new Set();
@@ -647,7 +646,7 @@ exports.getProposalForEdit = async (req, res) => {
     
     // Get user roles
   const userRoles = req.user?.Roles || [];
-  const isOverallApprover = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN');
+  const isOverallApprover = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('SUPER ADMIN');
   const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
   const isBudgetAnalyst = userRoles.includes('BUDGET_PLANNING_ANALYST');
   // Include hierarchical workflow roles for robust reviewer detection
@@ -1015,7 +1014,7 @@ exports.saveDraftEdit = async (req, res) => {
     
     // Get user roles
     const userRoles = req.user?.Roles || [];
-    const isOverallApprover = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET_ADMIN');
+    const isOverallApprover = userRoles.includes('BUDGET_MANAGER') || userRoles.includes('SUPER ADMIN');
     const isBudgetOfficer = userRoles.includes('BUDGET_OFFICER');
     const isBudgetAnalyst = userRoles.includes('BUDGET_PLANNING_ANALYST');
 

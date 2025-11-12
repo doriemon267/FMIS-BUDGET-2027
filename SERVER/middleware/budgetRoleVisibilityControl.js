@@ -15,30 +15,72 @@ const { hasFullAccess } = require('./securityMiddleware');
 /**
  * Apply budget role-based visibility filters
  */
+const fs = require('fs');
+const path = require('path');
+
+// Log to file
+const logToFile = (message) => {
+  const logPath = path.join(__dirname, '..', 'logs', 'middleware-debug.log');
+  const timestamp = new Date().toISOString();
+  fs.appendFileSync(logPath, `[${timestamp}] ${message}\n`);
+};
+
 const budgetRoleVisibilityControl = () => {
   return async (req, res, next) => {
     try {
       const userId = req.user?.id;
-      const userRoles = req.user?.Roles || [];
-      
-      // Super admins bypass all filters - check for both 'SUPER_ADMIN' (with underscore) and 'SUPER ADMIN' (with space)
-      if (userRoles.includes('SUPER_ADMIN') || userRoles.includes('SUPER ADMIN')) {
-        return next();
-      }
+      // logToFile('🔍 BUDGET ROLE VISIBILITY MIDDLEWARE CALLED: ' + JSON.stringify({
+      //   hasUser: !!req.user,
+      //   userId: userId,
+      //   userRoles: req.user?.Roles,
+      //   url: req.url,
+      //   method: req.method
+      // }));
 
-      // Get hierarchical assignment for workflow roles
-      const hierarchicalAssignment = req.userHierarchicalAssignment || req.user?.hierarchicalAssignment || {};
+      // Load hierarchical assignment if not already loaded
+      let hierarchicalAssignment = req.userHierarchicalAssignment || req.user?.hierarchicalAssignment || {};
+      
+      // Load hierarchical assignment if not already loaded
+      if (!hierarchicalAssignment.userId) {
+        try {
+          const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+          let assignment = await HierarchicalUserAssignment.findOne({ userId: userId });
+          
+          // If not found by userId, try by userName (in case dev headers send name instead of ID)
+          if (!assignment) {
+            // console.log('❌ Assignment not found by userId, trying userName:', userId);
+            assignment = await HierarchicalUserAssignment.findOne({ userName: userId });
+            // if (assignment) {
+            //   console.log('✅ Found assignment by userName');
+            // }
+          }
+          
+          if (assignment) {
+            hierarchicalAssignment = assignment.toObject();
+            // Cache it on the request for other middleware
+            req.userHierarchicalAssignment = hierarchicalAssignment;
+            // console.log('✅ Loaded hierarchical assignment for user:', userId);
+          } 
+          // else {
+          //   console.log('❌ No hierarchical assignment found for user:', userId);
+          // }
+        } catch (error) {
+          console.error('❌ Error loading hierarchical assignment:', error);
+          // Continue without hierarchical assignment
+        }
+      }
       const workflowRoles = hierarchicalAssignment.workflowRoles || [];
+      const userRoles = req.user?.Roles || [];
 
       // Determine user's budget role (highest privilege takes precedence)
       // Check both main database roles and workflow roles from hierarchical assignment
       // CRITICAL: Check from highest to lowest privilege EXCEPT put PREPARER before REVIEWER
       // This ensures users with both REVIEWER and PREPARER roles get PREPARER access (can create/see Drafts)
       let budgetRole = null;
-      if (userRoles.includes('BUDGET_ADMIN') || workflowRoles.includes('BUDGET_ADMIN')) {
-        budgetRole = 'BUDGET_ADMIN';
-      } else if (userRoles.includes('OVERALL_BUDGET_APPROVER') || workflowRoles.includes('OVERALL_BUDGET_APPROVER')) {
-        budgetRole = 'OVERALL_BUDGET_APPROVER';
+      if (userRoles.includes('SUPER ADMIN') || workflowRoles.includes('superAdmin')) {
+        budgetRole = 'SUPER ADMIN';
+      } else if (userRoles.includes('BUDGET MANAGER') || workflowRoles.includes('budgetManager')) {
+        budgetRole = 'BUDGET MANAGER';
       } else if (userRoles.includes('BUDGET_OFFICER') || workflowRoles.includes('BUDGET_OFFICER')) {
         budgetRole = 'BUDGET_OFFICER';
       } else if (userRoles.includes('BUDGET_PLANNING_ANALYST') || workflowRoles.includes('BUDGET_PLANNING_ANALYST')) {
@@ -62,8 +104,46 @@ const budgetRoleVisibilityControl = () => {
       // Get hierarchical assignment for organizational filtering
       const assignment = req.userHierarchicalAssignment || req.user?.hierarchicalAssignment || {};
       const userDivision = assignment.divisionName || req.user?.division || null;
-      const userDepartment = assignment.departmentId || req.user?.department || null;
-      const userRegion = assignment.regionId || req.user?.region || null;
+      
+      // Populate department and region names from ObjectIds
+      let userDepartment = null;
+      let userRegion = null;
+      
+      if (assignment.departmentId) {
+        try {
+          const Department = require('../models/Department');
+          const dept = await Department.findById(assignment.departmentId);
+          userDepartment = dept ? dept.Department : null;
+        } catch (error) {
+          console.error('Error loading department name:', error);
+        }
+      }
+      
+      if (assignment.regionId) {
+        try {
+          const Region = require('../models/Region');
+          const region = await Region.findById(assignment.regionId);
+          userRegion = region ? region.Region : null;
+        } catch (error) {
+          console.error('Error loading region name:', error);
+        }
+      }
+
+      console.log('🔍 BUDGET ROLE VISIBILITY DEBUG:', {
+        userId: req.user?.id,
+        userRoles: userRoles,
+        budgetRole: budgetRole,
+        userDivision: userDivision,
+        userDepartment: userDepartment,
+        userRegion: userRegion,
+        assignmentLoaded: !!assignment.userId,
+        hasHierarchicalAssignment: !!req.userHierarchicalAssignment
+      });
+      
+      logToFile('DEBUG: ' + JSON.stringify({
+        userId: req.user?.id, userRoles, budgetRole, userDivision, userDepartment, userRegion,
+        assignmentLoaded: !!assignment.userId
+      }));
 
       switch (budgetRole) {
         case 'BUDGET_PLANNING_ANALYST':
@@ -192,7 +272,7 @@ const budgetRoleVisibilityControl = () => {
           };
           break;
 
-        case 'BUDGET_ADMIN':
+        case 'SUPER ADMIN':
           // ADMIN: Can see all proposals regardless of status
           visibilityFilter = {}; // No filter for admins
           break;
@@ -200,12 +280,16 @@ const budgetRoleVisibilityControl = () => {
         case 'BUDGET PREPARER':
           // STEP 1 of 6-step workflow: [BUDGET PREPARER] → BUDGET REVIEWER → BUDGET APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER
           // BUDGET PREPARER creates drafts and can see all their proposals
+          const userName = req.user?.name || req.user?.Username || req.user?.displayName || req.user?.fullName;
           visibilityFilter = {
             $or: [
               // Own proposals created by this user
               { createdByUserId: userId },
-              // Proposals assigned/processed by this user
-              { processBy: userId },
+              // Proposals assigned/processed by this user (by ID or name)
+              { $or: [
+                { processBy: userId },
+                { processBy: userName }
+              ]},
               // Organizational scope proposals
               ...(userDivision ? [{ division: userDivision }] : []),
               ...(userDepartment ? [{ department: userDepartment }] : []),
@@ -319,8 +403,8 @@ const budgetRoleVisibilityControl = () => {
           };
           break;
 
-        case 'OVERALL_BUDGET_APPROVER':
-          // STEP 6 of 6-step workflow: PREPARER → BUDGET REVIEWER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → [OVERALL_APPROVER]
+        case 'BUDGET MANAGER':
+          // STEP 6 of 6-step workflow: PREPARER → BUDGET REVIEWER → APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → [BUDGET MANAGER]
           // Final approval step - sees proposals forwarded by BUDGET_OFFICER AND proposals they've worked on
           // BUT: Cannot see Draft proposals (must be submitted first)
           visibilityFilter = {

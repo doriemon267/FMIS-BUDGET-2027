@@ -226,7 +226,6 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
 
   const canDeleteItems = useMemo(() => {
     return currentUser?.userRoles?.includes('SUPER ADMIN') ||
-           currentUser?.userRoles?.includes('BUDGET ADMIN') ||
            currentUser?.userRoles?.includes('BUDGET PLANNING ANALYST');
   }, [currentUser]);
 

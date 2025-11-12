@@ -88,11 +88,11 @@ const mapLegacyRolesToNew = (legacyRoles) => {
     'departmentConsolidator': WORKFLOW_ROLES.OFFICE_APPROVER,
     'officeSubmission': WORKFLOW_ROLES.OFFICE_CREATOR,
     'departmentSubmission': WORKFLOW_ROLES.OFFICE_CREATOR,
-    'officeFinalVerifier': WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER,
+    'officeFinalVerifier': WORKFLOW_ROLES.BUDGET_MANAGER,
     
     // Region/Budget
     'regionCreator': WORKFLOW_ROLES.BUDGET_ANALYST,
-    'regionFinalVerifier': WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER
+    'regionFinalVerifier': WORKFLOW_ROLES.BUDGET_MANAGER
   };
 
   const newRoles = [];

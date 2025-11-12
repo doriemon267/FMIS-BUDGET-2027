@@ -35,6 +35,8 @@ const loyaltyPayRouter = require("./routers/loyaltyPayRoutes");
 const reportsRouter = require("./routers/reports.routes");
 const cosPersonnelRouter = require("./routers/cosPersonnelRoutes");
 const proposalSummaryRoutes = require("./routers/proposalSummary");
+// New Proposal Workflow Routes
+const newProposalWorkflowRoutes = require("./routes/newProposalWorkflowRoutes");
 //PARA SA MGA UPLOADER
 const chartOfAccountsRouter = require("./routers/uploader/chartOfAccounts");
 const uploadcategories = require("./routers/uploader/categories");
@@ -319,7 +321,7 @@ app.use(capitalOutlayRouter);
 app.use("/api", capitalOutlayDetailsRouter);
 app.use(categoryRouter);
 // app.use(proposalRouter);  // DISABLED - Using RBAC router instead
-app.use(proposalRBACRouter);  // ✅ RBAC router with role-based visibility control
+app.use('/api', proposalRBACRouter);  // ✅ RBAC router with role-based visibility control
 // Budget Officer Edit Routes
 const { comparisonRouter } = require("./routers/budgetOfficerEditRoutes");
 app.use('/api/budget-officer-edits', comparisonRouter);
@@ -352,6 +354,7 @@ app.use('/reports', reportsRouter); // Mount with /reports prefix
 app.use(cosPersonnelRouter);
 app.use('/', mooeRoutes);
 app.use('/api/proposalSummary', proposalSummaryRoutes);
+app.use('/api/new-proposal-workflow', newProposalWorkflowRoutes);
 //para sa mga uploader
 app.use(chartOfAccountsRouter);
 app.use(uploadcategories);

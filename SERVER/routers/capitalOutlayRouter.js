@@ -45,7 +45,7 @@ capitalOutlayRouter.get("/due-date-status", async (req, res) => {
     const isAdmin = userRoles.some(role => 
       role.toUpperCase().includes('ADMIN') || 
       role.toUpperCase().includes('SUPER') ||
-      role.toUpperCase().includes('BUDGET ADMIN')
+      role.toUpperCase().includes('SUPER ADMIN')
     );
     res.status(200).json({
       isPastDue,

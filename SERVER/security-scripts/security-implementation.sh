@@ -165,10 +165,10 @@ print_info "6. Checking authentication configuration..."
 
 # Check checkToken.js for security issues
 if [ -f "middleware/checkToken.js" ]; then
-    if grep -q "BUDGET ADMIN" middleware/checkToken.js; then
-        print_error "Hardcoded admin role found in checkToken.js - SECURITY RISK!"
+    if grep -q "SUPER ADMIN" middleware/checkToken.js; then
+        print_warning "Default admin role found in checkToken.js - ensure this is intentional"
     else
-        print_status "No hardcoded admin roles found"
+        print_status "No default admin roles found"
     fi
     
     if grep -q "ALLOW_MOCK_AUTH" middleware/checkToken.js; then

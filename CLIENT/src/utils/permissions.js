@@ -8,14 +8,9 @@ export function hasPermission(currentUser, permissionKey) {
     return true;
   }
 
-  // 🔥 BUDGET ADMIN - Access ALL (including Settings)
-  if (userRoles.includes('BUDGET ADMIN')) {
-    return true;
-  }
-
-  // 🔥 ManageUsers - RESTRICTED to SUPER ADMIN and BUDGET ADMIN only
+  // 🔥 ManageUsers - RESTRICTED to SUPER ADMIN only
   if (permissionKey === 'ManageUsers') {
-    return false; // Already checked SUPER ADMIN and BUDGET ADMIN above
+    return false; // Already checked SUPER ADMIN above
   }
 
   // ✅ Settings access: allow only BUDGET MANAGER (admins already allowed above);

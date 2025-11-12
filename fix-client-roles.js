@@ -24,14 +24,10 @@ const replacements = [
   { from: /"BUDGET_PLANNING_ANALYST"/g, to: '"BUDGET PLANNING ANALYST"' },
   { from: /'BUDGET_OFFICER'/g, to: "'BUDGET OFFICER'" },
   { from: /"BUDGET_OFFICER"/g, to: '"BUDGET OFFICER"' },
-  { from: /'OVERALL_BUDGET_APPROVER'/g, to: "'OVERALL BUDGET APPROVER'" },
-  { from: /"OVERALL_BUDGET_APPROVER"/g, to: '"OVERALL BUDGET APPROVER"' },
-  { from: /'BUDGET_ADMIN'/g, to: "'BUDGET ADMIN'" },
-  { from: /"BUDGET_ADMIN"/g, to: '"BUDGET ADMIN"' },
-  { from: /'SUPER_ADMIN'/g, to: "'SUPER ADMIN'" },
-  { from: /"SUPER_ADMIN"/g, to: '"SUPER ADMIN"' },
   { from: /'BUDGET_MANAGER'/g, to: "'BUDGET MANAGER'" },
   { from: /"BUDGET_MANAGER"/g, to: '"BUDGET MANAGER"' },
+  { from: /'SUPER_ADMIN'/g, to: "'SUPER ADMIN'" },
+  { from: /"SUPER_ADMIN"/g, to: '"SUPER ADMIN"' },
 ];
 
 filesToFix.forEach(filePath => {

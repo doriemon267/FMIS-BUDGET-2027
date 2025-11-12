@@ -95,8 +95,8 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     const hasManagerPrimaryRole = normalizedPrimaryRoles.some((role) => (
       role === 'BUDGET MANAGER' ||
       role === 'BUDGET MANAGER' ||
-      role === 'BUDGET ADMIN' ||
-      role === 'BUDGET ADMIN' ||
+      role === 'SUPER ADMIN' ||
+      role === 'SUPER ADMIN' ||
       role === 'OVERALL BUDGET APPROVER'
     ));
     if (hasManagerPrimaryRole) return true;
@@ -109,7 +109,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
 
   // Budget Manager: Check if ready to finalize (prominent button)
   const canBudgetManagerFinalize = useMemo(() => {
-    if (!isManagerLevel && !normalizedPrimaryRoles.some((role) => role.includes('BUDGET MANAGER') || role.includes('BUDGET ADMIN'))) {
+    if (!isManagerLevel && !normalizedPrimaryRoles.some((role) => role.includes('BUDGET MANAGER') || role.includes('SUPER ADMIN'))) {
       return false;
     }
     const status = displayedProposal?.status || proposal?.status;
@@ -1108,7 +1108,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                   {isPreparer && 'PREPARER (Creator)'}
                   {isDivisionApprover && !isPreparer && 'APPROVER (Division)'}
                   {isBudgetOfficer && !isPreparer && !isDivisionApprover && 'BUDGET_OFFICER (Verifier)'}
-                  {isManagerLevel && !isPreparer && !isDivisionApprover && !isBudgetOfficer && 'OVERALL_BUDGET_APPROVER (Final)'}
+                  {isManagerLevel && !isPreparer && !isDivisionApprover && !isBudgetOfficer && 'BUDGET MANAGER (Final)'}
                   <br />
                   
                   {isPreparer && isDivisionApprover && (

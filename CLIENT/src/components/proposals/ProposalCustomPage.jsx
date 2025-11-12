@@ -31,8 +31,12 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
-  DialogContentText,
   DialogTitle,
+  TextField,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
   CircularProgress,
   Typography,
   Snackbar,
@@ -47,7 +51,6 @@ import {
   FormControlLabel,
   Checkbox,
   Menu,
-  MenuItem,
   Divider,
   List,
   ListItem,
@@ -100,7 +103,7 @@ import { useUserRestrictions } from "../../hooks/useUserRestrictions";
 
 const CAPITAL_OUTLAY_VIEW_PREFERENCE_KEY = "capitalOutlayViewPreference";
 
-const CustomPage = ({
+const ProposalCustomPage = ({
   dataListName,
   schema,
   title = "Budget Proposal Entry",
@@ -131,6 +134,62 @@ const CustomPage = ({
     message: "",
     severity: "success",
   });
+
+  // State for the new proposal form
+  const [newProposalData, setNewProposalData] = useState({
+    title: "",
+    description: "",
+    projectedCorporateIncome: "",
+    projectedSubsidy: "",
+    modelType: "Initial",
+  });
+  const [isCreateDialogOpen, setCreateDialogOpen] = useState(false);
+
+  const createProposalMutation = useMutation({
+    mutationFn: (newProposal) => {
+      return api.post("/api/proposals", newProposal);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      toast.success("Proposal created successfully!");
+      setCreateDialogOpen(false);
+      setNewProposalData({
+        title: "",
+        description: "",
+        projectedCorporateIncome: "",
+        projectedSubsidy: "",
+        modelType: "Initial",
+      });
+    },
+    onError: (error) => {
+      toast.error(
+        `Error creating proposal: ${error.response?.data?.message || error.message}`
+      );
+    },
+  });
+
+  const handleCreateProposal = () => {
+    const {
+      title,
+      description,
+      projectedCorporateIncome,
+      projectedSubsidy,
+      modelType,
+    } = newProposalData;
+    if (!title) {
+      toast.error("Title is required.");
+      return;
+    }
+    createProposalMutation.mutate({
+      title,
+      description,
+      projectedCorporateIncome: Number(projectedCorporateIncome) || 0,
+      projectedSubsidy: Number(projectedSubsidy) || 0,
+      modelType,
+      fiscalYear: activeFiscalYear, // Assuming you want to associate with the active fiscal year
+    });
+  };
+
 
   // Enhancement states
   const [bulkSelection, setBulkSelection] = useState({
@@ -2033,7 +2092,7 @@ const CustomPage = ({
 
     return () => {
       window.removeEventListener(
-        "capitalOutlayDataChanged",
+        "capitalOutLayDataChanged",
         handleCapitalOutlayDataChanged
       );
     };
@@ -2319,1246 +2378,905 @@ const CustomPage = ({
   };
 
   return (
-    <ErrorBoundary
-      fallback={
-        <div>
-          Something went wrong with the Budget Proposal page. Please refresh the
-          page or contact support.
-        </div>
-      }
-    >
+    <StyledBox>
       <DashboardHeader
         title={title}
         description={description}
-        searchable={searchable}
+        showSearch={searchable}
       />
-      <StyledBox>
-        {/* Add fiscal year and budget type indicator */}
-        {/* Consolidated Header Section */}
-        <Paper
+
+      {/* Create Proposal Dialog */}
+      <Dialog
+        open={isCreateDialogOpen}
+        onClose={() => setCreateDialogOpen(false)}
+      >
+        <DialogTitle>Create New Budget Proposal</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Title"
+            type="text"
+            fullWidth
+            variant="standard"
+            value={newProposalData.title}
+            onChange={(e) =>
+              setNewProposalData({ ...newProposalData, title: e.target.value })
+            }
+          />
+          <TextField
+            margin="dense"
+            label="Description"
+            type="text"
+            fullWidth
+            multiline
+            rows={4}
+            variant="standard"
+            value={newProposalData.description}
+            onChange={(e) =>
+              setNewProposalData({
+                ...newProposalData,
+                description: e.target.value,
+              })
+            }
+          />
+          <TextField
+            margin="dense"
+            label="Projected Corporate Income"
+            type="number"
+            fullWidth
+            variant="standard"
+            value={newProposalData.projectedCorporateIncome}
+            onChange={(e) =>
+              setNewProposalData({
+                ...newProposalData,
+                projectedCorporateIncome: e.target.value,
+              })
+            }
+          />
+          <TextField
+            margin="dense"
+            label="Projected Subsidy"
+            type="number"
+            fullWidth
+            variant="standard"
+            value={newProposalData.projectedSubsidy}
+            onChange={(e) =>
+              setNewProposalData({
+                ...newProposalData,
+                projectedSubsidy: e.target.value,
+              })
+            }
+          />
+          <FormControl fullWidth margin="dense" variant="standard">
+            <InputLabel>Budget Type</InputLabel>
+            <Select
+              value={newProposalData.modelType}
+              onChange={(e) =>
+                setNewProposalData({
+                  ...newProposalData,
+                  modelType: e.target.value,
+                })
+              }
+            >
+              <MenuItem value="Initial">Initial</MenuItem>
+              <MenuItem value="NEP">NEP</MenuItem>
+              <MenuItem value="GAA">GAA</MenuItem>
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleCreateProposal} disabled={createProposalMutation.isLoading}>
+            {createProposalMutation.isLoading ? <CircularProgress size={24} /> : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          mb: 2,
+          flexWrap: "wrap",
+          gap: 1,
+        }}
+      >
+        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+          <Chip
+            icon={<CalendarTodayIcon />}
+            label={`Active FY: ${activeFiscalYear || "N/A"}`}
+            color="primary"
+            variant="filled"
+            size="small"
+          />
+          {selectedFiscalYear &&
+            selectedFiscalYear !== activeFiscalYear && (
+              <Chip
+                icon={<CalendarTodayIcon />}
+                label={`Selected FY: ${selectedFiscalYear}`}
+                color="secondary"
+                variant="filled"
+                size="small"
+              />
+            )}
+          <Chip
+            icon={<AccountBalanceIcon />}
+            label={`Budget: ${activeBudgetType || "N/A"}`}
+            color="primary"
+            variant="filled"
+            size="small"
+          />
+        </Box>
+        <AutoSaveIndicator />
+      </Box>
+
+      {/* Collapsible Budget Summary */}
+      {import.meta.env.VITE_HIDE_BUDGET_SUMMARY !== 'true' && (
+      <Accordion
+        expanded={summaryExpanded}
+        onChange={() => setSummaryExpanded(!summaryExpanded)}
+        sx={{
+          mb: 2,
+          backgroundColor: "#f8f9fa",
+          border: "1px solid #e0e0e0",
+          borderRadius: 1,
+          boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+          "&:before": { display: "none" },
+        }}
+      >
+        <AccordionSummary
+          expandIcon={<ExpandMore />}
           sx={{
-            p: 2,
-            mb: 2,
-            backgroundColor: "#f8f9fa",
-            border: "1px solid #e0e0e0",
+            minHeight: "40px",
+            "& .MuiAccordionSummary-content": {
+              margin: "8px 0",
+              alignItems: "center",
+            },
           }}
         >
-          {/* Top Row: System Info and Auto-save */}
           <Box
             sx={{
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              mb: 2,
-              flexWrap: "wrap",
-              gap: 1,
+              width: "100%",
+              mr: 2,
             }}
           >
-            <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-              <Chip
-                icon={<CalendarTodayIcon />}
-                label={`Active FY: ${activeFiscalYear || "N/A"}`}
-                color="primary"
-                variant="filled"
-                size="small"
-              />
-              {selectedFiscalYear &&
-                selectedFiscalYear !== activeFiscalYear && (
-                  <Chip
-                    icon={<CalendarTodayIcon />}
-                    label={`Selected FY: ${selectedFiscalYear}`}
-                    color="secondary"
-                    variant="filled"
-                    size="small"
-                  />
-                )}
-              <Chip
-                icon={<AccountBalanceIcon />}
-                label={`Budget: ${activeBudgetType || "N/A"}`}
-                color="primary"
-                variant="filled"
-                size="small"
-              />
-            </Box>
-            <AutoSaveIndicator />
+            <Typography
+              variant="body2"
+              sx={{ fontWeight: "bold", fontSize: "0.9rem" }}
+            >
+              📊 Budget Summary
+            </Typography>
+            <Chip
+              label={formatCurrency(calculateTotalBudget.grandTotal)}
+              color="primary"
+              size="small"
+              sx={{ fontSize: "0.7rem", height: "20px" }}
+            />
           </Box>
-
-          {/* Validation Errors (if any) */}
-          {Object.keys(validationErrors).length > 0 && (
+        </AccordionSummary>
+        <AccordionDetails sx={{ pt: 0, pb: 1.5, px: 1.5 }}>
+          {/* Budget Overview Row */}
+          <Box sx={{ mb: 1.5 }}>
+            <Typography
+              variant="body2"
+              sx={{ fontWeight: "bold", fontSize: "0.9rem", mb: 1 }}
+            >
+              💰 Budget Overview
+            </Typography>
             <Box
               sx={{
-                p: 1.5,
-                mb: 2,
-                backgroundColor: "#ffebee",
-                border: "1px solid #f44336",
-                borderRadius: 1,
+                display: "grid",
+                gridTemplateColumns: "repeat(3, 1fr)",
+                gap: 0.5,
               }}
             >
-              <Typography
-                variant="body2"
-                color="error"
-                sx={{ fontWeight: "bold", mb: 1 }}
-              >
-                ⚠️ Issues to Fix:
-              </Typography>
-              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-                {Object.entries(validationErrors).map(([key, error]) => (
-                  <Chip
-                    key={key}
-                    label={error}
-                    color="error"
-                    variant="outlined"
-                    size="small"
-                    icon={<ErrorIcon />}
-                  />
-                ))}
-              </Box>
-            </Box>
-          )}
-
-          {/* Status Overview and Shortcuts */}
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "flex-start",
-              flexWrap: "wrap",
-              gap: 2,
-            }}
-          >
-            {/* Status Chips */}
-            <Box sx={{ flex: 1, minWidth: "200px" }}>
               <Box
                 sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 1,
-                  mb: 1,
-                  flexWrap: "wrap",
+                  textAlign: "center",
+                  p: 0.5,
+                  backgroundColor: "#e8f5e9",
+                  borderRadius: 0.5,
                 }}
               >
+                <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
+                  Personnel Services
+                </Typography>
                 <Typography
-                  variant="body2"
-                  sx={{ fontWeight: "bold", color: "#666" }}
-                >
-                  📊 Status Overview{" "}
-                  {(() => {
-                    const scope = currentUser?.hierarchicalAccess?.scope;
-                    if (scope === 'FULL') {
-                      return '(Administrative Access - All Regions)';
-                    }
-                    if (scope === 'DIVISION') {
-                      const divisionName = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
-                      return divisionName ? `(${divisionName})` : '';
-                    }
-                    if (scope === 'DEPARTMENT') {
-                      const deptName = currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-                      return deptName ? `(${deptName})` : '';
-                    }
-                    return activeRegion ? `(${activeRegion.name || activeRegion.regionName})` : '';
-                  })()}
-                  :
-                </Typography>
-
-                <Button
-                  size="small"
-                  variant="outlined"
-                  onClick={() => {
-                    // console.log("Manual refresh triggered");
-                    fetchAllData();
+                  variant="caption"
+                  sx={{
+                    display: "block",
+                    fontWeight: "bold",
+                    fontSize: "0.8rem",
                   }}
-                  sx={{ fontSize: "0.7rem", py: 0.5, px: 1, mr: 1 }}
                 >
-                  Refresh
-                </Button>
-              </Box>
-              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                {Object.entries(getStatusCounts()).map(([status, count]) => (
-                  <StatusChip key={status} status={status} count={count} />
-                ))}
-              </Box>
-            </Box>
-
-            {/* Keyboard Shortcuts */}
-            <Box
-              sx={{
-                backgroundColor: "#f0f7ff",
-                border: "1px solid #2196f3",
-                borderRadius: 1,
-                p: 1,
-                minWidth: "200px",
-              }}
-            >
-              <Typography
-                variant="body2"
-                sx={{ fontWeight: "bold", mb: 0.5, color: "#1976d2" }}
-              >
-                ⌨️ Shortcuts:
-              </Typography>
-              <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
-                <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
-                  <strong>Ctrl+S</strong> Save Draft
+                  {formatCurrency(calculateTotalBudget.personnelTotal)}
                 </Typography>
+              </Box>
+              <Box
+                sx={{
+                  textAlign: "center",
+                  p: 0.5,
+                  backgroundColor: "#e3f2fd",
+                  borderRadius: 0.5,
+                }}
+              >
                 <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
-                  <strong>Ctrl+Shift+Enter</strong> Submit
+                  MOOE (Regular + IAs O&M)
+                </Typography>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    display: "block",
+                    fontWeight: "bold",
+                    fontSize: "0.8rem",
+                  }}
+                >
+                  {formatCurrency(calculateTotalBudget.mooeTotal)}
+                </Typography>
+              </Box>
+              <Box
+                sx={{
+                  textAlign: "center",
+                  p: 0.5,
+                  backgroundColor: "#fff3e0",
+                  borderRadius: 0.5,
+                }}
+              >
+                <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
+                  Capital Outlay
+                </Typography>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    display: "block",
+                    fontWeight: "bold",
+                    fontSize: "0.8rem",
+                  }}
+                >
+                  {formatCurrency(calculateTotalBudget.capitalOutlayTotal)}
                 </Typography>
               </Box>
             </Box>
           </Box>
-        </Paper>
 
-        {/* Collapsible Budget Summary */}
-        {import.meta.env.VITE_HIDE_BUDGET_SUMMARY !== 'true' && (
-        <Accordion
-          expanded={summaryExpanded}
-          onChange={() => setSummaryExpanded(!summaryExpanded)}
-          sx={{
-            mb: 2,
-            backgroundColor: "#f8f9fa",
-            border: "1px solid #e0e0e0",
-            borderRadius: 1,
-            boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-            "&:before": { display: "none" },
-          }}
-        >
-          <AccordionSummary
-            expandIcon={<ExpandMore />}
-            sx={{
-              minHeight: "40px",
-              "& .MuiAccordionSummary-content": {
-                margin: "8px 0",
-                alignItems: "center",
-              },
-            }}
-          >
+          {/* Income Summary Row */}
+          <Box sx={{ mb: 1.5 }}>
             <Box
               sx={{
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
-                width: "100%",
-                mr: 2,
+                mb: 1,
               }}
             >
               <Typography
                 variant="body2"
                 sx={{ fontWeight: "bold", fontSize: "0.9rem" }}
               >
-                📊 Budget Summary
+                📊 Expenses Under Corporate Income
               </Typography>
-              <Chip
-                label={formatCurrency(calculateTotalBudget.grandTotal)}
-                color="primary"
-                size="small"
-                sx={{ fontSize: "0.7rem", height: "20px" }}
-              />
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                <CompareArrowsIcon
+                  color={budgetSummary.isIncomeBalanced ? "success" : "error"}
+                  sx={{ fontSize: "16px" }}
+                />
+                <Typography
+                  variant="caption"
+                  color={
+                    budgetSummary.isIncomeBalanced
+                      ? "success.main"
+                      : "error.main"
+                  }
+                  sx={{ fontWeight: "bold", fontSize: "0.7rem" }}
+                >
+                  {budgetSummary.isIncomeBalanced ? "Balanced" : "Unbalanced"}
+                </Typography>
+              </Box>
             </Box>
-          </AccordionSummary>
-          <AccordionDetails sx={{ pt: 0, pb: 1.5, px: 1.5 }}>
-            {/* Budget Overview Row */}
-            <Box sx={{ mb: 1.5 }}>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: "repeat(4, 1fr)",
+                gap: 0.5,
+              }}
+            >
+              <Box
+                sx={{
+                  textAlign: "center",
+                  p: 0.5,
+                  backgroundColor: "rgba(255, 255, 255, 0.8)",
+                  borderRadius: 0.5,
+                }}
+              >
+                <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
+                  MOOE (Regular + IAs O&M)
+                </Typography>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    display: "block",
+                    fontWeight: "bold",
+                    fontSize: "0.8rem",
+                  }}
+                >
+                  {formatCurrency(budgetSummary.mooeIncomeTotal)}
+                </Typography>
+              </Box>
+              <Box
+                sx={{
+                  textAlign: "center",
+                  p: 0.5,
+                  backgroundColor: "rgba(255, 255, 255, 0.8)",
+                  borderRadius: 0.5,
+                }}
+              >
+                <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
+                  Capital Outlay
+                </Typography>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    display: "block",
+                    fontWeight: "bold",
+                    fontSize: "0.8rem",
+                  }}
+                >
+                  {formatCurrency(budgetSummary.capitalOutlayIncomeTotal)}
+                </Typography>
+              </Box>
+              <Box
+                sx={{
+                  textAlign: "center",
+                  p: 0.5,
+                  backgroundColor: "rgba(255, 255, 255, 0.8)",
+                  borderRadius: 0.5,
+                }}
+              >
+                <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
+                  Total
+                </Typography>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    display: "block",
+                    fontWeight: "bold",
+                    fontSize: "0.8rem",
+                  }}
+                >
+                  {formatCurrency(budgetSummary.combinedIncomeTotal)}
+                </Typography>
+              </Box>
+              <Box
+                sx={{
+                  textAlign: "center",
+                  p: 0.5,
+                  backgroundColor: budgetSummary.isIncomeBalanced
+                    ? "#4caf50"
+                    : "#f44336",
+                  color: "white",
+                  borderRadius: 0.5,
+                }}
+              >
+                <Typography
+                  variant="caption"
+                  sx={{ fontSize: "0.7rem", color: "white" }}
+                >
+                  Corporate Income
+                </Typography>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    display: "block",
+                    fontWeight: "bold",
+                    fontSize: "0.8rem",
+                    color: "white",
+                  }}
+                >
+                  {formatCurrency(budgetSummary.incomeTotal)}
+                </Typography>
+              </Box>
+            </Box>
+            {!budgetSummary.isIncomeBalanced && (
+              <Typography
+                variant="caption"
+                color="error.main"
+                sx={{
+                  display: "block",
+                  textAlign: "center",
+                  mt: 0.5,
+                  fontWeight: "bold",
+                  fontSize: "0.7rem",
+                }}
+              >
+                Diff: ₱
+                {Math.abs(
+                  (budgetSummary.incomeTotal || 0) -
+                    (budgetSummary.combinedIncomeTotal || 0)
+                ).toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </Typography>
+            )}
+          </Box>
+
+          {/* Subsidy Summary Row */}
+          <Box>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                mb: 1,
+              }}
+            >
               <Typography
                 variant="body2"
-                sx={{ fontWeight: "bold", fontSize: "0.9rem", mb: 1 }}
+                sx={{ fontWeight: "bold", fontSize: "0.9rem" }}
               >
-                💰 Budget Overview
+                🏛️ Budgetary Support Summary
               </Typography>
-              <Box
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
-                  gap: 0.5,
-                }}
-              >
-                <Box
-                  sx={{
-                    textAlign: "center",
-                    p: 0.5,
-                    backgroundColor: "#e8f5e9",
-                    borderRadius: 0.5,
-                  }}
-                >
-                  <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
-                    Personnel Services
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      display: "block",
-                      fontWeight: "bold",
-                      fontSize: "0.8rem",
-                    }}
-                  >
-                    {formatCurrency(calculateTotalBudget.personnelTotal)}
-                  </Typography>
-                </Box>
-                <Box
-                  sx={{
-                    textAlign: "center",
-                    p: 0.5,
-                    backgroundColor: "#e3f2fd",
-                    borderRadius: 0.5,
-                  }}
-                >
-                  <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
-                    MOOE (Regular + IAs O&M)
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      display: "block",
-                      fontWeight: "bold",
-                      fontSize: "0.8rem",
-                    }}
-                  >
-                    {formatCurrency(calculateTotalBudget.mooeTotal)}
-                  </Typography>
-                </Box>
-                <Box
-                  sx={{
-                    textAlign: "center",
-                    p: 0.5,
-                    backgroundColor: "#fff3e0",
-                    borderRadius: 0.5,
-                  }}
-                >
-                  <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
-                    Capital Outlay
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      display: "block",
-                      fontWeight: "bold",
-                      fontSize: "0.8rem",
-                    }}
-                  >
-                    {formatCurrency(calculateTotalBudget.capitalOutlayTotal)}
-                  </Typography>
-                </Box>
-              </Box>
-            </Box>
-
-            {/* Income Summary Row */}
-            <Box sx={{ mb: 1.5 }}>
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  mb: 1,
-                }}
-              >
-                <Typography
-                  variant="body2"
-                  sx={{ fontWeight: "bold", fontSize: "0.9rem" }}
-                >
-                  📊 Expenses Under Corporate Income
-                </Typography>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                  <CompareArrowsIcon
-                    color={budgetSummary.isIncomeBalanced ? "success" : "error"}
-                    sx={{ fontSize: "16px" }}
-                  />
-                  <Typography
-                    variant="caption"
-                    color={
-                      budgetSummary.isIncomeBalanced
-                        ? "success.main"
-                        : "error.main"
-                    }
-                    sx={{ fontWeight: "bold", fontSize: "0.7rem" }}
-                  >
-                    {budgetSummary.isIncomeBalanced ? "Balanced" : "Unbalanced"}
-                  </Typography>
-                </Box>
-              </Box>
-              <Box
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(4, 1fr)",
-                  gap: 0.5,
-                }}
-              >
-                <Box
-                  sx={{
-                    textAlign: "center",
-                    p: 0.5,
-                    backgroundColor: "rgba(255, 255, 255, 0.8)",
-                    borderRadius: 0.5,
-                  }}
-                >
-                  <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
-                    MOOE (Regular + IAs O&M)
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      display: "block",
-                      fontWeight: "bold",
-                      fontSize: "0.8rem",
-                    }}
-                  >
-                    {formatCurrency(budgetSummary.mooeIncomeTotal)}
-                  </Typography>
-                </Box>
-                <Box
-                  sx={{
-                    textAlign: "center",
-                    p: 0.5,
-                    backgroundColor: "rgba(255, 255, 255, 0.8)",
-                    borderRadius: 0.5,
-                  }}
-                >
-                  <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
-                    Capital Outlay
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      display: "block",
-                      fontWeight: "bold",
-                      fontSize: "0.8rem",
-                    }}
-                  >
-                    {formatCurrency(budgetSummary.capitalOutlayIncomeTotal)}
-                  </Typography>
-                </Box>
-                <Box
-                  sx={{
-                    textAlign: "center",
-                    p: 0.5,
-                    backgroundColor: "rgba(255, 255, 255, 0.8)",
-                    borderRadius: 0.5,
-                  }}
-                >
-                  <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
-                    Total
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      display: "block",
-                      fontWeight: "bold",
-                      fontSize: "0.8rem",
-                    }}
-                  >
-                    {formatCurrency(budgetSummary.combinedIncomeTotal)}
-                  </Typography>
-                </Box>
-                <Box
-                  sx={{
-                    textAlign: "center",
-                    p: 0.5,
-                    backgroundColor: budgetSummary.isIncomeBalanced
-                      ? "#4caf50"
-                      : "#f44336",
-                    color: "white",
-                    borderRadius: 0.5,
-                  }}
-                >
-                  <Typography
-                    variant="caption"
-                    sx={{ fontSize: "0.7rem", color: "white" }}
-                  >
-                    Corporate Income
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      display: "block",
-                      fontWeight: "bold",
-                      fontSize: "0.8rem",
-                      color: "white",
-                    }}
-                  >
-                    {formatCurrency(budgetSummary.incomeTotal)}
-                  </Typography>
-                </Box>
-              </Box>
-              {!budgetSummary.isIncomeBalanced && (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                <CompareArrowsIcon
+                  color={
+                    budgetSummary.isSubsidyBalanced ? "success" : "error"
+                  }
+                  sx={{ fontSize: "16px" }}
+                />
                 <Typography
                   variant="caption"
-                  color="error.main"
-                  sx={{
-                    display: "block",
-                    textAlign: "center",
-                    mt: 0.5,
-                    fontWeight: "bold",
-                    fontSize: "0.7rem",
-                  }}
+                  color={
+                    budgetSummary.isSubsidyBalanced
+                      ? "success.main"
+                      : "error.main"
+                  }
+                  sx={{ fontWeight: "bold", fontSize: "0.7rem" }}
                 >
-                  Diff: ₱
-                  {Math.abs(
-                    (budgetSummary.incomeTotal || 0) -
-                      (budgetSummary.combinedIncomeTotal || 0)
-                  ).toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                  {budgetSummary.isSubsidyBalanced
+                    ? "Balanced"
+                    : "Unbalanced"}
                 </Typography>
-              )}
+              </Box>
             </Box>
-
-            {/* Subsidy Summary Row */}
-            <Box>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, 1fr)",
+                gap: 0.5,
+              }}
+            >
               <Box
                 sx={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  mb: 1,
+                  textAlign: "center",
+                  p: 0.5,
+                  backgroundColor: "rgba(255, 255, 255, 0.8)",
+                  borderRadius: 0.5,
                 }}
               >
-                <Typography
-                  variant="body2"
-                  sx={{ fontWeight: "bold", fontSize: "0.9rem" }}
-                >
-                  🏛️ Budgetary Support Summary
+                <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
+                  MOOE Subsidy (Regular + IAs O&M)
                 </Typography>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                  <CompareArrowsIcon
-                    color={
-                      budgetSummary.isSubsidyBalanced ? "success" : "error"
-                    }
-                    sx={{ fontSize: "16px" }}
-                  />
-                  <Typography
-                    variant="caption"
-                    color={
-                      budgetSummary.isSubsidyBalanced
-                        ? "success.main"
-                        : "error.main"
-                    }
-                    sx={{ fontWeight: "bold", fontSize: "0.7rem" }}
-                  >
-                    {budgetSummary.isSubsidyBalanced
-                      ? "Balanced"
-                      : "Unbalanced"}
-                  </Typography>
-                </Box>
-              </Box>
-              <Box
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
-                  gap: 0.5,
-                }}
-              >
-                <Box
-                  sx={{
-                    textAlign: "center",
-                    p: 0.5,
-                    backgroundColor: "rgba(255, 255, 255, 0.8)",
-                    borderRadius: 0.5,
-                  }}
-                >
-                  <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
-                    MOOE Subsidy (Regular + IAs O&M)
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      display: "block",
-                      fontWeight: "bold",
-                      fontSize: "0.8rem",
-                    }}
-                  >
-                    {formatCurrency(budgetSummary.mooeSubsidyTotal || 0)}
-                  </Typography>
-                </Box>
-                <Box
-                  sx={{
-                    textAlign: "center",
-                    p: 0.5,
-                    backgroundColor: "rgba(255, 255, 255, 0.8)",
-                    borderRadius: 0.5,
-                  }}
-                >
-                  <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
-                    Capital Subsidy
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      display: "block",
-                      fontWeight: "bold",
-                      fontSize: "0.8rem",
-                    }}
-                  >
-                    {formatCurrency(
-                      budgetSummary.capitalOutlaySubsidyTotal || 0
-                    )}
-                  </Typography>
-                </Box>
-                <Box
-                  sx={{
-                    textAlign: "center",
-                    p: 0.5,
-                    backgroundColor: budgetSummary.isSubsidyBalanced
-                      ? "#4caf50"
-                      : "#f44336",
-                    color: "white",
-                    borderRadius: 0.5,
-                  }}
-                >
-                  <Typography
-                    variant="caption"
-                    sx={{ fontSize: "0.7rem", color: "white" }}
-                  >
-                    Budgetary
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      display: "block",
-                      fontWeight: "bold",
-                      fontSize: "0.8rem",
-                      color: "white",
-                    }}
-                  >
-                    {formatCurrency(
-                      calculateTotalBudget.budgetarySupportTotal || 0
-                    )}
-                  </Typography>
-                </Box>
-              </Box>
-              {!budgetSummary.isSubsidyBalanced && (
                 <Typography
                   variant="caption"
-                  color="error.main"
                   sx={{
                     display: "block",
-                    textAlign: "center",
-                    mt: 0.5,
                     fontWeight: "bold",
-                    fontSize: "0.7rem",
+                    fontSize: "0.8rem",
                   }}
                 >
-                  Diff: ₱
-                  {Math.abs(
-                    (budgetSummary.mooeSubsidyTotal || 0) +
-                      (budgetSummary.capitalOutlaySubsidyTotal || 0) -
-                      (calculateTotalBudget.budgetarySupportTotal || 0)
-                  ).toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                  {formatCurrency(budgetSummary.mooeSubsidyTotal || 0)}
                 </Typography>
-              )}
-            </Box>
-          </AccordionDetails>
-  </Accordion>
-  )}
-
-        {/* Mobile Navigation */}
-        <MobileTabNavigation />
-
-        <div className="action-tab-container">
-          {/* Desktop Tab Buttons */}
-          <Box sx={{ display: { xs: 'none', md: 'flex' } }}>
-            <div className="tab-buttons">
-              <button
-                className={activeTab === "Income" ? "active" : ""}
-                onClick={() => setActiveTab("Income")}
-              >
-                <FaMoneyCheckAlt /> INCOME
-              </button>
-              <button
-                className={activeTab === "PSPermanent" ? "active" : ""}
-                onClick={() => setActiveTab("PSPermanent")}
-              >
-                <IoPersonCircleOutline /> PS - Permanent
-              </button>
-              <button
-                className={activeTab === "PSCasual" ? "active" : ""}
-                onClick={() => setActiveTab("PSCasual")}
-              >
-                <IoPersonCircleOutline /> PS - Casual
-              </button>
-              <button
-                className={activeTab === "COS/JO" ? "active" : ""}
-                onClick={() => setActiveTab("COS/JO")}
-              >
-                <FaFileContract /> COS/JO
-              </button>
-              <button
-                className={activeTab === "MOOE" ? "active" : ""}
-                onClick={() => setActiveTab("MOOE")}
-              >
-                <GrHostMaintenance /> MOOE
-              </button>
-              <button
-                className={activeTab === "Capital Outlay" ? "active" : ""}
-                onClick={() => setActiveTab("Capital Outlay")}
-              >
-                <FaMoneyBill /> CAPITAL OUTLAY
-              </button>
-              <button
-                className={activeTab === "Budgetary Support" ? "active" : ""}
-                onClick={() => setActiveTab("Budgetary Support")}
-              >
-                <FaProjectDiagram /> BSGC
-              </button>
-            </div>
-          </Box>
-
-          {/* Enhanced Button Group with Export and Bulk Actions */}
-          <div className="button-group">
-            {/* Bulk Actions Button */}
-            {showBulkActions && (
-              <Button
-                variant="outlined"
-                color="primary"
-                onClick={(e) => setBulkActionsAnchor(e.currentTarget)}
-                startIcon={<SelectAllIcon />}
-                sx={{ mr: 1 }}
-              >
-                Bulk Actions ({
-                  bulkSelection.personnel.length + 
-                  bulkSelection.mooe.length + 
-                  bulkSelection.capitalOutlay.length + 
-                  bulkSelection.income.length + 
-                  bulkSelection.budgetarySupport.length
-                })
-              </Button>
-            )}
-
-            {/* Export Button */}
-            <Button
-              variant="outlined"
-              color="secondary"
-              onClick={(e) => setExportMenuAnchor(e.currentTarget)}
-              startIcon={<GetAppIcon />}
-              sx={{ mr: 1, display: { xs: 'none', sm: 'inline-flex' } }}
-            >
-              Export
-            </Button>
-
-            {/* Activity Log Button */}
-            <Button
-              variant="outlined"
-              onClick={() => setShowActivityLog(true)}
-              startIcon={<HistoryIcon />}
-              sx={{ mr: 1, display: { xs: 'none', sm: 'inline-flex' } }}
-            >
-              Activity
-            </Button>
-
-            {/* TEMP: Hide Submit All Proposals and Save as Draft buttons */}
-            {(canCreate || canEditOwn) && (
-              <>
-                <Tooltip
-                  title={
-                    readOnly
-                      ? "Account is in read-only mode"
-                      : !canEditOwn
-                      ? "You don't have permission to submit proposals. Please contact your administrator."
-                      : !budgetSummary.isIncomeBalanced
-                      ? "Combined Income Total must equal Corporate Income before submission"
-                      : ""
-                  }
-                >
-                  <span style={{ display: "inline-block" }}>
-                    {/* <Button
-                      variant="contained"
-                      color="primary"
-                      onClick={handleOpenDialog}
-                      disabled={
-                        readOnly ||
-                        !canEditOwn ||
-                        !anyNotSubmitted ||
-                        isSubmitting
-                      }
-                      startIcon={<BalanceIcon />}
-                      sx={{
-                        mr: 1,
-                        py: 1,
-                        px: { xs: 2, sm: 3 },
-                        fontSize: { xs: "0.8rem", sm: "0.9rem" },
-                        backgroundColor: "#375e38",
-                        "&:hover": {
-                          backgroundColor: "#2e4e2f",
-                        },
-                      }}
-                    >
-                      Submit All Proposals
-                    </Button> */}
-                  </span>
-                </Tooltip>
-                <Tooltip
-                  title={
-                    readOnly
-                      ? "Account is in read-only mode"
-                      : Object.keys(validationErrors).length > 0
-                      ? "Please fix validation errors before saving"
-                      : !anyNotSubmitted
-                      ? "No eligible proposals to save as draft. All proposals may already be submitted or there are no proposals to save."
-                      : isSubmitting
-                      ? "Currently processing. Please wait..."
-                      : "Save all eligible proposals as draft"
-                  }
-                  arrow
-                >
-                  <span style={{ display: "inline-block" }}>
-                    {/* <Button
-                      variant="outlined"
-                      color="success"
-                      onClick={() => handleSaveAsDraft()}
-                      disabled={!canEditOwn || !anyNotSubmitted || isSubmitting || Object.keys(validationErrors).length > 0 || readOnly}
-                      startIcon={
-                        saveStatus === "saving" ? (
-                          <CircularProgress size={16} />
-                        ) : (
-                          <SaveIcon />
-                        )
-                      }
-                      sx={{
-                        py: 1,
-                        px: { xs: 2, sm: 3 },
-                        fontSize: { xs: "0.8rem", sm: "0.9rem" },
-                        borderColor:
-                          Object.keys(validationErrors).length > 0
-                            ? "#f44336"
-                            : "#375e38",
-                        color:
-                          Object.keys(validationErrors).length > 0
-                            ? "#f44336"
-                            : "#375e38",
-                        "&:hover": {
-                          borderColor:
-                            Object.keys(validationErrors).length > 0
-                              ? "#d32f2f"
-                              : "#2e4e2f",
-                          backgroundColor:
-                            Object.keys(validationErrors).length > 0
-                              ? "rgba(244, 67, 54, 0.04)"
-                              : "rgba(55, 94, 56, 0.04)",
-                        },
-                      }}
-                    >
-                      {saveStatus === "saving" ? "Saving..." : "Save as Draft"}
-                    </Button> */}
-                  </span>
-                </Tooltip>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Mobile Speed Dial for Actions */}
-        {isMobile && (
-          <SpeedDial
-            ariaLabel="Mobile Actions"
-            sx={{ position: 'fixed', bottom: 16, right: 16, display: { xs: 'block', md: 'none' } }}
-            icon={<SpeedDialIcon />}
-            open={speedDialOpen}
-            onClose={() => setSpeedDialOpen(false)}
-            onOpen={() => setSpeedDialOpen(true)}
-          >
-            <SpeedDialAction
-              icon={<GetAppIcon />}
-              tooltipTitle="Export"
-              onClick={(e) => setExportMenuAnchor(e.currentTarget)}
-            />
-            <SpeedDialAction
-              icon={<HistoryIcon />}
-              tooltipTitle="Activity Log"
-              onClick={() => setShowActivityLog(true)}
-            />
-            {showBulkActions && (
-              <SpeedDialAction
-                icon={<SelectAllIcon />}
-                tooltipTitle="Bulk Actions"
-                onClick={(e) => setBulkActionsAnchor(e.currentTarget)}
-              />
-            )}
-          </SpeedDial>
-        )}
-
-        {/* Bulk Actions Menu */}
-        <Menu
-          anchorEl={bulkActionsAnchor}
-          open={Boolean(bulkActionsAnchor)}
-          onClose={() => setBulkActionsAnchor(null)}
-        >
-          <MenuItem onClick={() => handleBulkStatusChange('Draft')}>
-            <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
-            <ListItemText>Save Selected as Draft</ListItemText>
-          </MenuItem>
-          <MenuItem onClick={() => handleBulkStatusChange('Submitted')}>
-            <ListItemIcon><CheckCircleIcon fontSize="small" /></ListItemIcon>
-            <ListItemText>Submit Selected</ListItemText>
-          </MenuItem>
-          <Divider />
-          <MenuItem onClick={() => {
-            const currentType = activeTab === 'PSPermanent' || activeTab === 'PSCasual' || activeTab === 'COS/JO' ? 'personnel' : 
-                               activeTab === 'MOOE' ? 'mooe' :
-                               activeTab === 'Capital Outlay' ? 'capitalOutlay' :
-                               activeTab === 'Income' ? 'income' : 'budgetarySupport';
-            handleSelectAll(currentType);
-            setBulkActionsAnchor(null);
-          }}>
-            <ListItemIcon><SelectAllIcon fontSize="small" /></ListItemIcon>
-            <ListItemText>Select All in Tab</ListItemText>
-          </MenuItem>
-          <MenuItem onClick={() => {
-            setBulkSelection({ personnel: [], mooe: [], capitalOutlay: [], income: [], budgetarySupport: [] });
-            setShowBulkActions(false);
-            setBulkActionsAnchor(null);
-          }}>
-            <ListItemIcon><DeselectIcon fontSize="small" /></ListItemIcon>
-            <ListItemText>Deselect All</ListItemText>
-          </MenuItem>
-        </Menu>
-
-        {/* Export Menu */}
-        <Menu
-          anchorEl={exportMenuAnchor}
-          open={Boolean(exportMenuAnchor)}
-          onClose={() => setExportMenuAnchor(null)}
-        >
-          <MenuItem onClick={generatePDFReport}>
-            <ListItemIcon><PictureAsPdfIcon fontSize="small" /></ListItemIcon>
-            <ListItemText>Export as PDF</ListItemText>
-          </MenuItem>
-          <MenuItem onClick={generateExcelReport}>
-            <ListItemIcon><TableChartIcon fontSize="small" /></ListItemIcon>
-            <ListItemText>Export as Excel</ListItemText>
-          </MenuItem>
-        </Menu>
-
-        {/* Activity Log Dialog */}
-        <ActivityLogDialog />
-
-        <Box>
-          <div
-            className="tab-content"
-            style={{
-              backgroundColor: "#f9f9f9",
-              borderRadius: "8px",
-              padding: isMobile ? "8px" : "16px",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-              minHeight: "300px"
-            }}
-          >
-          {activeTab === "PSPermanent" && (
-            <Suspense fallback={<CircularProgress />}>
-              <PSPermanentServiceTable
-                data={
-                  Array.isArray(personnelData)
-                    ? personnelData.filter(
-                        (p) => p.statusOfAppointment === "PERMANENT"
-                      )
-                    : []
-                }
-                locked={submissionLocked}
-                addMutation={addPersonnelMutation}
-                queryClient={queryClient}
-                queryKey={QUERY_KEYS.personnel}
-              />
-            </Suspense>
-          )}
-          {activeTab === "PSCasual" && (
-            <Suspense fallback={<CircularProgress />}>
-              <PSCasualServiceTable
-                data={
-                  Array.isArray(personnelData)
-                    ? personnelData.filter(
-                        (p) => p.statusOfAppointment === "CASUAL"
-                      )
-                    : []
-                }
-                locked={submissionLocked}
-              />
-            </Suspense>
-          )}
-          {activeTab === "MOOE" && (
-            <Suspense fallback={<CircularProgress />}>
-              {import.meta.env.VITE_HIDE_INCOME_LOCK_BANNER === 'true' ? null : <IncomeLockedBanner />}
-              <Mooe
-                data={mooeData}
-                disableIncomeInputs={disableIncomeInputs}
-                addMutation={addMooeMutation}
-                queryClient={queryClient}
-                queryKey={QUERY_KEYS.mooe}
-                locked={submissionLocked}
-              />
-            </Suspense>
-          )}
-          {activeTab === "Capital Outlay" && (
-            <Suspense fallback={<CircularProgress />}>
-              {import.meta.env.VITE_HIDE_INCOME_LOCK_BANNER === 'true' ? null : <IncomeLockedBanner />}
-              
-              {/* View Toggle Button */}
-              <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-                <Chip
-                  label={useDataGridView ? "DataGrid View (New)" : "Table View (Old)"}
-                  color={useDataGridView ? "primary" : "default"}
-                  variant={useDataGridView ? "filled" : "outlined"}
-                />
-                <Button
-                  size="small"
-                  variant="outlined"
-                  onClick={() => setUseDataGridView(!useDataGridView)}
-                  startIcon={<TableChartIcon />}
-                >
-                  Switch to {useDataGridView ? "Old Table" : "New DataGrid"}
-                </Button>
               </Box>
-
-              {/* Conditional Rendering */}
-              {useDataGridView ? (
-                <CapitalOutlayDataGrid
-                  fiscalYear={selectedFiscalYear || activeFiscalYear}
-                  onDataChange={setCapitalOutlayData}
-                  disableIncomeInputs={disableIncomeInputs}
-                  locked={submissionLocked}
-                />
-              ) : (
-                <CapitalOutlayTable
-                  data={capitalOutlayData}
-                  disableIncomeInputs={disableIncomeInputs}
-                  locked={submissionLocked}
-                />
-              )}
-            </Suspense>
-          )}
-          {activeTab === "COS/JO" && (
-            <Suspense fallback={<CircularProgress />}>
-              <PSCOSCustomPageTable
-                data={
-                  Array.isArray(personnelData)
-                    ? personnelData.filter(
-                        (p) => p.statusOfAppointment === "COS"
-                      )
-                    : []
-                }
-                locked={submissionLocked}
-              />
-            </Suspense>
-          )}
-          {activeTab === "Income" && (
-            <ErrorBoundary>
-              <Suspense fallback={<CircularProgress />}>
-                <IncomeTable
-                  data={incomeData}
-                  onGrandTotalUpdate={handleIncomeGrandTotalUpdate}
-                  onGroupedItemsUpdate={setGroupedItems}
-                  locked={submissionLocked}
-                />
-              </Suspense>
-            </ErrorBoundary>
-          )}
-          {activeTab === "Budgetary Support" && (
-            <ErrorBoundary>
-              <Suspense fallback={<CircularProgress />}>
-                <BudgetarySupportTable
-                  fiscalYear={selectedFiscalYear || activeFiscalYear}
-                  budgetType={activeBudgetType}
-                  incomeGrandTotal={incomeGrandTotal}
-                  groupedItems={groupedItems || {}}
-                />
-              </Suspense>
-            </ErrorBoundary>
-          )}
-          </div>
-        </Box>
-      </StyledBox>
-
-      <Dialog
-        open={openDialog}
-        onClose={() => handleCloseDialog(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle
-          sx={{
-            bgcolor: "#375e38",
-            color: "white",
-            display: "flex",
-            alignItems: "center",
-            gap: 1,
-          }}
-        >
-          <BalanceIcon /> Submit All Proposals
-        </DialogTitle>
-        <DialogContent sx={{ pt: 2, mt: 2 }}>
-          <DialogContentText>
-            You are about to submit the following proposals:
-          </DialogContentText>
-
-          <Box sx={{ mt: 2, display: "flex", flexDirection: "column", gap: 1 }}>
-            {Array.isArray(personnelData) &&
-              personnelData.filter((p) => isEligibleForSubmission(p.status))
-                .length > 0 && (
-                <Typography variant="body2">
-                  •{" "}
-                  <strong>
-                    {
-                      personnelData.filter((p) =>
-                        isEligibleForSubmission(p.status)
-                      ).length
-                    }
-                  </strong>{" "}
-                  Personnel Services proposals
+              <Box
+                sx={{
+                  textAlign: "center",
+                  p: 0.5,
+                  backgroundColor: "rgba(255, 255, 255, 0.8)",
+                  borderRadius: 0.5,
+                }}
+              >
+                <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
+                  Capital Subsidy
                 </Typography>
-              )}
-
-            {Array.isArray(mooeData) &&
-              mooeData.filter((p) => isEligibleForSubmission(p.status)).length >
-                0 && (
-                <Typography variant="body2">
-                  •{" "}
-                  <strong>
-                    {
-                      mooeData.filter((p) => isEligibleForSubmission(p.status))
-                        .length
-                    }
-                  </strong>{" "}
-                  MOOE proposals
+                <Typography
+                  variant="caption"
+                  sx={{
+                    display: "block",
+                    fontWeight: "bold",
+                    fontSize: "0.8rem",
+                  }}
+                >
+                  {formatCurrency(
+                    budgetSummary.capitalOutlaySubsidyTotal || 0
+                  )}
                 </Typography>
-              )}
-
-            {Array.isArray(capitalOutlayData) &&
-              capitalOutlayData.filter((p) => isEligibleForSubmission(p.status))
-                .length > 0 && (
-                <Typography variant="body2">
-                  •{" "}
-                  <strong>
-                    {
-                      capitalOutlayData.filter((p) =>
-                        isEligibleForSubmission(p.status)
-                      ).length
-                    }
-                  </strong>{" "}
-                  Capital Outlay proposals
+              </Box>
+              <Box
+                sx={{
+                  textAlign: "center",
+                  p: 0.5,
+                  backgroundColor: budgetSummary.isSubsidyBalanced
+                    ? "#4caf50"
+                    : "#f44336",
+                  color: "white",
+                  borderRadius: 0.5,
+                }}
+              >
+                <Typography
+                  variant="caption"
+                  sx={{ fontSize: "0.7rem", color: "white" }}
+                >
+                  Budgetary
                 </Typography>
-              )}
-
-            {Array.isArray(incomeData) &&
-              incomeData.filter((p) => isEligibleForSubmission(p.status))
-                .length > 0 && (
-                <Typography variant="body2">
-                  •{" "}
-                  <strong>
-                    {
-                      incomeData.filter((p) =>
-                        isEligibleForSubmission(p.status)
-                      ).length
-                    }
-                  </strong>{" "}
-                  Income proposals
+                <Typography
+                  variant="caption"
+                  sx={{
+                    display: "block",
+                    fontWeight: "bold",
+                    fontSize: "0.8rem",
+                    color: "white",
+                  }}
+                >
+                  {formatCurrency(
+                    calculateTotalBudget.budgetarySupportTotal || 0
+                  )}
                 </Typography>
-              )}
+              </Box>
+            </Box>
+            {!budgetSummary.isSubsidyBalanced && (
+              <Typography
+                variant="caption"
+                color="error.main"
+                sx={{
+                  display: "block",
+                  textAlign: "center",
+                  mt: 0.5,
+                  fontWeight: "bold",
+                  fontSize: "0.7rem",
+                }}
+              >
+                Diff: ₱
+                {Math.abs(
+                  (budgetSummary.mooeSubsidyTotal || 0) +
+                    (budgetSummary.capitalOutlaySubsidyTotal || 0) -
+                    (calculateTotalBudget.budgetarySupportTotal || 0)
+                ).toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </Typography>
+            )}
           </Box>
-
-          <Box
-            sx={{
-              mt: 2,
-              p: 1.5,
-              bgcolor: budgetSummary.isIncomeBalanced ? "#e8f5e9" : "#ffebee",
-              borderRadius: 1,
-              border: budgetSummary.isIncomeBalanced
-                ? "1px solid #81c784"
-                : "1px solid #e57373",
-            }}
-          >
-            <Typography
-              variant="body2"
-              fontWeight="bold"
-              color={
-                budgetSummary.isIncomeBalanced ? "success.main" : "error.main"
-              }
-            >
-              {budgetSummary.isIncomeBalanced
-                ? "✓ Income sources are balanced"
-                : "⚠ Income sources are not balanced"}
-            </Typography>
-            <Typography variant="body2" sx={{ mt: 0.5 }}>
-              Corporate Income: {formatCurrency(budgetSummary.incomeTotal)}
-            </Typography>
-            <Typography variant="body2">
-              Combined Income:{" "}
-              {formatCurrency(budgetSummary.combinedIncomeTotal)}
-            </Typography>
-          </Box>
-
-          <Typography variant="body2" sx={{ mt: 2, fontStyle: "italic" }}>
-            Once submitted, proposals will be sent for review and cannot be
-            modified unless returned.
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button
-            onClick={() => handleCloseDialog(false)}
-            color="inherit"
-            variant="outlined"
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={() => handleCloseDialog(true)}
-            color="primary"
-            variant="contained"
-            startIcon={<BalanceIcon />}
-          >
-            Submit All
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {loading && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-            alignItems: "center",
-            backgroundColor: "rgba(255, 255, 255, 0.8)",
-            zIndex: 1500,
-            backdropFilter: "blur(3px)",
-          }}
-        >
-          <CircularProgress size={60} thickness={4} />
-          <Typography
-            variant="h6"
-            sx={{
-              mt: 2,
-              fontWeight: "medium",
-              color: "#375e38",
-              textAlign: "center",
-              maxWidth: "80%",
-            }}
-          >
-            {isSubmitting ? "Submitting proposals..." : "Loading data..."}
-          </Typography>
-          <Typography
-            variant="body2"
-            sx={{
-              mt: 1,
-              color: "text.secondary",
-              textAlign: "center",
-              maxWidth: "80%",
-            }}
-          >
-            {isSubmitting
-              ? "This may take a moment. Please don't close this window."
-              : "Retrieving the latest budget data..."}
-          </Typography>
-        </div>
+        </AccordionDetails>
+      </Accordion>
       )}
 
-      {/* Mobile Tab Navigation */}
+      {/* Mobile Navigation */}
       <MobileTabNavigation />
 
-      {/* Activity Log Dialog */}
-      <ActivityLogDialog />
+      <div className="action-tab-container">
+        {/* Desktop Tab Buttons */}
+        <Box sx={{ display: { xs: 'none', md: 'flex' } }}>
+          <div className="tab-buttons">
+            <button
+              className={activeTab === "Income" ? "active" : ""}
+              onClick={() => setActiveTab("Income")}
+            >
+              <FaMoneyCheckAlt /> INCOME
+            </button>
+            <button
+              className={activeTab === "PSPermanent" ? "active" : ""}
+              onClick={() => setActiveTab("PSPermanent")}
+            >
+              <IoPersonCircleOutline /> PS - Permanent
+            </button>
+            <button
+              className={activeTab === "PSCasual" ? "active" : ""}
+              onClick={() => setActiveTab("PSCasual")}
+            >
+              <IoPersonCircleOutline /> PS - Casual
+            </button>
+            <button
+              className={activeTab === "COS/JO" ? "active" : ""}
+              onClick={() => setActiveTab("COS/JO")}
+            >
+              <FaFileContract /> COS/JO
+            </button>
+            <button
+              className={activeTab === "MOOE" ? "active" : ""}
+              onClick={() => setActiveTab("MOOE")}
+            >
+              <GrHostMaintenance /> MOOE
+            </button>
+            <button
+              className={activeTab === "Capital Outlay" ? "active" : ""}
+              onClick={() => setActiveTab("Capital Outlay")}
+            >
+              <FaMoneyBill /> CAPITAL OUTLAY
+            </button>
+            <button
+              className={activeTab === "Budgetary Support" ? "active" : ""}
+              onClick={() => setActiveTab("Budgetary Support")}
+            >
+              <FaProjectDiagram /> BSGC
+            </button>
+          </div>
+        </Box>
+
+        {/* Tab Content Rendering */}
+        <Box sx={{ mt: 3, mb: 3, width: '100%' }}>
+          {activeTab === "Income" && (
+            <IncomeTable
+              proposalId={dataListName}
+              region={activeRegion}
+              fiscalYear={selectedFiscalYear}
+              onGrandTotalUpdate={(grandTotal) => {
+                setIncomeGrandTotal(grandTotal || 0);
+              }}
+              onGroupedItemsUpdate={(items) => {
+                setGroupedItems(items || {});
+              }}
+            />
+          )}
+
+          {activeTab === "PSPermanent" && (
+            <PSPermanentServiceTable
+              dataListName={dataListName}
+              schema={schema}
+              region={activeRegion}
+              fiscalYear={selectedFiscalYear}
+            />
+          )}
+
+          {activeTab === "PSCasual" && (
+            <PSCasualServiceTable
+              dataListName={dataListName}
+              schema={schema}
+              region={activeRegion}
+              fiscalYear={selectedFiscalYear}
+            />
+          )}
+
+          {activeTab === "COS/JO" && (
+            <PSCOSCustomPageTable
+              dataListName={dataListName}
+              schema={schema}
+              region={activeRegion}
+              fiscalYear={selectedFiscalYear}
+            />
+          )}
+
+          {activeTab === "MOOE" && (
+            <Mooe
+              dataListName={dataListName}
+              schema={schema}
+              region={activeRegion}
+              fiscalYear={selectedFiscalYear}
+            />
+          )}
+
+          {activeTab === "Capital Outlay" && (
+            useDataGridView ? (
+              <CapitalOutlayDataGrid
+                dataListName={dataListName}
+                schema={schema}
+                region={activeRegion}
+                fiscalYear={selectedFiscalYear}
+              />
+            ) : (
+              <CapitalOutlayTable
+                dataListName={dataListName}
+                schema={schema}
+                region={activeRegion}
+                fiscalYear={selectedFiscalYear}
+              />
+            )
+          )}
+
+          {activeTab === "Budgetary Support" && (
+            <>
+              {!activeBudgetType || !selectedFiscalYear ? (
+                <Box sx={{ p: 3, textAlign: 'center', backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+                  <CircularProgress sx={{ mb: 2 }} />
+                  <Typography variant="body2" color="textSecondary">
+                    Loading Budgetary Support data...
+                  </Typography>
+                  <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                    Fiscal Year: {selectedFiscalYear || 'Loading...'}
+                  </Typography>
+                  <Typography variant="caption" display="block">
+                    Budget Type: {activeBudgetType || 'Loading...'}
+                  </Typography>
+                </Box>
+              ) : (
+                <BudgetarySupportTable
+                  fiscalYear={selectedFiscalYear}
+                  budgetType={activeBudgetType}
+                  incomeGrandTotal={incomeGrandTotal}
+                  groupedItems={groupedItems}
+                />
+              )}
+            </>
+          )}
+        </Box>
+
+        {/* Enhanced Button Group with Export and Bulk Actions */}
+        <div className="button-group">
+          {/* Bulk Actions Button */}
+          {showBulkActions && (
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={(e) => setBulkActionsAnchor(e.currentTarget)}
+              startIcon={<SelectAllIcon />}
+              sx={{ mr: 1 }}
+            >
+              Bulk Actions ({
+                bulkSelection.personnel.length + 
+                bulkSelection.mooe.length + 
+                bulkSelection.capitalOutlay.length + 
+                bulkSelection.income.length + 
+                bulkSelection.budgetarySupport.length
+              })
+            </Button>
+          )}
+
+          {/* Export Button */}
+          <Button
+            variant="outlined"
+            color="secondary"
+            onClick={(e) => setExportMenuAnchor(e.currentTarget)}
+            startIcon={<GetAppIcon />}
+            sx={{ mr: 1, display: { xs: 'none', sm: 'inline-flex' } }}
+          >
+            Export
+          </Button>
+
+          {/* Activity Log Button */}
+          <Button
+            variant="outlined"
+            onClick={() => setShowActivityLog(true)}
+            startIcon={<HistoryIcon />}
+            sx={{ mr: 1, display: { xs: 'none', sm: 'inline-flex' } }}
+          >
+            Activity
+          </Button>
+
+          {/* TEMP: Hide Submit All Proposals and Save as Draft buttons */}
+          {(canCreate || canEditOwn) && (
+            <>
+              <Tooltip
+                title={
+                  readOnly
+                    ? "Account is in read-only mode"
+                    : !canEditOwn
+                    ? "You don't have permission to submit proposals. Please contact your administrator."
+                    : !budgetSummary.isIncomeBalanced
+                    ? "Combined Income Total must equal Corporate Income before submission"
+                    : ""
+                }
+              >
+                <span style={{ display: "inline-block" }}>
+                  {/* <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={handleOpenDialog}
+                    disabled={
+                      readOnly ||
+                      !canEditOwn ||
+                      !anyNotSubmitted ||
+                      isSubmitting
+                    }
+                    startIcon={<BalanceIcon />}
+                    sx={{
+                      mr: 1,
+                      py: 1,
+                      px: { xs: 2, sm: 3 },
+                      fontSize: { xs: "0.8rem", sm: "0.9rem" },
+                      backgroundColor: "#375e38",
+                      "&:hover": {
+                        backgroundColor: "#2e4e2f",
+                      },
+                    }}
+                  >
+                    Submit All Proposals
+                  </Button> */}
+                </span>
+              </Tooltip>
+              <Tooltip
+                title={
+                  readOnly
+                    ? "Account is in read-only mode"
+                    : Object.keys(validationErrors).length > 0
+                    ? "Please fix validation errors before saving"
+                    : !anyNotSubmitted
+                    ? "No eligible proposals to save as draft. All proposals may already be submitted or there are no proposals to save."
+                    : isSubmitting
+                    ? "Currently processing. Please wait..."
+                    : "Save all eligible proposals as draft"
+                }
+                arrow
+              >
+                <span style={{ display: "inline-block" }}>
+                  {/* <Button
+                    variant="outlined"
+                    color="success"
+                    onClick={() => handleSaveAsDraft()}
+                    disabled={!canEditOwn || !anyNotSubmitted || isSubmitting || Object.keys(validationErrors).length > 0 || readOnly}
+                    startIcon={
+                      saveStatus === "saving" ? (
+                        <CircularProgress size={16} />
+                      ) : (
+                        <SaveIcon />
+                      )
+                    }
+                    sx={{
+                      py: 1,
+                      px: { xs: 2, sm: 3 },
+                      fontSize: { xs: "0.8rem", sm: "0.9rem" },
+                      borderColor:
+                        Object.keys(validationErrors).length > 0
+                          ? "#f44336"
+                          : "#375e38",
+                      color:
+                        Object.keys(validationErrors).length > 0
+                          ? "#f44336"
+                          : "#375e38",
+                      "&:hover": {
+                        borderColor:
+                          Object.keys(validationErrors).length > 0
+                            ? "#d32f2f"
+                            : "#2e4e2f",
+                        backgroundColor:
+                          Object.keys(validationErrors).length > 0
+                            ? "rgba(244, 67, 54, 0.04)"
+                            : "rgba(55, 94, 56, 0.04)",
+                      },
+                    }}
+                  >
+                    {saveStatus === "saving" ? "Saving..." : "Save as Draft"}
+                  </Button> */}
+                </span>
+              </Tooltip>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Mobile Speed Dial for Actions */}
+      {isMobile && (
+        <SpeedDial
+          ariaLabel="Mobile Actions"
+          sx={{ position: 'fixed', bottom: 16, right: 16, display: { xs: 'block', md: 'none' } }}
+          icon={<SpeedDialIcon />}
+          open={speedDialOpen}
+          onClose={() => setSpeedDialOpen(false)}
+          onOpen={() => setSpeedDialOpen(true)}
+        >
+          <SpeedDialAction
+            icon={<GetAppIcon />}
+            tooltipTitle="Export"
+            onClick={(e) => setExportMenuAnchor(e.currentTarget)}
+          />
+          <SpeedDialAction
+            icon={<HistoryIcon />}
+            tooltipTitle="Activity Log"
+            onClick={() => setShowActivityLog(true)}
+          />
+          {showBulkActions && (
+            <SpeedDialAction
+              icon={<SelectAllIcon />}
+              tooltipTitle="Bulk Actions"
+              onClick={(e) => setBulkActionsAnchor(e.currentTarget)}
+            />
+          )}
+        </SpeedDial>
+      )}
 
       {/* Bulk Actions Menu */}
       <Menu
@@ -3566,13 +3284,33 @@ const CustomPage = ({
         open={Boolean(bulkActionsAnchor)}
         onClose={() => setBulkActionsAnchor(null)}
       >
-        <MenuItem onClick={() => handleBulkStatusChange('Submitted')}>
-          <ListItemIcon><CheckIcon /></ListItemIcon>
-          <ListItemText primary="Submit Selected" />
-        </MenuItem>
         <MenuItem onClick={() => handleBulkStatusChange('Draft')}>
-          <ListItemIcon><DraftsIcon /></ListItemIcon>
-          <ListItemText primary="Save as Draft" />
+          <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Save Selected as Draft</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => handleBulkStatusChange('Submitted')}>
+          <ListItemIcon><CheckCircleIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Submit Selected</ListItemText>
+        </MenuItem>
+        <Divider />
+        <MenuItem onClick={() => {
+          const currentType = activeTab === 'PSPermanent' || activeTab === 'PSCasual' || activeTab === 'COS/JO' ? 'personnel' : 
+                             activeTab === 'MOOE' ? 'mooe' :
+                             activeTab === 'Capital Outlay' ? 'capitalOutlay' :
+                             activeTab === 'Income' ? 'income' : 'budgetarySupport';
+          handleSelectAll(currentType);
+          setBulkActionsAnchor(null);
+        }}>
+          <ListItemIcon><SelectAllIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Select All in Tab</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => {
+          setBulkSelection({ personnel: [], mooe: [], capitalOutlay: [], income: [], budgetarySupport: [] });
+          setShowBulkActions(false);
+          setBulkActionsAnchor(null);
+        }}>
+          <ListItemIcon><DeselectIcon fontSize="small" /></ListItemIcon>
+          <ListItemText>Deselect All</ListItemText>
         </MenuItem>
       </Menu>
 
@@ -3617,11 +3355,11 @@ const CustomPage = ({
           }, null, 2)}
         </pre>
       </Box> */}
-    </ErrorBoundary>
+    </StyledBox>
   );
 };
 
-CustomPage.propTypes = {
+ProposalCustomPage.propTypes = {
   dataListName: PropTypes.string.isRequired,
   schema: PropTypes.object.isRequired,
   title: PropTypes.string,
@@ -3629,4 +3367,4 @@ CustomPage.propTypes = {
   searchable: PropTypes.bool,
 };
 
-export default CustomPage;
+export default ProposalCustomPage;

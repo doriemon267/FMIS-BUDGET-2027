@@ -48,6 +48,7 @@ import ConsolidatedPersonnelServicesReportsPage from "./components/reports/Conso
 import ComprehensiveReportsPage from "./components/reports/ComprehensiveReportsPage";
 import DatabaseBackupPage from "./pages/DatabaseBackupPage";
 import HierarchicalUserAssignmentPage from "./pages/HierarchicalUserAssignmentPage";
+import NewProposalWorkflowPage from "./pages/NewProposalWorkflowPage";
 import AuditLogsPage from "./pages/AuditLogsPage";
 import ProposalDetailsPage from "./components/workflow/ProposalDetailsPage";
 const App = () => {
@@ -250,6 +251,14 @@ const App = () => {
         <Route path="/loyaltyPay" element={<EmployeeBenefitsPage />} />
         <Route path="/Appearance" element={<AppearancePage />} />
         <Route path="/ProposalSummaryPage" element={<ProposalSummaryPage />} />
+        <Route
+          path="/new-proposal-workflow"
+          element={
+            <ProtectedRoute>
+              <NewProposalWorkflowPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/uploader" element={<UploaderPage />} />
         <Route path="/mealallowance" element={<EmployeeBenefitsPage />} />
         <Route path="/medicalAllowance" element={<EmployeeBenefitsPage />} />

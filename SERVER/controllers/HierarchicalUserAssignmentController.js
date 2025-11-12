@@ -103,8 +103,8 @@ const lookupUserFromMainDB = async (req, res) => {
 
     console.log(`🔍 User ${userId} roles from DB:`, roleNames);
 
-    if (roleNames.includes('SUPER ADMIN') || roleNames.includes('SUPER_ADMIN') || roleNames.includes('ADMIN') || roleNames.includes('BUDGET ADMIN') || roleNames.includes('BUDGET_ADMIN')) {
-      budgetRole = 'BUDGET_ADMIN';
+    if (roleNames.includes('SUPER ADMIN') || roleNames.includes('SUPER_ADMIN') || roleNames.includes('ADMIN')) {
+      budgetRole = 'SUPER_ADMIN';
     } else if (roleNames.includes('OVERALL_BUDGET_APPROVER') || roleNames.includes('OVERALL BUDGET APPROVER')) {
       // STEP 6: OVERALL_BUDGET_APPROVER
       budgetRole = 'OVERALL_BUDGET_APPROVER';
@@ -534,10 +534,22 @@ const getHierarchicalAssignment = async (req, res) => {
 const getAllHierarchicalAssignments = async (req, res) => {
   try {
     const userRoles = req.user.Roles;
-    if (!hasFullAccess(userRoles)) {
+    
+    // Allow access for users with budget roles or admin privileges
+    const hasBudgetRole = userRoles && (
+      userRoles.includes('BUDGET PREPARER') ||
+      userRoles.includes('BUDGET REVIEWER') ||
+      userRoles.includes('BUDGET APPROVER') ||
+      userRoles.includes('BUDGET PLANNING ANALYST') ||
+      userRoles.includes('BUDGET OFFICER') ||
+      userRoles.includes('BUDGET MANAGER') ||
+      userRoles.includes('OVERALL_BUDGET_APPROVER')
+    );
+    
+    if (!hasFullAccess(userRoles) && !hasBudgetRole) {
       return res.status(403).json({
         success: false,
-        message: 'Access denied. Admin privileges required.',
+        message: 'Access denied. Budget role or admin privileges required.',
         code: 'ADMIN_REQUIRED'
       });
     }

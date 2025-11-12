@@ -196,7 +196,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
     return currentUser.Roles.some(role => 
       role.toUpperCase().includes('ADMIN') || 
       role.toUpperCase().includes('SUPER') ||
-      role.toUpperCase().includes('BUDGET ADMIN')
+      role.toUpperCase().includes('SUPER ADMIN')
     );
   }, [currentUser]);
 

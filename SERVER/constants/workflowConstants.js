@@ -52,11 +52,11 @@ const ASSIGNMENT_LEVELS = {
 const USER_ROLES = {
   BUDGET_PREPARER: 'BUDGET PREPARER',
   BUDGET_REVIEWER: 'BUDGET REVIEWER',
-  APPROVER: 'BUDGET APPROVER',
-  BUDGET_PLANNING_ANALYST: 'BUDGET_PLANNING_ANALYST',
-  BUDGET_OFFICER: 'BUDGET_OFFICER',
-  OVERALL_BUDGET_APPROVER: 'OVERALL_BUDGET_APPROVER',
-  BUDGET_ADMIN: 'BUDGET_ADMIN'
+  BUDGET_APPROVER: 'BUDGET APPROVER',
+  BUDGET_PLANNING_ANALYST: 'BUDGET PLANNING ANALYST',
+  BUDGET_OFFICER: 'BUDGET OFFICER',
+  BUDGET_MANAGER: 'BUDGET MANAGER',
+  SUPER_ADMIN: 'SUPER ADMIN'
 };
 
 // Workflow Roles (internal role names for workflow management)
@@ -73,8 +73,8 @@ const WORKFLOW_ROLES = {
   // Budget and Revenue Division
   BUDGET_PLANNING_ANALYST: 'budgetAnalyst',
   BUDGET_OFFICER: 'budgetOfficer',
-  OVERALL_BUDGET_APPROVER: 'overallBudgetApprover',
-  BUDGET_ADMIN: 'budgetAdmin',
+  BUDGET_MANAGER: 'budgetManager',
+  SUPER_ADMIN: 'superAdmin',
   
   // Legacy/Compatibility roles
   DIVISION_CREATOR_LEGACY: 'divisionCreator',
@@ -94,9 +94,9 @@ const WORKFLOW_STEPS = {
     step: 2,
     name: 'BUDGET REVIEWER',
     description: 'Reviews division-level submissions',
-    nextStep: 'BUDGET APPROVER'
+    nextStep: 'BUDGET_APPROVER'
   },
-  APPROVER: {
+  BUDGET_APPROVER: {
     step: 3,
     name: 'BUDGET APPROVER',
     description: 'Approves/verifies submissions',
@@ -104,19 +104,19 @@ const WORKFLOW_STEPS = {
   },
   BUDGET_PLANNING_ANALYST: {
     step: 4,
-    name: 'BUDGET_PLANNING_ANALYST',
+    name: 'BUDGET PLANNING ANALYST',
     description: 'Performs technical review',
     nextStep: 'BUDGET_OFFICER'
   },
   BUDGET_OFFICER: {
     step: 5,
-    name: 'BUDGET_OFFICER',
+    name: 'BUDGET OFFICER',
     description: 'Provides operational approval',
-    nextStep: 'OVERALL_BUDGET_APPROVER'
+    nextStep: 'BUDGET_MANAGER'
   },
-  OVERALL_BUDGET_APPROVER: {
+  BUDGET_MANAGER: {
     step: 6,
-    name: 'OVERALL_BUDGET_APPROVER',
+    name: 'BUDGET MANAGER',
     description: 'Executive authorization and final approval',
     nextStep: null
   }
@@ -155,14 +155,14 @@ const ASSIGNMENT_LEVEL_WORKFLOW_MAPPING = {
     autoAssignedRoles: [
       WORKFLOW_ROLES.BUDGET_PLANNING_ANALYST,
       WORKFLOW_ROLES.BUDGET_OFFICER,
-      WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER,
-      WORKFLOW_ROLES.BUDGET_ADMIN
+      WORKFLOW_ROLES.BUDGET_MANAGER,
+      WORKFLOW_ROLES.SUPER_ADMIN
     ],
     canHaveRoles: [
       WORKFLOW_ROLES.BUDGET_PLANNING_ANALYST,
       WORKFLOW_ROLES.BUDGET_OFFICER,
-      WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER,
-      WORKFLOW_ROLES.BUDGET_ADMIN
+      WORKFLOW_ROLES.BUDGET_MANAGER,
+      WORKFLOW_ROLES.SUPER_ADMIN
     ],
     description: 'Central budget authority handling final reviews and approvals'
   },
@@ -176,8 +176,8 @@ const ASSIGNMENT_LEVEL_WORKFLOW_MAPPING = {
       WORKFLOW_ROLES.OFFICE_APPROVER,
       WORKFLOW_ROLES.BUDGET_PLANNING_ANALYST,
       WORKFLOW_ROLES.BUDGET_OFFICER,
-      WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER,
-      WORKFLOW_ROLES.BUDGET_ADMIN
+      WORKFLOW_ROLES.BUDGET_MANAGER,
+      WORKFLOW_ROLES.SUPER_ADMIN
     ],
     canHaveRoles: [
       WORKFLOW_ROLES.DIVISION_CREATOR,
@@ -187,8 +187,8 @@ const ASSIGNMENT_LEVEL_WORKFLOW_MAPPING = {
       WORKFLOW_ROLES.OFFICE_APPROVER,
       WORKFLOW_ROLES.BUDGET_PLANNING_ANALYST,
       WORKFLOW_ROLES.BUDGET_OFFICER,
-      WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER,
-      WORKFLOW_ROLES.BUDGET_ADMIN
+      WORKFLOW_ROLES.BUDGET_MANAGER,
+      WORKFLOW_ROLES.SUPER_ADMIN
     ],
     description: 'Full access to all workflow roles'
   }
@@ -202,9 +202,9 @@ const WORKFLOW_PATHS = {
       'BUDGET PREPARER',      // divisionCreator
       'BUDGET REVIEWER',      // divisionReviewer
       'BUDGET APPROVER',      // divisionApprover
-      'BUDGET_PLANNING_ANALYST',
-      'BUDGET_OFFICER',
-      'OVERALL_BUDGET_APPROVER'
+      'BUDGET PLANNING ANALYST',
+      'BUDGET OFFICER',
+      'BUDGET MANAGER'
     ]
   },
   OFFICE_SUBMISSION: {
@@ -212,9 +212,9 @@ const WORKFLOW_PATHS = {
     steps: [
       'BUDGET PREPARER',      // officeCreator (skips BUDGET_COORDINATOR)
       'BUDGET APPROVER',      // officeApprover (skips BUDGET REVIEWER)
-      'BUDGET_PLANNING_ANALYST',
-      'BUDGET_OFFICER',
-      'OVERALL_BUDGET_APPROVER'
+      'BUDGET PLANNING ANALYST',
+      'BUDGET OFFICER',
+      'BUDGET MANAGER'
     ]
   }
 };
@@ -228,8 +228,8 @@ const WORKFLOW_ROLE_DESCRIPTIONS = {
   [WORKFLOW_ROLES.OFFICE_APPROVER]: 'Approves office-level submissions and routes to preparer (skips coordinator)',
   [WORKFLOW_ROLES.BUDGET_PLANNING_ANALYST]: 'Performs technical review of all submissions',
   [WORKFLOW_ROLES.BUDGET_OFFICER]: 'Provides operational approval after technical review',
-  [WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER]: 'Executive authorization and final budget approval',
-  [WORKFLOW_ROLES.BUDGET_ADMIN]: 'Administrative access for budget management'
+  [WORKFLOW_ROLES.BUDGET_MANAGER]: 'Executive authorization and final budget approval',
+  [WORKFLOW_ROLES.SUPER_ADMIN]: 'Administrative access for budget management'
 };
 
 // Role Hierarchy (for access control and permissions)
@@ -241,8 +241,8 @@ const ROLE_HIERARCHY = {
   [WORKFLOW_ROLES.OFFICE_APPROVER]: 3,
   [WORKFLOW_ROLES.BUDGET_PLANNING_ANALYST]: 4,
   [WORKFLOW_ROLES.BUDGET_OFFICER]: 5,
-  [WORKFLOW_ROLES.OVERALL_BUDGET_APPROVER]: 6,
-  [WORKFLOW_ROLES.BUDGET_ADMIN]: 99
+  [WORKFLOW_ROLES.BUDGET_MANAGER]: 6,
+  [WORKFLOW_ROLES.SUPER_ADMIN]: 99
 };
 
 // Permission Mapping

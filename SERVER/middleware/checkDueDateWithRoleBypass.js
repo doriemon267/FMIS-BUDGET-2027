@@ -8,7 +8,7 @@ const checkDueDateWithRoleBypass = async (req, res, next) => {
       return (
         role.includes('ADMIN') ||
         role.includes('SUPER') ||
-        role.includes('BUDGET ADMIN') ||
+        role.includes('SUPER ADMIN') ||
         role.includes('BUDGET PREPARER')
       );
     });

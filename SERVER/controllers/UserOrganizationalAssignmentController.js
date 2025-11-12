@@ -119,7 +119,7 @@ const createOrUpdateOrganizationalAssignment = async (req, res) => {
     // - BUDGET_REVIEWER (Approver): divisionapprover only
     // - BUDGET OFFICER (Verifier): officeconsolidator, officeFinalVerifier
     // - BUDGET MANAGER (Final Approver): managerapprover, regionfinalverifier
-    // - BUDGET ADMIN (Full Access): all roles for administrative purposes
+    // - SUPER ADMIN (Full Access): all roles for administrative purposes
     const autoAssignedWorkflowRoles = [];
     
     if (userRole === 'PREPARER') {
@@ -140,8 +140,8 @@ const createOrUpdateOrganizationalAssignment = async (req, res) => {
     } else if (userRole === 'OVERALL_BUDGET_APPROVER') {
       // STEP 6: OVERALL_BUDGET_APPROVER: Final approver and regional verifier (no creator role)
       autoAssignedWorkflowRoles.push('regionFinalVerifier');
-    } else if (userRole === 'BUDGET_ADMIN' || accessScope === 'FULL') {
-      // BUDGET ADMIN or FULL access: All roles for administrative purposes
+    } else if (userRole === 'SUPER_ADMIN' || accessScope === 'FULL') {
+      // SUPER ADMIN or FULL access: All roles for administrative purposes
       autoAssignedWorkflowRoles.push('officeCreator', 'officeFinalVerifier', 'regionFinalVerifier');
     } else {
       // Fallback: If no userRole specified, use old logic based on accessScope only
