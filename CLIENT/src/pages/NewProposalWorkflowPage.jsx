@@ -273,120 +273,210 @@ const NewProposalWorkflowPage = () => {
 
   // Render proposal status chip
   const renderStatusChip = (status) => {
-    const statusInfo = WORKFLOW_STATUSES[status] || { label: status, color: 'default' };
+    const statusColorMap = {
+      'Draft': { bg: '#ffb74d', text: '#fff' },
+      'Forwarded to Reviewer': { bg: '#42a5f5', text: '#fff' },
+      'Forwarded to Approver': { bg: '#42a5f5', text: '#fff' },
+      'Forwarded to Budget Planning Analyst': { bg: '#42a5f5', text: '#fff' },
+      'Forwarded to Budget Officer': { bg: '#42a5f5', text: '#fff' },
+      'Forwarded to Overall Budget Approver': { bg: '#42a5f5', text: '#fff' },
+      'Finalized': { bg: '#66bb6a', text: '#fff' },
+      'Returned': { bg: '#ef5350', text: '#fff' }
+    };
+    
+    const colors = statusColorMap[status] || { bg: '#999', text: '#fff' };
+    
     return (
       <Chip
-        label={statusInfo.label}
-        color={statusInfo.color}
+        label={status}
+        sx={{
+          bgcolor: colors.bg,
+          color: colors.text,
+          fontWeight: 'bold',
+          fontSize: '0.75rem'
+        }}
         size="small"
-        variant="outlined"
       />
     );
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ p: 0, bgcolor: '#f5f5f5', minHeight: '100vh' }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" component="h1">
-          New Proposal Workflow
+      <Box sx={{ bgcolor: '#2d5016', color: 'white', p: 3, mb: 0 }}>
+        <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold', mb: 0.5 }}>
+          Proposal Workflow
+        </Typography>
+        <Typography variant="body2" sx={{ opacity: 0.9 }}>
+          Process Budget Proposals
         </Typography>
       </Box>
 
-      {/* Tabs */}
-      <Paper sx={{ mb: 3 }}>
-        <Tabs
-          value={activeTab}
-          onChange={handleTabChange}
-          indicatorColor="primary"
-          textColor="primary"
-          variant="fullWidth"
-        >
-          {TABS.map((tab, index) => (
-            <Tab key={index} label={tab.label} />
-          ))}
-        </Tabs>
-      </Paper>
+      {/* Tabs with green style */}
+      <Box sx={{ 
+        display: 'flex', 
+        bgcolor: '#2d5016',
+        gap: 2,
+        px: 3,
+        pt: 2,
+        pb: 0
+      }}>
+        {TABS.map((tab, index) => (
+          <Box
+            key={index}
+            onClick={() => handleTabChange(null, index)}
+            sx={{
+              px: 3,
+              py: 2,
+              bgcolor: activeTab === index ? '#4a7c2c' : 'transparent',
+              color: 'white',
+              cursor: 'pointer',
+              fontWeight: activeTab === index ? 'bold' : 'normal',
+              borderBottom: activeTab === index ? '3px solid #fff' : 'none',
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                bgcolor: '#4a7c2c'
+              }
+            }}
+          >
+            <Typography variant="body1">{tab.label}</Typography>
+          </Box>
+        ))}
+      </Box>
 
       {/* Content */}
-      <Paper sx={{ p: 3 }}>
+      <Paper sx={{ m: 3, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
             <CircularProgress />
           </Box>
         ) : (
           <>
-            <TableContainer>
-              <Table>
+            <TableContainer sx={{ p: 3 }}>
+              <Table sx={{ borderCollapse: 'collapse' }}>
                 <TableHead>
-                  <TableRow>
-                    <TableCell><strong>RESPONSIBILITY CENTER</strong></TableCell>
-                    <TableCell><strong>FISCAL YEAR</strong></TableCell>
-                    <TableCell><strong>BUDGET TYPE</strong></TableCell>
-                    <TableCell><strong>SUBMITTED DATE</strong></TableCell>
-                    <TableCell align="right"><strong>PROJECTED INCOME</strong></TableCell>
-                    <TableCell align="right"><strong>PROJECTED EXPENSES</strong></TableCell>
-                    <TableCell align="right"><strong>PROPOSED BUDGET</strong></TableCell>
-                    <TableCell><strong>STATUS</strong></TableCell>
-                    <TableCell><strong>ACTIONS</strong></TableCell>
+                  <TableRow sx={{ bgcolor: '#2d5016' }}>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold', p: 2, borderBottom: '2px solid #fff' }}>
+                      RESPONSIBILITY CENTER
+                    </TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold', p: 2, borderBottom: '2px solid #fff' }}>
+                      FISCAL YEAR
+                    </TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold', p: 2, borderBottom: '2px solid #fff' }}>
+                      BUDGET TYPE
+                    </TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold', p: 2, borderBottom: '2px solid #fff' }}>
+                      DATE
+                    </TableCell>
+                    <TableCell align="right" sx={{ color: 'white', fontWeight: 'bold', p: 2, borderBottom: '2px solid #fff' }}>
+                      PROJECTED INCOME
+                    </TableCell>
+                    <TableCell align="right" sx={{ color: 'white', fontWeight: 'bold', p: 2, borderBottom: '2px solid #fff' }}>
+                      PROJECTED EXPENSES
+                    </TableCell>
+                    <TableCell align="right" sx={{ color: 'white', fontWeight: 'bold', p: 2, borderBottom: '2px solid #fff' }}>
+                      PROPOSED BUDGET
+                    </TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold', p: 2, borderBottom: '2px solid #fff' }}>
+                      STATUS
+                    </TableCell>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold', p: 2, borderBottom: '2px solid #fff' }}>
+                      ACTIONS
+                    </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {proposals
                     .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                    .map((proposal) => (
-                      <TableRow key={proposal._id}>
-                        <TableCell>
-                          <Typography variant="body2" fontWeight="bold">
+                    .map((proposal, index) => (
+                      <TableRow 
+                        key={proposal._id}
+                        sx={{
+                          bgcolor: index % 2 === 0 ? '#f9f9f9' : '#fff',
+                          borderBottom: '1px solid #e0e0e0',
+                          '&:hover': {
+                            bgcolor: '#f0f4e8'
+                          }
+                        }}
+                      >
+                        <TableCell sx={{ p: 2 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
                             {proposal.responsibilityCenter || proposal.division || 'N/A'}
                           </Typography>
                         </TableCell>
-                        <TableCell>{proposal.fiscalYear}</TableCell>
-                        <TableCell>
+                        <TableCell sx={{ p: 2 }}>{proposal.fiscalYear}</TableCell>
+                        <TableCell sx={{ p: 2 }}>
                           <Chip
-                            label={proposal.budgetType.toUpperCase()}
+                            label={proposal.budgetType?.toUpperCase()}
                             size="small"
-                            color="secondary"
-                            variant="outlined"
+                            sx={{
+                              bgcolor: '#4a7c2c',
+                              color: 'white',
+                              fontWeight: 'bold'
+                            }}
                           />
                         </TableCell>
-                        <TableCell>
-                          {new Date(proposal.createdAt).toLocaleDateString()}
+                        <TableCell sx={{ p: 2 }}>
+                          {new Date(proposal.createdAt).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit'
+                          })}
                         </TableCell>
-                        <TableCell align="right">
-                          ₱{(proposal.totalIncome || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <TableCell align="right" sx={{ p: 2 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            ₱{(proposal.totalIncome || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </Typography>
                         </TableCell>
-                        <TableCell align="right">
-                          ₱{(proposal.totalExpenses || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <TableCell align="right" sx={{ p: 2 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            ₱{(proposal.totalExpenses || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </Typography>
                         </TableCell>
-                        <TableCell align="right">
-                          ₱{(proposal.proposedBudget || proposal.totalExpenses + proposal.totalIncome || proposal.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <TableCell align="right" sx={{ p: 2 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#2d5016' }}>
+                            ₱{(proposal.proposedBudget || proposal.totalExpenses + proposal.totalIncome || proposal.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </Typography>
                         </TableCell>
-                        <TableCell>
+                        <TableCell sx={{ p: 2 }}>
                           {renderStatusChip(proposal.status)}
                         </TableCell>
-                        <TableCell>
-                          <Box sx={{ display: 'flex', gap: 1 }}>
+                        <TableCell sx={{ p: 2 }}>
+                          <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
                             <Tooltip title="View Details">
-                              <IconButton size="small">
-                                <ViewIcon />
+                              <IconButton size="small" sx={{ color: '#2d5016' }}>
+                                <ViewIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
-                            {getAvailableActions(proposal).map((action) => (
-                              <Tooltip key={action.value} title={action.label}>
-                                <IconButton
+                            {getAvailableActions(proposal).length > 0 ? (
+                              <Tooltip title="Actions">
+                                <Button
                                   size="small"
-                                  color={action.color}
+                                  variant="contained"
+                                  sx={{
+                                    bgcolor: '#2d5016',
+                                    color: 'white',
+                                    textTransform: 'none',
+                                    fontSize: '0.75rem',
+                                    '&:hover': {
+                                      bgcolor: '#4a7c2c'
+                                    }
+                                  }}
                                   onClick={() => {
                                     setSelectedProposal(proposal);
+                                    const action = getAvailableActions(proposal)[0];
                                     setActionType(action.value);
                                     setActionDialogOpen(true);
                                   }}
                                 >
-                                  {action.icon}
-                                </IconButton>
+                                  ACTIONS
+                                </Button>
                               </Tooltip>
-                            ))}
+                            ) : (
+                              <Typography variant="caption" sx={{ color: '#999' }}>
+                                No actions
+                              </Typography>
+                            )}
                           </Box>
                         </TableCell>
                       </TableRow>
@@ -395,32 +485,63 @@ const NewProposalWorkflowPage = () => {
               </Table>
             </TableContainer>
 
-            <TablePagination
-              rowsPerPageOptions={[5, 10, 25]}
-              component="div"
-              count={proposals.length}
-              rowsPerPage={rowsPerPage}
-              page={page}
-              onPageChange={handleChangePage}
-              onRowsPerPageChange={handleChangeRowsPerPage}
-            />
+            <Box sx={{ 
+              p: 3, 
+              bgcolor: '#f9f9f9',
+              borderTop: '1px solid #e0e0e0',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <Typography variant="body2" sx={{ color: '#666' }}>
+                Rows per page:
+                <Select
+                  value={rowsPerPage}
+                  onChange={handleChangeRowsPerPage}
+                  size="small"
+                  sx={{ ml: 1, minWidth: 60 }}
+                >
+                  <MenuItem value={5}>5</MenuItem>
+                  <MenuItem value={10}>10</MenuItem>
+                  <MenuItem value={25}>25</MenuItem>
+                </Select>
+              </Typography>
+              
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <Typography variant="body2" sx={{ color: '#666' }}>
+                  {page * rowsPerPage + 1}-{Math.min((page + 1) * rowsPerPage, proposals.length)} of {proposals.length}
+                </Typography>
+                <IconButton
+                  size="small"
+                  onClick={() => handleChangePage(null, page - 1)}
+                  disabled={page === 0}
+                  sx={{ color: '#2d5016' }}
+                >
+                  <Typography sx={{ fontSize: '1.2rem' }}>‹</Typography>
+                </IconButton>
+                <Typography variant="body2" sx={{ color: '#666', minWidth: 30, textAlign: 'center' }}>
+                  {page + 1}
+                </Typography>
+                <IconButton
+                  size="small"
+                  onClick={() => handleChangePage(null, page + 1)}
+                  disabled={(page + 1) * rowsPerPage >= proposals.length}
+                  sx={{ color: '#2d5016' }}
+                >
+                  <Typography sx={{ fontSize: '1.2rem' }}>›</Typography>
+                </IconButton>
+              </Box>
+            </Box>
           </>
         )}
       </Paper>
-
-      {/* Create Proposal Dialog - REMOVED */
-      /*
-      <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="md" fullWidth>
-        ...
-      </Dialog>
-      */}
 
       {/* Action Dialog */}
       <Dialog open={actionDialogOpen} onClose={() => setActionDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Confirm Action</DialogTitle>
         <DialogContent>
           <Typography variant="body1" sx={{ mb: 2 }}>
-            Are you sure you want to perform this action on the proposal "{selectedProposal?.title}"?
+            Are you sure you want to perform this action on the proposal {`"${selectedProposal?.title}"`}?
           </Typography>
           <TextField
             fullWidth
