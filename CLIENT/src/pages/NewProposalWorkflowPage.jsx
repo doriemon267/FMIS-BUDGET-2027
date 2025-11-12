@@ -318,40 +318,46 @@ const NewProposalWorkflowPage = () => {
         </Typography>
       </Box>
 
-      {/* Tabs with green style */}
-      <Box sx={{ 
-        display: 'flex', 
-        bgcolor: '#375e38',
-        gap: 2,
-        px: 3,
-        pt: 2,
-        pb: 0
-      }}>
-        {TABS.map((tab, index) => (
-          <Box
-            key={index}
-            onClick={() => handleTabChange(null, index)}
-            sx={{
-              px: 3,
-              py: 2,
-              bgcolor: activeTab === index ? '#013d24ff' : 'transparent',
-              color: 'white',
-              cursor: 'pointer',
-              fontWeight: activeTab === index ? 'bold' : 'normal',
-              borderBottom: activeTab === index ? '3px solid #fff' : 'none',
-              transition: 'all 0.3s ease',
-              '&:hover': {
-                bgcolor: '#3e8868ff'
-              }
-            }}
-          >
-            <Typography variant="body1">{tab.label}</Typography>
-          </Box>
-        ))}
-      </Box>
+      {/* Tabs and Table Container */}
+      <Box sx={{ mx: 3, mt: 3, mb: 3 }}>
+        {/* Tabs with green style */}
+        <Box sx={{ 
+          display: 'flex', 
+          bgcolor: '#2d5016',
+          gap: 1.5,
+          px: 2,
+          py: 1.5,
+          borderRadius: '4px 4px 0 0'
+        }}>
+          {TABS.map((tab, index) => (
+            <Box
+              key={index}
+              onClick={() => handleTabChange(null, index)}
+              sx={{
+                px: 3,
+                py: 1.5,
+                bgcolor: activeTab === index ? '#1a3d0b' : '#4a7c2c',
+                color: 'white',
+                cursor: 'pointer',
+                fontWeight: activeTab === index ? 'bold' : 'normal',
+                borderRadius: '4px',
+                transition: 'all 0.3s ease',
+                '&:hover': {
+                  bgcolor: activeTab === index ? '#1a3d0b' : '#5a8c3c'
+                }
+              }}
+            >
+              <Typography variant="body1" sx={{ fontSize: '0.95rem' }}>{tab.label}</Typography>
+            </Box>
+          ))}
+        </Box>
 
-      {/* Content */}
-      <Paper sx={{ m: 3, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+        {/* Content */}
+        <Paper sx={{ 
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          mt: 0,
+          borderRadius: '0 0 4px 4px'
+        }}>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
             <CircularProgress />
@@ -573,7 +579,8 @@ const NewProposalWorkflowPage = () => {
             </Box>
           </>
         )}
-      </Paper>
+        </Paper>
+      </Box>
 
       {/* Action Dialog */}
       <Dialog open={actionDialogOpen} onClose={() => setActionDialogOpen(false)} maxWidth="sm" fullWidth>
