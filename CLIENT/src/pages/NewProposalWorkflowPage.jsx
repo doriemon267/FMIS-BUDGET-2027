@@ -224,6 +224,9 @@ const NewProposalWorkflowPage = () => {
     const currentStatus = proposal.status;
     const actions = [];
 
+    // VIEW DETAILS (always available)
+    actions.push({ label: 'View Details', value: 'view-details', icon: <ViewIcon />, color: '#2d5016' });
+
     // BUDGET PREPARER actions
     if (userRoles.includes('BUDGET PREPARER') && proposal.createdBy === currentUser?.id) {
       if (currentStatus === 'Draft') {
@@ -306,7 +309,7 @@ const NewProposalWorkflowPage = () => {
   return (
     <Box sx={{ p: 0, bgcolor: '#f5f5f5', minHeight: '100vh' }}>
       {/* Header */}
-      <Box sx={{ bgcolor: '#2d5016', color: 'white', p: 3, mb: 0 }}>
+      <Box sx={{ bgcolor: '#375e38', color: 'white', p: 3, mb: 0 }}>
         <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold', mb: 0.5 }}>
           Proposal Workflow
         </Typography>
@@ -318,7 +321,7 @@ const NewProposalWorkflowPage = () => {
       {/* Tabs with green style */}
       <Box sx={{ 
         display: 'flex', 
-        bgcolor: '#2d5016',
+        bgcolor: '#375e38',
         gap: 2,
         px: 3,
         pt: 2,
@@ -331,14 +334,14 @@ const NewProposalWorkflowPage = () => {
             sx={{
               px: 3,
               py: 2,
-              bgcolor: activeTab === index ? '#4a7c2c' : 'transparent',
+              bgcolor: activeTab === index ? '#013d24ff' : 'transparent',
               color: 'white',
               cursor: 'pointer',
               fontWeight: activeTab === index ? 'bold' : 'normal',
               borderBottom: activeTab === index ? '3px solid #fff' : 'none',
               transition: 'all 0.3s ease',
               '&:hover': {
-                bgcolor: '#4a7c2c'
+                bgcolor: '#3e8868ff'
               }
             }}
           >
@@ -413,7 +416,7 @@ const NewProposalWorkflowPage = () => {
                             label={proposal.budgetType?.toUpperCase()}
                             size="small"
                             sx={{
-                              bgcolor: '#4a7c2c',
+                              bgcolor: '#012014ff',
                               color: 'white',
                               fontWeight: 'bold'
                             }}
@@ -446,23 +449,18 @@ const NewProposalWorkflowPage = () => {
                         </TableCell>
                         <TableCell sx={{ p: 2 }}>
                           <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-                            <Tooltip title="View Details">
-                              <IconButton size="small" sx={{ color: '#2d5016' }}>
-                                <ViewIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                            {getAvailableActions(proposal).length > 0 ? (
+                            {getAvailableActions(proposal).length > 0 && (
                               <>
                                 <Button
                                   size="small"
                                   variant="contained"
                                   sx={{
-                                    bgcolor: '#2d5016',
+                                    bgcolor: '#035c28ff',
                                     color: 'white',
                                     textTransform: 'none',
                                     fontSize: '0.75rem',
                                     '&:hover': {
-                                      bgcolor: '#4a7c2c'
+                                      bgcolor: '#06965fff'
                                     }
                                   }}
                                   onClick={(e) => {
@@ -484,18 +482,39 @@ const NewProposalWorkflowPage = () => {
                                       onClick={() => {
                                         setActionType(action.value);
                                         setActionMenuAnchor(null);
-                                        setActionDialogOpen(true);
+                                        if (action.value === 'view-details') {
+                                          // Handle view details - could navigate or open details dialog
+                                          console.log('Viewing details for:', proposal._id);
+                                        } else {
+                                          setActionDialogOpen(true);
+                                        }
+                                      }}
+                                      sx={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 1,
+                                        color: action.value === 'view-details' ? '#2d5016' : 'inherit',
+                                        fontWeight: action.value === 'view-details' ? 'bold' : 'normal',
+                                        '&:hover': {
+                                          bgcolor: action.value === 'view-details' ? '#e8f5e9' : '#f5f5f5'
+                                        }
                                       }}
                                     >
+                                      <Box sx={{ 
+                                        display: 'flex', 
+                                        alignItems: 'center',
+                                        color: action.color === 'primary' ? '#2d5016' : 
+                                               action.color === 'warning' ? '#ff9800' :
+                                               action.color === 'success' ? '#66bb6a' :
+                                               '#2d5016'
+                                      }}>
+                                        {action.icon}
+                                      </Box>
                                       {action.label}
                                     </MenuItem>
                                   ))}
                                 </Menu>
                               </>
-                            ) : (
-                              <Typography variant="caption" sx={{ color: '#999' }}>
-                                No actions
-                              </Typography>
                             )}
                           </Box>
                         </TableCell>
