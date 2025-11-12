@@ -320,14 +320,11 @@ const NewProposalWorkflowPage = () => {
 
       {/* Tabs and Table Container */}
       <Box sx={{ mx: 3, mt: 3, mb: 3 }}>
-        {/* Tabs with green style */}
+        {/* Tabs with green style - separated tabs like screenshot */}
         <Box sx={{ 
           display: 'flex', 
-          bgcolor: '#2d5016',
           gap: 1.5,
-          px: 2,
-          py: 1.5,
-          borderRadius: '4px 4px 0 0'
+          mb: 2
         }}>
           {TABS.map((tab, index) => (
             <Box
@@ -336,18 +333,18 @@ const NewProposalWorkflowPage = () => {
               sx={{
                 px: 3,
                 py: 1.5,
-                bgcolor: activeTab === index ? '#1a3d0b' : '#4a7c2c',
+                bgcolor: activeTab === index ? '#4a7c2c' : '#375e38',
                 color: 'white',
                 cursor: 'pointer',
                 fontWeight: activeTab === index ? 'bold' : 'normal',
                 borderRadius: '4px',
                 transition: 'all 0.3s ease',
                 '&:hover': {
-                  bgcolor: activeTab === index ? '#1a3d0b' : '#5a8c3c'
+                  bgcolor: activeTab === index ? '#4a7c2c' : '#4a7c2c'
                 }
               }}
             >
-              <Typography variant="body1" sx={{ fontSize: '0.95rem' }}>{tab.label}</Typography>
+              <Typography variant="body2" sx={{ fontSize: '0.9rem' }}>{tab.label}</Typography>
             </Box>
           ))}
         </Box>
@@ -355,8 +352,7 @@ const NewProposalWorkflowPage = () => {
         {/* Content */}
         <Paper sx={{ 
           boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-          mt: 0,
-          borderRadius: '0 0 4px 4px'
+          borderRadius: '4px'
         }}>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
