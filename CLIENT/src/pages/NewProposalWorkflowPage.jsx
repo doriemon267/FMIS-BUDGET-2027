@@ -31,6 +31,7 @@ import {
   FormControl,
   InputLabel,
   Select,
+  Menu,
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -88,6 +89,8 @@ const NewProposalWorkflowPage = () => {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [actionType, setActionType] = useState('');
   const [actionComment, setActionComment] = useState('');
+  const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
+  const [availableActionsForMenu, setAvailableActionsForMenu] = useState([]);
   const [newProposalData, setNewProposalData] = useState({
     title: '',
     description: '',
@@ -449,7 +452,7 @@ const NewProposalWorkflowPage = () => {
                               </IconButton>
                             </Tooltip>
                             {getAvailableActions(proposal).length > 0 ? (
-                              <Tooltip title="Actions">
+                              <>
                                 <Button
                                   size="small"
                                   variant="contained"
@@ -462,16 +465,33 @@ const NewProposalWorkflowPage = () => {
                                       bgcolor: '#4a7c2c'
                                     }
                                   }}
-                                  onClick={() => {
+                                  onClick={(e) => {
                                     setSelectedProposal(proposal);
-                                    const action = getAvailableActions(proposal)[0];
-                                    setActionType(action.value);
-                                    setActionDialogOpen(true);
+                                    setAvailableActionsForMenu(getAvailableActions(proposal));
+                                    setActionMenuAnchor(e.currentTarget);
                                   }}
                                 >
-                                  ACTIONS
+                                  ACTIONS ▼
                                 </Button>
-                              </Tooltip>
+                                <Menu
+                                  anchorEl={actionMenuAnchor}
+                                  open={Boolean(actionMenuAnchor) && selectedProposal?._id === proposal._id}
+                                  onClose={() => setActionMenuAnchor(null)}
+                                >
+                                  {availableActionsForMenu.map((action) => (
+                                    <MenuItem
+                                      key={action.value}
+                                      onClick={() => {
+                                        setActionType(action.value);
+                                        setActionMenuAnchor(null);
+                                        setActionDialogOpen(true);
+                                      }}
+                                    >
+                                      {action.label}
+                                    </MenuItem>
+                                  ))}
+                                </Menu>
+                              </>
                             ) : (
                               <Typography variant="caption" sx={{ color: '#999' }}>
                                 No actions
