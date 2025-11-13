@@ -256,7 +256,8 @@ const NewProposalWorkflowPage = () => {
     
     try {
       const queryParams = {
-        proposalId: proposal._id
+        proposalId: proposal._id,
+        _t: Date.now()  // Cache buster - force fresh data
       };
 
       const [incomeRes, personnelRes, mooeRes, capitalRes] = await Promise.all([
@@ -361,10 +362,11 @@ const NewProposalWorkflowPage = () => {
 
       toast.success('Action completed successfully');
       setActionDialogOpen(false);
+      setViewDetailsDialogOpen(false);  // Close details dialog
       setSelectedProposal(null);
       setActionType('');
       setActionComment('');
-      fetchProposals();
+      fetchProposals();  // Refresh the proposals list
     } catch (error) {
       console.error('Error performing action:', error);
       toast.error('Failed to perform action');
