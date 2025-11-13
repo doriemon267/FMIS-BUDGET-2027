@@ -144,13 +144,17 @@ const ProposalCustomPage = ({
     modelType: "Initial",
   });
   const [isCreateDialogOpen, setCreateDialogOpen] = useState(false);
+  const [currentProposalId, setCurrentProposalId] = useState(null);
 
   const createProposalMutation = useMutation({
     mutationFn: (newProposal) => {
       return api.post("/api/proposals", newProposal);
     },
-    onSuccess: () => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      // Capture the created proposal ID
+      const proposalId = response.data?._id || response.data?.id;
+      setCurrentProposalId(proposalId);
       toast.success("Proposal created successfully!");
       setCreateDialogOpen(false);
       setNewProposalData({
@@ -3012,7 +3016,7 @@ const ProposalCustomPage = ({
         <Box sx={{ mt: 3, mb: 3, width: '100%' }}>
           {activeTab === "Income" && (
             <IncomeTable
-              proposalId={dataListName !== "tests" ? dataListName : undefined}
+              proposalId={currentProposalId || (dataListName !== "tests" ? dataListName : undefined)}
               region={activeRegion}
               fiscalYear={selectedFiscalYear}
               onGrandTotalUpdate={(grandTotal) => {

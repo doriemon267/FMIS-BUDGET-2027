@@ -69,17 +69,7 @@ const App = () => {
         }
       >
         <Route path="/dashboard" element={<DashBoardHome />} />
-        <Route
-          path="/proposal"
-          element={
-            <ProtectedRoute
-              requiredPermissions={["CreateProposals", "EditOwnProposals"]}
-              requiredWorkflowRoles={["divisionCreator", "departmentCreator", "regionCreator", "superAdmin", "preparer"]}
-            >
-              <Proposals />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/proposal" element={<Proposals />} />
         <Route
           path="/myProposals"
           element={
