@@ -294,7 +294,7 @@ const NewProposalWorkflowPage = () => {
     setSelectedProposal(proposal);
     
     try {
-      const response = await api.get(`/api/newProposalWorkflow/proposals/${proposal._id}/audit-trail`);
+      const response = await api.get(`/api/new-proposal-workflow/proposals/${proposal._id}/audit-trail`);
       
       if (response.data.success) {
         setAuditTrailData(response.data.data.changes || []);
