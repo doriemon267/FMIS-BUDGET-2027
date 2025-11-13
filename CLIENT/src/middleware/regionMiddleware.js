@@ -20,7 +20,8 @@ export const setupRegionInterceptor = () => {
         '/comprehensive-reports/active-settings',
         '/api/hierarchical-rbac/assignments',
         '/api/hierarchical-rbac/my-access',
-        '/api/hierarchical-rbac/user-lookup'
+        '/api/hierarchical-rbac/user-lookup',
+        '/audit-trail'  // Exclude audit trail from region parameter
       ];
 
       // Check if the current request URL matches any excluded endpoint
