@@ -403,7 +403,16 @@ exports.bulkAddPersonnelServices = async (req, res) => {
     // Get submission workflow data for correct org attribution
     const workflowData = req.submissionWorkflowData || {};
     // CRITICAL: Extract proposalId to link personnel services to specific proposal
-    const proposalId = req.body.proposalId || workflowData.proposalId;
+    const workflowProposalId = req.body.proposalId || workflowData.proposalId; // NewProposalWorkflow _id
+    let legacyProposalPS = null;
+    if (workflowProposalId) {
+      legacyProposalPS = await Proposal.findOne({ workflowRef: workflowProposalId }).select('_id');
+      if (!legacyProposalPS) {
+        console.warn('[bulkAddPersonnelServices] No legacy Proposal found for workflowRef:', workflowProposalId);
+      }
+    } else {
+      console.warn('[bulkAddPersonnelServices] Missing workflow proposalId; PS entries will not aggregate');
+    }
     const userLevel = userAssignment.assignmentLevel || workflowData.userLevel;
     
     // Get the user's ACTUAL assigned organizational units
@@ -693,7 +702,8 @@ exports.bulkAddPersonnelServices = async (req, res) => {
         processorDepartment: ownerDepartment || null,
         processorDivision: ownerDivision || null,
         // CRITICAL: Link to specific proposal to prevent cross-proposal data mixing
-        ...(proposalId && { proposalId })
+        ...(legacyProposalPS?._id && { proposalId: legacyProposalPS._id }),
+        ...(workflowProposalId && { workflowRef: workflowProposalId })
       };
       if (statusAppointment === "COS") {
         personnelService = {
@@ -753,10 +763,19 @@ exports.bulkAddPersonnelServices = async (req, res) => {
       }
       personnelServicesData.push(personnelService);
     }
-    if (personnelServicesData.length > 0) {
+      if (personnelServicesData.length > 0) {
       const addedPersonnelServices = await PersonnelServices.insertMany(
         personnelServicesData
       );
+        // Direct recompute for linked legacy proposal
+        if (legacyProposalPS?._id) {
+          try {
+            const proposalDoc = await Proposal.findById(legacyProposalPS._id);
+            await proposalDoc?.recomputeTotals();
+          } catch (e) {
+            console.warn('[bulkAddPersonnelServices] recomputeTotals failed', e.message);
+          }
+        }
       // Non-blocking: trigger Proposal totals recalculation for affected proposals using first added item's keys
       try {
         const first = addedPersonnelServices[0] || {};

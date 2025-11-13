@@ -73,10 +73,19 @@ capitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl
   try {
     const { proposalId, fiscalYear, budgetType, processBy, region, status, department, division } = req.query;
     const query = {};
-    
-    // ✅ Primary filter: if proposalId is provided, use it
+
+    // ✅ Primary filter: if proposalId is provided, accept either legacy Proposal _id or NewProposalWorkflow _id
     if (proposalId) {
-      query.proposalId = proposalId;
+      try {
+        query.$or = [{ workflowRef: proposalId }];
+        const Proposal = require('../models/Proposal');
+        const legacy = await Proposal.findOne({ workflowRef: proposalId }).select('_id').lean();
+        if (legacy?._id) {
+          query.$or.push({ proposalId: legacy._id });
+        }
+      } catch (_e) {
+        query.proposalId = proposalId; // fallback as legacy Proposal id
+      }
     } else {
       // Fallback: use individual parameters
       if (fiscalYear) query.fiscalYear = fiscalYear;

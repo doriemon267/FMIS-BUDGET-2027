@@ -1,7 +1,7 @@
 // controllers/subsistenceAllowanceMDSController.js
 const SubsistenceAllowanceMDS = require("../models/subsistenceAllowanceMDS");
 const Settings = require("../models/Settings");
-const PersonnelService = require('../models/PersonnelServices');
+const PersonnelServices = require('../models/PersonnelServices');
 /**
  * Create a new Subsistence Allowance MDS record,
  * then immediately update the corresponding PersonnelServices entry.

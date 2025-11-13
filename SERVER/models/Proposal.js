@@ -398,4 +398,50 @@ const proposalSchema = new mongoose.Schema({
     default: Date.now
   }
 }, { timestamps: true });
+
+// Link to new workflow document (added for dual-model sync)
+proposalSchema.add({
+  workflowRef: { type: mongoose.Schema.Types.ObjectId, ref: 'NewProposalWorkflow', index: true },
+  // Backward compatible alias used by some scripts expecting proposalId linkage
+  proposalId: { type: mongoose.Schema.Types.ObjectId, ref: 'NewProposalWorkflow', index: true }
+});
+
+// Recompute derived financial totals (lightweight version)
+proposalSchema.methods.recomputeTotals = async function() {
+  try {
+    if (!this._id) return this;
+    const Income = require('./Income');
+    const CapitalOutlay = require('./CapitalOutlay');
+    const PersonnelServices = require('./PersonnelServices');
+    const MooeProposal = require('./mooeProposals');
+
+    const pid = this._id;
+    const [incomeRows, coRows, psRows, mooeRows] = await Promise.all([
+      Income.find({ proposalId: pid }),
+      CapitalOutlay.find({ proposalId: pid }),
+      PersonnelServices.find({ proposalId: pid }),
+      MooeProposal.find({ proposalId: pid })
+    ]);
+
+    const sum = rows => rows.reduce((acc, r) => acc + (Number(r.amount || r.totalAmount || r.total || r.grandTotal || 0)), 0);
+    const incomeTotal = sum(incomeRows);
+    const coTotal = sum(coRows);
+    const psTotal = sum(psRows);
+    const mooeTotal = sum(mooeRows);
+    this.totalIncome = incomeTotal;
+    this.totalExpenses = psTotal + mooeTotal + coTotal;
+    this.proposedBudget = this.totalExpenses; // Align with legacy meaning
+    this.categoryBreakdown = {
+      income: incomeTotal,
+      personnelServices: psTotal,
+      mooe: mooeTotal,
+      capitalOutlay: coTotal
+    };
+    return this.save();
+  } catch (e) {
+    // Silent failure to avoid blocking primary operations
+    return this;
+  }
+};
+
 module.exports = mongoose.model("Proposal", proposalSchema);

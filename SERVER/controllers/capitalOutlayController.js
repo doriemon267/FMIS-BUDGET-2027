@@ -188,6 +188,18 @@ exports.addCapitalOutlay = async (req, res) => {
     const ownerDivision = userLevel === 'DEPARTMENT' ? null : (workflowData.division ?? req.body.division ?? null);
     
     console.log("Creating new capital outlay...");
+    // Map incoming proposalId (workflow) to legacy Proposal _id
+    const incomingWorkflowId = proposalId || workflowData.proposalId;
+    let legacyProposal = null;
+    if (incomingWorkflowId) {
+      legacyProposal = await Proposal.findOne({ workflowRef: incomingWorkflowId }).select('_id');
+      if (!legacyProposal) {
+        console.warn('[addCapitalOutlay] No legacy Proposal found for workflowRef:', incomingWorkflowId);
+      }
+    } else {
+      console.warn('[addCapitalOutlay] Missing workflow proposalId in request; line item will not aggregate');
+    }
+
     const newOutlay = new CapitalOutlay({
    
       particulars,
@@ -209,11 +221,21 @@ exports.addCapitalOutlay = async (req, res) => {
       originalLevel: workflowData.originalLevel || (userLevel === 'DIVISION' ? 'DIVISION' : userLevel === 'DEPARTMENT' ? 'DEPARTMENT' : userLevel === 'REGION' ? 'REGION' : null),
       workflowLevel: workflowData.workflowLevel || (userLevel === 'DIVISION' ? 'DIVISION' : userLevel === 'DEPARTMENT' ? 'DEPARTMENT' : userLevel === 'REGION' ? 'REGION' : null),
       status: req.body.status || 'Draft',
-      proposalId: proposalId || workflowData.proposalId  // Link to specific proposal
+      proposalId: legacyProposal ? legacyProposal._id : undefined, // Link to legacy Proposal for aggregation
+      workflowRef: incomingWorkflowId ? new mongoose.Types.ObjectId(incomingWorkflowId) : undefined // Track workflow origin
     });
     
     console.log("Saving capital outlay to database...");
     await newOutlay.save();
+    // Direct recompute for linked legacy proposal
+    if (legacyProposal?._id) {
+      try {
+        const proposalDoc = await Proposal.findById(legacyProposal._id);
+        await proposalDoc?.recomputeTotals();
+      } catch (e) {
+        console.warn('[addCapitalOutlay] recomputeTotals failed', e.message);
+      }
+    }
     console.log("Capital outlay saved successfully:", newOutlay._id);
     console.log("=== ADD CAPITAL OUTLAY COMPLETE ===");
     // Non-blocking: trigger Proposal totals recalculation for affected proposals
@@ -325,6 +347,9 @@ exports.editCapitalOutlay = async (req, res) => {
         // Preserve/Apply submission workflow tagging when available
         ...(workflowData.originalLevel ? { originalLevel: workflowData.originalLevel } : {}),
         ...(workflowData.workflowLevel ? { workflowLevel: workflowData.workflowLevel } : {}),
+        // Preserve proposal linkage fields
+        ...(existingOutlay?.proposalId ? { proposalId: existingOutlay.proposalId } : {}),
+        ...(existingOutlay?.workflowRef ? { workflowRef: existingOutlay.workflowRef } : {})
       },
       { new: true, runValidators: true }
     ).populate("category"); // Ensure updated category details are returned
@@ -354,6 +379,15 @@ exports.editCapitalOutlay = async (req, res) => {
     } catch (recErr) {
       console.warn('⚠️ [CO] Proposal totals recalculation skipped:', recErr?.message);
     }
+      // Direct recompute for linked legacy proposal (more precise)
+      if (existingOutlay?.proposalId) {
+        try {
+          const proposalDoc = await Proposal.findById(existingOutlay.proposalId);
+          await proposalDoc?.recomputeTotals();
+        } catch (e) {
+          console.warn('[editCapitalOutlay] recomputeTotals failed', e.message);
+        }
+      }
     return res.status(200).json({
       message: "Capital outlay updated successfully.",
       capitalOutlay: updatedCapitalOutlay,

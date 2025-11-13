@@ -6,7 +6,7 @@ import React, {
   Suspense,
 } from "react";
 import api from "../../config/api";
-import DashboardHeader from "../../global/components/DashboardHeader";
+
 import PropTypes from "prop-types";
 import { useRegion } from "../../context/RegionContext";
 import { IoPersonCircleOutline } from "react-icons/io5";
@@ -100,8 +100,41 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import BudgetSummary from "./BudgetSummary";
 import { hasPermission, PERMISSIONS } from "../../utils/permissions";
 import { useUserRestrictions } from "../../hooks/useUserRestrictions";
+import { styled } from "@mui/material/styles";
 
 const CAPITAL_OUTLAY_VIEW_PREFERENCE_KEY = "capitalOutlayViewPreference";
+
+const StyledTab = styled((props) => <Tab {...props} />)(({ theme }) => ({
+  textTransform: "none",
+  minWidth: 0,
+  padding: '12px 16px',
+  [theme.breakpoints.up("sm")]: {
+    minWidth: 0,
+  },
+  fontWeight: theme.typography.fontWeightRegular,
+  marginRight: theme.spacing(1),
+  color: "rgba(0, 0, 0, 0.7)",
+  borderRadius: '8px 8px 0 0',
+  transition: 'all 0.3s ease',
+  "&:hover": {
+    backgroundColor: "rgba(55, 94, 56, 0.08)",
+    color: theme.palette.primary.main,
+    "& svg": {
+      transform: "scale(1.2)",
+      color: theme.palette.primary.main,
+    },
+  },
+  "&.Mui-selected": {
+    color: theme.palette.primary.main,
+    fontWeight: theme.typography.fontWeightMedium,
+    backgroundColor: "rgba(55, 94, 56, 0.12)",
+  },
+  "& .MuiSvgIcon-root, & svg": {
+    marginRight: theme.spacing(1),
+    fontSize: "1.2rem",
+    transition: 'transform 0.3s ease',
+  },
+}));
 
 const ProposalCustomPage = ({
   dataListName,
@@ -141,19 +174,21 @@ const ProposalCustomPage = ({
     description: "",
     projectedCorporateIncome: "",
     projectedSubsidy: "",
-    modelType: "Initial",
+    modelType: "Initial", // Will be auto-overridden by active settings
   });
   const [isCreateDialogOpen, setCreateDialogOpen] = useState(false);
   const [currentProposalId, setCurrentProposalId] = useState(null);
 
   const createProposalMutation = useMutation({
     mutationFn: (newProposal) => {
-      return api.post("/api/proposals", newProposal);
+      // Use new workflow endpoint so proposals appear in /new-proposal-workflow page
+      return api.post("/api/new-proposal-workflow/proposals", newProposal);
     },
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ["proposals"] });
       // Capture the created proposal ID
-      const proposalId = response.data?._id || response.data?.id;
+      // New workflow controller returns { success, message, data: <proposal> }
+      const proposalId = response.data?.data?._id;
       setCurrentProposalId(proposalId);
       toast.success("Proposal created successfully!");
       setCreateDialogOpen(false);
@@ -172,6 +207,16 @@ const ProposalCustomPage = ({
     },
   });
 
+  // Normalize modelType coming from active settings to the enum accepted by backend
+  const normalizeModelType = (value) => {
+    if (!value) return 'Initial';
+    const v = String(value).trim().toUpperCase();
+    if (v.includes('NEP')) return 'NEP';
+    if (v.includes('GAA')) return 'GAA';
+    // Default bucket for anything like "INITIAL", "BUDGET: INITIAL", etc.
+    return 'Initial';
+  };
+
   const handleCreateProposal = () => {
     const {
       title,
@@ -184,13 +229,21 @@ const ProposalCustomPage = ({
       toast.error("Title is required.");
       return;
     }
+    // Prefer sending region NAME to satisfy legacy/middleware validators
+    const regionPayload = typeof activeRegion === 'object'
+      ? (activeRegion.name || activeRegion.regionName || activeRegion.Region || 'CENTRAL OFFICE')
+      : (activeRegion || 'CENTRAL OFFICE');
+
+    const modelTypeNormalized = normalizeModelType(activeBudgetType || modelType || 'Initial');
+
     createProposalMutation.mutate({
       title,
       description,
       projectedCorporateIncome: Number(projectedCorporateIncome) || 0,
       projectedSubsidy: Number(projectedSubsidy) || 0,
-      modelType,
-      fiscalYear: activeFiscalYear, // Assuming you want to associate with the active fiscal year
+      modelType: modelTypeNormalized,
+      fiscalYear: Number(activeFiscalYear) || new Date().getFullYear(),
+      region: regionPayload,
     });
   };
 
@@ -258,6 +311,13 @@ const ProposalCustomPage = ({
       setUseDataGridView(true);
     }
   }, []);
+
+  // Auto-sync modelType with active settings budget type
+  useEffect(() => {
+    if (activeBudgetType) {
+      setNewProposalData(prev => ({ ...prev, modelType: activeBudgetType }));
+    }
+  }, [activeBudgetType]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2383,11 +2443,30 @@ const ProposalCustomPage = ({
 
   return (
     <StyledBox>
-      <DashboardHeader
-        title={title}
-        description={description}
-        showSearch={searchable}
-      />
+      {/* Modern Header Section */}
+      <Paper 
+        elevation={3} 
+        sx={{ 
+          p: 3, 
+          mb: 3, 
+          borderRadius: 2,
+          background: 'linear-gradient(135deg, #375e38 0%, #2e4d30 100%)',
+          color: 'white',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+          transition: 'all 0.3s ease',
+          '&:hover': {
+            boxShadow: '0 12px 40px rgba(0,0,0,0.2)',
+            transform: 'translateY(-2px)',
+          }
+        }}
+      >
+        <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: "bold" }}>
+          {title}
+        </Typography>
+        <Typography variant="h5" component="h2" sx={{ opacity: 0.9 }}>
+          {description || "Submit and manage your budget proposals with detailed breakdown of personnel, MOOE, capital outlay, income, and budgetary support"}
+        </Typography>
+      </Paper>
 
       {/* Create Proposal Dialog */}
       <Dialog
@@ -2426,7 +2505,7 @@ const ProposalCustomPage = ({
           />
           <TextField
             margin="dense"
-            label="Projected Corporate Income"
+            label="Projected Corporate Income (optional)"
             type="number"
             fullWidth
             variant="standard"
@@ -2437,10 +2516,13 @@ const ProposalCustomPage = ({
                 projectedCorporateIncome: e.target.value,
               })
             }
+            placeholder="0.00"
+            helperText="Optional: high-level estimate only. You can leave this blank; totals will be computed from line items."
+            inputProps={{ step: '0.01', min: '0' }}
           />
           <TextField
             margin="dense"
-            label="Projected Subsidy"
+            label="Projected Subsidy (optional)"
             type="number"
             fullWidth
             variant="standard"
@@ -2451,28 +2533,22 @@ const ProposalCustomPage = ({
                 projectedSubsidy: e.target.value,
               })
             }
+            placeholder="0.00"
+            helperText="Optional: estimate of subsidy. You can leave this blank; you may encode details later."
+            inputProps={{ step: '0.01', min: '0' }}
           />
-          <FormControl fullWidth margin="dense" variant="standard">
-            <InputLabel>Budget Type</InputLabel>
-            <Select
-              value={newProposalData.modelType}
-              onChange={(e) =>
-                setNewProposalData({
-                  ...newProposalData,
-                  modelType: e.target.value,
-                })
-              }
-            >
-              <MenuItem value="Initial">Initial</MenuItem>
-              <MenuItem value="NEP">NEP</MenuItem>
-              <MenuItem value="GAA">GAA</MenuItem>
-            </Select>
-          </FormControl>
+          <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Chip icon={<CalendarTodayIcon />} label={`Fiscal Year: ${activeFiscalYear || 'N/A'}`} color="primary" size="small" />
+            <Chip icon={<AccountBalanceIcon />} label={`Budget Type: ${activeBudgetType || newProposalData.modelType || 'Initial'}`} color="primary" size="small" />
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleCreateProposal} disabled={createProposalMutation.isLoading}>
-            {createProposalMutation.isLoading ? <CircularProgress size={24} /> : 'Create'}
+          <Button
+            onClick={handleCreateProposal}
+            disabled={createProposalMutation.isLoading || !!currentProposalId || !newProposalData.title || !activeFiscalYear || !activeRegion}
+          >
+            {createProposalMutation.isLoading ? <CircularProgress size={24} /> : !!currentProposalId ? 'Created' : 'Create'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -2482,18 +2558,31 @@ const ProposalCustomPage = ({
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          mb: 2,
+          mb: 3,
           flexWrap: "wrap",
-          gap: 1,
+          gap: 2,
+          p: 2.5,
+          background: "linear-gradient(135deg, #f5f5f5 0%, #ffffff 100%)",
+          borderRadius: 2,
+          border: "1px solid #e0e0e0",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
         }}
       >
-        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+        <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "center" }}>
           <Chip
             icon={<CalendarTodayIcon />}
             label={`Active FY: ${activeFiscalYear || "N/A"}`}
             color="primary"
             variant="filled"
             size="small"
+            sx={{
+              backgroundColor: "#1976d2",
+              fontWeight: 600,
+              letterSpacing: "0.3px",
+              "& .MuiChip-icon": {
+                color: "white !important",
+              },
+            }}
           />
           {selectedFiscalYear &&
             selectedFiscalYear !== activeFiscalYear && (
@@ -2503,6 +2592,13 @@ const ProposalCustomPage = ({
                 color="secondary"
                 variant="filled"
                 size="small"
+                sx={{
+                  fontWeight: 600,
+                  letterSpacing: "0.3px",
+                  "& .MuiChip-icon": {
+                    color: "white !important",
+                  },
+                }}
               />
             )}
           <Chip
@@ -2511,7 +2607,62 @@ const ProposalCustomPage = ({
             color="primary"
             variant="filled"
             size="small"
+            sx={{
+              backgroundColor: "#2d5016",
+              fontWeight: 600,
+              letterSpacing: "0.3px",
+              "& .MuiChip-icon": {
+                color: "white !important",
+              },
+            }}
           />
+          {!currentProposalId && (
+            <Button
+              variant="contained"
+              size="small"
+              onClick={() => setCreateDialogOpen(true)}
+              disabled={createProposalMutation.isLoading}
+              startIcon={createProposalMutation.isLoading ? <CircularProgress size={16} /> : null}
+              sx={{
+                ml: 1,
+                backgroundColor: "#4CAF50",
+                fontWeight: 600,
+                letterSpacing: "0.5px",
+                borderRadius: "6px",
+                padding: "6px 16px",
+                textTransform: "capitalize",
+                boxShadow: "0 2px 6px rgba(76, 175, 80, 0.3)",
+                transition: "all 0.3s cubic-bezier(0.3, 0, 0.7, 1)",
+                "&:hover": {
+                  backgroundColor: "#45a049",
+                  boxShadow: "0 4px 12px rgba(76, 175, 80, 0.4)",
+                  transform: "translateY(-2px)",
+                },
+                "&:active": {
+                  transform: "translateY(0px)",
+                },
+              }}
+            >
+              {createProposalMutation.isLoading ? 'Creating...' : '+ Create Proposal'}
+            </Button>
+          )}
+          {currentProposalId && (
+            <Tooltip title={`Linked Proposal ID: ${currentProposalId}`}> 
+              <Chip
+                icon={<CheckCircleIcon />}
+                label="Proposal Linked"
+                sx={{
+                  backgroundColor: "#4CAF50",
+                  color: "white",
+                  fontWeight: 600,
+                  letterSpacing: "0.3px",
+                  "& .MuiChip-icon": {
+                    color: "white !important",
+                  },
+                }}
+              />
+            </Tooltip>
+          )}
         </Box>
         <AutoSaveIndicator />
       </Box>
@@ -2523,20 +2674,28 @@ const ProposalCustomPage = ({
         onChange={() => setSummaryExpanded(!summaryExpanded)}
         sx={{
           mb: 2,
-          backgroundColor: "#f8f9fa",
+          background: "linear-gradient(135deg, #fafafa 0%, #ffffff 100%)",
           border: "1px solid #e0e0e0",
-          borderRadius: 1,
-          boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+          borderRadius: 2,
+          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+          transition: "all 0.3s cubic-bezier(0.3, 0, 0.7, 1)",
+          "&:hover": {
+            boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
+          },
           "&:before": { display: "none" },
         }}
       >
         <AccordionSummary
           expandIcon={<ExpandMore />}
           sx={{
-            minHeight: "40px",
+            minHeight: "45px",
+            background: "linear-gradient(135deg, #f5f5f5 0%, #ffffff 100%)",
             "& .MuiAccordionSummary-content": {
               margin: "8px 0",
               alignItems: "center",
+            },
+            "&:hover": {
+              backgroundColor: "rgba(76, 175, 80, 0.04)",
             },
           }}
         >
@@ -2582,12 +2741,19 @@ const ProposalCustomPage = ({
               <Box
                 sx={{
                   textAlign: "center",
-                  p: 0.5,
-                  backgroundColor: "#e8f5e9",
-                  borderRadius: 0.5,
+                  p: 1,
+                  background: "linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)",
+                  borderRadius: 1,
+                  boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+                  border: "1px solid rgba(76, 175, 80, 0.2)",
+                  transition: "all 0.3s cubic-bezier(0.3, 0, 0.7, 1)",
+                  "&:hover": {
+                    boxShadow: "0 4px 8px rgba(76, 175, 80, 0.15)",
+                    transform: "translateY(-2px)",
+                  },
                 }}
               >
-                <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
+                <Typography variant="caption" sx={{ fontSize: "0.7rem", fontWeight: 600 }}>
                   Personnel Services
                 </Typography>
                 <Typography
@@ -2596,6 +2762,8 @@ const ProposalCustomPage = ({
                     display: "block",
                     fontWeight: "bold",
                     fontSize: "0.8rem",
+                    color: "#1b5e20",
+                    mt: 0.5,
                   }}
                 >
                   {formatCurrency(calculateTotalBudget.personnelTotal)}
@@ -2604,12 +2772,19 @@ const ProposalCustomPage = ({
               <Box
                 sx={{
                   textAlign: "center",
-                  p: 0.5,
-                  backgroundColor: "#e3f2fd",
-                  borderRadius: 0.5,
+                  p: 1,
+                  background: "linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)",
+                  borderRadius: 1,
+                  boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+                  border: "1px solid rgba(25, 118, 210, 0.2)",
+                  transition: "all 0.3s cubic-bezier(0.3, 0, 0.7, 1)",
+                  "&:hover": {
+                    boxShadow: "0 4px 8px rgba(25, 118, 210, 0.15)",
+                    transform: "translateY(-2px)",
+                  },
                 }}
               >
-                <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
+                <Typography variant="caption" sx={{ fontSize: "0.7rem", fontWeight: 600 }}>
                   MOOE (Regular + IAs O&M)
                 </Typography>
                 <Typography
@@ -2618,6 +2793,8 @@ const ProposalCustomPage = ({
                     display: "block",
                     fontWeight: "bold",
                     fontSize: "0.8rem",
+                    color: "#0d47a1",
+                    mt: 0.5,
                   }}
                 >
                   {formatCurrency(calculateTotalBudget.mooeTotal)}
@@ -2626,12 +2803,19 @@ const ProposalCustomPage = ({
               <Box
                 sx={{
                   textAlign: "center",
-                  p: 0.5,
-                  backgroundColor: "#fff3e0",
-                  borderRadius: 0.5,
+                  p: 1,
+                  background: "linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)",
+                  borderRadius: 1,
+                  boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+                  border: "1px solid rgba(255, 152, 0, 0.2)",
+                  transition: "all 0.3s cubic-bezier(0.3, 0, 0.7, 1)",
+                  "&:hover": {
+                    boxShadow: "0 4px 8px rgba(255, 152, 0, 0.15)",
+                    transform: "translateY(-2px)",
+                  },
                 }}
               >
-                <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
+                <Typography variant="caption" sx={{ fontSize: "0.7rem", fontWeight: 600 }}>
                   Capital Outlay
                 </Typography>
                 <Typography
@@ -2640,6 +2824,8 @@ const ProposalCustomPage = ({
                     display: "block",
                     fontWeight: "bold",
                     fontSize: "0.8rem",
+                    color: "#e65100",
+                    mt: 0.5,
                   }}
                 >
                   {formatCurrency(calculateTotalBudget.capitalOutlayTotal)}
@@ -2960,57 +3146,73 @@ const ProposalCustomPage = ({
       </Accordion>
       )}
 
-      {/* Mobile Navigation */}
-      <MobileTabNavigation />
+      {/* Main Content Container */}
+      <Box sx={{ mx: 4, mt: 4, mb: 3 }}>
+        {/* Mobile Navigation */}
+        <MobileTabNavigation />
 
-      <div className="action-tab-container">
-        {/* Desktop Tab Buttons */}
-        <Box sx={{ display: { xs: 'none', md: 'flex' } }}>
-          <div className="tab-buttons">
-            <button
-              className={activeTab === "Income" ? "active" : ""}
-              onClick={() => setActiveTab("Income")}
+        {/* Desktop Tab Navigation */}
+        <Paper 
+          elevation={3} 
+          sx={{ 
+            mb: 2, 
+            borderRadius: 2,
+            transition: 'all 0.3s ease',
+            display: { xs: 'none', md: 'block' },
+            '&:hover': {
+              boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+            }
+          }}
+        >
+          <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
+            <Tabs
+              value={activeTab === 'Income' ? 0 : activeTab === 'PSPermanent' ? 1 : activeTab === 'PSCasual' ? 2 : activeTab === 'COS/JO' ? 3 : activeTab === 'MOOE' ? 4 : activeTab === 'Capital Outlay' ? 5 : 6}
+              onChange={(event, newValue) => {
+                const tabValues = ['Income', 'PSPermanent', 'PSCasual', 'COS/JO', 'MOOE', 'Capital Outlay', 'Budgetary Support'];
+                setActiveTab(tabValues[newValue]);
+              }}
+              variant="scrollable"
+              scrollButtons="auto"
+              aria-label="proposal tabs"
             >
-              <FaMoneyCheckAlt /> INCOME
-            </button>
-            <button
-              className={activeTab === "PSPermanent" ? "active" : ""}
-              onClick={() => setActiveTab("PSPermanent")}
-            >
-              <IoPersonCircleOutline /> PS - Permanent
-            </button>
-            <button
-              className={activeTab === "PSCasual" ? "active" : ""}
-              onClick={() => setActiveTab("PSCasual")}
-            >
-              <IoPersonCircleOutline /> PS - Casual
-            </button>
-            <button
-              className={activeTab === "COS/JO" ? "active" : ""}
-              onClick={() => setActiveTab("COS/JO")}
-            >
-              <FaFileContract /> COS/JO
-            </button>
-            <button
-              className={activeTab === "MOOE" ? "active" : ""}
-              onClick={() => setActiveTab("MOOE")}
-            >
-              <GrHostMaintenance /> MOOE
-            </button>
-            <button
-              className={activeTab === "Capital Outlay" ? "active" : ""}
-              onClick={() => setActiveTab("Capital Outlay")}
-            >
-              <FaMoneyBill /> CAPITAL OUTLAY
-            </button>
-            <button
-              className={activeTab === "Budgetary Support" ? "active" : ""}
-              onClick={() => setActiveTab("Budgetary Support")}
-            >
-              <FaProjectDiagram /> BSGC
-            </button>
-          </div>
-        </Box>
+              <StyledTab 
+                icon={<FaMoneyCheckAlt />} 
+                iconPosition="start" 
+                label="INCOME" 
+              />
+              <StyledTab 
+                icon={<IoPersonCircleOutline />} 
+                iconPosition="start" 
+                label="PS - Permanent" 
+              />
+              <StyledTab 
+                icon={<IoPersonCircleOutline />} 
+                iconPosition="start" 
+                label="PS - Casual" 
+              />
+              <StyledTab 
+                icon={<FaFileContract />} 
+                iconPosition="start" 
+                label="COS/JO" 
+              />
+              <StyledTab 
+                icon={<GrHostMaintenance />} 
+                iconPosition="start" 
+                label="MOOE" 
+              />
+              <StyledTab 
+                icon={<FaMoneyBill />} 
+                iconPosition="start" 
+                label="CAPITAL OUTLAY" 
+              />
+              <StyledTab 
+                icon={<FaProjectDiagram />} 
+                iconPosition="start" 
+                label="BSGC" 
+              />
+            </Tabs>
+          </Box>
+        </Paper>
 
         {/* Tab Content Rendering */}
         <Box sx={{ mt: 3, mb: 3, width: '100%' }}>
@@ -3250,7 +3452,7 @@ const ProposalCustomPage = ({
             </>
           )}
         </div>
-      </div>
+      </Box>
 
       {/* Mobile Speed Dial for Actions */}
       {isMobile && (

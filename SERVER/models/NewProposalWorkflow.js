@@ -58,7 +58,7 @@ const newProposalWorkflowSchema = new mongoose.Schema({
   },
   region: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Region'
+    ref: 'region' // Align with actual model name export in models/Region.js
   },
   currentAssigneeRole: {
     type: String,

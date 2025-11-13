@@ -1,6 +1,8 @@
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const Proposal = require('../models/Proposal');
 const User = require('../models/User');
+const Region = require('../models/Region');
+const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 
 // Workflow status transitions based on the specification
 const WORKFLOW_TRANSITIONS = {
@@ -69,12 +71,9 @@ const WORKFLOW_TRANSITIONS = {
   }
 };
 
-// Get user's role from request
+// Get user's primary budget role (silent version)
 const getUserRole = (req) => {
-  console.log('[getUserRole] Full req.user object:', JSON.stringify(req.user, null, 2));
   const userRoles = req.user?.Roles || [];
-  console.log('[getUserRole] User Roles from request:', userRoles);
-  
   const roleMapping = {
     'BUDGET_PREPARER': 'BUDGET PREPARER',
     'BUDGET PREPARER': 'BUDGET PREPARER',
@@ -91,15 +90,9 @@ const getUserRole = (req) => {
     'SUPER_ADMIN': 'SUPER ADMIN',
     'SUPER ADMIN': 'SUPER ADMIN'
   };
-
   for (const role of userRoles) {
-    if (roleMapping[role]) {
-      console.log('[getUserRole] Mapped role:', roleMapping[role]);
-      return roleMapping[role];
-    }
+    if (roleMapping[role]) return roleMapping[role];
   }
-
-  console.log('[getUserRole] No role mapping found for roles:', userRoles);
   return null;
 };
 
@@ -162,28 +155,75 @@ exports.createProposal = async (req, res) => {
       division
     } = req.body;
 
-    // Validate modelType - Updated to use new valid types
+    // Robust user identifiers (avoid undefined createdBy)
+    const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
+    const nameFallback = [req.user?.name, req.user?.UserName, req.user?.email, `${req.user?.FirstName || ''} ${req.user?.LastName || ''}`.trim()].find(v => v && v.length > 0);
+    const userName = nameFallback || 'UNKNOWN_USER';
+
+    // Validate/normalize modelType - accept common variants and normalize
     const validModelTypes = ['Initial', 'NEP', 'GAA'];
-    if (!validModelTypes.includes(modelType)) {
+    const normalizeModelType = (val) => {
+      if (!val) return 'Initial';
+      const v = String(val).trim().toUpperCase();
+      if (v.includes('NEP')) return 'NEP';
+      if (v.includes('GAA')) return 'GAA';
+      return 'Initial';
+    };
+    const normalizedModelType = normalizeModelType(modelType);
+    if (!validModelTypes.includes(normalizedModelType)) {
       return res.status(400).json({
         success: false,
         message: `Invalid modelType. Must be one of: ${validModelTypes.join(', ')}`
       });
     }
 
-    // Calculate the proposed budget amount
+  // Calculate the proposed budget amount
     const calculatedAmount = (Number(projectedCorporateIncome) || 0) + (Number(projectedSubsidy) || 0);
+
+    // Resolve region: accept ObjectId string/object or plain name and look up by Region model
+    let regionId = (region && typeof region === 'object') ? (region._id || region.id) : region;
+    if (region && typeof region === 'string' && !/^[0-9a-fA-F]{24}$/.test(region)) {
+      try {
+        const regionDoc = await Region.findOne({ $or: [
+          { Region: region },
+          { regionName: region },
+          { RegionName: region }
+        ] });
+        regionId = regionDoc ? regionDoc._id : undefined;
+      } catch (_e) {
+        regionId = undefined;
+      }
+    }
+    // Ensure only a valid ObjectId goes into NewProposalWorkflow.region
+    const finalRegionId = (regionId && /^[0-9a-fA-F]{24}$/.test(String(regionId))) ? regionId : undefined;
+    // Derive default department/division from user assignment if not provided
+    let derivedDepartment = department || '';
+    let derivedDivision = division || '';
+    try {
+      if (!department || !division) {
+        const hua = await HierarchicalUserAssignment.findOne({ userId, isActive: true })
+          .populate('departmentId', 'Department departmentName DepartmentName')
+          .populate('regionId', 'Region regionName RegionName');
+        if (hua) {
+          if (!derivedDivision && hua.divisionName) derivedDivision = hua.divisionName;
+          if (!derivedDepartment && hua.departmentId) {
+            derivedDepartment = hua.departmentId.Department || hua.departmentId.departmentName || hua.departmentId.DepartmentName || '';
+          }
+        }
+      }
+    } catch (_e) { /* non-fatal */ }
 
     const proposalData = {
       title,
       description,
-      modelType,
-      fiscalYear,
+      modelType: normalizedModelType,
+      fiscalYear: parseInt(fiscalYear, 10),
       projectedCorporateIncome: Number(projectedCorporateIncome) || 0,
       projectedSubsidy: Number(projectedSubsidy) || 0,
       amount: calculatedAmount,
-      createdBy: req.user.id,
-      createdByName: req.user.name || req.user.email,
+      createdBy: userId,
+      createdByName: userName,
+      region: finalRegionId,
       status: 'DRAFT'
     };
 
@@ -197,21 +237,23 @@ exports.createProposal = async (req, res) => {
       title,
       description,
       fiscalYear: String(fiscalYear),
-      budgetType: modelType,
-      region: region || 'CENTRAL OFFICE',
-      department: department || '',
-      division: division || '',
-      originalDepartment: department || '',
-      originalDivision: division || '',
-      processBy: req.user.name || req.user.email,
+      budgetType: normalizedModelType,
+      // Legacy proposal stores a region string; prefer provided name or fall back to known fields
+      region: (typeof region === 'string') ? region : (region?.Region || region?.regionName || region?.RegionName || ''),
+      department: derivedDepartment,
+      division: derivedDivision,
+      originalDepartment: derivedDepartment,
+      originalDivision: derivedDivision,
+      processBy: userName,
       status: 'Draft',
       workflowLevel: 'BUDGET PREPARER',
       currentStep: 'PREPARER_DRAFT',
-      proposalId: proposal._id.toString(),  // Link to NewProposalWorkflow
+      workflowRef: proposal._id,
+      proposalId: proposal._id, // backward-compatible alias
       createdAt: new Date(),
       updatedAt: new Date(),
-      createdBy: req.user.id,
-      createdByName: req.user.name || req.user.email
+      createdBy: userId,
+      createdByName: userName
     };
 
     const legacyProposal = new Proposal(legacyProposalData);
@@ -235,23 +277,45 @@ exports.createProposal = async (req, res) => {
 // Get proposals based on user role and filters
 exports.getProposals = async (req, res) => {
   try {
-    console.log('[GET PROPOSALS] req.user object:', JSON.stringify(req.user, null, 2));
-    const userRole = getUserRole(req);
-    const userId = req.user.id;
-    const userName = req.user.name || `${req.user.FirstName || ''} ${req.user.LastName || ''}`.trim();
-    const { status, modelType, fiscalYear, page = 1, limit = 10, view } = req.query;
+  const userRole = getUserRole(req);
+  const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
+  const userName = [req.user?.name, req.user?.UserName, `${req.user?.FirstName || ''} ${req.user?.LastName || ''}`.trim(), req.user?.email].find(v => v && v.length > 0) || 'UNKNOWN_USER';
+  const { status, modelType, fiscalYear, page = 1, limit = 10, view } = req.query;
+  // Normalize userId to string to avoid mismatches
+  const userIdString = userId ? String(userId) : undefined;
 
     let query = {};
 
     // Apply standard filters
-    if (status) query.status = status;
+    if (status) {
+      const statusAlias = {
+        'Draft': 'DRAFT',
+        'Forwarded to Reviewer': 'FORWARDED_TO_REVIEWER',
+        'Forwarded to Approver': 'FORWARDED_TO_APPROVER',
+        'Forwarded to Budget Planning Analyst': 'FORWARDED_TO_BRD_ANALYST',
+        'Forwarded to Budget Officer': 'FORWARDED_TO_BRD_OFFICER',
+        'Forwarded to Overall Budget Approver': 'FORWARDED_TO_BRD_MANAGER',
+        'Finalized': 'FINALIZED',
+        'Returned': 'RETURNED_TO_PREPARER',
+        'Returned to Reviewer': 'RETURNED_TO_REVIEWER',
+        'Returned to Approver': 'RETURNED_TO_APPROVER',
+        'Returned to Budget Planning Analyst': 'RETURNED_TO_PLANNING_ANALYST',
+        'Returned to Budget Officer': 'RETURNED_TO_OFFICER'
+      };
+      query.status = statusAlias[status] || status;
+    }
     if (modelType) query.modelType = modelType;
     if (fiscalYear) query.fiscalYear = parseInt(fiscalYear);
 
     // Apply view-based and role-based filtering
     switch (view) {
       case 'my-proposals':
-        query.createdBy = userId;  // Use userId for NewProposalWorkflow
+        // Allow matching either stored userId or userName (in case earlier records used name)
+        query.$or = [
+          { createdBy: userIdString },
+          { createdBy: userName },
+          { createdByName: userName }
+        ];
         query.status = 'DRAFT';     // Use DRAFT enum value
         break;
       case 'pending-review':
@@ -299,31 +363,84 @@ exports.getProposals = async (req, res) => {
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
 
-    console.log('[GET PROPOSALS] View:', view);
-    console.log('[GET PROPOSALS] User ID:', userId);
-    console.log('[GET PROPOSALS] User Name:', userName);
-    console.log('[GET PROPOSALS] User Role:', userRole);
-    console.log('[GET PROPOSALS] Final Query:', JSON.stringify(query));
+  // Silent mode: no verbose logging
 
-    // Query NewProposalWorkflow model directly
-    const total = await NewProposalWorkflow.countDocuments(query);
-    const proposals = await NewProposalWorkflow.find(query)
+    // Query both NewProposalWorkflow and legacy Proposal models
+    const newProposalsCount = await NewProposalWorkflow.countDocuments(query);
+    let newProposals = await NewProposalWorkflow.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum)
-      .populate('region', 'name regionName');
+      .populate('region', 'Region regionName RegionName');
 
-    console.log('[GET PROPOSALS] Total found:', total);
-    console.log('[GET PROPOSALS] Proposals returned:', proposals.length);
+    // Fetch legacy proposals for totals/region string mapping
+    const wfIds = newProposals.map(p => p._id);
+    const legacyList = await Proposal.find({ workflowRef: { $in: wfIds } }, 'workflowRef region totalIncome totalExpenses proposedBudget department division').lean();
+    const legacyMap = new Map(legacyList.map(lp => [String(lp.workflowRef), lp]));
+
+    // Fallback: if my-proposals view returned none, broaden search to createdBy only (no status) then re-filter
+    if (view === 'my-proposals' && newProposals.length === 0) {
+      // First fallback: direct createdBy match (string cast)
+      const fallbackQuery = { createdBy: userIdString };
+  const fallbackAll = await NewProposalWorkflow.find(fallbackQuery).sort({ createdAt: -1 }).populate('region','Region regionName RegionName');
+      newProposals = fallbackAll.filter(p => p.status === 'DRAFT');
+      // Second fallback: try createdByName if still empty
+      if (newProposals.length === 0) {
+  const nameFallback = await NewProposalWorkflow.find({ createdByName: userName, status: 'DRAFT' }).sort({ createdAt: -1 }).populate('region','Region regionName RegionName');
+        newProposals = nameFallback;
+      }
+      // Final fallback: return ALL draft proposals (for visibility) if still empty
+      if (newProposals.length === 0) {
+  const allDrafts = await NewProposalWorkflow.find({ status: 'DRAFT' }).sort({ createdAt: -1 }).limit(25).populate('region','Region regionName RegionName');
+        newProposals = allDrafts;
+      }
+    }
+
+    // Map NewProposalWorkflow status to legacy format for consistency
+    const mappedNewProposals = newProposals.map(p => {
+      const legacy = legacyMap.get(String(p._id));
+      const regionName = legacy?.region || (p.region && (p.region.Region || p.region.regionName || p.region.RegionName));
+      const divisionName = legacy?.division || '';
+      const departmentName = legacy?.department || '';
+      const responsibilityCenter = divisionName || departmentName || regionName || undefined;
+      return ({
+        _id: p._id,
+        title: p.title,
+        description: p.description,
+        fiscalYear: p.fiscalYear,
+        region: p.region,
+        division: divisionName || undefined,
+        department: departmentName || undefined,
+        // Who created/owns the draft on UI (used by actions menu for PREPARER)
+        processBy: legacy?.processBy || p.createdByName,
+        // Responsibility Center: prefer Division, then Department, then Region
+        responsibilityCenter,
+        budgetType: p.modelType,  // Map modelType to budgetType for consistency
+        status: p.status,
+        createdBy: p.createdBy,
+        createdByName: p.createdByName,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt,
+        amount: Number(p.amount || 0),
+        totalIncome: Number(legacy?.totalIncome || 0),
+        totalExpenses: Number(legacy?.totalExpenses || 0),
+        proposedBudget: Number(legacy?.proposedBudget ?? p.amount ?? 0),
+        projectedCorporateIncome: p.projectedCorporateIncome,
+        projectedSubsidy: p.projectedSubsidy,
+        fromNewWorkflow: true
+      });
+    });
+
+  // Silent return
 
     res.json({
       success: true,
-      proposals: proposals,
+      proposals: mappedNewProposals,
       pagination: {
         page: pageNum,
         limit: limitNum,
-        total: total,
-        pages: Math.ceil(total / limitNum)
+        total: newProposalsCount,
+        pages: Math.ceil(newProposalsCount / limitNum)
       }
     });
   } catch (error) {
@@ -619,8 +736,9 @@ exports.updateProposal = async (req, res) => {
     }
 
     // Only allow editing if user is the creator and status is DRAFT, or user has BRD roles
-    const isBRDStaff = ['BUDGET PLANNING ANALYST', 'BUDGET_PLANNING_ANALYST', 'BUDGET OFFICER', 'BUDGET_OFFICER', 'BUDGET MANAGER', 'BUDGET_MANAGER'].includes(userRole);
-    const isCreatorEditingDraft = proposal.createdBy === userId && proposal.status === 'DRAFT';
+  const isBRDStaff = ['BUDGET PLANNING ANALYST', 'BUDGET_PLANNING_ANALYST', 'BUDGET OFFICER', 'BUDGET_OFFICER', 'BUDGET MANAGER', 'BUDGET_MANAGER'].includes(userRole);
+  // Normalize to string to avoid ObjectId vs string mismatch
+  const isCreatorEditingDraft = String(proposal.createdBy) === String(userId) && proposal.status === 'DRAFT';
     
     if (!isCreatorEditingDraft && !isBRDStaff) {
       return res.status(403).json({

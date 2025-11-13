@@ -255,6 +255,11 @@ courtAppearance: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Proposal',
       index: true
+    },
+    workflowRef: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'NewProposalWorkflow',
+      index: true
     }
   },
   { timestamps: true }

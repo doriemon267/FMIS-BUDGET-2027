@@ -83,6 +83,11 @@ const mooeProposalSchema = new Schema({
     ref: 'Proposal',
     index: true
   },
+  workflowRef: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'NewProposalWorkflow',
+    index: true
+  },
   budgetType: {
     type: String
   },

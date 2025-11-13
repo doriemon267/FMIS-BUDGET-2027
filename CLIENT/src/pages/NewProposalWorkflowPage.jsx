@@ -53,6 +53,39 @@ import api from "../config/api";
 import { useUser } from "../context/UserContext";
 import { useRegion } from "../context/RegionContext";
 import { toast } from "react-toastify";
+import { styled } from "@mui/material/styles";
+
+const StyledTab = styled((props) => <Tab {...props} />)(({ theme }) => ({
+  textTransform: "none",
+  minWidth: 0,
+  padding: '12px 16px',
+  [theme.breakpoints.up("sm")]: {
+    minWidth: 0,
+  },
+  fontWeight: theme.typography.fontWeightRegular,
+  marginRight: theme.spacing(1),
+  color: "rgba(0, 0, 0, 0.7)",
+  borderRadius: '8px 8px 0 0',
+  transition: 'all 0.3s ease',
+  "&:hover": {
+    backgroundColor: "rgba(55, 94, 56, 0.08)",
+    color: theme.palette.primary.main,
+    "& svg": {
+      transform: "scale(1.2)",
+      color: theme.palette.primary.main,
+    },
+  },
+  "&.Mui-selected": {
+    color: theme.palette.primary.main,
+    fontWeight: theme.typography.fontWeightMedium,
+    backgroundColor: "rgba(55, 94, 56, 0.12)",
+  },
+  "& .MuiSvgIcon-root, & svg": {
+    marginRight: theme.spacing(1),
+    fontSize: "1.2rem",
+    transition: 'transform 0.3s ease',
+  },
+}));
 
 // Workflow constants based on the provided specification
 const WORKFLOW_ROLES = {
@@ -118,7 +151,6 @@ const NewProposalWorkflowPage = () => {
   const [proposals, setProposals] = useState([]);
   const [selectedProposal, setSelectedProposal] = useState(null);
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [viewDetailsDialogOpen, setViewDetailsDialogOpen] = useState(false);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [auditTrailDialogOpen, setAuditTrailDialogOpen] = useState(false);
@@ -137,13 +169,6 @@ const NewProposalWorkflowPage = () => {
   const [personnelPage, setPersonnelPage] = useState(0);
   const [personnelRowsPerPage, setPersonnelRowsPerPage] = useState(10);
   const [expandedPersonnel, setExpandedPersonnel] = useState({});
-  const [newProposalData, setNewProposalData] = useState({
-    title: '',
-    description: '',
-    modelType: 'Initial', // mooe, capital, income, personnel
-    fiscalYear: new Date().getFullYear(),
-    amount: 0
-  });
   
   // Edit mode and change tracking for reviewers - now for items
   const [editableItems, setEditableItems] = useState({
@@ -153,6 +178,12 @@ const NewProposalWorkflowPage = () => {
     capitalOutlay: []
   });
   const [changedItems, setChangedItems] = useState(new Set());
+  // Inline proposal detail edits (for PREPARER while Draft)
+  const [proposalEditValues, setProposalEditValues] = useState({
+    title: '',
+    description: ''
+  });
+  const [proposalEditDirty, setProposalEditDirty] = useState(false);
 
   // Pagination
   const [page, setPage] = useState(0);
@@ -214,15 +245,28 @@ const NewProposalWorkflowPage = () => {
   // Check if user can edit the current proposal based on their role and proposal status
   const canUserEdit = () => {
     if (!selectedProposal) return false;
-    
+
     const userRoles = currentUser?.Roles || [];
     const status = selectedProposal.status;
-    
+
+    // Allow the owner (Budget Preparer) to edit while Draft/Returned
+    if (userRoles.some(role => ['BUDGET PREPARER', 'BUDGET_PREPARER'].includes(role))) {
+      const userName = currentUser?.name || `${currentUser?.FirstName || ''} ${currentUser?.LastName || ''}`.trim();
+      const draftStatuses = ['DRAFT', 'Draft', 'Returned', 'Returned to Preparer', 'RETURNED_TO_PREPARER'];
+      const isOwnerByName = selectedProposal?.processBy && userName && selectedProposal.processBy === userName;
+      const isOwnerById = (selectedProposal?.createdBy && (currentUser?.id || currentUser?._id))
+        ? String(selectedProposal.createdBy) === String(currentUser.id || currentUser?._id)
+        : false;
+      if (draftStatuses.includes(status) && (isOwnerByName || isOwnerById)) {
+        return true;
+      }
+    }
+
     // Budget Reviewer can only edit when status is Forwarded to Reviewer or Returned to Reviewer
     if (userRoles.some(role => ['BUDGET REVIEWER', 'BUDGET_REVIEWER'].includes(role))) {
       return ['Forwarded to Reviewer', 'Returned to Reviewer'].includes(status);
     }
-    
+
     // Budget Approver can only edit when status is Forwarded to Approver or Returned to Approver
     if (userRoles.some(role => ['BUDGET APPROVER', 'BUDGET_APPROVER'].includes(role))) {
       return ['Forwarded to Approver', 'Returned to Approver'].includes(status);
@@ -242,7 +286,7 @@ const NewProposalWorkflowPage = () => {
     if (userRoles.some(role => ['BUDGET MANAGER', 'BUDGET_MANAGER'].includes(role))) {
       return ['Forwarded to Overall Budget Approver', 'Returned'].includes(status);
     }
-    
+
     return false;
   };
 
@@ -253,6 +297,12 @@ const NewProposalWorkflowPage = () => {
     setSelectedProposal(proposal);
     setDetailsTab(0);
     setChangedItems(new Set());
+    // Initialize inline edit form values
+    setProposalEditValues({
+      title: proposal.title || '',
+      description: proposal.description || ''
+    });
+    setProposalEditDirty(false);
     
     try {
       const queryParams = {
@@ -318,37 +368,6 @@ const NewProposalWorkflowPage = () => {
     }
   };
 
-  // Handle create proposal
-  const handleCreateProposal = async () => {
-    try {
-      // Only send the fields that the user can edit
-      const payload = {
-        title: newProposalData.title,
-        description: newProposalData.description,
-        modelType: newProposalData.modelType,
-        fiscalYear: newProposalData.fiscalYear,
-        amount: newProposalData.amount,
-      };
-
-      // Use existing proposal API endpoint
-      const response = await api.post('/api/new-proposal-workflow/proposals', payload);
-
-      toast.success('Proposal created successfully');
-      setCreateDialogOpen(false);
-      setNewProposalData({
-        title: '',
-        description: '',
-        modelType: 'Initial',
-        fiscalYear: new Date().getFullYear(),
-        amount: 0
-      });
-      fetchProposals();
-    } catch (error) {
-      console.error('Error creating proposal:', error);
-      toast.error('Failed to create proposal');
-    }
-  };
-
   // Handle proposal actions
   const handleProposalAction = async () => {
     if (!selectedProposal || !actionType) return;
@@ -375,7 +394,7 @@ const NewProposalWorkflowPage = () => {
 
   // Handle item amount changes for reviewers
   const handleEditItemAmount = (category, index, newAmount) => {
-    if (!isReviewer) return;
+    if (!canUserEdit()) return;
     
     setEditableItems(prev => {
       const updated = { ...prev };
@@ -618,91 +637,105 @@ const NewProposalWorkflowPage = () => {
   };
 
   return (
-    <Box sx={{ p: 0, bgcolor: '#f5f5f5', minHeight: '100vh' }}>
+    <Box sx={{ p: 0, bgcolor: '#fafafa', minHeight: '100vh' }}>
       {/* Header */}
-      <Box sx={{ 
-        bgcolor: 'linear-gradient(135deg, #2d5016 0%, #375e38 100%)',
-        background: 'linear-gradient(135deg, #2d5016 0%, #375e38 100%)',
-        color: 'white', 
-        p: 3, 
-        mb: 0,
-        boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-      }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Box sx={{ px: 4, py: 3, mb: 0 }}>
+        <Paper 
+          elevation={3} 
+          sx={{ 
+            p: 3,
+            borderRadius: 2,
+            background: 'linear-gradient(135deg, #375e38 0%, #2e4d30 100%)',
+            color: 'white',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+            transition: 'all 0.3s ease',
+            '&:hover': {
+              boxShadow: '0 12px 40px rgba(0,0,0,0.2)',
+              transform: 'translateY(-2px)',
+            },
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start'
+          }}
+        >
           <Box>
-            <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold', mb: 0.5 }}>
-              Proposal Workflow
+            <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: "bold" }}>
+              Proposal Workflow Management
             </Typography>
-            <Typography variant="body2" sx={{ opacity: 0.9 }}>
-              Manage and track budget proposals through approval stages
+            <Typography variant="h5" component="h2" sx={{ opacity: 0.9 }}>
+              Track and manage budget proposals through the approval workflow
             </Typography>
           </Box>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Tooltip title="Refresh">
-              <IconButton 
-                onClick={fetchProposals}
-                sx={{ 
-                  color: 'white',
-                  bgcolor: 'rgba(255,255,255,0.1)',
-                  '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' }
-                }}
-              >
-                <RefreshIcon />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        </Box>
-      </Box>
-
-      {/* Tabs and Table Container */}
-      <Box sx={{ mx: 3, mt: 3, mb: 3 }}>
-        {/* Tabs with green style - separated tabs like screenshot */}
-        <Box sx={{ 
-          display: 'flex', 
-          gap: 1.5,
-          mb: 3
-        }}>
-          {TABS.filter(tab => {
-            // Hide "My Proposals" tab for BRD users (they don't create proposals)
-            if (tab.value === 'my-proposals' && isBRDUser) return false;
-            return true;
-          }).map((tab, index) => (
-            <Box
-              key={index}
-              onClick={() => handleTabChange(null, TABS.findIndex(t => t.value === tab.value))}
-              sx={{
-                px: 3,
-                py: 1.5,
-                bgcolor: activeTab === TABS.findIndex(t => t.value === tab.value) ? '#4C6F4D' : '#375e38',
+          <Tooltip title="Refresh proposals" arrow>
+            <IconButton 
+              onClick={fetchProposals}
+              sx={{ 
+                bgcolor: 'rgba(255, 255, 255, 0.2)',
                 color: 'white',
-                cursor: 'pointer',
-                fontWeight: activeTab === TABS.findIndex(t => t.value === tab.value) ? 'bold' : 'normal',
-                borderRadius: '8px',
                 transition: 'all 0.3s ease',
-                boxShadow: activeTab === TABS.findIndex(t => t.value === tab.value) ? '0 4px 8px rgba(0,0,0,0.2)' : '0 2px 4px rgba(0,0,0,0.1)',
-                transform: activeTab === TABS.findIndex(t => t.value === tab.value) ? 'translateY(-2px)' : 'none',
-                '&:hover': {
-                  bgcolor: activeTab === TABS.findIndex(t => t.value === tab.value) ? '#4C6F4D' : '#4a7c2c',
-                  transform: 'translateY(-2px)',
-                  boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
+                '&:hover': { 
+                  bgcolor: 'rgba(255, 255, 255, 0.35)',
+                  transform: 'rotate(180deg)',
                 }
               }}
             >
-              <Typography variant="body2" sx={{ fontSize: '0.9rem' }}>{tab.label}</Typography>
-            </Box>
-          ))}
-        </Box>
+              <RefreshIcon />
+            </IconButton>
+          </Tooltip>
+        </Paper>
+      </Box>
+
+      {/* Tabs and Table Container */}
+      <Box sx={{ mx: 4, mt: 4, mb: 3 }}>
+        {/* Tabs with enhanced styling */}
+        <Paper 
+          elevation={3} 
+          sx={{ 
+            mb: 2, 
+            borderRadius: 2,
+            transition: 'all 0.3s ease',
+            '&:hover': {
+              boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+            }
+          }}
+        >
+          <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
+            <Tabs
+              value={activeTab}
+              onChange={handleTabChange}
+              variant="scrollable"
+              scrollButtons="auto"
+              aria-label="proposal workflow tabs"
+            >
+              {TABS.filter(tab => {
+                if (tab.value === 'my-proposals' && isBRDUser) return false;
+                return true;
+              }).map((tab, index) => {
+                const tabIndex = TABS.findIndex(t => t.value === tab.value);
+                return (
+                  <StyledTab 
+                    key={tabIndex}
+                    label={tab.label}
+                  />
+                );
+              })}
+            </Tabs>
+          </Box>
+        </Paper>
 
         {/* Search and Filter Bar */}
         <Box sx={{ 
-          mb: 2, 
+          mb: 3, 
           display: 'flex', 
           gap: 2, 
           alignItems: 'center',
+          flexWrap: 'wrap',
           bgcolor: 'white',
-          p: 2,
-          borderRadius: '8px',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.08)'
+          p: 2.5,
+          borderRadius: '12px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+          border: '1px solid #e8e8e8',
+          transition: 'all 0.2s ease'
         }}>
           <TextField
             placeholder="Search by center, division, type, or status..."
@@ -711,32 +744,54 @@ const NewProposalWorkflowPage = () => {
             size="small"
             sx={{ 
               flex: 1,
+              minWidth: '250px',
               '& .MuiOutlinedInput-root': {
+                borderRadius: '8px',
+                transition: 'all 0.2s ease',
+                '& fieldset': {
+                  borderColor: '#e0e0e0'
+                },
                 '&:hover fieldset': {
-                  borderColor: '#4a7c2c',
+                  borderColor: '#4CAF50',
+                  borderWidth: '2px'
                 },
                 '&.Mui-focused fieldset': {
-                  borderColor: '#4a7c2c',
+                  borderColor: '#4CAF50',
+                  borderWidth: '2px',
+                  boxShadow: '0 0 0 3px rgba(76, 175, 80, 0.1)'
                 }
+              },
+              '& .MuiInputBase-input::placeholder': {
+                opacity: 0.6
               }
             }}
             InputProps={{
-              startAdornment: <SearchIcon sx={{ mr: 1, color: '#666' }} />
+              startAdornment: <SearchIcon sx={{ mr: 1.5, color: '#999', fontSize: '1.2rem' }} />
             }}
           />
           {isBRDStaff && (
-            <FormControl size="small" sx={{ minWidth: 200 }}>
-              <InputLabel>Filter by Status</InputLabel>
+            <FormControl size="small" sx={{ minWidth: 220 }}>
+              <InputLabel sx={{ '&.Mui-focused': { color: '#4CAF50' } }}>Filter by Status</InputLabel>
               <Select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
                 label="Filter by Status"
                 sx={{
+                  borderRadius: '8px',
+                  transition: 'all 0.2s ease',
+                  '& .MuiOutlinedInput-root': {
+                    '& fieldset': {
+                      borderColor: '#e0e0e0'
+                    }
+                  },
                   '&:hover .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#4a7c2c',
+                    borderColor: '#4CAF50',
+                    borderWidth: '2px'
                   },
                   '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#4a7c2c',
+                    borderColor: '#4CAF50',
+                    borderWidth: '2px',
+                    boxShadow: '0 0 0 3px rgba(76, 175, 80, 0.1)'
                   }
                 }}
               >
@@ -756,22 +811,37 @@ const NewProposalWorkflowPage = () => {
               </Select>
             </FormControl>
           )}
-          <Chip 
-            label={`${filteredProposals.length} Results`}
-            sx={{ 
-              bgcolor: '#2d5016', 
-              color: 'white',
-              fontWeight: 'bold',
-              fontSize: '0.85rem'
-            }}
-          />
+          <Box sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            ml: 'auto',
+            flexWrap: 'wrap'
+          }}>
+            <Chip 
+              label={`${filteredProposals.length} Result${filteredProposals.length !== 1 ? 's' : ''}`}
+              sx={{ 
+                bgcolor: '#4CAF50', 
+                color: 'white',
+                fontWeight: 600,
+                fontSize: '0.85rem',
+                boxShadow: '0 2px 4px rgba(76, 175, 80, 0.3)'
+              }}
+              icon={<Box sx={{ color: 'white !important' }}>✓</Box>}
+            />
+          </Box>
         </Box>
 
         {/* Content */}
         <Paper sx={{ 
-          boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
           borderRadius: '12px',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          border: '1px solid #e8e8e8',
+          transition: 'all 0.2s ease',
+          '&:hover': {
+            boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+          }
         }}>
         {loading ? (
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', p: 6 }}>
@@ -790,32 +860,35 @@ const NewProposalWorkflowPage = () => {
             <TableContainer>
               <Table sx={{ borderCollapse: 'collapse' }}>
                 <TableHead>
-                  <TableRow sx={{ bgcolor: '#2d5016' }}>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold', p: 2.5, fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                  <TableRow sx={{ 
+                    background: 'linear-gradient(135deg, #1b3a1b 0%, #2d5016 100%)',
+                    position: 'relative'
+                  }}>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold', p: 2.5, fontSize: '0.85rem', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
                       RESPONSIBILITY CENTER
                     </TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold', p: 2.5, fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold', p: 2.5, fontSize: '0.85rem', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
                       FISCAL YEAR
                     </TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold', p: 2.5, fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold', p: 2.5, fontSize: '0.85rem', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
                       BUDGET TYPE
                     </TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold', p: 2.5, fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold', p: 2.5, fontSize: '0.85rem', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
                       DATE
                     </TableCell>
-                    <TableCell align="right" sx={{ color: 'white', fontWeight: 'bold', p: 2.5, fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                    <TableCell align="right" sx={{ color: 'white', fontWeight: 'bold', p: 2.5, fontSize: '0.85rem', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
                       PROJECTED INCOME
                     </TableCell>
-                    <TableCell align="right" sx={{ color: 'white', fontWeight: 'bold', p: 2.5, fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                    <TableCell align="right" sx={{ color: 'white', fontWeight: 'bold', p: 2.5, fontSize: '0.85rem', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
                       PROJECTED EXPENSES
                     </TableCell>
-                    <TableCell align="right" sx={{ color: 'white', fontWeight: 'bold', p: 2.5, fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                    <TableCell align="right" sx={{ color: 'white', fontWeight: 'bold', p: 2.5, fontSize: '0.85rem', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
                       PROPOSED BUDGET
                     </TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold', p: 2.5, fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold', p: 2.5, fontSize: '0.85rem', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
                       STATUS
                     </TableCell>
-                    <TableCell sx={{ color: 'white', fontWeight: 'bold', p: 2.5, fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                    <TableCell sx={{ color: 'white', fontWeight: 'bold', p: 2.5, fontSize: '0.85rem', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
                       ACTIONS
                     </TableCell>
                   </TableRow>
@@ -827,13 +900,13 @@ const NewProposalWorkflowPage = () => {
                       <TableRow 
                         key={proposal._id}
                         sx={{
-                          bgcolor: index % 2 === 0 ? '#fafafa' : '#fff',
+                          bgcolor: index % 2 === 0 ? '#f9f9f9' : '#fff',
                           borderBottom: '1px solid #e8e8e8',
-                          transition: 'all 0.2s ease',
+                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                           '&:hover': {
                             bgcolor: '#f0f7ed',
-                            transform: 'scale(1.001)',
-                            boxShadow: '0 2px 8px rgba(45,80,22,0.08)'
+                            boxShadow: 'inset 3px 0 0 #4CAF50',
+                            transform: 'translateX(2px)'
                           }
                         }}
                       >
@@ -996,13 +1069,15 @@ const NewProposalWorkflowPage = () => {
             <Box sx={{ 
               p: 3, 
               bgcolor: '#fafafa',
-              borderTop: '1px solid #e8e8e8',
+              borderTop: '2px solid #e8e8e8',
               display: 'flex',
               justifyContent: 'space-between',
-              alignItems: 'center'
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 2
             }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="body2" sx={{ color: '#666', fontWeight: 500 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Typography variant="body2" sx={{ color: '#666', fontWeight: 600 }}>
                   Rows per page:
                 </Typography>
                 <Select
@@ -1010,16 +1085,20 @@ const NewProposalWorkflowPage = () => {
                   onChange={handleChangeRowsPerPage}
                   size="small"
                   sx={{ 
-                    ml: 1, 
-                    minWidth: 70,
-                    '& .MuiOutlinedInput-notchedOutline': {
-                      borderColor: '#e0e0e0'
+                    minWidth: 80,
+                    borderRadius: '8px',
+                    '& .MuiOutlinedInput-root': {
+                      '& fieldset': {
+                        borderColor: '#e0e0e0'
+                      }
                     },
                     '&:hover .MuiOutlinedInput-notchedOutline': {
-                      borderColor: '#4a7c2c'
+                      borderColor: '#4CAF50',
+                      borderWidth: '2px'
                     },
                     '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                      borderColor: '#4a7c2c'
+                      borderColor: '#4CAF50',
+                      borderWidth: '2px'
                     }
                   }}
                 >
@@ -1031,66 +1110,74 @@ const NewProposalWorkflowPage = () => {
               </Box>
               
               <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                <Typography variant="body2" sx={{ color: '#666', fontWeight: 500 }}>
-                  {page * rowsPerPage + 1}-{Math.min((page + 1) * rowsPerPage, filteredProposals.length)} of {filteredProposals.length}
+                <Typography variant="body2" sx={{ color: '#666', fontWeight: 600, px: 2, py: 1, bgcolor: 'white', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
+                  {page * rowsPerPage + 1}–{Math.min((page + 1) * rowsPerPage, filteredProposals.length)} of {filteredProposals.length}
                 </Typography>
-                <Box sx={{ display: 'flex', gap: 0.5 }}>
+                <Box sx={{ display: 'flex', gap: 1 }}>
                   <IconButton
                     size="small"
                     onClick={() => handleChangePage(null, page - 1)}
                     disabled={page === 0}
                     sx={{ 
-                      color: '#2d5016',
+                      color: '#4CAF50',
                       bgcolor: 'white',
-                      border: '1px solid #e0e0e0',
-                      borderRadius: '6px',
+                      border: '2px solid #4CAF50',
+                      borderRadius: '8px',
+                      fontWeight: 'bold',
+                      transition: 'all 0.2s ease',
                       '&:hover': {
                         bgcolor: '#f0f7ed',
-                        borderColor: '#4a7c2c'
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 2px 8px rgba(76, 175, 80, 0.2)'
                       },
                       '&.Mui-disabled': {
                         bgcolor: '#f5f5f5',
-                        color: '#ccc'
+                        color: '#ccc',
+                        borderColor: '#ccc'
                       }
                     }}
                   >
-                    <Typography sx={{ fontSize: '1.2rem', fontWeight: 'bold' }}>‹</Typography>
+                    ‹
                   </IconButton>
                   <Box sx={{ 
                     px: 2, 
-                    py: 0.5, 
-                    bgcolor: '#2d5016', 
+                    py: 0.75, 
+                    bgcolor: '#4CAF50', 
                     color: 'white',
-                    borderRadius: '6px',
+                    borderRadius: '8px',
                     display: 'flex',
                     alignItems: 'center',
-                    minWidth: 40,
-                    justifyContent: 'center'
+                    minWidth: 45,
+                    justifyContent: 'center',
+                    fontWeight: 600,
+                    boxShadow: '0 2px 4px rgba(76, 175, 80, 0.3)'
                   }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      {page + 1}
-                    </Typography>
+                    {page + 1}
                   </Box>
                   <IconButton
                     size="small"
                     onClick={() => handleChangePage(null, page + 1)}
                     disabled={(page + 1) * rowsPerPage >= filteredProposals.length}
                     sx={{ 
-                      color: '#2d5016',
+                      color: '#4CAF50',
                       bgcolor: 'white',
-                      border: '1px solid #e0e0e0',
-                      borderRadius: '6px',
+                      border: '2px solid #4CAF50',
+                      borderRadius: '8px',
+                      fontWeight: 'bold',
+                      transition: 'all 0.2s ease',
                       '&:hover': {
                         bgcolor: '#f0f7ed',
-                        borderColor: '#4a7c2c'
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 2px 8px rgba(76, 175, 80, 0.2)'
                       },
                       '&.Mui-disabled': {
                         bgcolor: '#f5f5f5',
-                        color: '#ccc'
+                        color: '#ccc',
+                        borderColor: '#ccc'
                       }
                     }}
                   >
-                    <Typography sx={{ fontSize: '1.2rem', fontWeight: 'bold' }}>›</Typography>
+                    ›
                   </IconButton>
                 </Box>
               </Box>
@@ -1300,6 +1387,91 @@ const NewProposalWorkflowPage = () => {
                     </Button>
                   </Box>
                 )}
+
+                {/* Inline Proposal Details Edit (Budget Preparer owner while Draft) */}
+                {(() => {
+                  if (!selectedProposal) return null;
+                  const userRoles = currentUser?.Roles || [];
+                  const isPreparer = userRoles.some(r => ['BUDGET PREPARER','BUDGET_PREPARER'].includes(r));
+                  const draftStatuses = ['DRAFT','Draft','Returned to Preparer','RETURNED_TO_PREPARER'];
+                  const userName = currentUser?.name || `${currentUser?.FirstName || ''} ${currentUser?.LastName || ''}`.trim();
+                  const isOwnerByName = selectedProposal?.processBy && userName && selectedProposal.processBy === userName;
+                  const isOwnerById = (selectedProposal?.createdBy && (currentUser?.id || currentUser?._id))
+                    ? String(selectedProposal.createdBy) === String(currentUser.id || currentUser?._id)
+                    : false;
+                  const canEditMeta = isPreparer && draftStatuses.includes(selectedProposal.status) && (isOwnerByName || isOwnerById);
+                  if (!canEditMeta) return null;
+                  return (
+                    <Box sx={{ mt: 4, pt: 3, borderTop: '2px dashed #d0d0d0' }}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2, color: '#2d5016' }}>
+                        Edit Proposal Details
+                      </Typography>
+                      <Grid container spacing={2}>
+                        <Grid item xs={12} md={6}>
+                          <TextField
+                            label="Title"
+                            fullWidth
+                            size="small"
+                            value={proposalEditValues.title}
+                            onChange={(e) => { setProposalEditValues(v => ({ ...v, title: e.target.value })); setProposalEditDirty(true); }}
+                          />
+                        </Grid>
+                        <Grid item xs={12} md={12}>
+                          <TextField
+                            label="Description"
+                            fullWidth
+                            multiline
+                            minRows={2}
+                            value={proposalEditValues.description}
+                            onChange={(e) => { setProposalEditValues(v => ({ ...v, description: e.target.value })); setProposalEditDirty(true); }}
+                          />
+                        </Grid>
+                      </Grid>
+                      <Box sx={{ mt: 2, display: 'flex', gap: 2 }}>
+                        <Button
+                          variant="contained"
+                          size="small"
+                          disabled={!proposalEditDirty}
+                          sx={{ bgcolor: proposalEditDirty ? '#2d5016' : '#9e9e9e', '&:hover': { bgcolor: proposalEditDirty ? '#1e3a0f' : '#757575' } }}
+                          onClick={async () => {
+                            try {
+                              const payload = {
+                                title: proposalEditValues.title,
+                                description: proposalEditValues.description
+                              };
+                              await api.put(`/api/new-proposal-workflow/proposals/${selectedProposal._id}`, payload);
+                              toast.success('Proposal details updated');
+                              // Update local states
+                              setSelectedProposal(prev => prev ? ({ ...prev, ...payload }) : prev);
+                              setProposals(prev => prev.map(p => p._id === selectedProposal._id ? ({ ...p, ...payload }) : p));
+                              setProposalEditDirty(false);
+                            } catch (err) {
+                              console.error('Error updating proposal details', err);
+                              toast.error('Failed to update proposal details');
+                            }
+                          }}
+                        >
+                          Save Details
+                        </Button>
+                        {proposalEditDirty && (
+                          <Button
+                            variant="text"
+                            size="small"
+                            onClick={() => {
+                              setProposalEditValues({
+                                title: selectedProposal.title || '',
+                                description: selectedProposal.description || ''
+                              });
+                              setProposalEditDirty(false);
+                            }}
+                          >
+                            Reset
+                          </Button>
+                        )}
+                      </Box>
+                    </Box>
+                  );
+                })()}
               </Box>
 
               {/* Tabs for different sections */}

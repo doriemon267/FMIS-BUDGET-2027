@@ -34,14 +34,19 @@ exports.createIncome = async (req, res) => {
     
     // Create new income entry with workflow data
     // CRITICAL: Ensure proposalId is always set to prevent cross-proposal data mixing
-    let finalProposalId = proposalId || workflowData.proposalId;
-    
-    // If still no proposalId, try to generate one based on fiscal year + budget type + region
-    // This is a fallback for legacy data compatibility
-    if (!finalProposalId && fiscalYear && budgetType && region) {
-      console.warn('[createIncome] No proposalId provided - this should include a proposalId link');
+    let finalWorkflowId = proposalId || workflowData.proposalId; // This refers to NewProposalWorkflow _id
+    let legacyProposalId = null;
+    if (finalWorkflowId) {
+      const legacy = await Proposal.findOne({ workflowRef: finalWorkflowId }).select('_id');
+      if (legacy) {
+        legacyProposalId = legacy._id;
+      } else {
+        console.warn('[createIncome] No legacy Proposal found for workflowRef:', finalWorkflowId);
+      }
+    } else {
+      console.warn('[createIncome] Missing workflow proposalId in request; line item will not aggregate');
     }
-    
+
     const newIncome = new Income({
       particulars,
       cost: cost || amount,
@@ -60,9 +65,19 @@ exports.createIncome = async (req, res) => {
       processBy: processBy || req.user?.userName || req.user?.id,
       processDate: processDate || new Date(),
       status: workflowData.status || "Draft", // Use new workflow status
-      proposalId: finalProposalId  // CRITICAL: Link to specific proposal to prevent data mixing
+      proposalId: legacyProposalId ? legacyProposalId : undefined, // Link to legacy Proposal for aggregation
+      workflowRef: finalWorkflowId ? new mongoose.Types.ObjectId(finalWorkflowId) : undefined // Link back to workflow
     });
     await newIncome.save();
+    // Direct recompute for linked legacy proposal (more precise than key-based scan)
+    if (legacyProposalId) {
+      try {
+        const proposalDoc = await Proposal.findById(legacyProposalId);
+        await proposalDoc?.recomputeTotals();
+      } catch (e) {
+        console.warn('[createIncome] recomputeTotals failed', e.message);
+      }
+    }
     // Non-blocking: trigger Proposal totals recalculation for affected proposals
     try {
       const keys = {
@@ -155,6 +170,9 @@ exports.updateIncome = async (req, res) => {
         status: status || workflowData.status || "Draft",
         ...(workflowData.originalLevel ? { originalLevel: workflowData.originalLevel } : {}),
         ...(workflowData.workflowLevel ? { workflowLevel: workflowData.workflowLevel } : {}),
+        // Ensure proposal linkage persists
+        ...(existingIncome?.proposalId ? { proposalId: existingIncome.proposalId } : {}),
+        ...(existingIncome?.workflowRef ? { workflowRef: existingIncome.workflowRef } : {})
       },
       { new: true }
     );
@@ -314,7 +332,18 @@ exports.getIncomeByParams = async (req, res) => {
     
     // ✅ Primary filter: if proposalId is provided, use it
     if (proposalId) {
-      baseQuery.proposalId = proposalId;
+      // Accept either legacy Proposal _id or NewProposalWorkflow _id
+      // If the provided id is a workflow id, include workflowRef match and resolve legacy proposal id for proposalId match
+      try {
+        baseQuery.$or = [{ workflowRef: proposalId }];
+        const legacy = await Proposal.findOne({ workflowRef: proposalId }).select('_id').lean();
+        if (legacy?._id) {
+          baseQuery.$or.push({ proposalId: legacy._id });
+        }
+      } catch (_e) {
+        // Fallback: direct proposalId match (legacy)
+        baseQuery.proposalId = proposalId;
+      }
     } else {
       // Fallback: use individual parameters
       if (fiscalYear) baseQuery.fiscalYear = fiscalYear;

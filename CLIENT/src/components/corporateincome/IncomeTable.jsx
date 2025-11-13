@@ -400,12 +400,21 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
     }
   });
 
+  const [savingKeys, setSavingKeys] = useState(new Set());
+
   const handleSaveSubcategoryAmount = (category, subcategoryName) => {
     const key = `${category._id}-${subcategoryName}`;
     const amount = subcategoryAmounts[key] || "0";
     if (!category || !category._id || !subcategoryName || isNaN(Number(amount))) {
       toast.error("Cannot save: Missing category, subcategory, or amount.");
       return;
+    }
+    if (!proposalId) {
+      toast.warning("Create a proposal first before saving income entries. No proposalId found.");
+      return; // Prevent orphan income records without linkage
+    }
+    if (savingKeys.has(key)) {
+      return; // Already saving this subcategory
     }
     const existingItem = incomeItems.find(item =>
       (item.incomecategory === category._id || item.incomecategory?._id === category._id) &&
@@ -427,10 +436,18 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
       processDate: new Date(),
       ...(proposalId && { proposalId })  // Include proposalId if available
     };
+    setSavingKeys(prev => new Set(prev).add(key));
+    const finalize = () => {
+      setSavingKeys(prev => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    };
     if (existingItem) {
-      updateIncomeMutation.mutate({ id: existingItem._id, data: incomeData });
+      updateIncomeMutation.mutate({ id: existingItem._id, data: incomeData }, { onSettled: finalize });
     } else {
-      saveIncomeAmountMutation.mutate(incomeData);
+      saveIncomeAmountMutation.mutate(incomeData, { onSettled: finalize });
     }
     setUserModifiedFields(prev => {
       const newState = { ...prev };
@@ -659,12 +676,19 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
     });
   };
 
+  const [bulkSaving, setBulkSaving] = useState(false);
   const handleSaveAll = () => {
     const modifiedKeys = Object.keys(userModifiedFields);
     if (modifiedKeys.length === 0) {
       toast.info("No changes to save");
       return;
     }
+    if (!proposalId) {
+      toast.warning("Create a proposal first before saving income entries. No proposalId found.");
+      return; // Prevent orphan income records without linkage
+    }
+    if (bulkSaving) return;
+    setBulkSaving(true);
     const savePromises = modifiedKeys.map(key => {
       const [categoryId, subcategoryName] = key.split('-');
       const category = incomeCategories.find(cat => cat._id === categoryId);
@@ -705,7 +729,8 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
       .catch(error => {
         console.error("Error saving changes:", error);
         toast.error(`Error saving changes: ${error.message}`);
-      });
+      })
+      .finally(() => setBulkSaving(false));
   };
 
   const handleClearUnsaved = () => {
@@ -837,15 +862,19 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
       <Box sx={{ mb: 3 }}>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
           <Box display="flex" alignItems="center" gap={2}>
-            <Button
-              variant="contained"
-              startIcon={<SaveIcon />}
-              onClick={handleSaveAll}
-              disabled={locked || !hasUnsavedChanges}
-              sx={{ minWidth: 120 }}
-            >
-              {hasUnsavedChanges ? 'Save Changes' : 'Saved'}
-            </Button>
+            <Tooltip title={!proposalId ? 'Create a proposal first to enable saving' : hasUnsavedChanges ? 'Save all modified income entries' : 'No pending changes'}>
+              <span>
+                <Button
+                  variant="contained"
+                  startIcon={bulkSaving ? <CircularProgress size={18} /> : <SaveIcon />}
+                  onClick={handleSaveAll}
+                  disabled={locked || !hasUnsavedChanges || !proposalId || bulkSaving}
+                  sx={{ minWidth: 140 }}
+                >
+                  {!proposalId ? 'Disabled' : bulkSaving ? 'Saving...' : hasUnsavedChanges ? 'Save Changes' : 'Saved'}
+                </Button>
+              </span>
+            </Tooltip>
             <Button
               variant="outlined"
               startIcon={<CancelIcon />}
@@ -1161,6 +1190,29 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
                                       disabled={locked}
                                       sx={{ width: '120px', '& .MuiInputBase-root': { display: 'flex', justifyContent: 'flex-end' } }}
                                     />
+                                    {userModifiedFields[key] && proposalId && (
+                                      <Tooltip title={savingKeys.has(key) ? 'Saving...' : 'Save this amount'}>
+                                        <span>
+                                          <IconButton
+                                            color="primary"
+                                            size="small"
+                                            onClick={() => handleSaveSubcategoryAmount(category, cleanSubcategoryName)}
+                                            disabled={savingKeys.has(key) || bulkSaving}
+                                          >
+                                            {savingKeys.has(key) ? <CircularProgress size={18} /> : <SaveIcon fontSize="inherit" />}
+                                          </IconButton>
+                                        </span>
+                                      </Tooltip>
+                                    )}
+                                    {!proposalId && (
+                                      <Tooltip title="Create a proposal first">
+                                        <span>
+                                          <IconButton color="primary" size="small" disabled>
+                                            <SaveIcon fontSize="inherit" />
+                                          </IconButton>
+                                        </span>
+                                      </Tooltip>
+                                    )}
                                   </Box>
                                 </TableCell>
                               </TableRow>

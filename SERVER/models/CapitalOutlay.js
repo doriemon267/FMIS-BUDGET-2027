@@ -51,6 +51,11 @@ const CapitalOutlaySchema = new mongoose.Schema(
       ref: 'Proposal',
       index: true
     },
+    workflowRef: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'NewProposalWorkflow',
+      index: true
+    },
     
     processBy: {
       type: String,

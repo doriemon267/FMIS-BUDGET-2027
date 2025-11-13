@@ -1,6 +1,6 @@
 const EmployeeCourtAppearance = require("../models/employeeCourtAppearance");
 const Settings = require("../models/Settings");
-const PersonnelService = require('../models/PersonnelServices');
+const PersonnelServices = require('../models/PersonnelServices');
 const {
   numberFilter,
   dateFilter,
@@ -15,18 +15,19 @@ exports.getAllAppearances = async (req, res) => {
     const regionFilter = req.query.region;
     // Log access for monitoring purposes
     const activeSettings = await Settings.findOne({ isActive: true });
-    if (
-      !activeSettings ||
-      !activeSettings.fiscalYear ||
-      !activeSettings.courtAppearance
-    ) {
-      return res.status(400).json({
-        message: "Active settings with court appearance not found.",
+    if (!activeSettings || !activeSettings.fiscalYear) {
+      return res.json({
+        data: [],
+        totalRecords: 0,
+        currentPage: 1,
+        totalPages: 1,
+        region: regionFilter || 'All',
+        message: "No active settings found."
       });
     }
     const fiscalYear = activeSettings.fiscalYear;
     const budgetType = activeSettings.budgetType;
-    const rate = activeSettings.courtAppearance;
+    const rate = activeSettings.courtAppearance || 0;
     // Kumuha ng permanent personnel para sa active fiscal year at may status na "Not Submitted", "Returned", o "Draft"
     const personnelQuery = {
       statusOfAppointment: { $regex: /^permanent$/i },
@@ -203,8 +204,8 @@ exports.getSumOfCourtAppearanceAmount = async (req, res) => {
   try {
     // Gamitin ang active fiscalYear sa pag‑sum
     const activeSettings = await Settings.findOne({ isActive: true });
-    if (!activeSettings) {
-      return res.status(400).json({ message: "Active settings not found." });
+    if (!activeSettings || !activeSettings.fiscalYear) {
+      return res.json({ totalAmount: 0 });
     }
     const fiscalYear = activeSettings.fiscalYear;
     const result = await EmployeeCourtAppearance.aggregate([

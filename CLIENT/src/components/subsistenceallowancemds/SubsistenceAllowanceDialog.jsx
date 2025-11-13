@@ -124,10 +124,11 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
   const fetchActiveSettings = async () => {
     try {
       const res = await api.get("/settings/active");
-      setSubsistenceRate(res.data.subsistenceAllowanceRate);
+      setSubsistenceRate(res.data.subsistenceAllowanceRate || 0);
       setFiscalYearFromSettings(res.data.fiscalYear || new Date().getFullYear().toString());
     } catch (error) {
       console.error("Error fetching settings:", error);
+      setSubsistenceRate(0);
     }
   };
 
@@ -264,10 +265,14 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
             <Grid item xs={12}>
               <TextField
                 label="Amount"
-                value={subsistenceRate.toLocaleString("en-PH", {
-                  style: "currency",
-                  currency: "PHP",
-                })}
+                value={
+                  subsistenceRate
+                    ? subsistenceRate.toLocaleString("en-PH", {
+                        style: "currency",
+                        currency: "PHP",
+                      })
+                    : "₱0.00"
+                }
                 fullWidth
                 disabled
               />

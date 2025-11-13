@@ -902,7 +902,16 @@ exports.bulkSaveMOOE = async (req, res) => {
       ownerDivision = null;
     }
     // CRITICAL: Link MOOE entries to specific proposal to prevent cross-proposal data mixing
-    const ownerProposalId = meta?.proposalId ?? workflowData.proposalId ?? req.body.proposalId;
+    const ownerWorkflowId = meta?.proposalId ?? workflowData.proposalId ?? req.body.proposalId; // NewProposalWorkflow _id
+    let legacyProposalForMOOE = null;
+    if (ownerWorkflowId) {
+      legacyProposalForMOOE = await Proposal.findOne({ workflowRef: ownerWorkflowId }).select('_id');
+      if (!legacyProposalForMOOE) {
+        console.warn('[bulkSaveMOOE] No legacy Proposal found for workflowRef:', ownerWorkflowId);
+      }
+    } else {
+      console.warn('[bulkSaveMOOE] Missing workflow proposalId in request; MOOE entries will not aggregate');
+    }
     
     console.log('   Resolved ownership:', { ownerRegion, ownerDepartment, ownerDivision, ownerProposalId });
     // Determine level tagging
@@ -1080,8 +1089,11 @@ exports.bulkSaveMOOE = async (req, res) => {
         }
         updateObj.status = meta?.status || item.status || "Draft";
         // Link to specific proposal if available to prevent cross-proposal mixing
-        if (ownerProposalId) {
-          updateObj.proposalId = ownerProposalId;
+        if (legacyProposalForMOOE?._id) {
+          updateObj.proposalId = legacyProposalForMOOE._id; // Link to legacy Proposal for aggregation
+        }
+        if (ownerWorkflowId) {
+          updateObj.workflowRef = ownerWorkflowId; // Track originating workflow
         }
         return {
         updateOne: {
@@ -1137,6 +1149,15 @@ exports.bulkSaveMOOE = async (req, res) => {
       };
       
       console.log('✅ MOOE SAVE SUCCESSFUL:', operationStats);
+      // Direct recompute for linked legacy proposal (precise aggregation)
+      if (legacyProposalForMOOE?._id) {
+        try {
+          const proposalDoc = await Proposal.findById(legacyProposalForMOOE._id);
+          await proposalDoc?.recomputeTotals();
+        } catch (e) {
+          console.warn('[bulkSaveMOOE] recomputeTotals failed', e.message);
+        }
+      }
       // Non-blocking: trigger Proposal totals recalculation for affected proposals
       try {
         // Collect unique key combos from processed entries (usually one set)
@@ -1419,10 +1440,22 @@ exports.getMOOEByParams = async (req, res) => {
   try {
     const { proposalId, fiscalYear, budgetType, processBy, region, status, department, division } = req.query;
     const query = {};
-    
-    // ✅ Primary filter: if proposalId is provided, use it
+
+    // ✅ Primary filter: if proposalId is provided, accept either legacy Proposal _id or NewProposalWorkflow _id
     if (proposalId) {
-      query.proposalId = proposalId;
+      try {
+        // Match by workflowRef directly
+        query.$or = [{ workflowRef: proposalId }];
+        // Try to resolve legacy Proposal id linked to this workflow proposal id
+        const Proposal = require('../models/Proposal');
+        const legacy = await Proposal.findOne({ workflowRef: proposalId }).select('_id').lean();
+        if (legacy?._id) {
+          query.$or.push({ proposalId: legacy._id });
+        }
+      } catch (_e) {
+        // Fallback: treat proposalId as legacy Proposal _id
+        query.proposalId = proposalId;
+      }
     } else {
       // Fallback: use individual parameters
       if (fiscalYear) query.fiscalYear = fiscalYear;
@@ -1433,7 +1466,7 @@ exports.getMOOEByParams = async (req, res) => {
       if (department) query.department = department;
       if (division) query.division = division;
     }
-    
+
     const mooe = await MooeProposal.find(query).lean();
     res.status(200).json(mooe);
   } catch (error) {
