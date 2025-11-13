@@ -516,6 +516,22 @@ const NewProposalWorkflowPage = () => {
   };
 
   // Filter and search proposals
+  const statusEnumToDbMap = {
+    'DRAFT': 'Draft',
+    'FORWARDED_TO_REVIEWER': 'Forwarded to Reviewer',
+    'FORWARDED_TO_APPROVER': 'Forwarded to Approver',
+    'FORWARDED_TO_BRD_ANALYST': 'Forwarded to Budget Planning Analyst',
+    'FORWARDED_TO_BRD_OFFICER': 'Forwarded to Budget Officer',
+    'FORWARDED_TO_BRD_MANAGER': 'Forwarded to Overall Budget Approver',
+    'FINALIZED': 'Finalized',
+    'RETURNED_TO_PREPARER': 'Returned to Preparer',
+    'RETURNED_TO_REVIEWER': 'Returned to Reviewer',
+    'RETURNED_TO_APPROVER': 'Returned to Approver',
+    'RETURNED_TO_PLANNING_ANALYST': 'Returned to Budget Planning Analyst',
+    'RETURNED_TO_BRD_OFFICER': 'Returned to Budget Officer',
+    'RETURNED': 'Returned'
+  };
+
   const filteredProposals = proposals.filter(proposal => {
     const matchesSearch = searchQuery === '' || 
       proposal.responsibilityCenter?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -523,7 +539,9 @@ const NewProposalWorkflowPage = () => {
       proposal.budgetType?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       proposal.status?.toLowerCase().includes(searchQuery.toLowerCase());
     
-    const matchesFilter = filterStatus === 'all' || proposal.status === filterStatus;
+    // Map the filter enum to actual database status
+    const filterDbStatus = statusEnumToDbMap[filterStatus];
+    const matchesFilter = filterStatus === 'all' || proposal.status === filterDbStatus;
     
     return matchesSearch && matchesFilter;
   });
@@ -690,15 +708,15 @@ const NewProposalWorkflowPage = () => {
                 <MenuItem value="DRAFT">Draft</MenuItem>
                 <MenuItem value="FORWARDED_TO_REVIEWER">Forwarded to Reviewer</MenuItem>
                 <MenuItem value="FORWARDED_TO_APPROVER">Forwarded to Approver</MenuItem>
-                <MenuItem value="FORWARDED_TO_BRD_ANALYST">Forwarded to Analyst</MenuItem>
-                <MenuItem value="FORWARDED_TO_BRD_OFFICER">Forwarded to Officer</MenuItem>
-                <MenuItem value="FORWARDED_TO_BRD_MANAGER">Forwarded to Manager</MenuItem>
+                <MenuItem value="FORWARDED_TO_BRD_ANALYST">Forwarded to Budget Planning Analyst</MenuItem>
+                <MenuItem value="FORWARDED_TO_BRD_OFFICER">Forwarded to Budget Officer</MenuItem>
+                <MenuItem value="FORWARDED_TO_BRD_MANAGER">Forwarded to Overall Budget Approver</MenuItem>
                 <MenuItem value="FINALIZED">Finalized</MenuItem>
                 <MenuItem value="RETURNED_TO_PREPARER">Returned to Preparer</MenuItem>
                 <MenuItem value="RETURNED_TO_REVIEWER">Returned to Reviewer</MenuItem>
                 <MenuItem value="RETURNED_TO_APPROVER">Returned to Approver</MenuItem>
-                <MenuItem value="RETURNED_TO_PLANNING_ANALYST">Returned to Analyst</MenuItem>
-                <MenuItem value="RETURNED_TO_OFFICER">Returned to Officer</MenuItem>
+                <MenuItem value="RETURNED_TO_PLANNING_ANALYST">Returned to Budget Planning Analyst</MenuItem>
+                <MenuItem value="RETURNED_TO_OFFICER">Returned to Budget Officer</MenuItem>
               </Select>
             </FormControl>
           )}
