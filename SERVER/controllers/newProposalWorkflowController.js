@@ -506,7 +506,13 @@ exports.performAction = async (req, res) => {
       });
     }
 
+    console.log('[PERFORM_ACTION] ========== START ACTION PROCESSING ==========');
+    console.log('[PERFORM_ACTION] Proposal ID:', id);
+    console.log('[PERFORM_ACTION] Proposal Title:', proposal.title);
     console.log('[PERFORM_ACTION] Proposal Status:', proposal.status);
+    console.log('[PERFORM_ACTION] User Role:', userRole);
+    console.log('[PERFORM_ACTION] Action Requested:', action);
+    console.log('[PERFORM_ACTION] =========================================');
 
     // Map status from Proposal format to workflow format for validation
     const statusMapping = {
@@ -539,13 +545,26 @@ exports.performAction = async (req, res) => {
       });
     }
 
+    // NOTE: The following check is redundant with canPerformAction, but kept for safety
     const transitions = WORKFLOW_TRANSITIONS[userRole];
-    console.log('[PERFORM_ACTION] Transitions available for role:', userRole, transitions ? Object.keys(transitions) : 'NONE');
-    console.log('[PERFORM_ACTION] Transitions for status', workflowStatus, ':', transitions?.[workflowStatus]);
-    console.log('[PERFORM_ACTION] Action', action, 'available:', transitions?.[workflowStatus]?.[action] ? 'YES' : 'NO');
-    
-    if (!transitions || !transitions[workflowStatus] || !transitions[workflowStatus][action]) {
-      console.log('[PERFORM_ACTION] 400 - Invalid action for current status. Role:', userRole, 'Status:', workflowStatus, 'Action:', action);
+    if (!transitions) {
+      console.log('[PERFORM_ACTION] ERROR: No transitions defined for role:', userRole);
+      return res.status(500).json({
+        success: false,
+        message: 'Workflow not configured for this role'
+      });
+    }
+
+    if (!transitions[workflowStatus]) {
+      console.log('[PERFORM_ACTION] ERROR: Status', workflowStatus, 'not available for role', userRole, '. Available:', Object.keys(transitions));
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status for this role'
+      });
+    }
+
+    if (!transitions[workflowStatus][action]) {
+      console.log('[PERFORM_ACTION] ERROR: Action', action, 'not available for status', workflowStatus, '. Available:', Object.keys(transitions[workflowStatus]));
       return res.status(400).json({
         success: false,
         message: 'Invalid action for current status'
