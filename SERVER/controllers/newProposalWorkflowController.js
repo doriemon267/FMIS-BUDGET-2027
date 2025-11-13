@@ -156,7 +156,10 @@ exports.createProposal = async (req, res) => {
       modelType, 
       fiscalYear, 
       projectedCorporateIncome, 
-      projectedSubsidy 
+      projectedSubsidy,
+      region,
+      department,
+      division
     } = req.body;
 
     // Validate modelType - Updated to use new valid types
@@ -178,14 +181,41 @@ exports.createProposal = async (req, res) => {
       fiscalYear,
       projectedCorporateIncome: Number(projectedCorporateIncome) || 0,
       projectedSubsidy: Number(projectedSubsidy) || 0,
-      amount: calculatedAmount, // Use the calculated amount
+      amount: calculatedAmount,
       createdBy: req.user.id,
       createdByName: req.user.name || req.user.email,
       status: 'DRAFT'
     };
 
+    // Create NewProposalWorkflow document
     const proposal = new NewProposalWorkflow(proposalData);
     await proposal.save();
+
+    // Also create a Proposal document for the proposals collection
+    // This is needed for backward compatibility and proposal tracking
+    const legacyProposalData = {
+      title,
+      description,
+      fiscalYear: String(fiscalYear),
+      budgetType: modelType,
+      region: region || 'CENTRAL OFFICE',
+      department: department || '',
+      division: division || '',
+      originalDepartment: department || '',
+      originalDivision: division || '',
+      processBy: req.user.name || req.user.email,
+      status: 'Draft',
+      workflowLevel: 'BUDGET PREPARER',
+      currentStep: 'PREPARER_DRAFT',
+      proposalId: proposal._id.toString(),  // Link to NewProposalWorkflow
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      createdBy: req.user.id,
+      createdByName: req.user.name || req.user.email
+    };
+
+    const legacyProposal = new Proposal(legacyProposalData);
+    await legacyProposal.save();
 
     res.status(201).json({
       success: true,
