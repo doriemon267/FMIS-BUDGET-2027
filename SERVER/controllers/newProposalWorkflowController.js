@@ -71,7 +71,9 @@ const WORKFLOW_TRANSITIONS = {
 
 // Get user's role from request
 const getUserRole = (req) => {
+  console.log('[getUserRole] Full req.user object:', JSON.stringify(req.user, null, 2));
   const userRoles = req.user?.Roles || [];
+  console.log('[getUserRole] User Roles from request:', userRoles);
   
   const roleMapping = {
     'BUDGET_PREPARER': 'BUDGET PREPARER',
@@ -92,10 +94,12 @@ const getUserRole = (req) => {
 
   for (const role of userRoles) {
     if (roleMapping[role]) {
+      console.log('[getUserRole] Mapped role:', roleMapping[role]);
       return roleMapping[role];
     }
   }
 
+  console.log('[getUserRole] No role mapping found for roles:', userRoles);
   return null;
 };
 
@@ -536,7 +540,12 @@ exports.performAction = async (req, res) => {
     }
 
     const transitions = WORKFLOW_TRANSITIONS[userRole];
+    console.log('[PERFORM_ACTION] Transitions available for role:', userRole, transitions ? Object.keys(transitions) : 'NONE');
+    console.log('[PERFORM_ACTION] Transitions for status', workflowStatus, ':', transitions?.[workflowStatus]);
+    console.log('[PERFORM_ACTION] Action', action, 'available:', transitions?.[workflowStatus]?.[action] ? 'YES' : 'NO');
+    
     if (!transitions || !transitions[workflowStatus] || !transitions[workflowStatus][action]) {
+      console.log('[PERFORM_ACTION] 400 - Invalid action for current status. Role:', userRole, 'Status:', workflowStatus, 'Action:', action);
       return res.status(400).json({
         success: false,
         message: 'Invalid action for current status'
