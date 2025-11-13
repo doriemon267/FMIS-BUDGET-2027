@@ -96,6 +96,11 @@ const NewProposalWorkflowPage = () => {
     ['BUDGET_REVIEWER', 'BUDGET REVIEWER', 'BUDGET_APPROVER', 'BUDGET APPROVER', 'BUDGET_PLANNING_ANALYST', 'BUDGET PLANNING ANALYST', 'BUDGET_OFFICER', 'BUDGET OFFICER', 'BUDGET_MANAGER', 'BUDGET MANAGER', 'SUPER_ADMIN', 'SUPER ADMIN'].includes(role)
   );
 
+  // Check if user is actual BRD staff (Planning Analyst, Officer, Manager) - only these should have status filter
+  const isBRDStaff = currentUser?.Roles?.some(role => 
+    ['BUDGET_PLANNING_ANALYST', 'BUDGET PLANNING ANALYST', 'BUDGET_OFFICER', 'BUDGET OFFICER', 'BUDGET_MANAGER', 'BUDGET MANAGER', 'SUPER_ADMIN', 'SUPER ADMIN'].includes(role)
+  );
+
   // State management - BRD users start at "Pending Review" (index 1), others at "My Proposals" (index 0)
   const [activeTab, setActiveTab] = useState(isBRDUser ? 1 : 0);
   
@@ -115,6 +120,7 @@ const NewProposalWorkflowPage = () => {
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [viewDetailsDialogOpen, setViewDetailsDialogOpen] = useState(false);
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [actionType, setActionType] = useState('');
   const [actionComment, setActionComment] = useState('');
   const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
@@ -122,6 +128,8 @@ const NewProposalWorkflowPage = () => {
   const [proposalDetails, setProposalDetails] = useState(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsTab, setDetailsTab] = useState(0);
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyRowsPerPage, setHistoryRowsPerPage] = useState(20);
   const [expandedGroups, setExpandedGroups] = useState({});
   const [personnelPage, setPersonnelPage] = useState(0);
   const [personnelRowsPerPage, setPersonnelRowsPerPage] = useState(10);
@@ -215,6 +223,21 @@ const NewProposalWorkflowPage = () => {
     // Budget Approver can only edit when status is Forwarded to Approver or Returned to Approver
     if (userRoles.some(role => ['BUDGET APPROVER', 'BUDGET_APPROVER'].includes(role))) {
       return ['Forwarded to Approver', 'Returned to Approver'].includes(status);
+    }
+
+    // Budget Planning Analyst can edit when status is Forwarded to Analyst or Returned to Analyst
+    if (userRoles.some(role => ['BUDGET PLANNING ANALYST', 'BUDGET_PLANNING_ANALYST'].includes(role))) {
+      return ['Forwarded to Budget Planning Analyst', 'Returned to Budget Planning Analyst', 'Returned'].includes(status);
+    }
+
+    // Budget Officer can edit when status is Forwarded to Officer or Returned to Officer
+    if (userRoles.some(role => ['BUDGET OFFICER', 'BUDGET_OFFICER'].includes(role))) {
+      return ['Forwarded to Budget Officer', 'Returned to Budget Officer', 'Returned'].includes(status);
+    }
+
+    // Budget Manager can edit when status is Forwarded to Manager or Returned to Manager
+    if (userRoles.some(role => ['BUDGET MANAGER', 'BUDGET_MANAGER'].includes(role))) {
+      return ['Forwarded to Overall Budget Approver', 'Returned'].includes(status);
     }
     
     return false;
@@ -393,6 +416,31 @@ const NewProposalWorkflowPage = () => {
     }
   };
 
+  // Helper function to determine the role/position from action or status
+  const getRoleFromAction = (entry) => {
+    const action = entry.action || '';
+    const newStatus = entry.newStatus || entry.toStatus || '';
+    
+    // Map based on action
+    if (action.includes('SUBMIT_TO_REVIEWER') || action.includes('submit-to-reviewer')) return 'BUDGET PREPARER';
+    if (action.includes('SUBMIT_TO_APPROVER') || action.includes('submit-to-approver')) return 'BUDGET REVIEWER';
+    if (action.includes('SUBMIT_TO_ANALYST') || action.includes('submit-to-analyst')) return 'BUDGET APPROVER';
+    if (action.includes('FORWARD_TO_OFFICER') || action.includes('forward-to-officer')) return 'BUDGET PLANNING ANALYST';
+    if (action.includes('FORWARD_TO_MANAGER') || action.includes('forward-to-manager')) return 'BUDGET OFFICER';
+    if (action.includes('FINALIZE') || action.includes('finalize')) return 'BUDGET MANAGER';
+    if (action.includes('RETURN_TO')) return 'RETURN ACTION';
+    
+    // Map based on new status if action is not clear
+    if (newStatus.includes('Reviewer')) return 'BUDGET PREPARER';
+    if (newStatus.includes('Approver')) return 'BUDGET REVIEWER';
+    if (newStatus.includes('Analyst') || newStatus.includes('Planning')) return 'BUDGET APPROVER';
+    if (newStatus.includes('Officer')) return 'BUDGET PLANNING ANALYST';
+    if (newStatus.includes('Manager')) return 'BUDGET OFFICER';
+    if (newStatus.includes('Finalized')) return 'BUDGET MANAGER';
+    
+    return action || '-';
+  };
+
   // Get available actions based on user role and proposal status
   const getAvailableActions = (proposal) => {
     const userRoles = currentUser?.Roles || [];
@@ -401,6 +449,9 @@ const NewProposalWorkflowPage = () => {
 
     // VIEW DETAILS (always available)
     actions.push({ label: 'View Details', value: 'view-details', icon: <ViewIcon />, color: '#2d5016' });
+    
+    // VIEW HISTORY (always available)
+    actions.push({ label: 'View History', value: 'view-history', icon: <ExpandMoreIcon />, color: '#1976d2' });
 
     // BUDGET PREPARER actions
     const userName = currentUser?.name || `${currentUser?.FirstName || ''} ${currentUser?.LastName || ''}`.trim();
@@ -438,7 +489,7 @@ const NewProposalWorkflowPage = () => {
     }
 
     // BUDGET PLANNING ANALYST actions
-    if (userRoles.includes('BUDGET PLANNING ANALYST') && (currentStatus === 'Forwarded to Analyst' || currentStatus === 'Returned to Analyst')) {
+    if (userRoles.includes('BUDGET PLANNING ANALYST') && (currentStatus === 'Forwarded to Budget Planning Analyst' || currentStatus === 'Returned to Budget Planning Analyst' || currentStatus === 'Returned')) {
       actions.push(
         { label: 'Forward to Budget Officer', value: 'forward-to-officer', icon: <SendIcon />, color: 'primary' },
         { label: 'Return to Budget Approver', value: 'return-to-approver', icon: <RejectIcon />, color: 'warning' }
@@ -446,7 +497,7 @@ const NewProposalWorkflowPage = () => {
     }
 
     // BUDGET OFFICER actions
-    if (userRoles.includes('BUDGET OFFICER') && (currentStatus === 'Forwarded to Officer' || currentStatus === 'Returned to Officer')) {
+    if (userRoles.includes('BUDGET OFFICER') && (currentStatus === 'Forwarded to Budget Officer' || currentStatus === 'Returned to Budget Officer' || currentStatus === 'Returned')) {
       actions.push(
         { label: 'Forward to Budget Manager', value: 'forward-to-manager', icon: <SendIcon />, color: 'primary' },
         { label: 'Return to Budget Planning Analyst', value: 'return-to-analyst', icon: <RejectIcon />, color: 'warning' }
@@ -454,7 +505,7 @@ const NewProposalWorkflowPage = () => {
     }
 
     // BUDGET MANAGER actions
-    if (userRoles.includes('BUDGET MANAGER') && currentStatus === 'Forwarded to Manager') {
+    if (userRoles.includes('BUDGET MANAGER') && (currentStatus === 'Forwarded to Overall Budget Approver' || currentStatus === 'Returned')) {
       actions.push(
         { label: 'Finalize Proposal', value: 'finalize', icon: <ApproveIcon />, color: 'success' },
         { label: 'Return to Budget Officer', value: 'return-to-officer', icon: <RejectIcon />, color: 'warning' }
@@ -619,7 +670,7 @@ const NewProposalWorkflowPage = () => {
               startAdornment: <SearchIcon sx={{ mr: 1, color: '#666' }} />
             }}
           />
-          {isBRDUser && (
+          {isBRDStaff && (
             <FormControl size="small" sx={{ minWidth: 200 }}>
               <InputLabel>Filter by Status</InputLabel>
               <Select
@@ -836,6 +887,10 @@ const NewProposalWorkflowPage = () => {
                                         setActionMenuAnchor(null);
                                         if (action.value === 'view-details') {
                                           await handleViewDetails(proposal);
+                                        } else if (action.value === 'view-history') {
+                                          setSelectedProposal(proposal);
+                                          setHistoryPage(0);
+                                          setHistoryDialogOpen(true);
                                         } else {
                                           setActionDialogOpen(true);
                                         }
@@ -1815,6 +1870,197 @@ const NewProposalWorkflowPage = () => {
             }}
           >
             Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Proposal History Dialog */}
+      <Dialog
+        open={historyDialogOpen}
+        onClose={() => setHistoryDialogOpen(false)}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: '12px',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.15)'
+          }
+        }}
+      >
+        <DialogTitle sx={{
+          bgcolor: '#2d5016',
+          color: 'white',
+          fontWeight: 'bold',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.5,
+          fontSize: '1.1rem',
+          py: 2.5,
+          px: 3
+        }}>
+          <Box sx={{ 
+            width: 28, 
+            height: 28, 
+            bgcolor: 'rgba(255,255,255,0.2)',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <ExpandMoreIcon sx={{ fontSize: '1.2rem' }} />
+          </Box>
+          Proposal History
+        </DialogTitle>
+        <DialogContent sx={{ p: 0 }}>
+          {selectedProposal?.workflowHistory && selectedProposal.workflowHistory.length > 0 ? (
+            <>
+              <TableContainer sx={{ maxHeight: 600 }}>
+                <Table stickyHeader>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                      <TableCell sx={{ fontWeight: 'bold', color: '#333', fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                        PROCESSOR NAME
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', color: '#333', fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                        POSITION
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', color: '#333', fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                        OLD STATUS
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', color: '#333', fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                        NEW STATUS
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', color: '#333', fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                        REMARK
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', color: '#333', fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                        DATE
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', color: '#333', fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                        TIME
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {selectedProposal.workflowHistory
+                      .slice(historyPage * historyRowsPerPage, (historyPage + 1) * historyRowsPerPage)
+                      .map((entry, index) => (
+                        <TableRow 
+                          key={index}
+                          sx={{
+                            '&:nth-of-type(odd)': { bgcolor: '#f9f9f9' },
+                            '&:hover': { bgcolor: '#f0f7ed' },
+                            transition: 'background-color 0.2s ease'
+                          }}
+                        >
+                          <TableCell sx={{ py: 1.5, fontSize: '0.85rem', color: '#333' }}>
+                            {entry.performedByName || entry.userName || '-'}
+                          </TableCell>
+                          <TableCell sx={{ py: 1.5, fontSize: '0.85rem', color: '#666' }}>
+                            {entry.position || getRoleFromAction(entry)}
+                          </TableCell>
+                          <TableCell sx={{ py: 1.5, fontSize: '0.85rem', color: '#666' }}>
+                            {entry.fromStatus || entry.previousStatus || '-'}
+                          </TableCell>
+                          <TableCell sx={{ py: 1.5, fontSize: '0.85rem', color: '#333', fontWeight: 500 }}>
+                            {entry.toStatus || entry.newStatus || '-'}
+                          </TableCell>
+                          <TableCell sx={{ py: 1.5, fontSize: '0.85rem', color: '#555' }}>
+                            {entry.comment || '-'}
+                          </TableCell>
+                          <TableCell sx={{ py: 1.5, fontSize: '0.85rem', color: '#666' }}>
+                            {entry.timestamp ? new Date(entry.timestamp).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '-'}
+                          </TableCell>
+                          <TableCell sx={{ py: 1.5, fontSize: '0.85rem', color: '#666' }}>
+                            {entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              <Box sx={{
+                p: 2,
+                bgcolor: '#fafafa',
+                borderTop: '1px solid #e0e0e0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Typography variant="body2" sx={{ color: '#666', fontWeight: 500 }}>
+                    Rows per page:
+                  </Typography>
+                  <Select
+                    value={historyRowsPerPage}
+                    onChange={(e) => {
+                      setHistoryRowsPerPage(e.target.value);
+                      setHistoryPage(0);
+                    }}
+                    size="small"
+                    sx={{ width: 70 }}
+                  >
+                    <MenuItem value={10}>10</MenuItem>
+                    <MenuItem value={20}>20</MenuItem>
+                    <MenuItem value={50}>50</MenuItem>
+                  </Select>
+                </Box>
+                <Typography variant="body2" sx={{ color: '#666' }}>
+                  {selectedProposal.workflowHistory.length > 0 
+                    ? `${historyPage * historyRowsPerPage + 1}–${Math.min((historyPage + 1) * historyRowsPerPage, selectedProposal.workflowHistory.length)} of ${selectedProposal.workflowHistory.length}`
+                    : '0 of 0'
+                  }
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 0.5 }}>
+                  <IconButton
+                    size="small"
+                    onClick={() => setHistoryPage(Math.max(0, historyPage - 1))}
+                    disabled={historyPage === 0}
+                  >
+                    <Box sx={{ transform: 'rotate(90deg)' }}>
+                      ‹
+                    </Box>
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    onClick={() => setHistoryPage(historyPage + 1)}
+                    disabled={(historyPage + 1) * historyRowsPerPage >= selectedProposal.workflowHistory.length}
+                  >
+                    <Box sx={{ transform: 'rotate(-90deg)' }}>
+                      ›
+                    </Box>
+                  </IconButton>
+                </Box>
+              </Box>
+            </>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', p: 6 }}>
+              <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
+                No history available
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                This proposal has no workflow history yet
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 3, borderTop: '1px solid #e0e0e0' }}>
+          <Button 
+            onClick={() => setHistoryDialogOpen(false)}
+            variant="contained"
+            sx={{
+              bgcolor: '#2d5016',
+              color: 'white',
+              textTransform: 'none',
+              fontWeight: 600,
+              px: 4,
+              '&:hover': {
+                bgcolor: '#4a7c2c'
+              }
+            }}
+          >
+            Back
           </Button>
         </DialogActions>
       </Dialog>

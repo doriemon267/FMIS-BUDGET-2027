@@ -193,15 +193,37 @@ exports.getProposals = async (req, res) => {
     switch (view) {
       case 'my-proposals':
         query.createdBy = userName;
+        // Only show DRAFT proposals in "My Proposals" tab for Budget Preparer
+        query.status = 'Draft';
         break;
       case 'pending-review':
         console.log('[PENDING-REVIEW] User Role:', userRole);
         if (userRole && WORKFLOW_TRANSITIONS[userRole]) {
           const allowedStatuses = Object.keys(WORKFLOW_TRANSITIONS[userRole]);
-          console.log('[PENDING-REVIEW] Allowed Statuses:', allowedStatuses);
+          console.log('[PENDING-REVIEW] Allowed Statuses (enum):', allowedStatuses);
           const pendingStatuses = allowedStatuses.filter(status => status !== 'DRAFT');
           console.log('[PENDING-REVIEW] Pending Statuses (after filter):', pendingStatuses);
-          if (pendingStatuses.length === 0) {
+          
+          // Map enum statuses to human-readable statuses
+          const statusMapping = {
+            'DRAFT': 'Draft',
+            'FORWARDED_TO_REVIEWER': 'Forwarded to Reviewer',
+            'FORWARDED_TO_APPROVER': 'Forwarded to Approver',
+            'FORWARDED_TO_BRD_ANALYST': 'Forwarded to Budget Planning Analyst',
+            'FORWARDED_TO_BRD_OFFICER': 'Forwarded to Budget Officer',
+            'FORWARDED_TO_BRD_MANAGER': 'Forwarded to Overall Budget Approver',
+            'FINALIZED': 'Finalized',
+            'RETURNED_TO_PREPARER': 'Returned',
+            'RETURNED_TO_REVIEWER': 'Returned',
+            'RETURNED_TO_APPROVER': 'Returned',
+            'RETURNED_TO_PLANNING_ANALYST': 'Returned',
+            'RETURNED_TO_OFFICER': 'Returned'
+          };
+          
+          const mappedStatuses = pendingStatuses.map(s => statusMapping[s] || s);
+          console.log('[PENDING-REVIEW] Mapped Statuses:', mappedStatuses);
+          
+          if (mappedStatuses.length === 0) {
             console.log('[PENDING-REVIEW] No pending statuses, returning empty array');
             return res.json({
               success: true,
@@ -209,7 +231,7 @@ exports.getProposals = async (req, res) => {
               pagination: { page: 1, limit: 10, total: 0, pages: 0 }
             });
           }
-          query.status = { $in: pendingStatuses };
+          query.status = { $in: mappedStatuses };
           console.log('[PENDING-REVIEW] Query:', JSON.stringify(query));
         } else {
           console.log('[PENDING-REVIEW] No user role or transitions, returning empty array');
@@ -444,7 +466,7 @@ exports.performAction = async (req, res) => {
     const userId = req.user.id;
     const userName = req.user.name || req.user.email;
 
-    const proposal = await Proposal.findById(id);
+    const proposal = await NewProposalWorkflow.findById(id);
     if (!proposal) {
       return res.status(404).json({
         success: false,
