@@ -111,12 +111,12 @@ const CustomDrawer = ({ collapsed = false }) => {
                 icon: <FaFileAlt />,
               },
 
-              {
-                link: "/AllProposals",
-                name: "Proposals",
-                isAllow: hasPermission(currentUser, "ViewReports"),
-                icon: <FaClipboardList />,
-              },
+              // {
+              //   link: "/AllProposals",
+              //   name: "Proposals",
+              //   isAllow: hasPermission(currentUser, "ViewReports"),
+              //   icon: <FaClipboardList />,
+              // },
               {
                 link: "/new-proposal-workflow",
                 name: "New Proposal Workflow",

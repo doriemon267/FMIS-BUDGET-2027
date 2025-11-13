@@ -95,7 +95,7 @@ const ProposalDetailsPage = () => {
 
   // Fetch tab data
   useEffect(() => {
-    if (!proposal?.fiscalYear || !proposal?.region || !proposal?.budgetType) return;
+    if (!proposal?.fiscalYear || !proposal?.region || (!proposal?.budgetType && !proposal?.modelType)) return;
 
     switch (tabValue) {
       case 0: fetchPersonnelServices(); break;
@@ -104,7 +104,7 @@ const ProposalDetailsPage = () => {
       case 3: fetchIncomeData(); break;
       default: break;
     }
-  }, [tabValue, proposal?.fiscalYear, proposal?.region, proposal?.budgetType]);
+  }, [tabValue, proposal?.fiscalYear, proposal?.region, proposal?.budgetType, proposal?.modelType]);
 
   const fetchPersonnelServices = async () => {
     try {
@@ -114,7 +114,7 @@ const ProposalDetailsPage = () => {
           proposalId: proposal._id,
           fiscalYear: proposal.fiscalYear, 
           region: proposal.region, 
-          budgetType: proposal.budgetType 
+          budgetType: proposal.modelType || proposal.budgetType
         }
       });
       setPersonnelData(Array.isArray(response.data) ? response.data : []);
@@ -134,7 +134,7 @@ const ProposalDetailsPage = () => {
           proposalId: proposal._id,
           fiscalYear: proposal.fiscalYear, 
           region: proposal.region, 
-          budgetType: proposal.budgetType 
+          budgetType: proposal.modelType || proposal.budgetType
         }
       });
       setMooeData(Array.isArray(response.data) ? response.data : []);
@@ -154,7 +154,7 @@ const ProposalDetailsPage = () => {
           proposalId: proposal._id,
           fiscalYear: proposal.fiscalYear, 
           region: proposal.region, 
-          budgetType: proposal.budgetType 
+          budgetType: proposal.modelType || proposal.budgetType
         }
       });
       setCapitalOutlayData(Array.isArray(response.data) ? response.data : []);
@@ -174,7 +174,7 @@ const ProposalDetailsPage = () => {
           proposalId: proposal._id,
           fiscalYear: proposal.fiscalYear, 
           region: proposal.region, 
-          budgetType: proposal.budgetType 
+          budgetType: proposal.modelType || proposal.budgetType  // Use modelType for new workflow, fallback to budgetType for legacy
         }
       });
       setIncomeData(Array.isArray(response.data) ? response.data : []);
@@ -306,7 +306,7 @@ const ProposalDetailsPage = () => {
             Proposal Details
           </Typography>
           <Typography variant="body2" color="textSecondary">
-            FY {proposal.fiscalYear} | {proposal.region} | {proposal.budgetType}
+            FY {proposal.fiscalYear} | {proposal.region} | {proposal.modelType || proposal.budgetType}
           </Typography>
         </Box>
         <Box sx={{ width: 100 }} />

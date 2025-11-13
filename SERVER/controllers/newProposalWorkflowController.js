@@ -251,9 +251,8 @@ exports.getProposals = async (req, res) => {
     // Apply view-based and role-based filtering
     switch (view) {
       case 'my-proposals':
-        query.createdBy = userName;
-        // Only show DRAFT proposals in "My Proposals" tab for Budget Preparer
-        query.status = 'Draft';
+        query.createdBy = userId;  // Use userId for NewProposalWorkflow
+        query.status = 'DRAFT';     // Use DRAFT enum value
         break;
       case 'pending-review':
         console.log('[PENDING-REVIEW] User Role:', userRole);
@@ -263,26 +262,7 @@ exports.getProposals = async (req, res) => {
           const pendingStatuses = allowedStatuses.filter(status => status !== 'DRAFT');
           console.log('[PENDING-REVIEW] Pending Statuses (after filter):', pendingStatuses);
           
-          // Map enum statuses to human-readable statuses
-          const statusMapping = {
-            'DRAFT': 'Draft',
-            'FORWARDED_TO_REVIEWER': 'Forwarded to Reviewer',
-            'FORWARDED_TO_APPROVER': 'Forwarded to Approver',
-            'FORWARDED_TO_BRD_ANALYST': 'Forwarded to Budget Planning Analyst',
-            'FORWARDED_TO_BRD_OFFICER': 'Forwarded to Budget Officer',
-            'FORWARDED_TO_BRD_MANAGER': 'Forwarded to Overall Budget Approver',
-            'FINALIZED': 'Finalized',
-            'RETURNED_TO_PREPARER': 'Returned',
-            'RETURNED_TO_REVIEWER': 'Returned',
-            'RETURNED_TO_APPROVER': 'Returned',
-            'RETURNED_TO_PLANNING_ANALYST': 'Returned',
-            'RETURNED_TO_OFFICER': 'Returned'
-          };
-          
-          const mappedStatuses = pendingStatuses.map(s => statusMapping[s] || s);
-          console.log('[PENDING-REVIEW] Mapped Statuses:', mappedStatuses);
-          
-          if (mappedStatuses.length === 0) {
+          if (pendingStatuses.length === 0) {
             console.log('[PENDING-REVIEW] No pending statuses, returning empty array');
             return res.json({
               success: true,
@@ -290,7 +270,7 @@ exports.getProposals = async (req, res) => {
               pagination: { page: 1, limit: 10, total: 0, pages: 0 }
             });
           }
-          query.status = { $in: mappedStatuses };
+          query.status = { $in: pendingStatuses };  // Use enum statuses directly
           console.log('[PENDING-REVIEW] Query:', JSON.stringify(query));
         } else {
           console.log('[PENDING-REVIEW] No user role or transitions, returning empty array');
@@ -302,7 +282,7 @@ exports.getProposals = async (req, res) => {
         }
         break;
       case 'all-proposals':
-        query.status = { $ne: 'Draft' };
+        query.status = { $ne: 'DRAFT' };  // Use DRAFT enum
         if (userRole !== 'SUPER ADMIN' && userRole !== 'BUDGET MANAGER') {
           // Restrict 'all' view for non-admins, e.g., to their region/department
           // This logic can be expanded based on hierarchical assignments
@@ -312,37 +292,6 @@ exports.getProposals = async (req, res) => {
         // Default to 'my-proposals' if view is not specified
         query.createdBy = userId;
         break;
-    }
-
-    // Map status from NewProposalWorkflow format to Proposal format
-    const statusMapping = {
-      'DRAFT': 'Draft',
-      'FORWARDED_TO_REVIEWER': 'Forwarded to Reviewer',
-      'FORWARDED_TO_APPROVER': 'Forwarded to Approver',
-      'FORWARDED_TO_BRD_ANALYST': 'Forwarded to Budget Planning Analyst',
-      'FORWARDED_TO_BRD_OFFICER': 'Forwarded to Budget Officer',
-      'FORWARDED_TO_BRD_MANAGER': 'Forwarded to Overall Budget Approver',
-      'FINALIZED': 'Finalized',
-      'RETURNED_TO_PREPARER': 'Returned',
-      'RETURNED_TO_REVIEWER': 'Returned',
-      'RETURNED_TO_APPROVER': 'Returned',
-      'RETURNED_TO_PLANNING_ANALYST': 'Returned',
-      'RETURNED_TO_OFFICER': 'Returned'
-    };
-
-    // Convert query status to Proposal format
-    if (query.status && typeof query.status === 'string') {
-      query.status = statusMapping[query.status] || query.status;
-    } else if (query.status && query.status.$in) {
-      query.status.$in = query.status.$in.map(s => statusMapping[s] || s);
-    } else if (query.status && query.status.$ne) {
-      query.status.$ne = statusMapping[query.status.$ne] || query.status.$ne;
-    }
-
-    // Convert createdBy to processBy for Proposal model
-    if (query.createdBy) {
-      query.processBy = query.createdBy;
-      delete query.createdBy;
     }
 
     // Manual pagination
@@ -356,11 +305,13 @@ exports.getProposals = async (req, res) => {
     console.log('[GET PROPOSALS] User Role:', userRole);
     console.log('[GET PROPOSALS] Final Query:', JSON.stringify(query));
 
-    const total = await Proposal.countDocuments(query);
-    const proposals = await Proposal.find(query)
+    // Query NewProposalWorkflow model directly
+    const total = await NewProposalWorkflow.countDocuments(query);
+    const proposals = await NewProposalWorkflow.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limitNum);
+      .limit(limitNum)
+      .populate('region', 'name regionName');
 
     console.log('[GET PROPOSALS] Total found:', total);
     console.log('[GET PROPOSALS] Proposals returned:', proposals.length);
