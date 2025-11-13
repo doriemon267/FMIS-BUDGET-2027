@@ -98,7 +98,7 @@ const lookupUserFromMainDB = async (req, res) => {
     // Determine the appropriate budget role based on user's main roles
     // Following the 6-step workflow hierarchy
     //  ONLY accept these role names - 6-step workflow + 3 admin roles
-    // Map ANY incoming role name to standardized versions ONLY
+    // Map ANY incoming role name to standardized versions ONLY (with underscores)
     let budgetRole = 'BUDGET_PREPARER'; // default (STEP 1)
 
     console.log(`🔍 User ${userId} roles from DB:`, roleNames);
@@ -536,14 +536,14 @@ const getAllHierarchicalAssignments = async (req, res) => {
     const userRoles = req.user.Roles;
     
     // Allow access for users with budget roles or admin privileges
+    // ✅ Check both old (space-separated) and new (underscore) formats for backward compatibility
     const hasBudgetRole = userRoles && (
-      userRoles.includes('BUDGET PREPARER') ||
-      userRoles.includes('BUDGET REVIEWER') ||
-      userRoles.includes('BUDGET APPROVER') ||
-      userRoles.includes('BUDGET PLANNING ANALYST') ||
-      userRoles.includes('BUDGET OFFICER') ||
-      userRoles.includes('BUDGET MANAGER') ||
-      userRoles.includes('OVERALL_BUDGET_APPROVER')
+      userRoles.includes('BUDGET_PREPARER') || userRoles.includes('BUDGET PREPARER') ||
+      userRoles.includes('BUDGET_REVIEWER') || userRoles.includes('BUDGET REVIEWER') ||
+      userRoles.includes('BUDGET_APPROVER') || userRoles.includes('BUDGET APPROVER') ||
+      userRoles.includes('BUDGET_PLANNING_ANALYST') || userRoles.includes('BUDGET PLANNING ANALYST') ||
+      userRoles.includes('BUDGET_OFFICER') || userRoles.includes('BUDGET OFFICER') ||
+      userRoles.includes('OVERALL_BUDGET_APPROVER') || userRoles.includes('OVERALL BUDGET APPROVER')
     );
     
     if (!hasFullAccess(userRoles) && !hasBudgetRole) {

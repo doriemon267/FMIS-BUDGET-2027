@@ -103,7 +103,11 @@ const canPerformAction = (userRole, proposal, action) => {
     'Forwarded to Budget Officer': 'FORWARDED_TO_BRD_OFFICER',
     'Forwarded to Overall Budget Approver': 'FORWARDED_TO_BRD_MANAGER',
     'Finalized': 'FINALIZED',
-    'Returned': 'RETURNED_TO_PREPARER'
+    'Returned': 'RETURNED_TO_PREPARER',
+    'Returned to Reviewer': 'RETURNED_TO_REVIEWER',
+    'Returned to Approver': 'RETURNED_TO_APPROVER',
+    'Returned to Budget Planning Analyst': 'RETURNED_TO_PLANNING_ANALYST',
+    'Returned to Budget Officer': 'RETURNED_TO_OFFICER'
   };
 
   const workflowStatus = statusMapping[proposal.status] || proposal.status;
@@ -483,7 +487,11 @@ exports.performAction = async (req, res) => {
       'Forwarded to Budget Officer': 'FORWARDED_TO_BRD_OFFICER',
       'Forwarded to Overall Budget Approver': 'FORWARDED_TO_BRD_MANAGER',
       'Finalized': 'FINALIZED',
-      'Returned': 'RETURNED_TO_PREPARER'
+      'Returned': 'RETURNED_TO_PREPARER',
+      'Returned to Reviewer': 'RETURNED_TO_REVIEWER',
+      'Returned to Approver': 'RETURNED_TO_APPROVER',
+      'Returned to Budget Planning Analyst': 'RETURNED_TO_PLANNING_ANALYST',
+      'Returned to Budget Officer': 'RETURNED_TO_OFFICER'
     };
 
     const workflowStatus = statusMapping[proposal.status] || proposal.status;

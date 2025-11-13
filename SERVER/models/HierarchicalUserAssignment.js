@@ -22,13 +22,16 @@ const HierarchicalUserAssignmentSchema = new mongoose.Schema({
   userRole: {
     type: String,
     enum: [
-      'BUDGET PREPARER',         // STEP 1: Creates draft proposals
-      'BUDGET REVIEWER',         // STEP 2: Reviews and approves/rejects
-      'BUDGET APPROVER',         // STEP 3: Approves and forwards to analyst
+      // Standardized 6-step workflow roles (ONLY these valid values)
+      'BUDGET_PREPARER',           // STEP 1: Creates draft proposals
+      'BUDGET_REVIEWER',           // STEP 2: Reviews and approves/rejects
+      'BUDGET_APPROVER',           // STEP 3: Approves and forwards to analyst
       'BUDGET_PLANNING_ANALYST',   // STEP 4: Analyzes and forwards to officer
-      'BUDGET_OFFICER',   // STEP 5: Makes final budget decisions
-      'OVERALL_BUDGET_APPROVER', // STEP 6: Final approval
-      'BUDGET_ADMIN'      // Admin override
+      'BUDGET_OFFICER',            // STEP 5: Makes final budget decisions
+      'OVERALL_BUDGET_APPROVER',   // STEP 6: Final approval
+      'SUPER_ADMIN',               // Admin override
+      'ADMIN',                     // Admin override
+      'BUDGET_ADMIN'               // Admin override
     ],
     required: false,
     default: undefined
@@ -108,8 +111,8 @@ const HierarchicalUserAssignmentSchema = new mongoose.Schema({
       'officeCreator', 'officeApprover',
       'budgetAnalyst', 'budgetOfficer', 'overallBudgetApprover',
       'budgetAdmin',
-      // NEW USER-FACING ROLE NAMES (September 2025 system)
-      'BUDGET PREPARER', 'BUDGET REVIEWER', 'BUDGET APPROVER',
+      // NEW USER-FACING ROLE NAMES (September 2025 system) - STANDARDIZED with underscores
+      'BUDGET_PREPARER', 'BUDGET_REVIEWER', 'BUDGET_APPROVER',
       'BUDGET_PLANNING_ANALYST', 'BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_ADMIN',
       // Legacy roles (for backward compatibility)
       'departmentCreator', 'departmentConsolidator', 'departmentSubmission',
