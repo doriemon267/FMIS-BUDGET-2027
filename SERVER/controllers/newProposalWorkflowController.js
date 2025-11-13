@@ -37,6 +37,10 @@ const WORKFLOW_TRANSITIONS = {
     'RETURNED_TO_PLANNING_ANALYST': {
       'forward-to-officer': 'FORWARDED_TO_BRD_OFFICER',
       'return-to-approver': 'RETURNED_TO_APPROVER'
+    },
+    'RETURNED_TO_PREPARER': {
+      'forward-to-officer': 'FORWARDED_TO_BRD_OFFICER',
+      'return-to-approver': 'RETURNED_TO_APPROVER'
     }
   },
   'BUDGET OFFICER': {
@@ -47,10 +51,18 @@ const WORKFLOW_TRANSITIONS = {
     'RETURNED_TO_OFFICER': {
       'forward-to-manager': 'FORWARDED_TO_BRD_MANAGER',
       'return-to-analyst': 'RETURNED_TO_PLANNING_ANALYST'
+    },
+    'RETURNED_TO_PREPARER': {
+      'forward-to-manager': 'FORWARDED_TO_BRD_MANAGER',
+      'return-to-analyst': 'RETURNED_TO_PLANNING_ANALYST'
     }
   },
   'BUDGET MANAGER': {
     'FORWARDED_TO_BRD_MANAGER': {
+      'finalize': 'FINALIZED',
+      'return-to-officer': 'RETURNED_TO_OFFICER'
+    },
+    'RETURNED_TO_PREPARER': {
       'finalize': 'FINALIZED',
       'return-to-officer': 'RETURNED_TO_OFFICER'
     }
@@ -92,7 +104,10 @@ const canPerformAction = (userRole, proposal, action) => {
   if (userRole === 'SUPER ADMIN') return true;
 
   const transitions = WORKFLOW_TRANSITIONS[userRole];
-  if (!transitions) return false;
+  if (!transitions) {
+    console.log('[canPerformAction] No transitions found for role:', userRole);
+    return false;
+  }
 
   // Map status from Proposal format to workflow format
   const statusMapping = {
@@ -111,7 +126,13 @@ const canPerformAction = (userRole, proposal, action) => {
   };
 
   const workflowStatus = statusMapping[proposal.status] || proposal.status;
-  return transitions[workflowStatus] && transitions[workflowStatus][action];
+  console.log('[canPerformAction] Role:', userRole, 'Status:', proposal.status, 'MappedStatus:', workflowStatus, 'Action:', action);
+  console.log('[canPerformAction] Available transitions:', Object.keys(transitions));
+  console.log('[canPerformAction] Transitions for status:', transitions[workflowStatus]);
+  
+  const canDo = transitions[workflowStatus] && transitions[workflowStatus][action];
+  console.log('[canPerformAction] Result:', !!canDo);
+  return canDo;
 };
 
 // Create new proposal
@@ -470,6 +491,9 @@ exports.performAction = async (req, res) => {
     const userId = req.user.id;
     const userName = req.user.name || req.user.email;
 
+    console.log('[PERFORM_ACTION] User:', { userRole, userId, userName });
+    console.log('[PERFORM_ACTION] Request:', { proposalId: id, action, comment });
+
     const proposal = await NewProposalWorkflow.findById(id);
     if (!proposal) {
       return res.status(404).json({
@@ -477,6 +501,8 @@ exports.performAction = async (req, res) => {
         message: 'Proposal not found'
       });
     }
+
+    console.log('[PERFORM_ACTION] Proposal Status:', proposal.status);
 
     // Map status from Proposal format to workflow format for validation
     const statusMapping = {
@@ -495,9 +521,14 @@ exports.performAction = async (req, res) => {
     };
 
     const workflowStatus = statusMapping[proposal.status] || proposal.status;
+    console.log('[PERFORM_ACTION] Mapped Workflow Status:', workflowStatus);
 
     // Check if user can perform this action
-    if (!canPerformAction(userRole, proposal, action)) {
+    const canPerform = canPerformAction(userRole, proposal, action);
+    console.log('[PERFORM_ACTION] canPerformAction result:', canPerform);
+    
+    if (!canPerform) {
+      console.log('[PERFORM_ACTION] 403 - User cannot perform action. User role:', userRole, 'Action:', action, 'Status:', proposal.status);
       return res.status(403).json({
         success: false,
         message: 'You are not authorized to perform this action'
