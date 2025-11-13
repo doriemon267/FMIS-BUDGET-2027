@@ -3012,7 +3012,7 @@ const ProposalCustomPage = ({
         <Box sx={{ mt: 3, mb: 3, width: '100%' }}>
           {activeTab === "Income" && (
             <IncomeTable
-              proposalId={dataListName}
+              proposalId={dataListName !== "tests" ? dataListName : undefined}
               region={activeRegion}
               fiscalYear={selectedFiscalYear}
               onGrandTotalUpdate={(grandTotal) => {
