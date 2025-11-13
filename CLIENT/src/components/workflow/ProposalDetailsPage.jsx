@@ -110,7 +110,12 @@ const ProposalDetailsPage = () => {
     try {
       setTabLoading(prev => ({ ...prev, 0: true }));
       const response = await api.get('/getpersonnels/byParams', {
-        params: { fiscalYear: proposal.fiscalYear, region: proposal.region, budgetType: proposal.budgetType }
+        params: { 
+          proposalId: proposal._id,
+          fiscalYear: proposal.fiscalYear, 
+          region: proposal.region, 
+          budgetType: proposal.budgetType 
+        }
       });
       setPersonnelData(Array.isArray(response.data) ? response.data : []);
     } catch (err) {
@@ -125,7 +130,12 @@ const ProposalDetailsPage = () => {
     try {
       setTabLoading(prev => ({ ...prev, 1: true }));
       const response = await api.get('/mooe/getByParams', {
-        params: { fiscalYear: proposal.fiscalYear, region: proposal.region, budgetType: proposal.budgetType }
+        params: { 
+          proposalId: proposal._id,
+          fiscalYear: proposal.fiscalYear, 
+          region: proposal.region, 
+          budgetType: proposal.budgetType 
+        }
       });
       setMooeData(Array.isArray(response.data) ? response.data : []);
     } catch (err) {
@@ -140,7 +150,12 @@ const ProposalDetailsPage = () => {
     try {
       setTabLoading(prev => ({ ...prev, 2: true }));
       const response = await api.get('/capital-outlay/getByParams', {
-        params: { fiscalYear: proposal.fiscalYear, region: proposal.region, budgetType: proposal.budgetType }
+        params: { 
+          proposalId: proposal._id,
+          fiscalYear: proposal.fiscalYear, 
+          region: proposal.region, 
+          budgetType: proposal.budgetType 
+        }
       });
       setCapitalOutlayData(Array.isArray(response.data) ? response.data : []);
     } catch (err) {
@@ -155,7 +170,12 @@ const ProposalDetailsPage = () => {
     try {
       setTabLoading(prev => ({ ...prev, 3: true }));
       const response = await api.get('/income/getByParams', {
-        params: { fiscalYear: proposal.fiscalYear, region: proposal.region, budgetType: proposal.budgetType }
+        params: { 
+          proposalId: proposal._id,
+          fiscalYear: proposal.fiscalYear, 
+          region: proposal.region, 
+          budgetType: proposal.budgetType 
+        }
       });
       setIncomeData(Array.isArray(response.data) ? response.data : []);
     } catch (err) {
