@@ -319,25 +319,39 @@ exports.getProposals = async (req, res) => {
         query.status = 'DRAFT';     // Use DRAFT enum value
         break;
       case 'pending-review':
-        console.log('[PENDING-REVIEW] User Role:', userRole);
+        // Ensure BRD roles only see items that were actually forwarded to them (exclude drafts)
         if (userRole && WORKFLOW_TRANSITIONS[userRole]) {
-          const allowedStatuses = Object.keys(WORKFLOW_TRANSITIONS[userRole]);
-          console.log('[PENDING-REVIEW] Allowed Statuses (enum):', allowedStatuses);
-          const pendingStatuses = allowedStatuses.filter(status => status !== 'DRAFT');
-          console.log('[PENDING-REVIEW] Pending Statuses (after filter):', pendingStatuses);
-          
-          if (pendingStatuses.length === 0) {
-            console.log('[PENDING-REVIEW] No pending statuses, returning empty array');
+          const allowedStatuses = Object.keys(WORKFLOW_TRANSITIONS[userRole]); // enum codes
+          const pendingEnum = allowedStatuses.filter(s => s !== 'DRAFT');
+
+          // Map enum codes to DB-stored human-readable statuses
+          const reverseStatusMapping = {
+            'DRAFT': 'Draft',
+            'FORWARDED_TO_REVIEWER': 'Forwarded to Reviewer',
+            'FORWARDED_TO_APPROVER': 'Forwarded to Approver',
+            'FORWARDED_TO_BRD_ANALYST': 'Forwarded to Budget Planning Analyst',
+            'FORWARDED_TO_BRD_OFFICER': 'Forwarded to Budget Officer',
+            'FORWARDED_TO_BRD_MANAGER': 'Forwarded to Overall Budget Approver',
+            'FINALIZED': 'Finalized',
+            'RETURNED_TO_PREPARER': 'Returned to Preparer',
+            'RETURNED_TO_REVIEWER': 'Returned to Reviewer',
+            'RETURNED_TO_APPROVER': 'Returned to Approver',
+            'RETURNED_TO_PLANNING_ANALYST': 'Returned to Budget Planning Analyst',
+            'RETURNED_TO_OFFICER': 'Returned to Budget Officer'
+          };
+
+          const pendingDb = pendingEnum.map(code => reverseStatusMapping[code] || code);
+
+          if (pendingDb.length === 0) {
             return res.json({
               success: true,
               proposals: [],
               pagination: { page: 1, limit: 10, total: 0, pages: 0 }
             });
           }
-          query.status = { $in: pendingStatuses };  // Use enum statuses directly
-          console.log('[PENDING-REVIEW] Query:', JSON.stringify(query));
+
+          query.status = { $in: pendingDb };
         } else {
-          console.log('[PENDING-REVIEW] No user role or transitions, returning empty array');
           return res.json({
             success: true,
             proposals: [],
