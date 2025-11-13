@@ -108,9 +108,20 @@ const incomeSchema = new mongoose.Schema(
     
     // Link to specific proposal (CRITICAL for distinguishing between proposals)
     proposalId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Proposal',
-      index: true
+      type: mongoose.Schema.Types.Mixed,
+      index: true,
+      validate: {
+        validator: function(v) {
+          if (!v) return true; // Optional field
+          // Accept either ObjectId or valid string
+          if (typeof v === 'string') {
+            // Must be either valid ObjectId string or acceptable string value
+            return /^[0-9a-f]{24}$/i.test(v) || v.length > 0;
+          }
+          return true;
+        },
+        message: 'proposalId must be a valid ObjectId string or non-empty string'
+      }
     }
   },
   { timestamps: true }

@@ -24,14 +24,22 @@ const HierarchicalUserAssignmentSchema = new mongoose.Schema({
     enum: [
       // Standardized 6-step workflow roles (ONLY these valid values)
       'BUDGET_PREPARER',           // STEP 1: Creates draft proposals
+      'BUDGET PREPARER',           // Legacy format with space
       'BUDGET_REVIEWER',           // STEP 2: Reviews and approves/rejects
+      'BUDGET REVIEWER',           // Legacy format with space
       'BUDGET_APPROVER',           // STEP 3: Approves and forwards to analyst
+      'BUDGET APPROVER',           // Legacy format with space
       'BUDGET_PLANNING_ANALYST',   // STEP 4: Analyzes and forwards to officer
+      'BUDGET PLANNING ANALYST',   // Legacy format with space
       'BUDGET_OFFICER',            // STEP 5: Makes final budget decisions
+      'BUDGET OFFICER',            // Legacy format with space
       'OVERALL_BUDGET_APPROVER',   // STEP 6: Final approval
+      'OVERALL BUDGET APPROVER',   // Legacy format with space
       'SUPER_ADMIN',               // Admin override
+      'SUPER ADMIN',               // Legacy format with space
       'ADMIN',                     // Admin override
-      'BUDGET_ADMIN'               // Admin override
+      'BUDGET_ADMIN',              // Admin override
+      'BUDGET ADMIN'               // Legacy format with space
     ],
     required: false,
     default: undefined
