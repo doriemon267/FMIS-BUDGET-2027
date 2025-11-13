@@ -584,7 +584,9 @@ exports.performAction = async (req, res) => {
       'FINALIZED': 'Finalized',
       'RETURNED_TO_PREPARER': 'Returned',
       'RETURNED_TO_REVIEWER': 'Returned',
-      'RETURNED_TO_APPROVER': 'Returned'
+      'RETURNED_TO_APPROVER': 'Returned',
+      'RETURNED_TO_PLANNING_ANALYST': 'Returned to Budget Planning Analyst',
+      'RETURNED_TO_OFFICER': 'Returned to Budget Officer'
     };
 
     const newStatus = reverseStatusMapping[newWorkflowStatus] || newWorkflowStatus;
