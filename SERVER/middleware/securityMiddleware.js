@@ -44,17 +44,22 @@ const hasFullAccess = (userRoles) => {
     PERMISSION_LEVELS.BUDGET_ADMIN,
     PERMISSION_LEVELS.BUDGET_PREPARER,         // STEP 1: Proposal creation
     PERMISSION_LEVELS.BUDGET_REVIEWER,         // STEP 2: Division review
+    'BUDGET REVIEWER',                          // Support display format
     PERMISSION_LEVELS.BUDGET_APPROVER,         // STEP 3: Division/Office approval
+    'BUDGET APPROVER',                          // Support display format
     PERMISSION_LEVELS.BUDGET_ANALYST,          // STEP 4: Technical review
     PERMISSION_LEVELS.BUDGET_PLANNING_ANALYST, // STEP 4: Technical review (variant)
     'BUDGET PLANNING ANALYST',                 // Support display format from database
     PERMISSION_LEVELS.BUDGET_OFFICER,          // STEP 5: Operational approval
+    'BUDGET OFFICER',                           // Support display format
+    PERMISSION_LEVELS.BUDGET_MANAGER,          // STEP 6: Budget Manager (legacy)
+    'BUDGET MANAGER',                           // Support display format
     PERMISSION_LEVELS.OVERALL_BUDGET_APPROVER  // STEP 6: Executive approval
   ];
   const result = hasRequiredRole(userRoles, requiredRoles);
   
   // 🔍 DEBUG for workflow roles
-  if (Array.isArray(userRoles) && (userRoles.includes('BUDGET_OFFICER') || userRoles.includes('BUDGET REVIEWER') || userRoles.includes('APPROVER') || userRoles.includes('OVERALL_BUDGET_APPROVER') || userRoles.includes('BUDGET PLANNING ANALYST'))) {
+  if (Array.isArray(userRoles) && (userRoles.includes('BUDGET_OFFICER') || userRoles.includes('BUDGET REVIEWER') || userRoles.includes('APPROVER') || userRoles.includes('OVERALL_BUDGET_APPROVER') || userRoles.includes('BUDGET PLANNING ANALYST') || userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET MANAGER'))) {
     console.log('🔍 hasFullAccess check for 6-step workflow role:', {
       userRoles,
       result,
