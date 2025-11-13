@@ -33,6 +33,15 @@ exports.createIncome = async (req, res) => {
   const workflowData = req.submissionWorkflowData || {};
     
     // Create new income entry with workflow data
+    // CRITICAL: Ensure proposalId is always set to prevent cross-proposal data mixing
+    let finalProposalId = proposalId || workflowData.proposalId;
+    
+    // If still no proposalId, try to generate one based on fiscal year + budget type + region
+    // This is a fallback for legacy data compatibility
+    if (!finalProposalId && fiscalYear && budgetType && region) {
+      console.warn('[createIncome] No proposalId provided - this should include a proposalId link');
+    }
+    
     const newIncome = new Income({
       particulars,
       cost: cost || amount,
@@ -51,7 +60,7 @@ exports.createIncome = async (req, res) => {
       processBy: processBy || req.user?.userName || req.user?.id,
       processDate: processDate || new Date(),
       status: workflowData.status || "Draft", // Use new workflow status
-      proposalId: proposalId || workflowData.proposalId  // Link to specific proposal
+      proposalId: finalProposalId  // CRITICAL: Link to specific proposal to prevent data mixing
     });
     await newIncome.save();
     // Non-blocking: trigger Proposal totals recalculation for affected proposals

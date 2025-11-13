@@ -65,7 +65,7 @@ const NumberFormatCustom = React.forwardRef(function NumberFormatCustom(props, r
   );
 });
 
-const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false }) => {
+const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false, proposalId }) => {
   const queryClient = useQueryClient();
   const { currentUser } = useUser();
   const { activeRegion } = useRegion();
@@ -424,7 +424,8 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false 
       budgetType,
       region: getDefaultRegionForSave(regionFilter),
       processBy: currentUser ? `${currentUser.FirstName} ${currentUser.LastName}` : "User",
-      processDate: new Date()
+      processDate: new Date(),
+      ...(proposalId && { proposalId })  // Include proposalId if available
     };
     if (existingItem) {
       updateIncomeMutation.mutate({ id: existingItem._id, data: incomeData });
@@ -686,7 +687,8 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false 
         budgetType,
         region: getDefaultRegionForSave(regionFilter),
         processBy: currentUser ? `${currentUser.FirstName} ${currentUser.LastName}` : "User",
-        processDate: new Date()
+        processDate: new Date(),
+        ...(proposalId && { proposalId })  // Include proposalId if available
       };
       return existingItem ?
         api.put(`/income/${existingItem._id}`, incomeData) :
