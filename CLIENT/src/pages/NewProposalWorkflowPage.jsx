@@ -297,7 +297,14 @@ const NewProposalWorkflowPage = () => {
       const response = await api.get(`/api/new-proposal-workflow/proposals/${proposal._id}/audit-trail`);
       
       if (response.data.success) {
-        setAuditTrailData(response.data.data.changes || []);
+        const changes = response.data.data.changes || [];
+        setAuditTrailData(changes);
+        
+        // Show toast notification if no changes found
+        if (changes.length === 0) {
+          toast.info('No changes recorded for this proposal yet');
+        }
+        
         setAuditTrailDialogOpen(true);
       } else {
         toast.error('Failed to fetch audit trail');
