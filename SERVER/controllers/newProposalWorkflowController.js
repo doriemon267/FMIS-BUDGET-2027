@@ -94,7 +94,20 @@ const canPerformAction = (userRole, proposal, action) => {
   const transitions = WORKFLOW_TRANSITIONS[userRole];
   if (!transitions) return false;
 
-  return transitions[proposal.status] && transitions[proposal.status][action];
+  // Map status from Proposal format to workflow format
+  const statusMapping = {
+    'Draft': 'DRAFT',
+    'Forwarded to Reviewer': 'FORWARDED_TO_REVIEWER',
+    'Forwarded to Approver': 'FORWARDED_TO_APPROVER',
+    'Forwarded to Budget Planning Analyst': 'FORWARDED_TO_BRD_ANALYST',
+    'Forwarded to Budget Officer': 'FORWARDED_TO_BRD_OFFICER',
+    'Forwarded to Overall Budget Approver': 'FORWARDED_TO_BRD_MANAGER',
+    'Finalized': 'FINALIZED',
+    'Returned': 'RETURNED_TO_PREPARER'
+  };
+
+  const workflowStatus = statusMapping[proposal.status] || proposal.status;
+  return transitions[workflowStatus] && transitions[workflowStatus][action];
 };
 
 // Create new proposal
@@ -431,13 +444,27 @@ exports.performAction = async (req, res) => {
     const userId = req.user.id;
     const userName = req.user.name || req.user.email;
 
-    const proposal = await NewProposalWorkflow.findById(id);
+    const proposal = await Proposal.findById(id);
     if (!proposal) {
       return res.status(404).json({
         success: false,
         message: 'Proposal not found'
       });
     }
+
+    // Map status from Proposal format to workflow format for validation
+    const statusMapping = {
+      'Draft': 'DRAFT',
+      'Forwarded to Reviewer': 'FORWARDED_TO_REVIEWER',
+      'Forwarded to Approver': 'FORWARDED_TO_APPROVER',
+      'Forwarded to Budget Planning Analyst': 'FORWARDED_TO_BRD_ANALYST',
+      'Forwarded to Budget Officer': 'FORWARDED_TO_BRD_OFFICER',
+      'Forwarded to Overall Budget Approver': 'FORWARDED_TO_BRD_MANAGER',
+      'Finalized': 'FINALIZED',
+      'Returned': 'RETURNED_TO_PREPARER'
+    };
+
+    const workflowStatus = statusMapping[proposal.status] || proposal.status;
 
     // Check if user can perform this action
     if (!canPerformAction(userRole, proposal, action)) {
@@ -448,18 +475,35 @@ exports.performAction = async (req, res) => {
     }
 
     const transitions = WORKFLOW_TRANSITIONS[userRole];
-    const newStatus = transitions[proposal.status][action];
-
-    if (!newStatus) {
+    if (!transitions || !transitions[workflowStatus] || !transitions[workflowStatus][action]) {
       return res.status(400).json({
         success: false,
         message: 'Invalid action for current status'
       });
     }
 
+    const newWorkflowStatus = transitions[workflowStatus][action];
+
+    // Map status back from workflow format to Proposal format
+    const reverseStatusMapping = {
+      'DRAFT': 'Draft',
+      'FORWARDED_TO_REVIEWER': 'Forwarded to Reviewer',
+      'FORWARDED_TO_APPROVER': 'Forwarded to Approver',
+      'FORWARDED_TO_BRD_ANALYST': 'Forwarded to Budget Planning Analyst',
+      'FORWARDED_TO_BRD_OFFICER': 'Forwarded to Budget Officer',
+      'FORWARDED_TO_BRD_MANAGER': 'Forwarded to Overall Budget Approver',
+      'FINALIZED': 'Finalized',
+      'RETURNED_TO_PREPARER': 'Returned',
+      'RETURNED_TO_REVIEWER': 'Returned',
+      'RETURNED_TO_APPROVER': 'Returned'
+    };
+
+    const newStatus = reverseStatusMapping[newWorkflowStatus] || newWorkflowStatus;
+
     // Update proposal
     const oldStatus = proposal.status;
     proposal.status = newStatus;
+    proposal.workflowHistory = proposal.workflowHistory || [];
     proposal.workflowHistory.push({
       action,
       fromStatus: oldStatus,

@@ -178,7 +178,7 @@ async function recalculateAndSaveProposalTotals({ proposalId, keys } = {}) {
   proposal.projectedSubsidy = projectedSubsidy;
   proposal.proposedBudget = proposedBudget;
   proposal.updatedAt = new Date();
-  await proposal.save();
+  await proposal.save({ validateBeforeSave: false });
 
   return {
     proposalId: proposal._id,

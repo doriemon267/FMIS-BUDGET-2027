@@ -7,6 +7,7 @@ const {
   getSublineItems,
   getAccountingTitles,
   deleteAllCapitalOutlays,
+  bulkUpdateCapitalOutlay,
 } = require("../controllers/capitalOutlayController");
 const Router = require("express").Router;
 const checkDueDate = require("../middleware/checkDueDate");
@@ -14,6 +15,7 @@ const checkDueDateWithRoleBypass = require("../middleware/checkDueDateWithRoleBy
 const checkToken = require("../middleware/checkToken");
 const { strictHierarchicalControl, hierarchicalAccessControl } = require('../middleware/hierarchicalAccessControl');
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
+const { enforceAccessRestrictions } = require('../middleware/accessRestrictions');
 const CapitalOutlay = require("../models/CapitalOutlay"); // New model import
 const capitalOutlayRouter = Router();
 // Apply authentication to all capital outlay routes
@@ -93,4 +95,6 @@ capitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl
     res.status(500).json({ message: "Failed to fetch Capital Outlay data" });
   }
 });
+// Bulk update Capital Outlay entries
+capitalOutlayRouter.put("/capital-outlay/bulk-update", submissionWorkflowControl('update', { strictMode: true, enableConsolidation: true }), enforceAccessRestrictions({ checkBudgetType: true, checkFiscalYear: true, checkReadOnly: true }), bulkUpdateCapitalOutlay);
 module.exports = capitalOutlayRouter;

@@ -1441,3 +1441,91 @@ exports.getMOOEByParams = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch MOOE data" });
   }
 };
+
+exports.bulkUpdateMOOE = async (req, res) => {
+  try {
+    const { items } = req.body;
+    
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "Items array is required and must not be empty" });
+    }
+
+    const Settings = require("../models/Settings");
+    const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
+
+    const activeSettings = await Settings.findOne({ isActive: true });
+    const setFY = activeSettings?.fiscalYear;
+    const setBT = activeSettings?.budgetType;
+    const workflowData = req.submissionWorkflowData || {};
+
+    const updates = [];
+    
+    for (const item of items) {
+      if (!item._id) {
+        return res.status(400).json({ message: "Each item must have an _id field" });
+      }
+
+      const existingMooe = await MooeProposal.findById(item._id);
+      if (!existingMooe) {
+        return res.status(404).json({ message: `MOOE entry with ID ${item._id} not found` });
+      }
+
+      const submittedStatuses = ["Submitted", "Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"];
+      if (submittedStatuses.includes(existingMooe.status)) {
+        return res.status(403).json({
+          error: "Update not allowed",
+          message: `Cannot edit MOOE record ${item._id} that has been submitted or approved`
+        });
+      }
+
+      updates.push(
+        MooeProposal.findByIdAndUpdate(
+          item._id,
+          {
+            amount: item.amount !== undefined ? item.amount : existingMooe.amount,
+            particulars: item.particulars !== undefined ? item.particulars : existingMooe.particulars,
+            ...(setFY ? { fiscalYear: setFY } : {}),
+            ...(setBT ? { budgetType: setBT } : {}),
+            region: item.region !== undefined ? item.region : (workflowData.region || existingMooe.region),
+            department: item.department !== undefined ? item.department : (workflowData.department || existingMooe.department),
+            division: item.division !== undefined ? item.division : (workflowData.division || existingMooe.division),
+            processBy: item.processBy !== undefined ? item.processBy : (req.user?.userName || req.user?.id || existingMooe.processBy),
+            processDate: item.processDate !== undefined ? item.processDate : new Date(),
+            status: item.status !== undefined ? item.status : (workflowData.status || existingMooe.status),
+            ...(workflowData.originalLevel ? { originalLevel: workflowData.originalLevel } : {}),
+            ...(workflowData.workflowLevel ? { workflowLevel: workflowData.workflowLevel } : {}),
+          },
+          { new: true }
+        )
+      );
+    }
+
+    const updatedItems = await Promise.all(updates);
+    
+    try {
+      const proposalIds = new Set();
+      for (const item of updatedItems) {
+        if (item.proposalId) {
+          proposalIds.add(item.proposalId);
+        }
+      }
+      
+      if (proposalIds.size > 0) {
+        for (const proposalId of proposalIds) {
+          await recalculateAndSaveProposalTotals({ proposalId });
+        }
+      }
+    } catch (error) {
+      console.error("Error recalculating proposal totals:", error);
+    }
+
+    res.status(200).json({ 
+      message: "MOOE entries updated successfully", 
+      updatedCount: updatedItems.length,
+      items: updatedItems 
+    });
+  } catch (error) {
+    console.error("Error updating MOOE entries:", error);
+    res.status(500).json({ message: "Failed to update MOOE entries" });
+  }
+};

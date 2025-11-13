@@ -1,7 +1,8 @@
-const { getPersonnelByParams } = require("../controllers/personnel_params_controller");
+const { getPersonnelByParams, bulkUpdatePersonnel } = require("../controllers/personnel_params_controller");
 const Router = require("express").Router;
 const checkToken = require('../middleware/checkToken');
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
+const { enforceAccessRestrictions } = require('../middleware/accessRestrictions');
 const personnelParamsRouter = Router();
 // Apply authentication middleware to all routes in this router
 personnelParamsRouter.use(checkToken);
@@ -9,4 +10,6 @@ personnelParamsRouter.use(checkToken);
 personnelParamsRouter.get("/getpersonnels/byParams", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), getPersonnelByParams);
 // Legacy route for backward compatibility - with submission workflow control
 personnelParamsRouter.get("/api/personnel/getByParams", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), getPersonnelByParams);
+// Bulk update personnel entries
+personnelParamsRouter.put("/api/personnel/bulk-update", submissionWorkflowControl('update', { strictMode: true, enableConsolidation: true }), enforceAccessRestrictions({ checkBudgetType: true, checkFiscalYear: true, checkReadOnly: true }), bulkUpdatePersonnel);
 module.exports = personnelParamsRouter;

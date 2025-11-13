@@ -8,6 +8,8 @@ const { enforceAccessRestrictions } = require('../middleware/accessRestrictions'
 router.use(checkToken);
 // Create a new income entry (apply hierarchical create control, relaxed to avoid 403 during transition)
 router.post("/income", submissionWorkflowControl('create', { strictMode: false, enableConsolidation: true }), enforceAccessRestrictions({ checkBudgetType: true, checkFiscalYear: true, checkReadOnly: true }), incomeController.createIncome);
+// Bulk update income entries
+router.put("/income/bulk-update", submissionWorkflowControl('update', { strictMode: true, enableConsolidation: true }), enforceAccessRestrictions({ checkBudgetType: true, checkFiscalYear: true, checkReadOnly: true }), incomeController.bulkUpdateIncome);
 // Update an income entry (apply hierarchical update control, strict mode for security)
 router.put("/income/:id", submissionWorkflowControl('update', { strictMode: true, enableConsolidation: true }), enforceAccessRestrictions({ checkBudgetType: true, checkFiscalYear: true, checkReadOnly: true }), incomeController.updateIncome);
 // Get all income entries (apply hierarchical read control)

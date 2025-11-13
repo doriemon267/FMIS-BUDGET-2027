@@ -45,8 +45,10 @@ import {
   FilterList as FilterIcon,
   GetApp as ExportIcon,
   MoreVert as MoreVertIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
 } from "@mui/icons-material";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "../config/api";
 import { useUser } from "../context/UserContext";
 import { useRegion } from "../context/RegionContext";
@@ -87,23 +89,43 @@ const NewProposalWorkflowPage = () => {
   const navigate = useNavigate();
   const { currentUser } = useUser();
   const { activeRegion } = useRegion();
+  const [searchParams] = useSearchParams();
 
   // Check if user is BRD (Budget Revenue Division) level or SUPER ADMIN
   const isBRDUser = currentUser?.Roles?.some(role => 
-    ['BUDGET_PLANNING_ANALYST', 'BUDGET PLANNING ANALYST', 'BUDGET_OFFICER', 'BUDGET OFFICER', 'BUDGET_MANAGER', 'BUDGET MANAGER', 'SUPER_ADMIN', 'SUPER ADMIN'].includes(role)
+    ['BUDGET_REVIEWER', 'BUDGET REVIEWER', 'BUDGET_APPROVER', 'BUDGET APPROVER', 'BUDGET_PLANNING_ANALYST', 'BUDGET PLANNING ANALYST', 'BUDGET_OFFICER', 'BUDGET OFFICER', 'BUDGET_MANAGER', 'BUDGET MANAGER', 'SUPER_ADMIN', 'SUPER ADMIN'].includes(role)
   );
 
   // State management - BRD users start at "Pending Review" (index 1), others at "My Proposals" (index 0)
   const [activeTab, setActiveTab] = useState(isBRDUser ? 1 : 0);
+  
+  // Handle view parameter from query string (e.g., from notifications)
+  useEffect(() => {
+    const viewParam = searchParams.get('view');
+    if (viewParam) {
+      const tabIndex = TABS.findIndex(tab => tab.value === viewParam);
+      if (tabIndex !== -1) {
+        setActiveTab(tabIndex);
+      }
+    }
+  }, [searchParams]);
   const [loading, setLoading] = useState(false);
   const [proposals, setProposals] = useState([]);
   const [selectedProposal, setSelectedProposal] = useState(null);
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [viewDetailsDialogOpen, setViewDetailsDialogOpen] = useState(false);
   const [actionType, setActionType] = useState('');
   const [actionComment, setActionComment] = useState('');
   const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
   const [availableActionsForMenu, setAvailableActionsForMenu] = useState([]);
+  const [proposalDetails, setProposalDetails] = useState(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsTab, setDetailsTab] = useState(0);
+  const [expandedGroups, setExpandedGroups] = useState({});
+  const [personnelPage, setPersonnelPage] = useState(0);
+  const [personnelRowsPerPage, setPersonnelRowsPerPage] = useState(10);
+  const [expandedPersonnel, setExpandedPersonnel] = useState({});
   const [newProposalData, setNewProposalData] = useState({
     title: '',
     description: '',
@@ -111,6 +133,15 @@ const NewProposalWorkflowPage = () => {
     fiscalYear: new Date().getFullYear(),
     amount: 0
   });
+  
+  // Edit mode and change tracking for reviewers - now for items
+  const [editableItems, setEditableItems] = useState({
+    income: [],
+    personnel: [],
+    mooe: [],
+    capitalOutlay: []
+  });
+  const [changedItems, setChangedItems] = useState(new Set());
 
   // Pagination
   const [page, setPage] = useState(0);
@@ -164,6 +195,74 @@ const NewProposalWorkflowPage = () => {
     setPage(0);
   };
 
+  // Check if user is a reviewer
+  const isReviewer = currentUser?.Roles?.some(role => 
+    ['BUDGET REVIEWER', 'BUDGET_REVIEWER', 'BUDGET APPROVER', 'BUDGET_APPROVER'].includes(role)
+  );
+
+  // Check if user can edit the current proposal based on their role and proposal status
+  const canUserEdit = () => {
+    if (!selectedProposal) return false;
+    
+    const userRoles = currentUser?.Roles || [];
+    const status = selectedProposal.status;
+    
+    // Budget Reviewer can only edit when status is Forwarded to Reviewer or Returned to Reviewer
+    if (userRoles.some(role => ['BUDGET REVIEWER', 'BUDGET_REVIEWER'].includes(role))) {
+      return ['Forwarded to Reviewer', 'Returned to Reviewer'].includes(status);
+    }
+    
+    // Budget Approver can only edit when status is Forwarded to Approver or Returned to Approver
+    if (userRoles.some(role => ['BUDGET APPROVER', 'BUDGET_APPROVER'].includes(role))) {
+      return ['Forwarded to Approver', 'Returned to Approver'].includes(status);
+    }
+    
+    return false;
+  };
+
+  // Handle view details
+  const handleViewDetails = async (proposal) => {
+    setDetailsLoading(true);
+    setViewDetailsDialogOpen(true);
+    setSelectedProposal(proposal);
+    setDetailsTab(0);
+    setChangedItems(new Set());
+    
+    try {
+      const queryParams = {
+        proposalId: proposal._id
+      };
+
+      const [incomeRes, personnelRes, mooeRes, capitalRes] = await Promise.all([
+        api.get('/income/getByParams', { params: queryParams }),
+        api.get('/api/personnel/getByParams', { params: queryParams }),
+        api.get('/mooe/getByParams', { params: queryParams }),
+        api.get('/capital-outlay/getByParams', { params: queryParams })
+      ]);
+
+      const details = {
+        income: incomeRes.data || [],
+        personnel: personnelRes.data || [],
+        mooe: mooeRes.data || [],
+        capitalOutlay: capitalRes.data || []
+      };
+      
+      setProposalDetails(details);
+      
+      setEditableItems({
+        income: JSON.parse(JSON.stringify(details.income)),
+        personnel: JSON.parse(JSON.stringify(details.personnel)),
+        mooe: JSON.parse(JSON.stringify(details.mooe)),
+        capitalOutlay: JSON.parse(JSON.stringify(details.capitalOutlay))
+      });
+    } catch (error) {
+      console.error('Error fetching proposal details:', error);
+      toast.error('Failed to load proposal details');
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
+
   // Handle create proposal
   const handleCreateProposal = async () => {
     try {
@@ -200,26 +299,9 @@ const NewProposalWorkflowPage = () => {
     if (!selectedProposal || !actionType) return;
 
     try {
-      // Map action types to existing proposal system actions
-      const actionMapping = {
-        'submit-to-reviewer': 'forward',
-        'submit-to-approver': 'forward',
-        'submit-to-analyst': 'forward',
-        'forward-to-officer': 'forward',
-        'forward-to-manager': 'forward',
-        'finalize': 'approve',
-        'return-to-preparer': 'return',
-        'return-to-reviewer': 'return',
-        'return-to-approver': 'return',
-        'return-to-analyst': 'return',
-        'return-to-officer': 'return'
-      };
-
-      const mappedAction = actionMapping[actionType] || actionType;
-
-      // Use existing proposal API endpoint
+      // Use the action type directly - backend expects specific action names
       const response = await api.post(`/api/proposals/${selectedProposal._id}/action`, {
-        action: mappedAction,
+        action: actionType,
         comment: actionComment
       });
 
@@ -235,6 +317,82 @@ const NewProposalWorkflowPage = () => {
     }
   };
 
+  // Handle item amount changes for reviewers
+  const handleEditItemAmount = (category, index, newAmount) => {
+    if (!isReviewer) return;
+    
+    setEditableItems(prev => {
+      const updated = { ...prev };
+      if (updated[category] && updated[category][index]) {
+        if ('amount' in updated[category][index]) {
+          updated[category][index].amount = newAmount;
+        } else if ('Total' in updated[category][index]) {
+          updated[category][index].Total = newAmount;
+        } else if ('cost' in updated[category][index]) {
+          updated[category][index].cost = newAmount;
+        }
+      }
+      return updated;
+    });
+    
+    // Track changed items
+    const itemKey = `${category}-${index}`;
+    const newChangedItems = new Set(changedItems);
+    const originalItem = proposalDetails[category]?.[index];
+    
+    if (originalItem) {
+      const originalAmount = originalItem.amount ?? originalItem.Total ?? originalItem.cost ?? 0;
+      
+      if (originalAmount !== newAmount) {
+        newChangedItems.add(itemKey);
+      } else {
+        newChangedItems.delete(itemKey);
+      }
+    }
+    setChangedItems(newChangedItems);
+  };
+
+  // Save proposal item changes
+  const handleSaveChanges = async () => {
+    try {
+      if (changedItems.size === 0) {
+        toast.info('No changes made');
+        return;
+      }
+      
+      const changedByCategory = {};
+      changedItems.forEach(itemKey => {
+        const [category, index] = itemKey.split('-');
+        const idx = parseInt(index);
+        if (!changedByCategory[category]) changedByCategory[category] = [];
+        changedByCategory[category].push(editableItems[category][idx]);
+      });
+      
+      const savePromises = [];
+      if (changedByCategory.income) {
+        savePromises.push(api.put('/income/bulk-update', { items: changedByCategory.income }));
+      }
+      if (changedByCategory.personnel) {
+        savePromises.push(api.put('/api/personnel/bulk-update', { items: changedByCategory.personnel }));
+      }
+      if (changedByCategory.mooe) {
+        savePromises.push(api.put('/mooe/bulk-update', { items: changedByCategory.mooe }));
+      }
+      if (changedByCategory.capitalOutlay) {
+        savePromises.push(api.put('/capital-outlay/bulk-update', { items: changedByCategory.capitalOutlay }));
+      }
+      
+      await Promise.all(savePromises);
+      toast.success('Changes saved successfully');
+      
+      setProposalDetails(editableItems);
+      setChangedItems(new Set());
+    } catch (error) {
+      console.error('Error saving changes:', error);
+      toast.error('Failed to save changes');
+    }
+  };
+
   // Get available actions based on user role and proposal status
   const getAvailableActions = (proposal) => {
     const userRoles = currentUser?.Roles || [];
@@ -245,14 +403,26 @@ const NewProposalWorkflowPage = () => {
     actions.push({ label: 'View Details', value: 'view-details', icon: <ViewIcon />, color: '#2d5016' });
 
     // BUDGET PREPARER actions
-    if (userRoles.includes('BUDGET PREPARER') && proposal.createdBy === currentUser?.id) {
-      if (currentStatus === 'DRAFT' || currentStatus === 'RETURNED_TO_PREPARER') {
+    const userName = currentUser?.name || `${currentUser?.FirstName || ''} ${currentUser?.LastName || ''}`.trim();
+    console.log('[DEBUG] User Roles:', userRoles);
+    console.log('[DEBUG] Has BUDGET PREPARER role:', userRoles.includes('BUDGET PREPARER'));
+    console.log('[DEBUG] Has BUDGET_PREPARER role:', userRoles.includes('BUDGET_PREPARER'));
+    console.log('[DEBUG] Current User Name:', userName);
+    console.log('[DEBUG] Proposal processBy:', proposal.processBy);
+    console.log('[DEBUG] Proposal status:', currentStatus);
+    console.log('[DEBUG] Match:', proposal.processBy === userName);
+    
+    if ((userRoles.includes('BUDGET PREPARER') || userRoles.includes('BUDGET_PREPARER')) && proposal.processBy === userName) {
+      console.log('[DEBUG] Passed role and processBy check!');
+      console.log('[DEBUG] Checking status:', currentStatus);
+      if (currentStatus === 'DRAFT' || currentStatus === 'Draft' || currentStatus === 'Returned to Preparer') {
+        console.log('[DEBUG] Adding Submit to Budget Reviewer action!');
         actions.push({ label: 'Submit to Budget Reviewer', value: 'submit-to-reviewer', icon: <SendIcon />, color: 'primary' });
       }
     }
 
     // BUDGET REVIEWER actions
-    if (userRoles.includes('BUDGET REVIEWER') && (currentStatus === 'FORWARDED_TO_REVIEWER' || currentStatus === 'RETURNED_TO_REVIEWER')) {
+    if (userRoles.includes('BUDGET REVIEWER') && (currentStatus === 'Forwarded to Reviewer' || currentStatus === 'Returned to Reviewer')) {
       actions.push(
         { label: 'Submit to Budget Approver', value: 'submit-to-approver', icon: <SendIcon />, color: 'primary' },
         { label: 'Return to Budget Preparer', value: 'return-to-preparer', icon: <RejectIcon />, color: 'warning' }
@@ -260,7 +430,7 @@ const NewProposalWorkflowPage = () => {
     }
 
     // BUDGET APPROVER actions
-    if (userRoles.includes('BUDGET APPROVER') && (currentStatus === 'FORWARDED_TO_APPROVER' || currentStatus === 'RETURNED_TO_APPROVER')) {
+    if (userRoles.includes('BUDGET APPROVER') && (currentStatus === 'Forwarded to Approver' || currentStatus === 'Returned to Approver')) {
       actions.push(
         { label: 'Submit to Budget Planning Analyst', value: 'submit-to-analyst', icon: <SendIcon />, color: 'primary' },
         { label: 'Return to Budget Reviewer', value: 'return-to-reviewer', icon: <RejectIcon />, color: 'warning' }
@@ -268,7 +438,7 @@ const NewProposalWorkflowPage = () => {
     }
 
     // BUDGET PLANNING ANALYST actions
-    if (userRoles.includes('BUDGET PLANNING ANALYST') && (currentStatus === 'FORWARDED_TO_BRD_ANALYST' || currentStatus === 'RETURNED_TO_PLANNING_ANALYST')) {
+    if (userRoles.includes('BUDGET PLANNING ANALYST') && (currentStatus === 'Forwarded to Analyst' || currentStatus === 'Returned to Analyst')) {
       actions.push(
         { label: 'Forward to Budget Officer', value: 'forward-to-officer', icon: <SendIcon />, color: 'primary' },
         { label: 'Return to Budget Approver', value: 'return-to-approver', icon: <RejectIcon />, color: 'warning' }
@@ -276,7 +446,7 @@ const NewProposalWorkflowPage = () => {
     }
 
     // BUDGET OFFICER actions
-    if (userRoles.includes('BUDGET OFFICER') && (currentStatus === 'FORWARDED_TO_BRD_OFFICER' || currentStatus === 'RETURNED_TO_OFFICER')) {
+    if (userRoles.includes('BUDGET OFFICER') && (currentStatus === 'Forwarded to Officer' || currentStatus === 'Returned to Officer')) {
       actions.push(
         { label: 'Forward to Budget Manager', value: 'forward-to-manager', icon: <SendIcon />, color: 'primary' },
         { label: 'Return to Budget Planning Analyst', value: 'return-to-analyst', icon: <RejectIcon />, color: 'warning' }
@@ -284,7 +454,7 @@ const NewProposalWorkflowPage = () => {
     }
 
     // BUDGET MANAGER actions
-    if (userRoles.includes('BUDGET MANAGER') && currentStatus === 'FORWARDED_TO_BRD_MANAGER') {
+    if (userRoles.includes('BUDGET MANAGER') && currentStatus === 'Forwarded to Manager') {
       actions.push(
         { label: 'Finalize Proposal', value: 'finalize', icon: <ApproveIcon />, color: 'success' },
         { label: 'Return to Budget Officer', value: 'return-to-officer', icon: <RejectIcon />, color: 'warning' }
@@ -398,7 +568,7 @@ const NewProposalWorkflowPage = () => {
               sx={{
                 px: 3,
                 py: 1.5,
-                bgcolor: activeTab === TABS.findIndex(t => t.value === tab.value) ? '#4a7c2c' : '#375e38',
+                bgcolor: activeTab === TABS.findIndex(t => t.value === tab.value) ? '#4C6F4D' : '#375e38',
                 color: 'white',
                 cursor: 'pointer',
                 fontWeight: activeTab === TABS.findIndex(t => t.value === tab.value) ? 'bold' : 'normal',
@@ -407,7 +577,7 @@ const NewProposalWorkflowPage = () => {
                 boxShadow: activeTab === TABS.findIndex(t => t.value === tab.value) ? '0 4px 8px rgba(0,0,0,0.2)' : '0 2px 4px rgba(0,0,0,0.1)',
                 transform: activeTab === TABS.findIndex(t => t.value === tab.value) ? 'translateY(-2px)' : 'none',
                 '&:hover': {
-                  bgcolor: activeTab === TABS.findIndex(t => t.value === tab.value) ? '#4a7c2c' : '#4a7c2c',
+                  bgcolor: activeTab === TABS.findIndex(t => t.value === tab.value) ? '#4C6F4D' : '#4a7c2c',
                   transform: 'translateY(-2px)',
                   boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
                 }
@@ -661,11 +831,11 @@ const NewProposalWorkflowPage = () => {
                                   {availableActionsForMenu.map((action) => (
                                     <MenuItem
                                       key={action.value}
-                                      onClick={() => {
+                                      onClick={async () => {
                                         setActionType(action.value);
                                         setActionMenuAnchor(null);
                                         if (action.value === 'view-details') {
-                                          console.log('Viewing details for:', proposal._id);
+                                          await handleViewDetails(proposal);
                                         } else {
                                           setActionDialogOpen(true);
                                         }
@@ -899,6 +1069,752 @@ const NewProposalWorkflowPage = () => {
             }}
           >
             Confirm Action
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* View Details Dialog */}
+      <Dialog
+        open={viewDetailsDialogOpen}
+        onClose={() => {
+          if (changedItems.size > 0) {
+            const confirm = window.confirm('You have unsaved changes. Close anyway?');
+            if (!confirm) return;
+          }
+          setViewDetailsDialogOpen(false);
+          setChangedItems(new Set());
+        }}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: '12px',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.12)'
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          bgcolor: 'linear-gradient(135deg, #2d5016 0%, #375e38 100%)',
+          background: 'linear-gradient(135deg, #2d5016 0%, #375e38 100%)',
+          color: 'white',
+          fontWeight: 'bold',
+          fontSize: '1.25rem',
+          p: 3
+        }}>
+          Proposal Details
+        </DialogTitle>
+        <DialogContent sx={{ p: 0 }}>
+          {detailsLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', p: 6 }}>
+              <CircularProgress sx={{ color: '#2d5016' }} />
+            </Box>
+          ) : (
+            <>
+              {/* Proposal Summary */}
+              <Box sx={{ p: 3, bgcolor: '#f5f5f5', borderBottom: '1px solid #e0e0e0' }}>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Responsibility Center</Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 600 }}>{selectedProposal?.responsibilityCenter || selectedProposal?.division || 'N/A'}</Typography>
+                  </Grid>
+                  <Grid item xs={12} md={3}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Fiscal Year</Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 600 }}>{selectedProposal?.fiscalYear}</Typography>
+                  </Grid>
+                  <Grid item xs={12} md={3}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Budget Type</Typography>
+                    <Chip 
+                      label={selectedProposal?.budgetType?.toUpperCase()} 
+                      size="small"
+                      sx={{ bgcolor: '#012014ff', color: 'white', fontWeight: 'bold' }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Projected Income</Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 600, color: '#1976d2' }}>
+                      ₱{(selectedProposal?.totalIncome || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Projected Expenses</Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 600, color: '#d32f2f' }}>
+                      ₱{(selectedProposal?.totalExpenses || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Proposed Budget</Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 'bold', color: '#2d5016', fontSize: '1.1rem' }}>
+                      ₱{(selectedProposal?.proposedBudget || selectedProposal?.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Status</Typography>
+                    {renderStatusChip(selectedProposal?.status)}
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Created Date</Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                      {selectedProposal?.createdAt ? new Date(selectedProposal.createdAt).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      }) : 'N/A'}
+                    </Typography>
+                  </Grid>
+                </Grid>
+                
+                {/* Save button for reviewers if changes made */}
+                {canUserEdit() && changedItems.size > 0 && (
+                  <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid #e0e0e0', display: 'flex', gap: 2 }}>
+                    <Button
+                      variant="contained"
+                      sx={{ bgcolor: '#2d5016', '&:hover': { bgcolor: '#1e3a0f' } }}
+                      onClick={handleSaveChanges}
+                    >
+                      Save Changes ({changedItems.size})
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      onClick={() => {
+                        setEditableItems({
+                          income: JSON.parse(JSON.stringify(proposalDetails.income || [])),
+                          personnel: JSON.parse(JSON.stringify(proposalDetails.personnel || [])),
+                          mooe: JSON.parse(JSON.stringify(proposalDetails.mooe || [])),
+                          capitalOutlay: JSON.parse(JSON.stringify(proposalDetails.capitalOutlay || []))
+                        });
+                        setChangedItems(new Set());
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </Box>
+                )}
+              </Box>
+
+              {/* Tabs for different sections */}
+              <Tabs 
+                value={detailsTab} 
+                onChange={(e, newValue) => setDetailsTab(newValue)}
+                sx={{
+                  borderBottom: '1px solid #e0e0e0',
+                  bgcolor: 'white',
+                  '& .MuiTab-root': {
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    fontSize: '0.95rem',
+                    minWidth: 120,
+                    '&.Mui-selected': {
+                      color: '#2d5016'
+                    }
+                  },
+                  '& .MuiTabs-indicator': {
+                    bgcolor: '#2d5016',
+                    height: 3
+                  }
+                }}
+              >
+                <Tab label="Income" />
+                <Tab label="Personnel Services" />
+                <Tab label="MOOE" />
+                <Tab label="Capital Outlay" />
+              </Tabs>
+
+              {/* Tab Content */}
+              <Box sx={{ p: 3, minHeight: 300, maxHeight: 500, overflow: 'auto' }}>
+                {/* Income Tab */}
+                {detailsTab === 0 && (
+                  proposalDetails?.income?.length > 0 ? (
+                    <>
+                      {(() => {
+                        const groupedIncome = proposalDetails.income.reduce((acc, item) => {
+                          const category = item.category || 'Uncategorized';
+                          if (!acc[category]) acc[category] = [];
+                          acc[category].push(item);
+                          return acc;
+                        }, {});
+
+                        return Object.entries(groupedIncome).map(([category, items]) => {
+                          const categoryTotal = items.reduce((sum, item) => sum + (item.amount || 0), 0);
+                          const isExpanded = expandedGroups[`income-${category}`];
+
+                          return (
+                            <Box key={category} sx={{ mb: 2 }}>
+                              <Box
+                                onClick={() => setExpandedGroups(prev => ({ ...prev, [`income-${category}`]: !prev[`income-${category}`] }))}
+                                sx={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  p: 2,
+                                  bgcolor: '#2d5016',
+                                  color: 'white',
+                                  borderRadius: '8px',
+                                  cursor: 'pointer',
+                                  '&:hover': { bgcolor: '#3d6026' }
+                                }}
+                              >
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                                    {category} ({items.length} {items.length === 1 ? 'item' : 'items'})
+                                  </Typography>
+                                </Box>
+                                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                  ₱{categoryTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                </Typography>
+                              </Box>
+
+                              {isExpanded && (
+                                <TableContainer sx={{ mt: 1 }}>
+                                  <Table size="small">
+                                    <TableHead>
+                                      <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Subcategory</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Particulars</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Amount</TableCell>
+                                      </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                      {items.map((item, idx) => {
+                                        const globalIndex = proposalDetails.income.indexOf(item);
+                                        const itemKey = `income-${globalIndex}`;
+                                        const isChanged = changedItems.has(itemKey);
+                                        const editedItem = editableItems.income[globalIndex];
+                                        return (
+                                          <TableRow key={idx} hover sx={{ 
+                                            bgcolor: isChanged ? '#fff3cd' : 'transparent',
+                                            transition: 'background-color 0.3s ease'
+                                          }}>
+                                            <TableCell>{item.subcategory || 'N/A'}</TableCell>
+                                            <TableCell>{item.particulars || 'N/A'}</TableCell>
+                                            <TableCell align="right">
+                                              {canUserEdit() ? (
+                                                <TextField
+                                                  type="text"
+                                                  size="small"
+                                                  value={(editedItem?.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                  onChange={(e) => {
+                                                    const numValue = parseFloat(e.target.value.replace(/,/g, ''));
+                                                    if (!isNaN(numValue)) {
+                                                      handleEditItemAmount('income', globalIndex, numValue);
+                                                    }
+                                                  }}
+                                                  inputProps={{ style: { textAlign: 'right' } }}
+                                                  sx={{ 
+                                                    width: 120,
+                                                    '& .MuiOutlinedInput-root': {
+                                                      bgcolor: isChanged ? '#fff9e6' : 'white',
+                                                      borderColor: isChanged ? '#ffc107' : undefined
+                                                    }
+                                                  }}
+                                                />
+                                              ) : (
+                                                `₱${(item.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                                              )}
+                                            </TableCell>
+                                          </TableRow>
+                                        );
+                                      })}
+                                    </TableBody>
+                                  </Table>
+                                </TableContainer>
+                              )}
+                            </Box>
+                          );
+                        });
+                      })()}
+                      <Box sx={{ mt: 3, p: 2, bgcolor: '#f5f5f5', borderRadius: '8px' }}>
+                        <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1976d2' }}>
+                          Grand Total: ₱{editableItems.income.reduce((sum, item) => sum + (item.amount || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                    </>
+                  ) : (
+                    <Box sx={{ textAlign: 'center', py: 4 }}>
+                      <Typography variant="body2" color="text.secondary">No income data available</Typography>
+                    </Box>
+                  )
+                )}
+
+                {/* Personnel Services Tab */}
+                {detailsTab === 1 && (
+                  proposalDetails?.personnel?.length > 0 ? (
+                    <>
+                      <TableContainer>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                              <TableCell sx={{ width: 50 }}></TableCell>
+                              <TableCell sx={{ fontWeight: 'bold' }}>Employee Name</TableCell>
+                              <TableCell sx={{ fontWeight: 'bold' }}>Position</TableCell>
+                              <TableCell sx={{ fontWeight: 'bold' }}>SG/Step</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 'bold' }}>Monthly Salary</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 'bold' }}>Total</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {proposalDetails.personnel
+                              .slice(personnelPage * personnelRowsPerPage, personnelPage * personnelRowsPerPage + personnelRowsPerPage)
+                              .map((item, index) => {
+                                const globalIndex = personnelPage * personnelRowsPerPage + index;
+                                const itemKey = `personnel-${globalIndex}`;
+                                const isChanged = changedItems.has(itemKey);
+                                const editedItem = editableItems.personnel[globalIndex];
+                                const isExpanded = expandedPersonnel[index];
+                                return (
+                                  <React.Fragment key={index}>
+                                    <TableRow hover sx={{ 
+                                      cursor: 'pointer',
+                                      bgcolor: isChanged ? '#fff3cd' : 'transparent',
+                                      transition: 'background-color 0.3s ease'
+                                    }}>
+                                      <TableCell>
+                                        <IconButton
+                                          size="small"
+                                          onClick={() => setExpandedPersonnel(prev => ({ ...prev, [index]: !prev[index] }))}
+                                        >
+                                          {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                                        </IconButton>
+                                      </TableCell>
+                                      <TableCell>{item.employeeFullName || 'N/A'}</TableCell>
+                                      <TableCell>{item.positionTitle || 'N/A'}</TableCell>
+                                      <TableCell>{item.gradelevel_SG || 'N/A'}/{item.step || 'N/A'}</TableCell>
+                                      <TableCell align="right">
+                                        ₱{(item.monthlySalary || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                      </TableCell>
+                                      <TableCell align="right" sx={{ fontWeight: 600 }}>
+                                        {canUserEdit() ? (
+                                          <TextField
+                                            type="text"
+                                            size="small"
+                                            value={(editedItem?.Total || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            onChange={(e) => {
+                                              const numValue = parseFloat(e.target.value.replace(/,/g, ''));
+                                              if (!isNaN(numValue)) {
+                                                handleEditItemAmount('personnel', globalIndex, numValue);
+                                              }
+                                            }}
+                                            inputProps={{ style: { textAlign: 'right' } }}
+                                            sx={{ 
+                                              width: 120,
+                                              '& .MuiOutlinedInput-root': {
+                                                bgcolor: isChanged ? '#fff9e6' : 'white',
+                                                borderColor: isChanged ? '#ffc107' : undefined
+                                              }
+                                            }}
+                                          />
+                                        ) : (
+                                          `₱${(item.Total || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                                        )}
+                                      </TableCell>
+                                    </TableRow>
+                                    {isExpanded && (
+                                      <TableRow>
+                                        <TableCell colSpan={6} sx={{ bgcolor: '#fafafa', p: 3 }}>
+                                          <Grid container spacing={2}>
+                                            <Grid item xs={12}>
+                                              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 2, color: '#2d5016' }}>
+                                                Employee Information
+                                              </Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">Item Number</Typography>
+                                              <Typography variant="body2">{item.itemNumber || 'N/A'}</Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">Employee Number</Typography>
+                                              <Typography variant="body2">{item.employeeNumber || 'N/A'}</Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">Status</Typography>
+                                              <Typography variant="body2">{item.employeeStatus || 'N/A'}</Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">Appointment Status</Typography>
+                                              <Typography variant="body2">{item.statusOfAppointment || 'N/A'}</Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">Division</Typography>
+                                              <Typography variant="body2">{item.division || 'N/A'}</Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">Section</Typography>
+                                              <Typography variant="body2">{item.section || 'N/A'}</Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">Unit</Typography>
+                                              <Typography variant="body2">{item.unit || 'N/A'}</Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">Dependents</Typography>
+                                              <Typography variant="body2">{item.noOfDependent || 0}</Typography>
+                                            </Grid>
+
+                                            <Grid item xs={12}>
+                                              <Divider sx={{ my: 1 }} />
+                                              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 2, color: '#2d5016' }}>
+                                                Compensation Breakdown
+                                              </Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">Annual Salary</Typography>
+                                              <Typography variant="body2">₱{(item.annualSalary || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">PERA</Typography>
+                                              <Typography variant="body2">₱{(item.PERA || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">RATA</Typography>
+                                              <Typography variant="body2">₱{(item.RATA || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">Hazard Pay</Typography>
+                                              <Typography variant="body2">₱{(item.hazardPay || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">Subsistence Allowance</Typography>
+                                              <Typography variant="body2">₱{(item.subsistenceAllowance || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">Uniform Allowance</Typography>
+                                              <Typography variant="body2">₱{(item.uniformALLOWANCE || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">Medical Allowance</Typography>
+                                              <Typography variant="body2">₱{(item.medical || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">Children Allowance</Typography>
+                                              <Typography variant="body2">₱{(item.childrenAllowance || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">Midyear Bonus</Typography>
+                                              <Typography variant="body2">₱{(item.midyearBonus || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">Year-End Bonus</Typography>
+                                              <Typography variant="body2">₱{(item.yearEndBonus || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">Cash Gift</Typography>
+                                              <Typography variant="body2">₱{(item.cashGift || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">Productivity Incentive</Typography>
+                                              <Typography variant="body2">₱{(item.productivityIncentive || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography>
+                                            </Grid>
+
+                                            <Grid item xs={12}>
+                                              <Divider sx={{ my: 1 }} />
+                                              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 2, color: '#2d5016' }}>
+                                                Deductions
+                                              </Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">GSIS Premium</Typography>
+                                              <Typography variant="body2">₱{(item.gsisPremium || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">PhilHealth Premium</Typography>
+                                              <Typography variant="body2">₱{(item.philhealthPremium || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography>
+                                            </Grid>
+                                            <Grid item xs={6} md={3}>
+                                              <Typography variant="caption" color="text.secondary">Pag-IBIG Premium</Typography>
+                                              <Typography variant="body2">₱{(item.pagibigPremium || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</Typography>
+                                            </Grid>
+                                          </Grid>
+                                        </TableCell>
+                                      </TableRow>
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                      <TablePagination
+                        component="div"
+                        count={proposalDetails.personnel.length}
+                        page={personnelPage}
+                        onPageChange={(e, newPage) => setPersonnelPage(newPage)}
+                        rowsPerPage={personnelRowsPerPage}
+                        onRowsPerPageChange={(e) => {
+                          setPersonnelRowsPerPage(parseInt(e.target.value, 10));
+                          setPersonnelPage(0);
+                        }}
+                        rowsPerPageOptions={[5, 10, 25, 50]}
+                      />
+                      <Box sx={{ mt: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: '8px' }}>
+                        <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#d32f2f' }}>
+                          Grand Total: ₱{editableItems.personnel.reduce((sum, item) => sum + (item.Total || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                    </>
+                  ) : (
+                    <Box sx={{ textAlign: 'center', py: 4 }}>
+                      <Typography variant="body2" color="text.secondary">No personnel services data available</Typography>
+                    </Box>
+                  )
+                )}
+
+                {/* MOOE Tab */}
+                {detailsTab === 2 && (
+                  proposalDetails?.mooe?.length > 0 ? (
+                    <>
+                      {(() => {
+                        const groupedMOOE = proposalDetails.mooe.reduce((acc, item) => {
+                          const category = item.category || 'Uncategorized';
+                          if (!acc[category]) acc[category] = [];
+                          acc[category].push(item);
+                          return acc;
+                        }, {});
+
+                        return Object.entries(groupedMOOE).map(([category, items]) => {
+                          const categoryTotal = items.reduce((sum, item) => sum + (item.amount || 0), 0);
+                          const isExpanded = expandedGroups[`mooe-${category}`];
+
+                          return (
+                            <Box key={category} sx={{ mb: 2 }}>
+                              <Box
+                                onClick={() => setExpandedGroups(prev => ({ ...prev, [`mooe-${category}`]: !prev[`mooe-${category}`] }))}
+                                sx={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  p: 2,
+                                  bgcolor: '#2d5016',
+                                  color: 'white',
+                                  borderRadius: '8px',
+                                  cursor: 'pointer',
+                                  '&:hover': { bgcolor: '#3d6026' }
+                                }}
+                              >
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                                    {category} ({items.length} {items.length === 1 ? 'item' : 'items'})
+                                  </Typography>
+                                </Box>
+                                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                  ₱{categoryTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                </Typography>
+                              </Box>
+
+                              {isExpanded && (
+                                <TableContainer sx={{ mt: 1 }}>
+                                  <Table size="small">
+                                    <TableHead>
+                                      <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Particulars</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>UACS Code</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Amount</TableCell>
+                                      </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                      {items.map((item, idx) => {
+                                        const globalIndex = proposalDetails.mooe.indexOf(item);
+                                        const itemKey = `mooe-${globalIndex}`;
+                                        const isChanged = changedItems.has(itemKey);
+                                        const editedItem = editableItems.mooe[globalIndex];
+                                        return (
+                                          <TableRow key={idx} hover sx={{ 
+                                            bgcolor: isChanged ? '#fff3cd' : 'transparent',
+                                            transition: 'background-color 0.3s ease'
+                                          }}>
+                                            <TableCell>{item.particulars || 'N/A'}</TableCell>
+                                            <TableCell>{item.uacsCode || 'N/A'}</TableCell>
+                                            <TableCell align="right">
+                                              {canUserEdit() ? (
+                                                <TextField
+                                                  type="text"
+                                                  size="small"
+                                                  value={(editedItem?.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                  onChange={(e) => {
+                                                    const numValue = parseFloat(e.target.value.replace(/,/g, ''));
+                                                    if (!isNaN(numValue)) {
+                                                      handleEditItemAmount('mooe', globalIndex, numValue);
+                                                    }
+                                                  }}
+                                                  inputProps={{ style: { textAlign: 'right' } }}
+                                                  sx={{ 
+                                                    width: 120,
+                                                    '& .MuiOutlinedInput-root': {
+                                                      bgcolor: isChanged ? '#fff9e6' : 'white',
+                                                      borderColor: isChanged ? '#ffc107' : undefined
+                                                    }
+                                                  }}
+                                                />
+                                              ) : (
+                                                `₱${(item.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                                              )}
+                                            </TableCell>
+                                          </TableRow>
+                                        );
+                                      })}
+                                    </TableBody>
+                                  </Table>
+                                </TableContainer>
+                              )}
+                            </Box>
+                          );
+                        });
+                      })()}
+                      <Box sx={{ mt: 3, p: 2, bgcolor: '#f5f5f5', borderRadius: '8px' }}>
+                        <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#d32f2f' }}>
+                          Grand Total: ₱{editableItems.mooe.reduce((sum, item) => sum + (item.amount || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                    </>
+                  ) : (
+                    <Box sx={{ textAlign: 'center', py: 4 }}>
+                      <Typography variant="body2" color="text.secondary">No MOOE data available</Typography>
+                    </Box>
+                  )
+                )}
+
+                {/* Capital Outlay Tab */}
+                {detailsTab === 3 && (
+                  proposalDetails?.capitalOutlay?.length > 0 ? (
+                    <>
+                      {(() => {
+                        const groupedCapital = proposalDetails.capitalOutlay.reduce((acc, item) => {
+                          const category = item.category || 'Uncategorized';
+                          if (!acc[category]) acc[category] = [];
+                          acc[category].push(item);
+                          return acc;
+                        }, {});
+
+                        return Object.entries(groupedCapital).map(([category, items]) => {
+                          const categoryTotal = items.reduce((sum, item) => sum + (item.cost || item.amount || 0), 0);
+                          const isExpanded = expandedGroups[`capital-${category}`];
+
+                          return (
+                            <Box key={category} sx={{ mb: 2 }}>
+                              <Box
+                                onClick={() => setExpandedGroups(prev => ({ ...prev, [`capital-${category}`]: !prev[`capital-${category}`] }))}
+                                sx={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  p: 2,
+                                  bgcolor: '#2d5016',
+                                  color: 'white',
+                                  borderRadius: '8px',
+                                  cursor: 'pointer',
+                                  '&:hover': { bgcolor: '#3d6026' }
+                                }}
+                              >
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                                    {category} ({items.length} {items.length === 1 ? 'item' : 'items'})
+                                  </Typography>
+                                </Box>
+                                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                  ₱{categoryTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                </Typography>
+                              </Box>
+
+                              {isExpanded && (
+                                <TableContainer sx={{ mt: 1 }}>
+                                  <Table size="small">
+                                    <TableHead>
+                                      <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Particulars</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>UACS Code</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Amount</TableCell>
+                                      </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                      {items.map((item, idx) => {
+                                        const globalIndex = proposalDetails.capitalOutlay.indexOf(item);
+                                        const itemKey = `capitalOutlay-${globalIndex}`;
+                                        const isChanged = changedItems.has(itemKey);
+                                        const editedItem = editableItems.capitalOutlay[globalIndex];
+                                        const fieldName = item.cost !== undefined ? 'cost' : 'amount';
+                                        return (
+                                          <TableRow key={idx} hover sx={{ 
+                                            bgcolor: isChanged ? '#fff3cd' : 'transparent',
+                                            transition: 'background-color 0.3s ease'
+                                          }}>
+                                            <TableCell>{item.particulars || 'N/A'}</TableCell>
+                                            <TableCell>{item.uacsCode || 'N/A'}</TableCell>
+                                            <TableCell align="right">
+                                              {canUserEdit() ? (
+                                                <TextField
+                                                  type="text"
+                                                  size="small"
+                                                  value={(editedItem?.[fieldName] || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                  onChange={(e) => {
+                                                    const numValue = parseFloat(e.target.value.replace(/,/g, ''));
+                                                    if (!isNaN(numValue)) {
+                                                      handleEditItemAmount('capitalOutlay', globalIndex, numValue);
+                                                    }
+                                                  }}
+                                                  inputProps={{ style: { textAlign: 'right' } }}
+                                                  sx={{ 
+                                                    width: 120,
+                                                    '& .MuiOutlinedInput-root': {
+                                                      bgcolor: isChanged ? '#fff9e6' : 'white',
+                                                      borderColor: isChanged ? '#ffc107' : undefined
+                                                    }
+                                                  }}
+                                                />
+                                              ) : (
+                                                `₱${(item.cost || item.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                                              )}
+                                            </TableCell>
+                                          </TableRow>
+                                        );
+                                      })}
+                                    </TableBody>
+                                  </Table>
+                                </TableContainer>
+                              )}
+                            </Box>
+                          );
+                        });
+                      })()}
+                      <Box sx={{ mt: 3, p: 2, bgcolor: '#f5f5f5', borderRadius: '8px' }}>
+                        <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#d32f2f' }}>
+                          Grand Total: ₱{editableItems.capitalOutlay.reduce((sum, item) => sum + (item.cost || item.amount || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </Typography>
+                      </Box>
+                    </>
+                  ) : (
+                    <Box sx={{ textAlign: 'center', py: 4 }}>
+                      <Typography variant="body2" color="text.secondary">No capital outlay data available</Typography>
+                    </Box>
+                  )
+                )}
+              </Box>
+            </>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 3, borderTop: '1px solid #e0e0e0' }}>
+          <Button 
+            onClick={() => {
+              if (changedItems.size > 0) {
+                const confirm = window.confirm('You have unsaved changes. Close anyway?');
+                if (!confirm) return;
+              }
+              setViewDetailsDialogOpen(false);
+              setChangedItems(new Set());
+            }}
+            variant="contained"
+            sx={{
+              bgcolor: '#2d5016',
+              color: 'white',
+              textTransform: 'none',
+              fontWeight: 600,
+              px: 4,
+              '&:hover': {
+                bgcolor: '#4a7c2c'
+              }
+            }}
+          >
+            Close
           </Button>
         </DialogActions>
       </Dialog>

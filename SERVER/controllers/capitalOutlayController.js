@@ -477,3 +477,89 @@ exports.deleteAllCapitalOutlays = async (req, res) => {
     res.status(500).json({ error: "Failed to delete capital outlays." });
   }
 };
+
+exports.bulkUpdateCapitalOutlay = async (req, res) => {
+  try {
+    const { items } = req.body;
+    
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "Items array is required and must not be empty" });
+    }
+
+    const activeSettings = await Settings.findOne({ isActive: true });
+    const setFY = activeSettings?.fiscalYear;
+    const setBT = activeSettings?.budgetType;
+    const workflowData = req.submissionWorkflowData || {};
+
+    const updates = [];
+    
+    for (const item of items) {
+      if (!item._id) {
+        return res.status(400).json({ message: "Each item must have an _id field" });
+      }
+
+      const existingCapitalOutlay = await CapitalOutlay.findById(item._id);
+      if (!existingCapitalOutlay) {
+        return res.status(404).json({ message: `Capital Outlay entry with ID ${item._id} not found` });
+      }
+
+      const submittedStatuses = ["Submitted", "Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"];
+      if (submittedStatuses.includes(existingCapitalOutlay.status)) {
+        return res.status(403).json({
+          error: "Update not allowed",
+          message: `Cannot edit Capital Outlay record ${item._id} that has been submitted or approved`
+        });
+      }
+
+      updates.push(
+        CapitalOutlay.findByIdAndUpdate(
+          item._id,
+          {
+            cost: item.cost !== undefined ? item.cost : existingCapitalOutlay.cost,
+            amount: item.amount !== undefined ? item.amount : existingCapitalOutlay.amount,
+            particulars: item.particulars !== undefined ? item.particulars : existingCapitalOutlay.particulars,
+            ...(setFY ? { fiscalYear: setFY } : {}),
+            ...(setBT ? { budgetType: setBT } : {}),
+            region: item.region !== undefined ? item.region : (workflowData.region || existingCapitalOutlay.region),
+            department: item.department !== undefined ? item.department : (workflowData.department || existingCapitalOutlay.department),
+            division: item.division !== undefined ? item.division : (workflowData.division || existingCapitalOutlay.division),
+            processBy: item.processBy !== undefined ? item.processBy : (req.user?.userName || req.user?.id || existingCapitalOutlay.processBy),
+            processDate: item.processDate !== undefined ? item.processDate : new Date(),
+            status: item.status !== undefined ? item.status : (workflowData.status || existingCapitalOutlay.status),
+            ...(workflowData.originalLevel ? { originalLevel: workflowData.originalLevel } : {}),
+            ...(workflowData.workflowLevel ? { workflowLevel: workflowData.workflowLevel } : {}),
+          },
+          { new: true }
+        )
+      );
+    }
+
+    const updatedItems = await Promise.all(updates);
+    
+    try {
+      const proposalIds = new Set();
+      for (const item of updatedItems) {
+        if (item.proposalId) {
+          proposalIds.add(item.proposalId);
+        }
+      }
+      
+      if (proposalIds.size > 0) {
+        for (const proposalId of proposalIds) {
+          await recalculateAndSaveProposalTotals({ proposalId });
+        }
+      }
+    } catch (error) {
+      console.error("Error recalculating proposal totals:", error);
+    }
+
+    res.status(200).json({ 
+      message: "Capital Outlay entries updated successfully", 
+      updatedCount: updatedItems.length,
+      items: updatedItems 
+    });
+  } catch (error) {
+    console.error("Error updating Capital Outlay entries:", error);
+    res.status(500).json({ message: "Failed to update Capital Outlay entries" });
+  }
+};

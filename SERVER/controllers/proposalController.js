@@ -8,6 +8,8 @@ const BudgetarySupport = require('../models/BudgetarySupport');
 const Income = require('../models/Income');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
+const notificationController = require('./notificationController');
+const User = require('../models/User');
 // Remove the checkUserRegionAccess function
 // const checkUserRegionAccess = async (userId, region) => {
 //   try {
@@ -6143,8 +6145,12 @@ exports.performProposalAction = async (req, res) => {
     }
 
     // Get user roles
-    const userRoles = req.user?.Roles || [];
+    let userRoles = req.user?.Roles || [];
     const currentStatus = proposal.status;
+
+    // Normalize roles to handle both space and underscore formats
+    const normalizeRole = (role) => role.replace(/_/g, ' ').toUpperCase();
+    userRoles = userRoles.map(normalizeRole);
 
     // Define workflow transitions based on the corrected workflow order
     const workflowTransitions = {
@@ -6216,6 +6222,63 @@ exports.performProposalAction = async (req, res) => {
       ...updateData,
       $push: { workflowHistory: workflowEntry }
     });
+
+    // Send notifications based on the new status
+    try {
+      let targetRole = null;
+      let notificationTitle = '';
+      let notificationMessage = '';
+
+      if (newStatus === 'Forwarded to Reviewer') {
+        targetRole = 'BUDGET REVIEWER';
+        notificationTitle = 'New Proposal for Review';
+        notificationMessage = `A new proposal has been submitted by ${userName} for your review.`;
+      } else if (newStatus === 'Forwarded to Approver') {
+        targetRole = 'BUDGET APPROVER';
+        notificationTitle = 'Proposal Approved for Final Approval';
+        notificationMessage = `A proposal from ${userName} has been approved and is pending your approval.`;
+      } else if (newStatus === 'Forwarded to Budget Planning Analyst') {
+        targetRole = 'BUDGET PLANNING ANALYST';
+        notificationTitle = 'Proposal Pending Analysis';
+        notificationMessage = `A proposal is pending your analysis.`;
+      } else if (newStatus === 'Forwarded to Budget Officer') {
+        targetRole = 'BUDGET OFFICER';
+        notificationTitle = 'Proposal Pending Officer Review';
+        notificationMessage = `A proposal is pending your review.`;
+      } else if (newStatus === 'Forwarded to Overall Budget Approver') {
+        targetRole = 'BUDGET MANAGER';
+        notificationTitle = 'Proposal Pending Final Approval';
+        notificationMessage = `A proposal is pending your final approval.`;
+      }
+
+      if (targetRole) {
+        // Find all users with the target role
+        const targetUsers = await User.find({ roles: targetRole }).select('userId email');
+
+        if (targetUsers && targetUsers.length > 0) {
+          const notificationsData = targetUsers.map(user => ({
+            userId: user.userId || user._id.toString(),
+            type: 'PROPOSAL_SUBMISSION',
+            title: notificationTitle,
+            message: notificationMessage,
+            relatedId: id,
+            relatedType: 'proposal',
+            relatedLink: `/new-proposal-workflow?view=pending-review`,
+            metadata: {
+              proposalId: id,
+              action: action,
+              previousStatus: previousStatus,
+              newStatus: newStatus
+            }
+          }));
+
+          await notificationController.createNotifications(notificationsData);
+          console.log(`Notifications sent to ${targetUsers.length} ${targetRole} users`);
+        }
+      }
+    } catch (notificationError) {
+      console.error('Error sending notifications:', notificationError);
+    }
 
     res.status(200).json({
       success: true,

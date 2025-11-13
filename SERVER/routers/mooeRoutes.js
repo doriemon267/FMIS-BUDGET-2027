@@ -23,4 +23,6 @@ router.delete('/mooe-delete', mooeController.deleteAllMooeProposals);
 router.get('/MOOEProposal', hierarchicalAccessControl('read'), mooeController.getMOOEData);
 // Get MOOE by parameters - FIXED to use proper submission workflow filtering
 router.get("/mooe/getByParams", submissionWorkflowControl('read'), mooeController.getMOOEByParams);
+// Bulk update MOOE entries
+router.put("/mooe/bulk-update", submissionWorkflowControl('update', { strictMode: true, enableConsolidation: true }), mooeController.bulkUpdateMOOE);
 module.exports = router;
