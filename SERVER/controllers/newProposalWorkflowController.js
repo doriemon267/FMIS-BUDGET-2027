@@ -627,6 +627,7 @@ exports.updateProposal = async (req, res) => {
     const { id } = req.params;
     const userRole = getUserRole(req);
     const userId = req.user.id;
+    const userName = req.user.name || req.user.email;
 
     const proposal = await NewProposalWorkflow.findById(id);
     if (!proposal) {
@@ -636,39 +637,126 @@ exports.updateProposal = async (req, res) => {
       });
     }
 
-    // Only allow editing if user is the creator and status is DRAFT
-    if (proposal.createdBy !== userId || proposal.status !== 'DRAFT') {
+    // Only allow editing if user is the creator and status is DRAFT, or user has BRD roles
+    const isBRDStaff = ['BUDGET PLANNING ANALYST', 'BUDGET_PLANNING_ANALYST', 'BUDGET OFFICER', 'BUDGET_OFFICER', 'BUDGET MANAGER', 'BUDGET_MANAGER'].includes(userRole);
+    const isCreatorEditingDraft = proposal.createdBy === userId && proposal.status === 'DRAFT';
+    
+    if (!isCreatorEditingDraft && !isBRDStaff) {
       return res.status(403).json({
         success: false,
-        message: 'You can only edit your own draft proposals'
+        message: 'You do not have permission to edit this proposal'
       });
     }
 
-    const allowedFields = ['title', 'description', 'modelType', 'fiscalYear', 'amount'];
+    const allowedFields = ['title', 'description', 'modelType', 'fiscalYear', 'amount', 'income', 'personnel', 'mooe', 'capitalOutlay'];
     const updates = {};
+    const changes = {}; // Track what changed
 
     allowedFields.forEach(field => {
-      if (req.body[field] !== undefined) {
+      if (req.body[field] !== undefined && req.body[field] !== proposal[field]) {
         updates[field] = req.body[field];
+        changes[field] = {
+          oldValue: proposal[field],
+          newValue: req.body[field]
+        };
       }
     });
 
-    const updatedProposal = await NewProposalWorkflow.findByIdAndUpdate(
-      id,
-      updates,
-      { new: true }
-    );
+    // If no changes, just return current proposal
+    if (Object.keys(changes).length === 0) {
+      return res.json({
+        success: true,
+        message: 'No changes detected',
+        data: proposal
+      });
+    }
+
+    // Log the changes to workflowHistory
+    proposal.workflowHistory = proposal.workflowHistory || [];
+    proposal.workflowHistory.push({
+      action: 'EDIT',
+      performedBy: userId,
+      performedByName: userName,
+      position: userRole,
+      fromStatus: proposal.status,
+      toStatus: proposal.status, // Status doesn't change during edit
+      comment: `Fields updated: ${Object.keys(changes).join(', ')}`,
+      changes: changes, // Store detailed change log
+      timestamp: new Date(),
+      changeType: 'PROPOSAL_EDIT'
+    });
+
+    // Apply updates
+    Object.assign(proposal, updates);
+    await proposal.save();
+
+    console.log('[UPDATE_PROPOSAL] Changes made to proposal', id);
+    console.log('[UPDATE_PROPOSAL] User:', userName, 'Role:', userRole);
+    console.log('[UPDATE_PROPOSAL] Changes:', JSON.stringify(changes, null, 2));
 
     res.json({
       success: true,
       message: 'Proposal updated successfully',
-      data: updatedProposal
+      data: proposal,
+      changesSummary: {
+        fieldsChanged: Object.keys(changes),
+        changedBy: userName,
+        changedAt: new Date(),
+        details: changes
+      }
     });
   } catch (error) {
     console.error('Error updating proposal:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to update proposal',
+      error: error.message
+    });
+  }
+};
+
+// Get audit trail/change log for a proposal
+exports.getAuditTrail = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const proposal = await NewProposalWorkflow.findById(id);
+    if (!proposal) {
+      return res.status(404).json({
+        success: false,
+        message: 'Proposal not found'
+      });
+    }
+
+    // Filter workflow history to include only edits and field changes
+    const auditTrail = proposal.workflowHistory
+      .filter(entry => entry.action === 'EDIT' || entry.changeType === 'PROPOSAL_EDIT' || entry.changes)
+      .map(entry => ({
+        action: entry.action,
+        performedBy: entry.performedByName,
+        role: entry.position,
+        timestamp: entry.timestamp,
+        changedFields: entry.changes ? Object.keys(entry.changes) : [],
+        details: entry.changes || {},
+        comment: entry.comment
+      }))
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    res.json({
+      success: true,
+      message: 'Audit trail retrieved successfully',
+      data: {
+        proposalId: id,
+        proposalTitle: proposal.title,
+        totalChanges: auditTrail.length,
+        changes: auditTrail
+      }
+    });
+  } catch (error) {
+    console.error('Error retrieving audit trail:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve audit trail',
       error: error.message
     });
   }

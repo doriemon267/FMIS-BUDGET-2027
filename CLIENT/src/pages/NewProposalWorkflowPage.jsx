@@ -121,6 +121,9 @@ const NewProposalWorkflowPage = () => {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [viewDetailsDialogOpen, setViewDetailsDialogOpen] = useState(false);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const [auditTrailDialogOpen, setAuditTrailDialogOpen] = useState(false);
+  const [auditTrailData, setAuditTrailData] = useState([]);
+  const [auditTrailLoading, setAuditTrailLoading] = useState(false);
   const [actionType, setActionType] = useState('');
   const [actionComment, setActionComment] = useState('');
   const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
@@ -283,6 +286,27 @@ const NewProposalWorkflowPage = () => {
       toast.error('Failed to load proposal details');
     } finally {
       setDetailsLoading(false);
+    }
+  };
+
+  const handleViewAuditTrail = async (proposal) => {
+    setAuditTrailLoading(true);
+    setSelectedProposal(proposal);
+    
+    try {
+      const response = await api.get(`/api/newProposalWorkflow/proposals/${proposal._id}/audit-trail`);
+      
+      if (response.data.success) {
+        setAuditTrailData(response.data.data.changes || []);
+        setAuditTrailDialogOpen(true);
+      } else {
+        toast.error('Failed to fetch audit trail');
+      }
+    } catch (error) {
+      console.error('Error fetching audit trail:', error);
+      toast.error('Failed to load audit trail');
+    } finally {
+      setAuditTrailLoading(false);
     }
   };
 
@@ -452,6 +476,9 @@ const NewProposalWorkflowPage = () => {
     
     // VIEW HISTORY (always available)
     actions.push({ label: 'View History', value: 'view-history', icon: <ExpandMoreIcon />, color: '#1976d2' });
+
+    // VIEW AUDIT TRAIL (always available)
+    actions.push({ label: 'View Audit Trail', value: 'view-audit-trail', icon: <ExpandMoreIcon />, color: '#d97706' });
 
     // BUDGET PREPARER actions
     const userName = currentUser?.name || `${currentUser?.FirstName || ''} ${currentUser?.LastName || ''}`.trim();
@@ -909,6 +936,8 @@ const NewProposalWorkflowPage = () => {
                                           setSelectedProposal(proposal);
                                           setHistoryPage(0);
                                           setHistoryDialogOpen(true);
+                                        } else if (action.value === 'view-audit-trail') {
+                                          await handleViewAuditTrail(proposal);
                                         } else {
                                           setActionDialogOpen(true);
                                         }
@@ -2079,6 +2108,148 @@ const NewProposalWorkflowPage = () => {
             }}
           >
             Back
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Audit Trail Dialog */}
+      <Dialog
+        open={auditTrailDialogOpen}
+        onClose={() => setAuditTrailDialogOpen(false)}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: '12px',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.15)'
+          }
+        }}
+      >
+        <DialogTitle sx={{
+          bgcolor: '#d97706',
+          color: 'white',
+          fontWeight: 'bold',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.5,
+          fontSize: '1.1rem',
+          py: 2.5,
+          px: 3
+        }}>
+          <Box sx={{ 
+            width: 28, 
+            height: 28, 
+            bgcolor: 'rgba(255,255,255,0.2)',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <ExpandMoreIcon sx={{ fontSize: '1.2rem' }} />
+          </Box>
+          Change Log & Audit Trail
+        </DialogTitle>
+        <DialogContent sx={{ p: 0 }}>
+          {auditTrailLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', p: 6 }}>
+              <CircularProgress />
+            </Box>
+          ) : auditTrailData && auditTrailData.length > 0 ? (
+            <TableContainer sx={{ maxHeight: 600 }}>
+              <Table stickyHeader>
+                <TableHead>
+                  <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#333', fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                      CHANGED BY
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#333', fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                      ROLE
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#333', fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                      FIELDS CHANGED
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#333', fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                      OLD VALUE → NEW VALUE
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: '#333', fontSize: '0.85rem', letterSpacing: '0.5px' }}>
+                      DATE & TIME
+                    </TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {auditTrailData.map((change, index) => (
+                    <TableRow key={index} sx={{
+                      '&:hover': { bgcolor: '#f9f9f9' },
+                      borderBottom: '1px solid #e0e0e0'
+                    }}>
+                      <TableCell sx={{ fontSize: '0.85rem', py: 2 }}>
+                        {change.performedBy || 'System'}
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '0.85rem', py: 2 }}>
+                        <Chip 
+                          label={change.role?.replace(/_/g, ' ') || 'N/A'}
+                          size="small"
+                          sx={{
+                            bgcolor: '#e3f2fd',
+                            color: '#1976d2',
+                            fontWeight: 500
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '0.85rem', py: 2 }}>
+                        {change.changedFields?.join(', ') || 'N/A'}
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '0.8rem', py: 2, fontFamily: 'monospace' }}>
+                        {Object.entries(change.details || {}).map(([field, values]) => (
+                          <Box key={field} sx={{ mb: 0.5, pb: 0.5, borderBottom: '1px solid #f0f0f0' }}>
+                            <Box sx={{ fontWeight: 600, color: '#d97706', fontSize: '0.75rem' }}>
+                              {field}:
+                            </Box>
+                            <Box sx={{ color: '#ef4444', fontSize: '0.75rem' }}>
+                              {values.oldValue ? String(values.oldValue).substring(0, 30) : 'empty'}
+                            </Box>
+                            <Box sx={{ color: '#22c55e', fontSize: '0.75rem' }}>
+                              → {values.newValue ? String(values.newValue).substring(0, 30) : 'empty'}
+                            </Box>
+                          </Box>
+                        ))}
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '0.85rem', py: 2, whiteSpace: 'nowrap' }}>
+                        {new Date(change.timestamp).toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', p: 6 }}>
+              <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
+                No changes recorded
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                This proposal has not been edited yet
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 3, borderTop: '1px solid #e0e0e0' }}>
+          <Button 
+            onClick={() => setAuditTrailDialogOpen(false)}
+            variant="contained"
+            sx={{
+              bgcolor: '#d97706',
+              color: 'white',
+              textTransform: 'none',
+              fontWeight: 600,
+              px: 4,
+              '&:hover': {
+                bgcolor: '#b45309'
+              }
+            }}
+          >
+            Close
           </Button>
         </DialogActions>
       </Dialog>

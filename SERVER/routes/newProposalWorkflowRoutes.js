@@ -12,6 +12,7 @@ router.get('/proposals', newProposalWorkflowController.getProposals);
 router.get('/proposals/my-proposals', newProposalWorkflowController.getMyProposals);
 router.get('/proposals/pending-review', newProposalWorkflowController.getPendingReview);
 router.get('/proposals/:id', newProposalWorkflowController.getProposalById);
+router.get('/proposals/:id/audit-trail', newProposalWorkflowController.getAuditTrail);
 router.put('/proposals/:id', newProposalWorkflowController.updateProposal);
 router.delete('/proposals/:id', newProposalWorkflowController.deleteProposal);
 
