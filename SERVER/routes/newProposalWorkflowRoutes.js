@@ -11,12 +11,12 @@ router.post('/proposals', newProposalWorkflowController.createProposal);
 router.get('/proposals', newProposalWorkflowController.getProposals);
 router.get('/proposals/my-proposals', newProposalWorkflowController.getMyProposals);
 router.get('/proposals/pending-review', newProposalWorkflowController.getPendingReview);
-router.get('/proposals/:id', newProposalWorkflowController.getProposalById);
+// Specific routes with parameters must come BEFORE generic /:id routes
 router.get('/proposals/:id/audit-trail', newProposalWorkflowController.getAuditTrail);
+router.post('/proposals/:id/action', newProposalWorkflowController.performAction);
+// Generic routes AFTER specific ones
+router.get('/proposals/:id', newProposalWorkflowController.getProposalById);
 router.put('/proposals/:id', newProposalWorkflowController.updateProposal);
 router.delete('/proposals/:id', newProposalWorkflowController.deleteProposal);
-
-// Routes for workflow actions
-router.post('/proposals/:id/action', newProposalWorkflowController.performAction);
 
 module.exports = router;
