@@ -44,7 +44,25 @@ exports.createIncome = async (req, res) => {
         console.warn('[createIncome] No legacy Proposal found for workflowRef:', finalWorkflowId);
       }
     } else {
-      console.warn('[createIncome] Missing workflow proposalId in request; line item will not aggregate');
+      console.warn('[createIncome] Missing workflow proposalId in request; attempting inference');
+      try {
+        const activeSettings = await Settings.findOne({ isActive: true });
+        const inferQuery = {
+          fiscalYear: activeSettings?.fiscalYear ? String(activeSettings.fiscalYear) : fiscalYear,
+          budgetType: activeSettings?.budgetType || budgetType,
+          region: workflowData.region || region
+        };
+        Object.keys(inferQuery).forEach(k => inferQuery[k] === undefined && delete inferQuery[k]);
+        const inferredLegacy = await Proposal.findOne(inferQuery).select('_id');
+        if (inferredLegacy) {
+          legacyProposalId = inferredLegacy._id;
+          console.warn('[createIncome] Inferred legacy Proposal linkage:', legacyProposalId);
+        } else {
+          console.warn('[createIncome] Inference failed; entry remains unlinked');
+        }
+      } catch (infErr) {
+        console.warn('[createIncome] Inference error:', infErr.message);
+      }
     }
 
     const newIncome = new Income({

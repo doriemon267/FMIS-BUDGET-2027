@@ -197,7 +197,22 @@ exports.addCapitalOutlay = async (req, res) => {
         console.warn('[addCapitalOutlay] No legacy Proposal found for workflowRef:', incomingWorkflowId);
       }
     } else {
-      console.warn('[addCapitalOutlay] Missing workflow proposalId in request; line item will not aggregate');
+      console.warn('[addCapitalOutlay] Missing workflow proposalId in request; attempting inference');
+      try {
+        const inferQuery = {
+          fiscalYear: activeSettings.fiscalYear.toString(),
+          budgetType: activeSettings.budgetType,
+          region: ownerRegion
+        };
+        legacyProposal = await Proposal.findOne(inferQuery).select('_id');
+        if (legacyProposal) {
+          console.warn('[addCapitalOutlay] Inferred legacy Proposal linkage via fiscalYear+budgetType+region:', legacyProposal._id);
+        } else {
+          console.warn('[addCapitalOutlay] Inference failed; entry will remain unlinked');
+        }
+      } catch (infErr) {
+        console.warn('[addCapitalOutlay] Inference error:', infErr.message);
+      }
     }
 
     const newOutlay = new CapitalOutlay({

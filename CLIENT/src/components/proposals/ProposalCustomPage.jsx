@@ -66,6 +66,7 @@ import {
   SpeedDialAction,
   SpeedDialIcon,
   Fab,
+  InputAdornment,
 } from "@mui/material";
 import ExpandMore from "@mui/icons-material/ExpandMore";
 import { useUser } from "../../context/UserContext";
@@ -96,6 +97,7 @@ import MenuIcon from "@mui/icons-material/Menu";
 import CloseIcon from "@mui/icons-material/Close";
 import CheckIcon from "@mui/icons-material/Check";
 import DraftsIcon from "@mui/icons-material/Drafts";
+import SearchIcon from "@mui/icons-material/Search";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import BudgetSummary from "./BudgetSummary";
 import { hasPermission, PERMISSIONS } from "../../utils/permissions";
@@ -178,6 +180,7 @@ const ProposalCustomPage = ({
   });
   const [isCreateDialogOpen, setCreateDialogOpen] = useState(false);
   const [currentProposalId, setCurrentProposalId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const createProposalMutation = useMutation({
     mutationFn: (newProposal) => {
@@ -190,6 +193,12 @@ const ProposalCustomPage = ({
       // New workflow controller returns { success, message, data: <proposal> }
       const proposalId = response.data?.data?._id;
       setCurrentProposalId(proposalId);
+      try {
+        if (proposalId) {
+          sessionStorage.setItem('activeWorkflowRef', proposalId);
+          localStorage.setItem('activeWorkflowRef', proposalId);
+        }
+      } catch (_) {}
       toast.success("Proposal created successfully!");
       setCreateDialogOpen(false);
       setNewProposalData({
@@ -2445,27 +2454,71 @@ const ProposalCustomPage = ({
     <StyledBox>
       {/* Modern Header Section */}
       <Paper 
-        elevation={3} 
+        elevation={0}
         sx={{ 
           p: 3, 
-          mb: 3, 
-          borderRadius: 2,
-          background: 'linear-gradient(135deg, #375e38 0%, #2e4d30 100%)',
+          mb: 0, 
+          borderRadius: 0,
+          background: 'linear-gradient(135deg, #2d5016 0%, #1b3a1b 100%)',
           color: 'white',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+          boxShadow: 'none',
           transition: 'all 0.3s ease',
-          '&:hover': {
-            boxShadow: '0 12px 40px rgba(0,0,0,0.2)',
-            transform: 'translateY(-2px)',
-          }
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 3,
+          flexWrap: 'wrap'
         }}
       >
-        <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: "bold" }}>
-          {title}
-        </Typography>
-        <Typography variant="h5" component="h2" sx={{ opacity: 0.9 }}>
-          {description || "Submit and manage your budget proposals with detailed breakdown of personnel, MOOE, capital outlay, income, and budgetary support"}
-        </Typography>
+        <Box>
+          <Typography variant="h5" component="h1" gutterBottom sx={{ fontWeight: "bold", fontSize: '1.8rem' }}>
+            {title}
+          </Typography>
+          <Typography variant="body1" component="h2" sx={{ opacity: 0.9, fontSize: '0.9rem' }}>
+            {description || "Submit and manage your budget proposals"}
+          </Typography>
+        </Box>
+        <TextField
+          placeholder="Search"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          size="small"
+          variant="outlined"
+          sx={{
+            width: 250,
+            '& .MuiOutlinedInput-root': {
+              color: '#333',
+              backgroundColor: 'white',
+              borderRadius: '6px',
+              '& fieldset': {
+                borderColor: '#e0e0e0',
+              },
+              '&:hover fieldset': {
+                borderColor: '#e0e0e0',
+              },
+              '&.Mui-focused fieldset': {
+                borderColor: '#2d5016',
+                borderWidth: '2px'
+              },
+            },
+            '& .MuiOutlinedInput-input': {
+              '&::placeholder': {
+                opacity: 0.6,
+                color: '#999',
+              },
+            },
+            '& .MuiSvgIcon-root': {
+              color: '#999',
+            }
+          }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ opacity: 0.6, fontSize: '1.2rem' }} />
+              </InputAdornment>
+            ),
+          }}
+        />
       </Paper>
 
       {/* Create Proposal Dialog */}

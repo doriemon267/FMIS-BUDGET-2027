@@ -18,6 +18,26 @@ import {
   Chip,
   IconButton,
   Tooltip,
+            {/* Active WorkflowRef Badge */}
+            {(() => {
+              const activeRef = (selectedProposal?._id) || (typeof window !== 'undefined' ? (sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef')) : null);
+              if (!activeRef) return null;
+              return (
+                <Box sx={{
+                  bgcolor: '#1f3d1f',
+                  border: '1px solid #486848',
+                  px: 1.5,
+                  py: 0.75,
+                  borderRadius: '8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  minWidth: '180px'
+                }}>
+                  <Typography variant="caption" sx={{ fontSize: '0.6rem', letterSpacing: 1, color: '#bcd8bc' }}>ACTIVE WORKFLOW REF</Typography>
+                  <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeRef}</Typography>
+                </Box>
+              );
+            })()}
   Divider,
   Grid,
   Card,

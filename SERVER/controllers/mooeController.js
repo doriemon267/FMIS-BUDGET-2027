@@ -910,7 +910,24 @@ exports.bulkSaveMOOE = async (req, res) => {
         console.warn('[bulkSaveMOOE] No legacy Proposal found for workflowRef:', ownerWorkflowId);
       }
     } else {
-      console.warn('[bulkSaveMOOE] Missing workflow proposalId in request; MOOE entries will not aggregate');
+      console.warn('[bulkSaveMOOE] Missing workflow proposalId in request; attempting inference');
+      try {
+        const activeSettings = await Settings.findOne({ isActive: true });
+        const inferQuery = {
+          fiscalYear: activeSettings?.fiscalYear ? String(activeSettings.fiscalYear) : undefined,
+          budgetType: activeSettings?.budgetType,
+          region: ownerRegion
+        };
+        Object.keys(inferQuery).forEach(k => inferQuery[k] === undefined && delete inferQuery[k]);
+        legacyProposalForMOOE = await Proposal.findOne(inferQuery).select('_id');
+        if (legacyProposalForMOOE) {
+          console.warn('[bulkSaveMOOE] Inferred legacy Proposal linkage:', legacyProposalForMOOE._id);
+        } else {
+          console.warn('[bulkSaveMOOE] Inference failed; entries will remain unlinked');
+        }
+      } catch (infErr) {
+        console.warn('[bulkSaveMOOE] Inference error:', infErr.message);
+      }
     }
     
     console.log('   Resolved ownership:', { ownerRegion, ownerDepartment, ownerDivision, ownerProposalId });
