@@ -1114,11 +1114,11 @@ const NewProposalWorkflowPage = () => {
             </TableContainer>
 
             <Box sx={{ 
-              p: 3, 
-              bgcolor: '#fafafa',
-              borderTop: '2px solid #e8e8e8',
+              p: 1.5,
+              bgcolor: 'white',
+              borderTop: '1px solid #e0e0e0',
               display: 'flex',
-              justifyContent: 'space-between',
+              justifyContent: 'flex-start',
               alignItems: 'center',
               flexWrap: 'wrap',
               gap: 2
@@ -1166,16 +1166,16 @@ const NewProposalWorkflowPage = () => {
                     onClick={() => handleChangePage(null, page - 1)}
                     disabled={page === 0}
                     sx={{ 
-                      color: '#4CAF50',
+                      color: BRAND_COLORS.darkGreen,
                       bgcolor: 'white',
-                      border: '2px solid #4CAF50',
+                      border: `2px solid ${BRAND_COLORS.darkGreen}`,
                       borderRadius: '8px',
                       fontWeight: 'bold',
                       transition: 'all 0.2s ease',
                       '&:hover': {
-                        bgcolor: '#f0f7ed',
+                        bgcolor: '#f4f7f4',
                         transform: 'translateY(-2px)',
-                        boxShadow: '0 2px 8px rgba(76, 175, 80, 0.2)'
+                        boxShadow: '0 2px 8px rgba(55, 94, 56, 0.2)'
                       },
                       '&.Mui-disabled': {
                         bgcolor: '#f5f5f5',
@@ -1189,7 +1189,7 @@ const NewProposalWorkflowPage = () => {
                   <Box sx={{ 
                     px: 2, 
                     py: 0.75, 
-                    bgcolor: '#4CAF50', 
+                    bgcolor: BRAND_COLORS.darkGreen, 
                     color: 'white',
                     borderRadius: '8px',
                     display: 'flex',
@@ -1197,7 +1197,7 @@ const NewProposalWorkflowPage = () => {
                     minWidth: 45,
                     justifyContent: 'center',
                     fontWeight: 600,
-                    boxShadow: '0 2px 4px rgba(76, 175, 80, 0.3)'
+                    boxShadow: '0 2px 4px rgba(55, 94, 56, 0.3)'
                   }}>
                     {page + 1}
                   </Box>
@@ -1206,16 +1206,16 @@ const NewProposalWorkflowPage = () => {
                     onClick={() => handleChangePage(null, page + 1)}
                     disabled={(page + 1) * rowsPerPage >= filteredProposals.length}
                     sx={{ 
-                      color: '#4CAF50',
+                      color: BRAND_COLORS.darkGreen,
                       bgcolor: 'white',
-                      border: '2px solid #4CAF50',
+                      border: `2px solid ${BRAND_COLORS.darkGreen}`,
                       borderRadius: '8px',
                       fontWeight: 'bold',
                       transition: 'all 0.2s ease',
                       '&:hover': {
-                        bgcolor: '#f0f7ed',
+                        bgcolor: '#f4f7f4',
                         transform: 'translateY(-2px)',
-                        boxShadow: '0 2px 8px rgba(76, 175, 80, 0.2)'
+                        boxShadow: '0 2px 8px rgba(55, 94, 56, 0.2)'
                       },
                       '&.Mui-disabled': {
                         bgcolor: '#f5f5f5',
