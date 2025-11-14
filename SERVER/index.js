@@ -135,6 +135,8 @@ mongoose.connection.once('open', async () => {
   }
 });
 const app = express();
+// Attach workflowRef middleware early so body gets populated before routers
+const attachWorkflowRef = require('./middleware/attachWorkflowRef');
 const server = http.createServer(app);
 // Socket.IO setup with explicit allowed origins (separate from Express CORS)
 const allowedSocketOrigins = [
@@ -311,13 +313,13 @@ app.use(authRouter);
 app.use(personnelRoutes);
 //Position Title Routes
 app.use(positionTitleRoutes);
-app.use(mooeRoutes);
+app.use(attachWorkflowRef, mooeRoutes);
 app.use(fiscalYearRoutes);
 //Department Title Routes
 app.use(departmentRouter);
-app.use(personnelServicesRouter);
+app.use(attachWorkflowRef, personnelServicesRouter);
 app.use("/api", excelUploadRouter); // Excel Upload Route
-app.use(capitalOutlayRouter);
+app.use(attachWorkflowRef, capitalOutlayRouter);
 app.use("/api", capitalOutlayDetailsRouter);
 app.use(categoryRouter);
 // app.use(proposalRouter);  // DISABLED - Using RBAC router instead
@@ -374,7 +376,8 @@ app.use("/stats", statsRouter);
 app.use(childrenAllowance);
 app.use("/api/export", exportRoutes);
 app.use(medicalAllowanceRouter);
-app.use(incomeRouter);
+// Income routes also benefit from unified workflowRef injection
+app.use(attachWorkflowRef, incomeRouter);
 app.use(income_categories);
 app.use("/income", incomeExcelUploadRouter); // Mount under /income prefix
 app.use("/api/consolidated-reports", consolidatedReportsRouter); // Mount consolidated reports routes
