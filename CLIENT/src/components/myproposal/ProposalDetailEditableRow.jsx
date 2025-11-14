@@ -13,6 +13,7 @@ import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Close';
 import DeleteIcon from '@mui/icons-material/Delete';
 import api from '../../config/api';
+import { getStoredWorkflowRef } from '../../hooks/useWorkflowRef';
 import { toast } from 'react-toastify';
 
 const ProposalDetailEditableRow = ({ 
@@ -50,8 +51,10 @@ const ProposalDetailEditableRow = ({
         endpoint = `/income/${row._id}`;
       }
 
-      // Make the API call to update the data
-      await api.put(endpoint, editedData);
+  // Ensure proposal linkage
+  const activeRef = getStoredWorkflowRef();
+  const payload = { ...editedData, ...(activeRef ? { proposalId: activeRef } : {}) };
+  await api.put(endpoint, payload, { headers: activeRef ? { 'X-Workflow-Ref': activeRef } : {} });
       toast.success('Item updated successfully');
       setIsEditing(false);
       refreshData();
@@ -77,8 +80,8 @@ const ProposalDetailEditableRow = ({
         endpoint = `/income/${row._id}`;
       }
 
-      // Make the API call to delete the data
-      await api.delete(endpoint);
+  const activeRef = getStoredWorkflowRef();
+  await api.delete(endpoint, { headers: activeRef ? { 'X-Workflow-Ref': activeRef } : {} });
       toast.success('Item deleted successfully');
       refreshData();
     } catch (error) {

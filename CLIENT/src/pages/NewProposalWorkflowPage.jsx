@@ -425,17 +425,20 @@ const NewProposalWorkflowPage = () => {
       });
       
       const savePromises = [];
+      const activeWorkflowRef = (selectedProposal?._id) || (typeof window !== 'undefined' ? (sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef')) : null);
+      const headerOpt = activeWorkflowRef ? { headers: { 'X-Workflow-Ref': activeWorkflowRef } } : {};
+      const injectRef = (arr = []) => arr.map(it => ({ ...it, proposalId: it.proposalId || activeWorkflowRef }));
       if (changedByCategory.income) {
-        savePromises.push(api.put('/income/bulk-update', { items: changedByCategory.income }));
+        savePromises.push(api.put('/income/bulk-update', { items: injectRef(changedByCategory.income) }, headerOpt));
       }
       if (changedByCategory.personnel) {
-        savePromises.push(api.put('/api/personnel/bulk-update', { items: changedByCategory.personnel }));
+        savePromises.push(api.put('/api/personnel/bulk-update', { items: injectRef(changedByCategory.personnel) }, headerOpt));
       }
       if (changedByCategory.mooe) {
-        savePromises.push(api.put('/mooe/bulk-update', { items: changedByCategory.mooe }));
+        savePromises.push(api.put('/mooe/bulk-update', { items: injectRef(changedByCategory.mooe) }, headerOpt));
       }
       if (changedByCategory.capitalOutlay) {
-        savePromises.push(api.put('/capital-outlay/bulk-update', { items: changedByCategory.capitalOutlay }));
+        savePromises.push(api.put('/capital-outlay/bulk-update', { items: injectRef(changedByCategory.capitalOutlay) }, headerOpt));
       }
       
       await Promise.all(savePromises);
