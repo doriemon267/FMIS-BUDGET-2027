@@ -13,6 +13,7 @@ import AddIcon from '@mui/icons-material/Add';
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Close';
 import api from '../../config/api';
+import { getStoredWorkflowRef } from '../../hooks/useWorkflowRef';
 import { toast } from 'react-toastify';
 
 const ProposalDetailAddRow = ({ 
@@ -48,7 +49,10 @@ const ProposalDetailAddRow = ({
       }
 
       // Make the API call to add the data
-      await api.post(endpoint, newData);
+  // Ensure proposalId present (fallback to stored workflowRef if parent prop missing)
+  const activeRef = proposalId || getStoredWorkflowRef();
+  const payload = { ...newData, proposalId: activeRef };
+  await api.post(endpoint, payload, { headers: activeRef ? { 'X-Workflow-Ref': activeRef } : {} });
       toast.success('Item added successfully');
       setIsAdding(false);
       setNewData({});
