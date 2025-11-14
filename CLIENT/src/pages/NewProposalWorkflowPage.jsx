@@ -106,11 +106,14 @@ const NewProposalWorkflowPage = () => {
   // State management - BRD users start at "Pending Review" (index 1), others at "My Proposals" (index 0)
   const [activeTab, setActiveTab] = useState(isBRDUser ? 1 : 0);
   
-  // Handle view parameter from query string (e.g., from notifications)
-  // Handle view parameter (after tabs definition) - we defer execution until tabs are built
+  // Build tabs dynamically (include Monitoring for Budget Manager)
+  const isBudgetManager = currentUser?.Roles?.includes('BUDGET MANAGER') || currentUser?.Roles?.includes('BUDGET_MANAGER');
+  const tabs = isBudgetManager ? [...BASE_TABS, { label: 'Monitoring', value: 'monitoring' }] : BASE_TABS;
+
+  // Handle view parameter from query string (e.g., notifications deep link)
   useEffect(() => {
     const viewParam = searchParams.get('view');
-    if (viewParam && tabs) {
+    if (viewParam) {
       const tabIndex = tabs.findIndex(tab => tab.value === viewParam);
       if (tabIndex !== -1) setActiveTab(tabIndex);
     }
@@ -193,9 +196,7 @@ const NewProposalWorkflowPage = () => {
     }
   }, [activeRegion, activeTab]);
 
-  // Build tabs dynamically (include Monitoring for Budget Manager)
-  const isBudgetManager = currentUser?.Roles?.includes('BUDGET MANAGER') || currentUser?.Roles?.includes('BUDGET_MANAGER');
-  const tabs = isBudgetManager ? [...BASE_TABS, { label: 'Monitoring', value: 'monitoring' }] : BASE_TABS;
+  // tabs already built above
 
   useEffect(() => {
     fetchProposals();
