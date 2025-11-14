@@ -342,13 +342,14 @@ exports.getProposals = async (req, res) => {
 
           const pendingDb = pendingEnum.map(code => reverseStatusMapping[code] || code);
 
-          // Manager visibility enhancement: if role is Budget Manager, also include items currently at Analyst or Officer stages
+          // Manager visibility enhancement: include analyst/officer stages and their returned variants
           if (userRole === 'BUDGET MANAGER') {
             const analystOfficerStatuses = [
               reverseStatusMapping['FORWARDED_TO_BRD_ANALYST'],
-              reverseStatusMapping['FORWARDED_TO_BRD_OFFICER']
+              reverseStatusMapping['FORWARDED_TO_BRD_OFFICER'],
+              reverseStatusMapping['RETURNED_TO_PLANNING_ANALYST'],
+              reverseStatusMapping['RETURNED_TO_OFFICER']
             ].filter(Boolean);
-            // Merge unique statuses
             const merged = new Set([...(pendingDb || []), ...analystOfficerStatuses]);
             query.status = { $in: Array.from(merged) };
           } else {
@@ -374,6 +375,26 @@ exports.getProposals = async (req, res) => {
         if (userRole !== 'SUPER ADMIN' && userRole !== 'BUDGET MANAGER') {
           // Restrict 'all' view for non-admins, e.g., to their region/department
           // This logic can be expanded based on hierarchical assignments
+        }
+        break;
+      case 'monitoring':
+        // Provide aggregated monitoring for Budget Manager
+        if (userRole === 'BUDGET MANAGER') {
+          const monitorStatuses = [
+            'Forwarded to Budget Planning Analyst',
+            'Forwarded to Budget Officer',
+            'Forwarded to Overall Budget Approver',
+            'Returned to Budget Planning Analyst',
+            'Returned to Budget Officer'
+          ];
+          query.status = { $in: monitorStatuses };
+        } else {
+          return res.json({
+            success: true,
+            proposals: [],
+            metrics: {},
+            pagination: { page: 1, limit: 10, total: 0, pages: 0 }
+          });
         }
         break;
       default:
@@ -455,11 +476,21 @@ exports.getProposals = async (req, res) => {
       });
     });
 
-  // Silent return
+    // Metrics aggregation for monitoring view
+    let metrics = undefined;
+    if (view === 'monitoring' && userRole === 'BUDGET MANAGER') {
+      metrics = mappedNewProposals.reduce((acc, p) => {
+        acc.total = (acc.total || 0) + 1;
+        acc.byStatus = acc.byStatus || {};
+        acc.byStatus[p.status] = (acc.byStatus[p.status] || 0) + 1;
+        return acc;
+      }, {});
+    }
 
     res.json({
       success: true,
       proposals: mappedNewProposals,
+      metrics,
       pagination: {
         page: pageNum,
         limit: limitNum,
