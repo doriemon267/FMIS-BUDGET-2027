@@ -342,15 +342,25 @@ exports.getProposals = async (req, res) => {
 
           const pendingDb = pendingEnum.map(code => reverseStatusMapping[code] || code);
 
-          if (pendingDb.length === 0) {
+          // Manager visibility enhancement: if role is Budget Manager, also include items currently at Analyst or Officer stages
+          if (userRole === 'BUDGET MANAGER') {
+            const analystOfficerStatuses = [
+              reverseStatusMapping['FORWARDED_TO_BRD_ANALYST'],
+              reverseStatusMapping['FORWARDED_TO_BRD_OFFICER']
+            ].filter(Boolean);
+            // Merge unique statuses
+            const merged = new Set([...(pendingDb || []), ...analystOfficerStatuses]);
+            query.status = { $in: Array.from(merged) };
+          } else {
+            query.status = { $in: pendingDb };
+          }
+          if (!query.status.$in || query.status.$in.length === 0) {
             return res.json({
               success: true,
               proposals: [],
               pagination: { page: 1, limit: 10, total: 0, pages: 0 }
             });
           }
-
-          query.status = { $in: pendingDb };
         } else {
           return res.json({
             success: true,
