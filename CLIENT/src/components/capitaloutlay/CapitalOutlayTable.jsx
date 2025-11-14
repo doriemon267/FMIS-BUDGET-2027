@@ -67,6 +67,7 @@ import { useUser } from "../../context/UserContext";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import CapitalOutlayDetailsModal from "./CapitalOutlayDetailsModal";
+import { useWorkflowRef } from "../../hooks/useWorkflowRef";
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -199,6 +200,17 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
       role.toUpperCase().includes('SUPER ADMIN')
     );
   }, [currentUser]);
+
+  const { workflowRef, headerConfig } = useWorkflowRef();
+  const hasWorkflowRef = Boolean(workflowRef);
+
+  const ensureWorkflowRef = useCallback(() => {
+    if (!workflowRef) {
+      toast.error("Create a proposal first to modify capital outlay entries.");
+      return false;
+    }
+    return true;
+  }, [workflowRef]);
 
   // Enhanced filtering and search
   const filteredData = useMemo(() => {
@@ -528,6 +540,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
   }, [capitalOutlays]);
 
   const handleAutoSave = useCallback(async () => {
+    if (!ensureWorkflowRef()) return;
     try {
       // Check if there are any pending edits to save
       if (editingId && editedOutlay && Object.keys(editedOutlay).length > 0) {
@@ -560,14 +573,14 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
           processDate: new Date(),
           fiscalYear,
           budgetType,
-        });
+        }, { headers: headerConfig() });
 
         // Refresh data
         const params = new URLSearchParams();
         if (regionFilter) {
           params.append('region', regionFilter);
         }
-        const res = await api.get(`/capital-outlays?${params.toString()}`);
+  const res = await api.get(`/capital-outlays?${params.toString()}`);
         const updatedData = res.data.capitalOutlays.map((item) => ({
           ...item,
           status: item.status || "Not Submitted",
@@ -603,7 +616,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
       console.error("Auto-save failed:", error);
       toast.error(`Auto-save failed: ${error.response?.data?.error || error.message}`);
     }
-  }, [editingId, editedOutlay, newOutlays, currentUser, fiscalYear, budgetType, onDataChange, disableIncomeInputs, capitalOutlays, validateInput]);
+  }, [editingId, editedOutlay, newOutlays, currentUser, fiscalYear, budgetType, onDataChange, disableIncomeInputs, capitalOutlays, validateInput, ensureWorkflowRef, headerConfig]);
 
   const handleSelectAll = useCallback(() => {
     if (selectedRows.length === filteredData.length) {
@@ -838,6 +851,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
 
   const handleSaveEdit = useCallback(
     async (id) => {
+      if (!ensureWorkflowRef()) return;
       if (!validateInput(editedOutlay)) {
         toast.error("Please fix all validation errors before saving");
         return;
@@ -862,20 +876,20 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
         payload.subsidy = subsidy;
         payload.cost = income + subsidy;
 
-        await api.put(`/capital-outlays/${id}`, {
+        await api.put(`/capital-outlays/${id}` ,{
           ...payload,
           processBy: `${currentUser.FirstName} ${currentUser.LastName}`,
           region: regionFilter || activeRegion?.name || currentUser.Region,
           processDate: new Date(),
           fiscalYear,
           budgetType,
-        });
+        }, { headers: headerConfig() });
 
         const params = new URLSearchParams();
         if (regionFilter) {
           params.append('region', regionFilter);
         }
-        const res = await api.get(`/capital-outlays?${params.toString()}`);
+  const res = await api.get(`/capital-outlays?${params.toString()}`);
         const updatedData = res.data.capitalOutlays.map((item) => ({
           ...item,
           status: item.status || "Not Submitted",
@@ -911,7 +925,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
         setLoading(false);
       }
     },
-    [editedOutlay, currentUser, fiscalYear, budgetType, onDataChange, disableIncomeInputs, capitalOutlays]
+    [editedOutlay, currentUser, fiscalYear, budgetType, onDataChange, disableIncomeInputs, capitalOutlays, ensureWorkflowRef, headerConfig]
   );
 
   const handleCancelEdit = useCallback(() => {
@@ -927,7 +941,8 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
         setLoading(true);
         // Debug: log the actual URL and config
         // Use axios config to ensure no params are sent
-        await api.delete(`/capital-outlays/${id}`, { params: {} });
+        if (!ensureWorkflowRef()) return;
+        await api.delete(`/capital-outlays/${id}`, { params: {}, headers: headerConfig() });
         // Only use region param for GET refresh
         const params = new URLSearchParams();
         if (regionFilter) {
@@ -965,7 +980,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
         setLoading(false);
       }
     },
-    [onDataChange, regionFilter]
+    [onDataChange, regionFilter, ensureWorkflowRef, headerConfig]
   );
 
   const isDuplicateOutlay = useCallback(
@@ -983,6 +998,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
 
   const handleAddOutlay = useCallback(
     async (categoryId) => {
+      if (!ensureWorkflowRef()) return;
       const newEntry = newOutlays[categoryId] || {};
       if (!validateInput(newEntry, true)) {
         toast.error("Please fix all validation errors before saving");
@@ -1013,7 +1029,8 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
           fiscalYear,
           budgetType,
           status: "Not Submitted",
-        });
+          proposalId: workflowRef,
+        }, { headers: headerConfig() });
 
         // Add the new item to existing state instead of refetching all data
         const newItem = {
@@ -1070,7 +1087,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
         setLoading(false);
       }
     },
-    [newOutlays, currentUser, fiscalYear, budgetType, onDataChange, validateInput, disableIncomeInputs, handleOpenDetailsModal, capitalOutlays, regionFilter, activeRegion]
+    [newOutlays, currentUser, fiscalYear, budgetType, onDataChange, validateInput, disableIncomeInputs, handleOpenDetailsModal, capitalOutlays, regionFilter, activeRegion, ensureWorkflowRef, headerConfig, workflowRef]
   );
 
   const handleOutlayChange = useCallback(
@@ -1290,9 +1307,16 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
           startIcon={<Add />}
           onClick={(e) => setAddMenuAnchorEl(e.currentTarget)}
           sx={{ minWidth: 120 }}
+          disabled={!hasWorkflowRef}
         >
           Add Item
         </Button>
+
+        {!hasWorkflowRef && (
+          <Typography variant="caption" color="error">
+            Create a proposal first to unlock capital outlay editing.
+          </Typography>
+        )}
 
         {/* Results counter */}
         <Typography variant="body2" color="text.secondary">

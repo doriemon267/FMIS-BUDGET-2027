@@ -726,32 +726,14 @@ exports.performAction = async (req, res) => {
 
     const newWorkflowStatus = transitions[workflowStatus][action];
 
-    // Map status back from workflow format to Proposal format
-    const reverseStatusMapping = {
-      'DRAFT': 'Draft',
-      'FORWARDED_TO_REVIEWER': 'Forwarded to Reviewer',
-      'FORWARDED_TO_APPROVER': 'Forwarded to Approver',
-      'FORWARDED_TO_BRD_ANALYST': 'Forwarded to Budget Planning Analyst',
-      'FORWARDED_TO_BRD_OFFICER': 'Forwarded to Budget Officer',
-      'FORWARDED_TO_BRD_MANAGER': 'Forwarded to Overall Budget Approver',
-      'FINALIZED': 'Finalized',
-      'RETURNED_TO_PREPARER': 'Returned',
-      'RETURNED_TO_REVIEWER': 'Returned',
-      'RETURNED_TO_APPROVER': 'Returned',
-      'RETURNED_TO_PLANNING_ANALYST': 'Returned to Budget Planning Analyst',
-      'RETURNED_TO_OFFICER': 'Returned to Budget Officer'
-    };
-
-    const newStatus = reverseStatusMapping[newWorkflowStatus] || newWorkflowStatus;
-
     // Update proposal
     const oldStatus = proposal.status;
-    proposal.status = newStatus;
+    proposal.status = newWorkflowStatus;
     proposal.workflowHistory = proposal.workflowHistory || [];
     proposal.workflowHistory.push({
       action,
       fromStatus: oldStatus,
-      toStatus: newStatus,
+      toStatus: newWorkflowStatus,
       performedBy: userId,
       performedByName: userName,
       comment: comment || ''

@@ -45,6 +45,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import GetAppIcon from '@mui/icons-material/GetApp';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import EditIcon from '@mui/icons-material/Edit';
+import { useWorkflowRef } from "../../hooks/useWorkflowRef";
 
 // Helper function to format currency
 const formatCurrency = (amount) => {
@@ -81,6 +82,8 @@ const PSCasualCustomPageTable = ({
   const [compensation, setCompensation] = useState({});
   const { currentUser } = useUser();
   const queryClient = useQueryClient();
+  const { workflowRef, headerConfig } = useWorkflowRef();
+  const hasWorkflowRef = Boolean(workflowRef);
 
   // New state for view details
   const [selectedPersonnel, setSelectedPersonnel] = useState(null);
@@ -175,6 +178,10 @@ const PSCasualCustomPageTable = ({
   const handleAddAllPersonnel = useCallback(async () => {
     setLoading(true);
     try {
+      if (!workflowRef) {
+        toast.error("Create a proposal first to unlock casual personnel bulk add.");
+        return;
+      }
       let currentFiscalYear = fiscalYear;
       let currentBudgetType = budgetType;
       let currentPERA = PERA;
@@ -223,8 +230,9 @@ const PSCasualCustomPageTable = ({
         PERA: currentPERA,
         RATA: RATA.map(item => ({ grade: item.SG, amount: item.RATA })),
         compensation: currentCompensation,
-        region // Include the active region in the request
-      });
+        region, // Include the active region in the request
+        proposalId: workflowRef
+      }, { headers: headerConfig() });
 
       if (response.data.added && Array.isArray(response.data.added)) {
         const addedCount = response.data.added.length;
@@ -268,11 +276,17 @@ const PSCasualCustomPageTable = ({
     fetchData,
     queryClient,
     dataListName,
-    fetchActiveSettings
+    fetchActiveSettings,
+    workflowRef,
+    headerConfig
   ]);
 
   const handleOpenDialog = () => {
     if (locked) return;
+    if (!workflowRef) {
+      toast.error("Please create a proposal first before adding casual personnel.");
+      return;
+    }
     setOpenDialog(true);
   };
   const handleCloseDialog = () => setOpenDialog(false);
@@ -709,7 +723,7 @@ const PSCasualCustomPageTable = ({
               variant="contained"
               color="primary"
               onClick={handleOpenDialog}
-              disabled={locked}
+              disabled={locked || !hasWorkflowRef}
               sx={{
                 background: "#009688",
                 color: "#fff",
@@ -723,6 +737,11 @@ const PSCasualCustomPageTable = ({
             >
               Add Casual Personnel
             </Button>
+            {!hasWorkflowRef && (
+              <Typography variant="caption" color="error" sx={{ maxWidth: 260 }}>
+                Create a proposal first to unlock casual personnel entry.
+              </Typography>
+            )}
 
             <Tooltip title="Refresh Data">
               <IconButton

@@ -1,6 +1,7 @@
 import axios from "axios";
 import env from "../utils/env";
 import CryptoJS from "crypto-js"; // Import CryptoJS
+import { getStoredWorkflowRef } from "../hooks/useWorkflowRef";
 
 // Function to get the stored token (decrypt it first)
 const getToken = () => {
@@ -30,6 +31,16 @@ api.interceptors.request.use(
     const token = getToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    const workflowRef = getStoredWorkflowRef();
+    if (workflowRef) {
+      const hasWorkflowHeader = Object.keys(config.headers || {}).some(
+        (key) => key?.toLowerCase() === "x-workflow-ref"
+      );
+      if (!hasWorkflowHeader) {
+        config.headers["X-Workflow-Ref"] = workflowRef;
+      }
     }
 
     // Dev-only header to tell the backend which userId to use when ACCOUNT_USER_API_URL is not set

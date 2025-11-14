@@ -46,6 +46,7 @@ import api from "../../config/api";
 import { useUser } from "../../context/UserContext";
 import "react-toastify/dist/ReactToastify.css";
 import { NumericFormat } from "react-number-format";
+import { useWorkflowRef } from "../../hooks/useWorkflowRef";
 
 // Custom component for numeric input formatting - memoized for performance
 const NumberFormatCustom = React.memo(React.forwardRef(function NumberFormatCustom(props, ref) {
@@ -106,6 +107,8 @@ const Mooe = ({ onDataChange, locked = false }) => {
   const queryClient = useQueryClient();
   const [expandedRows, setExpandedRows] = useState([]);
   const [disableIncomeInputs, setDisableIncomeInputs] = useState(false);
+  const { workflowRef, headerConfig } = useWorkflowRef();
+  const hasWorkflowRef = Boolean(workflowRef);
 
   // Debug user and region loading
   useEffect(() => {
@@ -953,7 +956,7 @@ const Mooe = ({ onDataChange, locked = false }) => {
     mutationFn: async (payload) => {
       try {
         // Use the same API instance and endpoint as data loading, but POST
-        const response = await api.post('/mooe-data', payload, { withCredentials: true });
+  const response = await api.post('/mooe-data', payload, { withCredentials: true, headers: headerConfig() });
         if (!response.data) {
           throw new Error('No response data from server');
         }
@@ -968,6 +971,13 @@ const Mooe = ({ onDataChange, locked = false }) => {
   });
 
   const handleSave = (isAutoSave = false) => {
+
+    if (!workflowRef) {
+      if (!isAutoSave) {
+        toast.error("Create a proposal in the workflow tab before saving MOOE entries.");
+      }
+      return;
+    }
 
     // Enhanced validation checks
     if (!data?.formattedData) {
@@ -1119,6 +1129,7 @@ const Mooe = ({ onDataChange, locked = false }) => {
     });
 
     const payload = {
+      proposalId: workflowRef,
       meta: {
         processBy: `${currentUser.FirstName} ${currentUser.LastName}`,
         processDate: new Date(),
@@ -1202,8 +1213,12 @@ const Mooe = ({ onDataChange, locked = false }) => {
   const handleClear = async () => {
     try {
       // Call backend to delete all MOOE proposals for the active fiscal year and region
+      if (!workflowRef) {
+        toast.error("Create a proposal first to clear MOOE drafts.");
+        return;
+      }
       const regionName = activeRegion?.name || activeRegion?.regionName;
-      await api.delete("/mooe-delete", { params: { region: regionName } });
+  await api.delete("/mooe-delete", { params: { region: regionName }, headers: headerConfig() });
       toast.success("MOOE data cleared successfully.");
       // Refresh the table data
       queryClient.invalidateQueries(["mooeData"]);
@@ -1295,7 +1310,7 @@ const Mooe = ({ onDataChange, locked = false }) => {
     );
   }
 
-  const isEditable = ["Not Submitted", "Returned", "Draft"].includes(
+  const isEditable = hasWorkflowRef && ["Not Submitted", "Returned", "Draft"].includes(
     data?.status
   ) && !locked;
 
@@ -1469,6 +1484,12 @@ const Mooe = ({ onDataChange, locked = false }) => {
               disabled={!isEditable}
             />
 
+            {!hasWorkflowRef && (
+              <Typography variant="caption" color="error" sx={{ maxWidth: 260 }}>
+                Create a proposal first to unlock MOOE editing and saving.
+              </Typography>
+            )}
+
             {/* Auto-save toggle */}
             <FormControlLabel
               control={
@@ -1476,6 +1497,7 @@ const Mooe = ({ onDataChange, locked = false }) => {
                   checked={autoSave}
                   onChange={(e) => setAutoSave(e.target.checked)}
                   color="primary"
+                  disabled={!hasWorkflowRef}
                 />
               }
               label={

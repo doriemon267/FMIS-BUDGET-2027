@@ -97,7 +97,7 @@ capitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl
       if (division) query.division = division;
     }
     
-    const capitalOutlay = await CapitalOutlay.find(query).lean();
+    const capitalOutlay = await CapitalOutlay.find(query).populate('category', 'categoryName').lean();
     res.status(200).json(capitalOutlay);
   } catch (error) {
     console.error("Error fetching Capital Outlay by params:", error);

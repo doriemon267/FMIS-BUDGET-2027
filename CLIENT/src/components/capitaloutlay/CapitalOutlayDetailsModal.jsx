@@ -33,9 +33,7 @@ import api from "../../config/api";
 import { toast } from "react-toastify";
 import { useUser } from "../../context/UserContext";
 import { useRegion } from "../../context/RegionContext";
-
-const isValidCapitalOutlayUacs = (code) =>
-  typeof code === "string" && /^(5-01|5-02)-/i.test(code.trim());
+import { useWorkflowRef } from "../../hooks/useWorkflowRef";
 
 // Custom number format component for currency inputs
 const NumberFormatCustom = React.forwardRef(function NumberFormatCustom(props, ref) {
@@ -63,8 +61,8 @@ const NumberFormatCustom = React.forwardRef(function NumberFormatCustom(props, r
 });
 
 NumberFormatCustom.propTypes = {
-  onChange: PropTypes.func.isRequired,
   name: PropTypes.string.isRequired,
+  onChange: PropTypes.func.isRequired,
 };
 
 const CapitalOutlayDetailsModal = ({
@@ -74,6 +72,8 @@ const CapitalOutlayDetailsModal = ({
   accountingTitle = "",
   onSave,
   temporaryItem = null, // New prop for temporary items that aren't saved yet
+  editingDisabled = false,
+  editingDisabledReason = "",
 }) => {
   const [details, setDetails] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -81,6 +81,14 @@ const CapitalOutlayDetailsModal = ({
   const [errors, setErrors] = useState({});
   const { currentUser } = useUser();
   const { activeRegion } = useRegion();
+  const { workflowRef, headerConfig } = useWorkflowRef();
+  const ensureWorkflowRef = useCallback(() => {
+    if (!workflowRef) {
+      toast.error("Create a proposal first to modify capital outlay entries.");
+      return false;
+    }
+    return true;
+  }, [workflowRef]);
 
   // Initialize with one empty row
   const initializeEmptyRow = () => ({
@@ -226,6 +234,11 @@ const CapitalOutlayDetailsModal = ({
     console.log("Details:", details);
     console.log("Temporary Item:", temporaryItem);
     console.log("Capital Outlay ID:", capitalOutlayId);
+
+    if (editingDisabled) {
+      toast.error(editingDisabledReason || "Capital outlay editing is currently disabled.");
+      return;
+    }
     
     const validationResult = validateDetails();
     console.log("Validation result:", validationResult);
@@ -234,6 +247,10 @@ const CapitalOutlayDetailsModal = ({
     if (!validationResult) {
       console.log("Validation failed, showing error toast");
       toast.error("Please fix the validation errors before saving");
+      return;
+    }
+
+    if (!ensureWorkflowRef()) {
       return;
     }
 
@@ -284,7 +301,8 @@ const CapitalOutlayDetailsModal = ({
             fiscalYear: temporaryItem.fiscalYear,
             budgetType: temporaryItem.budgetType,
             status: "Draft",
-          });
+            proposalId: workflowRef,
+          }, { headers: headerConfig() });
           createdCapitalOutlay = capitalOutlayResponse?.data?.capitalOutlay || null;
           newCapitalOutlayId = createdCapitalOutlay?._id;
         } catch (createErr) {
@@ -326,10 +344,11 @@ const CapitalOutlayDetailsModal = ({
             subsidy_amount: parseFloat(detail.subsidy_amount) || 0,
           })),
           processBy,
+          proposalId: workflowRef,
         };
         
         console.log("Sending details payload for new item:", detailsPayload);
-        const detailsResponse = await api.post(`/api/capital-outlay/${newCapitalOutlayId}/details`, detailsPayload);
+        const detailsResponse = await api.post(`/api/capital-outlay/${newCapitalOutlayId}/details`, detailsPayload, { headers: headerConfig() });
 
         if (detailsResponse.data.success) {
           toast.success("Capital outlay item and breakdown details saved successfully!");
@@ -385,11 +404,12 @@ const CapitalOutlayDetailsModal = ({
             subsidy_amount: parseFloat(detail.subsidy_amount) || 0,
           })),
           processBy,
+          proposalId: workflowRef,
         };
         
         console.log("Sending details payload for existing item:", detailsPayload);
         console.log("Capital outlay ID:", capitalOutlayId);
-        const response = await api.post(`/api/capital-outlay/${capitalOutlayId}/details`, detailsPayload);
+        const response = await api.post(`/api/capital-outlay/${capitalOutlayId}/details`, detailsPayload, { headers: headerConfig() });
 
         if (response.data.success) {
           toast.success("Details saved successfully");
@@ -485,6 +505,11 @@ const CapitalOutlayDetailsModal = ({
       </DialogTitle>
 
       <DialogContent dividers>
+        {editingDisabled && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            {editingDisabledReason || "Capital outlay editing is currently disabled."}
+          </Alert>
+        )}
         {loading ? (
           <Box display="flex" justifyContent="center" p={4}>
             <CircularProgress />
@@ -497,6 +522,7 @@ const CapitalOutlayDetailsModal = ({
                 startIcon={<AddIcon />}
                 onClick={handleAddRow}
                 size="small"
+                disabled={editingDisabled}
               >
                 Add Row
               </Button>
@@ -540,6 +566,7 @@ const CapitalOutlayDetailsModal = ({
                           error={!!errors[`particulars_${index}`]}
                           helperText={errors[`particulars_${index}`]}
                           size="small"
+                          disabled={editingDisabled}
                         />
                       </TableCell>
                       <TableCell>
@@ -558,6 +585,7 @@ const CapitalOutlayDetailsModal = ({
                           error={!!errors[`income_amount_${index}`]}
                           helperText={errors[`income_amount_${index}`]}
                           size="small"
+                          disabled={editingDisabled}
                         />
                       </TableCell>
                       <TableCell>
@@ -576,6 +604,7 @@ const CapitalOutlayDetailsModal = ({
                           error={!!errors[`subsidy_amount_${index}`]}
                           helperText={errors[`subsidy_amount_${index}`]}
                           size="small"
+                          disabled={editingDisabled}
                         />
                       </TableCell>
                       <TableCell align="center">
@@ -585,7 +614,7 @@ const CapitalOutlayDetailsModal = ({
                               onClick={() => handleRemoveRow(index)}
                               size="small"
                               color="error"
-                              disabled={details.length === 1}
+                              disabled={details.length === 1 || editingDisabled}
                             >
                               <DeleteIcon fontSize="small" />
                             </IconButton>
@@ -682,7 +711,7 @@ const CapitalOutlayDetailsModal = ({
           }}
           variant="contained"
           startIcon={saving ? <CircularProgress size={16} /> : <SaveIcon />}
-          disabled={saving || loading}
+          disabled={saving || loading || editingDisabled}
         >
           {saving ? "Saving..." : "Save"}
         </Button>
@@ -710,6 +739,8 @@ CapitalOutlayDetailsModal.propTypes = {
     fiscalYear: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
     budgetType: PropTypes.string,
   }),
+  editingDisabled: PropTypes.bool,
+  editingDisabledReason: PropTypes.string,
 };
 
 export default CapitalOutlayDetailsModal;

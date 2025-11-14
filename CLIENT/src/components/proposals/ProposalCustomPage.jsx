@@ -2451,15 +2451,14 @@ const ProposalCustomPage = ({
   };
 
   return (
-    <StyledBox>
+    <Box sx={{ p: 0, bgcolor: 'white', minHeight: '100vh' }}>
       {/* Modern Header Section */}
       <Paper 
         elevation={0}
         sx={{ 
-          p: 3, 
-          mb: 0, 
+          p: 2.5,
           borderRadius: 0,
-          background: 'linear-gradient(135deg, #2d5016 0%, #1b3a1b 100%)',
+          background: '#375e38',
           color: 'white',
           boxShadow: 'none',
           transition: 'all 0.3s ease',
@@ -2521,6 +2520,7 @@ const ProposalCustomPage = ({
         />
       </Paper>
 
+      <StyledBox>
       {/* Create Proposal Dialog */}
       <Dialog
         open={isCreateDialogOpen}
@@ -3200,70 +3200,67 @@ const ProposalCustomPage = ({
       )}
 
       {/* Main Content Container */}
-      <Box sx={{ mx: 4, mt: 4, mb: 3 }}>
+      <Box sx={{ mx: 2, mt: 1.5, mb: 3 }}>
         {/* Mobile Navigation */}
         <MobileTabNavigation />
 
         {/* Desktop Tab Navigation */}
-        <Paper 
-          elevation={3} 
-          sx={{ 
-            mb: 2, 
-            borderRadius: 2,
-            transition: 'all 0.3s ease',
-            display: { xs: 'none', md: 'block' },
-            '&:hover': {
-              boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-            }
-          }}
-        >
-          <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
-            <Tabs
-              value={activeTab === 'Income' ? 0 : activeTab === 'PSPermanent' ? 1 : activeTab === 'PSCasual' ? 2 : activeTab === 'COS/JO' ? 3 : activeTab === 'MOOE' ? 4 : activeTab === 'Capital Outlay' ? 5 : 6}
-              onChange={(event, newValue) => {
-                const tabValues = ['Income', 'PSPermanent', 'PSCasual', 'COS/JO', 'MOOE', 'Capital Outlay', 'Budgetary Support'];
-                setActiveTab(tabValues[newValue]);
-              }}
-              variant="scrollable"
-              scrollButtons="auto"
-              aria-label="proposal tabs"
-            >
-              <StyledTab 
-                icon={<FaMoneyCheckAlt />} 
-                iconPosition="start" 
-                label="INCOME" 
-              />
-              <StyledTab 
-                icon={<IoPersonCircleOutline />} 
-                iconPosition="start" 
-                label="PS - Permanent" 
-              />
-              <StyledTab 
-                icon={<IoPersonCircleOutline />} 
-                iconPosition="start" 
-                label="PS - Casual" 
-              />
-              <StyledTab 
-                icon={<FaFileContract />} 
-                iconPosition="start" 
-                label="COS/JO" 
-              />
-              <StyledTab 
-                icon={<GrHostMaintenance />} 
-                iconPosition="start" 
-                label="MOOE" 
-              />
-              <StyledTab 
-                icon={<FaMoneyBill />} 
-                iconPosition="start" 
-                label="CAPITAL OUTLAY" 
-              />
-              <StyledTab 
-                icon={<FaProjectDiagram />} 
-                iconPosition="start" 
-                label="BSGC" 
-              />
-            </Tabs>
+        <Paper sx={{ 
+          boxShadow: 'none',
+          borderRadius: '0px',
+          overflow: 'hidden',
+          border: 'none',
+          transition: 'all 0.2s ease',
+          bgcolor: '#375e38',
+          display: { xs: 'none', md: 'block' }
+        }}>
+          {/* Tabs Header with Green Background */}
+          <Box sx={{ 
+            background: '#375e38',
+            color: 'white',
+            px: 1,
+            py: 1,
+            display: 'flex',
+            gap: 0,
+            alignItems: 'stretch',
+            borderTop: '1px solid rgba(255,255,255,0.15)'
+          }}>
+            {[
+              { label: 'INCOME', value: 'Income' },
+              { label: 'PS - Permanent', value: 'PSPermanent' },
+              { label: 'PS - Casual', value: 'PSCasual' },
+              { label: 'COS/JO', value: 'COS/JO' },
+              { label: 'MOOE', value: 'MOOE' },
+              { label: 'CAPITAL OUTLAY', value: 'Capital Outlay' },
+              { label: 'BSGC', value: 'Budgetary Support' }
+            ].map((tab, index, arr) => {
+              const isActive = activeTab === tab.value;
+              return (
+                <Box
+                  key={index}
+                  onClick={() => setActiveTab(tab.value)}
+                  sx={{
+                    flex: 1,
+                    bgcolor: isActive ? '#2b4a2c' : 'transparent',
+                    color: 'white',
+                    textTransform: 'uppercase',
+                    fontSize: '0.8rem',
+                    fontWeight: 800,
+                    letterSpacing: '0.8px',
+                    p: 1.25,
+                    borderRight: index < arr.length - 1 ? '1px solid rgba(255,255,255,0.25)' : 'none',
+                    transition: 'all 0.2s ease',
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                    '&:hover': {
+                      bgcolor: isActive ? '#2b4a2c' : 'rgba(255,255,255,0.08)'
+                    }
+                  }}
+                >
+                  {tab.label}
+                </Box>
+              );
+            })}
           </Box>
         </Paper>
 
@@ -3614,7 +3611,8 @@ const ProposalCustomPage = ({
           }, null, 2)}
         </pre>
       </Box> */}
-    </StyledBox>
+      </StyledBox>
+    </Box>
   );
 };
 

@@ -107,6 +107,7 @@ const CustomDrawer = ({ collapsed = false }) => {
                   !isOverallApprover &&
                   !isBudgetOfficer &&
                   !isApprover &&
+                  !isReviewer &&
                   !isBudgetPlanningAnalyst,  // ✅ Block both BUDGET_PLANNING_ANALYST and APPROVER from creating proposals
                 icon: <FaFileAlt />,
               },

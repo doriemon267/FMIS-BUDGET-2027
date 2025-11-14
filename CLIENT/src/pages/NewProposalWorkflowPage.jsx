@@ -18,26 +18,6 @@ import {
   Chip,
   IconButton,
   Tooltip,
-            {/* Active WorkflowRef Badge */}
-            {(() => {
-              const activeRef = (selectedProposal?._id) || (typeof window !== 'undefined' ? (sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef')) : null);
-              if (!activeRef) return null;
-              return (
-                <Box sx={{
-                  bgcolor: '#1f3d1f',
-                  border: '1px solid #486848',
-                  px: 1.5,
-                  py: 0.75,
-                  borderRadius: '8px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  minWidth: '180px'
-                }}>
-                  <Typography variant="caption" sx={{ fontSize: '0.6rem', letterSpacing: 1, color: '#bcd8bc' }}>ACTIVE WORKFLOW REF</Typography>
-                  <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeRef}</Typography>
-                </Box>
-              );
-            })()}
   Divider,
   Grid,
   Card,
@@ -59,6 +39,7 @@ import {
   ThumbDown as RejectIcon,
   ThumbUp as ApproveIcon,
   ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
   Visibility as ViewIcon
 } from '@mui/icons-material';
 import SearchIcon from '@mui/icons-material/Search';
@@ -106,6 +87,9 @@ const BASE_TABS = [
   { label: 'Pending Review', value: 'pending-review' },
   { label: 'All Proposals', value: 'all-proposals' }
 ];
+
+// Centralize the workflow API base path to avoid mismatched endpoints
+const WORKFLOW_API_BASE = '/api/new-proposal-workflow/proposals';
 
 const NewProposalWorkflowPage = () => {
   const navigate = useNavigate();
@@ -193,6 +177,10 @@ const NewProposalWorkflowPage = () => {
   // Monitoring metrics (manager only)
   const [monitoringMetrics, setMonitoringMetrics] = useState(null);
 
+  const resolvedWorkflowRef = selectedProposal?._id || (typeof window !== 'undefined'
+    ? (sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef'))
+    : null);
+
   const fetchProposals = useCallback(async () => {
     setLoading(true);
     try {
@@ -201,7 +189,7 @@ const NewProposalWorkflowPage = () => {
         region: activeRegion,
         view: activeTabView, // Pass the active tab's value to the API
       };
-      const response = await api.get('/api/new-proposal-workflow/proposals', { params });
+  const response = await api.get(WORKFLOW_API_BASE, { params });
       setProposals(response.data.proposals || []);
       if (activeTabView === 'monitoring') {
         setMonitoringMetrics(response.data.metrics || {});
@@ -346,7 +334,7 @@ const NewProposalWorkflowPage = () => {
     setSelectedProposal(proposal);
     
     try {
-      const response = await api.get(`/api/new-proposal-workflow/proposals/${proposal._id}/audit-trail`);
+  const response = await api.get(`${WORKFLOW_API_BASE}/${proposal._id}/audit-trail`);
       
       if (response.data.success) {
         const changes = response.data.data.changes || [];
@@ -375,7 +363,7 @@ const NewProposalWorkflowPage = () => {
 
     try {
       // Use the action type directly - backend expects specific action names
-      const response = await api.post(`/api/proposals/${selectedProposal._id}/action`, {
+      const response = await api.post(`${WORKFLOW_API_BASE}/${selectedProposal._id}/action`, {
         action: actionType,
         comment: actionComment
       });
@@ -605,6 +593,10 @@ const NewProposalWorkflowPage = () => {
     return matchesSearch && matchesFilter;
   });
 
+
+  useEffect(() => {
+  console.log('Capital Outlay Data:', proposalDetails?.capitalOutlay);
+}, [proposalDetails]);
   // Render proposal status chip
   const renderStatusChip = (status) => {
     const statusColorMap = {
@@ -668,7 +660,26 @@ const NewProposalWorkflowPage = () => {
               Manage budget proposals
             </Typography>
           </Box>
-          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+          <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {resolvedWorkflowRef && (
+              <Box sx={{
+                bgcolor: '#1f3d1f',
+                border: '1px solid #486848',
+                px: 1.5,
+                py: 0.75,
+                borderRadius: '8px',
+                display: 'flex',
+                flexDirection: 'column',
+                minWidth: '200px'
+              }}>
+                <Typography variant="caption" sx={{ fontSize: '0.6rem', letterSpacing: 1, color: '#bcd8bc' }}>
+                  ACTIVE WORKFLOW REF
+                </Typography>
+                <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {resolvedWorkflowRef}
+                </Typography>
+              </Box>
+            )}
             <TextField
               placeholder="Search"
               value={searchQuery}
@@ -1548,9 +1559,11 @@ const NewProposalWorkflowPage = () => {
                                   <Table size="small">
                                     <TableHead>
                                       <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                                        <TableCell sx={{ fontWeight: 'bold' }}>Subcategory</TableCell>
-                                        <TableCell sx={{ fontWeight: 'bold' }}>Particulars</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Item</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Description</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Category</TableCell>
                                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>Amount</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Total</TableCell>
                                       </TableRow>
                                     </TableHead>
                                     <TableBody>
@@ -1559,19 +1572,21 @@ const NewProposalWorkflowPage = () => {
                                         const itemKey = `income-${globalIndex}`;
                                         const isChanged = changedItems.has(itemKey);
                                         const editedItem = editableItems.income[globalIndex];
+                                        const itemAmount = editedItem?.amount || 0;
                                         return (
                                           <TableRow key={idx} hover sx={{ 
                                             bgcolor: isChanged ? '#fff3cd' : 'transparent',
                                             transition: 'background-color 0.3s ease'
                                           }}>
-                                            <TableCell>{item.subcategory || 'N/A'}</TableCell>
-                                            <TableCell>{item.particulars || 'N/A'}</TableCell>
+                                            <TableCell>{item.particulars || item.itemName || item.title || 'N/A'}</TableCell>
+                                            <TableCell>{item.description || 'N/A'}</TableCell>
+                                            <TableCell>{item.categoryName || item.category || item.type || item.subcategory || 'N/A'}</TableCell>
                                             <TableCell align="right">
                                               {canUserEdit() ? (
                                                 <TextField
                                                   type="text"
                                                   size="small"
-                                                  value={(editedItem?.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                  value={itemAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                   onChange={(e) => {
                                                     const numValue = parseFloat(e.target.value.replace(/,/g, ''));
                                                     if (!isNaN(numValue)) {
@@ -1588,9 +1603,10 @@ const NewProposalWorkflowPage = () => {
                                                   }}
                                                 />
                                               ) : (
-                                                `₱${(item.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                                                `₱${itemAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
                                               )}
                                             </TableCell>
+                                            <TableCell align="right" sx={{ fontWeight: 'bold', bgcolor: '#f0f0f0' }}>₱{itemAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
                                           </TableRow>
                                         );
                                       })}
@@ -1626,8 +1642,8 @@ const NewProposalWorkflowPage = () => {
                               <TableCell sx={{ width: 50 }}></TableCell>
                               <TableCell sx={{ fontWeight: 'bold' }}>Employee Name</TableCell>
                               <TableCell sx={{ fontWeight: 'bold' }}>Position</TableCell>
-                              <TableCell sx={{ fontWeight: 'bold' }}>SG/Step</TableCell>
                               <TableCell align="right" sx={{ fontWeight: 'bold' }}>Monthly Salary</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 'bold' }}>Annual Salary</TableCell>
                               <TableCell align="right" sx={{ fontWeight: 'bold' }}>Total</TableCell>
                             </TableRow>
                           </TableHead>
@@ -1655,13 +1671,15 @@ const NewProposalWorkflowPage = () => {
                                           {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                                         </IconButton>
                                       </TableCell>
-                                      <TableCell>{item.employeeFullName || 'N/A'}</TableCell>
+                                      <TableCell sx={{ fontWeight: 500 }}>{item.employeeFullName || 'N/A'}</TableCell>
                                       <TableCell>{item.positionTitle || 'N/A'}</TableCell>
-                                      <TableCell>{item.gradelevel_SG || 'N/A'}/{item.step || 'N/A'}</TableCell>
                                       <TableCell align="right">
                                         ₱{(item.monthlySalary || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                                       </TableCell>
-                                      <TableCell align="right" sx={{ fontWeight: 600 }}>
+                                      <TableCell align="right">
+                                        ₱{((item.annualSalary || (item.monthlySalary || 0) * 12) || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                      </TableCell>
+                                      <TableCell align="right" sx={{ fontWeight: 'bold', bgcolor: '#f0f0f0' }}>
                                         {canUserEdit() ? (
                                           <TextField
                                             type="text"
@@ -1843,14 +1861,13 @@ const NewProposalWorkflowPage = () => {
                     <>
                       {(() => {
                         const groupedMOOE = proposalDetails.mooe.reduce((acc, item) => {
-                          const category = item.category || 'Uncategorized';
+                          const category = item.sublineItem || 'Uncategorized';
                           if (!acc[category]) acc[category] = [];
                           acc[category].push(item);
                           return acc;
                         }, {});
 
                         return Object.entries(groupedMOOE).map(([category, items]) => {
-                          const categoryTotal = items.reduce((sum, item) => sum + (item.amount || 0), 0);
                           const isExpanded = expandedGroups[`mooe-${category}`];
 
                           return (
@@ -1875,9 +1892,6 @@ const NewProposalWorkflowPage = () => {
                                     {category} ({items.length} {items.length === 1 ? 'item' : 'items'})
                                   </Typography>
                                 </Box>
-                                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                                  ₱{categoryTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                </Typography>
                               </Box>
 
                               {isExpanded && (
@@ -1885,52 +1899,72 @@ const NewProposalWorkflowPage = () => {
                                   <Table size="small">
                                     <TableHead>
                                       <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                                        <TableCell sx={{ fontWeight: 'bold' }}>Particulars</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Subline Item</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Accounting Title</TableCell>
                                         <TableCell sx={{ fontWeight: 'bold' }}>UACS Code</TableCell>
-                                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Amount</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Income</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Subsidy</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Total</TableCell>
                                       </TableRow>
                                     </TableHead>
                                     <TableBody>
-                                      {items.map((item, idx) => {
-                                        const globalIndex = proposalDetails.mooe.indexOf(item);
-                                        const itemKey = `mooe-${globalIndex}`;
-                                        const isChanged = changedItems.has(itemKey);
-                                        const editedItem = editableItems.mooe[globalIndex];
-                                        return (
-                                          <TableRow key={idx} hover sx={{ 
-                                            bgcolor: isChanged ? '#fff3cd' : 'transparent',
-                                            transition: 'background-color 0.3s ease'
-                                          }}>
-                                            <TableCell>{item.particulars || 'N/A'}</TableCell>
-                                            <TableCell>{item.uacsCode || 'N/A'}</TableCell>
-                                            <TableCell align="right">
-                                              {canUserEdit() ? (
-                                                <TextField
-                                                  type="text"
-                                                  size="small"
-                                                  value={(editedItem?.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                  onChange={(e) => {
-                                                    const numValue = parseFloat(e.target.value.replace(/,/g, ''));
-                                                    if (!isNaN(numValue)) {
-                                                      handleEditItemAmount('mooe', globalIndex, numValue);
-                                                    }
-                                                  }}
-                                                  inputProps={{ style: { textAlign: 'right' } }}
-                                                  sx={{ 
-                                                    width: 120,
-                                                    '& .MuiOutlinedInput-root': {
-                                                      bgcolor: isChanged ? '#fff9e6' : 'white',
-                                                      borderColor: isChanged ? '#ffc107' : undefined
-                                                    }
-                                                  }}
-                                                />
-                                              ) : (
-                                                `₱${(item.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                                      {(() => {
+                                        const groupedBySubline = items.reduce((acc, item) => {
+                                          const sublineKey = item.sublineItem || item.sublimeItem || 'N/A';
+                                          if (!acc[sublineKey]) acc[sublineKey] = [];
+                                          acc[sublineKey].push(item);
+                                          return acc;
+                                        }, {});
+                                        
+                                        return Object.entries(groupedBySubline).map(([sublineKey, sublineItems]) => {
+                                          const sublineTotal = sublineItems.reduce((sum, item) => {
+                                            return sum + (item.income || 0) + (item.subsidy || 0);
+                                          }, 0);
+                                          
+                                          return (
+                                            <React.Fragment key={sublineKey}>
+                                              {sublineItems.map((item, itemIdx) => {
+                                                const globalIndex = proposalDetails.mooe.indexOf(item);
+                                                const itemKey = `mooe-${globalIndex}`;
+                                                const isChanged = changedItems.has(itemKey);
+                                                const editedItem = editableItems.mooe[globalIndex];
+                                                const itemTotal = (item.income || 0) + (item.subsidy || 0);
+                                                return (
+                                                  <TableRow key={itemIdx} hover sx={{ 
+                                                    bgcolor: isChanged ? '#fff3cd' : 'transparent',
+                                                    transition: 'background-color 0.3s ease'
+                                                  }}>
+                                                    <TableCell sx={{ fontSize: itemIdx === 0 ? '0.9rem' : '0.85rem', fontWeight: itemIdx === 0 ? 600 : 400 }}>
+                                                      {itemIdx === 0 ? item.sublineItem || item.sublimeItem || 'N/A' : ''}
+                                                    </TableCell>
+                                                    <TableCell>{item.accountingTitle || item.particulars || 'N/A'}</TableCell>
+                                                    <TableCell>{item.uacsCode || 'N/A'}</TableCell>
+                                                    <TableCell align="right" sx={{ minWidth: 120 }}>₱{(item.income || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
+                                                    <TableCell align="right" sx={{ minWidth: 120 }}>₱{(item.subsidy || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
+                                                    <TableCell align="right" sx={{ fontWeight: 'bold', bgcolor: '#e8f5e9', minWidth: 130 }}>₱{itemTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
+                                                  </TableRow>
+                                                );
+                                              })}
+                                              {sublineItems.length > 1 && (
+                                                <TableRow sx={{ bgcolor: '#e8f5e9' }}>
+                                                  <TableCell colSpan={3} sx={{ fontWeight: 'bold', textAlign: 'right', pr: 2 }}>
+                                                    Subtotal ({sublineKey}):
+                                                  </TableCell>
+                                                  <TableCell align="right" sx={{ fontWeight: 'bold', bgcolor: '#c8e6c9', minWidth: 120 }}>
+                                                    ₱{sublineItems.reduce((sum, item) => sum + (item.income || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                                  </TableCell>
+                                                  <TableCell align="right" sx={{ fontWeight: 'bold', bgcolor: '#c8e6c9', minWidth: 120 }}>
+                                                    ₱{sublineItems.reduce((sum, item) => sum + (item.subsidy || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                                  </TableCell>
+                                                  <TableCell align="right" sx={{ fontWeight: 'bold', bgcolor: '#a5d6a7', minWidth: 130 }}>
+                                                    ₱{(sublineItems.reduce((sum, item) => sum + (item.income || 0), 0) + sublineItems.reduce((sum, item) => sum + (item.subsidy || 0), 0)).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                                  </TableCell>
+                                                </TableRow>
                                               )}
-                                            </TableCell>
-                                          </TableRow>
-                                        );
-                                      })}
+                                            </React.Fragment>
+                                          );
+                                        });
+                                      })()}
                                     </TableBody>
                                   </Table>
                                 </TableContainer>
@@ -1941,7 +1975,7 @@ const NewProposalWorkflowPage = () => {
                       })()}
                       <Box sx={{ mt: 3, p: 2, bgcolor: '#f5f5f5', borderRadius: '8px' }}>
                         <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#d32f2f' }}>
-                          Grand Total: ₱{editableItems.mooe.reduce((sum, item) => sum + (item.amount || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          Grand Total: ₱{editableItems.mooe.reduce((sum, item) => sum + ((item.income || 0) + (item.subsidy || 0)), 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </Typography>
                       </Box>
                     </>
@@ -1952,20 +1986,38 @@ const NewProposalWorkflowPage = () => {
                   )
                 )}
 
+
+
                 {/* Capital Outlay Tab */}
                 {detailsTab === 3 && (
                   proposalDetails?.capitalOutlay?.length > 0 ? (
                     <>
                       {(() => {
                         const groupedCapital = proposalDetails.capitalOutlay.reduce((acc, item) => {
-                          const category = item.category || 'Uncategorized';
+                          let category = 'Uncategorized';
+                          if (item.categoryName) {
+                            category = item.categoryName;
+                          } else if (item.category) {
+                            if (typeof item.category === 'object' && item.category.categoryName) {
+                              category = item.category.categoryName;
+                            } else if (typeof item.category === 'object' && item.category.name) {
+                              category = item.category.name;
+                            } else if (typeof item.category === 'string' && item.category.trim() && item.category.length > 20) {
+                              category = item.sublineItem || item.type || item.classification || item.categoryTitle || 'Uncategorized';
+                            } else if (typeof item.category === 'string' && item.category.trim()) {
+                              category = item.category;
+                            } else {
+                              category = item.type || item.classification || item.categoryTitle || 'Uncategorized';
+                            }
+                          } else {
+                            category = item.sublineItem || item.type || item.classification || item.categoryTitle || 'Uncategorized';
+                          }
                           if (!acc[category]) acc[category] = [];
                           acc[category].push(item);
                           return acc;
                         }, {});
 
                         return Object.entries(groupedCapital).map(([category, items]) => {
-                          const categoryTotal = items.reduce((sum, item) => sum + (item.cost || item.amount || 0), 0);
                           const isExpanded = expandedGroups[`capital-${category}`];
 
                           return (
@@ -1990,9 +2042,6 @@ const NewProposalWorkflowPage = () => {
                                     {category} ({items.length} {items.length === 1 ? 'item' : 'items'})
                                   </Typography>
                                 </Box>
-                                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                                  ₱{categoryTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                </Typography>
                               </Box>
 
                               {isExpanded && (
@@ -2000,9 +2049,12 @@ const NewProposalWorkflowPage = () => {
                                   <Table size="small">
                                     <TableHead>
                                       <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                                        <TableCell sx={{ fontWeight: 'bold' }}>Particulars</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Subline Item</TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold' }}>Accounting Title</TableCell>
                                         <TableCell sx={{ fontWeight: 'bold' }}>UACS Code</TableCell>
                                         <TableCell align="right" sx={{ fontWeight: 'bold' }}>Amount</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Subsidy</TableCell>
+                                        <TableCell align="right" sx={{ fontWeight: 'bold' }}>Total</TableCell>
                                       </TableRow>
                                     </TableHead>
                                     <TableBody>
@@ -2011,20 +2063,22 @@ const NewProposalWorkflowPage = () => {
                                         const itemKey = `capitalOutlay-${globalIndex}`;
                                         const isChanged = changedItems.has(itemKey);
                                         const editedItem = editableItems.capitalOutlay[globalIndex];
-                                        const fieldName = item.cost !== undefined ? 'cost' : 'amount';
+                                        const amount = editedItem?.cost || editedItem?.amount || item.cost || item.amount || 0;
+                                        const itemTotal = amount + (item.subsidy || 0);
                                         return (
                                           <TableRow key={idx} hover sx={{ 
                                             bgcolor: isChanged ? '#fff3cd' : 'transparent',
                                             transition: 'background-color 0.3s ease'
                                           }}>
-                                            <TableCell>{item.particulars || 'N/A'}</TableCell>
+                                            <TableCell>{item.sublineItem || item.sublimeItem || 'N/A'}</TableCell>
+                                            <TableCell>{item.accountingTitle || item.particulars || 'N/A'}</TableCell>
                                             <TableCell>{item.uacsCode || 'N/A'}</TableCell>
-                                            <TableCell align="right">
+                                            <TableCell align="right" sx={{ minWidth: 130 }}>
                                               {canUserEdit() ? (
                                                 <TextField
                                                   type="text"
                                                   size="small"
-                                                  value={(editedItem?.[fieldName] || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                  value={amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                   onChange={(e) => {
                                                     const numValue = parseFloat(e.target.value.replace(/,/g, ''));
                                                     if (!isNaN(numValue)) {
@@ -2033,7 +2087,7 @@ const NewProposalWorkflowPage = () => {
                                                   }}
                                                   inputProps={{ style: { textAlign: 'right' } }}
                                                   sx={{ 
-                                                    width: 120,
+                                                    width: '100%',
                                                     '& .MuiOutlinedInput-root': {
                                                       bgcolor: isChanged ? '#fff9e6' : 'white',
                                                       borderColor: isChanged ? '#ffc107' : undefined
@@ -2041,9 +2095,11 @@ const NewProposalWorkflowPage = () => {
                                                   }}
                                                 />
                                               ) : (
-                                                `₱${(item.cost || item.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                                                <Box sx={{ textAlign: 'right', p: 0.5 }}>₱{amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</Box>
                                               )}
                                             </TableCell>
+                                            <TableCell align="right" sx={{ minWidth: 120 }}>₱{(item.subsidy || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
+                                            <TableCell align="right" sx={{ fontWeight: 'bold', bgcolor: '#e8f5e9', minWidth: 130 }}>₱{itemTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
                                           </TableRow>
                                         );
                                       })}

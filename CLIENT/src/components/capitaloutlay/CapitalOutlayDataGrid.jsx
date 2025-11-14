@@ -20,26 +20,15 @@ import {
   DialogContent,
   DialogActions,
   Stack,
-  InputAdornment,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TablePagination,
   Toolbar,
   Tabs,
   Tab,
-  Divider,
   Fade,
-  Zoom,
 } from "@mui/material";
 import {
   KeyboardArrowDown,
   KeyboardArrowUp,
   Edit,
-  Delete,
   Add,
   Save,
   Cancel,
@@ -47,13 +36,13 @@ import {
   FolderOpen,
   Folder,
   Description,
-  AttachMoney,
 } from "@mui/icons-material";
 import { NumericFormat } from "react-number-format";
 import { toast } from "react-toastify";
 import api from "../../config/api";
 import { useRegion } from "../../context/RegionContext";
 import { useUser } from "../../context/UserContext";
+import { useWorkflowRef } from "../../hooks/useWorkflowRef";
 
 // Number format component
 const NumberFormatCustom = React.forwardRef(function NumberFormatCustom(props, ref) {
@@ -87,7 +76,7 @@ const formatNumber = (number) => {
 };
 
 // Custom Toolbar
-function CustomToolbar({ onRefresh, onAddNew, loading, locked = false }) {
+function CustomToolbar({ onRefresh, onAddNew, loading, locked = false, lockedReason = "" }) {
   return (
     <Toolbar 
       sx={{ 
@@ -117,20 +106,29 @@ function CustomToolbar({ onRefresh, onAddNew, loading, locked = false }) {
       >
         Refresh
       </Button>
-      <Button
-        size="small"
-        variant="contained"
-        startIcon={<Add />}
-        onClick={onAddNew}
-        disabled={locked}
-        sx={{ 
-          bgcolor: "white", 
-          color: "#667eea",
-          "&:hover": { bgcolor: "#f0f0f0" }
-        }}
+      <Tooltip
+        title={locked ? lockedReason || "Adding entries is currently disabled." : ""}
+        disableFocusListener={!locked}
+        disableHoverListener={!locked}
+        disableTouchListener={!locked}
       >
-        Add New
-      </Button>
+        <span>
+          <Button
+            size="small"
+            variant="contained"
+            startIcon={<Add />}
+            onClick={onAddNew}
+            disabled={locked}
+            sx={{ 
+              bgcolor: "white", 
+              color: "#667eea",
+              "&:hover": { bgcolor: "#f0f0f0" }
+            }}
+          >
+            Add New
+          </Button>
+        </span>
+      </Tooltip>
     </Toolbar>
   );
 }
@@ -461,7 +459,7 @@ function MotherRow({
 }
 
 // Edit Detail Dialog
-function EditDetailDialog({ open, onClose, detail, onSave }) {
+function EditDetailDialog({ open, onClose, detail, onSave, disabled = false, disabledReason = "" }) {
   const [formData, setFormData] = useState({
     particulars: "",
     income_amount: "",
@@ -489,6 +487,10 @@ function EditDetailDialog({ open, onClose, detail, onSave }) {
       toast.error("Invalid detail data");
       return;
     }
+    if (disabled) {
+      toast.error(disabledReason || "Capital outlay editing is currently disabled.");
+      return;
+    }
     
     try {
       setSaving(true);
@@ -513,6 +515,11 @@ function EditDetailDialog({ open, onClose, detail, onSave }) {
         ✏️ Edit Breakdown Detail
       </DialogTitle>
       <DialogContent sx={{ mt: 2 }}>
+        {disabled && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            {disabledReason || "Capital outlay editing is currently disabled."}
+          </Alert>
+        )}
         <Stack spacing={2}>
           <TextField
             label="Particulars"
@@ -553,7 +560,7 @@ function EditDetailDialog({ open, onClose, detail, onSave }) {
           onClick={handleSubmit}
           variant="contained"
           startIcon={<Save />}
-          disabled={saving}
+          disabled={saving || disabled}
         >
           {saving ? "Saving..." : "Save Changes"}
         </Button>
@@ -563,7 +570,7 @@ function EditDetailDialog({ open, onClose, detail, onSave }) {
 }
 
 // Add New Dialog with Tabs
-function AddNewDialog({ open, onClose, categories = [], capitalOutlays = [], onSave }) {
+function AddNewDialog({ open, onClose, categories = [], capitalOutlays = [], onSave, disabled = false, disabledReason = "" }) {
   const [tabValue, setTabValue] = useState(0);
   const [saving, setSaving] = useState(false);
   
@@ -619,6 +626,10 @@ function AddNewDialog({ open, onClose, categories = [], capitalOutlays = [], onS
   };
 
   const handleSubmit = async () => {
+    if (disabled) {
+      toast.error(disabledReason || "Capital outlay editing is currently disabled.");
+      return;
+    }
     try {
       setSaving(true);
       
@@ -683,6 +694,11 @@ function AddNewDialog({ open, onClose, categories = [], capitalOutlays = [], onS
         </Tabs>
       </Box>
       <DialogContent sx={{ mt: 2 }}>
+        {disabled && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            {disabledReason || "Capital outlay editing is currently disabled."}
+          </Alert>
+        )}
         {/* Tab 0: Add TITLE */}
         {tabValue === 0 && (
           <Stack spacing={2}>
@@ -886,7 +902,7 @@ function AddNewDialog({ open, onClose, categories = [], capitalOutlays = [], onS
           onClick={handleSubmit}
           variant="contained"
           startIcon={<Save />}
-          disabled={saving}
+          disabled={saving || disabled}
         >
           {saving ? "Saving..." : "Save"}
         </Button>
@@ -896,7 +912,7 @@ function AddNewDialog({ open, onClose, categories = [], capitalOutlays = [], onS
 }
 
 // Main Component
-const CapitalOutlayDataGrid = ({ fiscalYear, onDataChange, disableIncomeInputs = false, locked = false }) => {
+const CapitalOutlayDataGrid = ({ fiscalYear, onDataChange, disableIncomeInputs: _disableIncomeInputs = false, locked = false }) => {
   // State
   const [capitalOutlays, setCapitalOutlays] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -913,6 +929,15 @@ const CapitalOutlayDataGrid = ({ fiscalYear, onDataChange, disableIncomeInputs =
   // Context
   const { currentUser } = useUser();
   const { activeRegion } = useRegion();
+  const { workflowRef, headerConfig } = useWorkflowRef();
+  const hasWorkflowRef = Boolean(workflowRef);
+  const ensureWorkflowRef = useCallback(() => {
+    if (!workflowRef) {
+      toast.error("Create a proposal first to modify capital outlay entries.");
+      return false;
+    }
+    return true;
+  }, [workflowRef]);
 
   // Permissions
   const canEdit = useMemo(() => {
@@ -923,6 +948,20 @@ const CapitalOutlayDataGrid = ({ fiscalYear, onDataChange, disableIncomeInputs =
         role.toUpperCase().includes("BUDGET")
     );
   }, [currentUser]);
+  const canModify = canEdit && !locked;
+  const modificationsAllowed = canModify && hasWorkflowRef;
+  const modificationBlockedReason = useMemo(() => {
+    if (!hasWorkflowRef) {
+      return "Create a proposal first to add or edit capital outlay entries.";
+    }
+    if (!canEdit) {
+      return "You don't have permission to modify capital outlay entries.";
+    }
+    if (locked) {
+      return "Capital outlay editing is currently locked.";
+    }
+    return "";
+  }, [hasWorkflowRef, canEdit, locked]);
 
   // Fetch capital outlays
   const fetchCapitalOutlays = useCallback(async () => {
@@ -1018,110 +1057,92 @@ const CapitalOutlayDataGrid = ({ fiscalYear, onDataChange, disableIncomeInputs =
 
   // Save edited detail
   const handleSaveDetail = useCallback(async (detailId, formData) => {
-    try {
-      // Get the parent capital outlay ID
-      const parentId = detailToEdit?.capital_outlay_id || detailToEdit?.capitalOutlay;
-      
-      if (!parentId) {
-        throw new Error("Parent capital outlay ID not found");
-      }
-      
-      // Get all existing details for this capital outlay
-      const existingDetails = capitalOutlayDetails[parentId] || [];
-      
-      // Update the specific detail in the array
-      const updatedDetails = existingDetails.map((detail) => {
-        if (detail._id === detailId) {
-          return {
-            ...detail,
-            particulars: formData.particulars,
-            income_amount: parseFloat(formData.income_amount) || 0,
-            subsidy_amount: parseFloat(formData.subsidy_amount) || 0,
-          };
-        }
-        return detail;
-      });
-      
-      // Save all details back to the server (POST replaces all)
-      await api.post(`/api/capital-outlay/${parentId}/details`, {
-        details: updatedDetails,
-        processBy: currentUser?.username || "System",
-      });
-      
-      // Clear cached details to force refresh
-      setCapitalOutlayDetails((prev) => {
-        const newDetails = { ...prev };
-        delete newDetails[parentId];
-        return newDetails;
-      });
-      
-      // Refresh the details
-      await fetchDetails(parentId);
-      
-      // Refresh main data to update totals
-      await fetchCapitalOutlays();
-    } catch (err) {
-      throw err;
-    }
-  }, [detailToEdit, capitalOutlayDetails, currentUser, fetchDetails, fetchCapitalOutlays]);
+    if (!ensureWorkflowRef()) return;
 
-  // Add new handler
-  const handleAddNew = useCallback(async (type, formData) => {
-    try {
-      if (type === "title" || type === "subline") {
-        // Add new capital outlay entry
-        await api.post("/capital-outlays", {
-          ...formData,
-          region: activeRegion,
-          fiscalYear: fiscalYear || new Date().getFullYear(),
-        });
-      } else if (type === "detail") {
-        // Add new detail - need to get existing details first
-        const capitalOutlayId = formData.capitalOutlayId;
-        
-        // Get existing details
-        const existingDetails = capitalOutlayDetails[capitalOutlayId] || [];
-        
-        // If not cached, fetch from server
-        let detailsList = existingDetails;
-        if (detailsList.length === 0) {
-          try {
-            const response = await api.get(`/api/capital-outlay/${capitalOutlayId}/details`);
-            detailsList = response.data.details || [];
-          } catch (err) {
-            console.error("Error fetching existing details:", err);
-            detailsList = [];
-          }
-        }
-        
-        // Append new detail
-        const newDetail = {
+    const parentId = detailToEdit?.capital_outlay_id || detailToEdit?.capitalOutlay;
+    if (!parentId) {
+      throw new Error("Parent capital outlay ID not found");
+    }
+
+    const existingDetails = capitalOutlayDetails[parentId] || [];
+
+    const updatedDetails = existingDetails.map((detail) => {
+      if (detail._id === detailId) {
+        return {
+          ...detail,
           particulars: formData.particulars,
           income_amount: parseFloat(formData.income_amount) || 0,
           subsidy_amount: parseFloat(formData.subsidy_amount) || 0,
         };
-        
-        const updatedDetails = [...detailsList, newDetail];
-        
-        // Save all details (POST replaces all)
-        await api.post(`/api/capital-outlay/${capitalOutlayId}/details`, {
-          details: updatedDetails,
-          processBy: currentUser?.username || "System",
-        });
-        
-        // Clear cached details
-        setCapitalOutlayDetails((prev) => {
-          const newDetails = { ...prev };
-          delete newDetails[capitalOutlayId];
-          return newDetails;
-        });
       }
-      
-      await fetchCapitalOutlays();
-    } catch (err) {
-      throw err;
+      return detail;
+    });
+
+    await api.post(`/api/capital-outlay/${parentId}/details`, {
+      details: updatedDetails,
+      processBy: currentUser?.username || "System",
+      proposalId: workflowRef
+    }, { headers: headerConfig() });
+
+    setCapitalOutlayDetails((prev) => {
+      const newDetails = { ...prev };
+      delete newDetails[parentId];
+      return newDetails;
+    });
+
+    await fetchDetails(parentId);
+    await fetchCapitalOutlays();
+  }, [detailToEdit, capitalOutlayDetails, currentUser, fetchDetails, fetchCapitalOutlays, ensureWorkflowRef, workflowRef, headerConfig]);
+
+  // Add new handler
+  const handleAddNew = useCallback(async (type, formData) => {
+    if (!ensureWorkflowRef()) return;
+
+    if (type === "title" || type === "subline") {
+      await api.post("/capital-outlays", {
+        ...formData,
+        region: activeRegion,
+        fiscalYear: fiscalYear || new Date().getFullYear(),
+        proposalId: workflowRef
+      }, { headers: headerConfig() });
+    } else if (type === "detail") {
+      const capitalOutlayId = formData.capitalOutlayId;
+      const existingDetails = capitalOutlayDetails[capitalOutlayId] || [];
+
+      let detailsList = existingDetails;
+      if (detailsList.length === 0) {
+        try {
+          const response = await api.get(`/api/capital-outlay/${capitalOutlayId}/details`);
+          detailsList = response.data.details || [];
+        } catch (err) {
+          console.error("Error fetching existing details:", err);
+          detailsList = [];
+        }
+      }
+
+      const newDetail = {
+        particulars: formData.particulars,
+        income_amount: parseFloat(formData.income_amount) || 0,
+        subsidy_amount: parseFloat(formData.subsidy_amount) || 0,
+      };
+
+      const updatedDetails = [...detailsList, newDetail];
+
+      await api.post(`/api/capital-outlay/${capitalOutlayId}/details`, {
+        details: updatedDetails,
+        processBy: currentUser?.username || "System",
+        proposalId: workflowRef
+      }, { headers: headerConfig() });
+
+      setCapitalOutlayDetails((prev) => {
+        const newDetails = { ...prev };
+        delete newDetails[capitalOutlayId];
+        return newDetails;
+      });
     }
-  }, [activeRegion, fiscalYear, capitalOutlayDetails, currentUser, fetchCapitalOutlays]);
+
+    await fetchCapitalOutlays();
+  }, [activeRegion, fiscalYear, capitalOutlayDetails, currentUser, fetchCapitalOutlays, ensureWorkflowRef, workflowRef, headerConfig]);
 
   // Initial load
   useEffect(() => {
@@ -1178,12 +1199,32 @@ const CapitalOutlayDataGrid = ({ fiscalYear, onDataChange, disableIncomeInputs =
       <CustomToolbar 
         onRefresh={fetchCapitalOutlays}
         onAddNew={() => {
-          if (locked) return;
+          if (!canModify) {
+            toast.error(modificationBlockedReason || "Capital outlay editing is currently locked.");
+            return;
+          }
+          if (!ensureWorkflowRef()) return;
           setAddDialogOpen(true);
         }}
         loading={loading}
-        locked={locked} // Pass the locked prop here
+        locked={!modificationsAllowed}
+        lockedReason={modificationBlockedReason}
       />
+
+      {(!hasWorkflowRef || locked) && (
+        <Box sx={{ px: 2, pt: 2, display: "flex", flexDirection: "column", gap: 1 }}>
+          {!hasWorkflowRef && (
+            <Alert severity="warning">
+              Create a proposal first to enable capital outlay editing. Existing entries remain read-only.
+            </Alert>
+          )}
+          {locked && (
+            <Alert severity="info">
+              Capital outlay entries are currently locked for editing by administrators.
+            </Alert>
+          )}
+        </Box>
+      )}
       
       <Box sx={{ maxHeight: 600, overflow: "auto" }}>
         {Object.keys(groupedData).length === 0 ? (
@@ -1205,7 +1246,7 @@ const CapitalOutlayDataGrid = ({ fiscalYear, onDataChange, disableIncomeInputs =
               capitalOutlayDetails={capitalOutlayDetails}
               loadingDetails={loadingDetails}
               fetchDetails={fetchDetails}
-              canEdit={canEdit}
+              canEdit={modificationsAllowed}
               onEditDetail={handleEditDetail}
             />
           ))
@@ -1219,6 +1260,8 @@ const CapitalOutlayDataGrid = ({ fiscalYear, onDataChange, disableIncomeInputs =
         categories={categories}
         capitalOutlays={capitalOutlays}
         onSave={handleAddNew}
+        disabled={!modificationsAllowed}
+        disabledReason={modificationBlockedReason}
       />
 
       {/* Edit Detail Dialog */}
@@ -1230,6 +1273,8 @@ const CapitalOutlayDataGrid = ({ fiscalYear, onDataChange, disableIncomeInputs =
         }}
         detail={detailToEdit}
         onSave={handleSaveDetail}
+        disabled={!modificationsAllowed}
+        disabledReason={modificationBlockedReason}
       />
     </Paper>
   );

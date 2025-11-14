@@ -39,6 +39,7 @@ import { useUser } from "../../context/UserContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateDataList } from "../../utils/queryClientHelpers";
 import * as XLSX from 'xlsx';
+import { useWorkflowRef } from "../../hooks/useWorkflowRef";
 
 // Define allowed columns for COS (adjust as needed)
 const allowedCOSColumns = [
@@ -83,6 +84,8 @@ const PSCOSCustomPageTable = ({
   const apiPath = `/${dataListName}`;
   const { currentUser } = useUser();
   const queryClient = useQueryClient();
+  const { workflowRef, headerConfig } = useWorkflowRef();
+  const hasWorkflowRef = Boolean(workflowRef);
 
   // New state for enhanced features
   const [selectedPersonnel, setSelectedPersonnel] = useState(null);
@@ -136,6 +139,10 @@ const PSCOSCustomPageTable = ({
   const handleAddAllPersonnel = useCallback(async (statusOfAppointment) => {
     setLoading(true);
     try {
+      if (!workflowRef) {
+        toast.error("Create a proposal first to add COS/JO personnel.");
+        return;
+      }
       let currentFiscalYear = fiscalYear;
       let currentBudgetType = budgetType;
 
@@ -156,9 +163,10 @@ const PSCOSCustomPageTable = ({
         statusOfAppointment,
         fiscalYear: currentFiscalYear,
         budgetType: currentBudgetType,
+        proposalId: workflowRef,
         // Remove hardcoded region - controller now filters based on user's actual assignment
         // region: currentUser?.organizationalAssignment?.regions?.[0]?.regionName || 'CENTRAL OFFICE'
-      });
+      }, { headers: headerConfig() });
 
       // Check for successful response - server returns different structures
       if (response.data && (response.data.addedRecords || response.data.message)) {
@@ -189,10 +197,18 @@ const PSCOSCustomPageTable = ({
     currentUser,
     queryClient,
     dataListName,
-    fetchActiveSettings
+    fetchActiveSettings,
+    workflowRef,
+    headerConfig
   ]);
 
-  const handleOpenDialog = () => setOpenDialog(true);
+  const handleOpenDialog = () => {
+    if (!workflowRef) {
+      toast.error("Please create a proposal first before adding COS/JO personnel.");
+      return;
+    }
+    setOpenDialog(true);
+  };
   const handleCloseDialog = () => setOpenDialog(false);
 
   // Enhanced functionality handlers
@@ -343,10 +359,15 @@ const PSCOSCustomPageTable = ({
                 },
               }}
               startIcon={<PersonAddIcon />}
-              disabled={!fiscalYear || locked}
+              disabled={!fiscalYear || locked || !hasWorkflowRef}
             >
               Add COS Personnel
             </Button>
+            {!hasWorkflowRef && (
+              <Typography variant="caption" color="error" sx={{ maxWidth: 260 }}>
+                Create a proposal first to unlock COS/JO entry.
+              </Typography>
+            )}
 
             <Tooltip title="Refresh Data">
               <IconButton

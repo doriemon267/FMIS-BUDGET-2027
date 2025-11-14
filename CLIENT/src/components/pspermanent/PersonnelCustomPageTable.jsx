@@ -36,6 +36,7 @@ import GetAppIcon from '@mui/icons-material/GetApp';
 import PrintIcon from '@mui/icons-material/Print';
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateDataList } from "../../utils/queryClientHelpers";
+import { useWorkflowRef } from "../../hooks/useWorkflowRef";
 
 const PSPCustomPageTable = ({
   dataListName,
@@ -59,6 +60,8 @@ const PSPCustomPageTable = ({
   const { currentUser } = useUser();
   const { activeRegion } = useRegion();
   const queryClient = useQueryClient();
+  const { workflowRef, headerConfig } = useWorkflowRef();
+  const hasWorkflowRef = Boolean(workflowRef);
 
   // Enhanced state management
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -506,6 +509,11 @@ const PSPCustomPageTable = ({
   }, [refreshPersonnelData, fetchActiveSettings, fetchRATA]);
 
   const handleAddAllPersonnel = useCallback(async (statusOfAppointment) => {
+    if (!workflowRef) {
+      toast.error("Create a proposal first before adding personnel services.");
+      setOpenDialog(false);
+      return;
+    }
     setLoading(true);
 
     try {
@@ -558,8 +566,9 @@ const PSPCustomPageTable = ({
         PERA: currentPERA,
         RATA: RATA.map(item => ({ grade: item.SG, amount: item.RATA })),
         compensation: currentCompensation,
-        region // Include the active region in the request
-      });
+        region, // Include the active region in the request
+        proposalId: workflowRef
+      }, { headers: headerConfig() });
 
       if (response.data.added && Array.isArray(response.data.added)) {
         const addedCount = response.data.added.length;
@@ -601,10 +610,18 @@ const PSPCustomPageTable = ({
     compensation,
     currentUser,
     refreshPersonnelData,
-    fetchActiveSettings
+    fetchActiveSettings,
+    workflowRef,
+    headerConfig
   ]);
 
-  const handleOpenDialog = () => setOpenDialog(true);
+  const handleOpenDialog = () => {
+    if (!workflowRef) {
+      toast.error("Please create a proposal first before adding personnel services.");
+      return;
+    }
+    setOpenDialog(true);
+  };
   const handleCloseDialog = () => setOpenDialog(false);
 
   // Enhanced additional menu options
@@ -736,7 +753,7 @@ const PSPCustomPageTable = ({
               variant="contained"
               color="primary"
               onClick={handleOpenDialog}
-              disabled={locked}
+              disabled={locked || !hasWorkflowRef}
               sx={{
                 background: "#009688",
                 color: "#fff",
@@ -750,6 +767,11 @@ const PSPCustomPageTable = ({
             >
               Add Personnel
             </Button>
+            {!hasWorkflowRef && (
+              <Typography variant="caption" color="error" sx={{ maxWidth: 260 }}>
+                Create a proposal first to unlock personnel entry.
+              </Typography>
+            )}
 
             <Tooltip title="Refresh Data">
               <IconButton

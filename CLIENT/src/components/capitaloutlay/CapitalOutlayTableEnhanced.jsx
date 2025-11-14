@@ -15,11 +15,9 @@ import {
   TableHead,
   TableRow,
   TablePagination,
-  Collapse,
   Stack,
   Tooltip,
   Alert,
-  Switch,
   Chip,
   CircularProgress,
   Divider,
@@ -31,10 +29,7 @@ import {
   DialogContentText,
   DialogActions,
   Select,
-  FormControlLabel,
   TextField,
-  Checkbox,
-  ListItemText,
   FormHelperText,
   InputAdornment,
   Backdrop,
@@ -64,6 +59,7 @@ import "react-toastify/dist/ReactToastify.css";
 import CapitalOutlayDetailsModal from "./CapitalOutlayDetailsModal";
 import { useCapitalOutlayData } from "./useCapitalOutlayData";
 import CapitalOutlayFilters from "./CapitalOutlayFilters";
+import { useWorkflowRef } from "../../hooks/useWorkflowRef";
 
 // Error Boundary Component with reset capability
 class ErrorBoundary extends React.Component {
@@ -151,6 +147,25 @@ const defaultFilterState = {
 
 const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false, locked = false }) => {
   const { currentUser } = useUser();
+  const { workflowRef, headerConfig } = useWorkflowRef();
+  const hasWorkflowRef = Boolean(workflowRef);
+  const ensureWorkflowRef = useCallback(() => {
+    if (!workflowRef) {
+      toast.error("Create a proposal first to modify capital outlay entries.");
+      return false;
+    }
+    return true;
+  }, [workflowRef]);
+  const modificationsAllowed = hasWorkflowRef && !locked;
+  const modificationBlockedReason = useMemo(() => {
+    if (!hasWorkflowRef) {
+      return "Create a proposal first to add or edit capital outlay entries.";
+    }
+    if (locked) {
+      return "Capital outlay editing is currently locked.";
+    }
+    return "";
+  }, [hasWorkflowRef, locked]);
 
   // Filter state
   const [searchTerm, setSearchTerm] = useState("");
@@ -166,23 +181,20 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
   // Use the custom hook for data management
   const {
     capitalOutlays,
-    categories,
+  categories,
     accountingTitles,
     loading,
     error,
     fiscalYear,
     budgetType,
-    regionFilter,
     status,
     dueDateStatus,
     capitalOutlayDetails,
-    setCapitalOutlays,
-    setCategories,
+  setCapitalOutlays,
     setAccountingTitles,
     setCapitalOutlayDetails,
     refreshData,
     handleDetailsSaved,
-    fetchAllCapitalOutlayDetails,
   } = useCapitalOutlayData(onDataChange);
 
   // Filter validation
@@ -215,15 +227,6 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
     return Array.from(items).sort((a, b) => a.localeCompare(b));
   }, [capitalOutlays]);
 
-  const categoryOptions = useMemo(() => {
-    return [...categories]
-      .map((category) => ({
-        id: category._id?.toString() || category._id,
-        name: category.name,
-      }))
-      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  }, [categories]);
-
   const canDeleteItems = useMemo(() => {
     return currentUser?.userRoles?.includes('SUPER ADMIN') ||
            currentUser?.userRoles?.includes('BUDGET PLANNING ANALYST');
@@ -238,6 +241,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
   const [itemToDelete, setItemToDelete] = useState(null);
   const tableContainerRef = useRef(null);
   const scrollPositionRef = useRef(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Enhanced state management
   const [showColumnTotals, setShowColumnTotals] = useState(true);
@@ -558,7 +562,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
       console.error("Error fetching accounting titles:", error);
       toast.error("Error fetching accounting titles.");
     }
-  }, []);
+  }, [setAccountingTitles]);
 
   // Fetch subline items for a category
   const fetchSublineItems = useCallback(async (categoryName, isNew = false, categoryId = null) => {
@@ -592,6 +596,13 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
 
   // Handle adding new outlay (launch breakdown modal with temporary item)
   const handleAddOutlay = useCallback((categoryId, categoryName) => {
+    if (!modificationsAllowed) {
+      toast.error(modificationBlockedReason || "Capital outlay editing is currently locked.");
+      return;
+    }
+    if (!ensureWorkflowRef()) {
+      return;
+    }
     const currentEntry = newOutlays[categoryId] || {};
 
     if (!fiscalYear) {
@@ -658,7 +669,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
     toast.info("Add breakdown details and click Save to create the item.", {
       autoClose: 3000,
     });
-  }, [newOutlays, fiscalYear, currentUser, accountingTitles, validateInput, budgetType, categories]);
+  }, [newOutlays, fiscalYear, currentUser, accountingTitles, validateInput, budgetType, categories, modificationsAllowed, modificationBlockedReason, ensureWorkflowRef]);
 
   // Handle changes to new outlay form
   const handleOutlayChange = useCallback((categoryId, field, value) => {
@@ -819,8 +830,19 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
 
   const handleConfirmDelete = async () => {
     if (itemToDelete) {
+      if (!modificationsAllowed) {
+        toast.error(modificationBlockedReason || "Capital outlay editing is currently locked.");
+        setDeleteConfirmOpen(false);
+        setItemToDelete(null);
+        return;
+      }
+      if (!ensureWorkflowRef()) {
+        setDeleteConfirmOpen(false);
+        setItemToDelete(null);
+        return;
+      }
       try {
-        await api.delete(`/capital-outlays/${itemToDelete}`);
+        await api.delete(`/capital-outlays/${itemToDelete}`, { params: {}, headers: headerConfig() });
         const updatedOutlays = capitalOutlays.filter(item => item._id !== itemToDelete);
         setCapitalOutlays(updatedOutlays);
         onDataChange?.(updatedOutlays);
@@ -836,27 +858,14 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
 
   const handleRefreshData = async () => {
     try {
-      setLoading(true);
-      const params = new URLSearchParams();
-      if (regionFilter) {
-        params.append('region', regionFilter);
-      }
-      
-      const outlaysRes = await api.get(`/capital-outlays?${params.toString()}`);
-      const outlaysWithStatus = outlaysRes.data.capitalOutlays.map((item) => ({
-        ...item,
-        status: item.status || "Not Submitted",
-      }));
-
-      setCapitalOutlays(outlaysWithStatus);
-      await fetchAllCapitalOutlayDetails(outlaysWithStatus);
-      onDataChange?.(outlaysWithStatus);
+      setIsRefreshing(true);
+      await refreshData();
       toast.success("Data refreshed successfully");
     } catch (error) {
       console.error("Error refreshing data:", error);
       toast.error("Failed to refresh data");
     } finally {
-      setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -888,53 +897,6 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
     });
   }, []);
 
-  const handleCategoryFilterChange = (event) => {
-    const value = event.target.value;
-    const normalized = (typeof value === "string" ? value.split(",") : value).map((val) => val.toString());
-    setSelectedFilters((prev) => ({
-      ...prev,
-      categories: normalized,
-    }));
-  };
-
-  const handleSublineFilterChange = (event) => {
-    const value = event.target.value;
-    const normalized = (typeof value === "string" ? value.split(",") : value).map((val) => val.toString());
-    setSelectedFilters((prev) => ({
-      ...prev,
-      sublineItems: normalized,
-    }));
-  };
-
-  const handleAmountFilterChange = (key) => (event) => {
-    const { value } = event.target;
-    setSelectedFilters((prev) => ({
-      ...prev,
-      amountRange: {
-        ...prev.amountRange,
-        [key]: value,
-      },
-    }));
-  };
-
-  const handleToggleHasValues = (event) => {
-    const isChecked = event.target.checked;
-    setSelectedFilters((prev) => ({
-      ...prev,
-      hasValues: isChecked,
-      emptyValues: isChecked ? false : prev.emptyValues,
-    }));
-  };
-
-  const handleToggleEmptyValues = (event) => {
-    const isChecked = event.target.checked;
-    setSelectedFilters((prev) => ({
-      ...prev,
-      emptyValues: isChecked,
-      hasValues: isChecked ? false : prev.hasValues,
-    }));
-  };
-
   // Render enhanced toolbar
   const renderEnhancedToolbar = () => {
     const hasSearch = Boolean(searchTerm.trim());
@@ -960,9 +922,16 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
 
           <Box display="flex" gap={1} flexWrap="wrap">
             <Tooltip title="Refresh data">
-              <IconButton color="primary" onClick={handleRefreshData} size="small">
-                <Refresh />
-              </IconButton>
+              <span>
+                <IconButton
+                  color="primary"
+                  onClick={handleRefreshData}
+                  size="small"
+                  disabled={loading || isRefreshing}
+                >
+                  {isRefreshing ? <CircularProgress size={18} thickness={5} /> : <Refresh />}
+                </IconButton>
+              </span>
             </Tooltip>
 
             <Tooltip title={compactView ? "Normal view" : "Compact view"}>
@@ -1077,165 +1046,6 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
       </Box>
     );
   };
-
-  const renderFilterControls = () => (
-    <Collapse in={showFilters} timeout="auto" unmountOnExit>
-      <Paper
-        variant="outlined"
-        sx={{
-          p: 3,
-          mb: 3,
-          backgroundColor: "background.default",
-          borderRadius: 2,
-          borderColor: "divider",
-        }}
-      >
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: {
-              xs: "1fr",
-              md: "repeat(2, minmax(0, 1fr))",
-              lg: "repeat(4, minmax(0, 1fr))",
-            },
-            gap: 2,
-            mb: 3,
-          }}
-        >
-          <Box>
-            <Typography variant="caption" sx={{ fontWeight: 600, color: "text.secondary", mb: 1, display: "block" }}>
-              Categories
-            </Typography>
-            <Select
-              multiple
-              fullWidth
-              size="small"
-              displayEmpty
-              value={selectedFilters.categories}
-              onChange={handleCategoryFilterChange}
-              renderValue={(selected) => {
-                if (!selected || selected.length === 0) {
-                  return <Typography color="text.secondary">All categories</Typography>;
-                }
-                const names = categoryOptions
-                  .filter((option) => selected.includes(option.id))
-                  .map((option) => option.name);
-                return names.join(", ");
-              }}
-            >
-              {categoryOptions.map((option) => (
-                <MenuItem key={option.id} value={option.id}>
-                  <Checkbox checked={selectedFilters.categories.includes(option.id)} size="small" />
-                  <ListItemText primary={option.name} />
-                </MenuItem>
-              ))}
-            </Select>
-          </Box>
-
-          <Box>
-            <Typography variant="caption" sx={{ fontWeight: 600, color: "text.secondary", mb: 1, display: "block" }}>
-              Subline items
-            </Typography>
-            <Select
-              multiple
-              fullWidth
-              size="small"
-              displayEmpty
-              value={selectedFilters.sublineItems}
-              onChange={handleSublineFilterChange}
-              renderValue={(selected) => {
-                if (!selected || selected.length === 0) {
-                  return <Typography color="text.secondary">All subline items</Typography>;
-                }
-                return selected.join(", ");
-              }}
-            >
-              {availableSublineItems.map((item) => (
-                <MenuItem key={item} value={item}>
-                  <Checkbox checked={selectedFilters.sublineItems.includes(item)} size="small" />
-                  <ListItemText primary={item} />
-                </MenuItem>
-              ))}
-            </Select>
-          </Box>
-
-          <Box>
-            <Typography variant="caption" sx={{ fontWeight: 600, color: "text.secondary", mb: 1, display: "block" }}>
-              Minimum amount (₱)
-            </Typography>
-            <TextField
-              type="number"
-              size="small"
-              fullWidth
-              placeholder="0.00"
-              value={selectedFilters.amountRange.min}
-              onChange={handleAmountFilterChange("min")}
-              inputProps={{ min: 0 }}
-              error={isAmountRangeInvalid}
-            />
-          </Box>
-
-          <Box>
-            <Typography variant="caption" sx={{ fontWeight: 600, color: "text.secondary", mb: 1, display: "block" }}>
-              Maximum amount (₱)
-            </Typography>
-            <TextField
-              type="number"
-              size="small"
-              fullWidth
-              placeholder="No limit"
-              value={selectedFilters.amountRange.max}
-              onChange={handleAmountFilterChange("max")}
-              inputProps={{ min: 0 }}
-              error={isAmountRangeInvalid}
-            />
-            {isAmountRangeInvalid && (
-              <FormHelperText error sx={{ mt: 0.5 }}>
-                Maximum must be greater than or equal to minimum.
-              </FormHelperText>
-            )}
-          </Box>
-        </Box>
-
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ xs: "flex-start", sm: "center" }} justifyContent="space-between">
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={selectedFilters.hasValues}
-                  onChange={handleToggleHasValues}
-                  size="small"
-                  color="success"
-                />
-              }
-              label="Only items with amounts"
-            />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={selectedFilters.emptyValues}
-                  onChange={handleToggleEmptyValues}
-                  size="small"
-                  color="warning"
-                />
-              }
-              label="Only items without amounts"
-            />
-          </Stack>
-
-          <Button
-            variant="text"
-            color="secondary"
-            startIcon={<Clear />}
-            onClick={handleResetFilters}
-            sx={{ alignSelf: { xs: "flex-end", sm: "center" } }}
-          >
-            Clear filters
-          </Button>
-        </Stack>
-      </Paper>
-    </Collapse>
-  );
   // Render loading state
   if (loading && capitalOutlays.length === 0) {
     return (
@@ -1262,11 +1072,13 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
           zIndex: (theme) => theme.zIndex.drawer + 1,
           backdropFilter: "blur(1px)",
         }}
-        open={loading && capitalOutlays.length > 0}
+        open={(loading || isRefreshing) && capitalOutlays.length > 0}
       >
         <Stack spacing={1} alignItems="center">
           <CircularProgress color="inherit" size={32} thickness={5} />
-          <Typography variant="caption">Syncing latest capital outlay data…</Typography>
+          <Typography variant="caption">
+            {isRefreshing ? "Refreshing capital outlay data…" : "Syncing latest capital outlay data…"}
+          </Typography>
         </Stack>
       </Backdrop>
       {/* Due Date Warning */}
@@ -1292,6 +1104,21 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
             }
           </Typography>
         </Alert>
+      )}
+
+      {(!hasWorkflowRef || locked) && (
+        <Box sx={{ mb: 2, display: "flex", flexDirection: "column", gap: 1 }}>
+          {!hasWorkflowRef && (
+            <Alert severity="warning">
+              Create a proposal first to enable capital outlay editing. Existing entries remain read-only.
+            </Alert>
+          )}
+          {locked && (
+            <Alert severity="info">
+              Capital outlay entries are currently locked for editing by administrators.
+            </Alert>
+          )}
+        </Box>
       )}
       
       <Box
@@ -1473,6 +1300,19 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
               {paginatedGroups.map((group) => {
                 const groupItems = group.items;
                 const hasItems = groupItems.length > 0;
+                const pendingOutlay = newOutlays[group.categoryId] || {};
+                const continueDisabled =
+                  !fiscalYear ||
+                  !pendingOutlay?.sublineItem ||
+                  !pendingOutlay?.accountingTitle ||
+                  !modificationsAllowed;
+                const continueTooltip = !modificationsAllowed
+                  ? modificationBlockedReason || "Capital outlay editing is currently locked."
+                  : !fiscalYear
+                    ? "⏳ Loading fiscal year settings..."
+                    : !pendingOutlay?.sublineItem || !pendingOutlay?.accountingTitle
+                      ? "Please complete all required fields first"
+                      : "Click to proceed and enter breakdown details";
                 
                 return (
                   <React.Fragment key={group.categoryId}>
@@ -1489,7 +1329,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                             position: 'sticky',
                             left: 0,
                             zIndex: 2,
-                            textAlign: 'center'
+                            textAlign: 'left'
                           }}
                         >
                           {group.categoryName.toUpperCase()}
@@ -1626,7 +1466,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                     })}
                     
                     {/* Add New Item Row (Form) */}
-                    {!locked && addingCategoryId === group.categoryId && (
+                    {modificationsAllowed && addingCategoryId === group.categoryId && (
                       <TableRow sx={{
                         backgroundColor: '#f0f8f0',
                         borderTop: '2px dashed #4caf50',
@@ -1826,13 +1666,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                                 </Typography>
                               )} */}
                             </Box>
-                            <Tooltip title={
-                              !fiscalYear
-                                ? "⏳ Loading fiscal year settings..."
-                                : !newOutlays[group.categoryId]?.sublineItem || !newOutlays[group.categoryId]?.accountingTitle
-                                ? "Please complete all required fields first"
-                                : "Click to proceed and enter breakdown details"
-                            }>
+                            <Tooltip title={continueTooltip}>
                               <span>
                                 <Button
                                   variant="contained"
@@ -1842,7 +1676,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                                   onClick={() => {
                                     handleAddOutlay(group.categoryId, group.categoryName);
                                   }}
-                                  disabled={!fiscalYear || !newOutlays[group.categoryId]?.sublineItem || !newOutlays[group.categoryId]?.accountingTitle}
+                                  disabled={continueDisabled}
                                   sx={{
                                     fontWeight: 'bold',
                                     px: 3,
@@ -1871,11 +1705,18 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                             position: 'relative'
                           }}
                         >
-                          <Tooltip title={`Add new ${group.categoryName} item`} placement="top">
+                          <Tooltip
+                            title={modificationsAllowed ? `Add new ${group.categoryName} item` : (modificationBlockedReason || "Capital outlay editing is currently locked.")}
+                            placement="top"
+                          >
                             <IconButton
                               color="success"
                               size="small"
                               onClick={() => {
+                                if (!modificationsAllowed) {
+                                  toast.error(modificationBlockedReason || "Capital outlay editing is currently locked.");
+                                  return;
+                                }
                                 setAddingCategoryId(group.categoryId);
                                 setNewOutlays((prev) => ({
                                   ...prev,
@@ -1887,6 +1728,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
                                 // Fetch subline items for this category
                                 fetchSublineItems(group.categoryName, true, group.categoryId);
                               }}
+                              disabled={!modificationsAllowed}
                               sx={{
                                 backgroundColor: 'success.main',
                                 color: 'white',
@@ -2006,7 +1848,10 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
           sx: { minWidth: 200 }
         }}
       >
-        <MenuItem onClick={() => handleOpenDetailsModal(actionsMenuRow)}>
+        <MenuItem
+          onClick={() => handleOpenDetailsModal(actionsMenuRow)}
+          disabled={!modificationsAllowed}
+        >
           <Edit fontSize="small" sx={{ mr: 1 }} />
           Edit Details
         </MenuItem>
@@ -2019,7 +1864,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
         <Divider />
         <MenuItem 
           onClick={() => handleDeleteClick(actionsMenuRow?._id)}
-          disabled={!canDeleteItems || actionsMenuRow?.status === "Finalized"}
+          disabled={!canDeleteItems || actionsMenuRow?.status === "Finalized" || !modificationsAllowed}
           sx={{ color: 'error.main' }}
         >
           <Delete fontSize="small" sx={{ mr: 1 }} />
@@ -2058,6 +1903,8 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
           fiscalYear,
           budgetType,
         } : null}
+        editingDisabled={!modificationsAllowed}
+        editingDisabledReason={modificationBlockedReason}
       />
     </ErrorBoundary>
   );

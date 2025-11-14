@@ -929,7 +929,7 @@ exports.bulkSaveMOOE = async (req, res) => {
         console.warn('[bulkSaveMOOE] Inference error:', infErr.message);
       }
     }
-    
+    const ownerProposalId = legacyProposalForMOOE?._id?.toString() ?? ownerWorkflowId ?? null;
     console.log('   Resolved ownership:', { ownerRegion, ownerDepartment, ownerDivision, ownerProposalId });
     // Determine level tagging
     const derivedOriginalLevel = workflowData.userLevel === 'DIVISION'
