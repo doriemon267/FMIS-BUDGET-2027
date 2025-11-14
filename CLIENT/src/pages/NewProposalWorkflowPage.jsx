@@ -936,7 +936,7 @@ const NewProposalWorkflowPage = () => {
                       PROJECTED INCOME
                     </TableCell>
                     <TableCell align="right" sx={{ color: 'white', fontWeight: 'bold', p: 2, fontSize: '0.75rem', letterSpacing: '0.8px', textTransform: 'uppercase', borderRight: '1px solid rgba(255, 255, 255, 0.3)' }}>
-                      PROJECTED EXPENSES
+                      PROJECTED SUBSIDY
                     </TableCell>
                     <TableCell align="right" sx={{ color: 'white', fontWeight: 'bold', p: 2, fontSize: '0.75rem', letterSpacing: '0.8px', textTransform: 'uppercase', borderRight: '1px solid rgba(255, 255, 255, 0.3)' }}>
                       PROPOSED BUDGET
@@ -1003,7 +1003,7 @@ const NewProposalWorkflowPage = () => {
                         </TableCell>
                         <TableCell align="right" sx={{ p: 2, fontSize: '0.85rem', borderRight: '1px solid #e8e8e8' }}>
                           <Typography variant="body2" sx={{ fontWeight: 600, color: '#d32f2f' }}>
-                            ₱{(proposal.totalExpenses || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            ₱{(proposal.projectedSubsidy || proposal.totalExpenses || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </Typography>
                         </TableCell>
                         <TableCell align="right" sx={{ p: 2, fontSize: '0.85rem', borderRight: '1px solid #e8e8e8' }}>
@@ -1307,9 +1307,9 @@ const NewProposalWorkflowPage = () => {
                     </Typography>
                   </Grid>
                   <Grid item xs={12} md={4}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Projected Expenses</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>Projected Subsidy</Typography>
                     <Typography variant="body1" sx={{ fontWeight: 600, color: '#d32f2f' }}>
-                      ₱{(selectedProposal?.totalExpenses || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      ₱{(selectedProposal?.projectedSubsidy || selectedProposal?.totalExpenses || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </Typography>
                   </Grid>
                   <Grid item xs={12} md={4}>
