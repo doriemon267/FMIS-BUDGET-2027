@@ -107,15 +107,14 @@ const NewProposalWorkflowPage = () => {
   const [activeTab, setActiveTab] = useState(isBRDUser ? 1 : 0);
   
   // Handle view parameter from query string (e.g., from notifications)
+  // Handle view parameter (after tabs definition) - we defer execution until tabs are built
   useEffect(() => {
     const viewParam = searchParams.get('view');
-    if (viewParam) {
-      const tabIndex = TABS.findIndex(tab => tab.value === viewParam);
-      if (tabIndex !== -1) {
-        setActiveTab(tabIndex);
-      }
+    if (viewParam && tabs) {
+      const tabIndex = tabs.findIndex(tab => tab.value === viewParam);
+      if (tabIndex !== -1) setActiveTab(tabIndex);
     }
-  }, [searchParams]);
+  }, [searchParams, tabs]);
   const [loading, setLoading] = useState(false);
   const [proposals, setProposals] = useState([]);
   const [selectedProposal, setSelectedProposal] = useState(null);
@@ -728,11 +727,11 @@ const NewProposalWorkflowPage = () => {
             alignItems: 'stretch',
             borderTop: '1px solid rgba(255,255,255,0.15)'
           }}>
-            {TABS.filter(tab => {
+            {tabs.filter(tab => {
               if (tab.value === 'my-proposals' && isBRDUser) return false;
               return true;
             }).map((tab, index) => {
-              const tabIndex = TABS.findIndex(t => t.value === tab.value);
+              const tabIndex = tabs.findIndex(t => t.value === tab.value);
               const isActive = activeTab === tabIndex;
               return (
                 <Box
@@ -747,7 +746,7 @@ const NewProposalWorkflowPage = () => {
                     fontWeight: 800,
                     letterSpacing: '0.8px',
                     p: 1.25,
-                    borderRight: index < (TABS.filter(t => !(t.value === 'my-proposals' && isBRDUser)).length - 1) ? '1px solid rgba(255,255,255,0.25)' : 'none',
+                    borderRight: index < (tabs.filter(t => !(t.value === 'my-proposals' && isBRDUser)).length - 1) ? '1px solid rgba(255,255,255,0.25)' : 'none',
                     transition: 'all 0.2s ease',
                     cursor: 'pointer',
                     textAlign: 'center',
