@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Paper,
@@ -27,66 +27,27 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  Menu,
   MenuItem,
+  Select,
   FormControl,
   InputLabel,
-  Select,
-  Menu,
-  InputAdornment,
-} from "@mui/material";
+  InputAdornment
+} from '@mui/material';
 import {
-  Add as AddIcon,
-  Edit as EditIcon,
-  Visibility as ViewIcon,
   Send as SendIcon,
-  CheckCircle as ApproveIcon,
-  Cancel as RejectIcon,
-  Refresh as RefreshIcon,
-  Search as SearchIcon,
-  FilterList as FilterIcon,
-  GetApp as ExportIcon,
-  MoreVert as MoreVertIcon,
+  ThumbDown as RejectIcon,
+  ThumbUp as ApproveIcon,
   ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon,
-} from "@mui/icons-material";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import api from "../config/api";
-import { useUser } from "../context/UserContext";
-import { useRegion } from "../context/RegionContext";
-import { toast } from "react-toastify";
-import { styled } from "@mui/material/styles";
-
-const StyledTab = styled((props) => <Tab {...props} />)(({ theme }) => ({
-  textTransform: "none",
-  minWidth: 0,
-  padding: '12px 16px',
-  [theme.breakpoints.up("sm")]: {
-    minWidth: 0,
-  },
-  fontWeight: theme.typography.fontWeightRegular,
-  marginRight: theme.spacing(1),
-  color: "rgba(0, 0, 0, 0.7)",
-  borderRadius: '8px 8px 0 0',
-  transition: 'all 0.3s ease',
-  "&:hover": {
-    backgroundColor: "rgba(55, 94, 56, 0.08)",
-    color: theme.palette.primary.main,
-    "& svg": {
-      transform: "scale(1.2)",
-      color: theme.palette.primary.main,
-    },
-  },
-  "&.Mui-selected": {
-    color: theme.palette.primary.main,
-    fontWeight: theme.typography.fontWeightMedium,
-    backgroundColor: "rgba(55, 94, 56, 0.12)",
-  },
-  "& .MuiSvgIcon-root, & svg": {
-    marginRight: theme.spacing(1),
-    fontSize: "1.2rem",
-    transition: 'transform 0.3s ease',
-  },
-}));
+  Visibility as ViewIcon
+} from '@mui/icons-material';
+import SearchIcon from '@mui/icons-material/Search';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useUser } from '../context/UserContext';
+import { useRegion } from '../context/RegionContext';
+import api from '../config/api';
+import { toast } from 'react-toastify';
 
 // Brand colors aligned to Transactions Processing UI
 const BRAND_COLORS = {
@@ -1113,121 +1074,39 @@ const NewProposalWorkflowPage = () => {
               </Table>
             </TableContainer>
 
-            <Box sx={{ 
-              p: 1.5,
-              bgcolor: 'white',
-              borderTop: '1px solid #e0e0e0',
-              display: 'flex',
-              justifyContent: 'flex-start',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: 2
-            }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Typography variant="body2" sx={{ color: '#666', fontWeight: 600 }}>
-                  Rows per page:
-                </Typography>
-                <Select
-                  value={rowsPerPage}
-                  onChange={handleChangeRowsPerPage}
-                  size="small"
-                  sx={{ 
-                    minWidth: 80,
-                    borderRadius: '8px',
-                    '& .MuiOutlinedInput-root': {
-                      '& fieldset': {
-                        borderColor: '#e0e0e0'
-                      }
-                    },
-                    '&:hover .MuiOutlinedInput-notchedOutline': {
-                      borderColor: '#4CAF50',
-                      borderWidth: '2px'
-                    },
-                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                      borderColor: '#4CAF50',
-                      borderWidth: '2px'
-                    }
-                  }}
-                >
-                  <MenuItem value={5}>5</MenuItem>
-                  <MenuItem value={10}>10</MenuItem>
-                  <MenuItem value={25}>25</MenuItem>
-                  <MenuItem value={50}>50</MenuItem>
-                </Select>
-              </Box>
-              
-              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                <Typography variant="body2" sx={{ color: '#666', fontWeight: 600, px: 2, py: 1, bgcolor: 'white', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
-                  {page * rowsPerPage + 1}–{Math.min((page + 1) * rowsPerPage, filteredProposals.length)} of {filteredProposals.length}
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <IconButton
-                    size="small"
-                    onClick={() => handleChangePage(null, page - 1)}
-                    disabled={page === 0}
-                    sx={{ 
-                      color: BRAND_COLORS.darkGreen,
-                      bgcolor: 'white',
-                      border: `2px solid ${BRAND_COLORS.darkGreen}`,
-                      borderRadius: '8px',
-                      fontWeight: 'bold',
-                      transition: 'all 0.2s ease',
-                      '&:hover': {
-                        bgcolor: '#f4f7f4',
-                        transform: 'translateY(-2px)',
-                        boxShadow: '0 2px 8px rgba(55, 94, 56, 0.2)'
-                      },
-                      '&.Mui-disabled': {
-                        bgcolor: '#f5f5f5',
-                        color: '#ccc',
-                        borderColor: '#ccc'
-                      }
-                    }}
-                  >
-                    ‹
-                  </IconButton>
-                  <Box sx={{ 
-                    px: 2, 
-                    py: 0.75, 
-                    bgcolor: BRAND_COLORS.darkGreen, 
-                    color: 'white',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    minWidth: 45,
-                    justifyContent: 'center',
-                    fontWeight: 600,
-                    boxShadow: '0 2px 4px rgba(55, 94, 56, 0.3)'
-                  }}>
-                    {page + 1}
-                  </Box>
-                  <IconButton
-                    size="small"
-                    onClick={() => handleChangePage(null, page + 1)}
-                    disabled={(page + 1) * rowsPerPage >= filteredProposals.length}
-                    sx={{ 
-                      color: BRAND_COLORS.darkGreen,
-                      bgcolor: 'white',
-                      border: `2px solid ${BRAND_COLORS.darkGreen}`,
-                      borderRadius: '8px',
-                      fontWeight: 'bold',
-                      transition: 'all 0.2s ease',
-                      '&:hover': {
-                        bgcolor: '#f4f7f4',
-                        transform: 'translateY(-2px)',
-                        boxShadow: '0 2px 8px rgba(55, 94, 56, 0.2)'
-                      },
-                      '&.Mui-disabled': {
-                        bgcolor: '#f5f5f5',
-                        color: '#ccc',
-                        borderColor: '#ccc'
-                      }
-                    }}
-                  >
-                    ›
-                  </IconButton>
-                </Box>
-              </Box>
+            <Box sx={{ mt: 0.75, width: '100%' }}>
+              <TablePagination
+                component="div"
+                count={filteredProposals.length}
+                page={page}
+                onPageChange={handleChangePage}
+                rowsPerPage={rowsPerPage}
+                onRowsPerPageChange={handleChangeRowsPerPage}
+                rowsPerPageOptions={[5, 10, 25, 50]}
+                labelRowsPerPage="Rows per page:"
+                labelDisplayedRows={({ from, to, count }) => `${from}-${to} of ${count}`}
+                sx={{
+                  width: '100%',
+                  backgroundColor: BRAND_COLORS.darkGreen,
+                  color: '#fff',
+                  borderRadius: '0 0 8px 8px',
+                  borderTop: `2px solid ${BRAND_COLORS.darkGreen}`,
+                  px: 2,
+                  '& .MuiTablePagination-toolbar': {
+                    p: 0,
+                    minHeight: 36,
+                  },
+                  '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': {
+                    fontSize: '0.7rem',
+                    color: '#fff',
+                  },
+                  '& .MuiSelect-select': { color: '#fff', fontSize: '0.7rem' },
+                  '& .MuiTablePagination-actions .MuiButtonBase-root': { color: '#fff' },
+                  '& .MuiTablePagination-selectIcon': { color: '#fff' },
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.4)' },
+                  '& .Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#fff' },
+                }}
+              />
             </Box>
           </>
         )}
