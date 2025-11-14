@@ -80,7 +80,8 @@ const WORKFLOW_STATUSES = {
   'RETURNED_TO_OFFICER': { label: 'Returned to Officer', color: 'warning' }
 };
 
-const TABS = [
+// Base tabs; Monitoring tab will be injected dynamically for Budget Manager
+const BASE_TABS = [
   { label: 'My Proposals', value: 'my-proposals' },
   { label: 'Pending Review', value: 'pending-review' },
   { label: 'All Proposals', value: 'all-proposals' }
@@ -167,16 +168,24 @@ const NewProposalWorkflowPage = () => {
 
   const canCreate = userWorkflowRole === 'BUDGET PREPARER';
 
+  // Monitoring metrics (manager only)
+  const [monitoringMetrics, setMonitoringMetrics] = useState(null);
+
   const fetchProposals = useCallback(async () => {
     setLoading(true);
     try {
-      const activeTabView = TABS[activeTab].value;
+      const activeTabView = tabs[activeTab].value;
       const params = {
         region: activeRegion,
         view: activeTabView, // Pass the active tab's value to the API
       };
       const response = await api.get('/api/new-proposal-workflow/proposals', { params });
       setProposals(response.data.proposals || []);
+      if (activeTabView === 'monitoring') {
+        setMonitoringMetrics(response.data.metrics || {});
+      } else {
+        setMonitoringMetrics(null);
+      }
     } catch (error) {
       console.error("Error fetching proposals:", error);
       toast.error("Failed to fetch proposals. Please try again.");
@@ -184,6 +193,10 @@ const NewProposalWorkflowPage = () => {
       setLoading(false);
     }
   }, [activeRegion, activeTab]);
+
+  // Build tabs dynamically (include Monitoring for Budget Manager)
+  const isBudgetManager = currentUser?.Roles?.includes('BUDGET MANAGER') || currentUser?.Roles?.includes('BUDGET_MANAGER');
+  const tabs = isBudgetManager ? [...BASE_TABS, { label: 'Monitoring', value: 'monitoring' }] : BASE_TABS;
 
   useEffect(() => {
     fetchProposals();
@@ -851,21 +864,54 @@ const NewProposalWorkflowPage = () => {
               icon={<Box sx={{ color: 'white !important' }}>✓</Box>}
             />
           </Box>
-          {/* Content */}
+          {/* Content (includes Monitoring metrics if active) */}
+          {tabs[activeTab].value === 'monitoring' && monitoringMetrics && (
+            <Box sx={{ mb: 3 }}>
+              <Grid container spacing={2}>
+                {Object.entries(monitoringMetrics.byStatus || {}).map(([status, count]) => (
+                  <Grid item xs={12} sm={6} md={4} lg={3} key={status}>
+                    <Card elevation={1} sx={{ borderLeft: '5px solid #375e38' }}>
+                      <CardContent sx={{ py: 1.5 }}>
+                        <Typography variant="caption" sx={{ fontWeight: 600, color: '#2d5016' }}>
+                          {status}
+                        </Typography>
+                        <Typography variant="h6" sx={{ m: 0, fontWeight: 700 }}>
+                          {count}
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                ))}
+                <Grid item xs={12} sm={6} md={4} lg={3}>
+                  <Card elevation={1} sx={{ borderLeft: '5px solid #2d5016', bgcolor: '#f4f7f4' }}>
+                    <CardContent sx={{ py: 1.5 }}>
+                      <Typography variant="caption" sx={{ fontWeight: 600, color: '#2d5016' }}>
+                        Total Monitored
+                      </Typography>
+                      <Typography variant="h6" sx={{ m: 0, fontWeight: 700 }}>
+                        {monitoringMetrics.total || 0}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              </Grid>
+              <Divider sx={{ my: 2 }} />
+            </Box>
+          )}
           {loading ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', p: 6 }}>
-            <CircularProgress sx={{ color: '#2d5016', mb: 2 }} />
-            <Typography variant="body2" color="text.secondary">Loading proposals...</Typography>
-          </Box>
-        ) : filteredProposals.length === 0 ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', p: 6 }}>
-            <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>No proposals found</Typography>
-            <Typography variant="body2" color="text.secondary">
-              {searchQuery || filterStatus !== 'all' ? 'Try adjusting your search or filters' : 'No proposals available'}
-            </Typography>
-          </Box>
-        ) : (
-          <>
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', p: 6 }}>
+              <CircularProgress sx={{ color: '#2d5016', mb: 2 }} />
+              <Typography variant="body2" color="text.secondary">Loading proposals...</Typography>
+            </Box>
+          ) : filteredProposals.length === 0 ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', p: 6 }}>
+              <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>No proposals found</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {searchQuery || filterStatus !== 'all' ? 'Try adjusting your search or filters' : 'No proposals available'}
+              </Typography>
+            </Box>
+          ) : (
+            <>
             <TableContainer sx={{ bgcolor: 'white', border: 'none', borderTop: 'none' }}>
               <Table sx={{ borderCollapse: 'collapse', width: '100%' }}>
                 <TableHead>
