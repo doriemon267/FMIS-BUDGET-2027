@@ -2,6 +2,7 @@
 const { 
   bulkAddPersonnelServices,
   updatePersonnelService,
+  bulkUpdatePersonnelService,
   getAllPersonnelServices,
   getAllPerServices,
   getGrandTotalPermanent,
@@ -93,6 +94,9 @@ personnelServicesRouter.get("/getpersonnels/byParams", async (req, res) => {
     res.status(500).json({ message: "Failed to fetch personnel data" });
   }
 });
+// Bulk update personnel entries
+personnelServicesRouter.put("/api/personnel/bulk-update", submissionWorkflowControl('update', { strictMode: true, enableConsolidation: true }), bulkUpdatePersonnelService);
+
 // Keep the original route for backward compatibility
 personnelServicesRouter.get("/api/personnel/getByParams", async (req, res) => {
   try {

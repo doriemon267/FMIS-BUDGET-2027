@@ -5,6 +5,7 @@ import PropTypes from "prop-types";
 import {
   Button,
   Box,
+  TextField,
   Dialog,
   DialogActions,
   DialogContent,
@@ -23,6 +24,7 @@ import {
   Typography,
   Paper,
   Checkbox,
+  InputAdornment,
 } from "@mui/material";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -34,9 +36,12 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import GetAppIcon from '@mui/icons-material/GetApp';
 import PrintIcon from '@mui/icons-material/Print';
+import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined';
+import HighlightOffIcon from '@mui/icons-material/HighlightOff';
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateDataList } from "../../utils/queryClientHelpers";
 import { useWorkflowRef } from "../../hooks/useWorkflowRef";
+import { updatePersonnelSubsidy } from "../../services/personnelSubsidyService";
 
 const PSPCustomPageTable = ({
   dataListName,
@@ -72,6 +77,9 @@ const PSPCustomPageTable = ({
   const [viewDetailsDialog, setViewDetailsDialog] = useState({ open: false, data: null });
   const [printPreviewDialog, setPrintPreviewDialog] = useState({ open: false, content: '', data: [] });
   const [filteredRows, setFilteredRows] = useState([]);
+  const [selectedRows, setSelectedRows] = useState([]);
+  const [subsidyDialog, setSubsidyDialog] = useState({ open: false, mode: "tag", amount: "", notes: "" });
+  const [subsidyLoading, setSubsidyLoading] = useState(false);
 
   const pageTitle = useMemo(() => title || dataListName.charAt(0).toUpperCase() + dataListName.slice(1), [title, dataListName]);
   const pageDescription = useMemo(() => description || `Manage ${dataListName}`, [description, dataListName]);
@@ -167,6 +175,66 @@ const PSPCustomPageTable = ({
       ...prev,
       [columnKey]: !prev[columnKey]
     }));
+  };
+
+  const handleOpenSubsidyDialog = (mode) => {
+    if (!selectedRows.length) {
+      toast.error("Select at least one personnel record first.");
+      return;
+    }
+    setSubsidyDialog({ open: true, mode, amount: "", notes: "" });
+  };
+
+  const handleCloseSubsidyDialog = () => {
+    if (subsidyLoading) return;
+    setSubsidyDialog((prev) => ({ ...prev, open: false }));
+  };
+
+  const handleConfirmSubsidy = async () => {
+    if (!selectedRows.length) {
+      toast.error("No personnel selected.");
+      return;
+    }
+
+    if (subsidyDialog.mode === "tag") {
+      const amountValue = Number(subsidyDialog.amount);
+      if (!Number.isFinite(amountValue) || amountValue <= 0) {
+        toast.error("Enter a subsidy amount greater than zero.");
+        return;
+      }
+    }
+
+    setSubsidyLoading(true);
+    try {
+      const numericAmount = Number(subsidyDialog.amount) || 0;
+      const payload =
+        subsidyDialog.mode === "tag"
+          ? {
+              items: selectedRows.map((id) => ({ _id: id, subsidyAmount: numericAmount })),
+              defaultAmount: numericAmount,
+              subsidyEligible: true,
+              notes: subsidyDialog.notes?.trim() || undefined,
+            }
+          : {
+              items: selectedRows.map((id) => ({ _id: id })),
+              subsidyEligible: false,
+              defaultAmount: 0,
+            };
+
+      await updatePersonnelSubsidy(payload);
+      toast.success(
+        subsidyDialog.mode === "tag"
+          ? "Subsidy tagged successfully"
+          : "Subsidy tag removed"
+      );
+      setSelectedRows([]);
+      setSubsidyDialog({ open: false, mode: "tag", amount: "", notes: "" });
+      refreshPersonnelData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update subsidy");
+    } finally {
+      setSubsidyLoading(false);
+    }
   };
 
   // Manual refresh
@@ -767,6 +835,24 @@ const PSPCustomPageTable = ({
             >
               Add Personnel
             </Button>
+            <Button
+              variant="outlined"
+              color="secondary"
+              startIcon={<PaidOutlinedIcon />}
+              disabled={!selectedRows.length}
+              onClick={() => handleOpenSubsidyDialog("tag")}
+            >
+              Tag Subsidy
+            </Button>
+            <Button
+              variant="text"
+              color="error"
+              startIcon={<HighlightOffIcon />}
+              disabled={!selectedRows.length}
+              onClick={() => handleOpenSubsidyDialog("untag")}
+            >
+              Remove Tag
+            </Button>
             {!hasWorkflowRef && (
               <Typography variant="caption" color="error" sx={{ maxWidth: 260 }}>
                 Create a proposal first to unlock personnel entry.
@@ -796,6 +882,9 @@ const PSPCustomPageTable = ({
           </Box>
 
           <Box display="flex" alignItems="center" gap={2}>
+            <Typography variant="body2" color={selectedRows.length ? "primary" : "text.secondary"}>
+              Selected: {selectedRows.length.toLocaleString("en-US")}
+            </Typography>
             <Typography variant="body2" color="text.secondary">
               Records loaded: {filteredRows.length.toLocaleString('en-US')}
             </Typography>
@@ -1055,6 +1144,65 @@ const PSPCustomPageTable = ({
         </DialogActions>
       </Dialog>
 
+      <Dialog
+        open={subsidyDialog.open}
+        onClose={handleCloseSubsidyDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {subsidyDialog.mode === "tag" ? "Tag Subsidy Recipients" : "Remove Subsidy Tags"}
+        </DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            {selectedRows.length.toLocaleString('en-US')} personnel selected.
+          </Typography>
+          {subsidyDialog.mode === "tag" && (
+            <>
+              <TextField
+                label="Subsidy amount per personnel"
+                type="number"
+                value={subsidyDialog.amount}
+                onChange={(e) =>
+                  setSubsidyDialog((prev) => ({ ...prev, amount: e.target.value }))
+                }
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">₱</InputAdornment>,
+                }}
+                fullWidth
+              />
+              <TextField
+                label="Notes (optional)"
+                value={subsidyDialog.notes}
+                onChange={(e) =>
+                  setSubsidyDialog((prev) => ({ ...prev, notes: e.target.value }))
+                }
+                fullWidth
+                multiline
+                minRows={2}
+              />
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseSubsidyDialog} disabled={subsidyLoading}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmSubsidy}
+            variant="contained"
+            color={subsidyDialog.mode === "tag" ? "primary" : "error"}
+            disabled={subsidyLoading}
+          >
+            {subsidyLoading
+              ? "Saving..."
+              : subsidyDialog.mode === "tag"
+              ? "Apply Subsidy"
+              : "Remove Tags"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <ToastContainer />
 
       {/* Print Preview Dialog */}
@@ -1131,6 +1279,8 @@ const PSPCustomPageTable = ({
         dataListName={dataListName}
         apiPath={apiPath}
         onDataChange={setFilteredRows}
+        selectedRows={selectedRows}
+        onRowSelectionChange={setSelectedRows}
         columns={useMemo(() => Object.keys(schema)
           .filter((key) => (columnVisibility[key] !== false && (schema[key].show === true || key === "action")))
           .map((key) => {

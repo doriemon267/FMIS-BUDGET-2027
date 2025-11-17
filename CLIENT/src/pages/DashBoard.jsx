@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   Box,
   Grid,
@@ -7,14 +7,14 @@ import {
   Typography,
   Stack,
   Container,
-  IconButton,
   Chip,
   Button,
   Paper,
   Divider,
   useTheme,
   alpha,
-  LinearProgress
+  LinearProgress,
+  CircularProgress
 } from '@mui/material';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../config/api';
@@ -32,7 +32,6 @@ import { useRegion } from '../context/RegionContext';
 
 // Reusable Stat Card Component
 const StatCard = ({ title, value, color, icon: Icon, isLoading, subtitle, filled = true }) => {
-  const theme = useTheme();
   const { mode } = useThemeContext();
   const isDarkMode = mode === 'dark';
 
@@ -78,7 +77,6 @@ const StatCard = ({ title, value, color, icon: Icon, isLoading, subtitle, filled
 
 // Reusable Action Card Component
 const ActionCard = ({ title, description, icon: Icon, color, onClick, buttonText }) => {
-  const theme = useTheme();
   const { mode } = useThemeContext();
   const isDarkMode = mode === 'dark';
 
@@ -150,7 +148,7 @@ const ActionCard = ({ title, description, icon: Icon, color, onClick, buttonText
 const HomePage = () => {
   const navigate = useNavigate();
   const theme = useTheme();
-  const { mode, toggleTheme } = useThemeContext();
+  const { mode } = useThemeContext();
   const { currentUser } = useUser();
   const { activeRegion } = useRegion();
   const queryClient = useQueryClient();
@@ -236,167 +234,357 @@ const HomePage = () => {
     await queryClient.invalidateQueries(['dashboardStats', regionName, userAccessLevel]);
   };
 
+  const statusBreakdown = [
+    {
+      label: 'Pending',
+      value: pendingProposals,
+      color: '#d97706',
+    },
+    {
+      label: 'Approved',
+      value: approvedProposals,
+      color: '#16a34a',
+    },
+    {
+      label: 'Rejected',
+      value: rejectedProposals,
+      color: '#dc2626',
+    },
+  ];
+
+  const actionChips = [
+    {
+      label: `Access: ${displayInfo.level}`,
+      color: 'primary',
+      variant: 'outlined',
+    },
+    {
+      label: `Scope: ${displayInfo.scope}`,
+      color: 'secondary',
+      variant: 'outlined',
+    },
+    {
+      label: `Region: ${regionName || 'Not assigned'}`,
+      color: 'success',
+      variant: 'outlined',
+    },
+  ];
+
   return (
     <>
       <Container maxWidth='xl' sx={{ py: 3 }}>
-        {/* Simple Welcome Section */}
-        <Paper
-          elevation={isDarkMode ? 4 : 1}
-          sx={{
-            p: 3,
-            mb: 4,
-            borderRadius: 2,
-            background: isDarkMode
-              ? 'linear-gradient(135deg, #0f172a 0%, #0b3d2e 100%)' // deep slate to deep green
-              : 'linear-gradient(135deg, #1b5e20 0%, #2e7d32 100%)', // NIA green shades
-            color: 'white'
-          }}
-        >
-          <Stack direction={{ xs: 'column', md: 'row' }} justifyContent='space-between' alignItems='center' spacing={2}>
-            <Box>
-              <Typography variant='h5' fontWeight='bold' gutterBottom>
-                Welcome, {currentUser?.FirstName || 'User'}!
-              </Typography>
-              <Typography variant='body2' sx={{ opacity: 0.95 }}>
-                You are logged in with your assigned access.
-              </Typography>
-            </Box>
-          </Stack>
-        </Paper>
+        <Stack spacing={4}>
+          {/* Hero / Welcome Section */}
+          <Paper
+            elevation={isDarkMode ? 6 : 3}
+            sx={{
+              p: { xs: 3, md: 4 },
+              borderRadius: 3,
+              background: isDarkMode
+                ? 'linear-gradient(135deg, #0f172a 0%, #0b3d2e 100%)'
+                : 'linear-gradient(135deg, #0f5132 0%, #1b5e20 40%, #2e7d32 100%)',
+              color: 'white',
+              overflow: 'hidden',
+            }}
+          >
+            <Stack
+              direction={{ xs: 'column', lg: 'row' }}
+              spacing={3}
+              justifyContent='space-between'
+              alignItems={{ xs: 'flex-start', lg: 'center' }}
+            >
+              <Box flex={1}>
+                <Typography variant='overline' sx={{ letterSpacing: 2, opacity: 0.85 }}>
+                  Budget Performance Dashboard
+                </Typography>
+                <Typography variant='h4' fontWeight={700} sx={{ mt: 1, mb: 1 }}>
+                  Welcome back, {currentUser?.FirstName || 'Team Member'}
+                </Typography>
+                <Typography variant='body1' sx={{ opacity: 0.9, mb: 2 }}>
+                  Monitor submissions, act on pending work, and keep {displayInfo.name} on track for the current fiscal cycle.
+                </Typography>
+                <Stack direction='row' spacing={1} flexWrap='wrap' sx={{ mb: 3 }}>
+                  {actionChips.map((chip) => (
+                    <Chip
+                      key={chip.label}
+                      label={chip.label}
+                      color={chip.color}
+                      variant='outlined'
+                      size='small'
+                      sx={{
+                        color: 'white',
+                        borderColor: alpha('#ffffff', 0.35),
+                        mr: 1,
+                        mb: 1,
+                      }}
+                    />
+                  ))}
+                </Stack>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+                  {isPreparer && (
+                    <Button
+                      variant='contained'
+                      color='secondary'
+                      onClick={handleCreateProposal}
+                      sx={{ minWidth: 180, textTransform: 'none', fontWeight: 600 }}
+                    >
+                      New Proposal
+                    </Button>
+                  )}
+                  <Button
+                    variant='outlined'
+                    onClick={handleRefreshStats}
+                    sx={{
+                      minWidth: 150,
+                      textTransform: 'none',
+                      color: 'white',
+                      borderColor: alpha('#ffffff', 0.5),
+                      '&:hover': {
+                        borderColor: 'white',
+                      },
+                    }}
+                  >
+                    Refresh Stats
+                  </Button>
+                  <Button
+                    color='inherit'
+                    onClick={handleGenerateReports}
+                    sx={{ textTransform: 'none' }}
+                  >
+                    Generate Report
+                  </Button>
+                </Stack>
+              </Box>
 
-        {/* Stats Overview */}
-        <Box sx={{ mb: 4 }}>
-          <Typography variant='h6' fontWeight='bold' sx={{ mb: 3 }}>
-            📊 Overview
-          </Typography>
+              <Paper
+                elevation={0}
+                sx={{
+                  minWidth: { xs: '100%', lg: 320 },
+                  borderRadius: 3,
+                  p: 3,
+                  bgcolor: alpha('#ffffff', 0.1),
+                  border: `1px solid ${alpha('#ffffff', 0.2)}`,
+                }}
+              >
+                <Typography variant='body2' sx={{ opacity: 0.9 }}>Completion Rate</Typography>
+                <Stack direction='row' spacing={2} alignItems='center' sx={{ mt: 2 }}>
+                  <CircularProgress
+                    variant='determinate'
+                    value={Number(completionRate)}
+                    size={90}
+                    thickness={4}
+                    sx={{ color: '#a7ffeb' }}
+                  />
+                  <Box>
+                    <Typography variant='h3' fontWeight={700}>
+                      {completionRate}%
+                    </Typography>
+                    <Typography variant='body2' sx={{ opacity: 0.85 }}>
+                      Approved vs Total Submissions
+                    </Typography>
+                    <Divider sx={{ my: 1, borderColor: alpha('#ffffff', 0.3) }} />
+                    <Typography variant='caption' sx={{ display: 'block', opacity: 0.8 }}>
+                      Total proposals: {totalProposals}
+                    </Typography>
+                    <Typography variant='caption' sx={{ display: 'block', opacity: 0.8 }}>
+                      Pending review: {pendingProposals}
+                    </Typography>
+                  </Box>
+                </Stack>
+              </Paper>
+            </Stack>
+          </Paper>
 
+          {/* Stats Overview */}
+          <Box>
+            <Typography variant='h6' fontWeight='bold' sx={{ mb: 2 }}>
+              📊 Key Metrics
+            </Typography>
+            <Grid container spacing={3}>
+              <Grid item xs={12} sm={6} md={3}>
+                <StatCard
+                  title='Total Proposals'
+                  value={totalProposals}
+                  color='#1e88e5'
+                  icon={TrendingUpIcon}
+                  isLoading={isLoading}
+                  filled
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <StatCard
+                  title='Pending'
+                  value={pendingProposals}
+                  color='#f9a825'
+                  icon={PendingActionsIcon}
+                  isLoading={isLoading}
+                  subtitle={`${totalProposals > 0 ? ((pendingProposals / totalProposals) * 100).toFixed(1) : 0}% of total`}
+                  filled
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <StatCard
+                  title='Approved'
+                  value={approvedProposals}
+                  color='#2e7d32'
+                  icon={CheckCircleIcon}
+                  isLoading={isLoading}
+                  subtitle={`${totalProposals > 0 ? ((approvedProposals / totalProposals) * 100).toFixed(1) : 0}% of total`}
+                  filled
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <StatCard
+                  title='Rejected'
+                  value={rejectedProposals}
+                  color='#c62828'
+                  icon={CancelIcon}
+                  isLoading={isLoading}
+                  subtitle={`${totalProposals > 0 ? ((rejectedProposals / totalProposals) * 100).toFixed(1) : 0}% of total`}
+                  filled
+                />
+              </Grid>
+            </Grid>
+          </Box>
+
+          {/* Health + Context */}
           <Grid container spacing={3}>
-            <Grid item xs={12} sm={6} md={3}>
-              <StatCard
-                title='Total Proposals'
-                value={totalProposals}
-                color='#1e88e5'
-                icon={TrendingUpIcon}
-                isLoading={isLoading}
-                filled
-              />
+            <Grid item xs={12} md={7}>
+              <Paper
+                elevation={isDarkMode ? 5 : 1}
+                sx={{ p: 3, borderRadius: 3 }}
+              >
+                <Stack direction='row' justifyContent='space-between' alignItems='center' sx={{ mb: 2 }}>
+                  <Typography variant='h6' fontWeight={600}>
+                    Submission Health
+                  </Typography>
+                  <Button size='small' onClick={handleViewAllProposals} sx={{ textTransform: 'none' }}>
+                    View All
+                  </Button>
+                </Stack>
+                <Stack spacing={2}>
+                  {statusBreakdown.map((status) => (
+                    <Box key={status.label}>
+                      <Stack direction='row' justifyContent='space-between' alignItems='center'>
+                        <Typography variant='body2' color='text.secondary'>
+                          {status.label}
+                        </Typography>
+                        <Typography variant='body2' fontWeight={600}>
+                          {status.value}
+                        </Typography>
+                      </Stack>
+                      <LinearProgress
+                        variant='determinate'
+                        value={totalProposals ? (status.value / totalProposals) * 100 : 0}
+                        sx={{
+                          height: 10,
+                          borderRadius: 10,
+                          bgcolor: alpha(status.color, 0.15),
+                          '& .MuiLinearProgress-bar': { bgcolor: status.color },
+                          mt: 1,
+                        }}
+                      />
+                    </Box>
+                  ))}
+                </Stack>
+              </Paper>
             </Grid>
 
-            <Grid item xs={12} sm={6} md={3}>
-              <StatCard
-                title='Pending'
-                value={pendingProposals}
-                color='#f9a825'
-                icon={PendingActionsIcon}
-                isLoading={isLoading}
-                subtitle={`${totalProposals > 0 ? ((pendingProposals / totalProposals) * 100).toFixed(1) : 0}% of total`}
-                filled
-              />
-            </Grid>
-
-            <Grid item xs={12} sm={6} md={3}>
-              <StatCard
-                title='Approved'
-                value={approvedProposals}
-                color='#2e7d32'
-                icon={CheckCircleIcon}
-                isLoading={isLoading}
-                subtitle={`${totalProposals > 0 ? ((approvedProposals / totalProposals) * 100).toFixed(1) : 0}% of total`}
-                filled
-              />
-            </Grid>
-
-            <Grid item xs={12} sm={6} md={3}>
-              <StatCard
-                title='Rejected'
-                value={rejectedProposals}
-                color='#c62828'
-                icon={CancelIcon}
-                isLoading={isLoading}
-                subtitle={`${totalProposals > 0 ? ((rejectedProposals / totalProposals) * 100).toFixed(1) : 0}% of total`}
-                filled
-              />
+            <Grid item xs={12} md={5}>
+              <Paper
+                elevation={isDarkMode ? 5 : 1}
+                sx={{ p: 3, borderRadius: 3, height: '100%' }}
+              >
+                <Typography variant='h6' fontWeight={600} sx={{ mb: 2 }}>
+                  Access & Region Context
+                </Typography>
+                <Stack spacing={2}>
+                  <Box>
+                    <Typography variant='caption' color='text.secondary'>Active Region</Typography>
+                    <Typography variant='body1' fontWeight={600}>
+                      {regionName || 'Region not assigned'}
+                    </Typography>
+                  </Box>
+                  <Divider />
+                  <Box>
+                    <Typography variant='caption' color='text.secondary'>Access Level</Typography>
+                    <Typography variant='body1' fontWeight={600}>
+                      {displayInfo.level}
+                    </Typography>
+                    <Typography variant='body2' color='text.secondary'>
+                      {displayInfo.scope}
+                    </Typography>
+                  </Box>
+                  <Divider />
+                  <Box>
+                    <Typography variant='caption' color='text.secondary'>Upcoming Actions</Typography>
+                    <Typography variant='body2'>
+                      {pendingProposals > 0
+                        ? 'Review pending submissions to keep the pipeline moving.'
+                        : 'All caught up! No pending items at the moment.'}
+                    </Typography>
+                  </Box>
+                </Stack>
+              </Paper>
             </Grid>
           </Grid>
-        </Box>
 
-        {/* Status Breakdown */}
-        <Box sx={{ mb: 4 }}>
-          <Typography variant='h6' fontWeight='bold' sx={{ mb: 2 }}>
-            Proposal Status Breakdown
-          </Typography>
-          <Stack spacing={2}>
-            <Box>
-              <Typography variant='body2' color='text.secondary'>Pending</Typography>
-              <LinearProgress variant='determinate' value={totalProposals ? (pendingProposals/totalProposals)*100 : 0} sx={{ height: 8, borderRadius: 1, bgcolor: alpha('#d97706', 0.15), '& .MuiLinearProgress-bar': { bgcolor: '#d97706' } }} />
-            </Box>
-            <Box>
-              <Typography variant='body2' color='text.secondary'>Approved</Typography>
-              <LinearProgress variant='determinate' value={totalProposals ? (approvedProposals/totalProposals)*100 : 0} sx={{ height: 8, borderRadius: 1, bgcolor: alpha('#16a34a', 0.15), '& .MuiLinearProgress-bar': { bgcolor: '#16a34a' } }} />
-            </Box>
-            <Box>
-              <Typography variant='body2' color='text.secondary'>Rejected</Typography>
-              <LinearProgress variant='determinate' value={totalProposals ? (rejectedProposals/totalProposals)*100 : 0} sx={{ height: 8, borderRadius: 1, bgcolor: alpha('#dc2626', 0.15), '& .MuiLinearProgress-bar': { bgcolor: '#dc2626' } }} />
-            </Box>
-          </Stack>
-        </Box>
+          {/* Quick Actions */}
+          <Box>
+            <Typography variant='h6' fontWeight='bold' sx={{ mb: 3 }}>
+              🚀 Quick Actions
+            </Typography>
 
-        {/* Quick Actions */}
-        <Box>
-          <Typography variant='h6' fontWeight='bold' sx={{ mb: 3 }}>
-            🚀 Quick Actions
-          </Typography>
+            <Grid container spacing={3}>
+              {isPreparer && (
+                <Grid item xs={12} sm={6} md={4}>
+                  <ActionCard
+                    title='Create New Proposal'
+                    description='Start a new budget proposal submission'
+                    icon={AddCircleOutlineIcon}
+                    color={theme.palette.primary.main}
+                    onClick={handleCreateProposal}
+                    buttonText='Get Started'
+                  />
+                </Grid>
+              )}
 
-          <Grid container spacing={3}>
-            {isPreparer && (
+              {isPreparer && (
+                <Grid item xs={12} sm={6} md={4}>
+                  <ActionCard
+                    title='My Proposals'
+                    description='View and manage your submitted proposals'
+                    icon={ListAltIcon}
+                    color={theme.palette.secondary.main}
+                    onClick={handleViewProposals}
+                    buttonText='View Proposals'
+                  />
+                </Grid>
+              )}
+
+              {isPreparer && (
+                <Grid item xs={12} sm={6} md={4}>
+                  <ActionCard
+                    title='New Proposal Workflow'
+                    description='Use the new 6-step proposal workflow system'
+                    icon={ListAltIcon}
+                    color='#ff9800'
+                    onClick={() => navigate('/new-proposal-workflow')}
+                    buttonText='Open Workflow'
+                  />
+                </Grid>
+              )}
+
               <Grid item xs={12} sm={6} md={4}>
                 <ActionCard
-                  title='Create New Proposal'
-                  description='Start a new budget proposal submission'
-                  icon={AddCircleOutlineIcon}
-                  color={theme.palette.primary.main}
-                  onClick={handleCreateProposal}
-                  buttonText='Get Started'
+                  title='Generate Reports'
+                  description='Create customized reports and export data'
+                  icon={AssessmentIcon}
+                  color='#10b981'
+                  onClick={handleGenerateReports}
+                  buttonText='Generate Reports'
                 />
               </Grid>
-            )}
-
-            {isPreparer && (
-              <Grid item xs={12} sm={6} md={4}>
-                <ActionCard
-                  title='My Proposals'
-                  description='View and manage your submitted proposals'
-                  icon={ListAltIcon}
-                  color={theme.palette.secondary.main}
-                  onClick={handleViewProposals}
-                  buttonText='View Proposals'
-                />
-              </Grid>
-            )}
-
-            {isPreparer && (
-              <Grid item xs={12} sm={6} md={4}>
-                <ActionCard
-                  title='New Proposal Workflow'
-                  description='Use the new 6-step proposal workflow system'
-                  icon={ListAltIcon}
-                  color='#ff9800'
-                  onClick={() => navigate('/new-proposal-workflow')}
-                  buttonText='Open Workflow'
-                />
-              </Grid>
-            )}
-
-            <Grid item xs={12} sm={6} md={4}>
-              <ActionCard
-                title='Generate Reports'
-                description='Create customized reports and export data'
-                icon={AssessmentIcon}
-                color='#10b981'
-                onClick={handleGenerateReports}
-                buttonText='Generate Reports'
-              />
-            </Grid>
 
             <Grid item xs={12} sm={6} md={4}>
               <ActionCard
@@ -420,7 +608,8 @@ const HomePage = () => {
               />
             </Grid>
           </Grid>
-        </Box>
+          </Box>
+        </Stack>
       </Container>
     </>
   );

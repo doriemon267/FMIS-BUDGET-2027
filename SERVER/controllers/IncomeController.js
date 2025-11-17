@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Income = require("../models/Income");
 const Settings = require("../models/Settings");
 const Proposal = require('../models/Proposal');
+const ProposalEditLog = require('../models/ProposalEditLog');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 // Create new income entry
 exports.createIncome = async (req, res) => {
@@ -480,6 +481,65 @@ exports.bulkUpdateIncome = async (req, res) => {
       }
     } catch (error) {
       console.error("Error recalculating proposal totals:", error);
+    }
+
+    try {
+      const originalItemMap = new Map();
+      items.forEach(item => {
+        originalItemMap.set(item._id.toString(), item);
+      });
+
+      for (const updatedItem of updatedItems) {
+        const originalItem = originalItemMap.get(updatedItem._id.toString());
+        if (originalItem && updatedItem.proposalId) {
+          const changes = [];
+          
+          if (originalItem.amount !== undefined && updatedItem.amount !== originalItem.amount) {
+            changes.push({
+              field: 'amount',
+              oldValue: originalItem.amount,
+              newValue: updatedItem.amount,
+              valueType: 'number'
+            });
+          }
+
+          if (originalItem.cost !== undefined && updatedItem.cost !== originalItem.cost) {
+            changes.push({
+              field: 'cost',
+              oldValue: originalItem.cost,
+              newValue: updatedItem.cost,
+              valueType: 'number'
+            });
+          }
+
+          if (changes.length > 0) {
+            await ProposalEditLog.logChange({
+              proposalId: updatedItem.proposalId,
+              workflowRef: updatedItem.workflowRef,
+              fiscalYear: updatedItem.fiscalYear,
+              budgetType: updatedItem.budgetType,
+              region: updatedItem.region,
+              department: updatedItem.department,
+              division: updatedItem.division,
+              changeType: 'BULK_EDIT',
+              entityType: 'Income',
+              entityId: updatedItem._id,
+              changedBy: {
+                userId: req.user?.id || 'SYSTEM',
+                userName: req.user?.userName || 'SYSTEM',
+                email: req.user?.email,
+                role: req.user?.Roles?.join(', ') || 'SYSTEM'
+              },
+              changes,
+              summary: `Updated ${changes.length} field(s) in Income entry`,
+              ipAddress: req.ip,
+              userAgent: req.get('user-agent')
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error logging income changes:", error);
     }
 
     res.status(200).json({ 

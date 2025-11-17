@@ -3,6 +3,7 @@ const PersonnelServices = require("../models/PersonnelServices");
 const EmployeeMaster = require("../models/EmployeeList");
 const Settings = require("../models/Settings");
 const Proposal = require('../models/Proposal');
+const ProposalEditLog = require('../models/ProposalEditLog');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { getActiveSettingsWithCompensation, getCompensationField } = require("../utils/settingsUtils");
@@ -16,6 +17,56 @@ const {
   booleanFilter,
   searchFilter,
 } = require("../utils/controller_get_process");
+
+const LOCKED_PERSONNEL_STATUSES = [
+  "Submitted",
+  "Division Submitted",
+  "Department Verified",
+  "Department Submitted",
+  "Region Approved",
+  "Finalized",
+];
+
+const parseBooleanQuery = (value) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "y"].includes(normalized)) return true;
+    if (["false", "0", "no", "n"].includes(normalized)) return false;
+  }
+  return null;
+};
+
+const normalizeHierarchicalFilters = (filters = {}) => {
+  if (!filters || typeof filters !== 'object') return {};
+  if (filters.$and || filters.$or) {
+    return filters;
+  }
+
+  const mapped = {};
+  if (filters.region) mapped.region = filters.region;
+  if (filters.department) mapped.department = filters.department;
+  if (filters.division) mapped.division = filters.division;
+  return mapped;
+};
+
+const recordMatchesFilters = (record, filters = {}) => {
+  if (!filters || Object.keys(filters).length === 0) return true;
+  if (filters.$and && Array.isArray(filters.$and)) {
+    return filters.$and.every((condition) =>
+      Object.entries(condition).every(([key, value]) => record[key] === value)
+    );
+  }
+  return Object.entries(filters).every(([key, value]) => {
+    if (key === '$or') {
+      return Array.isArray(value) && value.some((condition) =>
+        Object.entries(condition).every(([innerKey, innerValue]) => record[innerKey] === innerValue)
+      );
+    }
+    return record[key] === value;
+  });
+};
 // Add a function to sync meal allowance data
 async function syncMealAllowanceData(employeeNumber, fiscalYear) {
   try {
@@ -153,6 +204,7 @@ exports.getAllPersonnelServices = async (req, res) => {
       statusOfAppointment,
       syncMealAllowances = false,
       region, // Add region parameter
+      subsidyEligible,
     } = req.query;
 
     // Get filters from middleware - prioritize submission workflow filters over hierarchical filters
@@ -234,6 +286,15 @@ exports.getAllPersonnelServices = async (req, res) => {
         query.$and.push({ region: region });
       } else if (!query.region) {
         query.region = region;
+      }
+    }
+
+    const subsidyFilter = parseBooleanQuery(subsidyEligible);
+    if (subsidyFilter !== null) {
+      if (query.$and) {
+        query.$and.push({ subsidyEligible: subsidyFilter });
+      } else {
+        query.subsidyEligible = subsidyFilter;
       }
     }
     const sortByField = orderBy || "createdAt";
@@ -863,6 +924,9 @@ exports.updatePersonnelService = async (req, res) => {
       "honoraria",
       "childrenAllowance",
       "Total",
+      "subsidyAmount",
+      "subsidyEligible",
+      "subsidyNotes",
     ];
     const filteredUpdateFields = Object.keys(updateFields)
       .filter((key) => allowedFields.includes(key))
@@ -887,8 +951,7 @@ exports.updatePersonnelService = async (req, res) => {
     }
 
     // Check if the record has been submitted and prevent editing
-    const submittedStatuses = ["Submitted", "Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"];
-    if (submittedStatuses.includes(personnelServices.status)) {
+    if (LOCKED_PERSONNEL_STATUSES.includes(personnelServices.status)) {
       return res.status(403).json({
         error: "Update not allowed",
         message: "Cannot edit personnel service record that has been submitted or approved"
@@ -1000,7 +1063,7 @@ exports.updatePersonnelService = async (req, res) => {
 };
 exports.getAllPerServices = async (req, res) => {
   try {
-    const { fiscalYear, region } = req.query;
+    const { fiscalYear, region, subsidyEligible } = req.query;
     // Get active settings to determine fiscal year if not provided
     const activeSettings = await Settings.findOne({ isActive: true });
     if (!activeSettings) {
@@ -1027,8 +1090,17 @@ exports.getAllPerServices = async (req, res) => {
     if (region && !query.region && (!query.$and || !query.$and.some(condition => condition.region))) {
       query.region = region;
     }
+
+    const subsidyFilter = parseBooleanQuery(subsidyEligible);
+    if (subsidyFilter !== null) {
+      if (query.$and) {
+        query.$and.push({ subsidyEligible: subsidyFilter });
+      } else {
+        query.subsidyEligible = subsidyFilter;
+      }
+    }
     
-    const personnelServices = await PersonnelServices.find(query);
+  const personnelServices = await PersonnelServices.find(query);
     res.status(200).json(personnelServices);
   } catch (error) {
     console.error("Error fetching personnel services:", error.stack);
@@ -1419,11 +1491,244 @@ exports.getPersonnelHiredBeforeJune1988 = async (req, res) => {
     res.status(500).json({ message: "Server error", details: error.message });
   }
 };
+
+exports.bulkUpdatePersonnelService = async (req, res) => {
+  try {
+    const { items } = req.body;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "Items array is required and must not be empty" });
+    }
+
+    const activeSettings = await Settings.findOne({ isActive: true });
+    const setFY = activeSettings?.fiscalYear;
+    const setBT = activeSettings?.budgetType;
+    const workflowData = req.submissionWorkflowData || {};
+
+    const updates = [];
+
+    for (const item of items) {
+      if (!item._id) {
+        return res.status(400).json({ message: "Each item must have an _id field" });
+      }
+
+      const existingPersonnel = await PersonnelServices.findById(item._id);
+      if (!existingPersonnel) {
+        return res.status(404).json({ message: `Personnel entry with ID ${item._id} not found` });
+      }
+
+      updates.push(
+        PersonnelServices.findByIdAndUpdate(
+          item._id,
+          {
+            Total: item.Total !== undefined ? item.Total : (item.amount !== undefined ? item.amount : existingPersonnel.Total),
+            amount: item.amount !== undefined ? item.amount : (item.Total !== undefined ? item.Total : existingPersonnel.amount),
+            ...(setFY ? { fiscalYear: setFY } : {}),
+            ...(setBT ? { budgetType: setBT } : {}),
+            region: item.region !== undefined ? item.region : (workflowData.region || existingPersonnel.region),
+            department: item.department !== undefined ? item.department : (workflowData.department || existingPersonnel.department),
+            division: item.division !== undefined ? item.division : (workflowData.division || existingPersonnel.division),
+            processBy: item.processBy !== undefined ? item.processBy : (req.user?.userName || req.user?.id || existingPersonnel.processBy),
+            processDate: item.processDate !== undefined ? item.processDate : new Date(),
+            status: item.status !== undefined ? item.status : (workflowData.status || existingPersonnel.status),
+            ...(workflowData.originalLevel ? { originalLevel: workflowData.originalLevel } : {}),
+            ...(workflowData.workflowLevel ? { workflowLevel: workflowData.workflowLevel } : {}),
+          },
+          { new: true }
+        )
+      );
+    }
+
+    const updatedItems = await Promise.all(updates);
+
+    try {
+      const proposalIds = new Set();
+      for (const item of updatedItems) {
+        if (item.proposalId) {
+          proposalIds.add(item.proposalId);
+        }
+        if (item.workflowRef) {
+          proposalIds.add(item.workflowRef);
+        }
+      }
+
+      if (proposalIds.size > 0) {
+        for (const proposalId of proposalIds) {
+          await recalculateAndSaveProposalTotals({ proposalId });
+        }
+      }
+    } catch (error) {
+      console.error("Error recalculating proposal totals:", error);
+    }
+
+    try {
+      const originalItemMap = new Map();
+      items.forEach(item => {
+        originalItemMap.set(item._id.toString(), item);
+      });
+
+      for (const updatedItem of updatedItems) {
+        const originalItem = originalItemMap.get(updatedItem._id.toString());
+        if (originalItem && updatedItem.proposalId) {
+          const changes = [];
+          
+          const amountField = 'Total';
+          if (originalItem[amountField] !== undefined && updatedItem[amountField] !== originalItem[amountField]) {
+            changes.push({
+              field: amountField,
+              oldValue: originalItem[amountField],
+              newValue: updatedItem[amountField],
+              valueType: 'number'
+            });
+          }
+
+          if (originalItem.amount !== undefined && updatedItem.amount !== originalItem.amount) {
+            changes.push({
+              field: 'amount',
+              oldValue: originalItem.amount,
+              newValue: updatedItem.amount,
+              valueType: 'number'
+            });
+          }
+
+          if (changes.length > 0) {
+            await ProposalEditLog.logChange({
+              proposalId: updatedItem.proposalId,
+              workflowRef: updatedItem.workflowRef,
+              fiscalYear: updatedItem.fiscalYear,
+              budgetType: updatedItem.budgetType,
+              region: updatedItem.region,
+              department: updatedItem.department,
+              division: updatedItem.division,
+              changeType: 'BULK_EDIT',
+              entityType: 'PersonnelServices',
+              entityId: updatedItem._id,
+              changedBy: {
+                userId: req.user?.id || 'SYSTEM',
+                userName: req.user?.userName || 'SYSTEM',
+                email: req.user?.email,
+                role: req.user?.Roles?.join(', ') || 'SYSTEM'
+              },
+              changes,
+              summary: `Updated ${changes.length} field(s) in Personnel Services entry`,
+              ipAddress: req.ip,
+              userAgent: req.get('user-agent')
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error logging personnel changes:", error);
+    }
+
+    res.status(200).json({
+      message: "Personnel entries updated successfully",
+      updatedCount: updatedItems.length,
+      items: updatedItems
+    });
+  } catch (error) {
+    console.error("Error updating personnel entries:", error);
+    res.status(500).json({ message: "Failed to update personnel entries" });
+  }
+};
+
+exports.bulkSetPersonnelSubsidy = async (req, res) => {
+  try {
+    const {
+      items = [],
+      defaultAmount = 0,
+      subsidyEligible = true,
+      notes,
+    } = req.body || {};
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        message: "Items array is required to update subsidy",
+      });
+    }
+
+    const hierarchicalFilters = normalizeHierarchicalFilters(req.hierarchicalFilters);
+    const results = {
+      updated: [],
+      skipped: [],
+    };
+
+    for (const payload of items) {
+      const targetId = payload?._id || payload?.id;
+      if (!targetId) {
+        results.skipped.push({ reason: "Missing _id", payload });
+        continue;
+      }
+
+      const record = await PersonnelServices.findById(targetId);
+      if (!record) {
+        results.skipped.push({ reason: "Record not found", id: targetId });
+        continue;
+      }
+
+      if (!recordMatchesFilters(record, hierarchicalFilters)) {
+        results.skipped.push({ reason: "Access denied", id: targetId });
+        continue;
+      }
+
+      if (LOCKED_PERSONNEL_STATUSES.includes(record.status)) {
+        results.skipped.push({ reason: "Locked status", id: targetId, status: record.status });
+        continue;
+      }
+
+      const resolvedAmount = Number(payload.subsidyAmount ?? payload.amount ?? defaultAmount ?? record.subsidyAmount ?? 0);
+      const normalizedAmount = Number.isFinite(resolvedAmount) && resolvedAmount > 0 ? resolvedAmount : 0;
+      const resolvedNotes = payload.subsidyNotes ?? notes ?? record.subsidyNotes ?? null;
+
+      const updateDocument = subsidyEligible
+        ? {
+            subsidyEligible: true,
+            subsidyAmount: normalizedAmount,
+            subsidyNotes: resolvedNotes,
+            subsidyTaggedBy: req.user?.userName || req.user?.email || req.user?.id || "SYSTEM",
+            subsidyTaggedAt: new Date(),
+          }
+        : {
+            subsidyEligible: false,
+            subsidyAmount: 0,
+            subsidyNotes: null,
+            subsidyTaggedBy: null,
+            subsidyTaggedAt: null,
+          };
+
+      const updated = await PersonnelServices.findByIdAndUpdate(
+        targetId,
+        { $set: updateDocument },
+        { new: true }
+      );
+
+      if (updated) {
+        results.updated.push(updated);
+      } else {
+        results.skipped.push({ reason: "Update failed", id: targetId });
+      }
+    }
+
+    return res.status(200).json({
+      message: subsidyEligible
+        ? `${results.updated.length} personnel tagged for subsidy`
+        : `${results.updated.length} personnel subsidy tags removed`,
+      updatedCount: results.updated.length,
+      updated: results.updated,
+      skipped: results.skipped,
+    });
+  } catch (error) {
+    console.error("Error updating personnel subsidy flags:", error);
+    return res.status(500).json({ message: "Failed to update personnel subsidy" });
+  }
+};
+
 module.exports = {
   getAllPersonnelServices: exports.getAllPersonnelServices,
   bulkAddPersonnelServices: exports.bulkAddPersonnelServices,
   getAllPerServices: exports.getAllPerServices,
   updatePersonnelService: exports.updatePersonnelService,
+  bulkUpdatePersonnelService: exports.bulkUpdatePersonnelService,
   getGrandTotalPermanent: exports.getGrandTotalPermanent,
   getGrandTotalCasual: exports.getGrandTotalCasual,
   deleteAllPersonnelss: exports.deleteAllPersonnelss,
@@ -1432,4 +1737,5 @@ module.exports = {
   syncAllMealAllowances: exports.syncAllMealAllowances,
   getPersonnelServices: exports.getPersonnelServices,
   PersonnelServices: require("../models/PersonnelServices"),
+  bulkSetPersonnelSubsidy: exports.bulkSetPersonnelSubsidy,
 };

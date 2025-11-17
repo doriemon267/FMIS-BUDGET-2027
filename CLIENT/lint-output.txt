@@ -123,26 +123,6 @@ d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\budgetarysupport\BudgetaryS
 d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\capitaloutlay\CapitalOutlayCustompage.jsx
   2:8  error  'TextSearchable' is defined but never used. Allowed unused vars must match /^(React|_)/u  no-unused-vars
 
-d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\capitaloutlay\CapitalOutlayDataGrid.jsx
-    23:3   error  'InputAdornment' is defined but never used. Allowed unused vars must match /^(React|_)/u        no-unused-vars
-    24:3   error  'Table' is defined but never used. Allowed unused vars must match /^(React|_)/u                 no-unused-vars
-    25:3   error  'TableBody' is defined but never used. Allowed unused vars must match /^(React|_)/u             no-unused-vars
-    26:3   error  'TableCell' is defined but never used. Allowed unused vars must match /^(React|_)/u             no-unused-vars
-    27:3   error  'TableContainer' is defined but never used. Allowed unused vars must match /^(React|_)/u        no-unused-vars
-    28:3   error  'TableHead' is defined but never used. Allowed unused vars must match /^(React|_)/u             no-unused-vars
-    29:3   error  'TableRow' is defined but never used. Allowed unused vars must match /^(React|_)/u              no-unused-vars
-    30:3   error  'TablePagination' is defined but never used. Allowed unused vars must match /^(React|_)/u       no-unused-vars
-    34:3   error  'Divider' is defined but never used. Allowed unused vars must match /^(React|_)/u               no-unused-vars
-    36:3   error  'Zoom' is defined but never used. Allowed unused vars must match /^(React|_)/u                  no-unused-vars
-    42:3   error  'Delete' is defined but never used. Allowed unused vars must match /^(React|_)/u                no-unused-vars
-    50:3   error  'AttachMoney' is defined but never used. Allowed unused vars must match /^(React|_)/u           no-unused-vars
-   899:60  error  'disableIncomeInputs' is assigned a value but never used. Allowed unused args must match /^_/u  no-unused-vars
-  1021:5   error  Unnecessary try/catch wrapper                                                                   no-useless-catch
-  1070:5   error  Unnecessary try/catch wrapper                                                                   no-useless-catch
-
-d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\capitaloutlay\CapitalOutlayDetailsModal.jsx
-  37:7  error  'isValidCapitalOutlayUacs' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u  no-unused-vars
-
 d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\capitaloutlay\CapitalOutlayFilters.jsx
   20:7  error  'defaultFilterState' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u  no-unused-vars
 
@@ -156,43 +136,35 @@ d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\capitaloutlay\CapitalOutlay
     58:3   error    'CheckBox' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                  no-unused-vars
     59:3   error    'CheckBoxOutlineBlank' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                      no-unused-vars
     64:3   error    'List' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                      no-unused-vars
-   143:10  error    'status' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                           no-unused-vars
-   148:9   error    'isMobile' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                         no-unused-vars
-   164:10  error    'bulkEditMode' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                     no-unused-vars
-   164:24  error    'setBulkEditMode' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                  no-unused-vars
-   166:10  error    'exportDialogOpen' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                 no-unused-vars
-   166:28  error    'setExportDialogOpen' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                              no-unused-vars
-   169:28  error    'setValidationErrors' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                              no-unused-vars
-   180:10  error    'showFilters' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                      no-unused-vars
-   180:23  error    'setShowFilters' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                   no-unused-vars
-   292:6   warning  React Hook useEffect has missing dependencies: 'autoSaveTimer' and 'handleAutoSave'. Either include them or remove the dependency array                                                                             react-hooks/exhaustive-deps
-   295:9   error    'trackChanges' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                     no-unused-vars
-   306:9   error    'columnTotals' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                     no-unused-vars
-   333:9   warning  The 'handleOpenDetailsModal' function makes the dependencies of useCallback Hook (at line 1073) change on every render. To fix this, wrap the definition of 'handleOpenDetailsModal' in its own useCallback() Hook  react-hooks/exhaustive-deps
-   588:68  error    'categoryId' is defined but never used. Allowed unused args must match /^_/u                                                                                                                                        no-unused-vars
-   606:6   warning  React Hook useCallback has missing dependencies: 'activeRegion?.name' and 'regionFilter'. Either include them or remove the dependency array                                                                        react-hooks/exhaustive-deps
-   608:9   error    'handleSelectAll' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                  no-unused-vars
-   825:9   error    'handleEditOutlay' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                 no-unused-vars
-   839:9   error    'handleSaveEdit' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                   no-unused-vars
-   914:5   warning  React Hook useCallback has missing dependencies: 'activeRegion?.name', 'fetchAllCapitalOutlayDetails', 'regionFilter', and 'validateInput'. Either include them or remove the dependency array                      react-hooks/exhaustive-deps
-   917:9   error    'handleCancelEdit' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                 no-unused-vars
-   968:5   warning  React Hook useCallback has a missing dependency: 'canDeleteItems'. Either include it or remove the dependency array                                                                                                 react-hooks/exhaustive-deps
-   971:9   error    'isDuplicateOutlay' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                no-unused-vars
-   984:9   error    'handleAddOutlay' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                  no-unused-vars
-  1391:6   warning  React Hook useMemo has a missing dependency: 'filteredData'. Either include it or remove the dependency array                                                                                                       react-hooks/exhaustive-deps
-  1405:9   error    'toRoman' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                          no-unused-vars
-  1431:9   error    'isGroupSubmitted' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                 no-unused-vars
-  1452:9   error    'OutlayTextField' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                  no-unused-vars
-  1474:9   error    'TableHeader' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                      no-unused-vars
-  1688:36  error    'index' is defined but never used. Allowed unused args must match /^_/u                                                                                                                                             no-unused-vars
-
-d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\capitaloutlay\CapitalOutlayTableEnhanced.jsx
-   180:5  error    'setCategories' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                          no-unused-vars
-   183:5  error    'refreshData' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                            no-unused-vars
-   561:6  warning  React Hook useCallback has a missing dependency: 'setAccountingTitles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
-   839:7  error    'setLoading' is not defined                                                                                               no-undef
-   859:7  error    'setLoading' is not defined                                                                                               no-undef
-  1081:9  error    'renderFilterControls' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                   no-unused-vars
+   144:10  error    'status' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                           no-unused-vars
+   149:9   error    'isMobile' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                         no-unused-vars
+   165:10  error    'bulkEditMode' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                     no-unused-vars
+   165:24  error    'setBulkEditMode' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                  no-unused-vars
+   167:10  error    'exportDialogOpen' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                 no-unused-vars
+   167:28  error    'setExportDialogOpen' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                              no-unused-vars
+   170:28  error    'setValidationErrors' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                              no-unused-vars
+   181:10  error    'showFilters' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                      no-unused-vars
+   181:23  error    'setShowFilters' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                   no-unused-vars
+   304:6   warning  React Hook useEffect has missing dependencies: 'autoSaveTimer' and 'handleAutoSave'. Either include them or remove the dependency array                                                                             react-hooks/exhaustive-deps
+   307:9   error    'trackChanges' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                     no-unused-vars
+   318:9   error    'columnTotals' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                     no-unused-vars
+   345:9   warning  The 'handleOpenDetailsModal' function makes the dependencies of useCallback Hook (at line 1090) change on every render. To fix this, wrap the definition of 'handleOpenDetailsModal' in its own useCallback() Hook  react-hooks/exhaustive-deps
+   601:68  error    'categoryId' is defined but never used. Allowed unused args must match /^_/u                                                                                                                                        no-unused-vars
+   619:6   warning  React Hook useCallback has missing dependencies: 'activeRegion?.name' and 'regionFilter'. Either include them or remove the dependency array                                                                        react-hooks/exhaustive-deps
+   621:9   error    'handleSelectAll' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                  no-unused-vars
+   838:9   error    'handleEditOutlay' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                 no-unused-vars
+   852:9   error    'handleSaveEdit' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                   no-unused-vars
+   928:5   warning  React Hook useCallback has missing dependencies: 'activeRegion?.name', 'fetchAllCapitalOutlayDetails', 'regionFilter', and 'validateInput'. Either include them or remove the dependency array                      react-hooks/exhaustive-deps
+   931:9   error    'handleCancelEdit' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                 no-unused-vars
+   983:5   warning  React Hook useCallback has a missing dependency: 'canDeleteItems'. Either include it or remove the dependency array                                                                                                 react-hooks/exhaustive-deps
+   986:9   error    'isDuplicateOutlay' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                no-unused-vars
+   999:9   error    'handleAddOutlay' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                  no-unused-vars
+  1415:6   warning  React Hook useMemo has a missing dependency: 'filteredData'. Either include it or remove the dependency array                                                                                                       react-hooks/exhaustive-deps
+  1429:9   error    'toRoman' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                          no-unused-vars
+  1455:9   error    'isGroupSubmitted' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                 no-unused-vars
+  1476:9   error    'OutlayTextField' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                  no-unused-vars
+  1498:9   error    'TableHeader' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                      no-unused-vars
+  1712:36  error    'index' is defined but never used. Allowed unused args must match /^_/u                                                                                                                                             no-unused-vars
 
 d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\capitaloutlay\EnhancedTitleMappingDialog.jsx
     1:17  error  'useState' is defined but never used. Allowed unused vars must match /^(React|_)/u                 no-unused-vars
@@ -257,14 +229,14 @@ d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\corporateincome\IncomeTable
     94:10  error    'autoSaveTimer' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                                   no-unused-vars
    150:46  error    'loadingSettings' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                                 no-unused-vars
    341:41  warning  React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead                                                                                                                                                         react-hooks/exhaustive-deps
-   530:36  error    'categoryName' is defined but never used. Allowed unused args must match /^_/u                                                                                                                                                                                     no-unused-vars
-   577:6   warning  React Hook useMemo has missing dependencies: 'calculateCategorySubtotal', 'checkRegionMatch', 'discountSettings?.region', and 'regionFilter'. Either include them or remove the dependency array                                                                   react-hooks/exhaustive-deps
-   650:9   error    'handleAddCategory' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                               no-unused-vars
-   661:9   warning  The 'handleSaveAll' function makes the dependencies of useEffect Hook (at line 743) change on every render. To fix this, wrap the definition of 'handleSaveAll' in its own useCallback() Hook                                                                      react-hooks/exhaustive-deps
-   745:9   error    'handleAddSubcategoryField' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                       no-unused-vars
-   771:36  error    React Hook "useMutation" is called in function "handleSaveNewSubcategory" that is neither a React function component nor a custom React Hook function. React component names must start with an uppercase letter. React Hook names must start with the word "use"  react-hooks/rules-of-hooks
-   831:6   warning  React Hook useEffect has a missing dependency: 'checkRegionMatch'. Either include it or remove the dependency array                                                                                                                                                react-hooks/exhaustive-deps
-  1286:34  error    'deleteItemMutation' is not defined                                                                                                                                                                                                                                no-undef
+   548:36  error    'categoryName' is defined but never used. Allowed unused args must match /^_/u                                                                                                                                                                                     no-unused-vars
+   595:6   warning  React Hook useMemo has missing dependencies: 'calculateCategorySubtotal', 'checkRegionMatch', 'discountSettings?.region', and 'regionFilter'. Either include them or remove the dependency array                                                                   react-hooks/exhaustive-deps
+   668:9   error    'handleAddCategory' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                               no-unused-vars
+   680:9   warning  The 'handleSaveAll' function makes the dependencies of useEffect Hook (at line 770) change on every render. To fix this, wrap the definition of 'handleSaveAll' in its own useCallback() Hook                                                                      react-hooks/exhaustive-deps
+   772:9   error    'handleAddSubcategoryField' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                       no-unused-vars
+   798:36  error    React Hook "useMutation" is called in function "handleSaveNewSubcategory" that is neither a React function component nor a custom React Hook function. React component names must start with an uppercase letter. React Hook names must start with the word "use"  react-hooks/rules-of-hooks
+   858:6   warning  React Hook useEffect has a missing dependency: 'checkRegionMatch'. Either include it or remove the dependency array                                                                                                                                                react-hooks/exhaustive-deps
+  1340:34  error    'deleteItemMutation' is not defined                                                                                                                                                                                                                                no-undef
 
 d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\corporateincome\IncomeTableTest.jsx
   19:22  error  'setFiscalYear' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u  no-unused-vars
@@ -413,12 +385,12 @@ d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\incomesubcategories\RegionM
 
 d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\jocos\PersonnelCustomPageTable.jsx
   33:11  error  'EditIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                    no-unused-vars
-  69:3   error  'searchable' is assigned a value but never used. Allowed unused args must match /^_/u                 no-unused-vars
-  72:3   error  'hasAdd' is assigned a value but never used. Allowed unused args must match /^_/u                     no-unused-vars
-  73:3   error  'customAddElement' is assigned a value but never used. Allowed unused args must match /^_/u           no-unused-vars
-  88:10  error  'selectedPersonnel' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u  no-unused-vars
-  91:10  error  'grandTotal' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u         no-unused-vars
-  91:22  error  'setGrandTotal' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u      no-unused-vars
+  70:3   error  'searchable' is assigned a value but never used. Allowed unused args must match /^_/u                 no-unused-vars
+  73:3   error  'hasAdd' is assigned a value but never used. Allowed unused args must match /^_/u                     no-unused-vars
+  74:3   error  'customAddElement' is assigned a value but never used. Allowed unused args must match /^_/u           no-unused-vars
+  91:10  error  'selectedPersonnel' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u  no-unused-vars
+  94:10  error  'grandTotal' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u         no-unused-vars
+  94:22  error  'setGrandTotal' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u      no-unused-vars
 
 d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\jocos\PersonnelCustomTable.jsx
    13:3   error    'TableFooter' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                                                                            no-unused-vars
@@ -536,30 +508,30 @@ d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\mooe\MooeTable.jsx
     36:3   error    'FormControl' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                no-unused-vars
     37:3   error    'InputLabel' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                 no-unused-vars
     38:3   error    'Select' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                     no-unused-vars
-    94:8   error    'ClearIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                  no-unused-vars
-    98:8   error    'VisibilityIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                             no-unused-vars
-    99:8   error    'BarChartIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                               no-unused-vars
-   103:17  error    'onDataChange' is defined but never used. Allowed unused args must match /^_/u                                                       no-unused-vars
-   108:31  error    'setDisableIncomeInputs' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                            no-unused-vars
-   146:10  error    'selectedRows' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                      no-unused-vars
-   147:20  error    'setViewMode' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                       no-unused-vars
-   148:10  error    'showMiniCharts' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                    no-unused-vars
-   148:26  error    'setShowMiniCharts' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                 no-unused-vars
-   149:10  error    'exportDialogOpen' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                  no-unused-vars
-   149:28  error    'setExportDialogOpen' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                               no-unused-vars
-   157:9   error    'getEffectiveField' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                 no-unused-vars
-   239:46  error    'consolidatedLoading' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                               no-unused-vars
-   552:6   warning  React Hook useEffect has a missing dependency: 'activeRegion.name'. Either include it or remove the dependency array                 react-hooks/exhaustive-deps
-   656:9   error    'handleAmountChange' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                no-unused-vars
-   704:30  warning  React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead                           react-hooks/exhaustive-deps
-   723:11  error    'currentData' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                       no-unused-vars
-   812:31  warning  React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead                           react-hooks/exhaustive-deps
-   825:11  error    'currentData' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                       no-unused-vars
-   895:9   error    'handleTitleChange' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                 no-unused-vars
-   916:9   error    'addCustomMOOE' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                     no-unused-vars
-   954:7   error    Unnecessary try/catch wrapper                                                                                                        no-useless-catch
-  1244:6   warning  React Hook useEffect has missing dependencies: 'autoSaveTimer' and 'handleSave'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
-  1750:91  error    'index' is defined but never used. Allowed unused args must match /^_/u                                                              no-unused-vars
+    95:8   error    'ClearIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                  no-unused-vars
+    99:8   error    'VisibilityIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                             no-unused-vars
+   100:8   error    'BarChartIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                               no-unused-vars
+   104:17  error    'onDataChange' is defined but never used. Allowed unused args must match /^_/u                                                       no-unused-vars
+   109:31  error    'setDisableIncomeInputs' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                            no-unused-vars
+   149:10  error    'selectedRows' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                      no-unused-vars
+   150:20  error    'setViewMode' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                       no-unused-vars
+   151:10  error    'showMiniCharts' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                    no-unused-vars
+   151:26  error    'setShowMiniCharts' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                 no-unused-vars
+   152:10  error    'exportDialogOpen' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                  no-unused-vars
+   152:28  error    'setExportDialogOpen' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                               no-unused-vars
+   160:9   error    'getEffectiveField' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                 no-unused-vars
+   242:46  error    'consolidatedLoading' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                               no-unused-vars
+   555:6   warning  React Hook useEffect has a missing dependency: 'activeRegion.name'. Either include it or remove the dependency array                 react-hooks/exhaustive-deps
+   659:9   error    'handleAmountChange' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                no-unused-vars
+   707:30  warning  React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead                           react-hooks/exhaustive-deps
+   726:11  error    'currentData' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                       no-unused-vars
+   815:31  warning  React Hook useCallback received a function whose dependencies are unknown. Pass an inline function instead                           react-hooks/exhaustive-deps
+   828:11  error    'currentData' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                       no-unused-vars
+   898:9   error    'handleTitleChange' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                 no-unused-vars
+   919:9   error    'addCustomMOOE' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                     no-unused-vars
+   957:7   error    Unnecessary try/catch wrapper                                                                                                        no-useless-catch
+  1259:6   warning  React Hook useEffect has missing dependencies: 'autoSaveTimer' and 'handleSave'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  1772:91  error    'index' is defined but never used. Allowed unused args must match /^_/u                                                              no-unused-vars
 
 d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\mooe\__tests__\MooeRow.test.jsx
    34:19  error  'jest' is not defined        no-undef
@@ -933,60 +905,66 @@ d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\proposals\BudgetSummary.jsx
 d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\proposals\ProposalCustomPage.jsx
      6:3   error    'Suspense' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                  no-unused-vars
     26:8   error    'ErrorBoundary' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                             no-unused-vars
+    36:3   error    'Select' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                    no-unused-vars
+    38:3   error    'FormControl' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                               no-unused-vars
+    39:3   error    'InputLabel' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                no-unused-vars
     42:3   error    'Snackbar' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                  no-unused-vars
     43:3   error    'Alert' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                     no-unused-vars
-    44:3   error    'Paper' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                     no-unused-vars
     52:3   error    'Checkbox' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                  no-unused-vars
     59:3   error    'IconButton' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                no-unused-vars
     64:3   error    'Drawer' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                    no-unused-vars
     68:3   error    'Fab' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                       no-unused-vars
-    72:8   error    'BalanceIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                               no-unused-vars
-    82:8   error    'SaveIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                  no-unused-vars
-    90:8   error    'TableChartIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                            no-unused-vars
-    94:8   error    'MoreVertIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                              no-unused-vars
-    95:8   error    'MenuIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                  no-unused-vars
-    96:8   error    'CloseIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                 no-unused-vars
-    97:8   error    'CheckIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                 no-unused-vars
-    98:8   error    'DraftsIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                no-unused-vars
-   100:8   error    'BudgetSummary' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                             no-unused-vars
-   115:32  error    'canDelete' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                        no-unused-vars
-   125:10  error    'openDialog' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                       no-unused-vars
-   126:10  error    'loading' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                          no-unused-vars
-   130:10  error    'availableFiscalYears' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                             no-unused-vars
-   207:10  error    'mobileDrawerOpen' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                 no-unused-vars
-   207:28  error    'setMobileDrawerOpen' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                              no-unused-vars
-   236:10  error    'overviewExpanded' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                 no-unused-vars
-   236:28  error    'setOverviewExpanded' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                              no-unused-vars
-   246:10  error    'isValidating' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                     no-unused-vars
-   348:9   warning  The 'isEligibleForSubmission' function makes the dependencies of useCallback Hook (at line 1728) change on every render. To fix this, wrap the definition of 'isEligibleForSubmission' in its own useCallback() Hook                react-hooks/exhaustive-deps
-   374:9   error    'hasDrafts' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                        no-unused-vars
-   438:6   warning  React Hook useMemo has an unnecessary dependency: 'budgetarySupportData'. Either exclude it or remove the dependency array                                                                                                          react-hooks/exhaustive-deps
-   460:9   error    'submissionLocked' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                 no-unused-vars
-   491:6   warning  React Hook useEffect has a missing dependency: 'handleSaveAsDraft'. Either include it or remove the dependency array                                                                                                                react-hooks/exhaustive-deps
-   535:6   warning  React Hook useEffect has missing dependencies: 'handleOpenDialog' and 'handleSaveAsDraft'. Either include them or remove the dependency array                                                                                       react-hooks/exhaustive-deps
-   543:9   error    'handleIncomeGrandTotalUpdate' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                     no-unused-vars
-   545:13  error    'regionName' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                       no-unused-vars
-   579:13  error    'filteredIncomeData' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                               no-unused-vars
-   767:6   warning  React Hook useCallback has missing dependencies: 'calculateTotalBudget.budgetarySupportTotal', 'iasOMCostData', and 'incomeData'. Either include them or remove the dependency array                                                react-hooks/exhaustive-deps
-   939:51  error    'budgetarySupportError' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                            no-unused-vars
-  1007:9   error    'addPersonnelMutation' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                             no-unused-vars
-  1038:9   error    'addMooeMutation' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                  no-unused-vars
-  1163:13  error    'response' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                         no-unused-vars
-  1273:6   warning  React Hook useCallback has missing dependencies: 'QUERY_KEYS.budgetarySupport', 'QUERY_KEYS.capitalOutlay', 'QUERY_KEYS.income', 'QUERY_KEYS.mooe', and 'QUERY_KEYS.personnel'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
-  1283:22  error    Empty block statement                                                                                                                                                                                                               no-empty
-  1458:9   error    'handleCloseDialog' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                no-unused-vars
-  1502:9   error    'IncomeLockedBanner' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                               no-unused-vars
-  1694:6   warning  React Hook useMemo has an unnecessary dependency: 'budgetarySupportData'. Either exclude it or remove the dependency array                                                                                                          react-hooks/exhaustive-deps
-  1730:9   error    'handleDeselectAll' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                no-unused-vars
-  1968:9   error    'ActivityLogDialog' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                no-unused-vars
-  2099:6   warning  React Hook useEffect has a missing dependency: 'QUERY_KEYS.capitalOutlay'. Either include it or remove the dependency array                                                                                                         react-hooks/exhaustive-deps
-  2114:9   error    'StatusChip' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                       no-unused-vars
-  2176:9   error    'getStatusCounts' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                  no-unused-vars
-  2218:48  error    Empty block statement                                                                                                                                                                                                               no-empty
-  2226:48  error    Empty block statement                                                                                                                                                                                                               no-empty
-  2234:48  error    Empty block statement                                                                                                                                                                                                               no-empty
-  2242:48  error    Empty block statement                                                                                                                                                                                                               no-empty
-  2291:11  error    'notSubmittedItems' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                no-unused-vars
+    73:8   error    'BalanceIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                               no-unused-vars
+    83:8   error    'SaveIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                  no-unused-vars
+    91:8   error    'TableChartIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                            no-unused-vars
+    95:8   error    'MoreVertIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                              no-unused-vars
+    96:8   error    'MenuIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                  no-unused-vars
+    97:8   error    'CloseIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                 no-unused-vars
+    98:8   error    'CheckIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                 no-unused-vars
+    99:8   error    'DraftsIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                no-unused-vars
+   102:8   error    'BudgetSummary' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                             no-unused-vars
+   109:7   error    'StyledTab' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                        no-unused-vars
+   146:3   error    'searchable' is assigned a value but never used. Allowed unused args must match /^_/u                                                                                                                                               no-unused-vars
+   150:32  error    'canDelete' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                        no-unused-vars
+   160:10  error    'openDialog' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                       no-unused-vars
+   161:10  error    'loading' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                          no-unused-vars
+   165:10  error    'availableFiscalYears' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                             no-unused-vars
+   201:19  error    Empty block statement                                                                                                                                                                                                               no-empty
+   273:10  error    'mobileDrawerOpen' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                 no-unused-vars
+   273:28  error    'setMobileDrawerOpen' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                              no-unused-vars
+   302:10  error    'overviewExpanded' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                 no-unused-vars
+   302:28  error    'setOverviewExpanded' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                              no-unused-vars
+   312:10  error    'isValidating' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                     no-unused-vars
+   421:9   warning  The 'isEligibleForSubmission' function makes the dependencies of useCallback Hook (at line 1801) change on every render. To fix this, wrap the definition of 'isEligibleForSubmission' in its own useCallback() Hook                react-hooks/exhaustive-deps
+   447:9   error    'hasDrafts' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                        no-unused-vars
+   511:6   warning  React Hook useMemo has an unnecessary dependency: 'budgetarySupportData'. Either exclude it or remove the dependency array                                                                                                          react-hooks/exhaustive-deps
+   533:9   error    'submissionLocked' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                 no-unused-vars
+   564:6   warning  React Hook useEffect has a missing dependency: 'handleSaveAsDraft'. Either include it or remove the dependency array                                                                                                                react-hooks/exhaustive-deps
+   608:6   warning  React Hook useEffect has missing dependencies: 'handleOpenDialog' and 'handleSaveAsDraft'. Either include them or remove the dependency array                                                                                       react-hooks/exhaustive-deps
+   616:9   error    'handleIncomeGrandTotalUpdate' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                     no-unused-vars
+   618:13  error    'regionName' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                       no-unused-vars
+   652:13  error    'filteredIncomeData' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                               no-unused-vars
+   840:6   warning  React Hook useCallback has missing dependencies: 'calculateTotalBudget.budgetarySupportTotal', 'iasOMCostData', and 'incomeData'. Either include them or remove the dependency array                                                react-hooks/exhaustive-deps
+  1012:51  error    'budgetarySupportError' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                            no-unused-vars
+  1080:9   error    'addPersonnelMutation' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                             no-unused-vars
+  1111:9   error    'addMooeMutation' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                  no-unused-vars
+  1236:13  error    'response' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                         no-unused-vars
+  1346:6   warning  React Hook useCallback has missing dependencies: 'QUERY_KEYS.budgetarySupport', 'QUERY_KEYS.capitalOutlay', 'QUERY_KEYS.income', 'QUERY_KEYS.mooe', and 'QUERY_KEYS.personnel'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  1356:22  error    Empty block statement                                                                                                                                                                                                               no-empty
+  1531:9   error    'handleCloseDialog' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                no-unused-vars
+  1575:9   error    'IncomeLockedBanner' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                               no-unused-vars
+  1767:6   warning  React Hook useMemo has an unnecessary dependency: 'budgetarySupportData'. Either exclude it or remove the dependency array                                                                                                          react-hooks/exhaustive-deps
+  1803:9   error    'handleDeselectAll' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                no-unused-vars
+  2041:9   error    'ActivityLogDialog' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                no-unused-vars
+  2172:6   warning  React Hook useEffect has a missing dependency: 'QUERY_KEYS.capitalOutlay'. Either include it or remove the dependency array                                                                                                         react-hooks/exhaustive-deps
+  2187:9   error    'StatusChip' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                       no-unused-vars
+  2249:9   error    'getStatusCounts' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                  no-unused-vars
+  2291:48  error    Empty block statement                                                                                                                                                                                                               no-empty
+  2299:48  error    Empty block statement                                                                                                                                                                                                               no-empty
+  2307:48  error    Empty block statement                                                                                                                                                                                                               no-empty
+  2315:48  error    Empty block statement                                                                                                                                                                                                               no-empty
+  2364:11  error    'notSubmittedItems' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                no-unused-vars
+  2604:82  error    Redundant double negation                                                                                                                                                                                                           no-extra-boolean-cast
 
 d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\proposalsummary\PSCustomTable.jsx
    55:37  error    'error' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                                                                         no-unused-vars
@@ -1011,12 +989,12 @@ d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\pscasual\PersonnelCustomPag
     5:10  error    'useRegion' is defined but never used. Allowed unused vars must match /^(React|_)/u                           no-unused-vars
     6:8   error    'ActiveRegionDisplay' is defined but never used. Allowed unused vars must match /^(React|_)/u                 no-unused-vars
    47:8   error    'EditIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                            no-unused-vars
-   63:3   error    'searchable' is assigned a value but never used. Allowed unused args must match /^_/u                         no-unused-vars
-   66:3   error    'hasAdd' is assigned a value but never used. Allowed unused args must match /^_/u                             no-unused-vars
-   67:3   error    'customAddElement' is assigned a value but never used. Allowed unused args must match /^_/u                   no-unused-vars
-   97:10  error    'bulkActionAnchor' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u           no-unused-vars
-  467:17  error    'field' is defined but never used. Allowed unused args must match /^_/u                                       no-unused-vars
-  675:6   warning  React Hook useMemo has an unnecessary dependency: 'schema'. Either exclude it or remove the dependency array  react-hooks/exhaustive-deps
+   64:3   error    'searchable' is assigned a value but never used. Allowed unused args must match /^_/u                         no-unused-vars
+   67:3   error    'hasAdd' is assigned a value but never used. Allowed unused args must match /^_/u                             no-unused-vars
+   68:3   error    'customAddElement' is assigned a value but never used. Allowed unused args must match /^_/u                   no-unused-vars
+  100:10  error    'bulkActionAnchor' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u           no-unused-vars
+  481:17  error    'field' is defined but never used. Allowed unused args must match /^_/u                                       no-unused-vars
+  689:6   warning  React Hook useMemo has an unnecessary dependency: 'schema'. Either exclude it or remove the dependency array  react-hooks/exhaustive-deps
 
 d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\pscasual\PersonnelCustomTable.jsx
    13:3   error    'TableFooter' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                                                                                                                            no-unused-vars
@@ -1030,7 +1008,7 @@ d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\pscasual\PersonnelCustomTab
   485:67  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                                                                                                                                                                                                                  react/no-unescaped-entities
 
 d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\pspermanent\PersonnelCustomPageTable.jsx
-  697:6  warning  React Hook useMemo has an unnecessary dependency: 'schema'. Either exclude it or remove the dependency array  react-hooks/exhaustive-deps
+  714:6  warning  React Hook useMemo has an unnecessary dependency: 'schema'. Either exclude it or remove the dependency array  react-hooks/exhaustive-deps
 
 d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\pspermanent\PersonnelCustomTable.jsx
   118:6   warning  React Hook useEffect has missing dependencies: 'ROWS_PER_PAGE' and 'refetch'. Either include them or remove the dependency array. If 'setRowsPerPage' needs the current value of 'ROWS_PER_PAGE', you can also switch to useReducer instead of useState and read 'ROWS_PER_PAGE' in the reducer  react-hooks/exhaustive-deps
@@ -1306,7 +1284,7 @@ d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\subsistenceallowancemds\Sub
    19:47  error    'AddIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                                  no-unused-vars
    28:68  error    'schema' is defined but never used. Allowed unused args must match /^_/u                                           no-unused-vars
    55:34  error    'setBudgetTypeFromSettings' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u       no-unused-vars
-  137:6   warning  React Hook useEffect has a missing dependency: 'fetchEmployees'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  138:6   warning  React Hook useEffect has a missing dependency: 'fetchEmployees'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
 
 d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\components\subsistenceallowancest\SubsistenceAllowanceCustomPage.jsx
   14:3  error  'searchable' is assigned a value but never used. Allowed unused args must match /^_/u         no-unused-vars
@@ -1458,6 +1436,12 @@ d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\global\components\NotificationsContext
 d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\global\components\TableSearchBar.jsx
   13:6  warning  React Hook useEffect has a missing dependency: 'handleClearSearchValue'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
 
+d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\hooks\useWorkflowRef.js
+  15:74  error  Empty block statement  no-empty
+  16:72  error  Empty block statement  no-empty
+  27:62  error  Empty block statement  no-empty
+  28:60  error  Empty block statement  no-empty
+
 d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\layout\CustomDrawer.jsx
    2:10  error  'BiChild' is defined but never used. Allowed unused vars must match /^(React|_)/u                   no-unused-vars
    3:10  error  'AiFillMedicineBox' is defined but never used. Allowed unused vars must match /^(React|_)/u         no-unused-vars
@@ -1479,7 +1463,6 @@ d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\layout\CustomDrawer.jsx
   40:10  error  'openSettings' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u     no-unused-vars
   40:24  error  'setOpenSettings' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u  no-unused-vars
   45:9   error  'allRoles' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u         no-unused-vars
-  65:9   error  'isReviewer' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u       no-unused-vars
 
 d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\layout\Dashboard.jsx
    14:3   error    'Divider' is defined but never used. Allowed unused vars must match /^(React|_)/u                       no-unused-vars
@@ -1566,20 +1549,6 @@ d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\pages\CourtAppearancePage.jsx
   371:6   warning  React Hook useEffect has a missing dependency: 'handleSaveAll'. Either include it or remove the dependency array                                      react-hooks/exhaustive-deps
   647:6   warning  React Hook useMemo has missing dependencies: 'getHierarchicalColor' and 'getHierarchicalDisplay'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
 
-d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\pages\DashBoard.jsx
-    1:17  error  'useState' is defined but never used. Allowed unused vars must match /^(React|_)/u                         no-unused-vars
-    1:27  error  'useEffect' is defined but never used. Allowed unused vars must match /^(React|_)/u                        no-unused-vars
-   10:3   error  'IconButton' is defined but never used. Allowed unused vars must match /^(React|_)/u                       no-unused-vars
-   11:3   error  'Chip' is defined but never used. Allowed unused vars must match /^(React|_)/u                             no-unused-vars
-   14:3   error  'Divider' is defined but never used. Allowed unused vars must match /^(React|_)/u                          no-unused-vars
-   35:9   error  'theme' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                   no-unused-vars
-   81:9   error  'theme' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                   no-unused-vars
-  153:17  error  'toggleTheme' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u             no-unused-vars
-  209:9   error  'displayInfo' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u             no-unused-vars
-  229:9   error  'completionRate' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u          no-unused-vars
-  234:9   error  'handleViewAllProposals' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u  no-unused-vars
-  235:9   error  'handleRefreshStats' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u      no-unused-vars
-
 d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\pages\DashBoard_old.jsx
      1:17  error    'useState' is defined but never used. Allowed unused vars must match /^(React|_)/u                                     no-unused-vars
     14:3   error    'Divider' is defined but never used. Allowed unused vars must match /^(React|_)/u                                      no-unused-vars
@@ -1655,16 +1624,16 @@ d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\pages\FiscalYearSettingsPage.jsx
   48:68  error  'error' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u         no-unused-vars
 
 d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\pages\HierarchicalUserAssignmentPage.jsx
-   326:24  error    'setUserLookupId' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u        no-unused-vars
-   327:10  error    'isLookingUpUser' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u        no-unused-vars
-   327:27  error    'setIsLookingUpUser' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u     no-unused-vars
-   335:44  error    'loadingUserLookup' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u      no-unused-vars
-   335:72  error    'lookupUser' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u             no-unused-vars
-   739:27  error    'responsibilityCenters' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u  no-unused-vars
-   917:27  warning  `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`                                           react/no-unescaped-entities
-   939:62  warning  `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`                                           react/no-unescaped-entities
-  1833:69  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                           react/no-unescaped-entities
-  1833:84  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                           react/no-unescaped-entities
+   327:24  error    'setUserLookupId' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u        no-unused-vars
+   328:10  error    'isLookingUpUser' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u        no-unused-vars
+   328:27  error    'setIsLookingUpUser' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u     no-unused-vars
+   336:44  error    'loadingUserLookup' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u      no-unused-vars
+   336:72  error    'lookupUser' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u             no-unused-vars
+   740:27  error    'responsibilityCenters' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u  no-unused-vars
+   918:27  warning  `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`                                           react/no-unescaped-entities
+   940:62  warning  `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`                                           react/no-unescaped-entities
+  1834:69  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                           react/no-unescaped-entities
+  1834:84  warning  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`                                           react/no-unescaped-entities
 
 d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\pages\IncomeCategoryPage.jsx
   10:3   error  'alpha' is defined but never used. Allowed unused vars must match /^(React|_)/u       no-unused-vars
@@ -1707,20 +1676,16 @@ d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\pages\MyProposalPage.jsx
   266:14  error    'err' is defined but never used. Allowed unused caught errors must match /^_/u                                                          no-unused-vars
 
 d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\pages\NewProposalWorkflowPage.jsx
-   17:3   error  'Alert' is defined but never used. Allowed unused vars must match /^(React|_)/u                          no-unused-vars
-   23:3   error  'Card' is defined but never used. Allowed unused vars must match /^(React|_)/u                           no-unused-vars
-   24:3   error  'CardContent' is defined but never used. Allowed unused vars must match /^(React|_)/u                    no-unused-vars
-   37:10  error  'AddIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                        no-unused-vars
-   38:11  error  'EditIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                       no-unused-vars
-   45:17  error  'FilterIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                     no-unused-vars
-   46:13  error  'ExportIcon' is defined but never used. Allowed unused vars must match /^(React|_)/u                     no-unused-vars
-   58:7   error  'WORKFLOW_ROLES' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u        no-unused-vars
-   89:9   error  'navigate' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u              no-unused-vars
-  116:10  error  'createDialogOpen' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u      no-unused-vars
-  158:9   error  'canCreate' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u             no-unused-vars
-  247:9   error  'handleCreateProposal' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u  no-unused-vars
-  259:13  error  'response' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u              no-unused-vars
-  283:13  error  'response' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u              no-unused-vars
+    17:3   error    'Alert' is defined but never used. Allowed unused vars must match /^(React|_)/u                                                                                                      no-unused-vars
+    60:7   error    'WORKFLOW_ROLES' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                    no-unused-vars
+    95:9   error    'navigate' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                          no-unused-vars
+   115:9   warning  The 'tabs' conditional could make the dependencies of useEffect Hook (at line 124) change on every render. To fix this, wrap the initialization of 'tabs' in its own useMemo() Hook  react-hooks/exhaustive-deps
+   175:9   error    'canCreate' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                         no-unused-vars
+   205:6   warning  React Hook useCallback has a missing dependency: 'tabs'. Either include it or remove the dependency array                                                                            react-hooks/exhaustive-deps
+   230:9   error    'isReviewer' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                        no-unused-vars
+   361:9   error    'canUserEditProposal' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                               no-unused-vars
+  1087:37  error    'index' is defined but never used. Allowed unused args must match /^_/u                                                                                                              no-unused-vars
+  2018:49  error    'sublineTotal' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u                                                                                      no-unused-vars
 
 d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\pages\NotAuthorizedPage.jsx
   20:9  error  'handleGoBack' is assigned a value but never used. Allowed unused vars must match /^(React|_)/u  no-unused-vars
@@ -1744,5 +1709,6 @@ d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\pages\SubsistenceAllowanceMDSPage.jsx
 d:\DREED\FMIS-BUDGET-SEPTEMBER\CLIENT\src\pages\SubsistenceAllowanceSTPage.jsx
   3:8  error  'TextSearchable' is defined but never used. Allowed unused vars must match /^(React|_)/u  no-unused-vars
 
-✖ 1365 problems (1125 errors, 240 warnings)
+✖ 1336 problems (1095 errors, 241 warnings)
+  1 error and 0 warnings potentially fixable with the `--fix` option.
 

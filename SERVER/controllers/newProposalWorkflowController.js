@@ -3,11 +3,21 @@ const Proposal = require('../models/Proposal');
 const User = require('../models/User');
 const Region = require('../models/Region');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+const PersonnelServices = require('../models/PersonnelServices');
+const MooeProposal = require('../models/mooeProposals');
+const CapitalOutlay = require('../models/CapitalOutlay');
+const Income = require('../models/Income');
+const ProposalEditLog = require('../models/ProposalEditLog');
+const Notification = require('../models/Notification');
+const notificationController = require('./notificationController');
 
 // Workflow status transitions based on the specification
 const WORKFLOW_TRANSITIONS = {
   'BUDGET PREPARER': {
     'DRAFT': {
+      'submit-to-reviewer': 'FORWARDED_TO_REVIEWER'
+    },
+    'RETURNED_TO_PREPARER': {
       'submit-to-reviewer': 'FORWARDED_TO_REVIEWER'
     }
   },
@@ -130,6 +140,222 @@ const canPerformAction = (userRole, proposal, action) => {
   const canDo = transitions[workflowStatus] && transitions[workflowStatus][action];
   console.log('[canPerformAction] Result:', !!canDo);
   return canDo;
+};
+
+/**
+ * Helper function to determine notification recipients based on workflow action
+ * @param {string} action - The workflow action performed
+ * @param {Object} proposal - The proposal object
+ * @param {string} currentUserRole - The role of the user performing the action
+ * @param {string} currentUserId - The ID of the user performing the action
+ * @returns {Promise<Array>} Array of user IDs to notify
+ */
+const getNotificationRecipients = async (action, proposal, currentUserRole, currentUserId) => {
+  const recipients = [];
+
+  try {
+    console.log('[getNotificationRecipients] Called with action:', action);
+    console.log('[getNotificationRecipients] Proposal ID:', proposal._id);
+    console.log('[getNotificationRecipients] Proposal region:', proposal.region, 'Type:', typeof proposal.region);
+    console.log('[getNotificationRecipients] Current user role:', currentUserRole);
+    console.log('[getNotificationRecipients] Current user ID:', currentUserId);
+    
+    // Handle region - it might be ObjectId or string
+    const proposalRegionId = proposal.region ? (typeof proposal.region === 'object' ? proposal.region._id || proposal.region : proposal.region) : null;
+    const proposalRegionString = proposal.region ? (typeof proposal.region === 'object' ? proposal.region.toString() : proposal.region) : null;
+    
+    console.log('[getNotificationRecipients] Resolved region ID:', proposalRegionId, 'String:', proposalRegionString);
+    
+    // Convert currentUserId to string for comparison to avoid ObjectId casting errors
+    const currentUserIdString = String(currentUserId);
+    
+    // Helper function to find users by workflow role
+    const findUsersByWorkflowRole = async (roles, region = null) => {
+      try {
+        let query = { 
+          workflowRoles: { $in: roles },
+          isActive: true 
+        };
+        
+        // If region is specified, filter by regionId OR users with no region (system-wide staff)
+        if (region && region !== null) {
+          query.$or = [
+            { regionId: region },
+            { regionId: null },
+            { regionId: { $exists: false } }
+          ];
+        }
+        
+        console.log('[getNotificationRecipients] Query:', JSON.stringify(query));
+        const users = await HierarchicalUserAssignment.find(query).select('userId workflowRoles regionId');
+        console.log('[getNotificationRecipients] Found', users.length, 'users with roles', roles);
+        
+        return users;
+      } catch (err) {
+        console.error('[getNotificationRecipients] Error querying HierarchicalUserAssignment:', err.message);
+        return [];
+      }
+    };
+    
+    // Determine target recipients based on action
+    if (action === 'submit-to-reviewer') {
+      // Notify Budget Reviewers in the same region
+      const reviewers = await findUsersByWorkflowRole(['BUDGET_REVIEWER', 'BUDGET REVIEWER'], proposalRegionId);
+      const filteredReviewers = reviewers.filter(u => u.userId !== currentUserIdString);
+      console.log('[getNotificationRecipients] Found', filteredReviewers.length, 'reviewers for submit-to-reviewer');
+      recipients.push(...filteredReviewers.map(u => u.userId));
+    } else if (action === 'submit-to-approver') {
+      // Notify Budget Approvers
+      const approvers = await findUsersByWorkflowRole(['BUDGET_APPROVER', 'BUDGET APPROVER'], proposalRegionId);
+      const filteredApprovers = approvers.filter(u => u.userId !== currentUserIdString);
+      console.log('[getNotificationRecipients] Found', filteredApprovers.length, 'approvers for submit-to-approver');
+      recipients.push(...filteredApprovers.map(u => u.userId));
+    } else if (action === 'submit-to-analyst') {
+      // Notify Budget Planning Analysts (budgetAnalyst role)
+      const analysts = await findUsersByWorkflowRole(['budgetAnalyst', 'BUDGET_PLANNING_ANALYST', 'BUDGET PLANNING ANALYST'], proposalRegionId);
+      const filteredAnalysts = analysts.filter(u => u.userId !== currentUserIdString);
+      console.log('[getNotificationRecipients] Found', filteredAnalysts.length, 'analysts for submit-to-analyst');
+      recipients.push(...filteredAnalysts.map(u => u.userId));
+    } else if (action === 'forward-to-officer') {
+      // Notify Budget Officers (officeFinalVerifier role)
+      const officers = await findUsersByWorkflowRole(['officeFinalVerifier', 'BUDGET_OFFICER', 'BUDGET OFFICER'], proposalRegionId);
+      const filteredOfficers = officers.filter(u => u.userId !== currentUserIdString);
+      console.log('[getNotificationRecipients] Found', filteredOfficers.length, 'officers for forward-to-officer');
+      recipients.push(...filteredOfficers.map(u => u.userId));
+    } else if (action === 'forward-to-manager') {
+      // Notify Budget Managers (regionFinalVerifier role)
+      const managers = await findUsersByWorkflowRole(['regionFinalVerifier', 'OVERALL_BUDGET_APPROVER', 'BUDGET_ADMIN']);
+      const filteredManagers = managers.filter(u => u.userId !== currentUserIdString);
+      console.log('[getNotificationRecipients] Found', filteredManagers.length, 'managers for forward-to-manager');
+      recipients.push(...filteredManagers.map(u => u.userId));
+    } else if (action === 'finalize') {
+      // Notify the proposal creator (Budget Preparer)
+      console.log('[getNotificationRecipients] Notifying creator:', proposal.createdBy);
+      recipients.push(proposal.createdBy.toString());
+    } else if (action.includes('return')) {
+      // For return actions, notify based on previous status
+      const prevStatus = proposal.workflowHistory?.[proposal.workflowHistory.length - 1]?.fromStatus;
+      
+      if (action === 'return-to-preparer') {
+        // Notify the proposal creator
+        recipients.push(proposal.createdBy.toString());
+      } else if (action === 'return-to-reviewer') {
+        // Notify Budget Reviewers
+        const reviewers = await findUsersByWorkflowRole(['BUDGET_REVIEWER', 'BUDGET REVIEWER'], proposalRegionId);
+        const filteredReviewers = reviewers.filter(u => u.userId !== currentUserIdString);
+        console.log('[getNotificationRecipients] Found', filteredReviewers.length, 'reviewers for return-to-reviewer');
+        recipients.push(...filteredReviewers.map(u => u.userId));
+      } else if (action === 'return-to-approver') {
+        // Notify Budget Approvers
+        const approvers = await findUsersByWorkflowRole(['BUDGET_APPROVER', 'BUDGET APPROVER'], proposalRegionId);
+        const filteredApprovers = approvers.filter(u => u.userId !== currentUserIdString);
+        console.log('[getNotificationRecipients] Found', filteredApprovers.length, 'approvers for return-to-approver');
+        recipients.push(...filteredApprovers.map(u => u.userId));
+      } else if (action === 'return-to-analyst') {
+        // Notify Budget Planning Analysts (budgetAnalyst role)
+        const analysts = await findUsersByWorkflowRole(['budgetAnalyst', 'BUDGET_PLANNING_ANALYST', 'BUDGET PLANNING ANALYST'], proposalRegionId);
+        const filteredAnalysts = analysts.filter(u => u.userId !== currentUserIdString);
+        console.log('[getNotificationRecipients] Found', filteredAnalysts.length, 'analysts for return-to-analyst');
+        recipients.push(...filteredAnalysts.map(u => u.userId));
+      } else if (action === 'return-to-officer') {
+        // Notify Budget Officers (officeFinalVerifier role)
+        const officers = await findUsersByWorkflowRole(['officeFinalVerifier', 'BUDGET_OFFICER', 'BUDGET OFFICER'], proposalRegionId);
+        const filteredOfficers = officers.filter(u => u.userId !== currentUserIdString);
+        console.log('[getNotificationRecipients] Found', filteredOfficers.length, 'officers for return-to-officer');
+        recipients.push(...filteredOfficers.map(u => u.userId));
+      }
+    }
+  } catch (error) {
+    console.warn('[getNotificationRecipients] Error finding recipients:', error.message);
+    console.warn('[getNotificationRecipients] Error stack:', error.stack);
+  }
+
+  console.log('[getNotificationRecipients] Returning', recipients.length, 'recipients');
+  return recipients;
+};
+
+/**
+ * Helper function to create workflow notifications
+ * @param {string} action - The workflow action performed
+ * @param {Object} proposal - The proposal object
+ * @param {Array} recipientUserIds - Array of user IDs to notify
+ * @param {string} currentUserName - Name of the user performing the action
+ * @param {string} comment - Optional comment/message from the action
+ */
+const createWorkflowNotification = async (action, proposal, recipientUserIds, currentUserName, comment) => {
+  try {
+    console.log('[createWorkflowNotification] Starting with', recipientUserIds.length, 'recipients');
+    
+    if (!recipientUserIds || recipientUserIds.length === 0) {
+      console.log('[createWorkflowNotification] No recipients to notify');
+      return;
+    }
+
+    // Determine notification title and message based on action
+    const actionTitles = {
+      'submit-to-reviewer': 'Proposal Submitted for Review',
+      'submit-to-approver': 'Proposal Submitted for Approval',
+      'submit-to-analyst': 'Proposal Submitted to Budget Planning Analyst',
+      'forward-to-officer': 'Proposal Forwarded to Officer',
+      'forward-to-manager': 'Proposal Submitted to Manager',
+      'finalize': 'Proposal Finalized',
+      'return-to-preparer': 'Proposal Returned to Preparer',
+      'return-to-reviewer': 'Proposal Returned to Reviewer',
+      'return-to-approver': 'Proposal Returned to Approver',
+      'return-to-analyst': 'Proposal Returned to Analyst',
+      'return-to-officer': 'Proposal Returned to Officer'
+    };
+
+    const isReturnAction = action.includes('return');
+    const notificationTitle = actionTitles[action] || 'Proposal Status Updated';
+    
+    let notificationMessage = `${currentUserName} has ${isReturnAction ? 'returned' : 'submitted'} proposal "${proposal.title}" for your action.`;
+    if (comment && isReturnAction) {
+      notificationMessage += ` Comment: ${comment}`;
+    }
+
+    // Deep link to the proposal on the new-proposal-workflow page
+    // Format: /new-proposal-workflow?tab=all-proposals&proposalId=<id>
+    // Always navigate to ALL PROPOSALS tab when clicking notification
+    const relatedLink = `/new-proposal-workflow?tab=all-proposals&proposalId=${proposal._id}`;
+
+    // Create notification for each recipient
+    const notificationData = recipientUserIds.map(userId => ({
+      recipientUserId: userId,
+      type: isReturnAction ? 'PROPOSAL_RETURNED' : 'PROPOSAL_SUBMITTED',
+      title: notificationTitle,
+      message: notificationMessage,
+      relatedEntityId: proposal._id.toString(),
+      relatedEntityType: 'PROPOSAL',
+      relatedLink: relatedLink,
+      entity: 'proposal',
+      recordIds: [proposal._id],
+      org: {
+        region: proposal.region,
+        department: proposal.department,
+        division: proposal.division
+      },
+      metadata: {
+        action,
+        proposalTitle: proposal.title,
+        proposalId: proposal._id.toString(),
+        tab: 'all-proposals',
+        performedBy: currentUserName,
+        comment: comment || ''
+      },
+      status: 'UNREAD',
+      createdAt: new Date()
+    }));
+
+    console.log('[createWorkflowNotification] About to insert', notificationData.length, 'notifications');
+    
+    // Bulk create notifications
+    const result = await Notification.insertMany(notificationData);
+    console.log(`[createWorkflowNotification] Successfully created ${result.length} notification(s) for action: ${action}`);
+  } catch (error) {
+    console.error('[createWorkflowNotification] Error creating notifications:', error.message);
+    console.error('[createWorkflowNotification] Error stack:', error.stack);
+  }
 };
 
 // Create new proposal
@@ -472,6 +698,7 @@ exports.getProposals = async (req, res) => {
         proposedBudget: Number(legacy?.proposedBudget ?? p.amount ?? 0),
         projectedCorporateIncome: p.projectedCorporateIncome,
         projectedSubsidy: p.projectedSubsidy,
+        workflowHistory: p.workflowHistory || [],
         fromNewWorkflow: true
       });
     });
@@ -726,6 +953,22 @@ exports.performAction = async (req, res) => {
 
     const newWorkflowStatus = transitions[workflowStatus][action];
 
+    // Map workflow status to legacy Proposal format
+    const workflowToProposalStatus = {
+      'DRAFT': 'Draft',
+      'FORWARDED_TO_REVIEWER': 'Forwarded to Reviewer',
+      'FORWARDED_TO_APPROVER': 'Forwarded to Approver',
+      'FORWARDED_TO_BRD_ANALYST': 'Forwarded to Budget Planning Analyst',
+      'FORWARDED_TO_BRD_OFFICER': 'Forwarded to Budget Officer',
+      'FORWARDED_TO_BRD_MANAGER': 'Forwarded to Overall Budget Approver',
+      'FINALIZED': 'Finalized',
+      'RETURNED_TO_PREPARER': 'Returned to Preparer',
+      'RETURNED_TO_REVIEWER': 'Returned to Reviewer',
+      'RETURNED_TO_APPROVER': 'Returned to Approver',
+      'RETURNED_TO_PLANNING_ANALYST': 'Returned to Budget Planning Analyst',
+      'RETURNED_TO_OFFICER': 'Returned to Budget Officer'
+    };
+
     // Update proposal
     const oldStatus = proposal.status;
     proposal.status = newWorkflowStatus;
@@ -740,6 +983,89 @@ exports.performAction = async (req, res) => {
     });
 
     await proposal.save();
+
+    // Also update the legacy Proposal collection to keep it in sync
+    try {
+      const legacyStatus = workflowToProposalStatus[newWorkflowStatus] || newWorkflowStatus;
+      const updateResult = await Proposal.findOneAndUpdate(
+        { $or: [{ workflowRef: proposal._id }, { proposalId: proposal._id }] },
+        {
+          status: legacyStatus,
+          workflowLevel: userRole,
+          updatedAt: new Date()
+        },
+        { new: true }
+      );
+      if (updateResult) {
+        console.log('[PERFORM_ACTION] Updated legacy Proposal collection with status:', legacyStatus);
+      } else {
+        console.warn('[PERFORM_ACTION] Warning: No legacy Proposal found to update for workflowRef:', proposal._id);
+      }
+    } catch (syncError) {
+      console.warn('[PERFORM_ACTION] Warning: Could not update legacy Proposal collection:', syncError.message);
+    }
+
+    // Also sync status to all line-item collections
+    try {
+      const legacyStatus = workflowToProposalStatus[newWorkflowStatus] || newWorkflowStatus;
+      const lineItemUpdateQuery = { $or: [{ workflowRef: proposal._id }, { proposalId: proposal._id }] };
+      const lineItemUpdatePayload = { status: legacyStatus, workflowLevel: userRole, updatedAt: new Date() };
+
+      // Update PersonnelServices
+      await PersonnelServices.updateMany(lineItemUpdateQuery, lineItemUpdatePayload);
+      
+      // Update MOOE
+      await MooeProposal.updateMany(lineItemUpdateQuery, lineItemUpdatePayload);
+      
+      // Update CapitalOutlay
+      await CapitalOutlay.updateMany(lineItemUpdateQuery, lineItemUpdatePayload);
+      
+      // Update Income
+      await Income.updateMany(lineItemUpdateQuery, lineItemUpdatePayload);
+      
+      console.log('[PERFORM_ACTION] Synced status to all line-item collections:', legacyStatus);
+    } catch (syncError) {
+      console.warn('[PERFORM_ACTION] Warning: Could not sync line-item collections:', syncError.message);
+    }
+
+    // Create notifications for relevant workflow actions
+    try {
+      const isNotificationAction = [
+        'submit-to-reviewer',
+        'submit-to-approver',
+        'submit-to-analyst',
+        'forward-to-officer',
+        'forward-to-manager',
+        'finalize',
+        'return-to-preparer',
+        'return-to-reviewer',
+        'return-to-approver',
+        'return-to-analyst',
+        'return-to-officer'
+      ].includes(action);
+
+      console.log('[PERFORM_ACTION] Is notification action:', isNotificationAction, 'Action:', action);
+
+      if (isNotificationAction) {
+        // Get recipient user IDs based on the action
+        const recipientUserIds = await getNotificationRecipients(action, proposal, userRole, userId);
+        
+        console.log('[PERFORM_ACTION] Recipients found:', recipientUserIds.length, 'IDs:', recipientUserIds);
+        
+        // Create notifications for all recipients
+        if (recipientUserIds.length > 0) {
+          console.log('[PERFORM_ACTION] Creating notifications for action:', action);
+          await createWorkflowNotification(action, proposal, recipientUserIds, userName, comment);
+          console.log('[PERFORM_ACTION] Notifications created successfully');
+        } else {
+          console.log('[PERFORM_ACTION] No recipients found for action:', action);
+        }
+      }
+    } catch (notificationError) {
+      console.error('[PERFORM_ACTION] Error creating notifications:', notificationError.message);
+      console.error('[PERFORM_ACTION] Notification error stack:', notificationError.stack);
+      // Don't fail the action if notification creation fails
+    }
 
     res.json({
       success: true,
@@ -864,19 +1190,27 @@ exports.getAuditTrail = async (req, res) => {
       });
     }
 
-    // Filter workflow history to include only edits and field changes
-    const auditTrail = proposal.workflowHistory
-      .filter(entry => entry.action === 'EDIT' || entry.changeType === 'PROPOSAL_EDIT' || entry.changes)
-      .map(entry => ({
-        action: entry.action,
-        performedBy: entry.performedByName,
-        role: entry.position,
-        timestamp: entry.timestamp,
-        changedFields: entry.changes ? Object.keys(entry.changes) : [],
-        details: entry.changes || {},
-        comment: entry.comment
-      }))
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    const editLogs = await ProposalEditLog.find({ workflowRef: id })
+      .sort({ timestamp: -1 })
+      .lean();
+
+    const auditTrail = editLogs.map(log => ({
+      action: log.changeType,
+      actionType: log.entityType,
+      proposalType: log.budgetType,
+      performedBy: log.changedBy?.userName || 'SYSTEM',
+      role: log.changedBy?.role,
+      timestamp: log.timestamp,
+      summary: log.summary,
+      changedFields: log.changes ? log.changes.map(c => c.field) : [],
+      details: log.changes ? log.changes.map(c => ({
+        field: c.field,
+        oldValue: c.oldValue,
+        newValue: c.newValue,
+        type: c.valueType
+      })) : [],
+      comment: log.comments
+    }));
 
     res.json({
       success: true,

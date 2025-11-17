@@ -7,6 +7,7 @@ import ActiveRegionDisplay from "../common/ActiveRegionDisplay";
 import {
   Button,
   Box,
+  TextField,
   Dialog,
   DialogActions,
   DialogContent,
@@ -31,6 +32,7 @@ import {
   Divider,
   Checkbox,
   FormControlLabel as MuiFormControlLabel,
+  InputAdornment,
 } from "@mui/material";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -43,9 +45,11 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import PrintIcon from '@mui/icons-material/Print';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import GetAppIcon from '@mui/icons-material/GetApp';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
 import EditIcon from '@mui/icons-material/Edit';
+import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined';
+import HighlightOffIcon from '@mui/icons-material/HighlightOff';
 import { useWorkflowRef } from "../../hooks/useWorkflowRef";
+import { updatePersonnelSubsidy } from "../../services/personnelSubsidyService";
 
 // Helper function to format currency
 const formatCurrency = (amount) => {
@@ -97,8 +101,9 @@ const PSCasualCustomPageTable = ({
   const [columnVisibility, setColumnVisibility] = useState({});
   const [filterMenuAnchor, setFilterMenuAnchor] = useState(null);
   const [exportMenuAnchor, setExportMenuAnchor] = useState(null);
-  const [bulkActionAnchor, setBulkActionAnchor] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [subsidyDialog, setSubsidyDialog] = useState({ open: false, mode: "tag", amount: "", notes: "" });
+  const [subsidyLoading, setSubsidyLoading] = useState(false);
 
   const apiPath = `/${dataListName}`;
 
@@ -340,13 +345,72 @@ const PSCasualCustomPageTable = ({
   const handleFilterMenuClose = () => setFilterMenuAnchor(null);
   const handleExportMenuClick = (event) => setExportMenuAnchor(event.currentTarget);
   const handleExportMenuClose = () => setExportMenuAnchor(null);
-  const handleBulkActionClick = (event) => setBulkActionAnchor(event.currentTarget);
 
   const toggleColumnVisibility = (columnKey) => {
     setColumnVisibility(prev => ({
       ...prev,
       [columnKey]: !prev[columnKey]
     }));
+  };
+
+  const handleOpenSubsidyDialog = (mode) => {
+    if (!selectedRows.length) {
+      toast.error("Select at least one personnel record first.");
+      return;
+    }
+    setSubsidyDialog({ open: true, mode, amount: "", notes: "" });
+  };
+
+  const handleCloseSubsidyDialog = () => {
+    if (subsidyLoading) return;
+    setSubsidyDialog((prev) => ({ ...prev, open: false }));
+  };
+
+  const handleConfirmSubsidy = async () => {
+    if (!selectedRows.length) {
+      toast.error("No personnel selected.");
+      return;
+    }
+
+    if (subsidyDialog.mode === "tag") {
+      const amountValue = Number(subsidyDialog.amount);
+      if (!Number.isFinite(amountValue) || amountValue <= 0) {
+        toast.error("Enter a subsidy amount greater than zero.");
+        return;
+      }
+    }
+
+    setSubsidyLoading(true);
+    try {
+      const numericAmount = Number(subsidyDialog.amount) || 0;
+      const payload =
+        subsidyDialog.mode === "tag"
+          ? {
+              items: selectedRows.map((id) => ({ _id: id, subsidyAmount: numericAmount })),
+              defaultAmount: numericAmount,
+              subsidyEligible: true,
+              notes: subsidyDialog.notes?.trim() || undefined,
+            }
+          : {
+              items: selectedRows.map((id) => ({ _id: id })),
+              subsidyEligible: false,
+              defaultAmount: 0,
+            };
+
+      await updatePersonnelSubsidy(payload);
+      toast.success(
+        subsidyDialog.mode === "tag"
+          ? "Subsidy tagged successfully"
+          : "Subsidy tag removed"
+      );
+      setSelectedRows([]);
+      setSubsidyDialog({ open: false, mode: "tag", amount: "", notes: "" });
+      await fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update subsidy");
+    } finally {
+      setSubsidyLoading(false);
+    }
   };
 
   // Enhanced export function that fetches all data
@@ -737,6 +801,24 @@ const PSCasualCustomPageTable = ({
             >
               Add Casual Personnel
             </Button>
+            <Button
+              variant="outlined"
+              color="secondary"
+              startIcon={<PaidOutlinedIcon />}
+              disabled={!selectedRows.length}
+              onClick={() => handleOpenSubsidyDialog("tag")}
+            >
+              Tag Subsidy
+            </Button>
+            <Button
+              variant="text"
+              color="error"
+              startIcon={<HighlightOffIcon />}
+              disabled={!selectedRows.length}
+              onClick={() => handleOpenSubsidyDialog("untag")}
+            >
+              Remove Tag
+            </Button>
             {!hasWorkflowRef && (
               <Typography variant="caption" color="error" sx={{ maxWidth: 260 }}>
                 Create a proposal first to unlock casual personnel entry.
@@ -765,7 +847,10 @@ const PSCasualCustomPageTable = ({
             />
           </Box>
 
-          <Box display="flex" alignItems="center" gap={1}>
+          <Box display="flex" alignItems="center" gap={2}>
+            <Typography variant="body2" color={selectedRows.length ? "primary" : "text.secondary"}>
+              Selected: {selectedRows.length.toLocaleString('en-US')}
+            </Typography>
             {selectedRows.length > 0 && (
               <Chip
                 label={`${selectedRows.length} selected`}
@@ -785,14 +870,6 @@ const PSCasualCustomPageTable = ({
                 <GetAppIcon />
               </IconButton>
             </Tooltip>
-
-            {selectedRows.length > 0 && (
-              <Tooltip title="Bulk Actions">
-                <IconButton onClick={handleBulkActionClick}>
-                  <MoreVertIcon />
-                </IconButton>
-              </Tooltip>
-            )}
           </Box>
         </Box>
       </Paper>
@@ -1085,13 +1162,72 @@ const PSCasualCustomPageTable = ({
 
       <ToastContainer />
 
+      <Dialog
+        open={subsidyDialog.open}
+        onClose={handleCloseSubsidyDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {subsidyDialog.mode === "tag" ? "Tag Subsidy Recipients" : "Remove Subsidy Tags"}
+        </DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            {selectedRows.length.toLocaleString('en-US')} personnel selected.
+          </Typography>
+          {subsidyDialog.mode === "tag" && (
+            <>
+              <TextField
+                label="Subsidy amount per personnel"
+                type="number"
+                value={subsidyDialog.amount}
+                onChange={(e) =>
+                  setSubsidyDialog((prev) => ({ ...prev, amount: e.target.value }))
+                }
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">₱</InputAdornment>,
+                }}
+                fullWidth
+              />
+              <TextField
+                label="Notes (optional)"
+                value={subsidyDialog.notes}
+                onChange={(e) =>
+                  setSubsidyDialog((prev) => ({ ...prev, notes: e.target.value }))
+                }
+                fullWidth
+                multiline
+                minRows={2}
+              />
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseSubsidyDialog} disabled={subsidyLoading}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmSubsidy}
+            variant="contained"
+            color={subsidyDialog.mode === "tag" ? "primary" : "error"}
+            disabled={subsidyLoading}
+          >
+            {subsidyLoading
+              ? "Saving..."
+              : subsidyDialog.mode === "tag"
+              ? "Apply Subsidy"
+              : "Remove Tags"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <CustomTable
         ROWS_PER_PAGE={ROWS_PER_PAGE}
         dataListName={dataListName}
         apiPath={apiPath}
         rows={filteredRows}
         selectedRows={selectedRows}
-        onSelectionChange={setSelectedRows}
+        onRowSelectionChange={setSelectedRows}
         columnVisibility={columnVisibility}
         onColumnVisibilityChange={setColumnVisibility}
         columns={useMemo(() => Object.keys(schema)

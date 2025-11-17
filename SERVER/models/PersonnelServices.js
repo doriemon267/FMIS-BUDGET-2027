@@ -212,6 +212,25 @@ courtAppearance: {
       type: Number,
       required: true,
     },
+    subsidyEligible: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    subsidyAmount: {
+      type: Number,
+      default: 0,
+    },
+    subsidyNotes: {
+      type: String,
+      trim: true,
+    },
+    subsidyTaggedBy: {
+      type: String,
+    },
+    subsidyTaggedAt: {
+      type: Date,
+    },
     // Workflow audit fields
     divisionApproved: {
       by: { type: String },

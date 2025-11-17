@@ -5,6 +5,7 @@ const COSPersonnel     = require('../models/COSPersonnel');
 const Settings         = require('../models/Settings');
 const mongoose         = require('mongoose');
 const Proposal         = require('../models/Proposal');
+const ProposalEditLog  = require('../models/ProposalEditLog');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 // New combined endpoint to fetch all data at once
 exports.getMOOEData = async (req, res) => {
@@ -1509,6 +1510,7 @@ exports.bulkUpdateMOOE = async (req, res) => {
     const workflowData = req.submissionWorkflowData || {};
 
     const updates = [];
+    const originalDbValues = new Map();
     
     for (const item of items) {
       if (!item._id) {
@@ -1519,6 +1521,13 @@ exports.bulkUpdateMOOE = async (req, res) => {
       if (!existingMooe) {
         return res.status(404).json({ message: `MOOE entry with ID ${item._id} not found` });
       }
+
+      originalDbValues.set(item._id.toString(), {
+        amount: existingMooe.amount,
+        subsidy: existingMooe.subsidy,
+        income: existingMooe.income,
+        particulars: existingMooe.particulars
+      });
 
       const submittedStatuses = ["Submitted", "Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"];
       if (submittedStatuses.includes(existingMooe.status)) {
@@ -1533,6 +1542,8 @@ exports.bulkUpdateMOOE = async (req, res) => {
           item._id,
           {
             amount: item.amount !== undefined ? item.amount : existingMooe.amount,
+            subsidy: item.subsidy !== undefined ? item.subsidy : existingMooe.subsidy,
+            income: item.income !== undefined ? item.income : existingMooe.income,
             particulars: item.particulars !== undefined ? item.particulars : existingMooe.particulars,
             ...(setFY ? { fiscalYear: setFY } : {}),
             ...(setBT ? { budgetType: setBT } : {}),
@@ -1542,6 +1553,8 @@ exports.bulkUpdateMOOE = async (req, res) => {
             processBy: item.processBy !== undefined ? item.processBy : (req.user?.userName || req.user?.id || existingMooe.processBy),
             processDate: item.processDate !== undefined ? item.processDate : new Date(),
             status: item.status !== undefined ? item.status : (workflowData.status || existingMooe.status),
+            proposalId: item.proposalId || existingMooe.proposalId,
+            workflowRef: item.workflowRef || existingMooe.workflowRef || workflowData.workflowRef,
             ...(workflowData.originalLevel ? { originalLevel: workflowData.originalLevel } : {}),
             ...(workflowData.workflowLevel ? { workflowLevel: workflowData.workflowLevel } : {}),
           },
@@ -1567,6 +1580,69 @@ exports.bulkUpdateMOOE = async (req, res) => {
       }
     } catch (error) {
       console.error("Error recalculating proposal totals:", error);
+    }
+
+    try {
+      for (const updatedItem of updatedItems) {
+        const originalDbValue = originalDbValues.get(updatedItem._id.toString());
+        if (originalDbValue && updatedItem.proposalId) {
+          const changes = [];
+          
+          if (originalDbValue.amount !== undefined && updatedItem.amount !== originalDbValue.amount) {
+            changes.push({
+              field: 'amount',
+              oldValue: originalDbValue.amount,
+              newValue: updatedItem.amount,
+              valueType: 'number'
+            });
+          }
+          
+          if (originalDbValue.subsidy !== undefined && updatedItem.subsidy !== originalDbValue.subsidy) {
+            changes.push({
+              field: 'subsidy',
+              oldValue: originalDbValue.subsidy,
+              newValue: updatedItem.subsidy,
+              valueType: 'number'
+            });
+          }
+
+          if (originalDbValue.income !== undefined && updatedItem.income !== originalDbValue.income) {
+            changes.push({
+              field: 'income',
+              oldValue: originalDbValue.income,
+              newValue: updatedItem.income,
+              valueType: 'number'
+            });
+          }
+
+          if (changes.length > 0) {
+            await ProposalEditLog.logChange({
+              proposalId: updatedItem.proposalId,
+              workflowRef: updatedItem.workflowRef,
+              fiscalYear: updatedItem.fiscalYear,
+              budgetType: updatedItem.budgetType,
+              region: updatedItem.region,
+              department: updatedItem.department,
+              division: updatedItem.division,
+              changeType: 'BULK_EDIT',
+              entityType: 'MOOE',
+              entityId: updatedItem._id,
+              changedBy: {
+                userId: req.user?.id || req.user?._id || 'SYSTEM',
+                userName: [req.user?.name, req.user?.UserName, req.user?.email, `${req.user?.FirstName || ''} ${req.user?.LastName || ''}`.trim()].find(v => v && v.length > 0) || 'SYSTEM',
+                email: req.user?.email,
+                role: req.user?.Roles?.join(', ') || 'SYSTEM'
+              },
+              changes,
+              summary: `Updated ${changes.length} field(s) in MOOE entry`,
+              ipAddress: req.ip,
+              userAgent: req.get('user-agent')
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error logging MOOE changes:", error);
     }
 
     res.status(200).json({ 

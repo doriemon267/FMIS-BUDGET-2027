@@ -12,6 +12,12 @@ const proposalEditLogSchema = new mongoose.Schema({
     required: true
   },
   
+  // Reference to NewProposalWorkflow if applicable
+  workflowRef: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'NewProposalWorkflow'
+  },
+  
   // Reference to Budget Officer Edit if applicable
   budgetOfficerEditId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -102,6 +108,7 @@ const proposalEditLogSchema = new mongoose.Schema({
 
 // Indexes for efficient querying
 proposalEditLogSchema.index({ proposalId: 1, timestamp: -1 });
+proposalEditLogSchema.index({ workflowRef: 1, timestamp: -1 });
 proposalEditLogSchema.index({ budgetOfficerEditId: 1 });
 proposalEditLogSchema.index({ fiscalYear: 1, budgetType: 1 });
 proposalEditLogSchema.index({ 'changedBy.userId': 1, timestamp: -1 });

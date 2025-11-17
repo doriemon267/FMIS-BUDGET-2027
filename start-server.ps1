@@ -1,0 +1,2 @@
+cd d:\DREED\FMIS-BUDGET-SEPTEMBER\SERVER
+npm start

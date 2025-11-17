@@ -1,6 +1,7 @@
 import {
   Box,
   Button,
+  Checkbox,
   IconButton,
   MenuItem,
   Paper,
@@ -10,7 +11,6 @@ import {
   TableBody,
   TableCell,
   TableContainer,
-  TableFooter,
   TableHead,
   TablePagination,
   TableRow,
@@ -30,7 +30,6 @@ import { useRegion } from "../../context/RegionContext";
 import { TiFilter } from "react-icons/ti";
 import api from "../../config/api";
 import { useSearch } from "../../context/SearchContext";
-import TableBodyLoading from "../../global/components/TableBodyLoading";
 import TextSearchable from "../../global/components/TextSearchable";
 import formatCurrency from "../../utils/formatCurrency";
 import { formatDateToMDY, isValidDate } from "../../utils/formatDate";
@@ -42,6 +41,8 @@ const CasualCustomTable = ({
   dataListName = "",
   orderByDefault = "updatedAt",
   onDataChange,
+  selectedRows = [],
+  onRowSelectionChange,
 }) => {
   const { searchValue, setSearchValue } = useSearch();
   const TEN_SECONDS_AGO = dayjs().subtract(10, "second");
@@ -381,6 +382,63 @@ const CasualCustomTable = ({
   };
 
   const tableData = data && data[dataListName] ? data[dataListName] : [];
+  const safeSelectedRows = Array.isArray(selectedRows) ? selectedRows : [];
+  const hasRowSelection = typeof onRowSelectionChange === "function";
+  const totalRecords = data ? data.totalRecords : tableData.length;
+
+  const handleSelectAllClick = async (event) => {
+    if (!hasRowSelection) return;
+    if (event.target.checked) {
+      try {
+        const response = await api.get(apiPath, {
+          params: {
+            statusOfAppointment: "CASUAL",
+            limit: 10000,
+            selectFields: "_id",
+            region: regionFilter || undefined,
+          },
+        });
+
+        if (response.data && response.data[dataListName]) {
+          const allIds = response.data[dataListName].map((row) => row._id);
+          onRowSelectionChange(Array.from(new Set(allIds)));
+          return;
+        }
+      } catch (error) {
+        console.error("Error fetching all records for selection:", error);
+      }
+
+      const fallbackIds = tableData.map((row) => row._id);
+      onRowSelectionChange(fallbackIds);
+    } else {
+      onRowSelectionChange([]);
+    }
+  };
+
+  const handleRowClick = (event, id, options = {}) => {
+    if (!hasRowSelection) return;
+    if (!options.allowCheckbox && event?.target?.type === "checkbox") return;
+
+    const selectedIndex = safeSelectedRows.indexOf(id);
+    let newSelected = [];
+
+    if (selectedIndex === -1) {
+      newSelected = newSelected.concat(safeSelectedRows, id);
+    } else if (selectedIndex === 0) {
+      newSelected = newSelected.concat(safeSelectedRows.slice(1));
+    } else if (selectedIndex === safeSelectedRows.length - 1) {
+      newSelected = newSelected.concat(safeSelectedRows.slice(0, -1));
+    } else if (selectedIndex > 0) {
+      newSelected = newSelected.concat(
+        safeSelectedRows.slice(0, selectedIndex),
+        safeSelectedRows.slice(selectedIndex + 1)
+      );
+    }
+
+    onRowSelectionChange(newSelected);
+  };
+
+  const isSelected = (id) => safeSelectedRows.indexOf(id) !== -1;
 
   return (
     <>
@@ -414,6 +472,42 @@ const CasualCustomTable = ({
             <Table size="small" sx={{ borderCollapse: "collapse" }}>
               <TableHead>
                 <TableRow>
+                  {hasRowSelection && (
+                    <TableCell
+                      sx={{
+                        position: "sticky",
+                        top: 0,
+                        backgroundColor: "#375e38",
+                        zIndex: 1,
+                        borderRight: "1px solid",
+                        borderColor: grey[500],
+                        width: 48,
+                        padding: "4px 8px",
+                      }}
+                    >
+                      <Checkbox
+                        color="primary"
+                        indeterminate={
+                          safeSelectedRows.length > 0 &&
+                          safeSelectedRows.length < totalRecords
+                        }
+                        checked={
+                          totalRecords > 0 &&
+                          safeSelectedRows.length === totalRecords
+                        }
+                        onChange={handleSelectAllClick}
+                        sx={{
+                          color: "#fff",
+                          "&.Mui-checked": {
+                            color: "#fff",
+                          },
+                          "&.MuiCheckbox-indeterminate": {
+                            color: "#fff",
+                          },
+                        }}
+                      />
+                    </TableCell>
+                  )}
                   {columns.map((column) => (
                     <TableCell
                       key={column.field}
@@ -460,7 +554,10 @@ const CasualCustomTable = ({
               {isLoading ? (
                 <TableBody>
                   <TableRow>
-                    <TableCell colSpan={columns.length} sx={{ textAlign: 'center', py: 8 }}>
+                    <TableCell
+                      colSpan={columns.length + (hasRowSelection ? 1 : 0)}
+                      sx={{ textAlign: 'center', py: 8 }}
+                    >
                       <Fade in={isLoading}>
                         <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
                           <CircularProgress size={40} sx={{ color: '#375e38' }} />
@@ -477,7 +574,7 @@ const CasualCustomTable = ({
                   {tableData.length === 0 ? (
                     <TableRow sx={{ height: "70vh" }}>
                       <TableCell
-                        colSpan={columns.length}
+                        colSpan={columns.length + (hasRowSelection ? 1 : 0)}
                         sx={{ textAlign: "center", fontWeight: "500" }}
                       >
                         {searchValue ? (
@@ -494,20 +591,31 @@ const CasualCustomTable = ({
                       const isRecentlyUpdated =
                         row.updatedAt &&
                         dayjs(row.updatedAt).isAfter(TEN_SECONDS_AGO);
+                      const isRowSelected = isSelected(row._id);
+
                       return (
                         <TableRow
                           key={row._id || row.employeeNumber || rowIndex}
                           hover
+                          onClick={(event) => handleRowClick(event, row._id)}
+                          role={hasRowSelection ? "checkbox" : undefined}
+                          aria-checked={hasRowSelection ? isRowSelected : undefined}
+                          tabIndex={-1}
+                          selected={hasRowSelection ? isRowSelected : false}
                           sx={{
-                            backgroundColor: isRecentlyUpdated
+                            backgroundColor: isRowSelected
+                              ? "rgba(25, 118, 210, 0.08)"
+                              : isRecentlyUpdated
                               ? green[50]
                               : rowIndex % 2 === 0
                               ? blueGrey[50]
                               : "#ffffff",
-                            cursor: "pointer",
+                            cursor: hasRowSelection ? "pointer" : "default",
                             transition: 'all 0.2s ease',
                             '&:hover': {
-                              backgroundColor: isRecentlyUpdated
+                              backgroundColor: isRowSelected
+                                ? "rgba(25, 118, 210, 0.12)"
+                                : isRecentlyUpdated
                                 ? green[100]
                                 : rowIndex % 2 === 0
                                 ? blueGrey[100]
@@ -517,12 +625,30 @@ const CasualCustomTable = ({
                             }
                           }}
                         >
+                          {hasRowSelection && (
+                            <TableCell
+                              padding="checkbox"
+                              sx={{
+                                borderLeft: "1px solid white",
+                              }}
+                            >
+                              <Checkbox
+                                color="primary"
+                                checked={isRowSelected}
+                                onChange={(event) => {
+                                  event.stopPropagation();
+                                  handleRowClick(event, row._id, { allowCheckbox: true });
+                                }}
+                              />
+                            </TableCell>
+                          )}
                           {columns.map((column, i) => (
                             <TableCell
                               key={column.field}
-                              onClick={() =>
-                                handleCellClick(rowIndex, column.field, row["_id"])
-                              }
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleCellClick(rowIndex, column.field, row["_id"]);
+                              }}
                               sx={{
                                 maxWidth: column.field === "employeeName" ? "none" : "800px",
                                 whiteSpace: column.field === "employeeName" ? "normal" : "nowrap",
@@ -537,7 +663,7 @@ const CasualCustomTable = ({
                                     outline: "2px solid lightblue",
                                   }),
                                 borderLeft:
-                                  i !== 0
+                                  i !== 0 || hasRowSelection
                                     ? rowIndex % 2 === 0
                                       ? "1px solid white"
                                       : `1px solid ${grey[200]}`
@@ -579,6 +705,70 @@ const CasualCustomTable = ({
                         </TableRow>
                       );
                     })
+                  )}
+
+                  {tableData.length > 0 && (
+                    <TableRow
+                      sx={{
+                        backgroundColor: "#375e38",
+                        "& .MuiTableCell-root": {
+                          color: "#fff",
+                          fontWeight: "bold",
+                          borderTop: "2px solid #fff",
+                        },
+                      }}
+                    >
+                      {hasRowSelection && (
+                        <TableCell
+                          sx={{
+                            backgroundColor: "#375e38",
+                            color: "#fff",
+                            fontWeight: "bold",
+                            textAlign: "center",
+                          }}
+                        >
+                          {safeSelectedRows.length > 0 ? (
+                            <Typography variant="caption" sx={{ color: "#fff", fontSize: "10px" }}>
+                              {safeSelectedRows.length} / {totalRecords} selected
+                            </Typography>
+                          ) : (
+                            <Typography variant="caption" sx={{ color: "#fff", fontSize: "10px" }}>
+                              Select All
+                            </Typography>
+                          )}
+                        </TableCell>
+                      )}
+                      {columns.map((column, index) => (
+                        <TableCell
+                          key={column.field}
+                          sx={{
+                            backgroundColor: "#375e38",
+                            color: "#fff",
+                            fontWeight: "bold",
+                            textAlign:
+                              column.type === "number"
+                                ? "right"
+                                : index === 0
+                                ? "left"
+                                : "center",
+                          }}
+                        >
+                          {index === 0 ? (
+                            "TOTAL:"
+                          ) : column.type === "number" ? (
+                            totals[column.field]
+                              ? totals[column.field].toLocaleString(undefined, {
+                                  minimumFractionDigits: 2,
+                                })
+                              : "0.00"
+                          ) : column.field === "action" ? (
+                            `${tableData.length} records`
+                          ) : (
+                            ""
+                          )}
+                        </TableCell>
+                      ))}
+                    </TableRow>
                   )}
                 </TableBody>
               )}

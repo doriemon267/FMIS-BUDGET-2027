@@ -4,6 +4,7 @@ const ChartOfAccounts = require('../models/chartOfAccounts');
 const Category = require("../models/Category");
 const Settings = require("../models/Settings");
 const Proposal = require('../models/Proposal');
+const ProposalEditLog = require('../models/ProposalEditLog');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 // All Chart of Accounts entries are read straight from the FMIS main database via MONGODB_MAIN_URL.
 // We intentionally avoid local file-based seeding so the data always mirrors the source system.
@@ -541,6 +542,7 @@ exports.bulkUpdateCapitalOutlay = async (req, res) => {
     const workflowData = req.submissionWorkflowData || {};
 
     const updates = [];
+    const originalDbValues = new Map();
     
     for (const item of items) {
       if (!item._id) {
@@ -551,6 +553,14 @@ exports.bulkUpdateCapitalOutlay = async (req, res) => {
       if (!existingCapitalOutlay) {
         return res.status(404).json({ message: `Capital Outlay entry with ID ${item._id} not found` });
       }
+
+      originalDbValues.set(item._id.toString(), {
+        cost: existingCapitalOutlay.cost,
+        amount: existingCapitalOutlay.amount,
+        income: existingCapitalOutlay.income,
+        subsidy: existingCapitalOutlay.subsidy,
+        particulars: existingCapitalOutlay.particulars
+      });
 
       const submittedStatuses = ["Submitted", "Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"];
       if (submittedStatuses.includes(existingCapitalOutlay.status)) {
@@ -566,6 +576,8 @@ exports.bulkUpdateCapitalOutlay = async (req, res) => {
           {
             cost: item.cost !== undefined ? item.cost : existingCapitalOutlay.cost,
             amount: item.amount !== undefined ? item.amount : existingCapitalOutlay.amount,
+            income: item.income !== undefined ? item.income : existingCapitalOutlay.income,
+            subsidy: item.subsidy !== undefined ? item.subsidy : existingCapitalOutlay.subsidy,
             particulars: item.particulars !== undefined ? item.particulars : existingCapitalOutlay.particulars,
             ...(setFY ? { fiscalYear: setFY } : {}),
             ...(setBT ? { budgetType: setBT } : {}),
@@ -575,6 +587,8 @@ exports.bulkUpdateCapitalOutlay = async (req, res) => {
             processBy: item.processBy !== undefined ? item.processBy : (req.user?.userName || req.user?.id || existingCapitalOutlay.processBy),
             processDate: item.processDate !== undefined ? item.processDate : new Date(),
             status: item.status !== undefined ? item.status : (workflowData.status || existingCapitalOutlay.status),
+            proposalId: item.proposalId || existingCapitalOutlay.proposalId,
+            workflowRef: item.workflowRef || existingCapitalOutlay.workflowRef || workflowData.workflowRef,
             ...(workflowData.originalLevel ? { originalLevel: workflowData.originalLevel } : {}),
             ...(workflowData.workflowLevel ? { workflowLevel: workflowData.workflowLevel } : {}),
           },
@@ -600,6 +614,78 @@ exports.bulkUpdateCapitalOutlay = async (req, res) => {
       }
     } catch (error) {
       console.error("Error recalculating proposal totals:", error);
+    }
+
+    try {
+      for (const updatedItem of updatedItems) {
+        const originalDbValue = originalDbValues.get(updatedItem._id.toString());
+        if (originalDbValue && updatedItem.proposalId) {
+          const changes = [];
+          
+          if (originalDbValue.cost !== undefined && updatedItem.cost !== originalDbValue.cost) {
+            changes.push({
+              field: 'cost',
+              oldValue: originalDbValue.cost,
+              newValue: updatedItem.cost,
+              valueType: 'number'
+            });
+          }
+
+          if (originalDbValue.amount !== undefined && updatedItem.amount !== originalDbValue.amount) {
+            changes.push({
+              field: 'amount',
+              oldValue: originalDbValue.amount,
+              newValue: updatedItem.amount,
+              valueType: 'number'
+            });
+          }
+
+          if (originalDbValue.subsidy !== undefined && updatedItem.subsidy !== originalDbValue.subsidy) {
+            changes.push({
+              field: 'subsidy',
+              oldValue: originalDbValue.subsidy,
+              newValue: updatedItem.subsidy,
+              valueType: 'number'
+            });
+          }
+
+          if (originalDbValue.income !== undefined && updatedItem.income !== originalDbValue.income) {
+            changes.push({
+              field: 'income',
+              oldValue: originalDbValue.income,
+              newValue: updatedItem.income,
+              valueType: 'number'
+            });
+          }
+
+          if (changes.length > 0) {
+            await ProposalEditLog.logChange({
+              proposalId: updatedItem.proposalId,
+              workflowRef: updatedItem.workflowRef,
+              fiscalYear: updatedItem.fiscalYear,
+              budgetType: updatedItem.budgetType,
+              region: updatedItem.region,
+              department: updatedItem.department,
+              division: updatedItem.division,
+              changeType: 'BULK_EDIT',
+              entityType: 'CapitalOutlay',
+              entityId: updatedItem._id,
+              changedBy: {
+                userId: req.user?.id || req.user?._id || 'SYSTEM',
+                userName: [req.user?.name, req.user?.UserName, req.user?.email, `${req.user?.FirstName || ''} ${req.user?.LastName || ''}`.trim()].find(v => v && v.length > 0) || 'SYSTEM',
+                email: req.user?.email,
+                role: req.user?.Roles?.join(', ') || 'SYSTEM'
+              },
+              changes,
+              summary: `Updated ${changes.length} field(s) in Capital Outlay entry`,
+              ipAddress: req.ip,
+              userAgent: req.get('user-agent')
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error logging Capital Outlay changes:", error);
     }
 
     res.status(200).json({ 

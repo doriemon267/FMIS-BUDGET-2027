@@ -26,6 +26,7 @@ const Income = require('../models/Income');
 const PersonnelServices = require('../models/PersonnelServices');
 const MOOE = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
+const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 
 async function aggregateSum(model, match, amountExpr) {
   const pipeline = [
@@ -174,11 +175,31 @@ async function recalculateAndSaveProposalTotals({ proposalId, keys } = {}) {
   proposal.totalIncome = incomeTotal;
   proposal.totalExpenses = expenseSum;
   proposal.projectedCorporateIncome = incomeTotal;
-  // CRITICAL: Projected Subsidy should sum MOOE/CO subsidy columns, not their costs
-  proposal.projectedSubsidy = projectedSubsidy;
+  // CRITICAL: Projected Subsidy is the total expenses (Personnel + MOOE + CapitalOutlay)
+  proposal.projectedSubsidy = expenseSum;
   proposal.proposedBudget = proposedBudget;
   proposal.updatedAt = new Date();
   await proposal.save({ validateBeforeSave: false });
+
+  // Also update the linked NewProposalWorkflow if it exists
+  if (proposal.workflowRef || proposal.proposalId) {
+    const workflowId = proposal.workflowRef || proposal.proposalId;
+    try {
+      await NewProposalWorkflow.findByIdAndUpdate(
+        workflowId,
+        {
+          projectedCorporateIncome: incomeTotal,
+          projectedSubsidy: expenseSum,
+          amount: proposedBudget,
+          updatedAt: new Date()
+        },
+        { new: true }
+      );
+    } catch (err) {
+      console.error('Error updating NewProposalWorkflow totals:', err);
+      // Don't throw - we successfully saved Proposal, just log workflow update failure
+    }
+  }
 
   return {
     proposalId: proposal._id,

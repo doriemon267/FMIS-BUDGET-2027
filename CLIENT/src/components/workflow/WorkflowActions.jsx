@@ -1160,7 +1160,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
   const handleConfirm = () => {
     if (!confirmState.action) return;
     // For actions that require comments, ensure a comment is provided
-    if (requiresComment && !comment.trim()) {
+    if (confirmState.requiresComment && !comment.trim()) {
       toast.error('Please provide a comment.');
       return;
     }

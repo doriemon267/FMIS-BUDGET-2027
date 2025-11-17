@@ -118,4 +118,85 @@ router.post('/notifications/mark-read', async (req, res) => {
   }
 });
 
+// DEBUG: Create test notification for current user (development only)
+router.post('/notifications/test', async (req, res) => {
+  try {
+    const candidates = getRecipientCandidates(req.user);
+    const recipientUserId = candidates[0] || req.user?.id || 'test-user';
+
+    const testNotifications = [
+      {
+        recipientUserId,
+        type: 'PROPOSAL_SUBMITTED',
+        title: 'Your Liquidation - Traveling and Training Allowances - Local disbursement voucher',
+        message: 'John Doe has submitted proposal for your action.',
+        relatedEntityId: 'test-proposal-1',
+        relatedEntityType: 'PROPOSAL',
+        relatedLink: '/new-proposal-workflow?tab=all-proposals&proposalId=test-1',
+        entity: 'proposal',
+        status: 'UNREAD',
+        createdAt: new Date(Date.now() - 20 * 60000)
+      },
+      {
+        recipientUserId,
+        type: 'PROPOSAL_RETURNED',
+        title: 'Your Cash Advance - Traveling and Training Allowances',
+        message: 'Jane Smith has returned proposal with feedback. Comment: Please review the budget allocation.',
+        relatedEntityId: 'test-proposal-2',
+        relatedEntityType: 'PROPOSAL',
+        relatedLink: '/new-proposal-workflow?tab=all-proposals&proposalId=test-2',
+        entity: 'proposal',
+        status: 'UNREAD',
+        createdAt: new Date(Date.now() - 25 * 60000)
+      },
+      {
+        recipientUserId,
+        type: 'PROPOSAL_SUBMITTED',
+        title: 'Your Cash Advance - Traveling and Training Allowances',
+        message: 'Mark Johnson has submitted proposal for your action.',
+        relatedEntityId: 'test-proposal-3',
+        relatedEntityType: 'PROPOSAL',
+        relatedLink: '/new-proposal-workflow?tab=all-proposals&proposalId=test-3',
+        entity: 'proposal',
+        status: 'UNREAD',
+        createdAt: new Date(Date.now() - 25 * 60000)
+      },
+      {
+        recipientUserId,
+        type: 'PROPOSAL_SUBMITTED',
+        title: 'Your Cash Advance - Traveling and Training Allowances',
+        message: 'Robert Davis has submitted proposal for your action.',
+        relatedEntityId: 'test-proposal-4',
+        relatedEntityType: 'PROPOSAL',
+        relatedLink: '/new-proposal-workflow?tab=all-proposals&proposalId=test-4',
+        entity: 'proposal',
+        status: 'UNREAD',
+        createdAt: new Date(Date.now() - 26 * 60000)
+      },
+      {
+        recipientUserId,
+        type: 'PROPOSAL_SUBMITTED',
+        title: 'Your Cash Advance - Payroll of Salaries, Wages',
+        message: 'Sarah Wilson has submitted proposal for your action.',
+        relatedEntityId: 'test-proposal-5',
+        relatedEntityType: 'PROPOSAL',
+        relatedLink: '/new-proposal-workflow?tab=all-proposals&proposalId=test-5',
+        entity: 'proposal',
+        status: 'UNREAD',
+        createdAt: new Date(Date.now() - 26 * 60000)
+      }
+    ];
+
+    const result = await Notification.insertMany(testNotifications);
+    res.json({
+      success: true,
+      message: `Created ${result.length} test notifications`,
+      recipientUserId,
+      candidates
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Failed to create test notifications', error: e.message });
+  }
+});
+
 module.exports = router;

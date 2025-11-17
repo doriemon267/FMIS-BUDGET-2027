@@ -180,6 +180,24 @@ const PersonnelServicesPage = () => {
       label: "TERMINAL LEAVE",
       show: true,
     },
+    subsidyEligible: {
+      type: "text",
+      label: "SUBSIDY TAG",
+      show: true,
+      customRender: (row) => (row.subsidyEligible ? "Tagged" : "—"),
+    },
+    subsidyAmount: {
+      type: "number",
+      label: "SUBSIDY (₱)",
+      show: true,
+      customRender: (row) =>
+        row.subsidyEligible
+          ? (Number(row.subsidyAmount) || 0).toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })
+          : "—",
+    },
     // courtAppearance: {
     //       type: "number",
     //       label: "COURT APPEARANCE",

@@ -12,6 +12,8 @@ import {
   MenuItem,
   ListItemText,
   Divider,
+  Tooltip,
+  CircularProgress,
 } from "@mui/material";
 import { keyframes } from "@mui/system";
 import React, { useContext, useEffect, useState } from "react";
@@ -23,8 +25,7 @@ import UserAvatarMenu from "../global/components/UserAvatarMenu";
 import env from "../utils/env";
 import CustomDrawer from "./CustomDrawer";
 import api from "../config/api";
-import { DateRange as DateRangeIcon } from "@mui/icons-material";
-import NotificationsIcon from "@mui/icons-material/Notifications";
+import { DateRange as DateRangeIcon, Notifications as NotificationsIcon } from "@mui/icons-material";
 import {
   NotificationsProvider,
   NotificationsContext,
@@ -213,46 +214,96 @@ const DashboardContent = () => {
             </MenuItem>
           </Menu>
 
-          {/* Notifications */}
-          <IconButton
-            color="inherit"
-            onClick={handleNotificationsClick}
-            aria-label="Notifications"
-          >
-            <Badge badgeContent={unreadCount} color={unreadCount > 0 ? 'error' : 'default'}>
-              <NotificationsIcon />
-            </Badge>
-          </IconButton>
+
+          {/* Notifications Bell - ProposalNotifications Style */}
+          <Tooltip title="Proposals Notifications" arrow>
+            <IconButton
+              onClick={handleNotificationsClick}
+              sx={{
+                position: 'relative',
+                color: 'white',
+                transition: 'all 0.3s ease',
+                '&:hover': {
+                  bgcolor: 'rgba(255, 255, 255, 0.2)'
+                }
+              }}
+            >
+              <Badge badgeContent={unreadCount} color="error">
+                <NotificationsIcon />
+              </Badge>
+            </IconButton>
+          </Tooltip>
+          
           <Menu
             anchorEl={anchorEl}
             open={openNotifications}
             onClose={handleNotificationsClose}
-            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-            transformOrigin={{ vertical: "top", horizontal: "right" }}
+            PaperProps={{
+              sx: {
+                mt: 1,
+                boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                borderRadius: '8px',
+                maxWidth: 450,
+                maxHeight: 500
+              }
+            }}
           >
             {unreadCount === 0 ? (
-              <MenuItem onClick={handleNotificationsClose}>
-                <ListItemText primary="No notifications" />
+              <MenuItem disabled>
+                <Typography variant="body2" color="textSecondary">
+                  No notifications
+                </Typography>
               </MenuItem>
             ) : (
-              serverNotifications.map((n) => (
-                <MenuItem
-                  key={n._id}
-                  onClick={async () => {
-                    await markNotificationsAsRead(n._id);
-                    handleNotificationsClose();
-                  }}
-                >
-                  <ListItemText
-                    primary={n.title || n.message || 'New submission'}
-                    secondary={
-                      [n?.org?.region, n?.org?.department, n?.org?.division]
+              <>
+                <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0' }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                    Proposals Notifications ({unreadCount})
+                  </Typography>
+                </Box>
+                {serverNotifications.slice(0, 5).map((n) => (
+                  <MenuItem
+                    key={n._id}
+                    onClick={() => {
+                      handleNotificationsClose();
+                    }}
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-start',
+                      py: 1.5,
+                      px: 2,
+                      '&:hover': {
+                        bgcolor: '#f5f5f5'
+                      }
+                    }}
+                  >
+                    <Typography
+                      variant="subtitle2"
+                      sx={{
+                        fontWeight: 600,
+                        color: '#333',
+                        mb: 0.25
+                      }}
+                    >
+                      {n.title || n.message || 'New notification'}
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: '#666',
+                        lineHeight: 1.4,
+                        mb: 0.5,
+                        fontSize: '0.875rem'
+                      }}
+                    >
+                      {[n?.org?.region, n?.org?.department, n?.org?.division]
                         .filter(Boolean)
-                        .join(' • ')
-                    }
-                  />
-                </MenuItem>
-              ))
+                        .join(' • ')}
+                    </Typography>
+                  </MenuItem>
+                ))}
+              </>
             )}
           </Menu>
 
