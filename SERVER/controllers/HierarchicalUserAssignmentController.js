@@ -155,7 +155,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
 
     // Only admins can manage hierarchical assignments
     if (!hasFullAccess(adminUserRoles)) {
-      console.log('❌ Admin access denied');
+      if (DEBUG) console.debug('❌ Admin access denied');
       return res.status(403).json({
         success: false,
         message: 'Access denied. Admin privileges required to manage hierarchical assignments.',
@@ -332,7 +332,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
         );
         
         if (originalRoles.length !== assignment.workflowRoles.length) {
-          console.log('🧹 Cleaned up invalid workflow roles:', {
+          if (DEBUG) console.debug('🧹 Cleaned up invalid workflow roles:', {
             original: originalRoles,
             cleaned: assignment.workflowRoles,
             removed: originalRoles.filter(r => !VALID_WORKFLOW_ROLES.includes(r))
@@ -1160,7 +1160,7 @@ function applyOfficeDefaults(assignmentDoc, sanitizedWorkflowRoles, normalizedLe
   } else {
     // No userRole provided - start with empty (cannot auto-assign without role)
     assignmentDoc.workflowRoles = [];
-    console.log('⚠️ No userRole provided, workflow roles set to empty');
+  if (DEBUG) console.debug('⚠️ No userRole provided, workflow roles set to empty');
   }
 
   ensureApprovalFlagConsistency(assignmentDoc, sanitizedWorkflowRoles, normalizedLevel, hasExplicitWorkflowRoles);

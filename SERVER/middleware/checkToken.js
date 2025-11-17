@@ -75,7 +75,7 @@ module.exports = async (req, res, next) => {
               const user = await userRes.json();
               userId = user.userId || user.id || user.Username?.[0] || user.username;
               if (userId) {
-                console.log('✅ User ID retrieved from external API:', userId);
+                if (DEBUG) console.debug('✅ User ID retrieved from external API:', userId);
               }
             }
           } catch (apiError) {
@@ -186,9 +186,10 @@ module.exports = async (req, res, next) => {
     next();
   } catch (error) {
     // Log basic error info; avoid printing authorization header or actual tokens
-    console.error("❌ Auth Middleware Error:", error.message);
+    // Log a minimal warning to avoid sensitive token leakage in production
+    console.warn(`[AuthMiddleware] ${error.name} - ${error.message} - path: ${req.path}`);
     if (DEBUG) {
-      console.error("Error details:", {
+      console.error("Auth Middleware details:", {
         name: error.name,
         message: error.message,
         path: req.path,

@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const DEBUG = process.env.DEBUG_LOGS === 'true';
 module.exports = async (req, res, next) => {
   try {
     // Allow CORS preflight to pass through
@@ -45,14 +46,16 @@ module.exports = async (req, res, next) => {
     req.user = user; // Attach user to request
     next();
   } catch (error) {
-    console.error("Auth Middleware Error:", error);
-    console.error("Error details:", {
-      name: error.name,
-      message: error.message,
-      path: req.path,
-      method: req.method,
-      hasAuthHeader: !!req.headers.authorization
-    });
+    console.warn(`[AuthMiddleware] ${error.name} - ${error.message} - path: ${req.path}`);
+    if (DEBUG) {
+      console.error("Auth Middleware details:", {
+        name: error.name,
+        message: error.message,
+        path: req.path,
+        method: req.method,
+        hasAuthHeader: !!req.headers.authorization
+      });
+    }
     return res.status(401).json({ 
       error: "Access denied",
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
