@@ -1092,7 +1092,7 @@ const NewProposalWorkflowPage = () => {
     RETURNED_TO_REVIEWER: "Returned to Reviewer",
     RETURNED_TO_APPROVER: "Returned to Approver",
     RETURNED_TO_PLANNING_ANALYST: "Returned to Budget Planning Analyst",
-    RETURNED_TO_BRD_OFFICER: "Returned to Budget Officer",
+    RETURNED_TO_OFFICER: "Returned to Budget Officer",
     RETURNED: "Returned",
   };
 
@@ -1106,10 +1106,17 @@ const NewProposalWorkflowPage = () => {
       proposal.budgetType?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       proposal.status?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    // Map the filter enum to actual database status
+    // Map the filter enum to actual database status and do case-insensitive comparison
     const filterDbStatus = statusEnumToDbMap[filterStatus];
     const matchesFilter =
-      filterStatus === "all" || proposal.status === filterDbStatus;
+      filterStatus === "all" || 
+      (proposal.status && filterDbStatus && 
+        proposal.status.toLowerCase() === filterDbStatus.toLowerCase());
+
+    // Debug logging for filter issues
+    if (filterStatus !== "all" && !matchesFilter && proposal) {
+      console.log(`Filter debug - filterStatus: ${filterStatus}, filterDbStatus: ${filterDbStatus}, proposal.status: ${proposal.status}`);
+    }
 
     return matchesSearch && matchesFilter;
   });
