@@ -35,6 +35,8 @@ const hasRequiredRole = (userRoles, requiredRoles) => {
 };
 // Check if user has full system access
 // Note: Full access does NOT imply "FULL" hierarchical scope in UI; it only bypasses certain checks
+const DEBUG = process.env.DEBUG_LOGS === 'true' || process.env.NODE_ENV !== 'production' && process.env.DEBUG_LOGS !== 'false';
+
 const hasFullAccess = (userRoles) => {
   const requiredRoles = [
     PERMISSION_LEVELS.SUPER_ADMIN,
@@ -59,8 +61,8 @@ const hasFullAccess = (userRoles) => {
   const result = hasRequiredRole(userRoles, requiredRoles);
   
   // 🔍 DEBUG for workflow roles
-  if (Array.isArray(userRoles) && (userRoles.includes('BUDGET_OFFICER') || userRoles.includes('BUDGET REVIEWER') || userRoles.includes('APPROVER') || userRoles.includes('OVERALL_BUDGET_APPROVER') || userRoles.includes('BUDGET PLANNING ANALYST') || userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET MANAGER'))) {
-    console.log('🔍 hasFullAccess check for 6-step workflow role:', {
+  if (DEBUG && Array.isArray(userRoles) && (userRoles.includes('BUDGET_OFFICER') || userRoles.includes('BUDGET REVIEWER') || userRoles.includes('APPROVER') || userRoles.includes('OVERALL_BUDGET_APPROVER') || userRoles.includes('BUDGET PLANNING ANALYST') || userRoles.includes('BUDGET_MANAGER') || userRoles.includes('BUDGET MANAGER'))) {
+    console.debug('🔍 hasFullAccess check for 6-step workflow role:', {
       userRoles,
       result,
       hasRequiredRoleDebug: userRoles.some(role => requiredRoles.includes(role))

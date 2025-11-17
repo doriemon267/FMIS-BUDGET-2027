@@ -1,5 +1,7 @@
 const jwt = require("jsonwebtoken");
 const { resolveUserIdentity, getClientIp } = require("../utils/requestContext");
+// Enable large/verbose debug logging when DEBUG_LOGS=true in env
+const DEBUG = process.env.DEBUG_LOGS === 'true' || process.env.NODE_ENV !== 'production' && process.env.DEBUG_LOGS !== 'false';
 module.exports = async (req, res, next) => {
   try {
     // Allow CORS preflight to pass through
@@ -19,8 +21,9 @@ module.exports = async (req, res, next) => {
     
     // Debug: Log payload structure (only once per unique path to avoid spam)
     if (!global._loggedPaths) global._loggedPaths = new Set();
-    if (!global._loggedPaths.has(req.path)) {
-      console.log(`🔍 JWT Payload structure for ${req.path}:`, Object.keys(payload));
+    // Only log payload structure when debugging to avoid performance and privacy issues
+    if (DEBUG && !global._loggedPaths.has(req.path)) {
+      console.debug(`🔍 JWT Payload structure for ${req.path}:`, Object.keys(payload));
       global._loggedPaths.add(req.path);
     }
     // Capture client IP early for downstream logging
@@ -182,15 +185,17 @@ module.exports = async (req, res, next) => {
     }
     next();
   } catch (error) {
+    // Log basic error info; avoid printing authorization header or actual tokens
     console.error("❌ Auth Middleware Error:", error.message);
-    console.error("Error details:", {
-      name: error.name,
-      message: error.message,
-      path: req.path,
-      method: req.method,
-      hasAuthHeader: !!req.headers.authorization,
-      authHeaderPreview: req.headers.authorization ? req.headers.authorization.substring(0, 20) + '...' : 'none'
-    });
+    if (DEBUG) {
+      console.error("Error details:", {
+        name: error.name,
+        message: error.message,
+        path: req.path,
+        method: req.method,
+        hasAuthHeader: !!req.headers.authorization,
+      });
+    }
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ error: "Token expired", expired: true });
     }

@@ -14,6 +14,7 @@ const { mainConnection } = require('../config/mongo_db');
 
 // Import new workflow constants (September 2025 refactoring)
 const { WORKFLOW_ROLES } = require('../constants/workflowConstants');
+const DEBUG = process.env.DEBUG_LOGS === 'true' || process.env.NODE_ENV !== 'production' && process.env.DEBUG_LOGS !== 'false';
 
 /**
  * Lookup user from fmis_main.assigned_roles table
@@ -101,7 +102,7 @@ const lookupUserFromMainDB = async (req, res) => {
     // Map ANY incoming role name to standardized versions ONLY (with underscores)
     let budgetRole = 'BUDGET_PREPARER'; // default (STEP 1)
 
-    console.log(`🔍 User ${userId} roles from DB:`, roleNames);
+  if (DEBUG) console.debug(`🔍 User ${userId} roles from DB:`, roleNames);
 
     if (roleNames.includes('SUPER ADMIN') || roleNames.includes('SUPER_ADMIN') || roleNames.includes('ADMIN')) {
       budgetRole = 'SUPER_ADMIN';
@@ -125,7 +126,7 @@ const lookupUserFromMainDB = async (req, res) => {
       budgetRole = 'BUDGET_PREPARER';
     }
 
-    console.log(`📋 Determined budgetRole for user ${userId}: ${budgetRole}`);
+  if (DEBUG) console.debug(`📋 Determined budgetRole for user ${userId}: ${budgetRole}`);
     userInfo.budgetRole = budgetRole;
 
     res.json({
@@ -223,7 +224,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       });
     }
     // Build hierarchical assignment based on level
-    console.log('🔍 Building hierarchical assignment with:', {
+    if (DEBUG) console.debug('🔍 Building hierarchical assignment with:', {
       assignmentLevel: normalizedEffectiveLevel,
       regionId,
       departmentId: effectiveDepartmentId,
@@ -242,7 +243,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       return res.status(400).json(assignmentData);
     }
     
-    console.log('✅ Hierarchical assignment built successfully:', assignmentData);
+  if (DEBUG) console.debug('✅ Hierarchical assignment built successfully:', assignmentData);
     // Find existing assignment or create new one
     let assignment = await HierarchicalUserAssignment.findOne({ userId, isActive: true });
 
@@ -270,7 +271,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
           .filter(role => VALID_WORKFLOW_ROLES.includes(role)) // ✅ NOW accepts both old and new roles
       : [];
     
-    console.log('🔍 Workflow roles sanitization:', {
+    if (DEBUG) console.debug('🔍 Workflow roles sanitization:', {
       received: req.body.workflowRoles,
       sanitized: sanitizedWorkflowRoles,
       hasExplicit: hasExplicitWorkflowRoles
@@ -349,7 +350,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       applyOfficeDefaults(assignment, sanitizedWorkflowRoles, normalizedEffectiveLevel, hasExplicitWorkflowRoles);
       ensureApprovalFlagConsistency(assignment, sanitizedWorkflowRoles, normalizedEffectiveLevel, hasExplicitWorkflowRoles);
       
-      console.log('💾 Saving assignment:', {
+      if (DEBUG) console.debug('💾 Saving assignment:', {
         userId: assignment.userId,
         assignmentLevel: assignment.assignmentLevel,
         userRole: assignment.userRole,
@@ -361,7 +362,7 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       });
       
       await assignment.save();
-      console.log('✅ Assignment saved successfully');
+  if (DEBUG) console.debug('✅ Assignment saved successfully');
     } catch (saveError) {
       console.error('❌ Error saving assignment:', saveError);
       throw saveError;
@@ -1130,7 +1131,7 @@ function applyOfficeDefaults(assignmentDoc, sanitizedWorkflowRoles, normalizedLe
     assignmentDoc.workflowRoles = sanitizedWorkflowRoles;
   } else if (userRole) {
     // ✅ ONLY accept standardized 6-STEP WORKFLOW role names
-    console.log('🔍 Auto-assigning workflow roles based on userRole:', { userRole, level });
+  if (DEBUG) console.debug('🔍 Auto-assigning workflow roles based on userRole:', { userRole, level });
     
     if (userRole === 'BUDGET_PREPARER') {
       // STEP 1: BUDGET_PREPARER (no internal roles assigned - they just create proposals)
@@ -1155,7 +1156,7 @@ function applyOfficeDefaults(assignmentDoc, sanitizedWorkflowRoles, normalizedLe
       assignmentDoc.workflowRoles = [];
     }
     
-    console.log('✅ Auto-assigned workflow roles:', assignmentDoc.workflowRoles);
+  if (DEBUG) console.debug('✅ Auto-assigned workflow roles:', assignmentDoc.workflowRoles);
   } else {
     // No userRole provided - start with empty (cannot auto-assign without role)
     assignmentDoc.workflowRoles = [];
