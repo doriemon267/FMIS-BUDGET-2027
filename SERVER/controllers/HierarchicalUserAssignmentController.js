@@ -14,7 +14,7 @@ const { mainConnection } = require('../config/mongo_db');
 
 // Import new workflow constants (September 2025 refactoring)
 const { WORKFLOW_ROLES } = require('../constants/workflowConstants');
-const DEBUG = process.env.DEBUG_LOGS === 'true' || process.env.NODE_ENV !== 'production' && process.env.DEBUG_LOGS !== 'false';
+const DEBUG = process.env.DEBUG_LOGS === 'true';
 
 /**
  * Lookup user from fmis_main.assigned_roles table

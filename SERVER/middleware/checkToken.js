@@ -1,7 +1,7 @@
 const jwt = require("jsonwebtoken");
 const { resolveUserIdentity, getClientIp } = require("../utils/requestContext");
 // Enable large/verbose debug logging when DEBUG_LOGS=true in env
-const DEBUG = process.env.DEBUG_LOGS === 'true' || process.env.NODE_ENV !== 'production' && process.env.DEBUG_LOGS !== 'false';
+const DEBUG = process.env.DEBUG_LOGS === 'true';
 module.exports = async (req, res, next) => {
   try {
     // Allow CORS preflight to pass through

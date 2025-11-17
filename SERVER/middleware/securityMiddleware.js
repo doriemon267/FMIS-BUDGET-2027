@@ -35,7 +35,7 @@ const hasRequiredRole = (userRoles, requiredRoles) => {
 };
 // Check if user has full system access
 // Note: Full access does NOT imply "FULL" hierarchical scope in UI; it only bypasses certain checks
-const DEBUG = process.env.DEBUG_LOGS === 'true' || process.env.NODE_ENV !== 'production' && process.env.DEBUG_LOGS !== 'false';
+const DEBUG = process.env.DEBUG_LOGS === 'true';
 
 const hasFullAccess = (userRoles) => {
   const requiredRoles = [
