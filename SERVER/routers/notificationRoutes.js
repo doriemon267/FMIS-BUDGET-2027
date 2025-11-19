@@ -358,4 +358,79 @@ router.post('/notifications/test', async (req, res) => {
   }
 });
 
+// Delete a specific notification (only recipient/role can delete)
+router.delete('/notifications/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const candidates = getRecipientCandidates(req.user);
+    const userRoles = req.user.Roles || [];
+    const roleSet = new Set();
+    userRoles.forEach((r) => {
+      if (!r) return;
+      const raw = String(r).trim();
+      if (!raw) return;
+      roleSet.add(raw);
+      roleSet.add(raw.toUpperCase().replace(/\s+/g, '_'));
+      roleSet.add(raw.toUpperCase().replace(/[\s\/-]+/g, '_').replace(/[^A-Z0-9_]/g, '_'));
+    });
+    const roleCandidates = Array.from(roleSet);
+
+    const filter = {
+      _id: id,
+      $or: [
+        { recipientUserId: { $in: candidates } },
+        { recipientUserIdNormalized: { $in: candidates } },
+        { recipientUserId: { $in: roleCandidates } },
+        { recipientUserIdNormalized: { $in: roleCandidates } },
+        { recipientUserId: { $in: userRoles } },
+        { recipientUserIdNormalized: { $in: userRoles } }
+      ]
+    };
+
+    const result = await Notification.findOneAndDelete(filter);
+    if (!result) return res.status(404).json({ success: false, message: 'Notification not found or not authorized' });
+    res.json({ success: true, deletedId: id });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Failed to delete notification', error: e.message });
+  }
+});
+
+// Bulk delete notifications by ids (optional)
+router.post('/notifications/delete', async (req, res) => {
+  try {
+    const { ids = [] } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ success: false, message: 'ids array is required' });
+    const candidates = getRecipientCandidates(req.user);
+    const userRoles = req.user.Roles || [];
+    const roleSet = new Set();
+    userRoles.forEach((r) => {
+      if (!r) return;
+      const raw = String(r).trim();
+      if (!raw) return;
+      roleSet.add(raw);
+      roleSet.add(raw.toUpperCase().replace(/\s+/g, '_'));
+      roleSet.add(raw.toUpperCase().replace(/[\s\/-]+/g, '_').replace(/[^A-Z0-9_]/g, '_'));
+    });
+    const roleCandidates = Array.from(roleSet);
+
+    const filter = {
+      _id: { $in: ids },
+      $or: [
+        { recipientUserId: { $in: candidates } },
+        { recipientUserIdNormalized: { $in: candidates } },
+        { recipientUserId: { $in: roleCandidates } },
+        { recipientUserIdNormalized: { $in: roleCandidates } },
+        { recipientUserId: { $in: userRoles } },
+        { recipientUserIdNormalized: { $in: userRoles } }
+      ]
+    };
+
+    const result = await Notification.deleteMany(filter);
+    const deletedCount = result && (result.deletedCount ?? 0);
+    res.json({ success: true, deletedCount });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Failed to delete notifications', error: e.message });
+  }
+});
+
 module.exports = router;

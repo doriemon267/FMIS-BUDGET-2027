@@ -1,4 +1,5 @@
 const Notification = require('../models/Notification');
+const User = require('../models/User');
 
 const normalizeRecipientId = (val) => {
   if (!val || typeof val !== 'string') return null;
@@ -83,6 +84,50 @@ exports.createNotifications = async (notificationsData) => {
           console.warn('Notification bulk dedupe check failed', err.message);
         }
       }
+      // If data.userId looks like a role identifier (e.g., 'BUDGET_MANAGER', 'BUDGET MANAGER') expand it
+      const recipientId = data.userId;
+      const isRoleCandidate = (val) => {
+        if (!val || typeof val !== 'string') return false;
+        const v = val.trim();
+        // Typical role strings are uppercase and may contain spaces or underscores
+        if (/^[A-Z_\s]+$/.test(v) && v.length <= 64) return true;
+        // Also support known role prefixes
+        if (/BUDGET|OFFICER|REVIEWER|APPROVER|ANALYST|MANAGER/i.test(v)) return true;
+        return false;
+      };
+
+      if (isRoleCandidate(recipientId)) {
+        // Expand the role into user ids by querying User model
+        try {
+          const users = await User.find({ roles: { $in: [recipientId, recipientId.toUpperCase()] } }).select('userId');
+          for (const u of users) {
+            const uid = u.userId || String(u._id);
+            const uniqueKeyPerRecipient = uniqueKey || null;
+            if (uniqueKeyPerRecipient) {
+              const exists = await Notification.findOne({ recipientUserId: uid, status: 'UNREAD', 'metadata.uniqueKey': uniqueKeyPerRecipient }).lean();
+              if (exists) continue;
+            }
+            notifications.push({
+              recipientUserId: uid,
+              recipientUserIdNormalized: normalizeRecipientId(uid),
+              recipientUserIdOriginal: uid,
+              type: data.type || 'INFO',
+              title: data.title,
+              message: data.message,
+              relatedEntityId: data.relatedId,
+              relatedEntityType: data.relatedType,
+              relatedLink: data.relatedLink,
+              metadata: data.metadata || {},
+              status: 'UNREAD',
+              createdAt: new Date()
+            });
+          }
+          continue; // skip the original push below because we've handled role expansion
+        } catch (err) {
+          console.warn('[createNotifications] Role expansion failed, proceeding to add original recipient', err.message);
+        }
+      }
+
       notifications.push({
         recipientUserId: data.userId,
         recipientUserIdNormalized: normalizeRecipientId(data.userId),

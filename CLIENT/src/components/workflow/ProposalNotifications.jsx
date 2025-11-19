@@ -29,8 +29,7 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
   const [loading, setLoading] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const [showPersistent, setShowPersistent] = useState(showPersistentList);
-  const { markAllNotificationsAsRead } = useNotifications();
-  const { markNotificationsAsRead } = useNotifications();
+  const { markAllNotificationsAsRead, deleteNotifications, markNotificationsAsRead } = useNotifications();
   const pollIntervalRef = useRef(null);
 
   // Fetch notifications
@@ -385,7 +384,7 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
                   <Box sx={{ ml: 1, display: 'flex', alignItems: 'center' }}>
                     <IconButton
                       size="small"
-                      onClick={(e) => { e.stopPropagation(); markAsRead([notification._id]); }}
+                      onClick={(e) => { e.stopPropagation(); markNotificationsAsRead([notification._id]); }}
                       aria-label="dismiss"
                       sx={{ color: '#777' }}
                     >
@@ -520,7 +519,7 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
                   <Box sx={{ ml: 1, display: 'flex', alignItems: 'center' }}>
                     <IconButton
                       size="small"
-                      onClick={(e) => { e.stopPropagation(); markAsRead([notification._id]); }}
+                      onClick={(e) => { e.stopPropagation(); markNotificationsAsRead([notification._id]); }}
                       aria-label="dismiss"
                     >
                       <CloseIcon sx={{ fontSize: '0.95rem' }} />

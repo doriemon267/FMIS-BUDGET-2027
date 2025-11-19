@@ -36,6 +36,23 @@ export const NotificationsProvider = ({ children }) => {
     },
   });
 
+  // Delete notifications (single or bulk)
+  const { mutateAsync: deleteNotifications } = useMutation({
+    mutationFn: async (idsOrId) => {
+      // Accept single id or array
+      if (!idsOrId) return;
+      if (Array.isArray(idsOrId)) {
+        const payload = { ids: idsOrId };
+        await api.post('/api/notifications/delete', payload);
+      } else {
+        await api.delete(`/api/notifications/${idsOrId}`);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['serverNotifications'] });
+    }
+  });
+
   const { mutateAsync: markAllNotificationsAsRead } = useMutation({
     mutationFn: async (options = {}) => {
       // options may contain entity or proposalId as scope
@@ -107,7 +124,8 @@ export const NotificationsProvider = ({ children }) => {
         // Server notifications
         serverNotifications,
         fetchingServerNotifications,
-        markNotificationsAsRead,
+    markNotificationsAsRead,
+    deleteNotifications,
       markAllNotificationsAsRead,
         // Alerts (snackbars)
         addAlert,
