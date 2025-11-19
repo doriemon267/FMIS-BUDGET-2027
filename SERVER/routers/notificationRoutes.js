@@ -84,8 +84,8 @@ router.get('/notifications', async (req, res) => {
     };
 
     const query = debugMode === 'all'
-      ? baseFilter
-      : { ...baseFilter, status: 'UNREAD' };
+      ? { ...baseFilter, archived: { $ne: true } }
+      : { ...baseFilter, status: 'UNREAD', archived: { $ne: true } };
 
     const list = await Notification.find(query)
       .sort({ createdAt: -1 })
@@ -141,7 +141,7 @@ router.get('/notifications/debug', async (req, res) => {
       ]
     };
 
-    const query = debugMode === 'all' ? baseFilter : { ...baseFilter, status: 'UNREAD' };
+  const query = debugMode === 'all' ? { ...baseFilter, archived: { $ne: true } } : { ...baseFilter, status: 'UNREAD', archived: { $ne: true } };
 
     const docs = await Notification.find(query)
       .sort({ createdAt: -1 })
@@ -358,6 +358,42 @@ router.post('/notifications/test', async (req, res) => {
   }
 });
 
+// Toggle mute for current user on a proposal or entity
+router.post('/notifications/mute', async (req, res) => {
+  try {
+    const { proposalId, entityType, entityId, mute = true } = req.body || {};
+    if (!proposalId && !entityId) return res.status(400).json({ success: false, message: 'proposalId or entityId required' });
+
+    const candidates = getRecipientCandidates(req.user);
+    const userId = candidates[0] || req.user?.id || req.user?.userId;
+    if (!userId) return res.status(400).json({ success: false, message: 'User not found' });
+
+    const user = await require('../models/User').findOne({ $or: [{ userId }, { _id: userId }] });
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    user.notificationPreferences = user.notificationPreferences || { mutedProposals: [], mutedEntities: [] };
+    if (proposalId) {
+      const set = new Set(user.notificationPreferences.mutedProposals || []);
+      if (mute) set.add(String(proposalId)); else set.delete(String(proposalId));
+      user.notificationPreferences.mutedProposals = Array.from(set);
+    }
+    if (entityType && entityId) {
+      const arr = user.notificationPreferences.mutedEntities || [];
+      const key = `${entityType}:${entityId}`;
+      if (mute) {
+        // add
+        if (!arr.includes(key)) arr.push(key);
+      } else {
+        user.notificationPreferences.mutedEntities = arr.filter(a => a !== key);
+      }
+    }
+    await user.save();
+    res.json({ success: true, message: mute ? 'Muted' : 'Unmuted', preferences: user.notificationPreferences });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Failed to toggle mute', error: e.message });
+  }
+});
+
 // Delete a specific notification (only recipient/role can delete)
 router.delete('/notifications/:id', async (req, res) => {
   try {
@@ -387,9 +423,9 @@ router.delete('/notifications/:id', async (req, res) => {
       ]
     };
 
-    const result = await Notification.findOneAndDelete(filter);
-    if (!result) return res.status(404).json({ success: false, message: 'Notification not found or not authorized' });
-    res.json({ success: true, deletedId: id });
+  const result = await Notification.findOneAndUpdate(filter, { $set: { archived: true, archivedAt: new Date() } }, { new: true });
+  if (!result) return res.status(404).json({ success: false, message: 'Notification not found or not authorized' });
+  res.json({ success: true, archivedId: id });
   } catch (e) {
     res.status(500).json({ success: false, message: 'Failed to delete notification', error: e.message });
   }
@@ -425,9 +461,9 @@ router.post('/notifications/delete', async (req, res) => {
       ]
     };
 
-    const result = await Notification.deleteMany(filter);
-    const deletedCount = result && (result.deletedCount ?? 0);
-    res.json({ success: true, deletedCount });
+  const result = await Notification.updateMany(filter, { $set: { archived: true, archivedAt: new Date() } });
+  const deletedCount = result && (result.modifiedCount ?? result.nModified ?? 0);
+  res.json({ success: true, archivedCount: deletedCount });
   } catch (e) {
     res.status(500).json({ success: false, message: 'Failed to delete notifications', error: e.message });
   }

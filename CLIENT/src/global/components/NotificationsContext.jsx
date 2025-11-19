@@ -53,6 +53,26 @@ export const NotificationsProvider = ({ children }) => {
     }
   });
 
+  const { mutateAsync: muteProposal } = useMutation({
+    mutationFn: async ({ proposalId, mute = true }) => {
+      await api.post('/api/notifications/mute', { proposalId, mute });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['serverNotifications'] });
+    }
+  });
+
+  const muteNotification = async ({ proposalId, mute = true }) => {
+    try {
+      await muteProposal({ proposalId, mute });
+      // local UI update - refetch notifications
+      queryClient.invalidateQueries({ queryKey: ['serverNotifications'] });
+    } catch (error) {
+      console.error('Failed to mute proposal notifications:', error);
+      throw error;
+    }
+  };
+
   const { mutateAsync: markAllNotificationsAsRead } = useMutation({
     mutationFn: async (options = {}) => {
       // options may contain entity or proposalId as scope
@@ -125,7 +145,9 @@ export const NotificationsProvider = ({ children }) => {
         serverNotifications,
         fetchingServerNotifications,
     markNotificationsAsRead,
-    deleteNotifications,
+  deleteNotifications,
+  muteProposal,
+  muteNotification,
       markAllNotificationsAsRead,
         // Alerts (snackbars)
         addAlert,

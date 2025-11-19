@@ -29,7 +29,7 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
   const [loading, setLoading] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const [showPersistent, setShowPersistent] = useState(showPersistentList);
-  const { markAllNotificationsAsRead, deleteNotifications, markNotificationsAsRead } = useNotifications();
+  const { markAllNotificationsAsRead, deleteNotifications, markNotificationsAsRead, muteNotification } = useNotifications();
   const pollIntervalRef = useRef(null);
 
   // Fetch notifications
@@ -382,11 +382,20 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
                     </Typography>
                   </Box>
                   <Box sx={{ ml: 1, display: 'flex', alignItems: 'center' }}>
+                    {notification.metadata?.proposalId && (
+                      <IconButton
+                        size="small"
+                        title={notification.metadata && notification.metadata.proposalId ? 'Mute notifications for this proposal' : 'Mute'}
+                        onClick={(e) => { e.stopPropagation(); muteNotification({ proposalId: notification.metadata.proposalId, mute: true }); }}
+                        sx={{ color: '#777' }}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M10.5 2a1.5 1.5 0 0 1 0 3H9v5a1 1 0 0 1-1 1H7a1 1 0 0 0-1 1v.5a.5.5 0 0 1-1 0V12a2 2 0 0 1 2-2h1a.5.5 0 0 0 .5-.5V5h1.5A1.5 1.5 0 0 1 10.5 2Z"/></svg>
+                      </IconButton>
+                    )}
                     <IconButton
                       size="small"
                       onClick={(e) => { e.stopPropagation(); markNotificationsAsRead([notification._id]); }}
                       aria-label="dismiss"
-                      sx={{ color: '#777' }}
                     >
                       <CloseIcon sx={{ fontSize: '1rem' }} />
                     </IconButton>
@@ -516,15 +525,24 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
                       {formatTime(notification.createdAt)}
                     </Typography>
                   </Box>
-                  <Box sx={{ ml: 1, display: 'flex', alignItems: 'center' }}>
-                    <IconButton
-                      size="small"
-                      onClick={(e) => { e.stopPropagation(); markNotificationsAsRead([notification._id]); }}
-                      aria-label="dismiss"
-                    >
-                      <CloseIcon sx={{ fontSize: '0.95rem' }} />
-                    </IconButton>
-                  </Box>
+                    <Box sx={{ ml: 1, display: 'flex', alignItems: 'center' }}>
+                      {notification.metadata?.proposalId && (
+                        <IconButton
+                          size="small"
+                          title="Mute notifications for this proposal"
+                          onClick={(e) => { e.stopPropagation(); muteNotification({ proposalId: notification.metadata.proposalId, mute: true }); }}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M10.5 2a1.5 1.5 0 0 1 0 3H9v5a1 1 0 0 1-1 1H7a1 1 0 0 0-1 1v.5a.5.5 0 0 1-1 0V12a2 2 0 0 1 2-2h1a.5.5 0 0 0 .5-.5V5h1.5A1.5 1.5 0 0 1 10.5 2Z"/></svg>
+                        </IconButton>
+                      )}
+                      <IconButton
+                        size="small"
+                        onClick={(e) => { e.stopPropagation(); markNotificationsAsRead([notification._id]); }}
+                        aria-label="dismiss"
+                      >
+                        <CloseIcon sx={{ fontSize: '0.95rem' }} />
+                      </IconButton>
+                    </Box>
                 </Box>
               ))}
             </Box>

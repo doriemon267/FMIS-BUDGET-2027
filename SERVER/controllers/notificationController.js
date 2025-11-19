@@ -70,7 +70,21 @@ exports.createNotifications = async (notificationsData) => {
   try {
     // Dedupe per recipient + uniqueKey if provided in metadata
     const notifications = [];
-    for (const data of notificationsData) {
+    // If payload has a proposalId, gather a set of userIds who have muted this proposal
+    const allProposalIds = [...new Set(notificationsData.map(n => n.metadata?.proposalId).filter(Boolean))];
+    const mutedByProposal = {};
+    if (allProposalIds.length > 0) {
+      const usersWithMuted = await User.find({ 'notificationPreferences.mutedProposals': { $in: allProposalIds } }).select('userId notificationPreferences.mutedProposals').lean();
+      usersWithMuted.forEach(u => {
+        u.notificationPreferences?.mutedProposals?.forEach(pid => {
+          mutedByProposal[pid] = mutedByProposal[pid] || new Set();
+          mutedByProposal[pid].add(u.userId || String(u._id));
+        });
+      });
+    }
+
+  const expandRolesGlobally = String(process.env.NOTIFICATIONS_EXPAND_ROLE_TO_USERS || 'true').toLowerCase() === 'true';
+  for (const data of notificationsData) {
       const uniqueKey = data.metadata?.uniqueKey;
       if (uniqueKey) {
         try {
@@ -96,13 +110,19 @@ exports.createNotifications = async (notificationsData) => {
         return false;
       };
 
-      if (isRoleCandidate(recipientId)) {
+  const expandRoleFlag = data.metadata?.expandRoleToUsers;
+  const expandRoleFinal = expandRoleFlag === undefined ? expandRolesGlobally : !!expandRoleFlag;
+  if (isRoleCandidate(recipientId) && expandRoleFinal) {
         // Expand the role into user ids by querying User model
-        try {
+  try {
           const users = await User.find({ roles: { $in: [recipientId, recipientId.toUpperCase()] } }).select('userId');
           for (const u of users) {
             const uid = u.userId || String(u._id);
             const uniqueKeyPerRecipient = uniqueKey || null;
+            // If this user has muted the proposal referenced in metadata, skip
+            if (data.metadata?.proposalId && mutedByProposal[data.metadata.proposalId] && mutedByProposal[data.metadata.proposalId].has(uid)) {
+              continue;
+            }
             if (uniqueKeyPerRecipient) {
               const exists = await Notification.findOne({ recipientUserId: uid, status: 'UNREAD', 'metadata.uniqueKey': uniqueKeyPerRecipient }).lean();
               if (exists) continue;
@@ -126,6 +146,12 @@ exports.createNotifications = async (notificationsData) => {
         } catch (err) {
           console.warn('[createNotifications] Role expansion failed, proceeding to add original recipient', err.message);
         }
+      }
+
+      // If a user is explicitly provided (not a role)
+      if (data.metadata?.proposalId && mutedByProposal[data.metadata.proposalId] && mutedByProposal[data.metadata.proposalId].has(data.userId)) {
+        // Skip this recipient: they have muted the proposal
+        continue;
       }
 
       notifications.push({

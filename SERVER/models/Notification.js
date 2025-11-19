@@ -19,6 +19,8 @@ const NotificationSchema = new mongoose.Schema({
   createdBy: { userId: String, name: String },
   createdAt: { type: Date, default: Date.now },
   readAt: { type: Date },
+  archived: { type: Boolean, default: false, index: true },
+  archivedAt: { type: Date },
   // Deep linking support - route user to specific proposal or page
   relatedLink: { type: String },
   // Type and related ID for routing logic
