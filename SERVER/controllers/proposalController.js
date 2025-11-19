@@ -6231,7 +6231,7 @@ exports.performProposalAction = async (req, res) => {
             userId: user.userId || user._id.toString(),
             type: 'PROPOSAL_SUBMISSION',
             title: notificationTitle,
-            message: notificationMessage,
+            message: `${userName} has ${action?.includes('return') ? 'returned' : 'submitted'} a proposal for your review: "${proposal?.title || id}"`,
             relatedId: id,
             relatedType: 'proposal',
               // Use `tab` query param (frontend expects `tab`) and include proposalId for deep-linking
@@ -6244,6 +6244,8 @@ exports.performProposalAction = async (req, res) => {
             }
           }));
 
+          // Add a uniqueKey to prevent duplicates for same action and proposal
+          notificationsData.forEach(n => { n.metadata = n.metadata || {}; n.metadata.uniqueKey = `${action}_${id}`; });
           await notificationController.createNotifications(notificationsData);
           console.log(`Notifications sent to ${targetUsers.length} ${targetRole} users`);
         }

@@ -21,6 +21,20 @@ const normalizeRecipientId = (val) => {
  */
 exports.createNotification = async (notificationData) => {
   try {
+    // If unique key is provided in metadata, prevent duplicate UNREAD notifications for the same recipient
+    const uniqueKey = notificationData.metadata?.uniqueKey;
+    if (uniqueKey) {
+      try {
+        const existing = await Notification.findOne({
+          recipientUserId: notificationData.userId,
+          status: 'UNREAD',
+          'metadata.uniqueKey': uniqueKey
+        }).lean();
+        if (existing) return existing;
+      } catch (err) {
+        console.warn('Notification dedupe check failed', err.message);
+      }
+    }
     
 
     const notification = new Notification({
@@ -53,22 +67,39 @@ exports.createNotification = async (notificationData) => {
  */
 exports.createNotifications = async (notificationsData) => {
   try {
-    const notifications = notificationsData.map(data => ({
-      recipientUserId: data.userId,
-  recipientUserIdNormalized: normalizeRecipientId(data.userId),
-      recipientUserIdOriginal: data.userId,
-      type: data.type || 'INFO',
-      title: data.title,
-      message: data.message,
-      relatedEntityId: data.relatedId,
-      relatedEntityType: data.relatedType,
-      relatedLink: data.relatedLink,
-      metadata: data.metadata || {},
-      status: 'UNREAD',
-      createdAt: new Date()
-    }));
-    
-    const created = await Notification.insertMany(notifications);
+    // Dedupe per recipient + uniqueKey if provided in metadata
+    const notifications = [];
+    for (const data of notificationsData) {
+      const uniqueKey = data.metadata?.uniqueKey;
+      if (uniqueKey) {
+        try {
+          const exists = await Notification.findOne({
+            recipientUserId: data.userId,
+            status: 'UNREAD',
+            'metadata.uniqueKey': uniqueKey
+          }).lean();
+          if (exists) continue;
+        } catch (err) {
+          console.warn('Notification bulk dedupe check failed', err.message);
+        }
+      }
+      notifications.push({
+        recipientUserId: data.userId,
+        recipientUserIdNormalized: normalizeRecipientId(data.userId),
+        recipientUserIdOriginal: data.userId,
+        type: data.type || 'INFO',
+        title: data.title,
+        message: data.message,
+        relatedEntityId: data.relatedId,
+        relatedEntityType: data.relatedType,
+        relatedLink: data.relatedLink,
+        metadata: data.metadata || {},
+        status: 'UNREAD',
+        createdAt: new Date()
+      });
+    }
+
+    const created = notifications.length > 0 ? await Notification.insertMany(notifications) : [];
     return created;
   } catch (error) {
     console.error('Error creating notifications:', error);

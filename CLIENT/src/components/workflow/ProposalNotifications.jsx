@@ -30,6 +30,7 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [showPersistent, setShowPersistent] = useState(showPersistentList);
   const { markAllNotificationsAsRead } = useNotifications();
+  const { markNotificationsAsRead } = useNotifications();
   const pollIntervalRef = useRef(null);
 
   // Fetch notifications
@@ -351,6 +352,16 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
                     >
                       {notification.title}
                     </Typography>
+                    {notification.metadata?.performedBy && (
+                      <Typography variant="caption" sx={{ color: '#777', display: 'block', mb: 0.25 }}>
+                        By: {notification.metadata.performedBy} {notification.metadata.performedByRole ? `(${notification.metadata.performedByRole})` : ''}
+                      </Typography>
+                    )}
+                    {notification.metadata?.performedBy && (
+                      <Typography variant="caption" sx={{ color: '#777', display: 'block', mb: 0.25 }}>
+                        By: {notification.metadata.performedBy} {notification.metadata.performedByRole ? `(${notification.metadata.performedByRole})` : ''}
+                      </Typography>
+                    )}
                     <Typography
                       variant="body2"
                       sx={{
@@ -370,6 +381,16 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
                     >
                       {formatTime(notification.createdAt)}
                     </Typography>
+                  </Box>
+                  <Box sx={{ ml: 1, display: 'flex', alignItems: 'center' }}>
+                    <IconButton
+                      size="small"
+                      onClick={(e) => { e.stopPropagation(); markAsRead([notification._id]); }}
+                      aria-label="dismiss"
+                      sx={{ color: '#777' }}
+                    >
+                      <CloseIcon sx={{ fontSize: '1rem' }} />
+                    </IconButton>
                   </Box>
                 </Box>
               </MenuItem>
@@ -495,6 +516,15 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
                     >
                       {formatTime(notification.createdAt)}
                     </Typography>
+                  </Box>
+                  <Box sx={{ ml: 1, display: 'flex', alignItems: 'center' }}>
+                    <IconButton
+                      size="small"
+                      onClick={(e) => { e.stopPropagation(); markAsRead([notification._id]); }}
+                      aria-label="dismiss"
+                    >
+                      <CloseIcon sx={{ fontSize: '0.95rem' }} />
+                    </IconButton>
                   </Box>
                 </Box>
               ))}

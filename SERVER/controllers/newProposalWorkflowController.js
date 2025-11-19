@@ -282,7 +282,7 @@ const getNotificationRecipients = async (action, proposal, currentUserRole, curr
  * @param {string} currentUserName - Name of the user performing the action
  * @param {string} comment - Optional comment/message from the action
  */
-const createWorkflowNotification = async (action, proposal, recipientUserIds, currentUserName, comment) => {
+const createWorkflowNotification = async (action, proposal, recipientUserIds, currentUserName, comment, currentUserRole) => {
   try {
     console.log('[createWorkflowNotification] Starting with', recipientUserIds.length, 'recipients');
     
@@ -309,7 +309,18 @@ const createWorkflowNotification = async (action, proposal, recipientUserIds, cu
     const isReturnAction = action.includes('return');
     const notificationTitle = actionTitles[action] || 'Proposal Status Updated';
     
-    let notificationMessage = `${currentUserName} has ${isReturnAction ? 'returned' : 'submitted'} proposal "${proposal.title}" for your action.`;
+  // Compose clearer message including role and target action
+  let verb = isReturnAction ? 'returned' : 'submitted';
+  // If we can derive a more specific direction (e.g., for approver/reviewer)
+  let targetRole = '';
+  if (action === 'submit-to-reviewer') targetRole = 'Budget Reviewer';
+  if (action === 'submit-to-approver') targetRole = 'Budget Approver';
+  if (action === 'submit-to-analyst') targetRole = 'Budget Planning Analyst';
+  if (action === 'forward-to-officer') targetRole = 'Budget Officer';
+  if (action === 'forward-to-manager') targetRole = 'Budget Manager';
+  if (!targetRole && action.includes('return')) targetRole = 'previous workflow step';
+
+  let notificationMessage = `${currentUserName} (${currentUserRole || 'User'}) ${verb} the proposal "${proposal.title}"${targetRole ? ' to ' + targetRole : ''}.`;
     if (comment && isReturnAction) {
       notificationMessage += ` Comment: ${comment}`;
     }
@@ -320,6 +331,9 @@ const createWorkflowNotification = async (action, proposal, recipientUserIds, cu
     const relatedLink = `/new-proposal-workflow?tab=all-proposals&proposalId=${proposal._id}`;
 
     // Create notification for each recipient
+    // Unique key to prevent duplicate notifications for the same action + proposal
+    const uniqueKey = `${action}_${proposal._id}`;
+
     const notificationData = recipientUserIds.map(userId => ({
       recipientUserId: userId,
       type: isReturnAction ? 'PROPOSAL_RETURNED' : 'PROPOSAL_SUBMITTED',
@@ -343,14 +357,34 @@ const createWorkflowNotification = async (action, proposal, recipientUserIds, cu
         performedBy: currentUserName,
         comment: comment || ''
       },
+      uniqueKey,
       status: 'UNREAD',
       createdAt: new Date()
     }));
 
     console.log('[createWorkflowNotification] About to insert', notificationData.length, 'notifications');
     
+    // Prevent duplicate notifications per recipient by checking existing UNREAD notifications with the same uniqueKey
+    const notificationsToCreate = [];
+    for (const data of notificationData) {
+      try {
+        const exists = await Notification.findOne({
+          recipientUserId: data.recipientUserId,
+          status: 'UNREAD',
+          'metadata.uniqueKey': uniqueKey
+        }).lean();
+        if (!exists) notificationsToCreate.push(data);
+      } catch (err) {
+        console.warn('[createWorkflowNotification] Failed dedupe check for recipient', data.recipientUserId, err.message);
+        notificationsToCreate.push(data);
+      }
+    }
+
     // Bulk create notifications
-    const result = await Notification.insertMany(notificationData);
+    let result = [];
+    if (notificationsToCreate.length > 0) {
+      result = await Notification.insertMany(notificationsToCreate);
+    }
     console.log(`[createWorkflowNotification] Successfully created ${result.length} notification(s) for action: ${action}`);
   } catch (error) {
     console.error('[createWorkflowNotification] Error creating notifications:', error.message);
@@ -1072,7 +1106,7 @@ exports.performAction = async (req, res) => {
         // Create notifications for all recipients
         if (recipientUserIds.length > 0) {
           console.log('[PERFORM_ACTION] Creating notifications for action:', action);
-          await createWorkflowNotification(action, proposal, recipientUserIds, userName, comment);
+          await createWorkflowNotification(action, proposal, recipientUserIds, userName, comment, userRole);
           console.log('[PERFORM_ACTION] Notifications created successfully');
         } else {
           console.log('[PERFORM_ACTION] No recipients found for action:', action);

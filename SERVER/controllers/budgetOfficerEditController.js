@@ -1916,6 +1916,8 @@ exports.submitEdit = async (req, res) => {
             changeSummary: budgetOfficerEdit.getChangeSummary()
           }
         });
+  // Attach a unique key for deduplication per editor role + proposal + target role
+  notificationsToSend[notificationsToSend.length - 1].metadata.uniqueKey = `${editorRole}_${proposalId}_${displayTargetRole}`;
       }
     } else {
       // BUDGET_MANAGER finalized - mark forwardedTo as empty (no further routing)
@@ -2481,9 +2483,15 @@ exports.approveEdit = async (req, res) => {
         userId: edit.processBy,
         type: 'PROPOSAL_APPROVED',
         title: 'Proposal Edits Approved',
-        message: `The edits made by Budget Officer have been approved for your proposal (${edit.fiscalYear} - ${edit.budgetType})`,
+        message: `Your proposal (${edit.fiscalYear} - ${edit.budgetType}) has been approved by the Budget Officer.`,
         relatedId: edit.proposalId,
-        relatedType: 'Proposal'
+        relatedType: 'Proposal',
+        metadata: {
+          proposalId: edit.proposalId,
+          uniqueKey: `APPROVE_${edit.proposalId}`,
+          performedBy: userName,
+          performedByRole: roles && roles.length ? roles[0] : undefined
+        }
       });
       
       res.json({
