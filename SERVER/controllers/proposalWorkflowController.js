@@ -1607,7 +1607,7 @@ exports.returnProposal = async (req, res) => {
       type: 'PROPOSAL_WORKFLOW',
       relatedEntityId: proposal._id,
       relatedEntityType: 'Proposal',
-      relatedLink: `/AllProposals?proposalId=${proposal._id}`
+  relatedLink: `/new-proposal-workflow?tab=all-proposals&proposalId=${proposal._id}`
     };
 
     // Determine return path based on current status and user role
@@ -2619,7 +2619,7 @@ exports.reviewerReturnProposal = async (req, res) => {
       type: 'PROPOSAL_WORKFLOW',
       relatedEntityId: proposal._id,
       relatedEntityType: 'Proposal',
-      relatedLink: `/AllProposals?proposalId=${proposal._id}`
+  relatedLink: `/new-proposal-workflow?tab=all-proposals&proposalId=${proposal._id}`
     };
 
     // Sync status to all related budget items
@@ -2968,7 +2968,7 @@ exports.approverApproveForwardAnalyst = async (req, res) => {
       type: 'PROPOSAL_WORKFLOW',
       relatedEntityId: proposal._id,
       relatedEntityType: 'Proposal',
-      relatedLink: `/AllProposals?proposalId=${proposal._id}`
+  relatedLink: `/new-proposal-workflow?tab=all-proposals&proposalId=${proposal._id}`
     };
 
     // Sync status to all related budget items
@@ -3258,7 +3258,7 @@ exports.approverSubmitToOfficer = async (req, res) => {
       type: 'PROPOSAL_WORKFLOW',
       relatedEntityId: proposal._id,
       relatedEntityType: 'Proposal',
-      relatedLink: `/AllProposals?proposalId=${proposal._id}`
+  relatedLink: `/new-proposal-workflow?tab=all-proposals&proposalId=${proposal._id}`
     };
 
     // Sync status to all related budget items
@@ -3394,7 +3394,7 @@ exports.approverReturn = async (req, res) => {
       type: 'PROPOSAL_WORKFLOW',
       relatedEntityId: proposal._id,
       relatedEntityType: 'Proposal',
-      relatedLink: `/AllProposals?proposalId=${proposal._id}`
+  relatedLink: `/new-proposal-workflow?tab=all-proposals&proposalId=${proposal._id}`
     };
 
     // Sync status to all related budget items
@@ -4362,7 +4362,7 @@ exports.officerReturnProposal = async (req, res) => {
       type: 'PROPOSAL_WORKFLOW',
       relatedEntityId: proposal._id,
       relatedEntityType: 'Proposal',
-      relatedLink: `/AllProposals?proposalId=${proposal._id}`
+  relatedLink: `/new-proposal-workflow?tab=all-proposals&proposalId=${proposal._id}`
     };
 
     await sendNotification({
@@ -4776,7 +4776,7 @@ exports.managerReturnProposal = async (req, res) => {
       type: 'PROPOSAL_WORKFLOW',
       relatedEntityId: proposal._id,
       relatedEntityType: 'Proposal',
-      relatedLink: `/AllProposals?proposalId=${proposal._id}`
+  relatedLink: `/new-proposal-workflow?tab=all-proposals&proposalId=${proposal._id}`
     };
     const baseMetadata = {
       proposalId: String(proposal._id),
@@ -4956,8 +4956,9 @@ async function sendNotification({
     const recordId = Array.isArray(recordIds) ? recordIds[0] : recordIds;
     const derivedRelatedEntityType = relatedEntityType || (entity ? entity.toUpperCase() : undefined);
     const derivedRelatedEntityId = relatedEntityId || (recordId ? String(recordId) : undefined);
+    // Default to deep link into the new proposal workflow page with the 'all-proposals' tab
     const derivedRelatedLink = relatedLink || (entity === 'proposal' && derivedRelatedEntityId
-      ? `/AllProposals?proposalId=${derivedRelatedEntityId}`
+      ? `/new-proposal-workflow?tab=all-proposals&proposalId=${derivedRelatedEntityId}`
       : relatedLink);
     const normalizedMetadata = metadata && typeof metadata === 'object' ? metadata : {};
 

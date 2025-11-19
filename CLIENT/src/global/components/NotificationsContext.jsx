@@ -36,6 +36,17 @@ export const NotificationsProvider = ({ children }) => {
     },
   });
 
+  const { mutateAsync: markAllNotificationsAsRead } = useMutation({
+    mutationFn: async (options = {}) => {
+      // options may contain entity or proposalId as scope
+      const res = await api.post('/api/notifications/mark-all-read', options);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['serverNotifications'] });
+    }
+  });
+
   // Legacy: add/remove local toast-like notifications (kept for compatibility)
   const addNotification = (notification) => setNotifications((prev) => [...prev, notification]);
   const removeNotification = (index) => setNotifications((prev) => prev.filter((_, i) => i !== index));
@@ -97,6 +108,7 @@ export const NotificationsProvider = ({ children }) => {
         serverNotifications,
         fetchingServerNotifications,
         markNotificationsAsRead,
+      markAllNotificationsAsRead,
         // Alerts (snackbars)
         addAlert,
         removeAlert,

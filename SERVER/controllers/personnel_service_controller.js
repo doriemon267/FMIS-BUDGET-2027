@@ -205,7 +205,19 @@ exports.getAllPersonnelServices = async (req, res) => {
       syncMealAllowances = false,
       region, // Add region parameter
       subsidyEligible,
+      chargedToIncomeEligible,
     } = req.query;
+
+    console.log("DEBUG: getAllPersonnelServices called with params:", {
+      chargedToIncomeEligible,
+      page,
+      limit,
+      statusOfAppointment,
+    });
+
+    // DIAGNOSTIC: Check how many records have chargedToIncomeEligible = true in database
+    const chargedToIncomCount = await PersonnelServices.countDocuments({ chargedToIncomeEligible: true });
+    console.log("DEBUG: Total records with chargedToIncomeEligible=true in database:", chargedToIncomCount);
 
     // Get filters from middleware - prioritize submission workflow filters over hierarchical filters
     const submissionWorkflowFilters = req.submissionWorkflowFilters || {};
@@ -297,6 +309,20 @@ exports.getAllPersonnelServices = async (req, res) => {
         query.subsidyEligible = subsidyFilter;
       }
     }
+    
+    const chargedToIncomeFilter = parseBooleanQuery(chargedToIncomeEligible);
+    console.log("DEBUG: chargedToIncomeFilter parsed value:", chargedToIncomeFilter);
+    
+    if (chargedToIncomeFilter !== null) {
+      if (query.$and) {
+        query.$and.push({ chargedToIncomeEligible: chargedToIncomeFilter });
+      } else {
+        query.chargedToIncomeEligible = chargedToIncomeFilter;
+      }
+    }
+    
+    console.log("DEBUG: Final query before find:", JSON.stringify(query, null, 2));
+    
     const sortByField = orderBy || "createdAt";
     const sortOrder = order.toLowerCase() === "desc" ? -1 : 1;
     const sortQuery = { [sortByField]: sortOrder };
@@ -317,6 +343,12 @@ exports.getAllPersonnelServices = async (req, res) => {
       .limit(limitNum)
       .sort(sortQuery);
     const totalRecords = await PersonnelServices.countDocuments(query);
+    
+    console.log("DEBUG: Query results - found", personnelServices.length, "records out of", totalRecords, "total");
+    if (chargedToIncomeFilter !== null) {
+      console.log("DEBUG: Charged to income filter was applied, looking for chargedToIncomeEligible =", chargedToIncomeFilter);
+    }
+    
     // Recalculate fields
     personnelServices = personnelServices.map((personnel) => {
       const recalculatedSubsistenceAllowanceMDS =
@@ -526,7 +558,7 @@ exports.bulkAddPersonnelServices = async (req, res) => {
             "Missing required fields: statusOfAppointment and RATA are required",
         });
     }
-    const activeSettings = await Settings.findOne({ isActive: true });
+    const activeSettings = await getActiveSettingsWithCompensation();
     if (!activeSettings) {
       return res
         .status(400)
@@ -733,12 +765,11 @@ exports.bulkAddPersonnelServices = async (req, res) => {
         annualSalary: annualSalary,
         RATA: rataAmount * 12,
         PERA: (req.body.PERA || activeSettings.PERA || 0) * 12,
-        uniformALLOWANCE: activeSettings.uniformAllowance || 0,
-        productivityIncentive:
-          req.body.compensation?.productivityIncentive || 0,
-        medical: (req.body.medicalAllowance || 0) * 12,
+        uniformALLOWANCE: (activeSettings.uniformAllowance || 0) * 12,
+        productivityIncentive: (activeSettings.productivityIncentive || 0) * 12,
+        medical: (req.body.medicalAllowance || activeSettings.medicalAllowance || 0) * 12,
         meal: 0,
-        cashGift: req.body.compensation?.cashGift || 0,
+        cashGift: (activeSettings.cashGift || 0) * 12,
         midyearBonus: monthlySalary,
         yearEndBonus: monthlySalary,
         gsisPremium: annualSalary * (activeSettings.gsisPremium || 0),
@@ -1109,7 +1140,7 @@ exports.getAllPerServices = async (req, res) => {
 };
 exports.getGrandTotalPermanent = async (req, res) => {
   try {
-    let activeSettings = await Settings.findOne({ isActive: true }).lean();
+    let activeSettings = await getActiveSettingsWithCompensation();
     if (!activeSettings) {
       activeSettings = await Settings.findOne({})
         .sort({ fiscalYear: -1 })
@@ -1222,7 +1253,7 @@ exports.getGrandTotalPermanent = async (req, res) => {
 };
 exports.getGrandTotalCasual = async (req, res) => {
   try {
-    let activeSettings = await Settings.findOne({ isActive: true }).lean();
+    let activeSettings = await getActiveSettingsWithCompensation();
     if (!activeSettings) {
       activeSettings = await Settings.findOne({})
         .sort({ fiscalYear: -1 })
@@ -1709,6 +1740,28 @@ exports.bulkSetPersonnelSubsidy = async (req, res) => {
       }
     }
 
+    // Recalculate budget totals for all affected proposals
+    try {
+      const proposalIds = new Set();
+      for (const item of results.updated) {
+        if (item.proposalId) {
+          proposalIds.add(item.proposalId.toString());
+        }
+        if (item.workflowRef) {
+          proposalIds.add(item.workflowRef.toString());
+        }
+      }
+
+      if (proposalIds.size > 0) {
+        for (const proposalId of proposalIds) {
+          await recalculateAndSaveProposalTotals({ proposalId });
+        }
+      }
+    } catch (recalcError) {
+      console.error("ERROR: Failed to recalculate budget totals:", recalcError);
+      // Don't fail the response, just log the error
+    }
+
     return res.status(200).json({
       message: subsidyEligible
         ? `${results.updated.length} personnel tagged for subsidy`
@@ -1720,6 +1773,198 @@ exports.bulkSetPersonnelSubsidy = async (req, res) => {
   } catch (error) {
     console.error("Error updating personnel subsidy flags:", error);
     return res.status(500).json({ message: "Failed to update personnel subsidy" });
+  }
+};
+
+// Charged to Income handler (for Permanent and Casual employees)
+exports.bulkSetPersonnelChargedToIncome = async (req, res) => {
+  try {
+    const {
+      items = [],
+      defaultAmount = 0,
+      chargedToIncomeEligible = true,
+      notes,
+    } = req.body || {};
+
+    console.log("DEBUG: bulkSetPersonnelChargedToIncome called with:", {
+      itemsCount: items.length,
+      items,
+      chargedToIncomeEligible,
+      defaultAmount,
+    });
+
+    if (!Array.isArray(items) || items.length === 0) {
+      console.log("DEBUG: Items array validation failed");
+      return res.status(400).json({
+        message: "Items array is required to update charged to income",
+      });
+    }
+
+    const hierarchicalFilters = normalizeHierarchicalFilters(req.hierarchicalFilters);
+    console.log("DEBUG: hierarchicalFilters:", hierarchicalFilters);
+    
+    const results = {
+      updated: [],
+      skipped: [],
+    };
+
+    for (const payload of items) {
+      const targetId = payload?._id || payload?.id;
+      console.log("DEBUG: Processing item with id:", targetId);
+      
+      if (!targetId) {
+        results.skipped.push({ reason: "Missing _id", payload });
+        continue;
+      }
+
+      const record = await PersonnelServices.findById(targetId);
+      if (!record) {
+        console.log("DEBUG: Record not found for id:", targetId);
+        results.skipped.push({ reason: "Record not found", id: targetId });
+        continue;
+      }
+
+      console.log("DEBUG: Record found, checking access..."); 
+
+      if (!recordMatchesFilters(record, hierarchicalFilters)) {
+        console.log("DEBUG: Access denied for record:", targetId);
+        results.skipped.push({ reason: "Access denied", id: targetId });
+        continue;
+      }
+
+      if (LOCKED_PERSONNEL_STATUSES.includes(record.status)) {
+        console.log("DEBUG: Record has locked status:", record.status);
+        results.skipped.push({ reason: "Locked status", id: targetId, status: record.status });
+        continue;
+      }
+
+      console.log("DEBUG: Updating record, chargedToIncomeEligible:", chargedToIncomeEligible);
+
+      const resolvedAmount = Number(payload.chargedToIncomeAmount ?? payload.amount ?? defaultAmount ?? record.chargedToIncomeAmount ?? 0);
+      const normalizedAmount = Number.isFinite(resolvedAmount) && resolvedAmount > 0 ? resolvedAmount : 0;
+      const resolvedNotes = payload.chargedToIncomeNotes ?? notes ?? record.chargedToIncomeNotes ?? null;
+
+      const updateDocument = chargedToIncomeEligible
+        ? {
+            chargedToIncomeEligible: true,
+            chargedToIncomeAmount: normalizedAmount,
+            chargedToIncomeNotes: resolvedNotes,
+            chargedToIncomeTaggedBy: req.user?.userName || req.user?.email || req.user?.id || "SYSTEM",
+            chargedToIncomeTaggedAt: new Date(),
+          }
+        : {
+            chargedToIncomeEligible: false,
+            chargedToIncomeAmount: 0,
+            chargedToIncomeNotes: null,
+            chargedToIncomeTaggedBy: null,
+            chargedToIncomeTaggedAt: null,
+          };
+
+      console.log("DEBUG: updateDocument:", updateDocument);
+
+      const updated = await PersonnelServices.findByIdAndUpdate(
+        targetId,
+        { $set: updateDocument },
+        { new: true }
+      );
+
+      console.log("DEBUG: Update result:", updated ? "Success" : "Failed");
+      if (updated) {
+        console.log("DEBUG: Updated record chargedToIncomeEligible:", updated.chargedToIncomeEligible);
+        console.log("DEBUG: Updated record fields:", {
+          _id: updated._id,
+          chargedToIncomeEligible: updated.chargedToIncomeEligible,
+          chargedToIncomeAmount: updated.chargedToIncomeAmount,
+          chargedToIncomeTaggedAt: updated.chargedToIncomeTaggedAt,
+        });
+      } else {
+        console.log("DEBUG: Updated was null/undefined");
+      }
+
+      if (updated) {
+        results.updated.push(updated);
+      } else {
+        results.skipped.push({ reason: "Update failed", id: targetId });
+      }
+    }
+
+    console.log("DEBUG: Final results:", {
+      updatedCount: results.updated.length,
+      skippedCount: results.skipped.length,
+      skipped: results.skipped,
+    });
+
+    // Recalculate budget totals for all affected proposals
+    try {
+      const proposalIds = new Set();
+      for (const item of results.updated) {
+        if (item.proposalId) {
+          proposalIds.add(item.proposalId.toString());
+        }
+        if (item.workflowRef) {
+          proposalIds.add(item.workflowRef.toString());
+        }
+      }
+
+      if (proposalIds.size > 0) {
+        console.log("DEBUG: Recalculating for proposalIds:", Array.from(proposalIds));
+        for (const proposalId of proposalIds) {
+          await recalculateAndSaveProposalTotals({ proposalId });
+        }
+        console.log("DEBUG: Budget recalculation completed");
+      }
+    } catch (recalcError) {
+      console.error("ERROR: Failed to recalculate budget totals:", recalcError);
+      // Don't fail the response, just log the error
+    }
+
+    const responsePayload = {
+      message: chargedToIncomeEligible
+        ? `${results.updated.length} personnel charged to income`
+        : `${results.updated.length} personnel charged to income tags removed`,
+      updatedCount: results.updated.length,
+      updated: results.updated,
+      skipped: results.skipped,
+    };
+    
+    console.log("DEBUG: Response being sent, updatedCount:", responsePayload.updatedCount);
+    console.log("DEBUG: Updated items count in response:", responsePayload.updated.length);
+
+    return res.status(200).json(responsePayload);
+  } catch (error) {
+    console.error("Error updating personnel charged to income flags:", error);
+    return res.status(500).json({ message: "Failed to update personnel charged to income" });
+  }
+};
+
+// DEBUG: Simple endpoint to check if chargedToIncomeEligible records exist
+exports.debugCheckChargedToIncome = async (req, res) => {
+  try {
+    console.log("\n=== DEBUG: Checking chargedToIncomeEligible records ===");
+    
+    // Raw count
+    const count = await PersonnelServices.countDocuments({ chargedToIncomeEligible: true });
+    console.log(`Total records with chargedToIncomeEligible=true: ${count}`);
+    
+    // Get sample records
+    const records = await PersonnelServices.find({ chargedToIncomeEligible: true }).limit(5);
+    console.log(`Sample records found:`, records.map(r => ({
+      _id: r._id,
+      employeeName: r.employeeName,
+      statusOfAppointment: r.statusOfAppointment,
+      chargedToIncomeEligible: r.chargedToIncomeEligible,
+      chargedToIncomeAmount: r.chargedToIncomeAmount,
+      chargedToIncomeTaggedAt: r.chargedToIncomeTaggedAt
+    })));
+    
+    return res.json({
+      success: true,
+      totalCount: count,
+      sampleRecords: records
+    });
+  } catch (error) {
+    console.error("Error in debugCheckChargedToIncome:", error);
+    return res.status(500).json({ message: "Debug check failed", error: error.message });
   }
 };
 
@@ -1738,4 +1983,6 @@ module.exports = {
   getPersonnelServices: exports.getPersonnelServices,
   PersonnelServices: require("../models/PersonnelServices"),
   bulkSetPersonnelSubsidy: exports.bulkSetPersonnelSubsidy,
+  bulkSetPersonnelChargedToIncome: exports.bulkSetPersonnelChargedToIncome,
+  debugCheckChargedToIncome: exports.debugCheckChargedToIncome,
 };

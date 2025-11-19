@@ -598,10 +598,6 @@ exports.getProposals = async (req, res) => {
         break;
       case 'all-proposals':
         query.status = { $ne: 'DRAFT' };  // Use DRAFT enum
-        if (userRole !== 'SUPER ADMIN' && userRole !== 'BUDGET MANAGER') {
-          // Restrict 'all' view for non-admins, e.g., to their region/department
-          // This logic can be expanded based on hierarchical assignments
-        }
         break;
       case 'monitoring':
         // Provide aggregated monitoring for Budget Manager
@@ -664,6 +660,27 @@ exports.getProposals = async (req, res) => {
       if (newProposals.length === 0) {
   const allDrafts = await NewProposalWorkflow.find({ status: 'DRAFT' }).sort({ createdAt: -1 }).limit(25).populate('region','Region regionName RegionName');
         newProposals = allDrafts;
+      }
+    }
+
+    // RESPONSIBILITY CENTER FILTERING: For 'all-proposals' view, restrict visibility to user's current responsibility center
+    if (view === 'all-proposals' && userRole !== 'SUPER ADMIN' && userRole !== 'BUDGET MANAGER') {
+      try {
+        // Get user's hierarchical assignment to find their current responsibility center
+        const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString }).lean();
+        
+        if (userAssignment && userAssignment.divisionName) {
+          // Filter proposals to only show those from the user's assigned division
+          newProposals = newProposals.filter(p => {
+            const legacy = legacyMap.get(String(p._id));
+            // Match proposal's division with user's assigned division
+            return legacy?.division === userAssignment.divisionName;
+          });
+        }
+      } catch (err) {
+        console.error('[getProposals] Error filtering by responsibility center:', err.message);
+        // On error, return empty list for safety
+        newProposals = [];
       }
     }
 

@@ -49,7 +49,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined';
 import HighlightOffIcon from '@mui/icons-material/HighlightOff';
 import { useWorkflowRef } from "../../hooks/useWorkflowRef";
-import { updatePersonnelSubsidy } from "../../services/personnelSubsidyService";
+import { updatePersonnelChargedToIncome } from "../../services/personnelSubsidyService";
 
 // Helper function to format currency
 const formatCurrency = (amount) => {
@@ -102,8 +102,8 @@ const PSCasualCustomPageTable = ({
   const [filterMenuAnchor, setFilterMenuAnchor] = useState(null);
   const [exportMenuAnchor, setExportMenuAnchor] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
-  const [subsidyDialog, setSubsidyDialog] = useState({ open: false, mode: "tag", amount: "", notes: "" });
-  const [subsidyLoading, setSubsidyLoading] = useState(false);
+  const [chargedToIncomeDialog, setChargedToIncomeDialog] = useState({ open: false, mode: "tag", amount: "", notes: "" });
+  const [chargedToIncomeLoading, setChargedToIncomeLoading] = useState(false);
 
   const apiPath = `/${dataListName}`;
 
@@ -149,11 +149,15 @@ const PSCasualCustomPageTable = ({
         toast.error("Fetched data is not in the expected format.");
         console.error("Fetched data is not an array:", data);
       }
+      // Invalidate charged to income queries
+      await queryClient.invalidateQueries({
+        queryKey: [dataListName, "chargedToIncome"],
+      });
     } catch (error) {
       toast.error("Error fetching personnel data.");
       console.error("Error fetching data:", error);
     }
-  }, [apiPath]);
+  }, [apiPath, queryClient, dataListName]);
 
   const fetchRATA = useCallback(async () => {
     try {
@@ -353,63 +357,73 @@ const PSCasualCustomPageTable = ({
     }));
   };
 
-  const handleOpenSubsidyDialog = (mode) => {
+  // Charged to Income Dialog Handlers
+  const handleOpenChargedToIncomeDialog = (mode) => {
     if (!selectedRows.length) {
       toast.error("Select at least one personnel record first.");
       return;
     }
-    setSubsidyDialog({ open: true, mode, amount: "", notes: "" });
+    setChargedToIncomeDialog({ open: true, mode, amount: "", notes: "" });
   };
 
-  const handleCloseSubsidyDialog = () => {
-    if (subsidyLoading) return;
-    setSubsidyDialog((prev) => ({ ...prev, open: false }));
+  const handleCloseChargedToIncomeDialog = () => {
+    if (chargedToIncomeLoading) return;
+    setChargedToIncomeDialog((prev) => ({ ...prev, open: false }));
   };
 
-  const handleConfirmSubsidy = async () => {
+  const handleConfirmChargedToIncome = async () => {
     if (!selectedRows.length) {
       toast.error("No personnel selected.");
       return;
     }
 
-    if (subsidyDialog.mode === "tag") {
-      const amountValue = Number(subsidyDialog.amount);
-      if (!Number.isFinite(amountValue) || amountValue <= 0) {
-        toast.error("Enter a subsidy amount greater than zero.");
-        return;
-      }
+    if (chargedToIncomeDialog.mode === "tag") {
+      // No amount validation needed - just moving employees to charged to income
     }
 
-    setSubsidyLoading(true);
+    setChargedToIncomeLoading(true);
     try {
-      const numericAmount = Number(subsidyDialog.amount) || 0;
       const payload =
-        subsidyDialog.mode === "tag"
+        chargedToIncomeDialog.mode === "tag"
           ? {
-              items: selectedRows.map((id) => ({ _id: id, subsidyAmount: numericAmount })),
-              defaultAmount: numericAmount,
-              subsidyEligible: true,
-              notes: subsidyDialog.notes?.trim() || undefined,
+              items: selectedRows.map((id) => {
+                // Find the personnel record to get the salary amount
+                const personnel = filteredRows.find(r => r._id === id);
+                const salaryAmount = personnel?.Total || personnel?.total || personnel?.amount || personnel?.annualSalary || 0;
+                return { _id: id, chargedToIncomeAmount: salaryAmount };
+              }),
+              chargedToIncomeEligible: true,
+              defaultAmount: 0,
             }
           : {
               items: selectedRows.map((id) => ({ _id: id })),
-              subsidyEligible: false,
+              chargedToIncomeEligible: false,
               defaultAmount: 0,
             };
 
-      await updatePersonnelSubsidy(payload);
-      toast.success(
-        subsidyDialog.mode === "tag"
-          ? "Subsidy tagged successfully"
-          : "Subsidy tag removed"
-      );
+      const response = await updatePersonnelChargedToIncome(payload);
+      
+      // Check if there were any skipped items
+      if (response?.data?.skipped && response.data.skipped.length > 0) {
+        const skipReason = response.data.skipped.map(s => `${s.id}: ${s.reason}`).join(", ");
+        toast.warning(`${response.data.updatedCount} updated, ${response.data.skipped.length} skipped - ${skipReason}`);
+      } else {
+        toast.success(
+          chargedToIncomeDialog.mode === "tag"
+            ? `${selectedRows.length} employee(s) moved to Charged to Income`
+            : `${selectedRows.length} employee(s) moved back to Personnel Services`
+        );
+      }
+      
       setSelectedRows([]);
-      setSubsidyDialog({ open: false, mode: "tag", amount: "", notes: "" });
+      setChargedToIncomeDialog({ open: false, mode: "tag", amount: "", notes: "" });
       await fetchData();
+      // Invalidate proposal queries so budget totals update
+      await queryClient.invalidateQueries({ queryKey: ["proposals"] });
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to update subsidy");
+      toast.error(error.response?.data?.message || "Failed to update charged to income");
     } finally {
-      setSubsidyLoading(false);
+      setChargedToIncomeLoading(false);
     }
   };
 
@@ -803,22 +817,22 @@ const PSCasualCustomPageTable = ({
             </Button>
             <Button
               variant="outlined"
-              color="secondary"
+              color="info"
               startIcon={<PaidOutlinedIcon />}
               disabled={!selectedRows.length}
-              onClick={() => handleOpenSubsidyDialog("tag")}
+              onClick={() => handleOpenChargedToIncomeDialog("tag")}
             >
-              Tag Subsidy
+              Charge to Income
             </Button>
-            <Button
+            {/* <Button
               variant="text"
               color="error"
               startIcon={<HighlightOffIcon />}
               disabled={!selectedRows.length}
-              onClick={() => handleOpenSubsidyDialog("untag")}
+              onClick={() => handleOpenChargedToIncomeDialog("untag")}
             >
               Remove Tag
-            </Button>
+            </Button> */}
             {!hasWorkflowRef && (
               <Typography variant="caption" color="error" sx={{ maxWidth: 260 }}>
                 Create a proposal first to unlock casual personnel entry.
@@ -1162,61 +1176,38 @@ const PSCasualCustomPageTable = ({
 
       <ToastContainer />
 
+      {/* Charged to Income Dialog */}
       <Dialog
-        open={subsidyDialog.open}
-        onClose={handleCloseSubsidyDialog}
+        open={chargedToIncomeDialog.open}
+        onClose={handleCloseChargedToIncomeDialog}
         maxWidth="sm"
         fullWidth
       >
         <DialogTitle>
-          {subsidyDialog.mode === "tag" ? "Tag Subsidy Recipients" : "Remove Subsidy Tags"}
+          {chargedToIncomeDialog.mode === "tag" ? "Charge to Income Recipients" : "Remove Charged to Income Tags"}
         </DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography variant="body2" color="text.secondary">
-            {selectedRows.length.toLocaleString('en-US')} personnel selected.
+            {chargedToIncomeDialog.mode === "tag"
+              ? `Move ${selectedRows.length.toLocaleString('en-US')} personnel to Charged to Income?`
+              : `Remove ${selectedRows.length.toLocaleString('en-US')} personnel from Charged to Income?`}
           </Typography>
-          {subsidyDialog.mode === "tag" && (
-            <>
-              <TextField
-                label="Subsidy amount per personnel"
-                type="number"
-                value={subsidyDialog.amount}
-                onChange={(e) =>
-                  setSubsidyDialog((prev) => ({ ...prev, amount: e.target.value }))
-                }
-                InputProps={{
-                  startAdornment: <InputAdornment position="start">₱</InputAdornment>,
-                }}
-                fullWidth
-              />
-              <TextField
-                label="Notes (optional)"
-                value={subsidyDialog.notes}
-                onChange={(e) =>
-                  setSubsidyDialog((prev) => ({ ...prev, notes: e.target.value }))
-                }
-                fullWidth
-                multiline
-                minRows={2}
-              />
-            </>
-          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseSubsidyDialog} disabled={subsidyLoading}>
+          <Button onClick={handleCloseChargedToIncomeDialog} disabled={chargedToIncomeLoading}>
             Cancel
           </Button>
           <Button
-            onClick={handleConfirmSubsidy}
+            onClick={handleConfirmChargedToIncome}
             variant="contained"
-            color={subsidyDialog.mode === "tag" ? "primary" : "error"}
-            disabled={subsidyLoading}
+            color={chargedToIncomeDialog.mode === "tag" ? "primary" : "error"}
+            disabled={chargedToIncomeLoading}
           >
-            {subsidyLoading
-              ? "Saving..."
-              : subsidyDialog.mode === "tag"
-              ? "Apply Subsidy"
-              : "Remove Tags"}
+            {chargedToIncomeLoading
+              ? "Processing..."
+              : chargedToIncomeDialog.mode === "tag"
+              ? "Confirm Move"
+              : "Confirm Remove"}
           </Button>
         </DialogActions>
       </Dialog>

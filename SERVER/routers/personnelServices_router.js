@@ -9,7 +9,10 @@ const {
   getGrandTotalCasual,
   deleteAllPersonnelss,
   getGrandTotal,
-  getPersonnelHiredBeforeJune1988
+  getPersonnelHiredBeforeJune1988,
+  bulkSetPersonnelSubsidy,
+  bulkSetPersonnelChargedToIncome,
+  debugCheckChargedToIncome
 } = require("../controllers/personnel_service_controller");
 // Import the model directly to ensure it's available
 const PersonnelService = require('../models/PersonnelServices');
@@ -137,4 +140,30 @@ personnelServicesRouter.post(
   exports.syncAllMealAllowances || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
+
+// Add route for bulk subsidy updates
+personnelServicesRouter.put(
+  "/personnelServices/subsidy/bulk",
+  checkDueDate,
+  submissionWorkflowControl('update', { enforceSubmissionWorkflow: true }),
+  bulkSetPersonnelSubsidy || 
+    ((req, res) => res.status(500).json({ message: "Function not available" }))
+);
+
+// Add route for bulk charged to income updates
+personnelServicesRouter.put(
+  "/personnelServices/charged-to-income/bulk",
+  checkDueDate,
+  submissionWorkflowControl('update', { enforceSubmissionWorkflow: true }),
+  bulkSetPersonnelChargedToIncome || 
+    ((req, res) => res.status(500).json({ message: "Function not available" }))
+);
+
+// DEBUG: Add route to check if chargedToIncomeEligible records exist
+personnelServicesRouter.get(
+  "/debug/charged-to-income",
+  debugCheckChargedToIncome || 
+    ((req, res) => res.status(500).json({ message: "Debug function not available" }))
+);
+
 module.exports = personnelServicesRouter;

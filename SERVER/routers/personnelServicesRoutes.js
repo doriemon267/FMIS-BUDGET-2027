@@ -10,6 +10,7 @@ const {
   getGrandTotal,
   getPersonnelHiredBeforeJune1988,
   bulkSetPersonnelSubsidy,
+  bulkSetPersonnelChargedToIncome,
 } = require("../controllers/personnel_service_controller");
 // Import the model directly to ensure it's available
 const PersonnelService = require("../models/PersonnelServices");
@@ -49,6 +50,13 @@ personnelServicesRouter.put(
   checkDueDate,
   submissionWorkflowControl('update', { enforceSubmissionWorkflow: true }),
   bulkSetPersonnelSubsidy ||
+    ((req, res) => res.status(500).json({ message: "Function not available" }))
+);
+personnelServicesRouter.put(
+  "/personnelServices/charged-to-income/bulk",
+  checkDueDate,
+  submissionWorkflowControl('update', { enforceSubmissionWorkflow: true }),
+  bulkSetPersonnelChargedToIncome ||
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
 // Protected GET routes with hierarchical access control

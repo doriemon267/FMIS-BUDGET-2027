@@ -231,6 +231,26 @@ courtAppearance: {
     subsidyTaggedAt: {
       type: Date,
     },
+    // Charged to Income fields (for Permanent and Casual employees)
+    chargedToIncomeEligible: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    chargedToIncomeAmount: {
+      type: Number,
+      default: 0,
+    },
+    chargedToIncomeNotes: {
+      type: String,
+      trim: true,
+    },
+    chargedToIncomeTaggedBy: {
+      type: String,
+    },
+    chargedToIncomeTaggedAt: {
+      type: Date,
+    },
     // Workflow audit fields
     divisionApproved: {
       by: { type: String },

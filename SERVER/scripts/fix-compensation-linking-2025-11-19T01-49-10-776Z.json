@@ -1,0 +1,20 @@
+[
+  {
+    "fiscalYear": "2026",
+    "budgetType": "Initial",
+    "status": "ALREADY_LINKED",
+    "compensationSettingsId": "69017f9a275feb8733d41633"
+  },
+  {
+    "fiscalYear": "2026",
+    "budgetType": "NEP",
+    "status": "SKIPPED",
+    "reason": "No compensation data"
+  },
+  {
+    "fiscalYear": "2026",
+    "budgetType": "Initial",
+    "status": "SKIPPED",
+    "reason": "No compensation data"
+  }
+]

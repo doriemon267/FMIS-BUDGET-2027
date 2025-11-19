@@ -55,7 +55,7 @@ const toNumber = (value) => {
   return 0;
 };
 
-const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, groupedItems = {} }) => {
+const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, groupedItems = {}, onChargedToIncomeChange = null, onNonChargedPersonnelServicesChange = null, onBudgetDeficitChange = null }) => {
   const [amount, setAmount] = useState(0);
   const [exportMenuAnchor, setExportMenuAnchor] = useState(null);
   const [compactView, setCompactView] = useState(false);
@@ -230,6 +230,10 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
 
   // Check if we have valid fiscalYear and budgetType
   const hasValidParams = !!fiscalYear && !!budgetType;
+  
+  useEffect(() => {
+    console.log('DEBUG BudgetarySupportTable params:', { fiscalYear, budgetType, hasValidParams });
+  }, [fiscalYear, budgetType, hasValidParams]);
   
   // Debug props removed for cleaner console
   // Fetch calculated budgetary support from the new endpoint
@@ -503,6 +507,45 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
     }
   });
 
+  // Fetch charged-to-income personnel data for budget breakdown
+  const { data: chargedToIncomeData, isLoading: isLoadingChargedToIncome, error: chargedToIncomeError } = useQuery({
+    queryKey: ['personnelServices', 'chargedToIncome', fiscalYear, budgetType],
+    queryFn: async () => {
+      if (!hasValidParams) {
+        console.warn('⚠️ ChargedToIncome query skipped - hasValidParams is false');
+        return [];
+      }
+      
+      try {
+        const baseParams = {
+          fiscalYear: Number(fiscalYear),
+          budgetType: budgetType,
+          chargedToIncomeEligible: true,
+          limit: 1000,
+          page: 1
+        };
+
+        console.log('📡 Fetching chargedToIncomeData with params:', baseParams);
+        const response = await api.get('/personnelServices', { params: baseParams });
+        console.log('📡 ChargedToIncomeData full response:', response.data);
+        console.log('📡 Response keys:', Object.keys(response.data || {}));
+        
+        const personnel = response.data?.personnelServices || response.data?.data || [];
+        console.log('📡 ChargedToIncomeData personnel array:', {
+          count: Array.isArray(personnel) ? personnel.length : 'not-array',
+          data: personnel
+        });
+        return personnel;
+      } catch (error) {
+        console.error('❌ Error fetching charged-to-income personnel:', error.response?.data || error.message);
+        return [];
+      }
+    },
+    enabled: hasValidParams,
+    retry: 1,
+    staleTime: 30000
+  });
+
   // Check authentication status for protected endpoints
   const { data: authTest } = useQuery({
     queryKey: ['auth-test', fiscalYear, budgetType],
@@ -535,7 +578,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
   });
 
   // Combined loading state for all queries - MUST be defined after all useQuery hooks
-  const isLoading = isLoadingCalculated || isLoadingCapitalOutlay || isLoadingMOOE || isLoadingPersonnel || isLoadingBudgetarySupport;
+  const isLoading = isLoadingCalculated || isLoadingCapitalOutlay || isLoadingMOOE || isLoadingPersonnel || isLoadingBudgetarySupport || isLoadingChargedToIncome;
 
   // Timeout mechanism to prevent infinite loading
   const [loadingTimeout, setLoadingTimeout] = useState(false);
@@ -756,16 +799,79 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
     // Operating Requirements Total
     const operatingRequirements = personalServices + maintenanceAndOperating + capitalOutlays;
     
+    // Charged to Income Totals
+    let chargedToIncomeAmount = 0;
+    let chargedToIncomeSubsidy = 0;
+    if (chargedToIncomeData && Array.isArray(chargedToIncomeData)) {
+      console.log('DEBUG useOfFundsBreakdown - chargedToIncomeData found:', {
+        count: chargedToIncomeData.length,
+        sample: chargedToIncomeData[0],
+        sampleKeys: chargedToIncomeData[0] ? Object.keys(chargedToIncomeData[0]) : []
+      });
+      
+      const filteredChargedToIncome = hasAssignmentFilters
+        ? chargedToIncomeData.filter((p) => matchesAssignmentScope(p))
+        : chargedToIncomeData;
+      
+      console.log('DEBUG useOfFundsBreakdown - filtered data:', {
+        originalCount: chargedToIncomeData.length,
+        filteredCount: filteredChargedToIncome.length
+      });
+      
+      chargedToIncomeAmount = filteredChargedToIncome.reduce((sum, p) => {
+        const amount = toNumber(p.chargedToIncomeAmount || 0);
+        if (amount > 0) {
+          console.log('DEBUG - Found chargedToIncomeAmount:', {
+            employeeName: p.employeeFullName,
+            amount: amount
+          });
+        }
+        return sum + amount;
+      }, 0);
+      
+      chargedToIncomeSubsidy = filteredChargedToIncome.reduce((sum, p) => {
+        return sum + toNumber(p.subsidyAmount || 0);
+      }, 0);
+    } else {
+      console.log('DEBUG useOfFundsBreakdown - chargedToIncomeData missing or not array:', {
+        isArray: Array.isArray(chargedToIncomeData),
+        isNull: chargedToIncomeData === null,
+        isUndefined: chargedToIncomeData === undefined,
+        type: typeof chargedToIncomeData
+      });
+    }
+    
+    // DEBUG: Log charged-to-income calculations
+    console.log('DEBUG BudgetarySupportTable - Charged to Income Totals:', {
+      count: chargedToIncomeData?.length || 0,
+      amount: chargedToIncomeAmount,
+      subsidy: chargedToIncomeSubsidy,
+      willRender: chargedToIncomeAmount > 0
+    });
+    
     return {
       corporateIncome,
       personalServices,
       maintenanceAndOperating,
       capitalOutlays,
-      operatingRequirements
+      operatingRequirements,
+      chargedToIncomeAmount,
+      chargedToIncomeSubsidy
     };
-  }, [mooeData, capitalOutlayData, personalServicesData, incomeGrandTotal, matchesAssignmentScope, hasAssignmentFilters]);
+  }, [mooeData, capitalOutlayData, personalServicesData, chargedToIncomeData, incomeGrandTotal, matchesAssignmentScope, hasAssignmentFilters]);
 
-  // Enhanced export functionality
+  useEffect(() => {
+    if (onChargedToIncomeChange && useOfFundsBreakdown.chargedToIncomeAmount !== undefined) {
+      onChargedToIncomeChange(useOfFundsBreakdown.chargedToIncomeAmount);
+    }
+    
+    if (onNonChargedPersonnelServicesChange && useOfFundsBreakdown.personalServices !== undefined) {
+      const nonChargedPersonnelServices = useOfFundsBreakdown.personalServices - useOfFundsBreakdown.chargedToIncomeAmount;
+      onNonChargedPersonnelServicesChange(nonChargedPersonnelServices);
+    }
+  }, [useOfFundsBreakdown.chargedToIncomeAmount, useOfFundsBreakdown.personalServices, onChargedToIncomeChange, onNonChargedPersonnelServicesChange]);
+
+
   const handleExportToExcel = useCallback(() => {
     // Calculate values for export using the helper function
     const mooeIncomeFromRegion = getCorporateIncomeFromBreakdown('MOOE');
@@ -883,11 +989,11 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
   );
 
   const totalCorporateIncomeSources = Number(useOfFundsBreakdown.corporateIncome || 0);
-  const totalCorporateIncomeUses = corporateIncomeFromMOOE + corporateIncomeFromCapitalOutlay;
+  const totalCorporateIncomeUses = corporateIncomeFromMOOE + corporateIncomeFromCapitalOutlay + Number(useOfFundsBreakdown.chargedToIncomeAmount || 0);
 
   const totalSubsidySources = Number(useOfFundsBreakdown.operatingRequirements || 0);
   const totalSubsidyUses =
-    Number(useOfFundsBreakdown.personalServices || 0) +
+    (Number(useOfFundsBreakdown.personalServices || 0) - Number(useOfFundsBreakdown.chargedToIncomeAmount || 0)) +
     Number(useOfFundsBreakdown.maintenanceAndOperating || 0) +
     Number(useOfFundsBreakdown.capitalOutlays || 0);
 
@@ -899,6 +1005,20 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
     subsidy: totalSubsidySources - totalSubsidyUses,
     proposedBudget: totalProposedBudgetSources - totalProposedBudgetUses
   };
+
+  useEffect(() => {
+    if (onBudgetDeficitChange) {
+      const hasDeficit = surplusDeficit.proposedBudget < 0;
+      onBudgetDeficitChange({
+        hasDeficit,
+        amount: Math.abs(surplusDeficit.proposedBudget),
+        corporateIncomeDeficit: surplusDeficit.corporateIncome < 0,
+        subsidyDeficit: surplusDeficit.subsidy < 0,
+        totalSources: totalProposedBudgetSources,
+        totalUses: totalProposedBudgetUses
+      });
+    }
+  }, [surplusDeficit.proposedBudget, surplusDeficit.corporateIncome, surplusDeficit.subsidy, totalProposedBudgetSources, totalProposedBudgetUses, onBudgetDeficitChange]);
 
   if (!hasValidParams) {
     return (
@@ -1124,6 +1244,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
                   </TableCell>
                 </TableRow>
               ))}
+
               <TableRow sx={{ 
                 backgroundColor: '#e3f2fd',
                 borderTop: '2px solid #1976d2'
@@ -1352,7 +1473,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
                 </TableRow>
               </TableHead>
               <TableBody>
-              {/* B.1.1 PERSONAL SERVICES - Only PROJECTED SUBSIDY (no corporate income allocated) */}
+              {/* B.1.1 PERSONAL SERVICES - Split between corporate income (charged) and subsidy (non-charged) */}
               <TableRow sx={{ 
                 backgroundColor: '#f9f9f9',
                 '&:hover': { backgroundColor: '#f0f4f8' }
@@ -1362,17 +1483,17 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
                     B.1.1 PERSONAL SERVICES
                   </Typography>
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontStyle: 'italic' }}>
-                    (100% Subsidy - No corporate income allocation)
+                    (Charged to Income + Non-Charged Subsidy)
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
-                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#666', letterSpacing: 0.2 }}>
-                    -
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#d32f2f', letterSpacing: 0.2 }}>
+                    ₱{Number(useOfFundsBreakdown.chargedToIncomeAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                   <Typography variant="body2" sx={{ fontWeight: 500, color: '#2e7d32', letterSpacing: 0.2 }}>
-                    ₱{Number(useOfFundsBreakdown.personalServices || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₱{Number((useOfFundsBreakdown.personalServices || 0) - (useOfFundsBreakdown.chargedToIncomeAmount || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
@@ -1381,6 +1502,8 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
                   </Typography>
                 </TableCell>
               </TableRow>
+
+
 
               {/* B.1.2 MAINTENANCE AND OTHER OPERATING EXPENSES - Has both CORPORATE INCOME and SUBSIDY */}
               <TableRow sx={{ 

@@ -153,13 +153,13 @@ const PersonnelCasualServicesPage = () => {
     subsidyEligible: {
       type: "text",
       label: "SUBSIDY TAG",
-      show: true,
+      show: false,
       customRender: (row) => (row.subsidyEligible ? "Tagged" : "—"),
     },
     subsidyAmount: {
       type: "number",
       label: "SUBSIDY (₱)",
-      show: true,
+      show: false,
       customRender: (row) =>
         row.subsidyEligible
           ? (Number(row.subsidyAmount) || 0).toLocaleString(undefined, {

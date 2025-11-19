@@ -1,5 +1,12 @@
 const Notification = require('../models/Notification');
 
+const normalizeRecipientId = (val) => {
+  if (!val || typeof val !== 'string') return null;
+  if (val.includes('@')) return null; // skip emails
+  if (/^[0-9a-fA-F\-]{8,}$/.test(val)) return null; // likely UUID
+  return val.trim().toUpperCase().replace(/\s+/g, '_').replace(/[\/\-]+/g, '_').replace(/[^A-Z0-9_]/g, '_');
+};
+
 /**
  * Create a new notification
  * @param {Object} notificationData - The notification data
@@ -14,8 +21,12 @@ const Notification = require('../models/Notification');
  */
 exports.createNotification = async (notificationData) => {
   try {
+    
+
     const notification = new Notification({
       recipientUserId: notificationData.userId,
+  recipientUserIdNormalized: normalizeRecipientId(notificationData.userId),
+      recipientUserIdOriginal: notificationData.userId,
       type: notificationData.type || 'INFO',
       title: notificationData.title,
       message: notificationData.message,
@@ -44,6 +55,8 @@ exports.createNotifications = async (notificationsData) => {
   try {
     const notifications = notificationsData.map(data => ({
       recipientUserId: data.userId,
+  recipientUserIdNormalized: normalizeRecipientId(data.userId),
+      recipientUserIdOriginal: data.userId,
       type: data.type || 'INFO',
       title: data.title,
       message: data.message,

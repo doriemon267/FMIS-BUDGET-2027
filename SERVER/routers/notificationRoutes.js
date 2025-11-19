@@ -55,15 +55,31 @@ router.get('/notifications', async (req, res) => {
       if (s) candidates = [s];
     }
 
-    // Also include role-based notifications
+    // Also include role-based notifications (normalize into a few common variants)
     const userRoles = req.user.Roles || [];
-    const roleCandidates = userRoles.map(role => role.replace(/\s+/g, '_').toUpperCase());
+    const roleSet = new Set();
+    userRoles.forEach((r) => {
+      if (!r) return;
+      const raw = String(r).trim();
+      if (!raw) return;
+      roleSet.add(raw);
+      // normalized underscore upper-case (BUDGET MANAGER -> BUDGET_MANAGER)
+      roleSet.add(raw.toUpperCase().replace(/\s+/g, '_'));
+      // normalized with underscores and remove non-alphanum except underscore
+      roleSet.add(raw.toUpperCase().replace(/[\s\/-]+/g, '_').replace(/[^A-Z0-9_]/g, '_'));
+      // Also include space-variant if stored with underscores (BUDGET_MANAGER -> BUDGET MANAGER)
+      roleSet.add(raw.toUpperCase().replace(/_/g, ' '));
+    });
+    const roleCandidates = Array.from(roleSet);
 
     const baseFilter = {
       $or: [
         { recipientUserId: { $in: candidates } },
+        { recipientUserIdNormalized: { $in: candidates } },
         { recipientUserId: { $in: roleCandidates } },
-        { recipientUserId: { $in: userRoles } }
+        { recipientUserIdNormalized: { $in: roleCandidates } },
+        { recipientUserId: { $in: userRoles } },
+        { recipientUserIdNormalized: { $in: userRoles } }
       ]
     };
 
@@ -87,6 +103,57 @@ router.get('/notifications', async (req, res) => {
   }
 });
 
+// Debug helper to return raw notifications / query details for current user
+// Access pattern: GET /notifications/debug?limit=100&status=UNREAD
+// Optional headers: X-Debug-Recipient to override candidate; X-Debug-Notif=all to include READ
+router.get('/notifications/debug', async (req, res) => {
+  try {
+    const { limit = 100 } = req.query || {};
+    const debugMode = String(req.headers['x-debug-notif'] || '').toLowerCase();
+    const overrideRecipient = req.headers['x-debug-recipient'] || req.query.recipient;
+
+    let candidates = getRecipientCandidates(req.user);
+    if (overrideRecipient) {
+      const s = String(overrideRecipient).trim();
+      if (s) candidates = [s];
+    }
+
+    const userRoles = req.user.Roles || [];
+    const roleSet = new Set();
+    userRoles.forEach((r) => {
+      if (!r) return;
+      const raw = String(r).trim();
+      if (!raw) return;
+      roleSet.add(raw);
+      roleSet.add(raw.toUpperCase().replace(/\s+/g, '_'));
+      roleSet.add(raw.toUpperCase().replace(/[\s\/-]+/g, '_').replace(/[^A-Z0-9_]/g, '_'));
+    });
+    const roleCandidates = Array.from(roleSet);
+
+    const baseFilter = {
+      $or: [
+        { recipientUserId: { $in: candidates } },
+        { recipientUserIdNormalized: { $in: candidates } },
+        { recipientUserId: { $in: roleCandidates } },
+        { recipientUserIdNormalized: { $in: roleCandidates } },
+        { recipientUserId: { $in: userRoles } },
+        { recipientUserIdNormalized: { $in: userRoles } }
+      ]
+    };
+
+    const query = debugMode === 'all' ? baseFilter : { ...baseFilter, status: 'UNREAD' };
+
+    const docs = await Notification.find(query)
+      .sort({ createdAt: -1 })
+      .limit(Number(limit))
+      .lean();
+
+    res.json({ success: true, data: docs, debug: { candidates, roleCandidates, usedQuery: query } });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Failed to fetch debug notifications', error: e.message });
+  }
+});
+
 // Mark notifications as read
 router.post('/notifications/mark-read', async (req, res) => {
   try {
@@ -97,24 +164,116 @@ router.post('/notifications/mark-read', async (req, res) => {
 
     const candidates = getRecipientCandidates(req.user);
     const userRoles = req.user.Roles || [];
-    const roleCandidates = userRoles.map(role => role.replace(/\s+/g, '_').toUpperCase());
+    const roleSet2 = new Set();
+    userRoles.forEach((r) => {
+      if (!r) return;
+      const raw = String(r).trim();
+      if (!raw) return;
+      roleSet2.add(raw);
+      roleSet2.add(raw.toUpperCase().replace(/\s+/g, '_'));
+      roleSet2.add(raw.toUpperCase().replace(/[\s\/-]+/g, '_').replace(/[^A-Z0-9_]/g, '_'));
+    });
+    const roleCandidates = Array.from(roleSet2);
 
     const filter = {
       _id: { $in: ids },
       $or: [
         { recipientUserId: { $in: candidates } },
+        { recipientUserIdNormalized: { $in: candidates } },
         { recipientUserId: { $in: roleCandidates } },
-        { recipientUserId: { $in: userRoles } }
+        { recipientUserIdNormalized: { $in: roleCandidates } },
+        { recipientUserId: { $in: userRoles } },
+        { recipientUserIdNormalized: { $in: userRoles } }
       ]
     };
 
-    await Notification.updateMany(
+    const result = await Notification.updateMany(
       filter,
       { $set: { status: 'READ', readAt: new Date() } }
     );
-    res.json({ success: true });
+
+    // Return more debug details to help the client know what changed
+    const updatedCount = (result && (result.modifiedCount ?? result.nModified ?? 0));
+    // Return the IDs that were actually marked as read for better UI sync
+    let updatedIds = [];
+    if (updatedCount > 0) {
+      const updatedDocs = await Notification.find({ _id: { $in: ids }, status: 'READ' }, { _id: 1 }).lean();
+      updatedIds = updatedDocs.map(d => String(d._id));
+    }
+
+    const debugMode = String(req.headers['x-debug-notif'] || '').toLowerCase();
+    if (debugMode) {
+      console.debug('notifications.mark-read', { filter, ids, updatedCount, updatedIds });
+    }
+
+    res.json({ success: true, modifiedCount: updatedCount, updatedIds });
   } catch (e) {
     res.status(500).json({ success: false, message: 'Failed to mark notifications as read', error: e.message });
+  }
+});
+
+// Mark all notifications as read for the current user/roles
+router.post('/notifications/mark-all-read', async (req, res) => {
+  try {
+    // Optional: allow scoping by entity or proposalId
+    const { entity, proposalId } = req.body || {};
+
+    const candidates = getRecipientCandidates(req.user);
+    const userRoles = req.user.Roles || [];
+    const roleSet2 = new Set();
+    userRoles.forEach((r) => {
+      if (!r) return;
+      const raw = String(r).trim();
+      if (!raw) return;
+      roleSet2.add(raw);
+      roleSet2.add(raw.toUpperCase().replace(/\s+/g, '_'));
+      roleSet2.add(raw.toUpperCase().replace(/[\s\/-]+/g, '_').replace(/[^A-Z0-9_]/g, '_'));
+    });
+    const roleCandidates = Array.from(roleSet2);
+
+    const baseFilter = {
+      $and: [
+        { status: 'UNREAD' },
+        {
+          $or: [
+            { recipientUserId: { $in: candidates } },
+            { recipientUserIdNormalized: { $in: candidates } },
+            { recipientUserId: { $in: roleCandidates } },
+            { recipientUserIdNormalized: { $in: roleCandidates } },
+            { recipientUserId: { $in: userRoles } },
+            { recipientUserIdNormalized: { $in: userRoles } }
+          ]
+        }
+      ]
+    };
+
+    if (entity) {
+      baseFilter.$and.push({ entity });
+    }
+    if (proposalId) {
+      baseFilter.$and.push({ 'metadata.proposalId': String(proposalId) });
+    }
+
+    const result = await Notification.updateMany(
+      baseFilter,
+      { $set: { status: 'READ', readAt: new Date() } }
+    );
+
+    const updatedCount = (result && (result.modifiedCount ?? result.nModified ?? 0));
+    let updatedIds = [];
+    if (updatedCount > 0) {
+      const updatedDocs = await Notification.find({ ...baseFilter }, { _id: 1 }).lean();
+      updatedIds = updatedDocs.map(d => String(d._id));
+    }
+
+    const debugMode = String(req.headers['x-debug-notif'] || '').toLowerCase();
+    if (debugMode) {
+      console.debug('notifications.mark-all-read', { baseFilter, updatedCount, updatedIds });
+    }
+
+    res.json({ success: true, modifiedCount: updatedCount, updatedIds });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Failed to mark all notifications as read', error: e.message });
   }
 });
 

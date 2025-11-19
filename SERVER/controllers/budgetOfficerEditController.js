@@ -278,6 +278,39 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
             if (data.monthlySalary !== undefined) data.monthlySalary = Number(data.monthlySalary);
             if (data.annualSalary !== undefined) data.annualSalary = Number(data.annualSalary);
             if (data.total !== undefined) data.total = Number(data.total);
+            
+            // Apply compensation settings for any missing fields
+            const { getActiveSettingsWithCompensation } = require("../utils/settingsUtils");
+            const activeSettings = await getActiveSettingsWithCompensation();
+            
+            if (activeSettings) {
+              // Apply compensation settings for missing fields
+              if (data.PERA === undefined || data.PERA === null) {
+                data.PERA = (activeSettings.PERA || 0) * 12;
+              }
+              if (data.uniformALLOWANCE === undefined || data.uniformALLOWANCE === null) {
+                data.uniformALLOWANCE = (activeSettings.uniformAllowance || 0) * 12;
+              }
+              if (data.productivityIncentive === undefined || data.productivityIncentive === null) {
+                data.productivityIncentive = (activeSettings.productivityIncentive || 0) * 12;
+              }
+              if (data.cashGift === undefined || data.cashGift === null) {
+                data.cashGift = (activeSettings.cashGift || 0) * 12;
+              }
+              if (data.pagibigPremium === undefined || data.pagibigPremium === null) {
+                data.pagibigPremium = (activeSettings.pagibigPremium || 0) * 12;
+              }
+              if (data.medical === undefined || data.medical === null) {
+                data.medical = (activeSettings.medicalAllowance || 0) * 12;
+              }
+              if (data.employeeCompensation === undefined || data.employeeCompensation === null) {
+                data.employeeCompensation = (activeSettings.employeeCompensation || 0) * 12;
+              }
+              if (data.gsisPremium === undefined || data.gsisPremium === null) {
+                data.gsisPremium = (data.annualSalary || 0) * (activeSettings.gsisPremium || 0);
+              }
+            }
+            
             const newPS = new PersonnelServices({
               ...data,
               fiscalYear: budgetOfficerEdit.fiscalYear,
@@ -1870,7 +1903,7 @@ exports.submitEdit = async (req, res) => {
           message: notificationMessage,
           relatedId: proposalId.toString(),
           relatedType: 'Proposal',
-          relatedLink: `/AllProposals?proposalId=${proposalId}`,
+          relatedLink: `/new-proposal-workflow?tab=all-proposals&proposalId=${proposalId}`,
           metadata: {
             proposalId: proposalId.toString(),
             fiscalYear: proposal.fiscalYear,
@@ -2311,8 +2344,41 @@ exports.approveEdit = async (req, res) => {
       // Apply Personnel Services changes
       for (const item of edit.editedPersonnelServices) {
         if (item.changeType === 'added') {
+          // Apply compensation settings for any missing fields
+          const { getActiveSettingsWithCompensation } = require("../utils/settingsUtils");
+          const activeSettings = await getActiveSettingsWithCompensation();
+          
+          const personnelData = { ...item };
+          if (activeSettings) {
+            // Apply compensation settings for missing fields
+            if (personnelData.PERA === undefined || personnelData.PERA === null) {
+              personnelData.PERA = (activeSettings.PERA || 0) * 12;
+            }
+            if (personnelData.uniformALLOWANCE === undefined || personnelData.uniformALLOWANCE === null) {
+              personnelData.uniformALLOWANCE = (activeSettings.uniformAllowance || 0) * 12;
+            }
+            if (personnelData.productivityIncentive === undefined || personnelData.productivityIncentive === null) {
+              personnelData.productivityIncentive = (activeSettings.productivityIncentive || 0) * 12;
+            }
+            if (personnelData.cashGift === undefined || personnelData.cashGift === null) {
+              personnelData.cashGift = (activeSettings.cashGift || 0) * 12;
+            }
+            if (personnelData.pagibigPremium === undefined || personnelData.pagibigPremium === null) {
+              personnelData.pagibigPremium = (activeSettings.pagibigPremium || 0) * 12;
+            }
+            if (personnelData.medical === undefined || personnelData.medical === null) {
+              personnelData.medical = (activeSettings.medicalAllowance || 0) * 12;
+            }
+            if (personnelData.employeeCompensation === undefined || personnelData.employeeCompensation === null) {
+              personnelData.employeeCompensation = (activeSettings.employeeCompensation || 0) * 12;
+            }
+            if (personnelData.gsisPremium === undefined || personnelData.gsisPremium === null) {
+              personnelData.gsisPremium = (personnelData.annualSalary || 0) * (activeSettings.gsisPremium || 0);
+            }
+          }
+          
           const newPS = new PersonnelServices({
-            ...item,
+            ...personnelData,
             fiscalYear: edit.fiscalYear,
             budgetType: edit.budgetType,
             region: edit.region,

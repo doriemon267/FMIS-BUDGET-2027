@@ -5481,35 +5481,6 @@ exports.updateMissingRegions = async (req, res) => {
     return res.status(500).json({ message: "Server error updating missing regions" });
   }
 };
-// Helper function to calculate personnel total
-function calculatePersonnelTotal(personnel) {
-  if (!personnel) return 0;
-  return (
-    (Number(personnel.annualSalary) || 0) +
-    (Number(personnel.RATA) || 0) +
-    (Number(personnel.PERA) || 0) +
-    (Number(personnel.uniformALLOWANCE) || 0) +
-    (Number(personnel.productivityIncentive) || 0) +
-    (Number(personnel.medical) || 0) +
-    (Number(personnel.childrenAllowance) || 0) +
-    (Number(personnel.meal) || 0) +
-    (Number(personnel.cashGift) || 0) +
-    (Number(personnel.subsistenceAllowanceMDS) || 0) +
-    (Number(personnel.subsistenceAllowanceST) || 0) +
-    (Number(personnel.midyearBonus) || 0) +
-    (Number(personnel.yearEndBonus) || 0) +
-    (Number(personnel.gsisPremium) || 0) +
-    (Number(personnel.philhealthPremium) || 0) +
-    (Number(personnel.pagibigPremium) || 0) +
-    (Number(personnel.employeeCompensation) || 0) +
-    (Number(personnel.loyaltyAward) || 0) +
-    (Number(personnel.overtimePay) || 0) +
-    (Number(personnel.earnedLeaves) || 0) +
-    (Number(personnel.retirementBenefits) || 0) +
-    (Number(personnel.terminalLeave) || 0) +
-    (Number(personnel.courtAppearance) || 0)
-  );
-}
 exports.returnProposal = async (req, res) => {
   try {
     const { fiscalYear, budgetType, processBy, region, reason, cobExpenditures } = req.body;
@@ -6263,7 +6234,8 @@ exports.performProposalAction = async (req, res) => {
             message: notificationMessage,
             relatedId: id,
             relatedType: 'proposal',
-            relatedLink: `/new-proposal-workflow?view=pending-review`,
+              // Use `tab` query param (frontend expects `tab`) and include proposalId for deep-linking
+              relatedLink: `/new-proposal-workflow?tab=pending-review&proposalId=${id}`,
             metadata: {
               proposalId: id,
               action: action,
@@ -6300,10 +6272,3 @@ exports.performProposalAction = async (req, res) => {
     });
   }
 };
-
-
-
-
-
-
-

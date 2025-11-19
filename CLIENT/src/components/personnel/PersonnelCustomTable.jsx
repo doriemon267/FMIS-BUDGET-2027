@@ -436,7 +436,9 @@ const CustomTable = ({
                       <TableRow
                         key={rowIndex}
                         sx={{
-                          backgroundColor: isRecentlyUpdated
+                          backgroundColor: row.subsidyEligible
+                            ? "#fffde7" // Light yellow for subsidy-tagged rows
+                            : isRecentlyUpdated
                             ? green[50] // Highlight modified rows
                             : rowIndex % 2 === 0
                             ? blueGrey[50]

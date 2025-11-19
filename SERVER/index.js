@@ -456,7 +456,8 @@ io.on('connection', (socket) => {
 // Export io for use in other modules
 global.io = io;
 
-server.listen(process.env.APP_PORT, () => {
+if (require.main === module) {
+  server.listen(process.env.APP_PORT, () => {
   // Initialize backup system
   initializeBackupSystem();
   // Initialize backup cleanup scheduler
@@ -466,5 +467,9 @@ server.listen(process.env.APP_PORT, () => {
   // Always show essential startup message
   console.log("🚀", "FMIS - BUDGET IS UP AND RUNNING :: 5005");
   return null;
-});
+  });
+}
+
+// Export app & server for programmatic use (tests, utils)
+module.exports = { app, server };
 

@@ -125,6 +125,14 @@ const CustomCreateUpdateDialog = ({
     },
     onSuccess: async () => {
       await invalidateDataList(queryClient, dataListName);
+      
+      // Also invalidate chargedToIncome queries for BudgetarySupportTable
+      if (dataListName.includes('ChargedToIncome')) {
+        queryClient.invalidateQueries({
+          queryKey: ['personnelServices', 'chargedToIncome']
+        });
+      }
+      
       toast.success(
         isEditMode ? "Updated successfully" : "Created successfully"
       );

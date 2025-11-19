@@ -273,6 +273,7 @@ const EditablePersonnelTable = ({ data = [], onChange }) => {
               <TableCell><strong>Employee Name</strong></TableCell>
               <TableCell><strong>Position</strong></TableCell>
               <TableCell><strong>Status</strong></TableCell>
+              <TableCell><strong>Tags</strong></TableCell>
               <TableCell align="right"><strong>Monthly Salary</strong></TableCell>
               <TableCell align="right"><strong>Annual Salary</strong></TableCell>
               <TableCell align="right"><strong>Total</strong></TableCell>
@@ -370,6 +371,28 @@ const EditablePersonnelTable = ({ data = [], onChange }) => {
                             {item.statusOfAppointment || ''}
                           </Typography>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                          {item.subsidyEligible && (
+                            <Chip 
+                              label="PS - Subsidy" 
+                              size="small" 
+                              color="primary" 
+                              variant="outlined"
+                              sx={{ bgcolor: '#e3f2fd' }}
+                            />
+                          )}
+                          {item.chargedToIncomeEligible && (
+                            <Chip 
+                              label="PS - Charged to Income" 
+                              size="small" 
+                              color="success" 
+                              variant="outlined"
+                              sx={{ bgcolor: '#e8f5e9' }}
+                            />
+                          )}
+                        </Box>
                       </TableCell>
                       <TableCell align="right">
                         {renderNumberField('monthlySalary')}

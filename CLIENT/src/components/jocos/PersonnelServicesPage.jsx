@@ -74,6 +74,25 @@ const COSPersonnelServicesPage = () => {
       alignRight: true,
       customRender: (row) => row.annualSalary ? `₱${row.annualSalary.toLocaleString()}` : "₱0",
     },
+    subsidyEligible: {
+      type: "text",
+      label: "SUBSIDY TAG",
+      show: false,
+      customRender: (row) => (row.subsidyEligible ? "Tagged" : "—"),
+    },
+    subsidyAmount: {
+      type: "number",
+      label: "PROJECTED SUBSIDY",
+      show: false,
+      alignRight: true,
+      customRender: (row) =>
+        row.subsidyEligible
+          ? `₱${(Number(row.subsidyAmount) || 0).toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}`
+          : "—",
+    },
     Total: {
       type: "number",
       label: "TOTAL",

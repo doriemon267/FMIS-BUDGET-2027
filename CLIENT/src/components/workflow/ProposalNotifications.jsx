@@ -6,9 +6,6 @@ import {
   MenuItem,
   Box,
   Typography,
-  Divider,
-  Chip,
-  Paper,
   CircularProgress,
   Button,
   Dialog,
@@ -19,11 +16,11 @@ import {
 } from '@mui/material';
 import {
   Notifications as NotificationsIcon,
-  Close as CloseIcon,
-  CheckCircle as CheckIcon
+  Close as CloseIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import api from '../../config/api';
+import { useNotifications } from '../../global/components/NotificationsContext';
 import { toast } from 'react-toastify';
 
 const ProposalNotifications = ({ showPersistentList = false }) => {
@@ -32,11 +29,13 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
   const [loading, setLoading] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const [showPersistent, setShowPersistent] = useState(showPersistentList);
+  const { markAllNotificationsAsRead } = useNotifications();
   const pollIntervalRef = useRef(null);
 
   // Fetch notifications
   const fetchNotifications = useCallback(async () => {
     try {
+      setLoading(true);
       const response = await api.get('/api/notifications', {
         headers: {
           'X-Debug-Notif': 'false'
@@ -60,7 +59,44 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
     } catch (error) {
       console.error('Error fetching notifications:', error);
     }
-  }, [notifications.length]);
+    finally {
+      setLoading(false);
+    }
+  }, [notifications.length, showWindowsNotification]);
+
+  const buildNotificationLink = useCallback((notification) => {
+    // Use the relatedLink if provided, otherwise default to the workflow page
+    let link = notification.relatedLink || '/new-proposal-workflow';
+
+    // Normalize query string and params
+    const [pathPart, queryPart] = link.split('?');
+    const params = new URLSearchParams(queryPart || '');
+
+    // older code sometimes uses `view` instead of `tab` for the frontend - normalize
+    if (params.has('view') && !params.has('tab')) {
+      params.set('tab', params.get('view'));
+      params.delete('view');
+    }
+
+    // If the link targets the legacy AllProposals path, normalize to the new page and default tab
+    if (pathPart.toLowerCase().includes('/allproposals')) {
+      // Use the new workflow route and set the default tab to `all-proposals` unless specified
+      const newPath = '/new-proposal-workflow';
+      if (!params.has('tab')) params.set('tab', 'all-proposals');
+      link = `${newPath}?${params.toString()}`;
+    } else {
+      // Otherwise reconstruct the normalized link
+      link = params.toString() ? `${pathPart}?${params.toString()}` : pathPart;
+    }
+
+    // Append proposalId from metadata if available and not present in the link
+    if (notification.metadata?.proposalId && !params.has('proposalId')) {
+      const sep = link.includes('?') ? '&' : '?';
+      link = `${link}${sep}proposalId=${notification.metadata.proposalId}`;
+    }
+
+    return link;
+  }, []);
 
   // Show Windows notification
   const showWindowsNotification = useCallback((notification) => {
@@ -74,7 +110,8 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
 
       notif.onclick = () => {
         window.focus();
-        navigate('/new-proposal-workflow');
+        const link = buildNotificationLink(notification);
+        navigate(link);
         markAsRead([notification._id]);
       };
 
@@ -82,7 +119,7 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
         markAsRead([notification._id]);
       };
     }
-  }, [navigate]);
+  }, [navigate, buildNotificationLink, markAsRead]);
 
   // Request notification permission on component mount
   useEffect(() => {
@@ -108,20 +145,90 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
 
   // Mark notifications as read
   const markAsRead = useCallback(async (ids) => {
+    if (!Array.isArray(ids) || ids.length === 0) return;
     try {
-      await api.post('/api/notifications/mark-read', { ids });
-      
-      setNotifications(prev =>
-        prev.filter(notif => !ids.includes(notif._id))
-      );
+      const response = await api.post('/api/notifications/mark-read', { ids });
+      console.debug('markAsRead response:', response?.data);
+        if (response.data && response.data.success) {
+        const updatedIds = response.data.updatedIds || [];
+        const modifiedCount = response.data.modifiedCount || 0;
+
+        if (updatedIds.length > 0) {
+          // Only remove the notifications confirmed updated on the server
+          setNotifications(prev => prev.filter(notif => !updatedIds.includes(notif._id)));
+        } else if (modifiedCount > 0) {
+          // Server updated some documents but didn't return IDs; fall back to filtering by provided ids
+          setNotifications(prev => prev.filter(notif => !ids.includes(notif._id)));
+        }
+
+        // Re-sync with server to ensure we're not showing old notifications
+        await fetchNotifications();
+        if (modifiedCount === 0) {
+          toast.info('No notifications were updated (they may belong to a different role/user)', { autoClose: 2500 });
+        }
+        // Optional: show a subtle toast to indicate success
+        try {
+          toast.dismiss();
+          // small non-intrusive success toast - uses default durations
+          toast.success('Marked notification(s) as read', { autoClose: 1500 });
+        } catch (_e) {
+          console.debug('Toast error (ignored):', _e?.message || _e);
+        }
+      } else {
+        // If server didn't return success, re-sync to be safe
+        await fetchNotifications();
+      }
     } catch (error) {
       console.error('Error marking notifications as read:', error);
+      // Ensure UI is in sync after an error
+      try { await fetchNotifications(); } catch (_e) { console.debug('Failed to re-sync notifications: ', _e?.message || _e); }
+      toast.error('Failed to mark notification as read.');
     }
-  }, []);
+  }, [fetchNotifications]);
+
+  // Mark all unread notifications for the current user/roles
+  const markAllAsRead = useCallback(async () => {
+    try {
+      setLoading(true);
+      let responseData;
+      if (typeof markAllNotificationsAsRead === 'function') {
+        responseData = await markAllNotificationsAsRead();
+      } else {
+        const r = await api.post('/api/notifications/mark-all-read');
+        responseData = r?.data;
+      }
+  console.debug('markAllAsRead response:', responseData);
+      const success = responseData && responseData.success;
+      if (success) {
+        const updatedIds = responseData.updatedIds || [];
+        const modifiedCount = responseData.modifiedCount || 0;
+        if (updatedIds.length > 0) {
+          setNotifications(prev => prev.filter(notif => !updatedIds.includes(notif._id)));
+        } else if (modifiedCount > 0) {
+          // If server updated but didn't return IDs, clear local list
+          setNotifications([]);
+        }
+        await fetchNotifications();
+        toast.success('Marked all notifications as read', { autoClose: 1500 });
+      } else {
+        // No updates, re-sync
+        await fetchNotifications();
+      }
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+      try { await fetchNotifications(); } catch (_e) { console.debug('Failed to re-sync notifications: ', _e?.message || _e); }
+      toast.error('Failed to mark all notifications as read.');
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchNotifications, markAllNotificationsAsRead]);
 
   // Handle notification click
   const handleNotificationClick = (notification) => {
-    navigate('/new-proposal-workflow');
+    const link = buildNotificationLink(notification);
+    navigate(link);
+    // Mark this notification as read immediately
+    markAsRead([notification._id]);
     setAnchorEl(null);
     setShowPersistent(false);
   };
@@ -143,13 +250,7 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
     return notifDate.toLocaleDateString();
   };
 
-  // Get notification type color
-  const getNotificationColor = (type) => {
-    if (type?.includes('return')) return '#ef5350';
-    if (type?.includes('approve') || type?.includes('forward')) return '#42a5f5';
-    if (type?.includes('submit')) return '#66bb6a';
-    return '#999';
-  };
+  // Notification color logic is defined for future use if color badges are added
 
   const getNotificationIcon = (type) => {
     if (type?.includes('return')) return '🔄';
@@ -158,7 +259,8 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
     return 'ℹ️';
   };
 
-  const unreadCount = notifications.length;
+  // Beware: the API sometimes returns read + unread in debug mode; compute unread explicitly
+  const unreadCount = notifications.filter(n => n?.status === undefined || String(n.status).toUpperCase() === 'UNREAD').length;
 
   return (
     <>
@@ -402,9 +504,8 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
         <DialogActions sx={{ p: 2, bgcolor: '#f5f5f5' }}>
           <Button
             onClick={() => {
-              if (notifications.length > 0) {
-                markAsRead(notifications.map(n => n._id));
-              }
+              // Mark all unread notifications for the current user/roles
+              markAllAsRead();
             }}
             variant="contained"
             sx={{

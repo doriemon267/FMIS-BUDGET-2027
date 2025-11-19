@@ -81,6 +81,7 @@ const BudgetOfficerEditView = forwardRef(({
   // State for each table
   const [incomeData, setIncomeData] = useState([]);
   const [personnelData, setPersonnelData] = useState([]);
+  const [chargedToIncomeData, setChargedToIncomeData] = useState([]);
   const [mooeData, setMooeData] = useState([]);
   const [capitalOutlayData, setCapitalOutlayData] = useState([]);
 
@@ -89,6 +90,7 @@ const BudgetOfficerEditView = forwardRef(({
     getCurrentEditData: () => ({
       editedIncome: incomeData,
       editedPersonnelServices: personnelData,
+      editedChargedToIncome: chargedToIncomeData,
       editedMOOE: mooeData,
       editedCapitalOutlay: capitalOutlayData,
       comments: comments.trim() || undefined
@@ -154,8 +156,14 @@ const BudgetOfficerEditView = forwardRef(({
           capitalOutlayRows: mergedCapitalOutlay.length
         });
         
+        // Split personnel data into regular and charged to income
+        const allPersonnel = proposalData.editedData.personnelServices || [];
+        const regularPersonnel = allPersonnel.filter(p => !p.chargedToIncomeEligible);
+        const chargedPersonnel = allPersonnel.filter(p => p.chargedToIncomeEligible);
+        
         setIncomeData(proposalData.editedData.income || []);
-        setPersonnelData(proposalData.editedData.personnelServices || []);
+        setPersonnelData(regularPersonnel);
+        setChargedToIncomeData(chargedPersonnel);
         setMooeData(proposalData.editedData.mooe || []);
         setCapitalOutlayData(mergedCapitalOutlay);
         setComments(proposalData.editComments || ''); // Load existing comments
@@ -175,8 +183,14 @@ const BudgetOfficerEditView = forwardRef(({
           firstCapitalOutlay: proposalData.capitalOutlay?.[0]
         });
         
+        // Split personnel data into regular and charged to income
+        const allPersonnel = proposalData.personnelServices || [];
+        const regularPersonnel = allPersonnel.filter(p => !p.chargedToIncomeEligible);
+        const chargedPersonnel = allPersonnel.filter(p => p.chargedToIncomeEligible);
+        
         setIncomeData(proposalData.income || []);
-        setPersonnelData(proposalData.personnelServices || []);
+        setPersonnelData(regularPersonnel);
+        setChargedToIncomeData(chargedPersonnel);
         setMooeData(proposalData.mooe || []);
         setCapitalOutlayData(proposalData.capitalOutlay || []);
         setComments(''); // Clear comments for new edit
@@ -274,10 +288,13 @@ const BudgetOfficerEditView = forwardRef(({
   };
 
   const prepareEditData = () => {
+    // Combine personnel and charged to income data for submission
+    const allPersonnel = [...personnelData, ...chargedToIncomeData];
+    
     return {
       proposalId: proposal._id,
       editedIncome: incomeData,
-      editedPersonnelServices: personnelData,
+      editedPersonnelServices: allPersonnel,
       editedMOOE: mooeData,
       editedCapitalOutlay: capitalOutlayData,
       comments: comments.trim() || undefined // Optional comments field
@@ -409,15 +426,16 @@ const BudgetOfficerEditView = forwardRef(({
 
   // Calculate module totals for summary display
   const summaryPersonnelTotal = calculateModuleTotal(personnelData, 'Total');
+  const summaryChargedToIncomeTotal = calculateModuleTotal(chargedToIncomeData, 'chargedToIncomeAmount');
   const summaryMooeTotal = calculateModuleTotal(mooeData, 'amount');
   const summaryCapitalTotal = calculateModuleTotal(capitalOutlayData, 'cost');
   const summaryIncomeTotal = calculateModuleTotal(incomeData, 'amount');
   const regionName = (proposal.region || '').toUpperCase();
   const isCentralOffice = regionName.includes('CENTRAL') && regionName.includes('OFFICE');
 
-  // Determine missing modules for warning
+  // Determine missing modules for warning (Personnel Services now includes charged to income)
   const summaryMissingModules = [];
-  if (summaryPersonnelTotal <= 0 || personnelData.length === 0) summaryMissingModules.push('Personnel Services');
+  if ((summaryPersonnelTotal + summaryChargedToIncomeTotal) <= 0 || (personnelData.length + chargedToIncomeData.length) === 0) summaryMissingModules.push('Personnel Services');
   if (summaryMooeTotal <= 0 || mooeData.length === 0) summaryMissingModules.push('MOOE');
   if (summaryCapitalTotal <= 0 || capitalOutlayData.length === 0) summaryMissingModules.push('Capital Outlay');
   if (!isCentralOffice && (summaryIncomeTotal <= 0 || incomeData.length === 0)) summaryMissingModules.push('Income');
@@ -455,6 +473,11 @@ const BudgetOfficerEditView = forwardRef(({
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1, mb: 1 }}>
           <Typography variant="body2">
             ✓ Personnel Services: <strong>{summaryPersonnelTotal.toLocaleString('en-PH', { style: 'currency', currency: 'PHP' })}</strong>
+            {summaryChargedToIncomeTotal > 0 && (
+              <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '4px' }}>
+                + PS - Charged to Income: {summaryChargedToIncomeTotal.toLocaleString('en-PH', { style: 'currency', currency: 'PHP' })}
+              </div>
+            )}
           </Typography>
           <Typography variant="body2">
             ✓ MOOE: <strong>{summaryMooeTotal.toLocaleString('en-PH', { style: 'currency', currency: 'PHP' })}</strong>
@@ -489,12 +512,16 @@ const BudgetOfficerEditView = forwardRef(({
                 sx={{ fontWeight: activeTab === 1 ? 'bold' : 'normal' }}
               />
               <Tab 
-                label={`MOOE (${mooeData.length})`}
+                label={`PS - Charged to Income (${chargedToIncomeData.length})`}
                 sx={{ fontWeight: activeTab === 2 ? 'bold' : 'normal' }}
               />
               <Tab 
-                label={`Capital Outlay (${capitalOutlayData.length})`}
+                label={`MOOE (${mooeData.length})`}
                 sx={{ fontWeight: activeTab === 3 ? 'bold' : 'normal' }}
+              />
+              <Tab 
+                label={`Capital Outlay (${capitalOutlayData.length})`}
+                sx={{ fontWeight: activeTab === 4 ? 'bold' : 'normal' }}
               />
             </Tabs>
           </Box>
@@ -514,12 +541,19 @@ const BudgetOfficerEditView = forwardRef(({
               />
             )}
             {activeTab === 2 && (
+              <EditablePersonnelTable 
+                data={chargedToIncomeData} 
+                onChange={readOnly ? undefined : setChargedToIncomeData}
+                title="Personnel Services - Charged to Income"
+              />
+            )}
+            {activeTab === 3 && (
               <EditableMOOETable 
                 data={mooeData} 
                 onChange={readOnly ? undefined : setMooeData}
               />
             )}
-            {activeTab === 3 && (
+            {activeTab === 4 && (
               <EditableCapitalOutlayTable 
                 data={capitalOutlayData} 
                 onChange={readOnly ? undefined : setCapitalOutlayData}

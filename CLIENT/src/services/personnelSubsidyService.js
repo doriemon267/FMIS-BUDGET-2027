@@ -42,3 +42,47 @@ export const untagPersonnelSubsidy = async ({ ids }) => {
     defaultAmount: 0,
   });
 };
+
+// Charged to Income functions
+const CHARGED_TO_INCOME_ENDPOINT = "/personnelServices/charged-to-income/bulk";
+
+export const updatePersonnelChargedToIncome = async ({
+  items,
+  defaultAmount = 0,
+  chargedToIncomeEligible = true,
+  notes,
+}) => {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new Error("At least one personnel item is required");
+  }
+
+  const payload = {
+    items,
+    defaultAmount,
+    chargedToIncomeEligible,
+  };
+
+  if (notes) {
+    payload.notes = notes;
+  }
+
+  return api.put(CHARGED_TO_INCOME_ENDPOINT, payload);
+};
+
+export const chargePersonnelToIncome = async ({ ids, amount, notes }) => {
+  const numericAmount = Number(amount) || 0;
+  return updatePersonnelChargedToIncome({
+    items: ids.map((id) => ({ _id: id, chargedToIncomeAmount: numericAmount })),
+    defaultAmount: numericAmount,
+    chargedToIncomeEligible: true,
+    notes,
+  });
+};
+
+export const unchargePersonnelFromIncome = async ({ ids }) => {
+  return updatePersonnelChargedToIncome({
+    items: ids.map((id) => ({ _id: id })),
+    chargedToIncomeEligible: false,
+    defaultAmount: 0,
+  });
+};

@@ -75,6 +75,7 @@ const PermanentCustomTable = ({
         orderBy,
         order,
         statusOfAppointment: "PERMANENT",
+        chargedToIncomeEligible: false,  // Exclude charged-to-income personnel
       };
       
       // Only add search if it has a value

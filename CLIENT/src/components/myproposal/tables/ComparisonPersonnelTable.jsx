@@ -138,6 +138,7 @@ const ComparisonPersonnelTable = ({ data }) => {
               <TableCell><strong>Employee Name</strong></TableCell>
               <TableCell><strong>Position</strong></TableCell>
               <TableCell><strong>Status</strong></TableCell>
+              <TableCell><strong>Tags</strong></TableCell>
               <TableCell><strong>Monthly Salary</strong></TableCell>
               <TableCell><strong>Annual Salary</strong></TableCell>
               <TableCell><strong>Total</strong></TableCell>
@@ -147,7 +148,7 @@ const ComparisonPersonnelTable = ({ data }) => {
           <TableBody>
             {totalEntries === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} align="center">
+                <TableCell colSpan={8} align="center">
                   <Box sx={{ py: 3, color: 'text.secondary' }}>
                     No personnel entries found.
                   </Box>
@@ -162,6 +163,28 @@ const ComparisonPersonnelTable = ({ data }) => {
                       {renderComparisonCell(item, 'employeeFullName')}
                       {renderComparisonCell(item, 'positionTitle')}
                       {renderComparisonCell(item, 'statusOfAppointment')}
+                      <TableCell>
+                        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                          {item.subsidyEligible && (
+                            <Chip 
+                              label="PS - Subsidy" 
+                              size="small" 
+                              color="primary" 
+                              variant="outlined"
+                              sx={{ bgcolor: '#e3f2fd' }}
+                            />
+                          )}
+                          {item.chargedToIncomeEligible && (
+                            <Chip 
+                              label="PS - Income" 
+                              size="small" 
+                              color="success" 
+                              variant="outlined"
+                              sx={{ bgcolor: '#e8f5e9' }}
+                            />
+                          )}
+                        </Box>
+                      </TableCell>
                       {renderComparisonCell(item, 'monthlySalary', true)}
                       {renderComparisonCell(item, 'annualSalary', true)}
                       {renderComparisonCell(item, 'Total', true)}
@@ -173,7 +196,7 @@ const ComparisonPersonnelTable = ({ data }) => {
                       </TableCell>
                     </TableRow>
                     <TableRow>
-                      <TableCell colSpan={7} sx={{ p: 0 }}>
+                      <TableCell colSpan={8} sx={{ p: 0 }}>
                         <Accordion sx={{ boxShadow: 'none', '&:before': { display: 'none' } }}>
                           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                             <Typography variant="caption">View Additional Details</Typography>

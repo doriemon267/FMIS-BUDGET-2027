@@ -17,6 +17,7 @@ import { FaMoneyCheckAlt } from "react-icons/fa";
 import StyledBox from "../../global/components/StyledBox";
 import PSPermanentServiceTable from "../pspermanent/PersonnelServicesPage";
 import PSCasualServiceTable from "../pscasual/PersonnelServicesPage";
+import PSChargedToIncomeTable from "../pschargedtoincome/PersonnelChargedToIncomePage";
 import Mooe from "../mooe/MooeTable";
 // import CapitalOutlayTable from "../capitaloutlay/CapitalOutlayTable";
 import CapitalOutlayTable from "../capitaloutlay/CapitalOutlayTableEnhanced";
@@ -164,6 +165,7 @@ const ProposalCustomPage = ({
   const [selectedFiscalYear, setSelectedFiscalYear] = useState("");
   const [availableFiscalYears, setAvailableFiscalYears] = useState([]);
   const [activeBudgetType, setActiveBudgetType] = useState("");
+  const [budgetDeficit, setBudgetDeficit] = useState(null);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -248,8 +250,8 @@ const ProposalCustomPage = ({
     createProposalMutation.mutate({
       title,
       description,
-      projectedCorporateIncome: Number(projectedCorporateIncome) || 0,
-      projectedSubsidy: Number(projectedSubsidy) || 0,
+      projectedCorporateIncome: (Number(projectedCorporateIncome) || 0) + (Number(chargedToIncomeAmount) || 0),
+      projectedSubsidy: (Number(projectedSubsidy) || 0) + (Number(nonChargedPersonnelServices) || 0),
       modelType: modelTypeNormalized,
       fiscalYear: Number(activeFiscalYear) || new Date().getFullYear(),
       region: regionPayload,
@@ -302,6 +304,8 @@ const ProposalCustomPage = ({
   const [overviewExpanded, setOverviewExpanded] = useState(true);
   const [summaryExpanded, setSummaryExpanded] = useState(false);
   const [groupedItems, setGroupedItems] = useState({});
+  const [chargedToIncomeAmount, setChargedToIncomeAmount] = useState(0);
+  const [nonChargedPersonnelServices, setNonChargedPersonnelServices] = useState(0);
 
   // Enhanced UX state
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
@@ -1047,6 +1051,42 @@ const ProposalCustomPage = ({
       refetchIntervalInBackground: true,
     });
 
+  const { data: chargedToIncomeQueryData = 0 } = useQuery({
+    queryKey: [
+      'chargedToIncomeAmount',
+      selectedFiscalYear || activeFiscalYear,
+      activeBudgetType,
+    ],
+    queryFn: async () => {
+      const fiscalYear = selectedFiscalYear || activeFiscalYear;
+      const baseParams = {
+        fiscalYear: Number(fiscalYear),
+        budgetType: activeBudgetType,
+        chargedToIncomeEligible: true,
+        limit: 1000,
+        page: 1
+      };
+      
+      try {
+        const response = await api.get('/personnelServices', { params: baseParams });
+        const data = response.data?.personnelServices || [];
+        
+        if (!Array.isArray(data)) return 0;
+        
+        const total = data.reduce((sum, p) => {
+          return sum + (Number(p.chargedToIncomeAmount || 0));
+        }, 0);
+        
+        return total;
+      } catch (error) {
+        console.error('Error fetching charged to income data:', error);
+        return 0;
+      }
+    },
+    enabled: !!activeFiscalYear && !!activeBudgetType,
+    staleTime: 30000,
+  });
+
   // Use React Query's cache to update data
   useEffect(() => {
     if (personnelQueryData) setPersonnelData(personnelQueryData);
@@ -1055,12 +1095,14 @@ const ProposalCustomPage = ({
     if (incomeQueryData) setIncomeData(incomeQueryData);
     if (budgetarySupportQueryData)
       setBudgetarySupportData(budgetarySupportQueryData);
+    if (chargedToIncomeQueryData) setChargedToIncomeAmount(chargedToIncomeQueryData);
   }, [
     personnelQueryData,
     mooeQueryData,
     capitalOutlayQueryData,
     incomeQueryData,
     budgetarySupportQueryData,
+    chargedToIncomeQueryData,
   ]);
 
   // Update budget summary when data changes or selected fiscal year changes
@@ -1168,6 +1210,16 @@ const ProposalCustomPage = ({
       });
       return;
     }
+    // Check for budget deficit - BLOCK submission if there's a deficit
+    if (budgetDeficit && budgetDeficit.hasDeficit) {
+      setSnackbar({
+        open: true,
+        message: `Cannot submit: Budget has a deficit of ₱${budgetDeficit.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Total Sources (₱${budgetDeficit.totalSources.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) must equal or exceed Total Uses (₱${budgetDeficit.totalUses.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}).`,
+        severity: "error",
+      });
+      return;
+    }
+
     // If income is not balanced, allow submission but warn the user
     if (!budgetSummary.isIncomeBalanced) {
       setSnackbar({
@@ -1516,6 +1568,16 @@ const ProposalCustomPage = ({
   };
 
   const handleOpenDialog = () => {
+    // Check for budget deficit - BLOCK if there's a deficit
+    if (budgetDeficit && budgetDeficit.hasDeficit) {
+      setSnackbar({
+        open: true,
+        message: `Cannot submit: Budget has a deficit of ₱${budgetDeficit.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Total Sources must equal or exceed Total Uses.`,
+        severity: "error",
+      });
+      return;
+    }
+
     if (!budgetSummary.isIncomeBalanced) {
       setSnackbar({
         open: true,
@@ -2029,6 +2091,7 @@ const ProposalCustomPage = ({
         <Tab label="Income" value="Income" icon={<FaMoneyCheckAlt size={16} />} />
         <Tab label="PS-Perm" value="PSPermanent" icon={<IoPersonCircleOutline size={16} />} />
         <Tab label="PS-Casual" value="PSCasual" icon={<IoPersonCircleOutline size={16} />} />
+        <Tab label="PS-Charged" value="PSChargedToIncome" icon={<IoPersonCircleOutline size={16} />} />
         <Tab label="COS/JO" value="COS/JO" icon={<FaFileContract size={16} />} />
         <Tab label="MOOE" value="MOOE" icon={<GrHostMaintenance size={16} />} />
         <Tab label="Capital" value="Capital Outlay" icon={<FaMoneyBill size={16} />} />
@@ -3229,6 +3292,7 @@ const ProposalCustomPage = ({
               { label: 'INCOME', value: 'Income' },
               { label: 'PS - Permanent', value: 'PSPermanent' },
               { label: 'PS - Casual', value: 'PSCasual' },
+              { label: 'PS - Charged to Income', value: 'PSChargedToIncome' },
               { label: 'COS/JO', value: 'COS/JO' },
               { label: 'MOOE', value: 'MOOE' },
               { label: 'CAPITAL OUTLAY', value: 'Capital Outlay' },
@@ -3298,6 +3362,15 @@ const ProposalCustomPage = ({
             />
           )}
 
+          {activeTab === "PSChargedToIncome" && (
+            <PSChargedToIncomeTable
+              dataListName={dataListName}
+              schema={schema}
+              region={activeRegion}
+              fiscalYear={selectedFiscalYear}
+            />
+          )}
+
           {activeTab === "COS/JO" && (
             <PSCOSCustomPageTable
               dataListName={dataListName}
@@ -3351,10 +3424,13 @@ const ProposalCustomPage = ({
                 </Box>
               ) : (
                 <BudgetarySupportTable
-                  fiscalYear={selectedFiscalYear}
+                  fiscalYear={selectedFiscalYear || activeFiscalYear}
                   budgetType={activeBudgetType}
                   incomeGrandTotal={incomeGrandTotal}
                   groupedItems={groupedItems}
+                  onChargedToIncomeChange={setChargedToIncomeAmount}
+                  onNonChargedPersonnelServicesChange={setNonChargedPersonnelServices}
+                  onBudgetDeficitChange={setBudgetDeficit}
                 />
               )}
             </>
@@ -3550,7 +3626,7 @@ const ProposalCustomPage = ({
         </MenuItem>
         <Divider />
         <MenuItem onClick={() => {
-          const currentType = activeTab === 'PSPermanent' || activeTab === 'PSCasual' || activeTab === 'COS/JO' ? 'personnel' : 
+          const currentType = activeTab === 'PSPermanent' || activeTab === 'PSCasual' || activeTab === 'PSChargedToIncome' || activeTab === 'COS/JO' ? 'personnel' : 
                              activeTab === 'MOOE' ? 'mooe' :
                              activeTab === 'Capital Outlay' ? 'capitalOutlay' :
                              activeTab === 'Income' ? 'income' : 'budgetarySupport';

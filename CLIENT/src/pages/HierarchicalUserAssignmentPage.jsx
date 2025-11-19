@@ -91,14 +91,14 @@ const USER_ROLES = [
   },
   { 
     value: 'OVERALL_BUDGET_APPROVER', 
-    label: 'Overall Budget Approver', 
+    label: 'Budget Manager', 
     description: 'Final executive-level approval authority',
     workflowRoles: 'OVERALL_BUDGET_APPROVER (executive approval)',
     assignmentLevels: ['BUDGET_AND_REVENUE_DIVISION']
   },
   { 
     value: 'SUPER_ADMIN', 
-    label: 'Super Admin', 
+    label: 'Admin', 
     description: 'Full administrative access - manages all proposals, users, and system settings',
     workflowRoles: 'All workflow roles (full system access)',
     assignmentLevels: ['FULL']

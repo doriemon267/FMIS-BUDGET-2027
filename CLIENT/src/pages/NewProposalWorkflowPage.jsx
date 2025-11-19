@@ -50,6 +50,7 @@ import { useRegion } from "../context/RegionContext";
 import api from "../config/api";
 import { toast } from "react-toastify";
 import { useWorkflowRef } from "../hooks/useWorkflowRef";
+import { useNotifications } from "../global/components/NotificationsContext";
 
 // Brand colors aligned to Transactions Processing UI
 const BRAND_COLORS = {
@@ -101,6 +102,7 @@ const NewProposalWorkflowPage = () => {
   const { activeRegion } = useRegion();
   const [searchParams] = useSearchParams();
   const { setWorkflowRef } = useWorkflowRef();
+  const { serverNotifications, markNotificationsAsRead } = useNotifications();
 
   // Check if user is BRD (Budget Revenue Division) level or SUPER ADMIN
   const isBRDUser = currentUser?.Roles?.some((role) =>
@@ -179,13 +181,19 @@ const NewProposalWorkflowPage = () => {
   const [availableActionsForMenu, setAvailableActionsForMenu] = useState([]);
   const [proposalDetails, setProposalDetails] = useState(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
-  const [detailsTab, setDetailsTab] = useState(0);
+  const [detailsTab, setDetailsTab] = useState("income");
   const [historyPage, setHistoryPage] = useState(0);
   const [historyRowsPerPage, setHistoryRowsPerPage] = useState(20);
   const [expandedGroups, setExpandedGroups] = useState({});
   const [personnelPage, setPersonnelPage] = useState(0);
   const [personnelRowsPerPage, setPersonnelRowsPerPage] = useState(10);
   const [expandedPersonnel, setExpandedPersonnel] = useState({});
+  const [permanentPersonnelPage, setPermanentPersonnelPage] = useState(0);
+  const [permanentPersonnelRowsPerPage, setPermanentPersonnelRowsPerPage] = useState(10);
+  const [casualPersonnelPage, setCasualPersonnelPage] = useState(0);
+  const [casualPersonnelRowsPerPage, setCasualPersonnelRowsPerPage] = useState(10);
+  const [chargedPersonnelPage, setChargedPersonnelPage] = useState(0);
+  const [chargedPersonnelRowsPerPage, setChargedPersonnelRowsPerPage] = useState(10);
 
   // Edit mode and change tracking for reviewers - now for items
   const [editableItems, setEditableItems] = useState({
@@ -267,9 +275,22 @@ const NewProposalWorkflowPage = () => {
         setViewDetailsDialogOpen(true);
         // Clear the target so we don't auto-select again
         setTargetProposalId(null);
+        // Also mark related notifications as read (if any) on load
+        (async () => {
+          try {
+            if (targetProposalId && typeof window !== 'undefined') {
+              const matching = (serverNotifications || []).filter(n => String(n?.metadata?.proposalId) === String(targetProposalId));
+              if (matching.length > 0) {
+                await markNotificationsAsRead(matching.map(n => n._id));
+              }
+            }
+          } catch (e) {
+            console.debug('Auto-mark notifications read failed:', e?.message || e);
+          }
+        })();
       }
     }
-  }, [proposals, targetProposalId]);
+  }, [proposals, targetProposalId, serverNotifications, markNotificationsAsRead]);
 
   // Handle tab change
   const handleTabChange = (event, newValue) => {
@@ -417,7 +438,7 @@ const NewProposalWorkflowPage = () => {
     if (proposal?._id) {
       setWorkflowRef(proposal._id);
     }
-    setDetailsTab(0);
+    setDetailsTab("income");
     setChangedItems(new Set());
     // Initialize inline edit form values
     setProposalEditValues({
@@ -620,7 +641,8 @@ const NewProposalWorkflowPage = () => {
     category,
     index,
     newAmount,
-    fieldType = null
+    fieldType = null,
+    fieldName = null
   ) => {
     if (!canUserEdit()) return;
 
@@ -646,6 +668,44 @@ const NewProposalWorkflowPage = () => {
           } else if ("cost" in updated[category][index]) {
             updated[category][index].cost = totalAmount;
           }
+        } else if (category === "personnel" && fieldName) {
+          // Handle individual personnel field editing
+          updated[category][index][fieldName] = newAmount;
+
+          // If monthlySalary or annualSalary changed, update the other one
+          if (fieldName === "monthlySalary") {
+            updated[category][index].annualSalary = newAmount * 12;
+          } else if (fieldName === "annualSalary") {
+            updated[category][index].monthlySalary = newAmount / 12;
+          }
+
+          // Recalculate Total when any compensation field changes
+          const personnel = updated[category][index];
+          personnel.Total = (
+            (Number(personnel.annualSalary) || 0) +
+            (Number(personnel.RATA) || 0) +
+            (Number(personnel.PERA) || 0) +
+            (Number(personnel.uniformALLOWANCE) || 0) +
+            (Number(personnel.productivityIncentive) || 0) +
+            (Number(personnel.medical) || 0) +
+            (Number(personnel.childrenAllowance) || 0) +
+            (Number(personnel.meal) || 0) +
+            (Number(personnel.cashGift) || 0) +
+            (Number(personnel.subsistenceAllowanceMDS) || 0) +
+            (Number(personnel.subsistenceAllowanceST) || 0) +
+            (Number(personnel.midyearBonus) || 0) +
+            (Number(personnel.yearEndBonus) || 0) +
+            (Number(personnel.gsisPremium) || 0) +
+            (Number(personnel.philhealthPremium) || 0) +
+            (Number(personnel.pagibigPremium) || 0) +
+            (Number(personnel.employeeCompensation) || 0) +
+            (Number(personnel.loyaltyAward) || 0) +
+            (Number(personnel.overtimePay) || 0) +
+            (Number(personnel.earnedLeaves) || 0) +
+            (Number(personnel.retirementBenefits) || 0) +
+            (Number(personnel.terminalLeave) || 0) +
+            (Number(personnel.courtAppearance) || 0)
+          );
         } else if ("amount" in updated[category][index]) {
           updated[category][index].amount = newAmount;
         } else if ("Total" in updated[category][index]) {
@@ -658,7 +718,7 @@ const NewProposalWorkflowPage = () => {
     });
 
     // Track changed items
-    const itemKey = `${category}-${index}`;
+    const itemKey = fieldName ? `${category}-${index}-${fieldName}` : `${category}-${index}`;
     const newChangedItems = new Set(changedItems);
     const originalItem = proposalDetails[category]?.[index];
 
@@ -667,6 +727,9 @@ const NewProposalWorkflowPage = () => {
       if (fieldType === "income" || fieldType === "subsidy") {
         // For income/subsidy, compare the actual field value
         originalValue = originalItem[fieldType] ?? 0;
+      } else if (category === "personnel" && fieldName) {
+        // For personnel fields, compare the specific field
+        originalValue = originalItem[fieldName] ?? 0;
       } else {
         // For amount/cost, use the existing logic
         originalValue =
@@ -792,7 +855,7 @@ const NewProposalWorkflowPage = () => {
 
         // Refresh line item details with the updated proposal
         setDetailsLoading(true);
-        setDetailsTab(0);
+        setDetailsTab("income");
         try {
           const queryParams = {
             proposalId: updatedProposal._id,
@@ -1835,7 +1898,7 @@ const NewProposalWorkflowPage = () => {
                                 sx={{ fontWeight: 600, color: "#1976d2" }}
                               >
                                 ₱
-                                {(proposal.totalIncome || 0).toLocaleString(
+                                {(proposal.projectedCorporateIncome || proposal.totalIncome || 0).toLocaleString(
                                   "en-US",
                                   {
                                     minimumFractionDigits: 2,
@@ -2614,10 +2677,12 @@ const NewProposalWorkflowPage = () => {
                   },
                 }}
               >
-                <Tab label="Income" />
-                <Tab label="Personnel Services" />
-                <Tab label="MOOE" />
-                <Tab label="Capital Outlay" />
+                <Tab label="Income" value="income" />
+                <Tab label="PS-Permanent" value="ps-permanent" />
+                <Tab label="PS-Casual" value="ps-casual" />
+                <Tab label="PS-Charged" value="ps-charged" />
+                <Tab label="MOOE" value="mooe" />
+                <Tab label="Capital Outlay" value="capital-outlay" />
               </Tabs>
 
               {/* Tab Content */}
@@ -2625,7 +2690,7 @@ const NewProposalWorkflowPage = () => {
                 sx={{ p: 3, minHeight: 300, maxHeight: 500, overflow: "auto" }}
               >
                 {/* Income Tab */}
-                {detailsTab === 0 &&
+                {detailsTab === "income" &&
                   (proposalDetails?.income?.length > 0 ? (
                     <>
                       {(() => {
@@ -2883,9 +2948,18 @@ const NewProposalWorkflowPage = () => {
                     </Box>
                   ))}
 
-                {/* Personnel Services Tab */}
-                {detailsTab === 1 &&
-                  (proposalDetails?.personnel?.length > 0 ? (
+                {/* PS-Permanent Tab */}
+                {detailsTab === "ps-permanent" && (() => {
+                  const permanentPersonnel = proposalDetails?.personnel?.filter(
+                    person => person.statusOfAppointment === 'PERMANENT' || person.statusOfAppointment === 'Permanent'
+                  ) || [];
+                  
+                  const paginatedPermanentPersonnel = permanentPersonnel.slice(
+                    permanentPersonnelPage * permanentPersonnelRowsPerPage,
+                    permanentPersonnelPage * permanentPersonnelRowsPerPage + permanentPersonnelRowsPerPage
+                  );
+
+                  return permanentPersonnel.length > 0 ? (
                     <>
                       <TableContainer>
                         <Table size="small">
@@ -2898,577 +2972,932 @@ const NewProposalWorkflowPage = () => {
                               <TableCell sx={{ fontWeight: "bold" }}>
                                 Position
                               </TableCell>
-                              <TableCell
-                                align="right"
-                                sx={{ fontWeight: "bold" }}
-                              >
+                              <TableCell sx={{ fontWeight: "bold" }}>
+                                SG
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>
+                                STEP
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>
+                                JG
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
                                 Monthly Salary
                               </TableCell>
-                              <TableCell
-                                align="right"
-                                sx={{ fontWeight: "bold" }}
-                              >
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
                                 Annual Salary
                               </TableCell>
-                              <TableCell
-                                align="right"
-                                sx={{ fontWeight: "bold" }}
-                              >
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                                PERA
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                                RATA
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
                                 Total
                               </TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
-                            {proposalDetails.personnel
-                              .slice(
-                                personnelPage * personnelRowsPerPage,
-                                personnelPage * personnelRowsPerPage +
-                                  personnelRowsPerPage
-                              )
-                              .map((item, index) => {
-                                const globalIndex =
-                                  personnelPage * personnelRowsPerPage + index;
-                                const itemKey = `personnel-${globalIndex}`;
-                                const isChanged = changedItems.has(itemKey);
-                                const editedItem =
-                                  editableItems.personnel[globalIndex];
-                                const isExpanded = expandedPersonnel[index];
-                                return (
-                                  <React.Fragment key={index}>
-                                    <TableRow
-                                      hover
-                                      sx={{
-                                        cursor: "pointer",
-                                        bgcolor: isChanged
-                                          ? "#fff3cd"
-                                          : "transparent",
-                                        transition:
-                                          "background-color 0.3s ease",
-                                      }}
-                                    >
-                                      <TableCell>
-                                        <IconButton
-                                          size="small"
-                                          onClick={() =>
-                                            setExpandedPersonnel((prev) => ({
-                                              ...prev,
-                                              [index]: !prev[index],
-                                            }))
-                                          }
-                                        >
-                                          {isExpanded ? (
-                                            <ExpandLessIcon />
-                                          ) : (
-                                            <ExpandMoreIcon />
-                                          )}
-                                        </IconButton>
-                                      </TableCell>
-                                      <TableCell sx={{ fontWeight: 500 }}>
-                                        {item.employeeFullName || "N/A"}
-                                      </TableCell>
-                                      <TableCell>
-                                        {item.positionTitle || "N/A"}
-                                      </TableCell>
-                                      <TableCell align="right">
-                                        ₱
-                                        {(
-                                          item.monthlySalary || 0
-                                        ).toLocaleString("en-US", {
-                                          minimumFractionDigits: 2,
-                                        })}
-                                      </TableCell>
-                                      <TableCell align="right">
-                                        ₱
-                                        {(
-                                          item.annualSalary ||
-                                          (item.monthlySalary || 0) * 12 ||
-                                          0
-                                        ).toLocaleString("en-US", {
-                                          minimumFractionDigits: 2,
-                                        })}
-                                      </TableCell>
-                                      <TableCell
-                                        align="right"
-                                        sx={{
-                                          fontWeight: "bold",
-                                          bgcolor: "#f0f0f0",
-                                        }}
+                            {paginatedPermanentPersonnel.map((item, index) => {
+                              const globalIndex = permanentPersonnelPage * permanentPersonnelRowsPerPage + index;
+                              const itemKey = `permanent-${globalIndex}`;
+                              const isChanged = changedItems.has(itemKey);
+                              const editedItem = editableItems.personnel[globalIndex];
+                              const isExpanded = expandedPersonnel[index];
+                              
+                              return (
+                                <React.Fragment key={index}>
+                                  <TableRow
+                                    hover
+                                    sx={{
+                                      cursor: "pointer",
+                                      bgcolor: item.subsidyEligible
+                                        ? "#fffde7"
+                                        : isChanged
+                                        ? "#fff3cd"
+                                        : "transparent",
+                                      transition: "background-color 0.3s ease",
+                                    }}
+                                  >
+                                    <TableCell>
+                                      <IconButton
+                                        size="small"
+                                        onClick={() =>
+                                          setExpandedPersonnel((prev) => ({
+                                            ...prev,
+                                            [index]: !prev[index],
+                                          }))
+                                        }
                                       >
-                                        {canUserEdit() ? (
-                                          <TextField
-                                            type="text"
-                                            size="small"
-                                            value={(
-                                              editedItem?.Total || 0
-                                            ).toLocaleString("en-US", {
-                                              minimumFractionDigits: 2,
-                                              maximumFractionDigits: 2,
-                                            })}
-                                            onChange={(e) => {
-                                              const numValue = parseFloat(
-                                                e.target.value.replace(/,/g, "")
-                                              );
-                                              if (!isNaN(numValue)) {
-                                                handleEditItemAmount(
-                                                  "personnel",
-                                                  globalIndex,
-                                                  numValue
-                                                );
-                                              }
-                                            }}
-                                            inputProps={{
-                                              style: { textAlign: "right" },
-                                            }}
-                                            sx={{
-                                              width: 120,
-                                              "& .MuiOutlinedInput-root": {
-                                                bgcolor: isChanged
-                                                  ? "#fff9e6"
-                                                  : "white",
-                                                borderColor: isChanged
-                                                  ? "#ffc107"
-                                                  : undefined,
-                                              },
-                                            }}
-                                          />
+                                        {isExpanded ? (
+                                          <ExpandLessIcon />
                                         ) : (
-                                          `₱${(item.Total || 0).toLocaleString(
-                                            "en-US",
-                                            { minimumFractionDigits: 2 }
-                                          )}`
+                                          <ExpandMoreIcon />
                                         )}
+                                      </IconButton>
+                                    </TableCell>
+                                    <TableCell sx={{ fontWeight: 500 }}>
+                                      {item.employeeFullName || "N/A"}
+                                    </TableCell>
+                                    <TableCell>
+                                      {item.positionTitle || "N/A"}
+                                    </TableCell>
+                                    <TableCell>
+                                      {item.gradelevel_SG || "N/A"}
+                                    </TableCell>
+                                    <TableCell>
+                                      {item.step || "N/A"}
+                                    </TableCell>
+                                    <TableCell>
+                                      {item.gradelevel_JG || "N/A"}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {canUserEdit() ? (
+                                        <TextField
+                                          type="text"
+                                          size="small"
+                                          value={(editedItem?.monthlySalary || 0).toLocaleString("en-US", {
+                                            minimumFractionDigits: 2,
+                                          })}
+                                          onChange={(e) => {
+                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
+                                            if (!isNaN(numValue)) {
+                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "monthlySalary");
+                                            }
+                                          }}
+                                          inputProps={{
+                                            style: { textAlign: "right" },
+                                          }}
+                                          sx={{
+                                            width: 120,
+                                            "& .MuiOutlinedInput-root": {
+                                              bgcolor: isChanged ? "#fff9e6" : "white",
+                                              borderColor: isChanged ? "#ffc107" : undefined,
+                                            },
+                                          }}
+                                        />
+                                      ) : (
+                                        `₱${(item.monthlySalary || 0).toLocaleString("en-US", {
+                                          minimumFractionDigits: 2,
+                                        })}`
+                                      )}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {canUserEdit() ? (
+                                        <TextField
+                                          type="text"
+                                          size="small"
+                                          value={(editedItem?.annualSalary || 0).toLocaleString("en-US", {
+                                            minimumFractionDigits: 2,
+                                          })}
+                                          onChange={(e) => {
+                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
+                                            if (!isNaN(numValue)) {
+                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "annualSalary");
+                                            }
+                                          }}
+                                          inputProps={{
+                                            style: { textAlign: "right" },
+                                          }}
+                                          sx={{
+                                            width: 120,
+                                            "& .MuiOutlinedInput-root": {
+                                              bgcolor: isChanged ? "#fff9e6" : "white",
+                                              borderColor: isChanged ? "#ffc107" : undefined,
+                                            },
+                                          }}
+                                        />
+                                      ) : (
+                                        `₱${(item.annualSalary || (item.monthlySalary || 0) * 12).toLocaleString("en-US", {
+                                          minimumFractionDigits: 2,
+                                        })}`
+                                      )}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {canUserEdit() ? (
+                                        <TextField
+                                          type="text"
+                                          size="small"
+                                          value={(editedItem?.PERA || 0).toLocaleString("en-US", {
+                                            minimumFractionDigits: 2,
+                                          })}
+                                          onChange={(e) => {
+                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
+                                            if (!isNaN(numValue)) {
+                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "PERA");
+                                            }
+                                          }}
+                                          inputProps={{
+                                            style: { textAlign: "right" },
+                                          }}
+                                          sx={{
+                                            width: 120,
+                                            "& .MuiOutlinedInput-root": {
+                                              bgcolor: isChanged ? "#fff9e6" : "white",
+                                              borderColor: isChanged ? "#ffc107" : undefined,
+                                            },
+                                          }}
+                                        />
+                                      ) : (
+                                        `₱${(item.PERA || 0).toLocaleString("en-US", {
+                                          minimumFractionDigits: 2,
+                                        })}`
+                                      )}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {canUserEdit() ? (
+                                        <TextField
+                                          type="text"
+                                          size="small"
+                                          value={(editedItem?.RATA || 0).toLocaleString("en-US", {
+                                            minimumFractionDigits: 2,
+                                          })}
+                                          onChange={(e) => {
+                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
+                                            if (!isNaN(numValue)) {
+                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "RATA");
+                                            }
+                                          }}
+                                          inputProps={{
+                                            style: { textAlign: "right" },
+                                          }}
+                                          sx={{
+                                            width: 120,
+                                            "& .MuiOutlinedInput-root": {
+                                              bgcolor: isChanged ? "#fff9e6" : "white",
+                                              borderColor: isChanged ? "#ffc107" : undefined,
+                                            },
+                                          }}
+                                        />
+                                      ) : (
+                                        `₱${(item.RATA || 0).toLocaleString("en-US", {
+                                          minimumFractionDigits: 2,
+                                        })}`
+                                      )}
+                                    </TableCell>
+                                    <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                                      {canUserEdit() ? (
+                                        <TextField
+                                          type="text"
+                                          size="small"
+                                          value={(editedItem?.Total || 0).toLocaleString("en-US", {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                          })}
+                                          onChange={(e) => {
+                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
+                                            if (!isNaN(numValue)) {
+                                              handleEditItemAmount("personnel", globalIndex, numValue);
+                                            }
+                                          }}
+                                          inputProps={{
+                                            style: { textAlign: "right" },
+                                          }}
+                                          sx={{
+                                            width: 120,
+                                            "& .MuiOutlinedInput-root": {
+                                              bgcolor: isChanged ? "#fff9e6" : "white",
+                                              borderColor: isChanged ? "#ffc107" : undefined,
+                                            },
+                                          }}
+                                        />
+                                      ) : (
+                                        `₱${(item.Total || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+                                      )}
+                                    </TableCell>
+                                  </TableRow>
+                                  {isExpanded && (
+                                    <TableRow>
+                                      <TableCell colSpan={11} sx={{ bgcolor: "#fafafa", p: 3 }}>
+                                        <Grid container spacing={2}>
+                                          <Grid item xs={12}>
+                                            <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 2, color: "#2d5016" }}>
+                                              Employee Information
+                                            </Typography>
+                                          </Grid>
+                                          <Grid item xs={6} md={3}>
+                                            <Typography variant="caption" color="text.secondary">Item Number</Typography>
+                                            <Typography variant="body2">{item.itemNumber || "N/A"}</Typography>
+                                          </Grid>
+                                          <Grid item xs={6} md={3}>
+                                            <Typography variant="caption" color="text.secondary">Employee Number</Typography>
+                                            <Typography variant="body2">{item.employeeNumber || "N/A"}</Typography>
+                                          </Grid>
+                                          <Grid item xs={6} md={3}>
+                                            <Typography variant="caption" color="text.secondary">Status</Typography>
+                                            <Typography variant="body2">{item.employeeStatus || "N/A"}</Typography>
+                                          </Grid>
+                                          <Grid item xs={6} md={3}>
+                                            <Typography variant="caption" color="text.secondary">Appointment Status</Typography>
+                                            <Typography variant="body2">{item.statusOfAppointment || "N/A"}</Typography>
+                                          </Grid>
+                                        </Grid>
                                       </TableCell>
                                     </TableRow>
-                                    {isExpanded && (
-                                      <TableRow>
-                                        <TableCell
-                                          colSpan={6}
-                                          sx={{ bgcolor: "#fafafa", p: 3 }}
-                                        >
-                                          <Grid container spacing={2}>
-                                            <Grid item xs={12}>
-                                              <Typography
-                                                variant="subtitle2"
-                                                sx={{
-                                                  fontWeight: "bold",
-                                                  mb: 2,
-                                                  color: "#2d5016",
-                                                }}
-                                              >
-                                                Employee Information
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                Item Number
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                {item.itemNumber || "N/A"}
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                Employee Number
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                {item.employeeNumber || "N/A"}
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                Status
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                {item.employeeStatus || "N/A"}
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                Appointment Status
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                {item.statusOfAppointment ||
-                                                  "N/A"}
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                Division
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                {item.division || "N/A"}
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                Section
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                {item.section || "N/A"}
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                Unit
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                {item.unit || "N/A"}
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                Dependents
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                {item.noOfDependent || 0}
-                                              </Typography>
-                                            </Grid>
-
-                                            <Grid item xs={12}>
-                                              <Divider sx={{ my: 1 }} />
-                                              <Typography
-                                                variant="subtitle2"
-                                                sx={{
-                                                  fontWeight: "bold",
-                                                  mb: 2,
-                                                  color: "#2d5016",
-                                                }}
-                                              >
-                                                Compensation Breakdown
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                Annual Salary
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                ₱
-                                                {(
-                                                  item.annualSalary || 0
-                                                ).toLocaleString("en-US", {
-                                                  minimumFractionDigits: 2,
-                                                })}
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                PERA
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                ₱
-                                                {(
-                                                  item.PERA || 0
-                                                ).toLocaleString("en-US", {
-                                                  minimumFractionDigits: 2,
-                                                })}
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                RATA
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                ₱
-                                                {(
-                                                  item.RATA || 0
-                                                ).toLocaleString("en-US", {
-                                                  minimumFractionDigits: 2,
-                                                })}
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                Hazard Pay
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                ₱
-                                                {(
-                                                  item.hazardPay || 0
-                                                ).toLocaleString("en-US", {
-                                                  minimumFractionDigits: 2,
-                                                })}
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                Subsistence Allowance
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                ₱
-                                                {(
-                                                  item.subsistenceAllowance || 0
-                                                ).toLocaleString("en-US", {
-                                                  minimumFractionDigits: 2,
-                                                })}
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                Uniform Allowance
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                ₱
-                                                {(
-                                                  item.uniformALLOWANCE || 0
-                                                ).toLocaleString("en-US", {
-                                                  minimumFractionDigits: 2,
-                                                })}
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                Medical Allowance
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                ₱
-                                                {(
-                                                  item.medical || 0
-                                                ).toLocaleString("en-US", {
-                                                  minimumFractionDigits: 2,
-                                                })}
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                Children Allowance
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                ₱
-                                                {(
-                                                  item.childrenAllowance || 0
-                                                ).toLocaleString("en-US", {
-                                                  minimumFractionDigits: 2,
-                                                })}
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                Midyear Bonus
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                ₱
-                                                {(
-                                                  item.midyearBonus || 0
-                                                ).toLocaleString("en-US", {
-                                                  minimumFractionDigits: 2,
-                                                })}
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                Year-End Bonus
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                ₱
-                                                {(
-                                                  item.yearEndBonus || 0
-                                                ).toLocaleString("en-US", {
-                                                  minimumFractionDigits: 2,
-                                                })}
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                Cash Gift
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                ₱
-                                                {(
-                                                  item.cashGift || 0
-                                                ).toLocaleString("en-US", {
-                                                  minimumFractionDigits: 2,
-                                                })}
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                Productivity Incentive
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                ₱
-                                                {(
-                                                  item.productivityIncentive ||
-                                                  0
-                                                ).toLocaleString("en-US", {
-                                                  minimumFractionDigits: 2,
-                                                })}
-                                              </Typography>
-                                            </Grid>
-
-                                            <Grid item xs={12}>
-                                              <Divider sx={{ my: 1 }} />
-                                              <Typography
-                                                variant="subtitle2"
-                                                sx={{
-                                                  fontWeight: "bold",
-                                                  mb: 2,
-                                                  color: "#2d5016",
-                                                }}
-                                              >
-                                                Deductions
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                GSIS Premium
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                ₱
-                                                {(
-                                                  item.gsisPremium || 0
-                                                ).toLocaleString("en-US", {
-                                                  minimumFractionDigits: 2,
-                                                })}
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                PhilHealth Premium
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                ₱
-                                                {(
-                                                  item.philhealthPremium || 0
-                                                ).toLocaleString("en-US", {
-                                                  minimumFractionDigits: 2,
-                                                })}
-                                              </Typography>
-                                            </Grid>
-                                            <Grid item xs={6} md={3}>
-                                              <Typography
-                                                variant="caption"
-                                                color="text.secondary"
-                                              >
-                                                Pag-IBIG Premium
-                                              </Typography>
-                                              <Typography variant="body2">
-                                                ₱
-                                                {(
-                                                  item.pagibigPremium || 0
-                                                ).toLocaleString("en-US", {
-                                                  minimumFractionDigits: 2,
-                                                })}
-                                              </Typography>
-                                            </Grid>
-                                          </Grid>
-                                        </TableCell>
-                                      </TableRow>
-                                    )}
-                                  </React.Fragment>
-                                );
-                              })}
+                                  )}
+                                </React.Fragment>
+                              );
+                            })}
                           </TableBody>
                         </Table>
                       </TableContainer>
                       <TablePagination
                         component="div"
-                        count={proposalDetails.personnel.length}
-                        page={personnelPage}
-                        onPageChange={(e, newPage) => setPersonnelPage(newPage)}
-                        rowsPerPage={personnelRowsPerPage}
+                        count={permanentPersonnel.length}
+                        page={permanentPersonnelPage}
+                        onPageChange={(e, newPage) => setPermanentPersonnelPage(newPage)}
+                        rowsPerPage={permanentPersonnelRowsPerPage}
                         onRowsPerPageChange={(e) => {
-                          setPersonnelRowsPerPage(parseInt(e.target.value, 10));
-                          setPersonnelPage(0);
+                          setPermanentPersonnelRowsPerPage(parseInt(e.target.value, 10));
+                          setPermanentPersonnelPage(0);
                         }}
                         rowsPerPageOptions={[5, 10, 25, 50]}
                       />
-                      <Box
-                        sx={{
-                          mt: 2,
-                          p: 2,
-                          bgcolor: "#f5f5f5",
-                          borderRadius: "8px",
-                        }}
-                      >
-                        <Typography
-                          variant="h6"
-                          sx={{ fontWeight: "bold", color: "#d32f2f" }}
-                        >
-                          Grand Total: ₱
-                          {editableItems.personnel
-                            .reduce((sum, item) => sum + (item.Total || 0), 0)
-                            .toLocaleString("en-US", {
-                              minimumFractionDigits: 2,
-                            })}
-                        </Typography>
-                      </Box>
                     </>
                   ) : (
                     <Box sx={{ textAlign: "center", py: 4 }}>
                       <Typography variant="body2" color="text.secondary">
-                        No personnel services data available
+                        No permanent personnel services data available
                       </Typography>
                     </Box>
-                  ))}
+                  );
+                })()}
+
+                {/* PS-Casual Tab */}
+                {detailsTab === "ps-casual" && (() => {
+                  const casualPersonnel = proposalDetails?.personnel?.filter(
+                    person => person.statusOfAppointment === 'CASUAL'
+                  ) || [];
+                  
+                  const paginatedCasualPersonnel = casualPersonnel.slice(
+                    casualPersonnelPage * casualPersonnelRowsPerPage,
+                    casualPersonnelPage * casualPersonnelRowsPerPage + casualPersonnelRowsPerPage
+                  );
+
+                  return casualPersonnel.length > 0 ? (
+                    <>
+                      <TableContainer>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow sx={{ bgcolor: "#f5f5f5" }}>
+                              <TableCell sx={{ width: 50 }}></TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>
+                                Employee Name
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>
+                                Position
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>
+                                SG
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>
+                                STEP
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>
+                                JG
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                                Monthly Salary
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                                Annual Salary
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                                PERA
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                                RATA
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                                Total
+                              </TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {paginatedCasualPersonnel.map((item, index) => {
+                              const globalIndex = casualPersonnelPage * casualPersonnelRowsPerPage + index;
+                              const itemKey = `casual-${globalIndex}`;
+                              const isChanged = changedItems.has(itemKey);
+                              const editedItem = editableItems.personnel[globalIndex];
+                              const isExpanded = expandedPersonnel[index];
+                              
+                              return (
+                                <React.Fragment key={index}>
+                                  <TableRow
+                                    hover
+                                    sx={{
+                                      cursor: "pointer",
+                                      bgcolor: item.subsidyEligible
+                                        ? "#fffde7"
+                                        : isChanged
+                                        ? "#fff3cd"
+                                        : "transparent",
+                                      transition: "background-color 0.3s ease",
+                                    }}
+                                  >
+                                    <TableCell>
+                                      <IconButton
+                                        size="small"
+                                        onClick={() =>
+                                          setExpandedPersonnel((prev) => ({
+                                            ...prev,
+                                            [index]: !prev[index],
+                                          }))
+                                        }
+                                      >
+                                        {isExpanded ? (
+                                          <ExpandLessIcon />
+                                        ) : (
+                                          <ExpandMoreIcon />
+                                        )}
+                                      </IconButton>
+                                    </TableCell>
+                                    <TableCell sx={{ fontWeight: 500 }}>
+                                      {item.employeeFullName || "N/A"}
+                                    </TableCell>
+                                    <TableCell>
+                                      {item.positionTitle || "N/A"}
+                                    </TableCell>
+                                    <TableCell>
+                                      {item.gradelevel_SG || "N/A"}
+                                    </TableCell>
+                                    <TableCell>
+                                      {item.step || "N/A"}
+                                    </TableCell>
+                                    <TableCell>
+                                      {item.gradelevel_JG || "N/A"}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {canUserEdit() ? (
+                                        <TextField
+                                          type="text"
+                                          size="small"
+                                          value={(editedItem?.monthlySalary || 0).toLocaleString("en-US", {
+                                            minimumFractionDigits: 2,
+                                          })}
+                                          onChange={(e) => {
+                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
+                                            if (!isNaN(numValue)) {
+                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "monthlySalary");
+                                            }
+                                          }}
+                                          inputProps={{
+                                            style: { textAlign: "right" },
+                                          }}
+                                          sx={{
+                                            width: 120,
+                                            "& .MuiOutlinedInput-root": {
+                                              bgcolor: isChanged ? "#fff9e6" : "white",
+                                              borderColor: isChanged ? "#ffc107" : undefined,
+                                            },
+                                          }}
+                                        />
+                                      ) : (
+                                        `₱${(item.monthlySalary || 0).toLocaleString("en-US", {
+                                          minimumFractionDigits: 2,
+                                        })}`
+                                      )}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {canUserEdit() ? (
+                                        <TextField
+                                          type="text"
+                                          size="small"
+                                          value={(editedItem?.annualSalary || 0).toLocaleString("en-US", {
+                                            minimumFractionDigits: 2,
+                                          })}
+                                          onChange={(e) => {
+                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
+                                            if (!isNaN(numValue)) {
+                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "annualSalary");
+                                            }
+                                          }}
+                                          inputProps={{
+                                            style: { textAlign: "right" },
+                                          }}
+                                          sx={{
+                                            width: 120,
+                                            "& .MuiOutlinedInput-root": {
+                                              bgcolor: isChanged ? "#fff9e6" : "white",
+                                              borderColor: isChanged ? "#ffc107" : undefined,
+                                            },
+                                          }}
+                                        />
+                                      ) : (
+                                        `₱${(item.annualSalary || (item.monthlySalary || 0) * 12).toLocaleString("en-US", {
+                                          minimumFractionDigits: 2,
+                                        })}`
+                                      )}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {canUserEdit() ? (
+                                        <TextField
+                                          type="text"
+                                          size="small"
+                                          value={(editedItem?.PERA || 0).toLocaleString("en-US", {
+                                            minimumFractionDigits: 2,
+                                          })}
+                                          onChange={(e) => {
+                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
+                                            if (!isNaN(numValue)) {
+                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "PERA");
+                                            }
+                                          }}
+                                          inputProps={{
+                                            style: { textAlign: "right" },
+                                          }}
+                                          sx={{
+                                            width: 120,
+                                            "& .MuiOutlinedInput-root": {
+                                              bgcolor: isChanged ? "#fff9e6" : "white",
+                                              borderColor: isChanged ? "#ffc107" : undefined,
+                                            },
+                                          }}
+                                        />
+                                      ) : (
+                                        `₱${(item.PERA || 0).toLocaleString("en-US", {
+                                          minimumFractionDigits: 2,
+                                        })}`
+                                      )}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {canUserEdit() ? (
+                                        <TextField
+                                          type="text"
+                                          size="small"
+                                          value={(editedItem?.RATA || 0).toLocaleString("en-US", {
+                                            minimumFractionDigits: 2,
+                                          })}
+                                          onChange={(e) => {
+                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
+                                            if (!isNaN(numValue)) {
+                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "RATA");
+                                            }
+                                          }}
+                                          inputProps={{
+                                            style: { textAlign: "right" },
+                                          }}
+                                          sx={{
+                                            width: 120,
+                                            "& .MuiOutlinedInput-root": {
+                                              bgcolor: isChanged ? "#fff9e6" : "white",
+                                              borderColor: isChanged ? "#ffc107" : undefined,
+                                            },
+                                          }}
+                                        />
+                                      ) : (
+                                        `₱${(item.RATA || 0).toLocaleString("en-US", {
+                                          minimumFractionDigits: 2,
+                                        })}`
+                                      )}
+                                    </TableCell>
+                                    <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                                      {canUserEdit() ? (
+                                        <TextField
+                                          type="text"
+                                          size="small"
+                                          value={(editedItem?.Total || 0).toLocaleString("en-US", {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                          })}
+                                          onChange={(e) => {
+                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
+                                            if (!isNaN(numValue)) {
+                                              handleEditItemAmount("personnel", globalIndex, numValue);
+                                            }
+                                          }}
+                                          inputProps={{
+                                            style: { textAlign: "right" },
+                                          }}
+                                          sx={{
+                                            width: 120,
+                                            "& .MuiOutlinedInput-root": {
+                                              bgcolor: isChanged ? "#fff9e6" : "white",
+                                              borderColor: isChanged ? "#ffc107" : undefined,
+                                            },
+                                          }}
+                                        />
+                                      ) : (
+                                        `₱${(item.Total || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+                                      )}
+                                    </TableCell>
+                                  </TableRow>
+                                  {isExpanded && (
+                                    <TableRow>
+                                      <TableCell colSpan={11} sx={{ bgcolor: "#fafafa", p: 3 }}>
+                                        <Grid container spacing={2}>
+                                          <Grid item xs={12}>
+                                            <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 2, color: "#2d5016" }}>
+                                              Employee Information
+                                            </Typography>
+                                          </Grid>
+                                          <Grid item xs={6} md={3}>
+                                            <Typography variant="caption" color="text.secondary">Item Number</Typography>
+                                            <Typography variant="body2">{item.itemNumber || "N/A"}</Typography>
+                                          </Grid>
+                                          <Grid item xs={6} md={3}>
+                                            <Typography variant="caption" color="text.secondary">Employee Number</Typography>
+                                            <Typography variant="body2">{item.employeeNumber || "N/A"}</Typography>
+                                          </Grid>
+                                          <Grid item xs={6} md={3}>
+                                            <Typography variant="caption" color="text.secondary">Status</Typography>
+                                            <Typography variant="body2">{item.employeeStatus || "N/A"}</Typography>
+                                          </Grid>
+                                          <Grid item xs={6} md={3}>
+                                            <Typography variant="caption" color="text.secondary">Appointment Status</Typography>
+                                            <Typography variant="body2">{item.statusOfAppointment || "N/A"}</Typography>
+                                          </Grid>
+                                        </Grid>
+                                      </TableCell>
+                                    </TableRow>
+                                  )}
+                                </React.Fragment>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                      <TablePagination
+                        component="div"
+                        count={casualPersonnel.length}
+                        page={casualPersonnelPage}
+                        onPageChange={(e, newPage) => setCasualPersonnelPage(newPage)}
+                        rowsPerPage={casualPersonnelRowsPerPage}
+                        onRowsPerPageChange={(e) => {
+                          setCasualPersonnelRowsPerPage(parseInt(e.target.value, 10));
+                          setCasualPersonnelPage(0);
+                        }}
+                        rowsPerPageOptions={[5, 10, 25, 50]}
+                      />
+                    </>
+                  ) : (
+                    <Box sx={{ textAlign: "center", py: 4 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        No casual personnel services data available
+                      </Typography>
+                    </Box>
+                  );
+                })()}
+
+                {/* PS-Charged to Income Tab */}
+                {detailsTab === "ps-charged" && (() => {
+                  const chargedToIncomePersonnel = proposalDetails?.personnel?.filter(
+                    person => person.chargedToIncomeEligible === true
+                  ) || [];
+                  
+                  const paginatedChargedPersonnel = chargedToIncomePersonnel.slice(
+                    chargedPersonnelPage * chargedPersonnelRowsPerPage,
+                    chargedPersonnelPage * chargedPersonnelRowsPerPage + chargedPersonnelRowsPerPage
+                  );
+
+                  return chargedToIncomePersonnel.length > 0 ? (
+                    <>
+                      <TableContainer>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow sx={{ bgcolor: "#f5f5f5" }}>
+                              <TableCell sx={{ width: 50 }}></TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>
+                                Employee Name
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>
+                                Position
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>
+                                SG
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>
+                                STEP
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>
+                                JG
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                                Monthly Salary
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                                Annual Salary
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                                PERA
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                                RATA
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                                Total
+                              </TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {paginatedChargedPersonnel.map((item, index) => {
+                              const globalIndex = chargedPersonnelPage * chargedPersonnelRowsPerPage + index;
+                              const itemKey = `charged-${globalIndex}`;
+                              const isChanged = changedItems.has(itemKey);
+                              const editedItem = editableItems.personnel[globalIndex];
+                              const isExpanded = expandedPersonnel[index];
+                              
+                              return (
+                                <React.Fragment key={index}>
+                                  <TableRow
+                                    hover
+                                    sx={{
+                                      cursor: "pointer",
+                                      bgcolor: item.subsidyEligible
+                                        ? "#fffde7"
+                                        : isChanged
+                                        ? "#fff3cd"
+                                        : "transparent",
+                                      transition: "background-color 0.3s ease",
+                                    }}
+                                  >
+                                    <TableCell>
+                                      <IconButton
+                                        size="small"
+                                        onClick={() =>
+                                          setExpandedPersonnel((prev) => ({
+                                            ...prev,
+                                            [index]: !prev[index],
+                                          }))
+                                        }
+                                      >
+                                        {isExpanded ? (
+                                          <ExpandLessIcon />
+                                        ) : (
+                                          <ExpandMoreIcon />
+                                        )}
+                                      </IconButton>
+                                    </TableCell>
+                                    <TableCell sx={{ fontWeight: 500 }}>
+                                      {item.employeeFullName || "N/A"}
+                                    </TableCell>
+                                    <TableCell>
+                                      {item.positionTitle || "N/A"}
+                                    </TableCell>
+                                    <TableCell>
+                                      {item.gradelevel_SG || "N/A"}
+                                    </TableCell>
+                                    <TableCell>
+                                      {item.step || "N/A"}
+                                    </TableCell>
+                                    <TableCell>
+                                      {item.gradelevel_JG || "N/A"}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {canUserEdit() ? (
+                                        <TextField
+                                          type="text"
+                                          size="small"
+                                          value={(editedItem?.monthlySalary || 0).toLocaleString("en-US", {
+                                            minimumFractionDigits: 2,
+                                          })}
+                                          onChange={(e) => {
+                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
+                                            if (!isNaN(numValue)) {
+                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "monthlySalary");
+                                            }
+                                          }}
+                                          inputProps={{
+                                            style: { textAlign: "right" },
+                                          }}
+                                          sx={{
+                                            width: 120,
+                                            "& .MuiOutlinedInput-root": {
+                                              bgcolor: isChanged ? "#fff9e6" : "white",
+                                              borderColor: isChanged ? "#ffc107" : undefined,
+                                            },
+                                          }}
+                                        />
+                                      ) : (
+                                        `₱${(item.monthlySalary || 0).toLocaleString("en-US", {
+                                          minimumFractionDigits: 2,
+                                        })}`
+                                      )}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {canUserEdit() ? (
+                                        <TextField
+                                          type="text"
+                                          size="small"
+                                          value={(editedItem?.annualSalary || 0).toLocaleString("en-US", {
+                                            minimumFractionDigits: 2,
+                                          })}
+                                          onChange={(e) => {
+                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
+                                            if (!isNaN(numValue)) {
+                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "annualSalary");
+                                            }
+                                          }}
+                                          inputProps={{
+                                            style: { textAlign: "right" },
+                                          }}
+                                          sx={{
+                                            width: 120,
+                                            "& .MuiOutlinedInput-root": {
+                                              bgcolor: isChanged ? "#fff9e6" : "white",
+                                              borderColor: isChanged ? "#ffc107" : undefined,
+                                            },
+                                          }}
+                                        />
+                                      ) : (
+                                        `₱${(item.annualSalary || (item.monthlySalary || 0) * 12).toLocaleString("en-US", {
+                                          minimumFractionDigits: 2,
+                                        })}`
+                                      )}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {canUserEdit() ? (
+                                        <TextField
+                                          type="text"
+                                          size="small"
+                                          value={(editedItem?.PERA || 0).toLocaleString("en-US", {
+                                            minimumFractionDigits: 2,
+                                          })}
+                                          onChange={(e) => {
+                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
+                                            if (!isNaN(numValue)) {
+                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "PERA");
+                                            }
+                                          }}
+                                          inputProps={{
+                                            style: { textAlign: "right" },
+                                          }}
+                                          sx={{
+                                            width: 120,
+                                            "& .MuiOutlinedInput-root": {
+                                              bgcolor: isChanged ? "#fff9e6" : "white",
+                                              borderColor: isChanged ? "#ffc107" : undefined,
+                                            },
+                                          }}
+                                        />
+                                      ) : (
+                                        `₱${(item.PERA || 0).toLocaleString("en-US", {
+                                          minimumFractionDigits: 2,
+                                        })}`
+                                      )}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {canUserEdit() ? (
+                                        <TextField
+                                          type="text"
+                                          size="small"
+                                          value={(editedItem?.RATA || 0).toLocaleString("en-US", {
+                                            minimumFractionDigits: 2,
+                                          })}
+                                          onChange={(e) => {
+                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
+                                            if (!isNaN(numValue)) {
+                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "RATA");
+                                            }
+                                          }}
+                                          inputProps={{
+                                            style: { textAlign: "right" },
+                                          }}
+                                          sx={{
+                                            width: 120,
+                                            "& .MuiOutlinedInput-root": {
+                                              bgcolor: isChanged ? "#fff9e6" : "white",
+                                              borderColor: isChanged ? "#ffc107" : undefined,
+                                            },
+                                          }}
+                                        />
+                                      ) : (
+                                        `₱${(item.RATA || 0).toLocaleString("en-US", {
+                                          minimumFractionDigits: 2,
+                                        })}`
+                                      )}
+                                    </TableCell>
+                                    <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                                      {canUserEdit() ? (
+                                        <TextField
+                                          type="text"
+                                          size="small"
+                                          value={(editedItem?.Total || 0).toLocaleString("en-US", {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                          })}
+                                          onChange={(e) => {
+                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
+                                            if (!isNaN(numValue)) {
+                                              handleEditItemAmount("personnel", globalIndex, numValue);
+                                            }
+                                          }}
+                                          inputProps={{
+                                            style: { textAlign: "right" },
+                                          }}
+                                          sx={{
+                                            width: 120,
+                                            "& .MuiOutlinedInput-root": {
+                                              bgcolor: isChanged ? "#fff9e6" : "white",
+                                              borderColor: isChanged ? "#ffc107" : undefined,
+                                            },
+                                          }}
+                                        />
+                                      ) : (
+                                        `₱${(item.Total || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+                                      )}
+                                    </TableCell>
+                                  </TableRow>
+                                  {isExpanded && (
+                                    <TableRow>
+                                      <TableCell colSpan={11} sx={{ bgcolor: "#fafafa", p: 3 }}>
+                                        <Grid container spacing={2}>
+                                          <Grid item xs={12}>
+                                            <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 2, color: "#2d5016" }}>
+                                              Employee Information
+                                            </Typography>
+                                          </Grid>
+                                          <Grid item xs={6} md={3}>
+                                            <Typography variant="caption" color="text.secondary">Item Number</Typography>
+                                            <Typography variant="body2">{item.itemNumber || "N/A"}</Typography>
+                                          </Grid>
+                                          <Grid item xs={6} md={3}>
+                                            <Typography variant="caption" color="text.secondary">Employee Number</Typography>
+                                            <Typography variant="body2">{item.employeeNumber || "N/A"}</Typography>
+                                          </Grid>
+                                          <Grid item xs={6} md={3}>
+                                            <Typography variant="caption" color="text.secondary">Status</Typography>
+                                            <Typography variant="body2">{item.employeeStatus || "N/A"}</Typography>
+                                          </Grid>
+                                          <Grid item xs={6} md={3}>
+                                            <Typography variant="caption" color="text.secondary">Appointment Status</Typography>
+                                            <Typography variant="body2">{item.statusOfAppointment || "N/A"}</Typography>
+                                          </Grid>
+                                        </Grid>
+                                      </TableCell>
+                                    </TableRow>
+                                  )}
+                                </React.Fragment>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                      <TablePagination
+                        component="div"
+                        count={chargedToIncomePersonnel.length}
+                        page={chargedPersonnelPage}
+                        onPageChange={(e, newPage) => setChargedPersonnelPage(newPage)}
+                        rowsPerPage={chargedPersonnelRowsPerPage}
+                        onRowsPerPageChange={(e) => {
+                          setChargedPersonnelRowsPerPage(parseInt(e.target.value, 10));
+                          setChargedPersonnelPage(0);
+                        }}
+                        rowsPerPageOptions={[5, 10, 25, 50]}
+                      />
+                    </>
+                  ) : (
+                    <Box sx={{ textAlign: "center", py: 4 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        No personnel services charged to income available
+                      </Typography>
+                    </Box>
+                  );
+                })()}
 
                 {/* MOOE Tab */}
-                {detailsTab === 2 &&
+                {detailsTab === "mooe" &&
                   (proposalDetails?.mooe?.length > 0 ? (
                     <>
                       {(() => {
@@ -3980,7 +4409,7 @@ const NewProposalWorkflowPage = () => {
                   ))}
 
                 {/* Capital Outlay Tab */}
-                {detailsTab === 3 &&
+                {detailsTab === "capital-outlay" &&
                   (proposalDetails?.capitalOutlay?.length > 0 ? (
                     <>
                       {(() => {

@@ -117,6 +117,32 @@ async function computeModuleTotals(filterKeys, proposalId) {
   const mooeAmountTotal = await tryMatch(MOOE, { $sum: { $toDouble: { $ifNull: ["$amount", 0] } } });
   const coAmountTotal = await tryMatch(CapitalOutlay, { $sum: { $toDouble: { $ifNull: ["$cost", { $ifNull: ["$total", 0] }] } } });
 
+  // NEW: Charged-to-Income totals (these move from Personnel Services to Income)
+  // Calculate total amount charged to income from personnel services
+  let chargedToIncomeTotal = 0;
+  if (proposalId) {
+    const byProposal = { 
+      proposalId: new mongoose.Types.ObjectId(proposalId),
+      chargedToIncomeEligible: true 
+    };
+    chargedToIncomeTotal = await aggregateSum(PersonnelServices, byProposal, { $sum: { $toDouble: { $ifNull: ["$chargedToIncomeAmount", 0] } } });
+  } else {
+    const chargedMatch = { ...orgMatch, chargedToIncomeEligible: true };
+    chargedToIncomeTotal = await aggregateSum(PersonnelServices, chargedMatch, { $sum: { $toDouble: { $ifNull: ["$chargedToIncomeAmount", 0] } } });
+  }
+  // Calculate amount to subtract from subsidy (subsidy of charged-to-income personnel)
+  let chargedToIncomeSubsidyTotal = 0;
+  if (proposalId) {
+    const byProposal = { 
+      proposalId: new mongoose.Types.ObjectId(proposalId),
+      chargedToIncomeEligible: true 
+    };
+    chargedToIncomeSubsidyTotal = await aggregateSum(PersonnelServices, byProposal, { $sum: { $toDouble: { $ifNull: ["$subsidyAmount", 0] } } });
+  } else {
+    const chargedMatch = { ...orgMatch, chargedToIncomeEligible: true };
+    chargedToIncomeSubsidyTotal = await aggregateSum(PersonnelServices, chargedMatch, { $sum: { $toDouble: { $ifNull: ["$subsidyAmount", 0] } } });
+  }
+
   // Subsidy components (should match UI logic for Budget Summary)
   const mooeSubsidyTotal = await tryMatch(MOOE, { $sum: { $toDouble: { $ifNull: ["$subsidy", 0] } } });
   const coSubsidyTotal = await tryMatch(CapitalOutlay, { $sum: { $toDouble: { $ifNull: ["$subsidy", 0] } } });
@@ -127,27 +153,45 @@ async function computeModuleTotals(filterKeys, proposalId) {
     mooeAmountTotal,
     coAmountTotal,
     mooeSubsidyTotal,
-    coSubsidyTotal
+    coSubsidyTotal,
+    chargedToIncomeTotal,
+    chargedToIncomeSubsidyTotal
   };
 }
 
 /**
  * Recalculate and persist totals onto the Proposal document.
- * Accepts either a proposalId or the identifying org keys.
+ * Accepts either a proposalId, workflowRef, or the identifying org keys.
  */
-async function recalculateAndSaveProposalTotals({ proposalId, keys } = {}) {
+async function recalculateAndSaveProposalTotals({ proposalId, workflowRef, keys } = {}) {
   let proposal = null;
+  
+  // Try proposalId first (legacy Proposal._id)
   if (proposalId) {
     proposal = await Proposal.findById(proposalId);
-    if (!proposal) throw new Error(`Proposal not found: ${proposalId}`);
-  } else if (keys) {
+    if (proposal) return await persistProposalTotals(proposal);
+  }
+  
+  // Try workflowRef (NewProposalWorkflow._id)
+  if (workflowRef) {
+    proposal = await Proposal.findOne({ workflowRef });
+    if (proposal) return await persistProposalTotals(proposal);
+  }
+  
+  // Fall back to org keys
+  if (keys) {
     const query = { ...keys };
     proposal = await Proposal.findOne(query).sort({ updatedAt: -1 });
-    if (!proposal) throw new Error(`Proposal not found for keys: ${JSON.stringify(keys)}`);
-  } else {
-    throw new Error('Must provide proposalId or keys');
+    if (proposal) return await persistProposalTotals(proposal);
   }
+  
+  throw new Error('Must provide proposalId, workflowRef, or keys');
+}
 
+/**
+ * Helper function to calculate and persist proposal totals
+ */
+async function persistProposalTotals(proposal) {
   const filterKeys = {
     fiscalYear: proposal.fiscalYear,
     budgetType: proposal.budgetType,
@@ -165,18 +209,28 @@ async function recalculateAndSaveProposalTotals({ proposalId, keys } = {}) {
     mooeAmountTotal,
     coAmountTotal,
     mooeSubsidyTotal,
-    coSubsidyTotal
+    coSubsidyTotal,
+    chargedToIncomeTotal,
+    chargedToIncomeSubsidyTotal
   } = await computeModuleTotals(filterKeys, proposal._id);
 
-  const expenseSum = (psTotal || 0) + (mooeAmountTotal || 0) + (coAmountTotal || 0);
-  const projectedSubsidy = (mooeSubsidyTotal || 0) + (coSubsidyTotal || 0);
-  const proposedBudget = expenseSum + (incomeTotal || 0);
+  // ADJUSTED TOTALS FOR CHARGED-TO-INCOME:
+  // 1. Income includes charged-to-income amounts (they move from Personnel to Income)
+  // 2. Personnel total excludes charged-to-income amounts (already moved to income)
+  // 3. Subsidy is reduced by the subsidy amounts of charged-to-income personnel
+  const adjustedIncomeTotal = (incomeTotal || 0) + (chargedToIncomeTotal || 0);
+  const adjustedPsTotal = (psTotal || 0); // psTotal already excludes chargedToIncome (it's filtered out in query)
+  const adjustedSubsidyTotal = ((mooeSubsidyTotal || 0) + (coSubsidyTotal || 0)) - (chargedToIncomeSubsidyTotal || 0);
 
-  proposal.totalIncome = incomeTotal;
+  const expenseSum = (adjustedPsTotal || 0) + (mooeAmountTotal || 0) + (coAmountTotal || 0);
+  const projectedSubsidy = Math.max(0, adjustedSubsidyTotal); // Ensure it doesn't go negative
+  const proposedBudget = expenseSum + (adjustedIncomeTotal || 0);
+
+  proposal.totalIncome = adjustedIncomeTotal;
   proposal.totalExpenses = expenseSum;
-  proposal.projectedCorporateIncome = incomeTotal;
-  // CRITICAL: Projected Subsidy is the total expenses (Personnel + MOOE + CapitalOutlay)
-  proposal.projectedSubsidy = expenseSum;
+  proposal.projectedCorporateIncome = adjustedIncomeTotal;
+  // CRITICAL: Projected Subsidy is the total expenses (Personnel + MOOE + CapitalOutlay) minus charged-to-income subsidies
+  proposal.projectedSubsidy = projectedSubsidy;
   proposal.proposedBudget = proposedBudget;
   proposal.updatedAt = new Date();
   await proposal.save({ validateBeforeSave: false });
@@ -188,8 +242,8 @@ async function recalculateAndSaveProposalTotals({ proposalId, keys } = {}) {
       await NewProposalWorkflow.findByIdAndUpdate(
         workflowId,
         {
-          projectedCorporateIncome: incomeTotal,
-          projectedSubsidy: expenseSum,
+          projectedCorporateIncome: adjustedIncomeTotal,
+          projectedSubsidy: projectedSubsidy,
           amount: proposedBudget,
           updatedAt: new Date()
         },
@@ -204,15 +258,38 @@ async function recalculateAndSaveProposalTotals({ proposalId, keys } = {}) {
   return {
     proposalId: proposal._id,
     totals: {
-      income: incomeTotal,
-      personnel: psTotal,
+      income: adjustedIncomeTotal,
+      chargedToIncome: chargedToIncomeTotal,
+      personnel: adjustedPsTotal,
       mooe: mooeAmountTotal,
       capitalOutlay: coAmountTotal,
       expenses: expenseSum,
       subsidies: projectedSubsidy,
+      chargedToIncomeSubsidiesMinus: chargedToIncomeSubsidyTotal,
       proposedBudget
     }
   };
+  
+  // Try proposalId first (legacy Proposal._id)
+  if (proposalId) {
+    proposal = await Proposal.findById(proposalId);
+    if (proposal) return await persistProposalTotals(proposal);
+  }
+  
+  // Try workflowRef (NewProposalWorkflow._id)
+  if (workflowRef) {
+    proposal = await Proposal.findOne({ workflowRef });
+    if (proposal) return await persistProposalTotals(proposal);
+  }
+  
+  // Fall back to org keys
+  if (keys) {
+    const query = { ...keys };
+    proposal = await Proposal.findOne(query).sort({ updatedAt: -1 });
+    if (proposal) return await persistProposalTotals(proposal);
+  }
+  
+  throw new Error('Must provide proposalId, workflowRef, or keys');
 }
 
 module.exports = { recalculateAndSaveProposalTotals };

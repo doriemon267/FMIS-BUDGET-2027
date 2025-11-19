@@ -171,6 +171,12 @@ const PersonnelServicesPage = () => {
       show: true,
     },
 
+    subsidyAmount: {
+      type: "number",
+      label: "PROJECTED SUBSIDY",
+      show: true,
+    },
+
     Total: {
       type: "number",
       label: "TOTAL",
