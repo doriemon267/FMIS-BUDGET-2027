@@ -39,30 +39,45 @@ const createConsolidationRecord = async (proposalData) => {
     const isCentralOffice = proposalData.isCentralOffice || 
                           (proposalData.region && proposalData.region.toString() === 'central-office');
 
-    // Get region name
+    // Get region name - handle both populated object and ObjectId
     let regionName = 'Unknown Region';
-    if (proposalData.region && typeof proposalData.region === 'object') {
-      regionName = proposalData.region.Region || proposalData.region.RegionName || 'Unknown Region';
-    } else if (proposalData.region && typeof proposalData.region === 'string') {
-      regionName = proposalData.region;
+    if (proposalData.region) {
+      if (typeof proposalData.region === 'object' && proposalData.region._id) {
+        // Populated region object
+        regionName = proposalData.region.Region || proposalData.region.RegionName || 'Unknown Region';
+      } else if (typeof proposalData.region === 'object' && proposalData.region.Region) {
+        // Already has Region field
+        regionName = proposalData.region.Region;
+      } else if (typeof proposalData.region === 'string') {
+        // String reference
+        regionName = proposalData.region;
+      }
     }
 
-    // Get division and department from legacy proposal if available
+    console.log('[BRD_CONSOLIDATION] Extracted region name:', regionName);
+
+    // Get division, department, and budgetType from proposal or linked legacy proposal
     let division = proposalData.division || 'General';
     let department = proposalData.department || 'General';
+    let budgetType = proposalData.budgetType || 'Initial';
 
     // Try to get more detailed info from linked legacy proposal
-    if (proposalData.workflowRef) {
+    if (proposalData.workflowRef || proposalData.legacyProposalId) {
       try {
-        const legacyProposal = await Proposal.findById(proposalData.workflowRef).lean();
+        const legacyProposalId = proposalData.workflowRef || proposalData.legacyProposalId;
+        const legacyProposal = await Proposal.findById(legacyProposalId).lean();
         if (legacyProposal) {
+          console.log('[BRD_CONSOLIDATION] Found legacy proposal:', legacyProposalId);
           division = legacyProposal.division || division;
           department = legacyProposal.department || department;
+          budgetType = legacyProposal.budgetType || budgetType;
         }
       } catch (error) {
         console.log('[BRD_CONSOLIDATION] Could not fetch legacy proposal:', error.message);
       }
     }
+
+    console.log('[BRD_CONSOLIDATION] Extracted data - Region:', regionName, 'Division:', division, 'Department:', department, 'BudgetType:', budgetType);
 
     // Generate consolidation path
     const consolidationPath = generateConsolidationPath(
@@ -87,9 +102,9 @@ const createConsolidationRecord = async (proposalData) => {
       department: department,
       consolidationPath: consolidationPath,
       isCentralOffice: isCentralOffice,
-      proposalTitle: proposalData.title,
-      proposalAmount: proposalData.amount || 0,
-      modelType: proposalData.modelType || 'Initial',
+      proposalTitle: proposalData.title || proposalData.proposalTitle,
+      proposalAmount: proposalData.amount || proposalData.proposalAmount || 0,
+      modelType: budgetType,
       fiscalYear: proposalData.fiscalYear,
       legacyProposalId: proposalData.workflowRef?.toString(),
       consolidatedBy: 'SYSTEM',
@@ -197,7 +212,7 @@ const getRegionStructure = async (fiscalYear = null) => {
 
     const regionalRecords = await BRDConsolidation.find(query).lean();
 
-    // Group by region -> division
+    // Group by region -> division -> proposals
     const structure = {};
     regionalRecords.forEach(record => {
       if (!structure[record.region]) {
@@ -211,12 +226,20 @@ const getRegionStructure = async (fiscalYear = null) => {
         structure[record.region].divisions[record.division] = {
           division: record.division,
           proposalCount: 0,
-          totalAmount: 0
+          totalAmount: 0,
+          proposals: []
         };
       }
 
       structure[record.region].divisions[record.division].proposalCount++;
       structure[record.region].divisions[record.division].totalAmount += record.proposalAmount || 0;
+      structure[record.region].divisions[record.division].proposals.push({
+        proposalId: record.proposalId,
+        title: record.proposalTitle,
+        amount: record.proposalAmount,
+        modelType: record.modelType,
+        budgetType: record.modelType
+      });
     });
 
     // Convert to array format
@@ -268,7 +291,9 @@ const getCentralOfficeStructure = async (fiscalYear = null) => {
       departments[record.department].proposals.push({
         proposalId: record.proposalId,
         title: record.proposalTitle,
-        amount: record.proposalAmount
+        amount: record.proposalAmount,
+        modelType: record.modelType,
+        budgetType: record.modelType
       });
     });
 
