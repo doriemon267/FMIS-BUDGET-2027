@@ -29,7 +29,7 @@ export const NotificationsProvider = ({ children }) => {
     mutationFn: async (ids) => {
       // Accept single id or array
       const payload = { ids: Array.isArray(ids) ? ids : [ids] };
-      await api.post('/api/notifications/mark-read', payload);
+      await api.post('/notifications/mark-read', payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['serverNotifications'] });
@@ -43,9 +43,9 @@ export const NotificationsProvider = ({ children }) => {
       if (!idsOrId) return;
       if (Array.isArray(idsOrId)) {
         const payload = { ids: idsOrId };
-        await api.post('/api/notifications/delete', payload);
+        await api.post('/notifications/delete', payload);
       } else {
-        await api.delete(`/api/notifications/${idsOrId}`);
+        await api.delete(`/notifications/${idsOrId}`);
       }
     },
     onSuccess: () => {
@@ -55,7 +55,7 @@ export const NotificationsProvider = ({ children }) => {
 
   const { mutateAsync: muteProposal } = useMutation({
     mutationFn: async ({ proposalId, mute = true }) => {
-      await api.post('/api/notifications/mute', { proposalId, mute });
+      await api.post('/notifications/mute', { proposalId, mute });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['serverNotifications'] });
@@ -76,7 +76,7 @@ export const NotificationsProvider = ({ children }) => {
   const { mutateAsync: markAllNotificationsAsRead } = useMutation({
     mutationFn: async (options = {}) => {
       // options may contain entity or proposalId as scope
-      const res = await api.post('/api/notifications/mark-all-read', options);
+      const res = await api.post('/notifications/mark-all-read', options);
       return res.data;
     },
     onSuccess: () => {

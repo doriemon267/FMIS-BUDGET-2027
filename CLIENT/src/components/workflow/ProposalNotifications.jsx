@@ -163,7 +163,7 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
   const markAsRead = useCallback(async (ids) => {
     if (!Array.isArray(ids) || ids.length === 0) return;
     try {
-      const response = await api.post('/api/notifications/mark-read', { ids });
+      const response = await api.post('/notifications/mark-read', { ids });
       console.debug('markAsRead response:', response?.data);
         if (response.data && response.data.success) {
         const updatedIds = response.data.updatedIds || [];
@@ -210,7 +210,7 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
       if (typeof markAllNotificationsAsRead === 'function') {
         responseData = await markAllNotificationsAsRead();
       } else {
-        const r = await api.post('/api/notifications/mark-all-read');
+        const r = await api.post('/notifications/mark-all-read');
         responseData = r?.data;
       }
   console.debug('markAllAsRead response:', responseData);

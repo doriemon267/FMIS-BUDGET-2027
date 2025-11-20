@@ -1389,6 +1389,137 @@ const NewProposalWorkflowPage = () => {
         </Paper>
       </Box>
 
+      {/* Monitoring Metrics Cards - Displayed Above Tabs */}
+      {tabs[activeTab].value === "monitoring" && monitoringMetrics && (
+        <Box sx={{ mx: 2, mt: 2, mb: 3 }}>
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="h6" sx={{ fontWeight: 700, mb: 3, color: "#2d5016" }}>
+              Proposal Status Overview
+            </Typography>
+            <Grid container spacing={3} sx={{ justifyContent: "flex-start" }}>
+              {Object.entries(monitoringMetrics.byStatus || {}).map(
+                ([status, count]) => {
+                  // Convert enum status to readable format
+                  const statusLabels = {
+                    'FORWARDED_TO_BRD_ANALYST': 'Forwarded to Planning Analyst',
+                    'FORWARDED_TO_BRD_OFFICER': 'Forwarded to Budget Officer',
+                    'FORWARDED_TO_BRD_MANAGER': 'Forwarded to Manager',
+                    'RETURNED_TO_PLANNING_ANALYST': 'Returned to Analyst',
+                    'RETURNED_TO_OFFICER': 'Returned to Officer',
+                    'FINALIZED': 'Finalized'
+                  };
+                  const displayStatus = statusLabels[status] || status;
+
+                  return (
+                    <Grid item xs={12} sm={12} md={6} lg={6} key={status} sx={{ display: "flex" }}>
+                      <Card
+                        elevation={2}
+                        sx={{
+                          borderLeft: "6px solid #375e38",
+                          borderRadius: "8px",
+                          transition: "all 0.3s ease",
+                          width: "100%",
+                          minHeight: "140px",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "center",
+                          "&:hover": {
+                            elevation: 4,
+                            boxShadow: "0 8px 16px rgba(55, 94, 56, 0.15)",
+                            transform: "translateY(-2px)"
+                          }
+                        }}
+                      >
+                        <CardContent sx={{ py: 5, px: 3, textAlign: "center" }}>
+                          <Typography
+                            variant="body1"
+                            sx={{
+                              fontWeight: 600,
+                              color: "#2d5016",
+                              mb: 2.5,
+                              fontSize: "1.1rem",
+                              lineHeight: 1.6,
+                              minHeight: "4rem",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center"
+                            }}
+                          >
+                            {displayStatus}
+                          </Typography>
+                          <Typography
+                            variant="h2"
+                            sx={{
+                              m: 0,
+                              fontWeight: 700,
+                              color: "#375e38",
+                              fontSize: "3.5rem",
+                              lineHeight: 1
+                            }}
+                          >
+                            {count}
+                          </Typography>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  );
+                }
+              )}
+              {/* Total Monitored Card */}
+              <Grid item xs={12} sm={12} md={6} lg={6} sx={{ display: "flex" }}>
+                <Card
+                  elevation={3}
+                  sx={{
+                    borderLeft: "6px solid #2d5016",
+                    bgcolor: "#f4f7f4",
+                    borderRadius: "8px",
+                    background: "linear-gradient(135deg, #f4f7f4 0%, #e8f1e8 100%)",
+                    width: "100%",
+                    minHeight: "140px",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center"
+                  }}
+                >
+                  <CardContent sx={{ py: 5, px: 3, textAlign: "center" }}>
+                    <Typography
+                      variant="body1"
+                      sx={{
+                        fontWeight: 700,
+                        color: "#2d5016",
+                        mb: 2.5,
+                        fontSize: "1.1rem",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.5px",
+                        minHeight: "4rem",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                      }}
+                    >
+                      Total Monitored
+                    </Typography>
+                    <Typography
+                      variant="h2"
+                      sx={{
+                        m: 0,
+                        fontWeight: 700,
+                        color: "#375e38",
+                        fontSize: "3.5rem",
+                        lineHeight: 1
+                      }}
+                    >
+                      {monitoringMetrics.total || 0}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+          </Box>
+          <Divider sx={{ my: 2 }} />
+        </Box>
+      )}
+
       {/* Tabs and Table Container */}
       <Box sx={{ mx: 2, mt: 1.5, mb: 0 }}>
         <Paper
@@ -1594,132 +1725,6 @@ const NewProposalWorkflowPage = () => {
               />
             </Box>
             {/* Content (includes Monitoring metrics if active) */}
-            {tabs[activeTab].value === "monitoring" && monitoringMetrics && (
-              <Box sx={{ mb: 3 }}>
-                {/* Monitoring Metrics Cards */}
-                <Box sx={{ mb: 3 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, color: "#2d5016" }}>
-                    Proposal Status Overview
-                  </Typography>
-                  <Grid container spacing={2}>
-                    {Object.entries(monitoringMetrics.byStatus || {}).map(
-                      ([status, count]) => {
-                        // Convert enum status to readable format
-                        const statusLabels = {
-                          'FORWARDED_TO_BRD_ANALYST': 'Forwarded to Planning Analyst',
-                          'FORWARDED_TO_BRD_OFFICER': 'Forwarded to Budget Officer',
-                          'FORWARDED_TO_BRD_MANAGER': 'Forwarded to Manager',
-                          'RETURNED_TO_PLANNING_ANALYST': 'Returned to Analyst',
-                          'RETURNED_TO_OFFICER': 'Returned to Officer',
-                          'FINALIZED': 'Finalized'
-                        };
-                        const displayStatus = statusLabels[status] || status;
-                        
-                        return (
-                          <Grid item xs={12} sm={6} md={3} key={status} sx={{ display: "flex" }}>
-                            <Card
-                              elevation={2}
-                              sx={{
-                                borderLeft: "6px solid #375e38",
-                                borderRadius: "8px",
-                                transition: "all 0.3s ease",
-                                width: "100%",
-                                display: "flex",
-                                flexDirection: "column",
-                                justifyContent: "center",
-                                "&:hover": {
-                                  elevation: 4,
-                                  boxShadow: "0 8px 16px rgba(55, 94, 56, 0.15)",
-                                  transform: "translateY(-2px)"
-                                }
-                              }}
-                            >
-                              <CardContent sx={{ py: 2, px: 2, textAlign: "center" }}>
-                                <Typography
-                                  variant="body2"
-                                  sx={{
-                                    fontWeight: 600,
-                                    color: "#2d5016",
-                                    mb: 1,
-                                    fontSize: "0.9rem",
-                                    lineHeight: 1.4,
-                                    minHeight: "2.8rem",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center"
-                                  }}
-                                >
-                                  {displayStatus}
-                                </Typography>
-                                <Typography
-                                  variant="h5"
-                                  sx={{
-                                    m: 0,
-                                    fontWeight: 700,
-                                    color: "#375e38",
-                                    fontSize: "2.5rem"
-                                  }}
-                                >
-                                  {count}
-                                </Typography>
-                              </CardContent>
-                            </Card>
-                          </Grid>
-                        );
-                      }
-                    )}
-                    {/* Total Monitored Card */}
-                    <Grid item xs={12} sm={6} md={3} sx={{ display: "flex" }}>
-                      <Card
-                        elevation={3}
-                        sx={{
-                          borderLeft: "6px solid #2d5016",
-                          bgcolor: "#f4f7f4",
-                          borderRadius: "8px",
-                          background: "linear-gradient(135deg, #f4f7f4 0%, #e8f1e8 100%)",
-                          width: "100%",
-                          display: "flex",
-                          flexDirection: "column",
-                          justifyContent: "center"
-                        }}
-                      >
-                        <CardContent sx={{ py: 2, px: 2, textAlign: "center" }}>
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              fontWeight: 700,
-                              color: "#2d5016",
-                              mb: 1,
-                              fontSize: "0.9rem",
-                              textTransform: "uppercase",
-                              letterSpacing: "0.5px",
-                              minHeight: "2.8rem",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center"
-                            }}
-                          >
-                            Total Monitored
-                          </Typography>
-                          <Typography
-                            variant="h5"
-                            sx={{
-                              m: 0,
-                              fontWeight: 700,
-                              color: "#375e38",
-                              fontSize: "2.5rem"
-                            }}
-                          >
-                            {monitoringMetrics.total || 0}
-                          </Typography>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  </Grid>
-                </Box>
-                <Divider sx={{ my: 2 }} />
-              </Box>
-            )}
             {loading ? (
               <Box
                 sx={{
