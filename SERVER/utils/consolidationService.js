@@ -266,11 +266,11 @@ const getRegionStructure = async (fiscalYear = null) => {
       }
 
       structure[record.region].divisions[record.division].proposalCount++;
-      structure[record.region].divisions[record.division].totalAmount += record.proposalAmount || 0;
+      structure[record.region].divisions[record.division].totalAmount += record.financialSummary?.totalAmount || 0;
       structure[record.region].divisions[record.division].proposals.push({
         proposalId: record.proposalId,
         title: record.proposalTitle,
-        amount: record.proposalAmount,
+        amount: record.financialSummary?.totalAmount || 0,
         modelType: record.modelType,
         budgetType: record.modelType,
         consolidationId: record._id.toString()
@@ -328,11 +328,11 @@ const getCentralOfficeStructure = async (fiscalYear = null) => {
       }
 
       departments[record.department].proposalCount++;
-      departments[record.department].totalAmount += record.proposalAmount || 0;
+      departments[record.department].totalAmount += record.financialSummary?.totalAmount || 0;
       departments[record.department].proposals.push({
         proposalId: record.proposalId,
         title: record.proposalTitle,
-        amount: record.proposalAmount,
+        amount: record.financialSummary?.totalAmount || 0,
         modelType: record.modelType,
         budgetType: record.modelType,
         consolidationId: record._id.toString()
