@@ -39,6 +39,43 @@ const getRecipientCandidates = (user = {}) => {
   return Array.from(ids);
 };
 
+// Debug endpoint to return raw notification data with full details
+router.get('/notifications/debug-raw', async (req, res) => {
+  try {
+    const Notification = require('../models/Notification');
+    
+    const notifications = await Notification.find()
+      .sort({ createdAt: -1 })
+      .limit(3)
+      .lean();
+
+    console.log('[DEBUG-RAW] Returning notifications:', {
+      count: notifications.length,
+      first: notifications.length > 0 ? {
+        _id: String(notifications[0]._id),
+        message: String(notifications[0].message).substring(0, 100),
+        title: notifications[0].title,
+        relatedEntityId: notifications[0].relatedEntityId
+      } : null
+    });
+
+    res.json({
+      success: true,
+      debug: true,
+      data: notifications.map(n => ({
+        _id: String(n._id),
+        title: n.title,
+        message: n.message,
+        relatedEntityId: n.relatedEntityId,
+        metadata: n.metadata,
+        createdAt: n.createdAt
+      }))
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // List notifications for current user (UNREAD by default)
 // Debug modes via header X-Debug-Notif:
 // - 'true'  → include debug metadata
@@ -91,6 +128,17 @@ router.get('/notifications', async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(100)
       .lean();
+
+    // DEBUG: Log first notification being returned
+    if (list.length > 0) {
+      console.log('[GET /notifications] First notification returned to frontend:', {
+        id: String(list[0]._id),
+        title: list[0].title,
+        message: String(list[0].message).substring(0, 100),
+        messageLength: String(list[0].message).length,
+        messageType: typeof list[0].message
+      });
+    }
 
     const includeDebug = debugMode === 'true' || debugMode === 'all';
     if (includeDebug) {

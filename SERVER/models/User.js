@@ -24,11 +24,6 @@ const UserSchema = new mongoose.Schema({
     type: String,
     required: true
   }]
-  ,
-  notificationPreferences: {
-    mutedProposals: [{ type: String }],
-    mutedEntities: [{ entityType: String, entityId: String }]
-  }
 }, {
   timestamps: true
 });

@@ -304,6 +304,15 @@ const getNotificationRecipients = async (action, proposal, currentUserRole, curr
 const createWorkflowNotification = async (action, proposal, recipientUserIds, currentUserName, comment, currentUserRole) => {
   try {
     console.log('[createWorkflowNotification] Starting with', recipientUserIds.length, 'recipients');
+    console.log('[createWorkflowNotification] Proposal details:', {
+      proposalId: String(proposal._id),
+      proposalTitle: proposal.title,
+      proposalTitleType: typeof proposal.title,
+      action,
+      currentUserName,
+      currentUserRole,
+      comment: comment ? comment.substring(0, 50) : 'none'
+    });
     
     if (!recipientUserIds || recipientUserIds.length === 0) {
       console.log('[createWorkflowNotification] No recipients to notify');
@@ -339,15 +348,33 @@ const createWorkflowNotification = async (action, proposal, recipientUserIds, cu
   if (action === 'forward-to-manager') targetRole = 'Budget Manager';
   if (!targetRole && action.includes('return')) targetRole = 'previous workflow step';
 
-  let notificationMessage = `${currentUserName} (${currentUserRole || 'User'}) ${verb} the proposal "${proposal.title}"${targetRole ? ' to ' + targetRole : ''}.`;
+  // BULLETPROOF: Ensure all message components are valid strings, never ObjectIDs
+  const safeName = String(currentUserName || 'Unknown User').trim();
+  const safeRole = String(currentUserRole || 'User').trim();
+  const safeTitle = String(proposal.title || 'Untitled Proposal').trim();
+  const safeTargetRole = targetRole ? ' to ' + String(targetRole).trim() : '';
+  
+  let notificationMessage = `${safeName} (${safeRole}) ${verb} the proposal "${safeTitle}"${safeTargetRole}.`;
+  
     if (comment && isReturnAction) {
-      notificationMessage += ` Comment: ${comment}`;
+      const safeComment = String(comment).trim();
+      if (safeComment) {
+        notificationMessage += ` Comment: ${safeComment}`;
+      }
     }
 
-    // Safeguard: ensure message is never empty or just an ID
-    if (!notificationMessage || notificationMessage.trim() === '' || /^[a-f0-9]{24}$/.test(notificationMessage.trim())) {
-      notificationMessage = `Proposal ${isReturnAction ? 'returned' : 'submitted'}: "${proposal.title}"`;
+    // BULLETPROOF SAFEGUARD: Ensure message is NEVER empty or looks like an ObjectID
+    // Check for: empty, ObjectID pattern (24 hex chars), or too short
+    const msgCheck = notificationMessage.trim();
+    if (!msgCheck || msgCheck.length === 0 || /^[a-f0-9]{24}$/i.test(msgCheck) || msgCheck.length < 15) {
+      notificationMessage = `Proposal ${isReturnAction ? 'returned' : 'submitted'}: "${safeTitle}"`;
     }
+    
+    console.log('[createWorkflowNotification] Final message:', {
+      message: notificationMessage.substring(0, 100),
+      messageLength: notificationMessage.length,
+      messageType: typeof notificationMessage
+    });
 
     // Deep link to the proposal on the new-proposal-workflow page
     // Format: /new-proposal-workflow?tab=all-proposals&proposalId=<id>
@@ -388,6 +415,17 @@ const createWorkflowNotification = async (action, proposal, recipientUserIds, cu
 
     console.log('[createWorkflowNotification] About to insert', notificationData.length, 'notifications');
     
+    // LOG FIRST NOTIFICATION TO VERIFY MESSAGE
+    if (notificationData.length > 0) {
+      console.log('[createWorkflowNotification] First notification to insert:', {
+        message: String(notificationData[0].message).substring(0, 100),
+        messageLength: String(notificationData[0].message).length,
+        messageType: typeof notificationData[0].message,
+        title: notificationData[0].title,
+        proposalTitle: notificationData[0].metadata.proposalTitle
+      });
+    }
+    
     // Prevent duplicate notifications per recipient by checking existing UNREAD notifications with the same uniqueKey
     const notificationsToCreate = [];
     for (const data of notificationData) {
@@ -408,6 +446,17 @@ const createWorkflowNotification = async (action, proposal, recipientUserIds, cu
     let result = [];
     if (notificationsToCreate.length > 0) {
       result = await Notification.insertMany(notificationsToCreate);
+      
+      // LOG INSERTED DATA TO VERIFY
+      if (result.length > 0) {
+        console.log('[createWorkflowNotification] First inserted notification:', {
+          id: String(result[0]._id),
+          message: String(result[0].message).substring(0, 100),
+          messageLength: String(result[0].message).length,
+          messageType: typeof result[0].message,
+          title: result[0].title
+        });
+      }
     }
     console.log(`[createWorkflowNotification] Successfully created ${result.length} notification(s) for action: ${action}`);
   } catch (error) {
