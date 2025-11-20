@@ -1389,136 +1389,6 @@ const NewProposalWorkflowPage = () => {
         </Paper>
       </Box>
 
-      {/* Monitoring Metrics Cards - Displayed Above Tabs */}
-      {tabs[activeTab].value === "monitoring" && monitoringMetrics && (
-        <Box sx={{ mx: 2, mt: 2, mb: 3 }}>
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="h6" sx={{ fontWeight: 700, mb: 3, color: "#2d5016" }}>
-              Proposal Status Overview
-            </Typography>
-            <Grid container spacing={3} sx={{ justifyContent: "flex-start" }}>
-              {Object.entries(monitoringMetrics.byStatus || {}).map(
-                ([status, count]) => {
-                  // Convert enum status to readable format
-                  const statusLabels = {
-                    'FORWARDED_TO_BRD_ANALYST': 'Forwarded to Planning Analyst',
-                    'FORWARDED_TO_BRD_OFFICER': 'Forwarded to Budget Officer',
-                    'FORWARDED_TO_BRD_MANAGER': 'Forwarded to Manager',
-                    'RETURNED_TO_PLANNING_ANALYST': 'Returned to Analyst',
-                    'RETURNED_TO_OFFICER': 'Returned to Officer',
-                    'FINALIZED': 'Finalized'
-                  };
-                  const displayStatus = statusLabels[status] || status;
-
-                  return (
-                    <Grid item xs={12} sm={12} md={6} lg={6} key={status} sx={{ display: "flex" }}>
-                      <Card
-                        elevation={2}
-                        sx={{
-                          borderLeft: "6px solid #375e38",
-                          borderRadius: "8px",
-                          transition: "all 0.3s ease",
-                          width: "100%",
-                          minHeight: "140px",
-                          display: "flex",
-                          flexDirection: "column",
-                          justifyContent: "center",
-                          "&:hover": {
-                            elevation: 4,
-                            boxShadow: "0 8px 16px rgba(55, 94, 56, 0.15)",
-                            transform: "translateY(-2px)"
-                          }
-                        }}
-                      >
-                        <CardContent sx={{ py: 5, px: 3, textAlign: "center" }}>
-                          <Typography
-                            variant="body1"
-                            sx={{
-                              fontWeight: 600,
-                              color: "#2d5016",
-                              mb: 2.5,
-                              fontSize: "1.1rem",
-                              lineHeight: 1.6,
-                              minHeight: "4rem",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center"
-                            }}
-                          >
-                            {displayStatus}
-                          </Typography>
-                          <Typography
-                            variant="h2"
-                            sx={{
-                              m: 0,
-                              fontWeight: 700,
-                              color: "#375e38",
-                              fontSize: "3.5rem",
-                              lineHeight: 1
-                            }}
-                          >
-                            {count}
-                          </Typography>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  );
-                }
-              )}
-              {/* Total Monitored Card */}
-              <Grid item xs={12} sm={12} md={6} lg={6} sx={{ display: "flex" }}>
-                <Card
-                  elevation={3}
-                  sx={{
-                    borderLeft: "6px solid #2d5016",
-                    bgcolor: "#f4f7f4",
-                    borderRadius: "8px",
-                    background: "linear-gradient(135deg, #f4f7f4 0%, #e8f1e8 100%)",
-                    width: "100%",
-                    minHeight: "140px",
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: "center"
-                  }}
-                >
-                  <CardContent sx={{ py: 5, px: 3, textAlign: "center" }}>
-                    <Typography
-                      variant="body1"
-                      sx={{
-                        fontWeight: 700,
-                        color: "#2d5016",
-                        mb: 2.5,
-                        fontSize: "1.1rem",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.5px",
-                        minHeight: "4rem",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center"
-                      }}
-                    >
-                      Total Monitored
-                    </Typography>
-                    <Typography
-                      variant="h2"
-                      sx={{
-                        m: 0,
-                        fontWeight: 700,
-                        color: "#375e38",
-                        fontSize: "3.5rem",
-                        lineHeight: 1
-                      }}
-                    >
-                      {monitoringMetrics.total || 0}
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-            </Grid>
-          </Box>
-          <Divider sx={{ my: 2 }} />
-        </Box>
-      )}
 
       {/* Tabs and Table Container */}
       <Box sx={{ mx: 2, mt: 1.5, mb: 0 }}>
@@ -1589,6 +1459,95 @@ const NewProposalWorkflowPage = () => {
                 );
               })}
           </Box>
+          {/* Monitoring Metrics Cards - Below Tabs, Auto-Adjusting */}
+          {tabs[activeTab].value === "monitoring" && monitoringMetrics && (
+            <Box sx={{ display: "flex", gap: 1, alignItems: "stretch", p: 1.5, bgcolor: "white", flexWrap: "nowrap", borderBottom: "1px solid #e0e0e0", justifyContent: "space-between", minHeight: "100px" }}>
+              {Object.entries(monitoringMetrics.byStatus || {}).map(([status, count]) => {
+                const statusLabels = {
+                  'FORWARDED_TO_BRD_ANALYST': 'Forwarded to Analyst',
+                  'FORWARDED_TO_BRD_OFFICER': 'Forwarded to Officer',
+                  'FORWARDED_TO_BRD_MANAGER': 'Forwarded to Manager',
+                  'RETURNED_TO_PLANNING_ANALYST': 'Returned to Analyst',
+                  'RETURNED_TO_OFFICER': 'Returned to Officer',
+                  'FINALIZED': 'Finalized'
+                };
+                const statusIcons = {
+                  'FORWARDED_TO_BRD_ANALYST': '→',
+                  'FORWARDED_TO_BRD_OFFICER': '→',
+                  'FORWARDED_TO_BRD_MANAGER': '→',
+                  'RETURNED_TO_PLANNING_ANALYST': '↩',
+                  'RETURNED_TO_OFFICER': '↩',
+                  'FINALIZED': '✓'
+                };
+                return (
+                  <Box 
+                    key={status} 
+                    sx={{ 
+                      display: "flex", 
+                      flexDirection: "column",
+                      alignItems: "center", 
+                      justifyContent: "center",
+                      flex: "1 1 0",
+                      minWidth: "0",
+                      py: 2,
+                      px: 1,
+                      bgcolor: "#f8f9fa",
+                      borderRadius: "6px",
+                      border: "1px solid #ddd",
+                      textAlign: "center",
+                      transition: "all 0.3s ease",
+                      "&:hover": {
+                        bgcolor: "#f0f7f0",
+                        boxShadow: "0 2px 8px rgba(45, 80, 22, 0.1)"
+                      }
+                    }}
+                  >
+                    <Box sx={{ fontSize: "1.8rem", mb: 0.8, lineHeight: 1 }}>
+                      {statusIcons[status]}
+                    </Box>
+                    <Box sx={{ fontSize: "2rem", fontWeight: 700, color: "#2d5016", mb: 0.5, lineHeight: 1 }}>
+                      {count}
+                    </Box>
+                    <Typography sx={{ fontSize: "0.7rem", color: "#555", fontWeight: 500, lineHeight: 1.2, wordWrap: "break-word" }}>
+                      {statusLabels[status]}
+                    </Typography>
+                  </Box>
+                );
+              })}
+              {/* Total Monitored - Auto Adjusts with Other Cards */}
+              <Box 
+                sx={{ 
+                  display: "flex", 
+                  flexDirection: "column",
+                  alignItems: "center", 
+                  justifyContent: "center",
+                  flex: "1 1 0",
+                  minWidth: "0",
+                  py: 2,
+                  px: 1,
+                  bgcolor: "#f0f8f0",
+                  borderRadius: "6px",
+                  border: "2px solid #2d5016",
+                  textAlign: "center",
+                  transition: "all 0.3s ease",
+                  "&:hover": {
+                    bgcolor: "#e8f5e8",
+                    boxShadow: "0 2px 8px rgba(45, 80, 22, 0.15)"
+                  }
+                }}
+              >
+                <Box sx={{ fontSize: "1.8rem", mb: 0.8, lineHeight: 1 }}>
+                  📊
+                </Box>
+                <Box sx={{ fontSize: "2rem", fontWeight: 700, color: "#2d5016", mb: 0.5, lineHeight: 1 }}>
+                  {monitoringMetrics.total || 0}
+                </Box>
+                <Typography sx={{ fontSize: "0.7rem", color: "#2d5016", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.3px", lineHeight: 1.2 }}>
+                  Total
+                </Typography>
+              </Box>
+            </Box>
+          )}
           {/* Search and Filter Bar */}
           <Box
             sx={{
