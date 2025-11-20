@@ -1894,6 +1894,11 @@ exports.submitEdit = async (req, res) => {
         notificationMessage = `BUDGET_OFFICER has submitted the proposal "${proposal.title}" for your final review and approval. Fiscal Year: ${proposal.fiscalYear} - ${proposal.budgetType}`;
       }
 
+      // Safeguard: ensure message is never empty or just an ID
+      if (!notificationMessage || notificationMessage.trim() === '' || /^[a-f0-9]{24}$/.test(notificationMessage.trim())) {
+        notificationMessage = `Proposal "${proposal.title}" submitted for review. Fiscal Year: ${proposal.fiscalYear} - ${proposal.budgetType}`;
+      }
+
       // Create notifications for each recipient
       for (const recipientId of recipientUserIds) {
         notificationsToSend.push({

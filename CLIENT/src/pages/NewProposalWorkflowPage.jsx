@@ -51,6 +51,8 @@ import api from "../config/api";
 import { toast } from "react-toastify";
 import { useWorkflowRef } from "../hooks/useWorkflowRef";
 import { useNotifications } from "../global/components/NotificationsContext";
+import { prettyRole } from '../utils/role-utils';
+import { useQueryClient } from "@tanstack/react-query";
 
 // Brand colors aligned to Transactions Processing UI
 const BRAND_COLORS = {
@@ -103,6 +105,7 @@ const NewProposalWorkflowPage = () => {
   const [searchParams] = useSearchParams();
   const { setWorkflowRef } = useWorkflowRef();
   const { serverNotifications, markNotificationsAsRead } = useNotifications();
+  const queryClient = useQueryClient();
 
   // Check if user is BRD (Budget Revenue Division) level or SUPER ADMIN
   const isBRDUser = currentUser?.Roles?.some((role) =>
@@ -419,12 +422,15 @@ const NewProposalWorkflowPage = () => {
         ["BUDGET MANAGER", "BUDGET_MANAGER"].includes(role)
       )
     ) {
-      return [
+      // Only allow manager edits for forwarded statuses or if the proposal is 'Returned' specifically to the Budget Manager
+      const forwardedAllowed = [
         "Forwarded to Overall Budget Approver",
-        "Returned",
+        "Forwarded to Manager",
         "FORWARDED_TO_BRD_MANAGER",
-        "RETURNED_TO_PREPARER",
+        "FORWARDED_TO_MANAGER",
       ].includes(status);
+      const returnedToManager = (status === "Returned" || status === "RETURNED") && selectedProposal?.currentAssigneeRole === "BUDGET_MANAGER";
+      return forwardedAllowed || returnedToManager;
     }
 
     return false;
@@ -625,11 +631,14 @@ const NewProposalWorkflowPage = () => {
 
       toast.success("Action completed successfully");
       setActionDialogOpen(false);
-      setViewDetailsDialogOpen(false); // Close details dialog
+      setViewDetailsDialogOpen(false);
       setSelectedProposal(null);
       setActionType("");
       setActionComment("");
-      fetchProposals(); // Refresh the proposals list
+      
+      await fetchProposals();
+      
+      queryClient.invalidateQueries({ queryKey: ["serverNotifications"] });
     } catch (error) {
       console.error("Error performing action:", error);
       toast.error("Failed to perform action");
@@ -842,10 +851,10 @@ const NewProposalWorkflowPage = () => {
       toast.success(`Changes saved successfully`);
       setChangedItems(new Set());
 
-      // Refresh proposals to get updated totals
       await fetchProposals();
+      
+      queryClient.invalidateQueries({ queryKey: ["serverNotifications"] });
 
-      // Fetch the updated proposal to display new totals in dialog
       const updatedProposalRes = await api.get(
         `${WORKFLOW_API_BASE}/${selectedProposal._id}`
       );
@@ -1118,10 +1127,18 @@ const NewProposalWorkflowPage = () => {
     // BUDGET MANAGER actions
     if (
       userRoles.includes("BUDGET MANAGER") &&
-      (currentStatus === "Forwarded to Overall Budget Approver" ||
-        currentStatus === "Returned" ||
-        currentStatus === "FORWARDED_TO_BRD_MANAGER" ||
-        currentStatus === "RETURNED_TO_PREPARER")
+      (
+        // Allow manager actions when it's forwarded to manager/overall approver
+        [
+          "Forwarded to Overall Budget Approver",
+          "Forwarded to Manager",
+          "FORWARDED_TO_BRD_MANAGER",
+          "FORWARDED_TO_MANAGER",
+        ].includes(currentStatus) ||
+        // Allow manager actions if the record is Returned AND the returned-to assignee is the Budget Manager
+        (currentStatus === "Returned" && proposal?.currentAssigneeRole === "BUDGET_MANAGER") ||
+        (currentStatus === "RETURNED" && proposal?.currentAssigneeRole === "BUDGET_MANAGER")
+      )
     ) {
       actions.push(
         {
@@ -1221,6 +1238,8 @@ const NewProposalWorkflowPage = () => {
       />
     );
   };
+
+  // using shared prettyRole
 
   return (
     <Box sx={{ p: 0, bgcolor: "white", minHeight: "100vh" }}>
@@ -1577,54 +1596,111 @@ const NewProposalWorkflowPage = () => {
             {/* Content (includes Monitoring metrics if active) */}
             {tabs[activeTab].value === "monitoring" && monitoringMetrics && (
               <Box sx={{ mb: 3 }}>
-                <Grid container spacing={2}>
-                  {Object.entries(monitoringMetrics.byStatus || {}).map(
-                    ([status, count]) => (
-                      <Grid item xs={12} sm={6} md={4} lg={3} key={status}>
-                        <Card
-                          elevation={1}
-                          sx={{ borderLeft: "5px solid #375e38" }}
-                        >
-                          <CardContent sx={{ py: 1.5 }}>
-                            <Typography
-                              variant="caption"
-                              sx={{ fontWeight: 600, color: "#2d5016" }}
+                {/* Monitoring Metrics Cards */}
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, color: "#2d5016" }}>
+                    Proposal Status Overview
+                  </Typography>
+                  <Grid container spacing={2}>
+                    {Object.entries(monitoringMetrics.byStatus || {}).map(
+                      ([status, count]) => {
+                        // Convert enum status to readable format
+                        const statusLabels = {
+                          'FORWARDED_TO_BRD_ANALYST': 'Forwarded to Planning Analyst',
+                          'FORWARDED_TO_BRD_OFFICER': 'Forwarded to Budget Officer',
+                          'FORWARDED_TO_BRD_MANAGER': 'Forwarded to Manager',
+                          'RETURNED_TO_PLANNING_ANALYST': 'Returned to Analyst',
+                          'RETURNED_TO_OFFICER': 'Returned to Officer',
+                          'FINALIZED': 'Finalized'
+                        };
+                        const displayStatus = statusLabels[status] || status;
+                        
+                        return (
+                          <Grid item xs={12} sm={6} md={4} lg={3} key={status}>
+                            <Card
+                              elevation={2}
+                              sx={{
+                                borderLeft: "6px solid #375e38",
+                                borderRadius: "8px",
+                                transition: "all 0.3s ease",
+                                "&:hover": {
+                                  elevation: 4,
+                                  boxShadow: "0 8px 16px rgba(55, 94, 56, 0.15)",
+                                  transform: "translateY(-2px)"
+                                }
+                              }}
                             >
-                              {status}
-                            </Typography>
-                            <Typography
-                              variant="h6"
-                              sx={{ m: 0, fontWeight: 700 }}
-                            >
-                              {count}
-                            </Typography>
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                    )
-                  )}
-                  <Grid item xs={12} sm={6} md={4} lg={3}>
-                    <Card
-                      elevation={1}
-                      sx={{
-                        borderLeft: "5px solid #2d5016",
-                        bgcolor: "#f4f7f4",
-                      }}
-                    >
-                      <CardContent sx={{ py: 1.5 }}>
-                        <Typography
-                          variant="caption"
-                          sx={{ fontWeight: 600, color: "#2d5016" }}
-                        >
-                          Total Monitored
-                        </Typography>
-                        <Typography variant="h6" sx={{ m: 0, fontWeight: 700 }}>
-                          {monitoringMetrics.total || 0}
-                        </Typography>
-                      </CardContent>
-                    </Card>
+                              <CardContent sx={{ py: 2, px: 2 }}>
+                                <Typography
+                                  variant="body2"
+                                  sx={{
+                                    fontWeight: 600,
+                                    color: "#2d5016",
+                                    mb: 1,
+                                    fontSize: "0.9rem",
+                                    lineHeight: 1.4
+                                  }}
+                                >
+                                  {displayStatus}
+                                </Typography>
+                                <Typography
+                                  variant="h5"
+                                  sx={{
+                                    m: 0,
+                                    fontWeight: 700,
+                                    color: "#375e38",
+                                    fontSize: "2rem"
+                                  }}
+                                >
+                                  {count}
+                                </Typography>
+                              </CardContent>
+                            </Card>
+                          </Grid>
+                        );
+                      }
+                    )}
+                    {/* Total Monitored Card */}
+                    <Grid item xs={12} sm={6} md={4} lg={3}>
+                      <Card
+                        elevation={3}
+                        sx={{
+                          borderLeft: "6px solid #2d5016",
+                          bgcolor: "#f4f7f4",
+                          borderRadius: "8px",
+                          background: "linear-gradient(135deg, #f4f7f4 0%, #e8f1e8 100%)"
+                        }}
+                      >
+                        <CardContent sx={{ py: 2, px: 2, textAlign: "center" }}>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              fontWeight: 700,
+                              color: "#2d5016",
+                              mb: 1,
+                              fontSize: "0.95rem",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.5px"
+                            }}
+                          >
+                            Total Monitored
+                          </Typography>
+                          <Typography
+                            variant="h4"
+                            sx={{
+                              m: 0,
+                              fontWeight: 800,
+                              color: "#375e38",
+                              fontSize: "2.5rem"
+                            }}
+                          >
+                            {monitoringMetrics.total || 0}
+                          </Typography>
+                        </CardContent>
+                      </Card>
+                    </Grid>
                   </Grid>
-                </Grid>
+                </Box>
                 <Divider sx={{ my: 2 }} />
               </Box>
             )}
@@ -1966,7 +2042,16 @@ const NewProposalWorkflowPage = () => {
                                 borderRight: "1px solid #e8e8e8",
                               }}
                             >
-                              {renderStatusChip(proposal.status)}
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                {renderStatusChip(proposal.status)}
+                                {(/returned/i.test(String(proposal.status || '')) && proposal.currentAssigneeRole) && (
+                                  <Chip
+                                    label={`Returned to ${prettyRole(proposal.currentAssigneeRole)}`}
+                                    size="small"
+                                    sx={{ height: 22, fontSize: '0.68rem', bgcolor: '#f6f6f6', color: '#777' }}
+                                  />
+                                )}
+                              </Box>
                             </TableCell>
                             <TableCell sx={{ p: 2, fontSize: "0.85rem" }}>
                               <Box
@@ -2611,7 +2696,6 @@ const NewProposalWorkflowPage = () => {
                                 payload
                               );
                               toast.success("Proposal details updated");
-                              // Update local states
                               setSelectedProposal((prev) =>
                                 prev ? { ...prev, ...payload } : prev
                               );
@@ -2623,6 +2707,7 @@ const NewProposalWorkflowPage = () => {
                                 )
                               );
                               setProposalEditDirty(false);
+                              queryClient.invalidateQueries({ queryKey: ["serverNotifications"] });
                             } catch (err) {
                               console.error(
                                 "Error updating proposal details",

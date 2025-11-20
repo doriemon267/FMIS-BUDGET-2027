@@ -14,13 +14,17 @@ import {
   DialogActions,
   Tooltip
 } from '@mui/material';
+import Chip from '@mui/material/Chip';
 import {
   Notifications as NotificationsIcon,
   Close as CloseIcon
 } from '@mui/icons-material';
+import NotificationsOffIcon from '@mui/icons-material/NotificationsOff';
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import { useNavigate } from 'react-router-dom';
 import api from '../../config/api';
 import { useNotifications } from '../../global/components/NotificationsContext';
+import { useUser } from '../../context/UserContext';
 import { toast } from 'react-toastify';
 
 const ProposalNotifications = ({ showPersistentList = false }) => {
@@ -30,6 +34,8 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const [showPersistent, setShowPersistent] = useState(showPersistentList);
   const { markAllNotificationsAsRead, deleteNotifications, markNotificationsAsRead, muteNotification } = useNotifications();
+  const { currentUser, setCurrentUser } = useUser();
+  const [mutedProposals, setMutedProposals] = useState(new Set());
   const pollIntervalRef = useRef(null);
 
   // Fetch notifications
@@ -142,6 +148,16 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
       }
     };
   }, [fetchNotifications]);
+
+  // Keep local muted proposals in sync with currentUser preferences if available
+  useEffect(() => {
+    try {
+      const initialMuted = new Set((currentUser?.notificationPreferences?.mutedProposals || []).map(String));
+      setMutedProposals(initialMuted);
+    } catch (e) {
+      setMutedProposals(new Set());
+    }
+  }, [currentUser]);
 
   // Mark notifications as read
   const markAsRead = useCallback(async (ids) => {
@@ -340,7 +356,7 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
                   >
                     {getNotificationIcon(notification.type)}
                   </Box>
-                  <Box sx={{ flex: 1 }}>
+                    <Box sx={{ flex: 1 }}>
                     <Typography
                       variant="subtitle2"
                       sx={{
@@ -351,15 +367,12 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
                     >
                       {notification.title}
                     </Typography>
-                    {notification.metadata?.performedBy && (
-                      <Typography variant="caption" sx={{ color: '#777', display: 'block', mb: 0.25 }}>
-                        By: {notification.metadata.performedBy} {notification.metadata.performedByRole ? `(${notification.metadata.performedByRole})` : ''}
-                      </Typography>
-                    )}
-                    {notification.metadata?.performedBy && (
-                      <Typography variant="caption" sx={{ color: '#777', display: 'block', mb: 0.25 }}>
-                        By: {notification.metadata.performedBy} {notification.metadata.performedByRole ? `(${notification.metadata.performedByRole})` : ''}
-                      </Typography>
+                    {notification.metadata?.proposalId && mutedProposals.has(String(notification.metadata.proposalId)) && (
+                      <Box sx={{ mt: 0.5, mb: 0.5 }}>
+                        <Tooltip title="Muted — You won't receive new notifications for this proposal" placement="top">
+                          <Chip label="Muted" size="small" sx={{ height: 20, fontSize: '0.65rem', bgcolor: '#f5f5f5', color: '#777' }} />
+                        </Tooltip>
+                      </Box>
                     )}
                     <Typography
                       variant="body2"
@@ -383,14 +396,37 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
                   </Box>
                   <Box sx={{ ml: 1, display: 'flex', alignItems: 'center' }}>
                     {notification.metadata?.proposalId && (
-                      <IconButton
-                        size="small"
-                        title={notification.metadata && notification.metadata.proposalId ? 'Mute notifications for this proposal' : 'Mute'}
-                        onClick={(e) => { e.stopPropagation(); muteNotification({ proposalId: notification.metadata.proposalId, mute: true }); }}
-                        sx={{ color: '#777' }}
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M10.5 2a1.5 1.5 0 0 1 0 3H9v5a1 1 0 0 1-1 1H7a1 1 0 0 0-1 1v.5a.5.5 0 0 1-1 0V12a2 2 0 0 1 2-2h1a.5.5 0 0 0 .5-.5V5h1.5A1.5 1.5 0 0 1 10.5 2Z"/></svg>
-                      </IconButton>
+                      (() => {
+                        const pid = String(notification.metadata.proposalId);
+                        const isMuted = mutedProposals.has(pid);
+                        return (
+                          <IconButton
+                            size="small"
+                            title={isMuted ? 'Unmute notifications for this proposal' : 'Mute notifications for this proposal'}
+                            onClick={async (e) => { 
+                              e.stopPropagation();
+                              try {
+                                await muteNotification({ proposalId: pid, mute: !isMuted });
+                                // Update local UI set
+                                setMutedProposals(prev => {
+                                  const next = new Set(prev);
+                                  if (!isMuted) next.add(pid); else next.delete(pid);
+                                  return next;
+                                });
+                                // Refresh global user so other components reflect mute preference
+                                try { await setCurrentUser(); } catch (_e) { /* noop */ }
+                                toast.success(isMuted ? 'Notifications unmuted for this proposal' : 'Notifications muted for this proposal');
+                              } catch (err) {
+                                console.error('Failed to toggle mute:', err);
+                                toast.error('Failed to toggle mute');
+                              }
+                            }}
+                            sx={{ color: isMuted ? '#c62828' : '#777' }}
+                          >
+                            {isMuted ? <NotificationsOffIcon sx={{ fontSize: '1rem' }} /> : <NotificationsActiveIcon sx={{ fontSize: '1rem' }} />}
+                          </IconButton>
+                        );
+                      })()
                     )}
                     <IconButton
                       size="small"
@@ -494,7 +530,7 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
                   >
                     {getNotificationIcon(notification.type)}
                   </Box>
-                  <Box sx={{ flex: 1 }}>
+                    <Box sx={{ flex: 1 }}>
                     <Typography
                       variant="subtitle2"
                       sx={{
@@ -505,6 +541,13 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
                     >
                       {notification.title}
                     </Typography>
+                    {notification.metadata?.proposalId && mutedProposals.has(String(notification.metadata.proposalId)) && (
+                      <Box sx={{ mt: 0.75 }}>
+                        <Tooltip title="Muted — You won't receive new notifications for this proposal" placement="top">
+                          <Chip label="Muted" size="small" sx={{ height: 20, fontSize: '0.6rem', bgcolor: '#f5f5f5', color: '#777' }} />
+                        </Tooltip>
+                      </Box>
+                    )}
                     <Typography
                       variant="body2"
                       sx={{
@@ -527,13 +570,34 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
                   </Box>
                     <Box sx={{ ml: 1, display: 'flex', alignItems: 'center' }}>
                       {notification.metadata?.proposalId && (
-                        <IconButton
-                          size="small"
-                          title="Mute notifications for this proposal"
-                          onClick={(e) => { e.stopPropagation(); muteNotification({ proposalId: notification.metadata.proposalId, mute: true }); }}
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M10.5 2a1.5 1.5 0 0 1 0 3H9v5a1 1 0 0 1-1 1H7a1 1 0 0 0-1 1v.5a.5.5 0 0 1-1 0V12a2 2 0 0 1 2-2h1a.5.5 0 0 0 .5-.5V5h1.5A1.5 1.5 0 0 1 10.5 2Z"/></svg>
-                        </IconButton>
+                        (() => {
+                          const pid = String(notification.metadata.proposalId);
+                          const isMuted = mutedProposals.has(pid);
+                          return (
+                            <IconButton
+                              size="small"
+                              title={isMuted ? 'Unmute notifications for this proposal' : 'Mute notifications for this proposal'}
+                              onClick={async (e) => { 
+                                e.stopPropagation();
+                                try {
+                                  await muteNotification({ proposalId: pid, mute: !isMuted });
+                                  setMutedProposals(prev => {
+                                    const next = new Set(prev);
+                                    if (!isMuted) next.add(pid); else next.delete(pid);
+                                    return next;
+                                  });
+                                  try { await setCurrentUser(); } catch (_e) { /* noop */ }
+                                  toast.success(isMuted ? 'Notifications unmuted for this proposal' : 'Notifications muted for this proposal');
+                                } catch (err) {
+                                  console.error('Failed to toggle mute:', err);
+                                  toast.error('Failed to toggle mute');
+                                }
+                              }}
+                            >
+                              {isMuted ? <NotificationsOffIcon sx={{ fontSize: '0.95rem' }} /> : <NotificationsActiveIcon sx={{ fontSize: '0.95rem' }} />}
+                            </IconButton>
+                          );
+                        })()
                       )}
                       <IconButton
                         size="small"

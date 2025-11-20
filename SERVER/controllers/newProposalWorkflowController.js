@@ -173,24 +173,42 @@ const getNotificationRecipients = async (action, proposal, currentUserRole, curr
     const findUsersByWorkflowRole = async (roles, region = null) => {
       try {
         let query = { 
-          workflowRoles: { $in: roles },
+          $or: [
+            { workflowRoles: { $in: roles } },
+            { userRole: { $in: roles } }
+          ],
           isActive: true 
         };
         
         // If region is specified, filter by regionId OR users with no region (system-wide staff)
         if (region && region !== null) {
-          query.$or = [
-            { regionId: region },
-            { regionId: null },
-            { regionId: { $exists: false } }
+          query.$and = [
+            {
+              $or: [
+                { regionId: region },
+                { regionId: null },
+                { regionId: { $exists: false } }
+              ]
+            }
           ];
         }
         
         console.log('[getNotificationRecipients] Query:', JSON.stringify(query));
-        const users = await HierarchicalUserAssignment.find(query).select('userId workflowRoles regionId');
+        let users = await HierarchicalUserAssignment.find(query).select('userId workflowRoles userRole regionId');
+        // Fallback: if no users found in hierarchical assignments, try User.roles as fallback
+        if (!users || users.length === 0) {
+          console.warn('[getNotificationRecipients] No HierarchicalUserAssignment found for roles, falling back to User.roles lookup', roles);
+          try {
+            const userDocs = await User.find({ roles: { $in: roles }, isActive: true }).select('userId roles');
+            users = userDocs.map(u => ({ userId: u.userId || String(u._id), workflowRoles: u.roles || [], regionId: null }));
+            console.log('[getNotificationRecipients] Fallback found', users.length, 'users via User.roles for roles', roles);
+          } catch (fallbackErr) {
+            console.error('[getNotificationRecipients] Error during fallback User.roles query:', fallbackErr.message);
+          }
+        }
         console.log('[getNotificationRecipients] Found', users.length, 'users with roles', roles);
         
-        return users;
+  return users;
       } catch (err) {
         console.error('[getNotificationRecipients] Error querying HierarchicalUserAssignment:', err.message);
         return [];
@@ -323,6 +341,11 @@ const createWorkflowNotification = async (action, proposal, recipientUserIds, cu
   let notificationMessage = `${currentUserName} (${currentUserRole || 'User'}) ${verb} the proposal "${proposal.title}"${targetRole ? ' to ' + targetRole : ''}.`;
     if (comment && isReturnAction) {
       notificationMessage += ` Comment: ${comment}`;
+    }
+
+    // Safeguard: ensure message is never empty or just an ID
+    if (!notificationMessage || notificationMessage.trim() === '' || /^[a-f0-9]{24}$/.test(notificationMessage.trim())) {
+      notificationMessage = `Proposal ${isReturnAction ? 'returned' : 'submitted'}: "${proposal.title}"`;
     }
 
     // Deep link to the proposal on the new-proposal-workflow page
@@ -636,12 +659,14 @@ exports.getProposals = async (req, res) => {
       case 'monitoring':
         // Provide aggregated monitoring for Budget Manager
         if (userRole === 'BUDGET MANAGER') {
+          // Use enum format to match what's stored in NewProposalWorkflow
           const monitorStatuses = [
-            'Forwarded to Budget Planning Analyst',
-            'Forwarded to Budget Officer',
-            'Forwarded to Overall Budget Approver',
-            'Returned to Budget Planning Analyst',
-            'Returned to Budget Officer'
+            'FORWARDED_TO_BRD_ANALYST',
+            'FORWARDED_TO_BRD_OFFICER',
+            'FORWARDED_TO_BRD_MANAGER',
+            'RETURNED_TO_PLANNING_ANALYST',
+            'RETURNED_TO_OFFICER',
+            'FINALIZED'  // Include finalized proposals for manager review
           ];
           query.status = { $in: monitorStatuses };
         } else {
@@ -697,24 +722,54 @@ exports.getProposals = async (req, res) => {
       }
     }
 
-    // RESPONSIBILITY CENTER FILTERING: For 'all-proposals' view, restrict visibility to user's current responsibility center
-    if (view === 'all-proposals' && userRole !== 'SUPER ADMIN' && userRole !== 'BUDGET MANAGER') {
+    // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's organizational assignment
+    // Apply to all views EXCEPT 'monitoring' (which is for Budget Manager who sees all)
+    // and SUPER ADMIN (who sees everything)
+    if (userRole !== 'SUPER ADMIN' && userRole !== 'BUDGET MANAGER' && view !== 'monitoring') {
       try {
-        // Get user's hierarchical assignment to find their current responsibility center
+        // Get user's hierarchical assignment with accessible divisions/departments/regions
         const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString }).lean();
         
-        if (userAssignment && userAssignment.divisionName) {
-          // Filter proposals to only show those from the user's assigned division
-          newProposals = newProposals.filter(p => {
+        if (userAssignment) {
+          const filteredProposals = newProposals.filter(p => {
             const legacy = legacyMap.get(String(p._id));
-            // Match proposal's division with user's assigned division
-            return legacy?.division === userAssignment.divisionName;
+            if (!legacy) return false;
+            
+            // Extract accessible organizational units from assignment
+            // accessibleDivisions is an array of division names
+            // accessibleDepartments is an array of {departmentName, _id} objects
+            const accessibleDivisions = userAssignment.accessibleDivisions || [];
+            const accessibleDepartments = userAssignment.accessibleDepartments || [];
+            const departmentNames = accessibleDepartments.map(d => d.departmentName || d.Department || d);
+            
+            // Check if proposal is from an accessible division
+            if (legacy.division && accessibleDivisions.includes(legacy.division)) {
+              return true;
+            }
+            
+            // Check if proposal is from an accessible department
+            if (legacy.department && departmentNames.includes(legacy.department)) {
+              return true;
+            }
+            
+            // Check if proposal is from user's assigned region (fallback)
+            if (userAssignment.regionName && legacy.region === userAssignment.regionName) {
+              return true;
+            }
+            
+            // If no match found, don't show the proposal
+            return false;
           });
+          
+          // Only apply filter if it results in proposals (safety check)
+          if (filteredProposals.length > 0) {
+            newProposals = filteredProposals;
+          }
         }
+        // If no assignment found, show all proposals (fallback)
       } catch (err) {
         console.error('[getProposals] Error filtering by responsibility center:', err.message);
-        // On error, return empty list for safety
-        newProposals = [];
+        // On error, keep original proposals (don't hide data)
       }
     }
 

@@ -3155,6 +3155,48 @@ exports.approverApproveForwardOfficer = async (req, res) => {
       // Don't fail the entire request if edit persistence fails
     }
 
+    const baseNotificationFields = {
+      entity: 'proposal',
+      recordIds: [proposal._id],
+      org: {
+        region: proposal.region,
+        department: proposal.department,
+        division: proposal.division
+      },
+      createdBy: { userId, name: userName },
+      type: 'PROPOSAL_WORKFLOW',
+      relatedEntityId: proposal._id,
+      relatedEntityType: 'Proposal',
+      relatedLink: `/new-proposal-workflow?tab=all-proposals&proposalId=${proposal._id}`
+    };
+
+    await sendNotification({
+      recipientRole: 'BUDGET_OFFICER',
+      title: 'Proposal Approved by Approver - Ready for Budget Officer Review',
+      message: `Proposal "${proposal.title}" has been approved by ${userName} (Approver) and is ready for your review. Comment: ${comment}`,
+      ...baseNotificationFields,
+      metadata: {
+        proposalId: String(proposal._id),
+        proposalTitle: proposal.title,
+        fiscalYear: proposal.fiscalYear,
+        budgetType: proposal.budgetType,
+        region: proposal.region,
+        department: proposal.department,
+        division: proposal.division,
+        action: 'APPROVE_FORWARD_OFFICER',
+        comment,
+        previousStatus,
+        newStatus,
+        targetRole: 'BUDGET_OFFICER',
+        performedBy: {
+          userId,
+          name: userName,
+          role: performedByRole
+        },
+        recipientType: 'ROLE'
+      }
+    });
+
     res.json({
       success: true,
       message: 'Proposal approved and forwarded to Budget Officer successfully',
@@ -3848,6 +3890,48 @@ exports.analystSubmitToOfficer = async (req, res) => {
       console.warn('Warning: Could not recalculate totals after analyst submission:', calcError);
     }
 
+    const baseNotificationFields = {
+      entity: 'proposal',
+      recordIds: [proposal._id],
+      org: {
+        region: proposal.region,
+        department: proposal.department,
+        division: proposal.division
+      },
+      createdBy: { userId, name: userName },
+      type: 'PROPOSAL_WORKFLOW',
+      relatedEntityId: proposal._id,
+      relatedEntityType: 'Proposal',
+      relatedLink: `/new-proposal-workflow?tab=all-proposals&proposalId=${proposal._id}`
+    };
+
+    await sendNotification({
+      recipientRole: 'BUDGET_OFFICER',
+      title: 'Proposal Analysis Submitted - Ready for Review',
+      message: `Proposal "${proposal.title}" has been analyzed and submitted by ${userName} (Budget Planning Analyst) from ${proposal.division || proposal.department} and is ready for your review. Comment: ${comment}`,
+      ...baseNotificationFields,
+      metadata: {
+        proposalId: String(proposal._id),
+        proposalTitle: proposal.title,
+        fiscalYear: proposal.fiscalYear,
+        budgetType: proposal.budgetType,
+        region: proposal.region,
+        department: proposal.department,
+        division: proposal.division,
+        action: 'ANALYST_SUBMIT_TO_OFFICER',
+        comment,
+        previousStatus,
+        newStatus,
+        targetRole: 'BUDGET_OFFICER',
+        performedBy: {
+          userId,
+          name: userName,
+          role: 'BUDGET_PLANNING_ANALYST'
+        },
+        recipientType: 'ROLE'
+      }
+    });
+
     res.json({
       success: true,
       message: 'Analysis submitted to Budget Officer successfully',
@@ -3905,6 +3989,51 @@ exports.analystReturn = async (req, res) => {
     });
 
     await proposal.save();
+
+    const baseNotificationFields = {
+      entity: 'proposal',
+      recordIds: [proposal._id],
+      org: {
+        region: proposal.region,
+        department: proposal.department,
+        division: proposal.division
+      },
+      createdBy: { userId, name: userName },
+      type: 'PROPOSAL_WORKFLOW',
+      relatedEntityId: proposal._id,
+      relatedEntityType: 'Proposal',
+      relatedLink: `/new-proposal-workflow?tab=all-proposals&proposalId=${proposal._id}`
+    };
+
+    await syncBudgetItemsStatus(proposal);
+
+    await sendNotification({
+      recipientRole: 'APPROVER',
+      title: 'Proposal Returned by Analyst',
+      message: `Proposal "${proposal.title}" has been returned by ${userName} (Budget Planning Analyst) for revisions. Reason: ${comment}`,
+      ...baseNotificationFields,
+      metadata: {
+        proposalId: String(proposal._id),
+        proposalTitle: proposal.title,
+        fiscalYear: proposal.fiscalYear,
+        budgetType: proposal.budgetType,
+        region: proposal.region,
+        department: proposal.department,
+        division: proposal.division,
+        action: 'RETURN',
+        comment,
+        previousStatus,
+        newStatus,
+        returnToLevel: 'APPROVER',
+        targetRole: 'APPROVER',
+        performedBy: {
+          userId,
+          name: userName,
+          role: 'BUDGET_PLANNING_ANALYST'
+        },
+        recipientType: 'ROLE'
+      }
+    });
 
     res.json({
       success: true,
@@ -4840,6 +4969,30 @@ exports.managerReturnProposal = async (req, res) => {
   }
 };
 
+// Helper function to normalize role names to match HierarchicalUserAssignment enum
+function normalizeRoleForQuery(roleValue) {
+  if (!roleValue) return null;
+  const raw = String(roleValue).trim().toUpperCase();
+  
+  // Map shorthand roles to full role names
+  const roleMap = {
+    'REVIEWER': 'BUDGET_REVIEWER',
+    'PREPARER': 'BUDGET_PREPARER',
+    'APPROVER': 'BUDGET_APPROVER',
+    'ANALYST': 'BUDGET_PLANNING_ANALYST',
+    'OFFICER': 'BUDGET_OFFICER',
+    'MANAGER': 'BUDGET_MANAGER'
+  };
+  
+  const normalized = roleMap[raw] || raw;
+  
+  // Return variations (with underscore and with space)
+  return [
+    normalized,
+    normalized.replace(/_/g, ' ')
+  ];
+}
+
 // Helper function to send notifications
 async function sendNotification({
   recipientUserId,
@@ -4874,42 +5027,73 @@ async function sendNotification({
     }
 
     if (recipientRole) {
-      const baseQuery = { userRole: recipientRole, isActive: true };
+      const normalizedRoles = normalizeRoleForQuery(recipientRole);
+      // Support both userRole field and workflowRoles array
+      const baseQuery = { 
+        $or: [
+          { userRole: { $in: normalizedRoles } },
+          { workflowRoles: { $in: normalizedRoles } }
+        ]
+      };
+      const baseQueryWithActive = { 
+        ...baseQuery,
+        isActive: true 
+      };
       const queryVariants = [];
 
       let regionDoc = null;
       let departmentDoc = null;
+      let regionId = null;
+      let departmentId = null;
 
       if (org?.region) {
-        regionDoc = await Region.findOne({ Region: org.region }).lean();
+        const isObjectId = String(org.region).match(/^[a-f0-9]{24}$/i);
+        if (isObjectId) {
+          regionId = org.region;
+        } else {
+          regionDoc = await Region.findOne({ Region: org.region }).lean();
+          regionId = regionDoc?._id;
+        }
       }
 
       if (org?.department) {
-        departmentDoc = await Department.findOne({ Department: org.department }).lean();
+        const isObjectId = String(org.department).match(/^[a-f0-9]{24}$/i);
+        if (isObjectId) {
+          departmentId = org.department;
+        } else {
+          departmentDoc = await Department.findOne({ Department: org.department }).lean();
+          departmentId = departmentDoc?._id;
+        }
       }
 
-      const specificQuery = { ...baseQuery };
+      const specificQuery = { ...baseQueryWithActive };
       if (org?.division) {
-        specificQuery.divisionName = org.division;
+        const isObjectId = String(org.division).match(/^[a-f0-9]{24}$/i);
+        if (isObjectId) {
+          specificQuery.divisionId = org.division;
+        } else {
+          specificQuery.divisionName = org.division;
+        }
       }
-      if (departmentDoc?._id) {
-        specificQuery.departmentId = departmentDoc._id;
+      if (departmentId) {
+        specificQuery.departmentId = departmentId;
       }
-      if (regionDoc?._id) {
-        specificQuery.regionId = regionDoc._id;
+      if (regionId) {
+        specificQuery.regionId = regionId;
       }
 
       // Prioritize most specific combinations first then progressively relax filters
       queryVariants.push(specificQuery);
 
-      if (specificQuery.divisionName) {
+      if (specificQuery.divisionName || specificQuery.divisionId) {
         const withoutDivision = { ...specificQuery };
         delete withoutDivision.divisionName;
+        delete withoutDivision.divisionId;
         queryVariants.push(withoutDivision);
       }
 
       if (specificQuery.departmentId) {
-        const deptOnly = { ...baseQuery };
+        const deptOnly = { ...baseQueryWithActive };
         deptOnly.departmentId = specificQuery.departmentId;
         if (specificQuery.regionId) {
           deptOnly.regionId = specificQuery.regionId;
@@ -4918,13 +5102,23 @@ async function sendNotification({
       }
 
       if (specificQuery.regionId) {
-        const regionOnly = { ...baseQuery, regionId: specificQuery.regionId };
+        const regionOnly = { ...baseQueryWithActive, regionId: specificQuery.regionId };
         queryVariants.push(regionOnly);
       }
 
-      queryVariants.push(baseQuery);
+      queryVariants.push(baseQueryWithActive);
+      
+      // Try again without isActive filter as fallback
+      queryVariants.push({ ...baseQuery });
+      
+      // Additional fallback: search just by workflowRoles without isActive
+      queryVariants.push({ workflowRoles: { $in: normalizedRoles } });
+      
+      // Additional fallback: search just by userRole without isActive
+      queryVariants.push({ userRole: { $in: normalizedRoles } });
 
       const seenVariants = new Set();
+      let foundInHierarchical = false;
       for (const variant of queryVariants) {
         const sanitized = Object.fromEntries(
           Object.entries(variant).filter(([, value]) => value !== undefined)
@@ -4935,11 +5129,35 @@ async function sendNotification({
         }
         seenVariants.add(fingerprint);
 
-        const matches = await HierarchicalUserAssignment.find(sanitized).lean();
-        if (matches.length > 0) {
-          matches.forEach(match => addRecipient(match.userId));
-          // Stop after the first variant that yields recipients to avoid duplicate fan-out
-          break;
+          console.log(`🔍 Searching HierarchicalUserAssignment for role ${recipientRole} with query:`, sanitized);
+          const matches = await HierarchicalUserAssignment.find(sanitized).lean();
+          if (matches.length > 0) {
+            console.log(`✓ Found ${matches.length} hierarchical recipients for role ${recipientRole}:`, matches.map(m => m.userId));
+            matches.forEach(match => addRecipient(match.userId));
+            foundInHierarchical = true;
+            // Stop after the first variant that yields recipients to avoid duplicate fan-out
+            break;
+          } else {
+            console.log(`⚠️  No hierarchical recipients found for query:`, sanitized);
+          }
+      }
+      // Always check User.roles fallback, even if hierarchical assignments were found
+      // This ensures we get all users with the role, not just those in HierarchicalUserAssignment
+      if (recipientRole) {
+        try {
+          const User = require('../models/User');
+          const normalizedRolesArray = normalizeRoleForQuery(recipientRole);
+          // Query any user that lists this role in their roles array (normalized variations)
+          // Note: User model doesn't have isActive field, so we only check roles
+          const users = await User.find({ roles: { $in: normalizedRolesArray } }).select('userId');
+          if (users && users.length > 0) {
+            console.log(`✓ Found ${users.length} User.roles recipients for role ${recipientRole}:`, users.map(u => u.userId || String(u._id)));
+            users.forEach(u => addRecipient(u.userId || String(u._id)));
+          } else {
+            console.log(`⚠ No User.roles recipients found for role ${recipientRole}, normalized to:`, normalizedRolesArray);
+          }
+        } catch (err) {
+          console.warn('[sendNotification] Role fallback via User.roles failed for', recipientRole, err.message);
         }
       }
     }
@@ -4948,7 +5166,10 @@ async function sendNotification({
       console.warn('⚠️  Notification skipped - no recipients resolved', {
         recipientUserId,
         recipientRole,
-        org
+        normalizedRoles: recipientRole ? normalizeRoleForQuery(recipientRole) : null,
+        org,
+        title,
+        message
       });
       return;
     }
@@ -4961,6 +5182,10 @@ async function sendNotification({
       ? `/new-proposal-workflow?tab=all-proposals&proposalId=${derivedRelatedEntityId}`
       : relatedLink);
     const normalizedMetadata = metadata && typeof metadata === 'object' ? metadata : {};
+    // Auto-populate proposalId in metadata for proposal entities
+    if (entity === 'proposal' && derivedRelatedEntityId && !normalizedMetadata.proposalId) {
+      normalizedMetadata.proposalId = derivedRelatedEntityId;
+    }
 
     const notifications = Array.from(recipientIds).map(recipientId => ({
       recipientUserId: recipientId,
@@ -4977,6 +5202,7 @@ async function sendNotification({
       metadata: normalizedMetadata
     }));
 
+    console.log(`✅ Creating ${notifications.length} notifications for role: ${recipientRole}, recipients:`, Array.from(recipientIds));
     await Notification.insertMany(notifications);
   } catch (error) {
     console.error('Error sending notification:', error);

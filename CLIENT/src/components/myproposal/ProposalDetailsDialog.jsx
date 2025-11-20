@@ -17,6 +17,7 @@ import {
   Grid,
   Avatar
 } from '@mui/material';
+import { prettyRole } from '../../utils/role-utils';
 import { getUserInfo } from '../../utils/auth';
 import api from '../../config/api';
 import { getProposalForEdit, getComparisonData } from '../../services/budgetOfficerEditService';
@@ -1120,6 +1121,9 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                   )}
                   
                   <strong>Current Status:</strong> {proposal?.status || 'Draft'}
+                  {proposal?.status === 'Returned' && proposal?.currentAssigneeRole && (
+                    <Chip label={`Returned to ${prettyRole(proposal.currentAssigneeRole)}`} size="small" sx={{ ml: 1, height: 22, bgcolor: '#f6f6f6', color: '#777', fontSize: '0.68rem' }} />
+                  )}
                   <br />
                   
                   <strong>What you can do:</strong>{' '}

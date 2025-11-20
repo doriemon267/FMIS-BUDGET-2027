@@ -22,6 +22,7 @@ import {
   DialogActions,
   TextField
 } from "@mui/material";
+import Chip from '@mui/material/Chip';
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
@@ -32,6 +33,7 @@ import AssessmentIcon from "@mui/icons-material/Assessment";
 import { toast } from "react-toastify";
 import api from "../config/api";
 import { useLocation, useNavigate } from "react-router-dom";
+import { prettyRole } from '../utils/role-utils';
 
 const AllProposalsPage = () => {
   const tableRef = useRef(null);
@@ -53,6 +55,8 @@ const AllProposalsPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [deepLinkProposalId, setDeepLinkProposalId] = useState(null);
+
+  // Using shared prettyRole helper
 
   // Fetch active fiscal year and budget type settings
   const { data: activeSettings } = useQuery({
@@ -495,7 +499,7 @@ const AllProposalsPage = () => {
         const displayStatus = row.status;
         const { color = 'default', text = (displayStatus || 'Unknown'), bgColor = 'grey.100' } = map[displayStatus] || {};
         return (
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
             <Box
               sx={{
                 px: 2,
@@ -519,6 +523,9 @@ const AllProposalsPage = () => {
                 {text}
               </Typography>
             </Box>
+              {(displayStatus || '').toLowerCase().includes('returned') && row.currentAssigneeRole && (
+                <Chip label={`Returned to ${prettyRole(row.currentAssigneeRole)}`} size="small" sx={{ ml: 1, height: 22, bgcolor: '#f6f6f6', color: '#777', fontSize: '0.68rem' }} />
+              )}
           </Box>
         );
       }

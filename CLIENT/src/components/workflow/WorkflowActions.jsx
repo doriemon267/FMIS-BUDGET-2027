@@ -13,6 +13,7 @@ import TimelineIcon from "@mui/icons-material/Timeline";
 import SaveIcon from "@mui/icons-material/Save";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import { useNotification } from "../../context/NotificationContext";
+import { shouldShowManagerActions } from './workflow-utils';
 
 const MODULE_SUMMARY_LABELS = {
   personnel: 'Personnel Services',
@@ -320,8 +321,9 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     const isPreparerOnly = isPreparer && !isBudgetReviewer && !isApprover && !isBudgetPlanningAnalyst && !isBudgetOfficer && !isOverallApprover && !isSuperAdmin;
     const hasHigherRole = isBudgetReviewer || isApprover || isBudgetPlanningAnalyst || isBudgetOfficer || isOverallApprover || isSuperAdmin;
     
-    // Block manager actions only if user is BUDGET PREPARER ONLY (no other roles)
-    const shouldBlockManagerActions = isPreparerOnly;
+  // Block manager actions if user is BUDGET PREPARER only (no other roles)
+  // or when the proposal has been returned to a non-manager role (e.g., PREPARER)
+  const shouldBlockManagerActions = isPreparerOnly || ((normalizedStatus === 'RETURNED' || status === 'Returned') && proposal?.currentAssigneeRole && String(proposal?.currentAssigneeRole).toUpperCase().indexOf('BUDGET MANAGER') === -1);
     // Block officer actions only if user is PREPARER ONLY (no other roles)
     const shouldBlockOfficerActions = isPreparerOnly;
 
@@ -550,7 +552,9 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     }
 
     // BUDGET MANAGER & SUPER ADMIN Actions (Finalization Level)
-    if ((isOverallApprover || isSuperAdmin) && !shouldBlockManagerActions) {
+  // Manager actions: use helper to determine if manager actions should be shown in the current context.
+  const managerActionsAllowed = shouldShowManagerActions({ status, currentAssigneeRole: proposal?.currentAssigneeRole, normalizedRoles });
+  if ((isOverallApprover || isSuperAdmin) && managerActionsAllowed) {
       if (isWorkflowStage('manager') || 
           normalizedStatus === "OFFICER APPROVED" || status === "Officer Approved") {
         actions.push({
@@ -581,9 +585,9 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       }
     }
 
-    // FALLBACK: If BUDGET_MANAGER and no actions found but status is "Forwarded to Manager", ensure Return action is available
-    // This handles cases where role detection might fail but manager user can still perform manager actions
-    if (isOverallApprover && !shouldBlockManagerActions && actions.length === 0 && 
+  // FALLBACK: If BUDGET_MANAGER and no actions found but status is "Forwarded to Manager", ensure Return action is available
+  // This handles cases where role detection might fail but manager user can still perform manager actions
+  if (isOverallApprover && managerActionsAllowed && actions.length === 0 && 
         (normalizedStatus === 'FORWARDED TO MANAGER' || status === 'Forwarded to Manager')) {
       console.warn('⚠️ Role detection may have failed, but adding fallback manager actions for "Forwarded to Manager" status');
       actions.push({
@@ -614,8 +618,8 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     }
 
     // Log if actions are being blocked due to role hierarchy
-    if (shouldBlockManagerActions && (isOverallApprover || isSuperAdmin)) {
-      console.warn('🚫 BLOCKED: Manager actions blocked for BUDGET_PLANNING_ANALYST user (role hierarchy protection active)');
+    if (!managerActionsAllowed && (isOverallApprover || isSuperAdmin)) {
+      console.warn('🚫 BLOCKED: Manager actions blocked due to return-to role or role hierarchy protection');
     }
     if (shouldBlockOfficerActions && isBudgetOfficer) {
       console.warn('🚫 BLOCKED: Officer actions blocked for BUDGET_PLANNING_ANALYST user (role hierarchy protection active)');
