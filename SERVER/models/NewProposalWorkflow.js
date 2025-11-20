@@ -60,6 +60,24 @@ const newProposalWorkflowSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'region' // Align with actual model name export in models/Region.js
   },
+  // Organizational fields - captured at proposal submission
+  division: {
+    type: String,
+    trim: true
+  },
+  department: {
+    type: String,
+    trim: true
+  },
+  office: {
+    type: String,
+    trim: true,
+    default: null
+  },
+  isCentralOffice: {
+    type: Boolean,
+    default: false
+  },
   currentAssigneeRole: {
     type: String,
     enum: [

@@ -508,6 +508,9 @@ exports.createProposal = async (req, res) => {
       createdBy: userId,
       createdByName: userName,
       region: finalRegionId,
+      division: derivedDivision || undefined,
+      department: derivedDepartment || undefined,
+      isCentralOffice: false, // Default to false; can be changed later
       status: 'DRAFT'
     };
 
@@ -1282,7 +1285,7 @@ exports.updateProposal = async (req, res) => {
       });
     }
 
-    const allowedFields = ['title', 'description', 'modelType', 'fiscalYear', 'amount', 'income', 'personnel', 'mooe', 'capitalOutlay'];
+    const allowedFields = ['title', 'description', 'modelType', 'fiscalYear', 'amount', 'income', 'personnel', 'mooe', 'capitalOutlay', 'division', 'department', 'office', 'isCentralOffice'];
     const updates = {};
     const changes = {}; // Track what changed
 

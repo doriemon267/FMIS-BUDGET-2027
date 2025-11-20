@@ -56,30 +56,33 @@ const createConsolidationRecord = async (proposalData) => {
 
     console.log('[BRD_CONSOLIDATION] Extracted region name:', regionName);
 
-    // Get division, department, and budgetType from proposal or linked legacy proposal
-    // If division/department are not available, use region information
-    let division = proposalData.division || regionName || 'General';
-    let department = proposalData.department || regionName || 'General';
+    // Get division, department, and budgetType from proposal (NEW FIELDS in NewProposalWorkflow)
+    // Priority: NPW fields > legacy proposal > user assignment > region name fallback
+    let division = proposalData.division;
+    let department = proposalData.department;
     let budgetType = proposalData.budgetType || proposalData.modelType || 'Initial';
+    
+    console.log('[BRD_CONSOLIDATION] NPW org fields - Division:', division, 'Department:', department, 'IsCO:', proposalData.isCentralOffice);
 
-    // Try to get more detailed info from linked legacy proposal or user assignment
-    if (proposalData.workflowRef || proposalData.legacyProposalId) {
+    // Try to get more detailed info from linked legacy proposal if NPW fields are missing
+    if (!division || !department) {
       try {
         const legacyProposalId = proposalData.workflowRef || proposalData.legacyProposalId;
-        const legacyProposal = await Proposal.findById(legacyProposalId).lean();
-        if (legacyProposal) {
-          console.log('[BRD_CONSOLIDATION] Found legacy proposal:', legacyProposalId);
-          division = legacyProposal.division || division;
-          department = legacyProposal.department || department;
-          budgetType = legacyProposal.budgetType || budgetType;
+        if (legacyProposalId) {
+          const legacyProposal = await Proposal.findById(legacyProposalId).lean();
+          if (legacyProposal) {
+            console.log('[BRD_CONSOLIDATION] Found legacy proposal:', legacyProposalId);
+            division = division || legacyProposal.division;
+            department = department || legacyProposal.department;
+          }
         }
       } catch (error) {
         console.log('[BRD_CONSOLIDATION] Could not fetch legacy proposal:', error.message);
       }
     }
 
-    // If still "General", try to get from createdBy user's organizational assignment
-    if (division === 'General' || division === regionName) {
+    // If still missing, try to get from createdBy user's organizational assignment
+    if (!division || !department) {
       try {
         if (proposalData.createdBy) {
           const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
@@ -87,15 +90,20 @@ const createConsolidationRecord = async (proposalData) => {
             userId: proposalData.createdBy 
           }).lean();
           
-          if (userAssignment && userAssignment.division) {
-            division = userAssignment.division;
-            console.log('[BRD_CONSOLIDATION] Got division from user assignment:', division);
+          if (userAssignment) {
+            division = division || userAssignment.division;
+            department = department || userAssignment.department;
+            console.log('[BRD_CONSOLIDATION] Got org data from user assignment');
           }
         }
       } catch (error) {
         console.log('[BRD_CONSOLIDATION] Could not fetch user assignment:', error.message);
       }
     }
+
+    // Final fallback: use region name if still missing
+    division = division || regionName || 'General';
+    department = department || regionName || 'General';
 
     console.log('[BRD_CONSOLIDATION] Extracted data - Region:', regionName, 'Division:', division, 'Department:', department, 'BudgetType:', budgetType);
 
