@@ -212,11 +212,26 @@ const DashboardHeader = ({
                   >
                     {notification.title || "Notification"}
                   </Typography>
-                  {timestampLabel && (
-                    <Typography variant="caption" sx={{ color: "text.secondary", whiteSpace: "nowrap" }}>
-                      {timestampLabel}
-                    </Typography>
-                  )}
+                  <Box sx={{ display: "flex", gap: 0.5, alignItems: "center", whiteSpace: "nowrap" }}>
+                    {!isUnread && (
+                      <Chip
+                        label="Read"
+                        size="small"
+                        variant="outlined"
+                        sx={{
+                          height: "20px",
+                          fontSize: "0.65rem",
+                          color: "#999",
+                          borderColor: "#ddd"
+                        }}
+                      />
+                    )}
+                    {timestampLabel && (
+                      <Typography variant="caption" sx={{ color: "text.secondary", whiteSpace: "nowrap" }}>
+                        {timestampLabel}
+                      </Typography>
+                    )}
+                  </Box>
                 </Box>
 
                 {notification.message && (

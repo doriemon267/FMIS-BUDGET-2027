@@ -723,53 +723,53 @@ exports.getProposals = async (req, res) => {
     }
 
     // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's organizational assignment
+    // TEMPORARILY DISABLED - Need to debug field names in database
     // Apply to all views EXCEPT 'monitoring' (which is for Budget Manager who sees all)
     // and SUPER ADMIN (who sees everything)
-    if (userRole !== 'SUPER ADMIN' && userRole !== 'BUDGET MANAGER' && view !== 'monitoring') {
+    if (false && userRole !== 'SUPER ADMIN' && userRole !== 'BUDGET MANAGER' && view !== 'monitoring') {
       try {
-        // Get user's hierarchical assignment with accessible divisions/departments/regions
+        // Get user's hierarchical assignment
         const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString }).lean();
+        
+        console.log('[FILTER DEBUG] UserRole:', userRole, 'View:', view);
+        console.log('[FILTER DEBUG] User Assignment:', JSON.stringify(userAssignment, null, 2));
         
         if (userAssignment) {
           const filteredProposals = newProposals.filter(p => {
             const legacy = legacyMap.get(String(p._id));
             if (!legacy) return false;
             
-            // Extract accessible organizational units from assignment
-            // accessibleDivisions is an array of division names
-            // accessibleDepartments is an array of {departmentName, _id} objects
-            const accessibleDivisions = userAssignment.accessibleDivisions || [];
-            const accessibleDepartments = userAssignment.accessibleDepartments || [];
-            const departmentNames = accessibleDepartments.map(d => d.departmentName || d.Department || d);
+            console.log('[FILTER DEBUG] Proposal division/dept/region:', legacy.division, '/', legacy.department, '/', legacy.region);
             
-            // Check if proposal is from an accessible division
-            if (legacy.division && accessibleDivisions.includes(legacy.division)) {
+            // Match logic based on assignment level
+            // If assigned to DIVISION, only show proposals from that division
+            if (userAssignment.divisionName && legacy.division === userAssignment.divisionName) {
+              console.log('[FILTER DEBUG] ✓ Allowed by division match');
               return true;
             }
             
-            // Check if proposal is from an accessible department
-            if (legacy.department && departmentNames.includes(legacy.department)) {
+            // If assigned to DEPARTMENT, show proposals from that department  
+            if (userAssignment.departmentId && legacy.department) {
+              console.log('[FILTER DEBUG] ✓ Allowed by department match');
               return true;
             }
             
-            // Check if proposal is from user's assigned region (fallback)
-            if (userAssignment.regionName && legacy.region === userAssignment.regionName) {
+            // If assigned to REGION, only show proposals from that region
+            if (userAssignment.regionId && legacy.region) {
+              console.log('[FILTER DEBUG] ✓ Allowed by region match');
               return true;
             }
             
-            // If no match found, don't show the proposal
+            console.log('[FILTER DEBUG] ✗ BLOCKED');
             return false;
           });
           
-          // Only apply filter if it results in proposals (safety check)
           if (filteredProposals.length > 0) {
             newProposals = filteredProposals;
           }
         }
-        // If no assignment found, show all proposals (fallback)
       } catch (err) {
-        console.error('[getProposals] Error filtering by responsibility center:', err.message);
-        // On error, keep original proposals (don't hide data)
+        console.error('[getProposals] Error filtering:', err.message);
       }
     }
 
