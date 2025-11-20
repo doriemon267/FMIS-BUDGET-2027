@@ -51,6 +51,7 @@ import HierarchicalUserAssignmentPage from "./pages/HierarchicalUserAssignmentPa
 import NewProposalWorkflowPage from "./pages/NewProposalWorkflowPage";
 import AuditLogsPage from "./pages/AuditLogsPage";
 import ProposalDetailsPage from "./components/workflow/ProposalDetailsPage";
+import BRDConsolidationPage from "./pages/BRDConsolidationPage";
 const App = () => {
   return (
     <Routes>
@@ -246,6 +247,16 @@ const App = () => {
           element={
             <ProtectedRoute>
               <NewProposalWorkflowPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/brd-consolidation"
+          element={
+            <ProtectedRoute
+              requiredWorkflowRoles={["BUDGET_PLANNING_ANALYST", "budgetAnalyst", "BUDGET_OFFICER", "BUDGET_MANAGER", "overallBudgetApprover", "superAdmin"]}
+            >
+              <BRDConsolidationPage />
             </ProtectedRoute>
           }
         />

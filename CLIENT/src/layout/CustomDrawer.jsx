@@ -124,6 +124,12 @@ const CustomDrawer = ({ collapsed = false }) => {
                 isAllow: hasPermission(currentUser, "CreateProposals") || hasPermission(currentUser, "EditOwnProposals"),
                 icon: <FaClipboardList />,
               },
+              {
+                link: "/brd-consolidation",
+                name: "BRD Consolidation Structure",
+                isAllow: isBudgetPlanningAnalyst || isBudgetOfficer || isOverallApprover || isSuperAdmin(currentUser),
+                icon: <BiData />,
+              },
               // {
               //   link: "/myProposals",
               //   name: "My Proposals",
