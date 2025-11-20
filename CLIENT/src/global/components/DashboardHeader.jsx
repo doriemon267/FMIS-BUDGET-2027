@@ -302,11 +302,33 @@ const DashboardHeader = ({
                 <Badge
                   badgeContent={unreadCount}
                   color={unreadCount > 0 ? "error" : "default"}
+                  overlap="circular"
+                  variant={unreadCount > 0 ? "standard" : "dot"}
+                  sx={{
+                    "& .MuiBadge-badge": {
+                      backgroundColor: unreadCount > 0 ? "#f44336" : "#999",
+                      color: "#fff",
+                      fontSize: "0.75rem",
+                      fontWeight: "bold",
+                      minWidth: "20px",
+                      height: "20px",
+                      padding: "0 6px",
+                      borderRadius: "10px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }
+                  }}
+                  anchorOrigin={{
+                    vertical: "top",
+                    horizontal: "right",
+                  }}
                 >
                   <MdCircleNotifications
                     size={30}
                     style={{
                       transition: "color 0.3s",
+                      color: unreadCount > 0 ? "#f44336" : "#666"
                     }}
                   />
                 </Badge>
