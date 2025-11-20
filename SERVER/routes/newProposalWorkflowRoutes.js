@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const newProposalWorkflowController = require('../controllers/newProposalWorkflowController');
+const consolidationController = require('../controllers/consolidationController');
 const checkToken = require('../middleware/checkToken');
 
 // Apply authentication middleware to all routes
@@ -18,5 +19,12 @@ router.post('/proposals/:id/action', newProposalWorkflowController.performAction
 router.get('/proposals/:id', newProposalWorkflowController.getProposalById);
 router.put('/proposals/:id', newProposalWorkflowController.updateProposal);
 router.delete('/proposals/:id', newProposalWorkflowController.deleteProposal);
+
+// BRD Consolidation Routes
+router.get('/consolidation/folders', consolidationController.getFolders);
+router.get('/consolidation/folders/:path/proposals', consolidationController.getProposalsInFolder);
+router.get('/consolidation/regions', consolidationController.getRegionStructure);
+router.get('/consolidation/central-office', consolidationController.getCentralOfficeStructure);
+router.get('/consolidation/summary', consolidationController.getSummary);
 
 module.exports = router;

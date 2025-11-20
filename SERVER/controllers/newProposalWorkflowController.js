@@ -10,6 +10,7 @@ const Income = require('../models/Income');
 const ProposalEditLog = require('../models/ProposalEditLog');
 const Notification = require('../models/Notification');
 const notificationController = require('./notificationController');
+const consolidationService = require('../utils/consolidationService');
 
 // Workflow status transitions based on the specification
 const WORKFLOW_TRANSITIONS = {
@@ -1135,6 +1136,25 @@ exports.performAction = async (req, res) => {
     });
 
     await proposal.save();
+
+    // Trigger BRD Consolidation when proposal reaches BRD Analyst level
+    if (newWorkflowStatus === 'FORWARDED_TO_BRD_ANALYST' && oldStatus !== 'FORWARDED_TO_BRD_ANALYST') {
+      try {
+        console.log('[PERFORM_ACTION] Triggering BRD consolidation for proposal:', proposal._id);
+        // Populate region data for consolidation
+        const populatedProposal = await NewProposalWorkflow.findById(proposal._id)
+          .populate('region', 'Region RegionName')
+          .lean();
+        
+        if (populatedProposal) {
+          await consolidationService.createConsolidationRecord(populatedProposal);
+          console.log('[PERFORM_ACTION] BRD consolidation record created successfully');
+        }
+      } catch (consolidationError) {
+        console.error('[PERFORM_ACTION] Error creating BRD consolidation:', consolidationError.message);
+        // Don't fail the workflow action if consolidation fails
+      }
+    }
 
     // Also update the legacy Proposal collection to keep it in sync
     try {
