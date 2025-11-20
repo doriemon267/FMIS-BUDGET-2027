@@ -26,5 +26,7 @@ router.get('/consolidation/folders/:path/proposals', consolidationController.get
 router.get('/consolidation/regions', consolidationController.getRegionStructure);
 router.get('/consolidation/central-office', consolidationController.getCentralOfficeStructure);
 router.get('/consolidation/summary', consolidationController.getSummary);
+router.get('/consolidation/:consolidationId', consolidationController.getConsolidationRecord);
+router.put('/consolidation/:consolidationId/org-info', consolidationController.updateOrganizationalInfo);
 
 module.exports = router;

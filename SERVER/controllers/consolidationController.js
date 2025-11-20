@@ -153,3 +153,90 @@ exports.getSummary = async (req, res) => {
     });
   }
 };
+
+/**
+ * Get a specific consolidation record for editing
+ */
+exports.getConsolidationRecord = async (req, res) => {
+  try {
+    const { consolidationId } = req.params;
+    
+    if (!consolidationId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Consolidation ID is required'
+      });
+    }
+
+    console.log('[CONSOLIDATION] Fetching consolidation record:', consolidationId);
+    
+    const record = await consolidationService.getConsolidationRecord(consolidationId);
+    
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        message: 'Consolidation record not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: record,
+      timestamp: new Date()
+    });
+  } catch (error) {
+    console.error('[CONSOLIDATION] Error fetching consolidation record:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch consolidation record',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Update organizational information for a consolidation record
+ * Allows BRD analyst to correct division, department, office assignment
+ */
+exports.updateOrganizationalInfo = async (req, res) => {
+  try {
+    const { consolidationId } = req.params;
+    const { division, department, office, isCentralOffice } = req.body;
+    
+    if (!consolidationId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Consolidation ID is required'
+      });
+    }
+
+    console.log('[CONSOLIDATION] Updating org info for consolidation:', consolidationId);
+    console.log('[CONSOLIDATION] Updates:', { division, department, office, isCentralOffice });
+    
+    const updated = await consolidationService.updateOrganizationalInfo(
+      consolidationId,
+      { division, department, office, isCentralOffice }
+    );
+    
+    if (!updated) {
+      return res.status(404).json({
+        success: false,
+        message: 'Consolidation record not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Organizational information updated successfully',
+      data: updated,
+      timestamp: new Date()
+    });
+  } catch (error) {
+    console.error('[CONSOLIDATION] Error updating organizational info:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update organizational information',
+      error: error.message
+    });
+  }
+};

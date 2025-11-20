@@ -25,14 +25,17 @@ import {
   TableHead,
   TableRow,
   TablePagination,
+  Button,
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
   FolderOpen as FolderOpenIcon,
   LocationOn as LocationOnIcon,
   StorageRounded as StorageRoundedIcon,
+  Edit as EditIcon,
 } from '@mui/icons-material';
 import api from '../config/api';
+import OrganizationalInfoEditor from '../components/OrganizationalInfoEditor';
 
 /**
  * BRD Consolidation Page
@@ -71,6 +74,26 @@ export default function BRDConsolidationPage() {
   const [rowsPerPageCO, setRowsPerPageCO] = useState(5);
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear());
   const [availableFiscalYears, setAvailableFiscalYears] = useState([]);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [selectedConsolidationId, setSelectedConsolidationId] = useState(null);
+
+  // Handle opening the organizational info editor
+  const handleEditOrgInfo = (consolidationId) => {
+    setSelectedConsolidationId(consolidationId);
+    setEditorOpen(true);
+  };
+
+  // Handle closing the editor
+  const handleEditorClose = () => {
+    setEditorOpen(false);
+    setSelectedConsolidationId(null);
+  };
+
+  // Handle when organizational info is saved - refresh data
+  const handleOrgInfoSaved = () => {
+    // Re-fetch consolidation data to show updated org values
+    fetchConsolidationData();
+  };
 
   // Initialize with available fiscal years
   useEffect(() => {
@@ -364,6 +387,9 @@ export default function BRDConsolidationPage() {
                                       <TableCell align="right" sx={{ fontWeight: 600 }}>
                                         Total Amount
                                       </TableCell>
+                                      <TableCell align="center" sx={{ fontWeight: 600, width: '80px' }}>
+                                        Actions
+                                      </TableCell>
                                     </TableRow>
                                   </TableHead>
                                   <TableBody>
@@ -392,6 +418,18 @@ export default function BRDConsolidationPage() {
                                           <TableCell align="right">{division.proposalCount}</TableCell>
                                           <TableCell align="right">
                                             ₱{(division.totalAmount || 0).toLocaleString('en-PH', { maximumFractionDigits: 0 })}
+                                          </TableCell>
+                                          <TableCell align="center">
+                                            {division.consolidationId && (
+                                              <IconButton
+                                                size="small"
+                                                color="primary"
+                                                title="Edit organizational information"
+                                                onClick={() => handleEditOrgInfo(division.consolidationId)}
+                                              >
+                                                <EditIcon fontSize="small" />
+                                              </IconButton>
+                                            )}
                                           </TableCell>
                                         </TableRow>
                                         
@@ -481,6 +519,9 @@ export default function BRDConsolidationPage() {
                     <TableCell align="right" sx={{ fontWeight: 700 }}>
                       Total Amount
                     </TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 700, width: '80px' }}>
+                      Actions
+                    </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -513,6 +554,21 @@ export default function BRDConsolidationPage() {
                           </TableCell>
                           <TableCell align="right">
                             ₱{(dept.totalAmount || 0).toLocaleString('en-PH', { maximumFractionDigits: 0 })}
+                          </TableCell>
+                          <TableCell align="center">
+                            {dept.consolidationId && (
+                              <IconButton
+                                size="small"
+                                color="primary"
+                                title="Edit organizational information"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditOrgInfo(dept.consolidationId);
+                                }}
+                              >
+                                <EditIcon fontSize="small" />
+                              </IconButton>
+                            )}
                           </TableCell>
                         </TableRow>
                         
@@ -603,6 +659,14 @@ export default function BRDConsolidationPage() {
           </Grid>
         </Paper>
       )}
+
+      {/* Organizational Info Editor Modal */}
+      <OrganizationalInfoEditor
+        open={editorOpen}
+        consolidationId={selectedConsolidationId}
+        onClose={handleEditorClose}
+        onSaved={handleOrgInfoSaved}
+      />
     </Container>
   );
 }

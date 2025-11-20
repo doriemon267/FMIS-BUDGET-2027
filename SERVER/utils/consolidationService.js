@@ -245,10 +245,16 @@ const getRegionStructure = async (fiscalYear = null) => {
       if (!structure[record.region].divisions[record.division]) {
         structure[record.region].divisions[record.division] = {
           division: record.division,
+          consolidationId: null, // Will be set from first record
           proposalCount: 0,
           totalAmount: 0,
           proposals: []
         };
+      }
+
+      // Store consolidationId for the division (from first record in this division)
+      if (!structure[record.region].divisions[record.division].consolidationId) {
+        structure[record.region].divisions[record.division].consolidationId = record._id.toString();
       }
 
       structure[record.region].divisions[record.division].proposalCount++;
@@ -258,7 +264,8 @@ const getRegionStructure = async (fiscalYear = null) => {
         title: record.proposalTitle,
         amount: record.proposalAmount,
         modelType: record.modelType,
-        budgetType: record.modelType
+        budgetType: record.modelType,
+        consolidationId: record._id.toString()
       });
     });
 
@@ -300,10 +307,16 @@ const getCentralOfficeStructure = async (fiscalYear = null) => {
       if (!departments[record.department]) {
         departments[record.department] = {
           department: record.department,
+          consolidationId: null, // Will be set from first record
           proposalCount: 0,
           totalAmount: 0,
           proposals: []
         };
+      }
+
+      // Store consolidationId for the department (from first record in this department)
+      if (!departments[record.department].consolidationId) {
+        departments[record.department].consolidationId = record._id.toString();
       }
 
       departments[record.department].proposalCount++;
@@ -313,7 +326,8 @@ const getCentralOfficeStructure = async (fiscalYear = null) => {
         title: record.proposalTitle,
         amount: record.proposalAmount,
         modelType: record.modelType,
-        budgetType: record.modelType
+        budgetType: record.modelType,
+        consolidationId: record._id.toString()
       });
     });
 
@@ -414,6 +428,64 @@ const updateConsolidationStatus = async (proposalId, newStatus, notes = '') => {
   }
 };
 
+/**
+ * Update organizational information for a consolidation record
+ * Allows BRD analyst to correct division, department, and office assignment
+ */
+const updateOrganizationalInfo = async (consolidationId, { division, department, office, isCentralOffice }) => {
+  try {
+    console.log(`[BRD_CONSOLIDATION] Updating org info for consolidation: ${consolidationId}`);
+    console.log(`[BRD_CONSOLIDATION] New values - Division: ${division}, Department: ${department}, Office: ${office}, IsCO: ${isCentralOffice}`);
+
+    const updateData = {};
+    if (division !== undefined) updateData.division = division;
+    if (department !== undefined) updateData.department = department;
+    if (office !== undefined) updateData.office = office;
+    if (isCentralOffice !== undefined) updateData.isCentralOffice = isCentralOffice;
+
+    // Regenerate consolidation path if division/department changed
+    if (division || department) {
+      const doc = await BRDConsolidation.findById(consolidationId);
+      if (doc) {
+        const newDivision = division || doc.division;
+        const newDepartment = department || doc.department;
+        const newPath = isCentralOffice || updateData.isCentralOffice 
+          ? `CentralOffice/${newDepartment}`
+          : `${doc.region}/${newDivision}`;
+        updateData.consolidationPath = newPath;
+        console.log(`[BRD_CONSOLIDATION] Updated path: ${updateData.consolidationPath}`);
+      }
+    }
+
+    const updated = await BRDConsolidation.findByIdAndUpdate(
+      consolidationId,
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    console.log(`[BRD_CONSOLIDATION] Successfully updated org info`);
+    return updated;
+  } catch (error) {
+    console.error('[BRD_CONSOLIDATION] Error updating organizational info:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get consolidation record by ID for editing
+ */
+const getConsolidationRecord = async (consolidationId) => {
+  try {
+    const record = await BRDConsolidation.findById(consolidationId)
+      .populate('proposalId', 'title modelType amount fiscalYear')
+      .lean();
+    return record;
+  } catch (error) {
+    console.error('[BRD_CONSOLIDATION] Error fetching consolidation record:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   createConsolidationRecord,
   generateConsolidationPath,
@@ -422,5 +494,7 @@ module.exports = {
   getRegionStructure,
   getCentralOfficeStructure,
   getConsolidationSummary,
-  updateConsolidationStatus
+  updateConsolidationStatus,
+  updateOrganizationalInfo,
+  getConsolidationRecord
 };
