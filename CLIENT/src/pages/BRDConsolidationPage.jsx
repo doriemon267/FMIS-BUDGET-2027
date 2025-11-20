@@ -70,6 +70,31 @@ export default function BRDConsolidationPage() {
   const [pageCO, setPageCO] = useState(0);
   const [rowsPerPageCO, setRowsPerPageCO] = useState(5);
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear());
+  const [availableFiscalYears, setAvailableFiscalYears] = useState([]);
+
+  // Initialize with available fiscal years
+  useEffect(() => {
+    const initializeFiscalYears = async () => {
+      try {
+        const summaryRes = await api.get('/api/new-proposal-workflow/consolidation/summary');
+        if (summaryRes.data.data && summaryRes.data.data.byFiscalYear) {
+          const years = Object.keys(summaryRes.data.data.byFiscalYear)
+            .map(Number)
+            .sort((a, b) => b - a);
+          setAvailableFiscalYears(years);
+          
+          // Set default to first available year with data
+          if (years.length > 0) {
+            setFiscalYear(years[0]);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching available fiscal years:', err);
+      }
+    };
+    
+    initializeFiscalYears();
+  }, []);
 
   // Fetch all consolidation data
   useEffect(() => {
@@ -186,9 +211,16 @@ export default function BRDConsolidationPage() {
               minWidth: '120px'
             }}
           >
-            {[2024, 2025, 2026, 2027, 2028].map(year => (
-              <option key={year} value={year}>{year}</option>
-            ))}
+            {availableFiscalYears.length > 0 ? (
+              availableFiscalYears.map(year => (
+                <option key={year} value={year}>{year}</option>
+              ))
+            ) : (
+              // Fallback to last 5 years if no data yet
+              [2024, 2025, 2026, 2027, 2028].map(year => (
+                <option key={year} value={year}>{year}</option>
+              ))
+            )}
           </select>
         </Box>
       </Box>

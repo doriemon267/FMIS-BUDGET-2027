@@ -57,11 +57,12 @@ const createConsolidationRecord = async (proposalData) => {
     console.log('[BRD_CONSOLIDATION] Extracted region name:', regionName);
 
     // Get division, department, and budgetType from proposal or linked legacy proposal
-    let division = proposalData.division || 'General';
-    let department = proposalData.department || 'General';
-    let budgetType = proposalData.budgetType || 'Initial';
+    // If division/department are not available, use region information
+    let division = proposalData.division || regionName || 'General';
+    let department = proposalData.department || regionName || 'General';
+    let budgetType = proposalData.budgetType || proposalData.modelType || 'Initial';
 
-    // Try to get more detailed info from linked legacy proposal
+    // Try to get more detailed info from linked legacy proposal or user assignment
     if (proposalData.workflowRef || proposalData.legacyProposalId) {
       try {
         const legacyProposalId = proposalData.workflowRef || proposalData.legacyProposalId;
@@ -74,6 +75,25 @@ const createConsolidationRecord = async (proposalData) => {
         }
       } catch (error) {
         console.log('[BRD_CONSOLIDATION] Could not fetch legacy proposal:', error.message);
+      }
+    }
+
+    // If still "General", try to get from createdBy user's organizational assignment
+    if (division === 'General' || division === regionName) {
+      try {
+        if (proposalData.createdBy) {
+          const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+          const userAssignment = await HierarchicalUserAssignment.findOne({ 
+            userId: proposalData.createdBy 
+          }).lean();
+          
+          if (userAssignment && userAssignment.division) {
+            division = userAssignment.division;
+            console.log('[BRD_CONSOLIDATION] Got division from user assignment:', division);
+          }
+        }
+      } catch (error) {
+        console.log('[BRD_CONSOLIDATION] Could not fetch user assignment:', error.message);
       }
     }
 
@@ -316,6 +336,12 @@ const getConsolidationSummary = async (fiscalYear = null) => {
   try {
     console.log('[BRD_CONSOLIDATION] Calculating consolidation summary');
 
+    // First, get all records to find available fiscal years
+    const allRecords = await BRDConsolidation.find({ status: 'ACTIVE' }).lean();
+    
+    // Get unique fiscal years
+    const fiscalYears = [...new Set(allRecords.map(r => r.fiscalYear))].sort((a, b) => b - a);
+
     const query = { status: 'ACTIVE' };
     if (fiscalYear) {
       query.fiscalYear = fiscalYear;
@@ -331,8 +357,15 @@ const getConsolidationSummary = async (fiscalYear = null) => {
       regionsCount: new Set(records.filter(r => !r.isCentralOffice).map(r => r.region)).size,
       departmentsCount: new Set(records.filter(r => r.isCentralOffice).map(r => r.department)).size,
       byModelType: {},
-      byRegion: {}
+      byRegion: {},
+      byFiscalYear: {}
     };
+
+    // Count by fiscal year
+    fiscalYears.forEach(fy => {
+      const fyRecords = allRecords.filter(r => r.fiscalYear === fy);
+      summary.byFiscalYear[fy] = fyRecords.length;
+    });
 
     // Count by model type
     records.forEach(record => {
