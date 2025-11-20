@@ -50,7 +50,6 @@ import { useRegion } from "../context/RegionContext";
 import api from "../config/api";
 import { toast } from "react-toastify";
 import { useWorkflowRef } from "../hooks/useWorkflowRef";
-import { useNotifications } from "../global/components/NotificationsContext";
 import { prettyRole } from '../utils/role-utils';
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -104,7 +103,6 @@ const NewProposalWorkflowPage = () => {
   const { activeRegion } = useRegion();
   const [searchParams] = useSearchParams();
   const { setWorkflowRef } = useWorkflowRef();
-  const { serverNotifications, markNotificationsAsRead } = useNotifications();
   const queryClient = useQueryClient();
 
   // Check if user is BRD (Budget Revenue Division) level or SUPER ADMIN
@@ -278,22 +276,9 @@ const NewProposalWorkflowPage = () => {
         setViewDetailsDialogOpen(true);
         // Clear the target so we don't auto-select again
         setTargetProposalId(null);
-        // Also mark related notifications as read (if any) on load
-        (async () => {
-          try {
-            if (targetProposalId && typeof window !== 'undefined') {
-              const matching = (serverNotifications || []).filter(n => String(n?.metadata?.proposalId) === String(targetProposalId));
-              if (matching.length > 0) {
-                await markNotificationsAsRead(matching.map(n => n._id));
-              }
-            }
-          } catch (e) {
-            console.debug('Auto-mark notifications read failed:', e?.message || e);
-          }
-        })();
       }
     }
-  }, [proposals, targetProposalId, serverNotifications, markNotificationsAsRead]);
+  }, [proposals, targetProposalId]);
 
   // Handle tab change
   const handleTabChange = (event, newValue) => {
@@ -638,7 +623,7 @@ const NewProposalWorkflowPage = () => {
       
       await fetchProposals();
       
-      queryClient.invalidateQueries({ queryKey: ["serverNotifications"] });
+      queryClient.invalidateQueries({ queryKey: ["workflowNotifications"] });
     } catch (error) {
       console.error("Error performing action:", error);
       toast.error("Failed to perform action");
@@ -853,7 +838,7 @@ const NewProposalWorkflowPage = () => {
 
       await fetchProposals();
       
-      queryClient.invalidateQueries({ queryKey: ["serverNotifications"] });
+      queryClient.invalidateQueries({ queryKey: ["workflowNotifications"] });
 
       const updatedProposalRes = await api.get(
         `${WORKFLOW_API_BASE}/${selectedProposal._id}`
@@ -2687,7 +2672,7 @@ const NewProposalWorkflowPage = () => {
                                 )
                               );
                               setProposalEditDirty(false);
-                              queryClient.invalidateQueries({ queryKey: ["serverNotifications"] });
+                              queryClient.invalidateQueries({ queryKey: ["workflowNotifications"] });
                             } catch (err) {
                               console.error(
                                 "Error updating proposal details",

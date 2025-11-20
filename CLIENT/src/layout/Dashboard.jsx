@@ -26,11 +26,8 @@ import env from "../utils/env";
 import CustomDrawer from "./CustomDrawer";
 import api from "../config/api";
 import { DateRange as DateRangeIcon, Notifications as NotificationsIcon } from "@mui/icons-material";
-import {
-  NotificationsProvider,
-  NotificationsContext,
-  useNotifications,
-} from "../global/components/NotificationsContext";
+import { WorkflowNotificationProvider } from "../context/WorkflowNotificationContext";
+import WorkflowNotifications from "../components/workflow/WorkflowNotifications";
 import ActiveRegionDisplay from "../components/common/ActiveRegionDisplay";
 import { useRegion } from "../context/RegionContext";
 
@@ -73,7 +70,7 @@ const DashboardContent = () => {
 
   // determine if we should blink: 1 day before up to due date
   const [blinkActive, setBlinkActive] = useState(false);
-  const { addAlert } = useContext(NotificationsContext);
+  // Remove NotificationsContext usage, keep blink logic for calendar icon
   useEffect(() => {
     if (!dueDateRaw) return;
     const check = () => {
@@ -81,42 +78,18 @@ const DashboardContent = () => {
       const due = new Date(dueDateRaw);
       const oneDayBefore = new Date(due.getTime() - 24 * 60 * 60 * 1000);
       setBlinkActive(now >= oneDayBefore && now <= due);
-      
-      // We'll let the NotificationsContext handle the alert display
     };
     check();
     const iv = setInterval(check, 60 * 1000);
     return () => clearInterval(iv);
   }, [dueDateRaw]);
 
-  // Add a function to handle calendar icon click
+  // Calendar icon click (no alert)
   const handleFiscalInfoClick = () => {
-    if (dueDateRaw) {
-      const due = new Date(dueDateRaw);
-      const now = new Date();
-      const timeLeft = due - now;
-      
-      if (timeLeft > 0) {
-        // Calculate days, hours left
-        const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
-        const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-        
-        addAlert({
-          message: `Submission deadline: ${dueDate} (${days} days, ${hours} hours remaining)`,
-          severity: days < 1 ? 'error' : 'warning',
-          autoHideDuration: 10000
-        });
-      }
-    }
+    // Optionally show a dialog or toast here if needed
   };
 
-  // notifications from server
-  const { serverNotifications, markNotificationsAsRead } = useNotifications();
-  const [anchorEl, setAnchorEl] = useState(null);
-  const openNotifications = Boolean(anchorEl);
-  const handleNotificationsClick = (e) => setAnchorEl(e.currentTarget);
-  const handleNotificationsClose = () => setAnchorEl(null);
-  const unreadCount = serverNotifications.length;
+  // Remove old notification logic, will use WorkflowNotifications instead
   
   // Get active region
   const { activeRegion } = useRegion();
@@ -216,96 +189,10 @@ const DashboardContent = () => {
 
 
           {/* Notifications Bell - ProposalNotifications Style */}
-          <Tooltip title="Proposals Notifications" arrow>
-            <IconButton
-              onClick={handleNotificationsClick}
-              sx={{
-                position: 'relative',
-                color: 'white',
-                transition: 'all 0.3s ease',
-                '&:hover': {
-                  bgcolor: 'rgba(255, 255, 255, 0.2)'
-                }
-              }}
-            >
-              <Badge badgeContent={unreadCount} color="error">
-                <NotificationsIcon />
-              </Badge>
-            </IconButton>
-          </Tooltip>
-          
-          <Menu
-            anchorEl={anchorEl}
-            open={openNotifications}
-            onClose={handleNotificationsClose}
-            PaperProps={{
-              sx: {
-                mt: 1,
-                boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-                borderRadius: '8px',
-                maxWidth: 450,
-                maxHeight: 500
-              }
-            }}
-          >
-            {unreadCount === 0 ? (
-              <MenuItem disabled>
-                <Typography variant="body2" color="textSecondary">
-                  No notifications
-                </Typography>
-              </MenuItem>
-            ) : (
-              <>
-                <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0' }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                    Proposals Notifications ({unreadCount})
-                  </Typography>
-                </Box>
-                {serverNotifications.slice(0, 5).map((n) => (
-                  <MenuItem
-                    key={n._id}
-                    onClick={() => {
-                      handleNotificationsClose();
-                    }}
-                    sx={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'flex-start',
-                      py: 1.5,
-                      px: 2,
-                      '&:hover': {
-                        bgcolor: '#f5f5f5'
-                      }
-                    }}
-                  >
-                    <Typography
-                      variant="subtitle2"
-                      sx={{
-                        fontWeight: 600,
-                        color: '#333',
-                        mb: 0.25
-                      }}
-                    >
-                      {n.title || n.message || 'New notification'}
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        color: '#666',
-                        lineHeight: 1.4,
-                        mb: 0.5,
-                        fontSize: '0.875rem'
-                      }}
-                    >
-                      {[n?.org?.region, n?.org?.department, n?.org?.division]
-                        .filter(Boolean)
-                        .join(' • ')}
-                    </Typography>
-                  </MenuItem>
-                ))}
-              </>
-            )}
-          </Menu>
+          {/* New Notification Bell - WorkflowNotifications */}
+          <WorkflowNotificationProvider>
+            <WorkflowNotifications />
+          </WorkflowNotificationProvider>
 
           <UserAvatarMenu />
         </Toolbar>
@@ -364,7 +251,5 @@ const DashboardContent = () => {
 };
 
 export default () => (
-  <NotificationsProvider>
-    <DashboardContent />
-  </NotificationsProvider>
+  <DashboardContent />
 );

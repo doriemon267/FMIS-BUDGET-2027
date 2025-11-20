@@ -22,6 +22,8 @@ export const NotificationsProvider = ({ children }) => {
     },
     refetchInterval: 60000, // poll every 60s
     refetchOnWindowFocus: true,
+    staleTime: 0, // Always treat as stale - force fresh fetch
+    gcTime: 0, // Don't cache in memory - always get fresh data
   });
 
   // Mark notifications as read (bulk or single)

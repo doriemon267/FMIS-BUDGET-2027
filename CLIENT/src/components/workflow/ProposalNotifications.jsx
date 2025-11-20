@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Badge,
   IconButton,
@@ -29,6 +30,7 @@ import { toast } from 'react-toastify';
 
 const ProposalNotifications = ({ showPersistentList = false }) => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
@@ -37,6 +39,12 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
   const { currentUser, setCurrentUser } = useUser();
   const [mutedProposals, setMutedProposals] = useState(new Set());
   const pollIntervalRef = useRef(null);
+
+  // On mount, clear React Query cache for notifications to ensure fresh data
+  useEffect(() => {
+    console.log('[ProposalNotifications] Component mounted - invalidating React Query cache');
+    queryClient.invalidateQueries({ queryKey: ['serverNotifications'] });
+  }, [queryClient]);
 
   // Fetch notifications
   const fetchNotifications = useCallback(async () => {
@@ -50,6 +58,22 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
       
       if (response.data.success) {
         const newNotifications = response.data.data || [];
+        
+        // DEBUG: Log what we received from API
+        if (newNotifications.length > 0) {
+          console.log('[ProposalNotifications] Received from API:', {
+            count: newNotifications.length,
+            first: {
+              _id: String(newNotifications[0]._id),
+              title: newNotifications[0].title,
+              message: String(newNotifications[0].message).substring(0, 100),
+              messageType: typeof newNotifications[0].message,
+              messageLength: String(newNotifications[0].message).length,
+              relatedEntityId: newNotifications[0].relatedEntityId,
+              metadata: newNotifications[0].metadata
+            }
+          });
+        }
         
         // Check for new notifications to trigger Windows notification
         const oldCount = notifications.length;
@@ -107,8 +131,35 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
   // Show Windows notification
   const showWindowsNotification = useCallback((notification) => {
     if ('Notification' in window && Notification.permission === 'granted') {
+      // Determine the best message to display
+      let displayMessage = '';
+      
+      // Check message field
+      if (notification.message) {
+        const msgStr = String(notification.message).trim();
+        // Only use message if it's NOT an ObjectID pattern
+        if (msgStr && !/^[a-f0-9]{24}$/i.test(msgStr) && msgStr.length > 20) {
+          displayMessage = msgStr;
+        }
+      }
+      
+      // Fall back to proposal title if message not suitable
+      if (!displayMessage && notification.metadata?.proposalTitle) {
+        displayMessage = String(notification.metadata.proposalTitle).trim();
+      }
+      
+      // Final fallback to notification title
+      if (!displayMessage && notification.title) {
+        displayMessage = String(notification.title).trim();
+      }
+      
+      // Ensure we have something to show
+      if (!displayMessage) {
+        displayMessage = 'Proposal Notification';
+      }
+      
       const notif = new Notification('Proposal Workflow', {
-        body: notification.message || notification.title,
+        body: displayMessage,
         icon: '/logo.png',
         tag: notification._id,
         requireInteraction: false
@@ -382,7 +433,36 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
                         mb: 0.5
                       }}
                     >
-                      {notification.message}
+                      {(() => {
+                        let displayMsg = '';
+                        
+                        if (notification.message) {
+                          const msgStr = String(notification.message).trim();
+                          console.log('[Dropdown Display]', {
+                            title: notification.title,
+                            messageRaw: msgStr.substring(0, 80),
+                            messageLength: msgStr.length,
+                            isObjectID: /^[a-f0-9]{24}$/i.test(msgStr),
+                            checksPassed: msgStr && !/^[a-f0-9]{24}$/i.test(msgStr) && msgStr.length > 20
+                          });
+                          if (msgStr && !/^[a-f0-9]{24}$/i.test(msgStr) && msgStr.length > 20) {
+                            displayMsg = msgStr;
+                          }
+                        }
+                        
+                        if (!displayMsg && notification.metadata?.proposalTitle) {
+                          displayMsg = String(notification.metadata.proposalTitle).trim();
+                          console.log('[Dropdown] Fell back to proposalTitle:', displayMsg);
+                        }
+                        
+                        if (!displayMsg && notification.title) {
+                          displayMsg = String(notification.title).trim();
+                          console.log('[Dropdown] Fell back to title:', displayMsg);
+                        }
+                        
+                        console.log('[Dropdown] Final display:', displayMsg.substring(0, 60));
+                        return displayMsg || 'Notification';
+                      })()}
                     </Typography>
                     <Typography
                       variant="caption"
@@ -556,7 +636,26 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
                         mb: 0.5
                       }}
                     >
-                      {notification.message}
+                      {(() => {
+                        let displayMsg = '';
+                        
+                        if (notification.message) {
+                          const msgStr = String(notification.message).trim();
+                          if (msgStr && !/^[a-f0-9]{24}$/i.test(msgStr) && msgStr.length > 20) {
+                            displayMsg = msgStr;
+                          }
+                        }
+                        
+                        if (!displayMsg && notification.metadata?.proposalTitle) {
+                          displayMsg = String(notification.metadata.proposalTitle).trim();
+                        }
+                        
+                        if (!displayMsg && notification.title) {
+                          displayMsg = String(notification.title).trim();
+                        }
+                        
+                        return displayMsg || 'Notification';
+                      })()}
                     </Typography>
                     <Typography
                       variant="caption"
