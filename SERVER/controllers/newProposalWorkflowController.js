@@ -607,7 +607,9 @@ exports.getProposals = async (req, res) => {
           const allowedStatuses = Object.keys(WORKFLOW_TRANSITIONS[userRole]); // enum codes
           const pendingEnum = allowedStatuses.filter(s => s !== 'DRAFT');
 
-          // Map enum codes to DB-stored human-readable statuses
+          // Map enum codes to DB-stored statuses
+          // NOTE: Database might store either enum format (FORWARDED_TO_BRD_ANALYST) 
+          // OR human-readable format (Forwarded to Budget Planning Analyst)
           const reverseStatusMapping = {
             'DRAFT': 'Draft',
             'FORWARDED_TO_REVIEWER': 'Forwarded to Reviewer',
@@ -624,20 +626,34 @@ exports.getProposals = async (req, res) => {
           };
 
           const pendingDb = pendingEnum.map(code => reverseStatusMapping[code] || code);
+          
+          // Include both enum format AND human-readable format to handle both storage types
+          const allStatuses = new Set([
+            ...pendingDb,                    // Human-readable formats
+            ...pendingEnum                   // Enum formats
+          ]);
 
           // Manager visibility enhancement: include analyst/officer stages and their returned variants
           if (userRole === 'BUDGET MANAGER') {
-            const analystOfficerStatuses = [
+            const analystOfficerEnumStatuses = [
+              'FORWARDED_TO_BRD_ANALYST',
+              'FORWARDED_TO_BRD_OFFICER',
+              'RETURNED_TO_PLANNING_ANALYST',
+              'RETURNED_TO_OFFICER'
+            ];
+            const analystOfficerDbStatuses = [
               reverseStatusMapping['FORWARDED_TO_BRD_ANALYST'],
               reverseStatusMapping['FORWARDED_TO_BRD_OFFICER'],
               reverseStatusMapping['RETURNED_TO_PLANNING_ANALYST'],
               reverseStatusMapping['RETURNED_TO_OFFICER']
             ].filter(Boolean);
-            const merged = new Set([...(pendingDb || []), ...analystOfficerStatuses]);
-            query.status = { $in: Array.from(merged) };
-          } else {
-            query.status = { $in: pendingDb };
+            
+            analystOfficerEnumStatuses.forEach(s => allStatuses.add(s));
+            analystOfficerDbStatuses.forEach(s => allStatuses.add(s));
           }
+          
+          query.status = { $in: Array.from(allStatuses) };
+          
           if (!query.status.$in || query.status.$in.length === 0) {
             return res.json({
               success: true,
@@ -723,53 +739,83 @@ exports.getProposals = async (req, res) => {
     }
 
     // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's organizational assignment
-    // TEMPORARILY DISABLED - Need to debug field names in database
     // Apply to all views EXCEPT 'monitoring' (which is for Budget Manager who sees all)
     // and SUPER ADMIN (who sees everything)
-    if (false && userRole !== 'SUPER ADMIN' && userRole !== 'BUDGET MANAGER' && view !== 'monitoring') {
+    if (userRole !== 'SUPER ADMIN' && userRole !== 'BUDGET MANAGER' && view !== 'monitoring') {
       try {
         // Get user's hierarchical assignment
-        const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString }).lean();
-        
-        console.log('[FILTER DEBUG] UserRole:', userRole, 'View:', view);
-        console.log('[FILTER DEBUG] User Assignment:', JSON.stringify(userAssignment, null, 2));
+        const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
+          .populate('departmentId', 'Department DepartmentName department')
+          .populate('regionId', 'Region RegionName region')
+          .lean();
         
         if (userAssignment) {
+          // Get assigned organizational unit names
+          const assignedDepartment = userAssignment.departmentId?.Department || 
+                                    userAssignment.departmentId?.DepartmentName ||
+                                    userAssignment.departmentId?.department;
+          const assignedRegion = userAssignment.regionId?.Region ||
+                                userAssignment.regionId?.RegionName ||
+                                userAssignment.regionId?.region;
+          const assignedDivision = userAssignment.divisionName;
+          
+          console.log('[ORG_FILTER] User:', userIdString, 'Role:', userRole, 'Level:', userAssignment.assignmentLevel);
+          console.log('[ORG_FILTER] Assigned - Dept:', assignedDepartment, 'Div:', assignedDivision, 'Region:', assignedRegion);
+          
           const filteredProposals = newProposals.filter(p => {
             const legacy = legacyMap.get(String(p._id));
             if (!legacy) return false;
             
-            console.log('[FILTER DEBUG] Proposal division/dept/region:', legacy.division, '/', legacy.department, '/', legacy.region);
+            console.log(`[ORG_FILTER] Checking proposal: Div=${legacy.division} Dept=${legacy.department} Region=${legacy.region}`);
             
-            // Match logic based on assignment level
-            // If assigned to DIVISION, only show proposals from that division
-            if (userAssignment.divisionName && legacy.division === userAssignment.divisionName) {
-              console.log('[FILTER DEBUG] ✓ Allowed by division match');
+            // CASE 1: User assigned at DIVISION level - only show proposals from that division
+            if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
+              if (legacy.division === assignedDivision) {
+                console.log('[ORG_FILTER] ✓ ALLOWED (division match)');
+                return true;
+              }
+            }
+            
+            // CASE 2: User assigned at DEPARTMENT level - only show proposals from that department
+            if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
+              if (legacy.department === assignedDepartment) {
+                console.log('[ORG_FILTER] ✓ ALLOWED (department match)');
+                return true;
+              }
+            }
+            
+            // CASE 3: User assigned at REGION level - only show proposals from that region
+            if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
+              if (legacy.region === assignedRegion) {
+                console.log('[ORG_FILTER] ✓ ALLOWED (region match)');
+                return true;
+              }
+            }
+            
+            // CASE 4: Full access (no restrictions)
+            if (userAssignment.assignmentLevel === 'FULL') {
+              console.log('[ORG_FILTER] ✓ ALLOWED (full access)');
               return true;
             }
             
-            // If assigned to DEPARTMENT, show proposals from that department  
-            if (userAssignment.departmentId && legacy.department) {
-              console.log('[FILTER DEBUG] ✓ Allowed by department match');
-              return true;
-            }
-            
-            // If assigned to REGION, only show proposals from that region
-            if (userAssignment.regionId && legacy.region) {
-              console.log('[FILTER DEBUG] ✓ Allowed by region match');
-              return true;
-            }
-            
-            console.log('[FILTER DEBUG] ✗ BLOCKED');
+            console.log('[ORG_FILTER] ✗ BLOCKED (no match)');
             return false;
           });
           
+          console.log(`[ORG_FILTER] Results: ${newProposals.length} proposals before, ${filteredProposals.length} after`);
+          
+          // Only apply filter if it results in proposals
           if (filteredProposals.length > 0) {
             newProposals = filteredProposals;
+          } else {
+            console.log('[ORG_FILTER] Filter returned 0 results, keeping all proposals as fallback');
           }
+        } else {
+          console.log('[ORG_FILTER] No assignment found for user, showing all proposals');
         }
       } catch (err) {
-        console.error('[getProposals] Error filtering:', err.message);
+        console.error('[ORG_FILTER] Error:', err.message);
+        // On error, keep original proposals (don't hide data)
       }
     }
 

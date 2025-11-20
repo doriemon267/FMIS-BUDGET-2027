@@ -1616,13 +1616,17 @@ const NewProposalWorkflowPage = () => {
                         const displayStatus = statusLabels[status] || status;
                         
                         return (
-                          <Grid item xs={12} sm={6} md={4} lg={3} key={status}>
+                          <Grid item xs={12} sm={6} md={3} key={status} sx={{ display: "flex" }}>
                             <Card
                               elevation={2}
                               sx={{
                                 borderLeft: "6px solid #375e38",
                                 borderRadius: "8px",
                                 transition: "all 0.3s ease",
+                                width: "100%",
+                                display: "flex",
+                                flexDirection: "column",
+                                justifyContent: "center",
                                 "&:hover": {
                                   elevation: 4,
                                   boxShadow: "0 8px 16px rgba(55, 94, 56, 0.15)",
@@ -1630,7 +1634,7 @@ const NewProposalWorkflowPage = () => {
                                 }
                               }}
                             >
-                              <CardContent sx={{ py: 2, px: 2 }}>
+                              <CardContent sx={{ py: 2, px: 2, textAlign: "center" }}>
                                 <Typography
                                   variant="body2"
                                   sx={{
@@ -1638,7 +1642,11 @@ const NewProposalWorkflowPage = () => {
                                     color: "#2d5016",
                                     mb: 1,
                                     fontSize: "0.9rem",
-                                    lineHeight: 1.4
+                                    lineHeight: 1.4,
+                                    minHeight: "2.8rem",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center"
                                   }}
                                 >
                                   {displayStatus}
@@ -1649,7 +1657,7 @@ const NewProposalWorkflowPage = () => {
                                     m: 0,
                                     fontWeight: 700,
                                     color: "#375e38",
-                                    fontSize: "2rem"
+                                    fontSize: "2.5rem"
                                   }}
                                 >
                                   {count}
@@ -1661,14 +1669,18 @@ const NewProposalWorkflowPage = () => {
                       }
                     )}
                     {/* Total Monitored Card */}
-                    <Grid item xs={12} sm={6} md={4} lg={3}>
+                    <Grid item xs={12} sm={6} md={3} sx={{ display: "flex" }}>
                       <Card
                         elevation={3}
                         sx={{
                           borderLeft: "6px solid #2d5016",
                           bgcolor: "#f4f7f4",
                           borderRadius: "8px",
-                          background: "linear-gradient(135deg, #f4f7f4 0%, #e8f1e8 100%)"
+                          background: "linear-gradient(135deg, #f4f7f4 0%, #e8f1e8 100%)",
+                          width: "100%",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "center"
                         }}
                       >
                         <CardContent sx={{ py: 2, px: 2, textAlign: "center" }}>
@@ -1678,18 +1690,22 @@ const NewProposalWorkflowPage = () => {
                               fontWeight: 700,
                               color: "#2d5016",
                               mb: 1,
-                              fontSize: "0.95rem",
+                              fontSize: "0.9rem",
                               textTransform: "uppercase",
-                              letterSpacing: "0.5px"
+                              letterSpacing: "0.5px",
+                              minHeight: "2.8rem",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center"
                             }}
                           >
                             Total Monitored
                           </Typography>
                           <Typography
-                            variant="h4"
+                            variant="h5"
                             sx={{
                               m: 0,
-                              fontWeight: 800,
+                              fontWeight: 700,
                               color: "#375e38",
                               fontSize: "2.5rem"
                             }}
