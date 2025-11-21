@@ -1,14 +1,54 @@
 require("dotenv").config();
 // Removed console silencing - we want essential startup messages to show
-const { logger } = require("./utils/logRedactor");
-// Replace console methods with redacting versions (comment out if you want raw logs)
-if (process.env.REDACT_LOGS === 'true') {
-  console.log = logger.log.bind(logger);
-  console.error = logger.error.bind(logger);
-  console.warn = logger.warn.bind(logger);
-  console.info = logger.info.bind(logger);
-  if (console.debug) console.debug = logger.debug.bind(logger);
-}
+
+// Apply log redaction and debug mode globally
+const { logger: redactLogger } = require("./utils/logRedactor");
+const debugLogger = require("./utils/debugLogger");
+
+// Store original console methods before replacing
+const originalConsole = {
+  log: console.log,
+  error: console.error,
+  warn: console.warn,
+  info: console.info,
+  debug: console.debug
+};
+
+// Replace console methods with combined redaction + debug filtering
+const shouldRedact = process.env.REDACT_LOGS === 'true';
+const debugMode = process.env.DEBUG_MODE === 'true';
+
+console.log = (...args) => {
+  if (debugMode) {
+    if (shouldRedact) redactLogger.log(...args);
+    else originalConsole.log(...args);
+  }
+};
+
+console.info = (...args) => {
+  if (debugMode) {
+    if (shouldRedact) redactLogger.info?.(...args);
+    else originalConsole.info?.(...args);
+  }
+};
+
+console.debug = (...args) => {
+  if (debugMode) {
+    if (shouldRedact) redactLogger.debug?.(...args);
+    else originalConsole.debug?.(...args);
+  }
+};
+
+// Errors and warnings always show (but still get redacted)
+console.error = (...args) => {
+  if (shouldRedact) redactLogger.error(...args);
+  else originalConsole.error(...args);
+};
+
+console.warn = (...args) => {
+  if (shouldRedact) redactLogger.warn(...args);
+  else originalConsole.warn(...args);
+};
 const express = require("express");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
