@@ -73,12 +73,12 @@ const BackupNotificationSystem = ({
   onClose, 
   onViewDetails,
   onDownloadBackup,
-  enableSound = true 
+  // enableSound removed
 }) => {
   const theme = useTheme();
   const [activeNotifications, setActiveNotifications] = useState([]);
   const [detailsDialog, setDetailsDialog] = useState({ open: false, notification: null });
-  const [soundEnabled, setSoundEnabled] = useState(enableSound);
+  // const [soundEnabled, setSoundEnabled] = useState(enableSound); // sound logic removed
 
   useEffect(() => {
     setActiveNotifications(notifications.filter(n => !n.dismissed));
@@ -103,43 +103,7 @@ const BackupNotificationSystem = ({
     }
   };
 
-  const playNotificationSound = (type) => {
-    if (!soundEnabled) return;
-    
-    try {
-      // Create audio context for notification sounds
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      
-      // Different tones for different notification types
-      switch (type) {
-        case 'success':
-          oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-          oscillator.frequency.setValueAtTime(1000, audioContext.currentTime + 0.1);
-          break;
-        case 'error':
-          oscillator.frequency.setValueAtTime(300, audioContext.currentTime);
-          oscillator.frequency.setValueAtTime(200, audioContext.currentTime + 0.1);
-          break;
-        case 'warning':
-          oscillator.frequency.setValueAtTime(600, audioContext.currentTime);
-          break;
-        default:
-          oscillator.frequency.setValueAtTime(500, audioContext.currentTime);
-      }
-      
-      gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-      
-      oscillator.start(audioContext.currentTime);
-      oscillator.stop(audioContext.currentTime + 0.2);
-    } catch (error) {
-    }
-  };
+  // playNotificationSound removed
 
   const ProgressNotification = ({ notification }) => (
     <Card sx={{ mb: 1, minWidth: 400 }}>

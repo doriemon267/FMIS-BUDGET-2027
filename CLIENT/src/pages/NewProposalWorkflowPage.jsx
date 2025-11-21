@@ -195,6 +195,7 @@ const NewProposalWorkflowPage = () => {
   const [casualPersonnelRowsPerPage, setCasualPersonnelRowsPerPage] = useState(10);
   const [chargedPersonnelPage, setChargedPersonnelPage] = useState(0);
   const [chargedPersonnelRowsPerPage, setChargedPersonnelRowsPerPage] = useState(10);
+  const [actionLoading, setActionLoading] = useState(false);
 
   // Edit mode and change tracking for reviewers - now for items
   const [editableItems, setEditableItems] = useState({
@@ -607,6 +608,7 @@ const NewProposalWorkflowPage = () => {
       return;
     }
 
+    setActionLoading(true);
     try {
       const backendAction = mapActionToBackend(actionType);
       await api.post(`${WORKFLOW_API_BASE}/${selectedProposal._id}/action`, {
@@ -627,6 +629,8 @@ const NewProposalWorkflowPage = () => {
     } catch (error) {
       console.error("Error performing action:", error);
       toast.error("Failed to perform action");
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -2298,7 +2302,7 @@ const NewProposalWorkflowPage = () => {
           <Button
             onClick={handleProposalAction}
             variant="contained"
-            disabled={actionType?.includes("return") && !actionComment.trim()}
+            disabled={actionLoading || (actionType?.includes("return") && !actionComment.trim())}
             sx={{
               bgcolor: "#2d5016",
               color: "white",
@@ -2314,9 +2318,13 @@ const NewProposalWorkflowPage = () => {
                 bgcolor: "#ccc",
                 color: "#666",
               },
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
             }}
           >
-            Confirm Action
+            {actionLoading && <CircularProgress size={20} sx={{ color: "white" }} />}
+            {actionLoading ? "Processing..." : "Confirm Action"}
           </Button>
         </DialogActions>
       </Dialog>

@@ -110,15 +110,7 @@ exports.finalVerifyAtRegion = async (req, res) => {
 };
 exports.updateProposalStatus = async (req, res) => {
   try {
-    console.log('ðŸ”„ updateProposalStatus called with payload:', {
-      personnelIds: req.body.personnelIds?.length,
-      mooeIds: req.body.mooeIds?.length,
-      capitalOutlayIds: req.body.capitalOutlayIds?.length,
-      incomeIds: req.body.incomeIds?.length,
-      fiscalYear: req.body.fiscalYear,
-      budgetType: req.body.budgetType,
-      region: req.body.region
-    });
+    // console.log('ðŸ”„ updateProposalStatus called with payload:', req.body);
     const { 
       personnelIds, 
       mooeIds, 
@@ -161,7 +153,7 @@ exports.updateProposalStatus = async (req, res) => {
       }
     }
     
-    console.log('Submitter organizational context:', { submitterDepartment, submitterDivision });
+  // console.log('Submitter organizational context:', { submitterDepartment, submitterDivision });
     // Optimize: Run all database updates in parallel for better performance
     const updatePromises = [];
     if (personnelIds && Array.isArray(personnelIds) && personnelIds.length > 0) {
@@ -295,7 +287,7 @@ exports.updateProposalStatus = async (req, res) => {
       const deptRegion = req.hierarchicalAccess.accessibleRegions?.[0]?.regionName;
       const deptName = req.hierarchicalAccess.accessibleDepartments?.[0]?.departmentName;
 
-      console.log(`ðŸ”„ DEPARTMENT AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
+  // console.log(`ðŸ”„ DEPARTMENT AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
 
       if (deptRegion && deptName) {
         // Get Department-level Personnel data
@@ -475,7 +467,7 @@ exports.updateProposalStatus = async (req, res) => {
       const deptRegion = req.hierarchicalAccess.accessibleRegions?.[0]?.regionName;
       const deptName = req.hierarchicalAccess.accessibleDepartments?.[0]?.departmentName;
 
-      console.log(`ðŸ”„ DEPARTMENT MOOE AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
+  // console.log(`ðŸ”„ DEPARTMENT MOOE AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
 
       if (deptRegion && deptName) {
         // Get Department-level MOOE data
@@ -577,7 +569,7 @@ exports.updateProposalStatus = async (req, res) => {
       const deptRegion = req.hierarchicalAccess.accessibleRegions?.[0]?.regionName;
       const deptName = req.hierarchicalAccess.accessibleDepartments?.[0]?.departmentName;
 
-      console.log(`ðŸ”„ DEPARTMENT CAPITAL OUTLAY AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
+  // console.log(`ðŸ”„ DEPARTMENT CAPITAL OUTLAY AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
 
       if (deptRegion && deptName) {
         // Get Department-level Capital Outlay data
@@ -767,9 +759,9 @@ exports.updateProposalStatus = async (req, res) => {
     // Convert to array and create bulk operations for consolidated proposals
     const consolidatedArray = Object.values(consolidatedProposals);
 
-    console.log('ðŸ”„ Creating consolidated proposals:', consolidatedArray.length);
+  // console.log('ðŸ”„ Creating consolidated proposals:', consolidatedArray.length);
     if (consolidatedArray.length > 0) {
-      console.log('Sample consolidated proposal:', consolidatedArray[0]);
+  // console.log('Sample consolidated proposal:', consolidatedArray[0]);
     }
 
     // Optimize: Use bulkWrite for better performance instead of sequential updates
@@ -812,7 +804,7 @@ exports.updateProposalStatus = async (req, res) => {
         }
       }));
       const bulkResult = await Proposal.bulkWrite(bulkOps);
-      console.log('âœ… Bulk write result:', bulkResult);
+  // console.log('âœ… Bulk write result:', bulkResult);
       }
     return res.status(200).json({
       message: "Proposals status updated and summary saved successfully",
@@ -1130,18 +1122,18 @@ exports.getProposals = async (req, res) => {
     // Debug: when caller passes _debugFilters=true, print resolved filters and a small count
     if (String(req.query._debugFilters) === 'true') {
       try {
-        console.log('=== DEBUG /proposals filter dump ===');
-        console.log('User id:', req.user?.id);
-        console.log('User roles:', req.user?.Roles);
-        console.log('userHierarchicalAssignment:', JSON.stringify(req.userHierarchicalAssignment || {}, null, 2));
-        console.log('submissionWorkflowFilters:', JSON.stringify(req.submissionWorkflowFilters || {}, null, 2));
-        console.log('hierarchicalFilters:', JSON.stringify(req.hierarchicalFilters || {}, null, 2));
-        console.log('visibilityFilter (from budgetRoleAccessControl):', JSON.stringify(req.query.visibilityFilter || {}, null, 2));
+  // console.log('=== DEBUG /proposals filter dump ===');
+  // console.log('User id:', req.user?.id);
+  // console.log('User roles:', req.user?.Roles);
+  // console.log('userHierarchicalAssignment:', JSON.stringify(req.userHierarchicalAssignment || {}, null, 2));
+  // console.log('submissionWorkflowFilters:', JSON.stringify(req.submissionWorkflowFilters || {}, null, 2));
+  // console.log('hierarchicalFilters:', JSON.stringify(req.hierarchicalFilters || {}, null, 2));
+  // console.log('visibilityFilter (from budgetRoleAccessControl):', JSON.stringify(req.query.visibilityFilter || {}, null, 2));
         // Small counts using the most specific available filter (visibilityFilter > submissionWorkflowFilters > hierarchicalFilters)
         const debugFilter = req.query.visibilityFilter || req.submissionWorkflowFilters || req.hierarchicalFilters || {};
         const sampleCount = await Proposal.countDocuments(debugFilter);
-        console.log('DEBUG matched proposal count (by resolved filter):', sampleCount);
-        console.log('=== END DEBUG ===');
+  // console.log('DEBUG matched proposal count (by resolved filter):', sampleCount);
+  // console.log('=== END DEBUG ===');
       } catch (dbgErr) {
         console.error('DEBUG /proposals error:', dbgErr?.message || dbgErr);
       }
@@ -1281,7 +1273,7 @@ exports.getProposals = async (req, res) => {
         else if (req.hierarchicalFilters) Object.assign(initialQuery, req.hierarchicalFilters);
         const sampleCount = await Proposal.countDocuments(initialQuery);
         if (sampleCount === 0) {
-          console.log('â–¶ No proposals matched office-scoped filter; falling back to department for visibility');
+          // console.log('â–¶ No proposals matched office-scoped filter; falling back to department for visibility');
           // Replace office filter with department equal to office (common naming in DB)
           if (!initialQuery.department) {
             if (initialQuery.office) {
@@ -3055,15 +3047,7 @@ exports.finalVerifyAtRegion = async (req, res) => {
 };
 exports.updateProposalStatus = async (req, res) => {
   try {
-    console.log('ðŸ”„ updateProposalStatus called with payload:', {
-      personnelIds: req.body.personnelIds?.length,
-      mooeIds: req.body.mooeIds?.length,
-      capitalOutlayIds: req.body.capitalOutlayIds?.length,
-      incomeIds: req.body.incomeIds?.length,
-      fiscalYear: req.body.fiscalYear,
-      budgetType: req.body.budgetType,
-      region: req.body.region
-    });
+    // console.log('ðŸ”„ updateProposalStatus called with payload:', req.body);
     const { 
       personnelIds, 
       mooeIds, 
@@ -3106,7 +3090,7 @@ exports.updateProposalStatus = async (req, res) => {
       }
     }
     
-    console.log('Submitter organizational context:', { submitterDepartment, submitterDivision });
+  // console.log('Submitter organizational context:', { submitterDepartment, submitterDivision });
     // Optimize: Run all database updates in parallel for better performance
     const updatePromises = [];
     if (personnelIds && Array.isArray(personnelIds) && personnelIds.length > 0) {
@@ -3240,7 +3224,7 @@ exports.updateProposalStatus = async (req, res) => {
       const deptRegion = req.hierarchicalAccess.accessibleRegions?.[0]?.regionName;
       const deptName = req.hierarchicalAccess.accessibleDepartments?.[0]?.departmentName;
 
-      console.log(`ðŸ”„ DEPARTMENT AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
+  // console.log(`ðŸ”„ DEPARTMENT AGGREGATION: Processing for ${deptRegion} - ${deptName}`);
 
       if (deptRegion && deptName) {
         // Get Department-level Personnel data

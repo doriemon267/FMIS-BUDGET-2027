@@ -1,5 +1,14 @@
 require("dotenv").config();
 // Removed console silencing - we want essential startup messages to show
+const { logger } = require("./utils/logRedactor");
+// Replace console methods with redacting versions (comment out if you want raw logs)
+if (process.env.REDACT_LOGS === 'true') {
+  console.log = logger.log.bind(logger);
+  console.error = logger.error.bind(logger);
+  console.warn = logger.warn.bind(logger);
+  console.info = logger.info.bind(logger);
+  if (console.debug) console.debug = logger.debug.bind(logger);
+}
 const express = require("express");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");

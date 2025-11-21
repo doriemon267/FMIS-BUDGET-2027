@@ -445,7 +445,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                           <Chip label="B.1.1" size="small" color="primary" sx={{ fontSize: "0.75rem" }} />
                         </TableCell>
                         <TableCell sx={{ fontWeight: "bold", padding: "8px 12px", fontSize: "0.875rem" }}>
-                          PERSONAL SERVICES ({region.totalEmployees} employees)
+                          Personnel Services ({region.totalEmployees} employees)
                         </TableCell>
                         <TableCell align="right" sx={{ fontWeight: "bold", padding: "8px 12px", fontSize: "0.875rem" }}>
                           ₱{(region.categories || []).reduce((sum, cat) => sum + (cat.total || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}

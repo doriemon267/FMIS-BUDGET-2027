@@ -1,5 +1,6 @@
 const Notification = require('../models/Notification');
-const User = require('../models/User');
+const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+const { sendNotificationEmail } = require('../utils/emailNotification');
 
 const normalizeRecipientId = (val) => {
   if (!val || typeof val !== 'string') return null;
@@ -40,7 +41,7 @@ exports.createNotification = async (notificationData) => {
 
     const notification = new Notification({
       recipientUserId: notificationData.userId,
-  recipientUserIdNormalized: normalizeRecipientId(notificationData.userId),
+      recipientUserIdNormalized: normalizeRecipientId(notificationData.userId),
       recipientUserIdOriginal: notificationData.userId,
       type: notificationData.type || 'INFO',
       title: notificationData.title,
@@ -52,8 +53,31 @@ exports.createNotification = async (notificationData) => {
       status: 'UNREAD',
       createdAt: new Date()
     });
-    
+
     await notification.save();
+
+    // Try to send email notification if recipient has an email in HierarchicalUserAssignment
+    try {
+      const assignment = await HierarchicalUserAssignment.findOne({ userId: notificationData.userId }).select('email').lean();
+      console.log('[Notification Email Debug] userId:', notificationData.userId, 'assignment:', assignment);
+      if (assignment && assignment.email) {
+        const html = `<h2 style='color:#1976d2;'>${notificationData.title || 'Notification'}</h2>
+          <p>${notificationData.message || ''}</p>
+          ${notificationData.relatedLink ? `<a href='https://your-app.com${notificationData.relatedLink}' style='color:#1976d2;text-decoration:underline;'>View Proposal</a>` : ''}`;
+        await sendNotificationEmail(
+          assignment.email,
+          notificationData.title || 'New Notification',
+          notificationData.message || '',
+          html
+        );
+        console.log('[Notification Email Debug] Email sent to:', assignment.email);
+      } else {
+        console.warn('[Notification Email Debug] No email found for userId:', notificationData.userId);
+      }
+    } catch (emailErr) {
+      console.warn('Email notification failed:', emailErr.message);
+    }
+
     return notification;
   } catch (error) {
     console.error('Error creating notification:', error);
@@ -171,6 +195,68 @@ exports.createNotifications = async (notificationsData) => {
     }
 
     const created = notifications.length > 0 ? await Notification.insertMany(notifications) : [];
+
+    // Send email notifications to each recipient using HierarchicalUserAssignment
+    if (created && created.length > 0) {
+      // Improved: Try to match userId as string, number, and ObjectId string
+      const userIds = created.map(n => n.recipientUserId);
+      const candidates = [];
+      userIds.forEach(uid => {
+        candidates.push(uid);
+        if (!isNaN(Number(uid))) candidates.push(Number(uid));
+        candidates.push(String(uid));
+      });
+      console.log('[Notification Email Debug] Candidate userIds for email mapping:', candidates);
+      const assignments = await HierarchicalUserAssignment.find({ userId: { $in: candidates } }).select('userId email').lean();
+      console.log('[Notification Email Debug] Found assignments:', assignments);
+      const assignmentEmailMap = {};
+      assignments.forEach(a => { if (a.email) assignmentEmailMap[String(a.userId)] = a.email; });
+      console.log('[Notification Email Debug] Assignment email map:', assignmentEmailMap);
+
+      for (const n of created) {
+        let email = assignmentEmailMap[n.recipientUserId] || assignmentEmailMap[String(n.recipientUserId)] || assignmentEmailMap[Number(n.recipientUserId)] || null;
+        // Forced debug log for every notification
+        console.log('[Notification Email Debug] Attempting email for userId:', n.recipientUserId, 'initial email:', email);
+        if (!email) {
+          // Fallback: try to fetch assignment again with flexible matching
+          try {
+            const fallbackAssignment = await HierarchicalUserAssignment.findOne({
+              $or: [
+                { userId: n.recipientUserId },
+                { userId: String(n.recipientUserId) },
+                { userId: Number(n.recipientUserId) }
+              ]
+            }).select('userId email').lean();
+            if (fallbackAssignment && fallbackAssignment.email) {
+              email = fallbackAssignment.email;
+              console.log('[Notification Email Debug] Fallback assignment found for userId:', n.recipientUserId, 'email:', email);
+            } else {
+              console.warn('[Notification Email Debug] Fallback: No email found for userId:', n.recipientUserId);
+            }
+          } catch (fallbackErr) {
+            console.warn('[Notification Email Debug] Fallback assignment error for userId:', n.recipientUserId, fallbackErr.message);
+          }
+        }
+        if (email) {
+          try {
+            const html = `<h2 style='color:#1976d2;'>${n.title || 'Notification'}</h2>
+              <p>${n.message || ''}</p>
+              ${n.relatedLink ? `<a href='https://your-app.com${n.relatedLink}' style='color:#1976d2;text-decoration:underline;'>View Proposal</a>` : ''}`;
+            await sendNotificationEmail(
+              email,
+              n.title || 'New Notification',
+              n.message || '',
+              html
+            );
+            console.log('[Notification Email Debug] Bulk email sent to:', email);
+          } catch (emailErr) {
+            console.warn('Email notification failed for', email, emailErr.message);
+          }
+        } else {
+          console.warn('[Notification Email Debug] No email found for bulk userId:', n.recipientUserId);
+        }
+      }
+    }
     return created;
   } catch (error) {
     console.error('Error creating notifications:', error);

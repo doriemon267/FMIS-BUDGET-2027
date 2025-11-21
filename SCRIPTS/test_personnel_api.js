@@ -64,7 +64,7 @@ async function testPersonnelAPI() {
     
     console.log('\n=== COMBINED RESULTS ===');
     console.log(`Total Personnel Records: ${combinedData.length}`);
-    console.log(`Total Personal Services Amount: ₱${totalPS.toLocaleString()}`);
+    console.log(`Total Personnel Services Amount: ₱${totalPS.toLocaleString()}`);
     
   } catch (error) {
     console.error('Error testing Personnel API:', error.message);

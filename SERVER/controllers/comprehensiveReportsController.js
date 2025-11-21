@@ -23,7 +23,7 @@ const COMPREHENSIVE_BUDGET_STRUCTURE = {
         name: "Current Operating Expenditures",
         subcategories: {
           "1": {
-            name: "Personal Services",
+            name: "Personnel Services",
             description: "Personnel-related expenditures",
             structure: "B.1.1"
           },
@@ -45,7 +45,7 @@ const COMPREHENSIVE_BUDGET_STRUCTURE = {
 // Personnel Services hierarchical structure
 const PERSONNEL_SERVICES_STRUCTURE = {
   "B.1.1": {
-    name: "PERSONAL SERVICES",
+    name: "Personnel Services",
     categories: {
       "1": {
         name: "Salaries and Wages",
@@ -347,7 +347,7 @@ const processPersonnelServicesData = async (psData, query) => {
     // Return consolidated structure - no region grouping
     return {
       sectionCode: "B.1.1",
-      sectionName: "PERSONAL SERVICES",
+      sectionName: "Personnel Services",
       sectionDescription: "Personnel-related expenditures including salaries, allowances, and benefits",
       sectionTotal,
       totalEmployees,
@@ -423,7 +423,7 @@ const processPersonnelServicesData = async (psData, query) => {
     });
     return {
       sectionCode: "B.1.1",
-      sectionName: "PERSONAL SERVICES",
+      sectionName: "Personnel Services",
       sectionDescription: "Personnel-related expenditures including salaries, allowances, and benefits",
       sectionTotal,
       totalEmployees,

@@ -2,7 +2,7 @@ const PersonnelServices = require('../models/PersonnelServices');
 // Define the hierarchical structure mapping
 const PERSONNEL_SERVICES_STRUCTURE = {
   "B.1.1": {
-    name: "PERSONAL SERVICES",
+    name: "Personnel Services",
     categories: {
       "1": {
         name: "Salaries and Wages",

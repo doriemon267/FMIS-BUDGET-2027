@@ -344,7 +344,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
     retryDelay: 1000
   });
 
-  // Fetch Personal Services data for Use of Funds breakdown (Combined Permanent + Casual)
+  // Fetch Personnel Services data for Use of Funds breakdown (Combined Permanent + Casual)
   const { data: personalServicesData, error: personnelError, isLoading: isLoadingPersonnel } = useQuery({
     queryKey: ['personnel-services-combined', fiscalYear, budgetType], // Removed regionName from queryKey
     queryFn: async () => {
@@ -435,7 +435,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
         // Try to get data from calculatedBudgetarySupport as fallback
         if (calculatedBudgetarySupport?.breakdown) {
           const psBreakdown = calculatedBudgetarySupport.breakdown.find(item => 
-            item.source?.includes('PERSONAL SERVICES') || 
+            item.source?.includes('PERSONNEL SERVICES') || 
             item.source?.includes('PS')
           );
           
@@ -444,7 +444,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
               Total: psBreakdown.amount,
               region: selectedRegion,
               employeeFullName: 'Consolidated PS',
-              description: 'Total Personal Services from Budgetary Support Calculation'
+              description: 'Total Personnel Services from Budgetary Support Calculation'
             }];
           }
         }
@@ -728,7 +728,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
     // A.1 CORPORATE INCOME - Direct copy from IncomeTable
     const corporateIncome = incomeGrandTotal || 0;
 
-    // B.1.1 PERSONAL SERVICES - Use Total field approach like Budget Summary cards
+    // B.1.1 Personnel Services - Use Total field approach like Budget Summary cards
     let personalServices = 0;
     if (personalServicesData && Array.isArray(personalServicesData)) {
       const statusBreakdown = {};
@@ -897,7 +897,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
         'Status': 'Auto-calculated'
       },
       {
-        'Description': 'B.1.1 PERSONAL SERVICES',
+        'Description': 'B.1.1 Personnel Services',
         'Projected Corporate Income': 0,
         'Projected Subsidy': parseFloat(useOfFundsBreakdown.personalServices || 0),
         'Proposed Budget': parseFloat(useOfFundsBreakdown.personalServices || 0),
@@ -1473,14 +1473,14 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
                 </TableRow>
               </TableHead>
               <TableBody>
-              {/* B.1.1 PERSONAL SERVICES - Split between corporate income (charged) and subsidy (non-charged) */}
+              {/* B.1.1 Personnel Services - Split between corporate income (charged) and subsidy (non-charged) */}
               <TableRow sx={{ 
                 backgroundColor: '#f9f9f9',
                 '&:hover': { backgroundColor: '#f0f4f8' }
               }}>
                 <TableCell sx={{ pl: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                   <Typography variant="body2" sx={{ fontWeight: 500, letterSpacing: 0.2 }}>
-                    B.1.1 PERSONAL SERVICES
+                    B.1.1 Personnel Services
                   </Typography>
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontStyle: 'italic' }}>
                     (Charged to Income + Non-Charged Subsidy)

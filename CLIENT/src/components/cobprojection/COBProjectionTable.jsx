@@ -702,7 +702,7 @@ const COBProjectionTable = ({ personnelData }) => {
 
           {/* Grand Total */}
           <StyledTableRow>
-            <StyledTableCell isgrandtotal="true">PERSONAL SERVICES</StyledTableCell>
+            <StyledTableCell isgrandtotal="true">Personnel Services</StyledTableCell>
             <StyledTableCell align="right" isgrandtotal="true">₱{formatCurrency(corporateTotal)}</StyledTableCell>
             <StyledTableCell align="right" isgrandtotal="true">₱{formatCurrency(subsidyTotal)}</StyledTableCell>
             <StyledTableCell align="right" isgrandtotal="true">₱{formatCurrency(proposedBudgets.grandTotal)}</StyledTableCell>

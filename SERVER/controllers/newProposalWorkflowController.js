@@ -11,6 +11,7 @@ const ProposalEditLog = require('../models/ProposalEditLog');
 const Notification = require('../models/Notification');
 const notificationController = require('./notificationController');
 const consolidationService = require('../utils/consolidationService');
+const { sendNotificationEmail } = require('../utils/emailNotification');
 
 // Workflow status transitions based on the specification
 const WORKFLOW_TRANSITIONS = {
@@ -462,6 +463,228 @@ const createWorkflowNotification = async (action, proposal, recipientUserIds, cu
   } catch (error) {
     console.error('[createWorkflowNotification] Error creating notifications:', error.message);
     console.error('[createWorkflowNotification] Error stack:', error.stack);
+  }
+};
+
+/**
+ * Helper function to send email notifications to workflow recipients
+ * @param {string} action - The workflow action performed
+ * @param {Object} proposal - The proposal object
+ * @param {Array} recipientUserIds - Array of user IDs to notify
+ * @param {string} currentUserName - Name of the user performing the action
+ * @param {string} comment - Optional comment/message from the action
+ * @param {string} currentUserRole - The role of the user performing the action
+ */
+const sendWorkflowEmails = async (action, proposal, recipientUserIds, currentUserName, comment, currentUserRole) => {
+  try {
+    if (!recipientUserIds || recipientUserIds.length === 0) {
+      console.log('[sendWorkflowEmails] No recipients to email');
+      return;
+    }
+
+    console.log('[sendWorkflowEmails] Attempting to send emails to recipients:', recipientUserIds);
+
+    // Get user emails from the HierarchicalUserAssignment collection
+    const users = await HierarchicalUserAssignment.find({ userId: { $in: recipientUserIds } }).select('email userName userId');
+    console.log('[sendWorkflowEmails] Found users:', users.length, 'out of', recipientUserIds.length, 'recipients');
+    
+    if (users.length === 0) {
+      console.warn('[sendWorkflowEmails] No users found in HierarchicalUserAssignment with provided userId list');
+      console.warn('[sendWorkflowEmails] Searched for userIds:', recipientUserIds);
+      return;
+    }
+    
+    const emailMap = {};
+    users.forEach(user => {
+      emailMap[user.userId] = user.email;
+      console.log('[sendWorkflowEmails] Mapped userId:', user.userId, '-> email:', user.email);
+    });
+
+    // Prepare email subject and body
+    const isReturnAction = action.includes('return');
+    const actionTitles = {
+      'submit-to-reviewer': 'Proposal Submitted for Review',
+      'submit-to-approver': 'Proposal Submitted for Approval',
+      'submit-to-analyst': 'Proposal Submitted to Budget Planning Analyst',
+      'forward-to-officer': 'Proposal Forwarded to Officer',
+      'forward-to-manager': 'Proposal Submitted to Manager',
+      'finalize': 'Proposal Finalized',
+      'return-to-preparer': 'Proposal Returned to Preparer',
+      'return-to-reviewer': 'Proposal Returned to Reviewer',
+      'return-to-approver': 'Proposal Returned to Approver',
+      'return-to-analyst': 'Proposal Returned to Analyst',
+      'return-to-officer': 'Proposal Returned to Officer'
+    };
+
+    const emailSubject = actionTitles[action] || 'Proposal Status Updated';
+    const verb = isReturnAction ? 'returned' : 'submitted';
+    let targetRole = '';
+    if (action === 'submit-to-reviewer') targetRole = 'Budget Reviewer';
+    if (action === 'submit-to-approver') targetRole = 'Budget Approver';
+    if (action === 'submit-to-analyst') targetRole = 'Budget Planning Analyst';
+    if (action === 'forward-to-officer') targetRole = 'Budget Officer';
+    if (action === 'forward-to-manager') targetRole = 'Budget Manager';
+
+    const safeName = String(currentUserName || 'Unknown User').trim();
+    const safeRole = String(currentUserRole || 'User').trim();
+    const safeTitle = String(proposal.title || 'Untitled Proposal').trim();
+    const safeTargetRole = targetRole ? ' to ' + String(targetRole).trim() : '';
+
+    // Resolve region name from ObjectId
+    let regionName = 'N/A';
+    if (proposal.region) {
+      try {
+        const regionString = String(proposal.region);
+        console.log('[sendWorkflowEmails] Looking up region:', regionString);
+        const regionObj = await Region.findById(regionString).select('Region');
+        if (regionObj) {
+          regionName = regionObj.Region || regionString;
+          console.log('[sendWorkflowEmails] Found region name:', regionName);
+        } else {
+          console.warn('[sendWorkflowEmails] Region not found for ID:', regionString);
+          regionName = regionString;
+        }
+      } catch (err) {
+        console.error('[sendWorkflowEmails] Error resolving region:', err.message);
+        regionName = String(proposal.region);
+      }
+    }
+
+    // Get department and division info - try multiple sources
+    let department = proposal.department || 'N/A';
+    let division = proposal.division || 'N/A';
+    
+    console.log('[sendWorkflowEmails] Raw values - Department:', department, 'Division:', division);
+    
+    // If not found in NewProposalWorkflow, try legacy Proposal collection
+    if (department === 'N/A' || division === 'N/A') {
+      try {
+        const legacyProposal = await Proposal.findOne({ title: proposal.title, fiscalYear: String(proposal.fiscalYear) }).limit(1);
+        if (legacyProposal) {
+          department = department === 'N/A' ? (legacyProposal.department || 'N/A') : department;
+          division = division === 'N/A' ? (legacyProposal.division || 'N/A') : division;
+          console.log('[sendWorkflowEmails] Found in legacy Proposal - Department:', department, 'Division:', division);
+        }
+      } catch (err) {
+        console.warn('[sendWorkflowEmails] Error fetching from legacy Proposal:', err.message);
+      }
+    }
+    
+    // If still not found, try getting from user's HierarchicalUserAssignment
+    if (department === 'N/A' || division === 'N/A') {
+      try {
+        const createdBy = String(proposal.createdBy || currentUserId);
+        const hua = await HierarchicalUserAssignment.findOne({ userId: createdBy, isActive: true })
+          .populate('departmentId', 'Department departmentName DepartmentName');
+        if (hua) {
+          division = division === 'N/A' ? (hua.divisionName || 'N/A') : division;
+          department = department === 'N/A' ? (hua.departmentId?.Department || hua.departmentId?.departmentName || hua.departmentId?.DepartmentName || 'N/A') : department;
+          console.log('[sendWorkflowEmails] Found in HierarchicalUserAssignment - Department:', department, 'Division:', division);
+        }
+      } catch (err) {
+        console.warn('[sendWorkflowEmails] Error fetching from HierarchicalUserAssignment:', err.message);
+      }
+    }
+    
+    console.log('[sendWorkflowEmails] Final values - Department:', department, 'Division:', division);
+
+    let emailBody = `Dear Recipient,\n\n`;
+    emailBody += `${safeName} (${safeRole}) has ${verb} the proposal "${safeTitle}"${safeTargetRole}.\n\n`;
+    emailBody += `Proposal Details:\n`;
+    emailBody += `- Title: ${safeTitle}\n`;
+    emailBody += `- Fiscal Year: ${proposal.fiscalYear || 'N/A'}\n`;
+    emailBody += `- Budget Type: ${proposal.modelType || 'N/A'}\n`;
+    emailBody += `- Region: ${regionName}\n`;
+    emailBody += `- Department: ${department}\n`;
+    emailBody += `- Division: ${division}\n`;
+    if (comment && isReturnAction) {
+      emailBody += `\nFeedback: ${String(comment).trim()}\n`;
+    }
+    emailBody += `\nPlease log in to the system to view and process this proposal.\n\n`;
+    emailBody += `Note: This is an automated message. Please do not reply to this email.\n`;
+    emailBody += `Best regards,\nFMIS - BUDGET System`;
+
+    // HTML version of the email
+    let htmlBody = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #375e38; color: white; padding: 15px; border-radius: 5px 5px 0 0; }
+    .content { background-color: #f9fafb; padding: 20px; border-radius: 0 0 5px 5px; }
+    .details-box { background-color: white; padding: 15px; border-left: 4px solid #375e38; margin: 15px 0; }
+    .detail-row { margin: 8px 0; }
+    .detail-label { font-weight: bold; color: #375e38; }
+    .feedback-box { background-color: #fef3c7; padding: 15px; border-radius: 5px; margin: 15px 0; border-left: 4px solid #f59e0b; }
+    .footer { margin-top: 20px; padding-top: 15px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; }
+    .signature { color: #375e38; font-weight: bold; margin-top: 15px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2 style="margin: 0;">FMIS - OSBPIS Notification</h2>
+    </div>
+    <div class="content">
+      <p>Dear Recipient,</p>
+      <p>${safeName} (<strong>${safeRole}</strong>) has <strong>${verb}</strong> the proposal "<strong>${safeTitle}</strong>"${safeTargetRole}.</p>
+      
+      <div class="details-box">
+        <p style="margin-top: 0; color: #375e38; font-weight: bold;">Proposal Details:</p>
+        <div class="detail-row"><span class="detail-label">Title:</span> ${safeTitle}</div>
+        <div class="detail-row"><span class="detail-label">Fiscal Year:</span> ${proposal.fiscalYear || 'N/A'}</div>
+        <div class="detail-row"><span class="detail-label">Budget Type:</span> ${proposal.modelType || 'N/A'}</div>
+        <div class="detail-row"><span class="detail-label">Region:</span> ${regionName}</div>
+        <div class="detail-row"><span class="detail-label">Department:</span> ${department}</div>
+        <div class="detail-row"><span class="detail-label">Division:</span> ${division}</div>
+      </div>
+      
+      ${comment && isReturnAction ? `<div class="feedback-box">
+        <p style="margin-top: 0; font-weight: bold;">Feedback:</p>
+        <p style="margin: 8px 0;">${String(comment).trim()}</p>
+      </div>` : ''}
+      
+      <p style="margin-top: 20px;"><strong>Action Required:</strong> Please log in to the system to view and process this proposal.</p>
+      
+      <div class="footer">
+        <p style="margin: 8px 0; color: #ef4444;"><strong>⚠️ Note:</strong> This is an automated message. Please do not reply to this email.</p>
+        <p class="signature">FMIS - NIA</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+    `;
+
+    // Send emails to all recipients
+    console.log('[sendWorkflowEmails] Starting email delivery process...');
+    const emailPromises = recipientUserIds.map(async (userId) => {
+      const email = emailMap[userId];
+      if (!email) {
+        console.warn(`[sendWorkflowEmails] No email found for user ${userId}`);
+        return;
+      }
+
+      try {
+        console.log(`[sendWorkflowEmails] Sending email to ${email}...`);
+        const result = await sendNotificationEmail(email, emailSubject, emailBody, htmlBody);
+        console.log(`[sendWorkflowEmails] ✓ Email successfully sent to ${email}`, {
+          messageId: result.messageId,
+          action: action
+        });
+      } catch (err) {
+        console.error(`[sendWorkflowEmails] ✗ Failed to send email to ${email}:`, err.message);
+        console.error(`[sendWorkflowEmails] Error details:`, err);
+      }
+    });
+
+    const results = await Promise.all(emailPromises);
+    console.log(`[sendWorkflowEmails] ✓ Completed email delivery process. Sent ${emailPromises.length} email(s) for action: ${action}`);
+  } catch (error) {
+    console.error('[sendWorkflowEmails] Error sending workflow emails:', error.message);
+    console.error('[sendWorkflowEmails] Error stack:', error.stack);
   }
 };
 
@@ -1281,6 +1504,15 @@ exports.performAction = async (req, res) => {
           console.log('[PERFORM_ACTION] Creating notifications for action:', action);
           await createWorkflowNotification(action, proposal, recipientUserIds, userName, comment, userRole);
           console.log('[PERFORM_ACTION] Notifications created successfully');
+          
+          // Send email notifications
+          try {
+            console.log('[PERFORM_ACTION] Sending email notifications for action:', action);
+            await sendWorkflowEmails(action, proposal, recipientUserIds, userName, comment, userRole);
+            console.log('[PERFORM_ACTION] Email notifications sent successfully');
+          } catch (emailError) {
+            console.error('[PERFORM_ACTION] Error sending email notifications:', emailError.message);
+          }
         } else {
           console.log('[PERFORM_ACTION] No recipients found for action:', action);
         }
