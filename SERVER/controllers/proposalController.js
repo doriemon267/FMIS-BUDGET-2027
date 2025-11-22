@@ -6219,7 +6219,7 @@ exports.performProposalAction = async (req, res) => {
             relatedId: id,
             relatedType: 'proposal',
               // Use `tab` query param (frontend expects `tab`) and include proposalId for deep-linking
-              relatedLink: `/new-proposal-workflow?tab=pending-review&proposalId=${id}`,
+              relatedLink: `/allproposal?tab=pending-review&proposalId=${id}`,
             metadata: {
               proposalId: id,
               action: action,

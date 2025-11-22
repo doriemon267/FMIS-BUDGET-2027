@@ -1908,7 +1908,7 @@ exports.submitEdit = async (req, res) => {
           message: notificationMessage,
           relatedId: proposalId.toString(),
           relatedType: 'Proposal',
-          relatedLink: `/new-proposal-workflow?tab=all-proposals&proposalId=${proposalId}`,
+          relatedLink: `/allproposal?tab=all-proposals&proposalId=${proposalId}`,
           metadata: {
             proposalId: proposalId.toString(),
             fiscalYear: proposal.fiscalYear,

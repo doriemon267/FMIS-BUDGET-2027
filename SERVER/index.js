@@ -405,7 +405,7 @@ app.use('/reports', reportsRouter); // Mount with /reports prefix
 app.use(cosPersonnelRouter);
 app.use('/', mooeRoutes);
 app.use('/api/proposalSummary', proposalSummaryRoutes);
-app.use('/api/new-proposal-workflow', newProposalWorkflowRoutes);
+app.use('/api/allproposal', newProposalWorkflowRoutes);
 //para sa mga uploader
 app.use(chartOfAccountsRouter);
 app.use(uploadcategories);

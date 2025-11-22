@@ -77,7 +77,7 @@ const budgetRoleVisibilityControl = () => {
       // CRITICAL: Check from highest to lowest privilege EXCEPT put PREPARER before REVIEWER
       // This ensures users with both REVIEWER and PREPARER roles get PREPARER access (can create/see Drafts)
       let budgetRole = null;
-      if (userRoles.includes('SUPER ADMIN') || workflowRoles.includes('superAdmin')) {
+      if (userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN') || workflowRoles.includes('superAdmin')) {
         budgetRole = 'SUPER ADMIN';
       } else if (userRoles.includes('BUDGET MANAGER') || workflowRoles.includes('budgetManager')) {
         budgetRole = 'BUDGET MANAGER';
@@ -273,6 +273,7 @@ const budgetRoleVisibilityControl = () => {
           break;
 
         case 'SUPER ADMIN':
+        case 'SUPER_ADMIN':
           // ADMIN: Can see all proposals regardless of status
           visibilityFilter = {}; // No filter for admins
           break;

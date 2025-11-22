@@ -377,10 +377,10 @@ const createWorkflowNotification = async (action, proposal, recipientUserIds, cu
       messageType: typeof notificationMessage
     });
 
-    // Deep link to the proposal on the new-proposal-workflow page
-    // Format: /new-proposal-workflow?tab=all-proposals&proposalId=<id>
+    // Deep link to the proposal on the allproposal page
+    // Format: /allproposal?tab=all-proposals&proposalId=<id>
     // Always navigate to ALL PROPOSALS tab when clicking notification
-    const relatedLink = `/new-proposal-workflow?tab=all-proposals&proposalId=${proposal._id}`;
+    const relatedLink = `/allproposal?tab=all-proposals&proposalId=${proposal._id}`;
 
     // Create notification for each recipient
     // Unique key to prevent duplicate notifications for the same action + proposal

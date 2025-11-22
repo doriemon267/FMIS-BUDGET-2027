@@ -35,7 +35,7 @@ const hierarchicalAccessControl = (operation = 'read', options = {}) => {
       // Full access users no longer bypass hierarchical restrictions; they still follow assigned scope
       if (hasFullAccess(userRoles)) {
         // SUPER ADMIN gets full access regardless of assignment
-        if (userRoles.includes('SUPER ADMIN')) {
+        if (userRoles.includes('SUPER_ADMIN')) {
           req.hierarchicalAccess = {
             scope: 'FULL',
             canCreate: true,
@@ -462,7 +462,7 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
             workflowRoles = ['officeFinalVerifier'];
           } else if (userMainRoles.includes('OVERALL_BUDGET_APPROVER') || userMainRoles.includes('DEPARTMENT_HEAD')) {
             workflowRoles = ['departmentConsolidator', 'regionFinalVerifier'];
-          } else if (userMainRoles.includes('BUDGET_ADMIN') || userMainRoles.includes('SUPER ADMIN') || userMainRoles.includes('ADMIN')) {
+          } else if (userMainRoles.includes('BUDGET_ADMIN') || userMainRoles.includes('SUPER ADMIN') || userMainRoles.includes('SUPER_ADMIN') || userMainRoles.includes('ADMIN')) {
             workflowRoles = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier', 'regionCreator', 'superAdmin','regionFinalVerifier'];
           }
           
@@ -526,7 +526,7 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
       let defaultWorkflowRoles = [];
       
       // Special handling for SUPER ADMIN - give them FULL scope and all permissions
-      if (userRoles.includes('SUPER ADMIN')) {
+      if (userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN')) {
         defaultScope = 'FULL';
         defaultRolePermissions = {
           CreateProposals: true,
@@ -663,7 +663,7 @@ const getHierarchicalAccessInfo = async (req, res, next) => {
         workflowRoles = ['officeFinalVerifier'];
       } else if (userMainRoles.includes('OVERALL_BUDGET_APPROVER') || userMainRoles.includes('DEPARTMENT_HEAD')) {
         workflowRoles = ['departmentConsolidator', 'regionFinalVerifier'];
-      } else if (userMainRoles.includes('BUDGET_ADMIN') || userMainRoles.includes('SUPER ADMIN') || userMainRoles.includes('ADMIN')) {
+      } else if (userMainRoles.includes('BUDGET_ADMIN') || userMainRoles.includes('SUPER ADMIN') || userMainRoles.includes('SUPER_ADMIN') || userMainRoles.includes('ADMIN')) {
         workflowRoles = ['divisionCreator', 'divisionApprover', 'departmentCreator', 'departmentConsolidator', 'departmentSubmission', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'officeFinalVerifier', 'regionCreator', 'superAdmin', 'regionFinalVerifier'];
       }
       
@@ -738,7 +738,7 @@ const enforceWorkflowTransition = (transition) => {
       const userRoles = req.user?.Roles || [];
       
       // SUPER ADMIN bypasses all workflow transition restrictions
-      if (userRoles.includes('SUPER ADMIN')) {
+      if (userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN')) {
         return next();
       }
       

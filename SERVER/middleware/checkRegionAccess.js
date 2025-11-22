@@ -22,7 +22,7 @@ const checkRegionAccess = async (req, res, next) => {
   try {
     // SUPER ADMIN has access to all regions
     const userRoles = req.user?.Roles || [];
-    if (userRoles.includes('SUPER ADMIN')) {
+    if (userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN')) {
       return next();
     }
     

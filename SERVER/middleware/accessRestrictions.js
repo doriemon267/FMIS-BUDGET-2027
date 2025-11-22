@@ -27,7 +27,7 @@ const enforceAccessRestrictions = (options = {}) => {
       }
 
       // SUPER ADMIN bypasses all restrictions
-      if (userRoles.includes('SUPER ADMIN')) {
+      if (userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN')) {
         return next();
       }
 

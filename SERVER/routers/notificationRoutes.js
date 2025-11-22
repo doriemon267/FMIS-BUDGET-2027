@@ -339,7 +339,7 @@ router.post('/notifications/test', async (req, res) => {
         message: 'John Doe has submitted proposal for your action.',
         relatedEntityId: 'test-proposal-1',
         relatedEntityType: 'PROPOSAL',
-        relatedLink: '/new-proposal-workflow?tab=all-proposals&proposalId=test-1',
+        relatedLink: '/allproposal?tab=all-proposals&proposalId=test-1',
         entity: 'proposal',
         status: 'UNREAD',
         createdAt: new Date(Date.now() - 20 * 60000)
@@ -351,7 +351,7 @@ router.post('/notifications/test', async (req, res) => {
         message: 'Jane Smith has returned proposal with feedback. Comment: Please review the budget allocation.',
         relatedEntityId: 'test-proposal-2',
         relatedEntityType: 'PROPOSAL',
-        relatedLink: '/new-proposal-workflow?tab=all-proposals&proposalId=test-2',
+        relatedLink: '/allproposal?tab=all-proposals&proposalId=test-2',
         entity: 'proposal',
         status: 'UNREAD',
         createdAt: new Date(Date.now() - 25 * 60000)
@@ -363,7 +363,7 @@ router.post('/notifications/test', async (req, res) => {
         message: 'Mark Johnson has submitted proposal for your action.',
         relatedEntityId: 'test-proposal-3',
         relatedEntityType: 'PROPOSAL',
-        relatedLink: '/new-proposal-workflow?tab=all-proposals&proposalId=test-3',
+        relatedLink: '/allproposal?tab=all-proposals&proposalId=test-3',
         entity: 'proposal',
         status: 'UNREAD',
         createdAt: new Date(Date.now() - 25 * 60000)
@@ -375,7 +375,7 @@ router.post('/notifications/test', async (req, res) => {
         message: 'Robert Davis has submitted proposal for your action.',
         relatedEntityId: 'test-proposal-4',
         relatedEntityType: 'PROPOSAL',
-        relatedLink: '/new-proposal-workflow?tab=all-proposals&proposalId=test-4',
+        relatedLink: '/allproposal?tab=all-proposals&proposalId=test-4',
         entity: 'proposal',
         status: 'UNREAD',
         createdAt: new Date(Date.now() - 26 * 60000)
@@ -387,7 +387,7 @@ router.post('/notifications/test', async (req, res) => {
         message: 'Sarah Wilson has submitted proposal for your action.',
         relatedEntityId: 'test-proposal-5',
         relatedEntityType: 'PROPOSAL',
-        relatedLink: '/new-proposal-workflow?tab=all-proposals&proposalId=test-5',
+        relatedLink: '/allproposal?tab=all-proposals&proposalId=test-5',
         entity: 'proposal',
         status: 'UNREAD',
         createdAt: new Date(Date.now() - 26 * 60000)

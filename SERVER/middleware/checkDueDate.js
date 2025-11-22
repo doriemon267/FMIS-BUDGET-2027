@@ -3,7 +3,7 @@ const checkDueDate = async (req, res, next) => {
   try {
     // SUPER ADMIN bypasses due date restrictions
     const userRoles = req.user?.Roles || [];
-    if (userRoles.includes('SUPER ADMIN')) {
+    if (userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN')) {
       return next();
     }
     

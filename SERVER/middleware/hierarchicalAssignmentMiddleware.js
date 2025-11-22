@@ -16,7 +16,7 @@ const loadHierarchicalAssignment = async (req, res, next) => {
     }
     // If user has SUPER ADMIN role, grant full hierarchical access unconditionally
     const roles = req.user.Roles || req.user.roles || [];
-    if (Array.isArray(roles) && roles.includes('SUPER ADMIN')) {
+    if (Array.isArray(roles) && roles.includes('SUPER_ADMIN')) {
       // Synthetic assignment giving full access without DB entry
       const synthetic = {
         userId: req.user.id,

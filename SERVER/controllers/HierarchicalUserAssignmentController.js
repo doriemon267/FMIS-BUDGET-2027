@@ -63,7 +63,10 @@ const lookupUserFromMainDB = async (req, res) => {
     const Role = mainConnection.model('roles', new mongoose.Schema({}, { strict: false }), 'roles');
 
     const userData = await AssignedRole.findOne({
-      user: userId
+      $or: [
+        { user: userId },
+        { user: parseInt(userId) }
+      ]
     }).lean();
 
     if (!userData) {
@@ -77,11 +80,37 @@ const lookupUserFromMainDB = async (req, res) => {
     // Get the actual role names from the roles collection
     const roleNames = [];
     if (userData.roles && userData.roles.length > 0) {
-      const roles = await Promise.all(
-        userData.roles.map(roleId => Role.findById(roleId, { name: 1 }).lean())
-      );
-      // Include all roles, not just budget-related ones, for proper role determination
-      const allRoleNames = roles.filter(role => role).map(role => role.name);
+      
+      // Handle both cases: roles as ObjectIds or as direct role names
+      const allRoleNames = [];
+      for (const roleItem of userData.roles) {
+        console.log(`🔍 Processing role item:`, roleItem, `type:`, typeof roleItem);
+        if (roleItem && roleItem._bsontype === 'ObjectId') {
+          // It's an ObjectId object
+          const roleDoc = await Role.findById(roleItem, { name: 1 }).lean();
+          if (roleDoc && roleDoc.name) {
+            allRoleNames.push(roleDoc.name);
+          }
+        } else if (typeof roleItem === 'string') {
+          if (roleItem.match(/^[0-9a-fA-F]{24}$/)) {
+            // It's an ObjectId string, look it up
+            const roleDoc = await Role.findById(roleItem, { name: 1 }).lean();
+            if (roleDoc && roleDoc.name) {
+              allRoleNames.push(roleDoc.name);
+            }
+          } else {
+            // It's already a role name
+            allRoleNames.push(roleItem);
+          }
+        } else if (roleItem && typeof roleItem === 'object' && roleItem.name) {
+          // It's a role object with name property
+          allRoleNames.push(roleItem.name);
+        } else if (roleItem && roleItem.toString) {
+          // Try to convert to string
+          allRoleNames.push(roleItem.toString());
+        }
+      }
+      
       roleNames.push(...allRoleNames);
     }
 
@@ -89,7 +118,8 @@ const lookupUserFromMainDB = async (req, res) => {
     const userInfo = {
       userId: userData.user,
       userName: userData.fullName || userData.userName || userData.name,
-      email: userData.email || userData.userEmail,
+      // Note: Email is not stored in assigned_roles collection, so we don't return it
+      // email: userData.email || userData.userEmail,
       roles: roleNames, // Return actual role names, not just IDs
       department: userData.department || userData.departmentName,
       division: userData.division || userData.divisionName,

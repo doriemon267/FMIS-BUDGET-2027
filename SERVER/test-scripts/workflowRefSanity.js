@@ -40,7 +40,7 @@ async function maybeCreateProposal() {
       fiscalYear: new Date().getFullYear(),
       region: 'TEST_REGION'
     };
-    const res = await axios.post(`${BASE}/api/new-proposal-workflow/proposals`, payload, { headers: authHeaders });
+    const res = await axios.post(`${BASE}/api/allproposal/proposals`, payload, { headers: authHeaders });
     const wfId = res.data?.data?._id;
     if (!wfId) throw new Error('Proposal creation succeeded but _id missing');
     console.log('Created proposal workflowRef:', wfId);
