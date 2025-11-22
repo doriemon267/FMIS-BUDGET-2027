@@ -99,7 +99,7 @@ export default function BRDConsolidationPage() {
   useEffect(() => {
     const initializeFiscalYears = async () => {
       try {
-        const summaryRes = await api.get('/api/new-proposal-workflow/consolidation/summary');
+        const summaryRes = await api.get('/api/allproposal/consolidation/summary');
         if (summaryRes.data.data && summaryRes.data.data.byFiscalYear) {
           const years = Object.keys(summaryRes.data.data.byFiscalYear)
             .map(Number)
@@ -130,19 +130,19 @@ export default function BRDConsolidationPage() {
       setError(null);
 
       // Fetch summary
-      const summaryRes = await api.get('/api/new-proposal-workflow/consolidation/summary', {
+      const summaryRes = await api.get('/api/allproposal/consolidation/summary', {
         params: { fiscalYear }
       });
       setSummary(summaryRes.data.data);
 
       // Fetch regional structure
-      const regionalRes = await api.get('/api/new-proposal-workflow/consolidation/regions', {
+      const regionalRes = await api.get('/api/allproposal/consolidation/regions', {
         params: { fiscalYear }
       });
       setRegionalStructure(regionalRes.data.data);
 
       // Fetch central office structure
-      const coRes = await api.get('/api/new-proposal-workflow/consolidation/central-office', {
+      const coRes = await api.get('/api/allproposal/consolidation/central-office', {
         params: { fiscalYear }
       });
       setCentralOfficeStructure(coRes.data.data);
@@ -252,8 +252,8 @@ export default function BRDConsolidationPage() {
       {summary && (
         <Grid container spacing={2} sx={{ mb: 4 }}>
           <Grid item xs={12} sm={6} md={3}>
-            <Card sx={{ backgroundColor: '#e3f2fd' }}>
-              <CardContent sx={{ textAlign: 'center' }}>
+            <Card sx={{ backgroundColor: '#e3f2fd', minHeight: 120, display: 'flex', flexDirection: 'column' }}>
+              <CardContent sx={{ textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                 <Typography color="textSecondary" gutterBottom>
                   Total Proposals
                 </Typography>
@@ -265,8 +265,8 @@ export default function BRDConsolidationPage() {
           </Grid>
 
           <Grid item xs={12} sm={6} md={3}>
-            <Card sx={{ backgroundColor: '#f3e5f5' }}>
-              <CardContent sx={{ textAlign: 'center' }}>
+            <Card sx={{ backgroundColor: '#f3e5f5', minHeight: 120, display: 'flex', flexDirection: 'column' }}>
+              <CardContent sx={{ textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                 <Typography color="textSecondary" gutterBottom>
                   Total Amount
                 </Typography>
@@ -278,8 +278,8 @@ export default function BRDConsolidationPage() {
           </Grid>
 
           <Grid item xs={12} sm={6} md={3}>
-            <Card sx={{ backgroundColor: '#e8f5e9' }}>
-              <CardContent sx={{ textAlign: 'center' }}>
+            <Card sx={{ backgroundColor: '#e8f5e9', minHeight: 120, display: 'flex', flexDirection: 'column' }}>
+              <CardContent sx={{ textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                 <Typography color="textSecondary" gutterBottom>
                   Regions
                 </Typography>
@@ -291,8 +291,8 @@ export default function BRDConsolidationPage() {
           </Grid>
 
           <Grid item xs={12} sm={6} md={3}>
-            <Card sx={{ backgroundColor: '#fff3e0' }}>
-              <CardContent sx={{ textAlign: 'center' }}>
+            <Card sx={{ backgroundColor: '#fff3e0', minHeight: 120, display: 'flex', flexDirection: 'column' }}>
+              <CardContent sx={{ textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                 <Typography color="textSecondary" gutterBottom>
                   Departments (CO)
                 </Typography>

@@ -95,7 +95,7 @@ const BASE_TABS = [
 ];
 
 // Centralize the workflow API base path to avoid mismatched endpoints
-const WORKFLOW_API_BASE = "/api/new-proposal-workflow/proposals";
+const WORKFLOW_API_BASE = "/api/allproposal/proposals";
 
 const NewProposalWorkflowPage = () => {
   const navigate = useNavigate();
@@ -149,7 +149,7 @@ const NewProposalWorkflowPage = () => {
     : BASE_TABS;
 
   // Handle tab and proposalId parameters from query string (e.g., notifications deep link)
-  // Format: /new-proposal-workflow?tab=<tab>&proposalId=<id>
+  // Format: /allproposal?tab=<tab>&proposalId=<id>
   const [targetProposalId, setTargetProposalId] = useState(null);
 
   useEffect(() => {
@@ -2665,7 +2665,7 @@ const NewProposalWorkflowPage = () => {
                                 description: proposalEditValues.description,
                               };
                               await api.put(
-                                `/api/new-proposal-workflow/proposals/${selectedProposal._id}`,
+                                `/api/allproposal/proposals/${selectedProposal._id}`,
                                 payload
                               );
                               toast.success("Proposal details updated");

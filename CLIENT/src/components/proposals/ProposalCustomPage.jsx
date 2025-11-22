@@ -186,8 +186,8 @@ const ProposalCustomPage = ({
 
   const createProposalMutation = useMutation({
     mutationFn: (newProposal) => {
-      // Use new workflow endpoint so proposals appear in /new-proposal-workflow page
-      return api.post("/api/new-proposal-workflow/proposals", newProposal);
+      // Use new workflow endpoint so proposals appear in /allproposal page
+      return api.post("/api/allproposal/proposals", newProposal);
     },
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ["proposals"] });

@@ -569,7 +569,7 @@ const HomePage = () => {
                     description='Use the new 6-step proposal workflow system'
                     icon={ListAltIcon}
                     color='#ff9800'
-                    onClick={() => navigate('/new-proposal-workflow')}
+                    onClick={() => navigate('/allproposal')}
                     buttonText='Open Workflow'
                   />
                 </Grid>

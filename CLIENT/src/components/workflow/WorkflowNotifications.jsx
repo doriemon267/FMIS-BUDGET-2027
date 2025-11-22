@@ -147,8 +147,8 @@ const WorkflowNotifications = () => {
 
   // Navigate to proposal
   const handleNotificationClick = (notification) => {
-    // Always go to /new-proposal-workflow (no params, no dialog)
-    navigate('/new-proposal-workflow');
+    // Always go to /allproposal (no params, no dialog)
+    navigate('/allproposal');
     handleMarkAsRead(notification._id);
     setAnchorEl(null);
     setDialogOpen(false);

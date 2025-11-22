@@ -243,7 +243,7 @@ const App = () => {
         <Route path="/Appearance" element={<AppearancePage />} />
         <Route path="/ProposalSummaryPage" element={<ProposalSummaryPage />} />
         <Route
-          path="/new-proposal-workflow"
+          path="/allproposal"
           element={
             <ProtectedRoute>
               <NewProposalWorkflowPage />

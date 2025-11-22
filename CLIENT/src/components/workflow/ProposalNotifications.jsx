@@ -96,7 +96,7 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
 
   const buildNotificationLink = useCallback((notification) => {
     // Use the relatedLink if provided, otherwise default to the workflow page
-    let link = notification.relatedLink || '/new-proposal-workflow';
+    let link = notification.relatedLink || '/allproposal';
 
     // Normalize query string and params
     const [pathPart, queryPart] = link.split('?');
@@ -111,7 +111,7 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
     // If the link targets the legacy AllProposals path, normalize to the new page and default tab
     if (pathPart.toLowerCase().includes('/allproposals')) {
       // Use the new workflow route and set the default tab to `all-proposals` unless specified
-      const newPath = '/new-proposal-workflow';
+      const newPath = '/allproposal';
       if (!params.has('tab')) params.set('tab', 'all-proposals');
       link = `${newPath}?${params.toString()}`;
     } else {

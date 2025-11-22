@@ -48,7 +48,7 @@ const OrganizationalInfoEditor = ({ open, consolidationId, onClose, onSaved }) =
       setError(null);
       
       const response = await api.get(
-        `/api/new-proposal-workflow/consolidation/${consolidationId}`
+        `/api/allproposal/consolidation/${consolidationId}`
       );
 
       if (response.data.success && response.data.data) {
@@ -85,7 +85,7 @@ const OrganizationalInfoEditor = ({ open, consolidationId, onClose, onSaved }) =
       }
 
       const response = await api.put(
-        `/api/new-proposal-workflow/consolidation/${consolidationId}/org-info`,
+        `/api/allproposal/consolidation/${consolidationId}/org-info`,
         updateData
       );
 
