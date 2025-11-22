@@ -380,9 +380,12 @@ const UserProvider = ({ children }) => {
   // Convenience: derive workflow roles and assignment
   const hierarchical = currentUser?.hierarchicalAccess || {};
   const workflowRoles = Array.isArray(hierarchical.workflowRoles) ? hierarchical.workflowRoles : [];
-  const assignmentLevel = hierarchical.scope || hierarchical.assignmentLevel || 'NONE';
+  
+  // SUPER_ADMIN users automatically get FULL access
+  const isSuperAdmin = currentUser?.Roles?.includes('SUPER_ADMIN') || currentUser?.Roles?.includes('SUPER ADMIN') || currentUser?.Roles?.includes('ADMIN');
+  const assignmentLevel = isSuperAdmin ? 'FULL' : (hierarchical.scope || hierarchical.assignmentLevel || 'NONE');
 
-  const hasWorkflowRole = (role) => workflowRoles.includes(role);
+  const hasWorkflowRole = (role) => isSuperAdmin ? true : workflowRoles.includes(role);
 
   const canTransition = {
     responsibilityCenterApprove: assignmentLevel === 'RESPONSIBILITY_CENTER' || assignmentLevel === 'FULL' ? hasWorkflowRole('responsibilityCenterApprover') : false,

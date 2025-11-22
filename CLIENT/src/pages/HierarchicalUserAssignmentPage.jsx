@@ -98,12 +98,13 @@ const USER_ROLES = [
   },
   { 
     value: 'SUPER_ADMIN', 
-    label: 'Admin', 
+    label: 'ADMIN', 
     description: 'Full administrative access - manages all proposals, users, and system settings',
     workflowRoles: 'All workflow roles (full system access)',
     assignmentLevels: ['FULL']
   }
 ];
+// SUPER_ADMIN role is now displayed as "ADMIN" in the UI
 
 const HierarchicalUserAssignmentPage = () => {
   const { currentUser, jwtToken, refetchUserProfile } = useUser();
@@ -157,6 +158,7 @@ const HierarchicalUserAssignmentPage = () => {
   const isAdmin = currentUser?.Roles && (
     currentUser.Roles.includes('BUDGET MANAGER') ||
     currentUser.Roles.includes('BUDGET OFFICER') ||
+    currentUser.Roles.includes('SUPER_ADMIN') ||
     currentUser.Roles.includes('SUPER ADMIN') ||
     currentUser.Roles.includes('ADMIN')
   );
@@ -287,6 +289,7 @@ const HierarchicalUserAssignmentPage = () => {
           currentUser.Roles.includes('BUDGET_PLANNING_ANALYST') ||
           currentUser.Roles.includes('BUDGET OFFICER') ||
           currentUser.Roles.includes('BUDGET MANAGER') ||
+          currentUser.Roles.includes('SUPER_ADMIN') ||
           currentUser.Roles.includes('SUPER ADMIN') ||
           currentUser.Roles.includes('ADMIN')
         );
@@ -404,8 +407,12 @@ const HierarchicalUserAssignmentPage = () => {
       handleFormChange('userName', userLookupData.userName || '');
       handleFormChange('email', userLookupData.email || '');
       // NEW: Support multiple roles from FMIS main system
-      handleFormChange('userRoles', userLookupData.budgetRoles || []);
-      const budgetRole = userLookupData.budgetRole || 'BUDGET_PREPARER';
+      // Merge FMIS roles with any existing manually selected roles
+      const existingRoles = formData.userRoles || [];
+      const fmisRoles = userLookupData.budgetRoles || [];
+      const mergedRoles = [...new Set([...existingRoles, ...fmisRoles])]; // Remove duplicates
+      handleFormChange('userRoles', mergedRoles);
+      const budgetRole = userLookupData.budgetRole || mergedRoles[0] || 'BUDGET_PREPARER';
       handleFormChange('userRole', budgetRole);
 
       // Auto-set assignment level and permissions based on the budget role
@@ -463,6 +470,8 @@ const HierarchicalUserAssignmentPage = () => {
       }
     }
   }, [userLookupData, editingAssignment]);
+
+  // Removed: Auto-populate email from current user context
 
   // Mutation for creating/updating assignments
   const createOrUpdateMutation = useMutation({
@@ -595,6 +604,15 @@ const HierarchicalUserAssignmentPage = () => {
       setSnackbar({
         open: true,
         message: 'User ID, User Name, and Email are required',
+        severity: 'warning'
+      });
+      return;
+    }
+
+    if (!formData.userRoles || formData.userRoles.length === 0) {
+      setSnackbar({
+        open: true,
+        message: 'At least one user role must be selected',
         severity: 'warning'
       });
       return;
@@ -850,6 +868,7 @@ const HierarchicalUserAssignmentPage = () => {
                     
                     // Auto-lookup when user enters a valid userId (6+ digits)
                     if (!editingAssignment && value && value.length >= 6 && /^\d{6,}$/.test(value)) {
+                      setIsLookingUpUser(true);
                       currentLookupValue.current = value;
                       // Trigger lookup immediately with the new value
                       queryClient.fetchQuery({
@@ -873,21 +892,76 @@ const HierarchicalUserAssignmentPage = () => {
                           // Manually trigger the population logic
                           handleFormChange('userId', data.userId || '');
                           handleFormChange('userName', data.userName || '');
-                          handleFormChange('email', data.email || '');
+                          
+                          // Only set email if FMIS lookup returns one, otherwise keep current email
+                          if (data.email) {
+                            handleFormChange('email', data.email);
+                          }
+                          
+                          // NEW: Set userRoles from FMIS lookup
+                          handleFormChange('userRoles', data.budgetRoles || []);
                           
                           // Use the budgetRole directly from server - no client-side mapping needed
-                          const budgetRole = data.budgetRole || 'BUDGET_PREPARER';
+                          const budgetRole = data.budgetRole || (data.budgetRoles && data.budgetRoles.length > 0 ? data.budgetRoles[0] : 'BUDGET_PREPARER');
                           handleFormChange('userRole', budgetRole);
+                          
+                          // Set permissions based on the primary role from FMIS lookup
+                          const rolePerms = {
+                            CreateProposals: true,
+                            EditOwnProposals: true,
+                            EditAllProposals: false,
+                            DeleteProposals: false,
+                            ApproveProposals: false,
+                            ViewReports: true,
+                            ManageUsers: false,
+                            ManageSettings: false
+                          };
+                          
+                          // Set permissions based on primary role
+                          if (budgetRole === 'BUDGET_APPROVER') {
+                            rolePerms.EditOwnProposals = true;
+                            rolePerms.EditAllProposals = true;
+                            rolePerms.ApproveProposals = true;
+                          } else if (budgetRole === 'BUDGET_REVIEWER') {
+                            rolePerms.EditOwnProposals = true;
+                            rolePerms.EditAllProposals = true;
+                          } else if (budgetRole === 'BUDGET_PREPARER') {
+                            rolePerms.CreateProposals = true;
+                            rolePerms.EditOwnProposals = true;
+                          } else if (budgetRole === 'BUDGET_PLANNING_ANALYST' || budgetRole === 'BUDGET_OFFICER' || budgetRole === 'OVERALL_BUDGET_APPROVER') {
+                            rolePerms.EditAllProposals = true;
+                            rolePerms.ApproveProposals = true;
+                            if (budgetRole === 'OVERALL_BUDGET_APPROVER') {
+                              rolePerms.ManageSettings = true;
+                            }
+                          } else if (budgetRole === 'SUPER_ADMIN') {
+                            rolePerms.CreateProposals = true;
+                            rolePerms.EditOwnProposals = true;
+                            rolePerms.EditAllProposals = true;
+                            rolePerms.DeleteProposals = true;
+                            rolePerms.ApproveProposals = true;
+                            rolePerms.ViewReports = true;
+                            rolePerms.ManageUsers = true;
+                            rolePerms.ManageSettings = true;
+                          }
+                          
+                          handleFormChange('rolePermissions', rolePerms);
                         }
+                        setIsLookingUpUser(false);
                       }).catch((error) => {
                         console.warn('Auto-lookup query failed:', error);
+                        setIsLookingUpUser(false);
                       });
                     }
                   }}
                   disabled={!!editingAssignment}
                   required
                   helperText={
-                    formData.userId ? 'User information will be auto-filled' : 'Enter a valid user ID (6+ digits)'
+                    loadingUserLookup 
+                      ? 'Looking up user information...' 
+                      : formData.userId 
+                        ? 'User information will be auto-filled' 
+                        : 'Enter a valid user ID (6+ digits)'
                   }
                   inputProps={{ 'aria-label': 'User ID' }}
                 />
@@ -913,7 +987,11 @@ const HierarchicalUserAssignmentPage = () => {
                   value={formData.email}
                   onChange={(e) => handleFormChange('email', e.target.value)}
                   required
-                  helperText={formData.email && isValidEmail(formData.email) ? '' : 'Valid email is required'}
+                  helperText={
+                    formData.email && isValidEmail(formData.email) 
+                      ? 'Valid email address' 
+                      : 'Valid email is required'
+                  }
                   inputProps={{ 'aria-label': 'Email' }}
                 />
               </Grid>
@@ -975,17 +1053,25 @@ const HierarchicalUserAssignmentPage = () => {
 
               <Grid item xs={12}>
                 <Autocomplete
+                  key={`roles-${formData.userRoles.length}-${formData.userRoles.join(',')}`}
+                  multiple
                   options={USER_ROLES}
                   getOptionLabel={(option) => {
                     if (typeof option === 'string') return option;
                     return option.label || '';
                   }}
-                  value={USER_ROLES.find(r => r.value === formData.userRole) || null}
+                  value={USER_ROLES.filter(r => formData.userRoles.includes(r.value)) || []}
                   onChange={(event, newValue) => {
-                    if (newValue) {
-                      handleFormChange('userRole', newValue.value);
+                    if (newValue && newValue.length > 0) {
+                      // Set userRoles to the selected role values
+                      const selectedRoleValues = newValue.map(role => role.value);
+                      handleFormChange('userRoles', selectedRoleValues);
                       
-                      // Auto-update permissions based on selected role
+                      // Set primary userRole to the first selected role
+                      handleFormChange('userRole', selectedRoleValues[0]);
+                      
+                      // Auto-update permissions based on primary role
+                      const primaryRole = selectedRoleValues[0];
                       const rolePerms = {
                         CreateProposals: true,
                         EditOwnProposals: true,
@@ -997,24 +1083,24 @@ const HierarchicalUserAssignmentPage = () => {
                         ManageSettings: false
                       };
                       
-                      // Set permissions based on role
-                      if (newValue.value === 'BUDGET APPROVER') {
+                      // Set permissions based on primary role
+                      if (primaryRole === 'BUDGET_APPROVER') {
                         rolePerms.EditOwnProposals = true;
                         rolePerms.EditAllProposals = true;
                         rolePerms.ApproveProposals = true;
-                      } else if (newValue.value === 'BUDGET_REVIEWER') {
+                      } else if (primaryRole === 'BUDGET_REVIEWER') {
                         rolePerms.EditOwnProposals = true;
                         rolePerms.EditAllProposals = true;
-                      } else if (newValue.value === 'BUDGET_PREPARER') {
+                      } else if (primaryRole === 'BUDGET_PREPARER') {
                         rolePerms.CreateProposals = true;
                         rolePerms.EditOwnProposals = true;
-                      } else if (newValue.value === 'BUDGET_PLANNING_ANALYST' || newValue.value === 'BUDGET_OFFICER' || newValue.value === 'OVERALL_BUDGET_APPROVER') {
+                      } else if (primaryRole === 'BUDGET_PLANNING_ANALYST' || primaryRole === 'BUDGET_OFFICER' || primaryRole === 'OVERALL_BUDGET_APPROVER') {
                         rolePerms.EditAllProposals = true;
                         rolePerms.ApproveProposals = true;
-                        if (newValue.value === 'OVERALL_BUDGET_APPROVER') {
+                        if (primaryRole === 'OVERALL_BUDGET_APPROVER') {
                           rolePerms.ManageSettings = true;
                         }
-                      } else if (newValue.value === 'SUPER ADMIN') {
+                      } else if (primaryRole === 'SUPER_ADMIN') {
                         rolePerms.CreateProposals = true;
                         rolePerms.EditOwnProposals = true;
                         rolePerms.EditAllProposals = true;
@@ -1026,34 +1112,72 @@ const HierarchicalUserAssignmentPage = () => {
                       }
                       
                       handleFormChange('rolePermissions', rolePerms);
+                    } else {
+                      // No roles selected
+                      handleFormChange('userRoles', []);
+                      handleFormChange('userRole', '');
+                      handleFormChange('rolePermissions', {
+                        CreateProposals: true,
+                        EditOwnProposals: true,
+                        EditAllProposals: false,
+                        DeleteProposals: false,
+                        ApproveProposals: false,
+                        ViewReports: true,
+                        ManageUsers: false,
+                        ManageSettings: false
+                      });
                     }
                   }}
                   renderInput={(params) => (
                     <TextField
                       {...params}
-                      label="User Role"
-                      placeholder="Select a role"
-                      helperText="Choose the workflow role for this user"
+                      label="User Roles (Multiple Selection)"
+                      placeholder={formData.userRoles.length > 0 ? "Roles selected from FMIS lookup" : "Select one or more roles"}
+                      helperText={
+                        isLookingUpUser 
+                          ? "Looking up roles from FMIS..." 
+                          : formData.userRoles.length > 0 
+                            ? `${formData.userRoles.length} role(s) auto-selected from FMIS. Primary: ${formData.userRole?.replace(/_/g, ' ') || 'None'}`
+                            : 'Select one or more roles (will be auto-filled from FMIS lookup)'
+                      }
                       required
+                      InputProps={{
+                        ...params.InputProps,
+                        endAdornment: (
+                          <>
+                            {isLookingUpUser ? <CircularProgress color="inherit" size={20} /> : null}
+                            {params.InputProps.endAdornment}
+                          </>
+                        ),
+                      }}
                     />
                   )}
-                  renderOption={(props, option) => {
-                    const { key, ...otherProps } = props;
-                    return (
-                      <Box component="li" key={key} {...otherProps}>
-                        <Box>
-                          <Typography variant="body2" fontWeight="bold">
-                            {option.label}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {option.description}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    );
-                  }}
+                  renderTags={(value, getTagProps) =>
+                    value.map((option, index) => {
+                      const { key, ...tagProps } = getTagProps({ index });
+                      return (
+                        <Chip
+                          key={key}
+                          label={option.label}
+                          size="small"
+                          color="primary"
+                          variant="filled"
+                          sx={{ 
+                            backgroundColor: '#1976d2', 
+                            color: 'white',
+                            fontWeight: 'bold',
+                            '& .MuiChip-deleteIcon': {
+                              color: 'white'
+                            }
+                          }}
+                          {...tagProps}
+                        />
+                      );
+                    })
+                  }
                   noOptionsText="No roles available"
                   fullWidth
+                  disabled={isLookingUpUser}
                 />
               </Grid>
 
@@ -1334,8 +1458,8 @@ const HierarchicalUserAssignmentPage = () => {
                         ManageUsers: true,
                         ManageSettings: true
                       });
-                      // Update user role - FULL with ManageSettings = SUPER ADMIN
-                      handleFormChange('userRole', 'SUPER ADMIN');
+                      // Update user role - FULL with ManageSettings = SUPER_ADMIN
+                      handleFormChange('userRole', 'SUPER_ADMIN');
                     }
 
                     handleFormChange('workflowRoles', nextRoles);
@@ -1588,7 +1712,7 @@ const HierarchicalUserAssignmentPage = () => {
         <Grid item xs={12} md={6}>
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
-              Current Assignments ({assignments.length})
+              Current Assignments ({assignments.filter(a => a.userRole !== 'SUPER_ADMIN').length})
             </Typography>
 
             {loadingAssignments ? (
@@ -1606,9 +1730,11 @@ const HierarchicalUserAssignmentPage = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {assignments
-                      .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                      .map((assignment) => (
+                    {(() => {
+                      const filteredAssignments = assignments.filter(assignment => assignment.userRole !== 'SUPER_ADMIN');
+                      return filteredAssignments
+                        .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                        .map((assignment) => (
                         <TableRow key={assignment.userId}>
                           <TableCell>
                             <Typography variant="body2" fontWeight="bold">
@@ -1656,9 +1782,9 @@ const HierarchicalUserAssignmentPage = () => {
                                   }
                                 } else if (level === 'FULL') {
                                   if (perms.ManageSettings) {
-                                    return 'Super Admin';
+                                    return 'ADMIN';
                                   } else {
-                                    return 'Super Admin'; // FULL level is admin
+                                    return 'ADMIN'; // FULL level is admin
                                   }
                                 }
                                 return 'Unknown';
@@ -1793,7 +1919,7 @@ const HierarchicalUserAssignmentPage = () => {
                                     }
                                   } else if (level === 'FULL') {
                                     if (perms.ManageSettings) {
-                                      inferredRole = 'SUPER ADMIN';
+                                      inferredRole = 'SUPER_ADMIN';
                                     } else {
                                       inferredRole = 'BUDGET MANAGER';
                                     }
@@ -1812,6 +1938,8 @@ const HierarchicalUserAssignmentPage = () => {
                                     userId: assignment.userId,
                                     userName: assignment.userName,
                                     email: assignment.email,
+                                    // NEW: Include multiple roles when editing
+                                    userRoles: assignment.userRoles || [],
                                     userRole: assignment.userRole || inferredRole,
                                     assignmentLevel: reverseAssignmentLevelMap[assignment.assignmentLevel] || assignment.assignmentLevel,
                                     officeId: assignment.officeId || assignment.departmentId || '', // Use officeId if available, otherwise departmentId
@@ -1858,13 +1986,14 @@ const HierarchicalUserAssignmentPage = () => {
                             </Tooltip>
                           </TableCell>
                         </TableRow>
-                      ))}
+                      ));
+                    })()}
                   </TableBody>
                 </Table>
                 <TablePagination
                   rowsPerPageOptions={[5, 10, 25]}
                   component="div"
-                  count={assignments.length}
+                  count={assignments.filter(a => a.userRole !== 'SUPER_ADMIN').length}
                   rowsPerPage={rowsPerPage}
                   page={page}
                   onPageChange={handleChangePage}
