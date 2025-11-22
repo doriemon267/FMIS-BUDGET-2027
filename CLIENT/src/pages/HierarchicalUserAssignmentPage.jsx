@@ -121,7 +121,9 @@ const HierarchicalUserAssignmentPage = () => {
     userId: '',
     userName: '',
     email: '',
-    userRole: '',
+    // NEW: Support for multiple roles from FMIS main system
+    userRoles: [], // Array of roles from FMIS main
+    userRole: '', // Primary role for backward compatibility
     assignmentLevel: 'OFFICE', // Changed from assignmentLevel to match new structure
     officeId: '',
     responsibilityCenterName: '',
@@ -401,6 +403,8 @@ const HierarchicalUserAssignmentPage = () => {
       handleFormChange('userId', userLookupData.userId || '');
       handleFormChange('userName', userLookupData.userName || '');
       handleFormChange('email', userLookupData.email || '');
+      // NEW: Support multiple roles from FMIS main system
+      handleFormChange('userRoles', userLookupData.budgetRoles || []);
       const budgetRole = userLookupData.budgetRole || 'BUDGET_PREPARER';
       handleFormChange('userRole', budgetRole);
 
@@ -560,6 +564,8 @@ const HierarchicalUserAssignmentPage = () => {
       userId: '',
       userName: '',
       email: '',
+      // NEW: Reset multiple roles array
+      userRoles: [],
       userRole: '',
       assignmentLevel: 'OFFICE', // Keep assignmentLevel for form state
       officeId: '',
@@ -645,6 +651,8 @@ const HierarchicalUserAssignmentPage = () => {
       userId: formData.userId,
       userName: formData.userName,
       email: formData.email,
+      // NEW: Include multiple roles from FMIS main system
+      userRoles: formData.userRoles || [],
       userRole: formData.userRole,
       assignmentLevel: normalizedLevel,
       accessScope: normalizedLevel,
@@ -913,22 +921,44 @@ const HierarchicalUserAssignmentPage = () => {
               {/* Display user's actual roles from main database */}
               {userLookupData?.roles && userLookupData.roles.length > 0 && (
                 <Grid item xs={12}>
-                  <Alert severity="info" sx={{ mb: 1 }}>
-                    <Typography variant="subtitle2" gutterBottom>
-                      User's Actual Roles from Main Database:
-                    </Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                      {userLookupData.roles.map((role, index) => (
-                        <Chip
-                          key={index}
-                          label={role}
-                          size="small"
-                          color="primary"
-                          variant="outlined"
-                        />
-                      ))}
-                    </Box>
-                  </Alert>
+                  <TextField
+                    fullWidth
+                    label="FMIS Main System Roles"
+                    value={userLookupData.roles.join(', ')}
+                    InputProps={{
+                      readOnly: true,
+                    }}
+                    helperText="Original roles from FMIS main authentication system"
+                    variant="outlined"
+                    sx={{
+                      '& .MuiInputBase-input': {
+                        backgroundColor: '#e3f2fd',
+                        fontSize: '0.875rem'
+                      }
+                    }}
+                  />
+                </Grid>
+              )}
+
+              {/* NEW: Display multiple roles in text field format */}
+              {userLookupData?.budgetRoles && userLookupData.budgetRoles.length > 0 && (
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Determined Budget Roles (Multiple)"
+                    value={userLookupData.budgetRoles.map(role => role.replace(/_/g, ' ')).join(', ')}
+                    InputProps={{
+                      readOnly: true,
+                    }}
+                    helperText={`Primary: ${userLookupData.budgetRole?.replace(/_/g, ' ')} • Total roles: ${userLookupData.budgetRoles.length}`}
+                    variant="outlined"
+                    sx={{
+                      '& .MuiInputBase-input': {
+                        backgroundColor: '#f5f5f5',
+                        fontSize: '0.875rem'
+                      }
+                    }}
+                  />
                 </Grid>
               )}
               
@@ -1026,6 +1056,32 @@ const HierarchicalUserAssignmentPage = () => {
                   fullWidth
                 />
               </Grid>
+
+              {/* NEW: Display multiple roles that will be saved */}
+              {formData.userRoles && formData.userRoles.length > 0 && (
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Roles to be Saved (Multiple Role Support)"
+                    value={formData.userRoles.map(role => role.replace(/_/g, ' ')).join(', ')}
+                    InputProps={{
+                      readOnly: true,
+                    }}
+                    helperText={`These roles will be saved to the database. Primary role: ${formData.userRole?.replace(/_/g, ' ') || 'None selected'}`}
+                    variant="outlined"
+                    sx={{
+                      '& .MuiInputBase-input': {
+                        backgroundColor: '#e8f5e8',
+                        fontSize: '0.875rem',
+                        fontWeight: 'bold'
+                      },
+                      '& .MuiInputLabel-root': {
+                        color: '#2e7d32'
+                      }
+                    }}
+                  />
+                </Grid>
+              )}
 
               {/* Budget Planning Analyst - Region Selection */}
               {formData.userRole === 'BUDGET_PLANNING_ANALYST' && (
