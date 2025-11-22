@@ -56,21 +56,38 @@ exports.createNotification = async (notificationData) => {
 
     await notification.save();
 
-    // Try to send email notification if recipient has an email in HierarchicalUserAssignment
+    // Try to send email notification if recipient has an email in HierarchicalUserAssignment and email is enabled
     try {
       const assignment = await HierarchicalUserAssignment.findOne({ userId: notificationData.userId }).select('email').lean();
-      console.log('[Notification Email Debug] userId:', notificationData.userId, 'assignment:', assignment);
+      const user = await User.findOne({ userId: notificationData.userId }).select('emailPreferences').lean();
+      
+      console.log('[Notification Email Debug] userId:', notificationData.userId, 'assignment:', assignment, 'user prefs:', user?.emailPreferences);
+      
       if (assignment && assignment.email) {
-        const html = `<h2 style='color:#1976d2;'>${notificationData.title || 'Notification'}</h2>
-          <p>${notificationData.message || ''}</p>
-          ${notificationData.relatedLink ? `<a href='https://your-app.com${notificationData.relatedLink}' style='color:#1976d2;text-decoration:underline;'>View Proposal</a>` : ''}`;
-        await sendNotificationEmail(
-          assignment.email,
-          notificationData.title || 'New Notification',
-          notificationData.message || '',
-          html
-        );
-        console.log('[Notification Email Debug] Email sent to:', assignment.email);
+        // Check email preferences
+        const userPrefs = user?.emailPreferences || {};
+        const emailEnabled = userPrefs.enabled !== false;
+        const proposalMuted = notificationData.metadata?.proposalId && userPrefs.mutedProposals && userPrefs.mutedProposals.includes(notificationData.metadata.proposalId);
+        const notificationTypeEnabled = userPrefs.notificationTypes?.workflow !== false;
+        
+        if (!emailEnabled) {
+          console.log('[Notification Email Debug] Email disabled for userId:', notificationData.userId);
+        } else if (proposalMuted) {
+          console.log('[Notification Email Debug] Proposal muted for userId:', notificationData.userId, 'proposalId:', notificationData.metadata?.proposalId);
+        } else if (!notificationTypeEnabled) {
+          console.log('[Notification Email Debug] Workflow notifications disabled for userId:', notificationData.userId);
+        } else {
+          const html = `<h2 style='color:#1976d2;'>${notificationData.title || 'Notification'}</h2>
+            <p>${notificationData.message || ''}</p>
+            ${notificationData.relatedLink ? `<a href='https://your-app.com${notificationData.relatedLink}' style='color:#1976d2;text-decoration:underline;'>View Proposal</a>` : ''}`;
+          await sendNotificationEmail(
+            assignment.email,
+            notificationData.title || 'New Notification',
+            notificationData.message || '',
+            html
+          );
+          console.log('[Notification Email Debug] Email sent to:', assignment.email);
+        }
       } else {
         console.warn('[Notification Email Debug] No email found for userId:', notificationData.userId);
       }
@@ -207,18 +224,42 @@ exports.createNotifications = async (notificationsData) => {
         candidates.push(String(uid));
       });
       console.log('[Notification Email Debug] Candidate userIds for email mapping:', candidates);
+      
+      // Fetch user assignments and email preferences
       const assignments = await HierarchicalUserAssignment.find({ userId: { $in: candidates } }).select('userId email').lean();
-      console.log('[Notification Email Debug] Found assignments:', assignments);
+      const users = await User.find({ userId: { $in: candidates } }).select('userId emailPreferences').lean();
+      
+      console.log('[Notification Email Debug] Found assignments:', assignments.length, 'users:', users.length);
       const assignmentEmailMap = {};
+      const userPreferencesMap = {};
+      
       assignments.forEach(a => { if (a.email) assignmentEmailMap[String(a.userId)] = a.email; });
+      users.forEach(u => { userPreferencesMap[String(u.userId)] = u.emailPreferences; });
+      
       console.log('[Notification Email Debug] Assignment email map:', assignmentEmailMap);
+      console.log('[Notification Email Debug] User preferences map:', userPreferencesMap);
 
       for (const n of created) {
         let email = assignmentEmailMap[n.recipientUserId] || assignmentEmailMap[String(n.recipientUserId)] || assignmentEmailMap[Number(n.recipientUserId)] || null;
-        // Forced debug log for every notification
-        console.log('[Notification Email Debug] Attempting email for userId:', n.recipientUserId, 'initial email:', email);
+        const userPrefs = userPreferencesMap[n.recipientUserId] || userPreferencesMap[String(n.recipientUserId)] || userPreferencesMap[Number(n.recipientUserId)] || {};
+        
+        // Check email preferences
+        const emailEnabled = userPrefs.enabled !== false; // default true
+        const proposalMuted = n.metadata?.proposalId && userPrefs.mutedProposals && userPrefs.mutedProposals.includes(n.metadata.proposalId);
+        const notificationTypeEnabled = userPrefs.notificationTypes?.workflow !== false; // default true
+        
+        console.log('[Notification Email Debug] userId:', n.recipientUserId, 'email:', email, 'enabled:', emailEnabled, 'muted:', proposalMuted, 'typeEnabled:', notificationTypeEnabled);
+        
+        if (!email || !emailEnabled || proposalMuted || !notificationTypeEnabled) {
+          if (!email) console.warn('[Notification Email Debug] No email found for userId:', n.recipientUserId);
+          if (!emailEnabled) console.log('[Notification Email Debug] Email disabled for userId:', n.recipientUserId);
+          if (proposalMuted) console.log('[Notification Email Debug] Proposal muted for userId:', n.recipientUserId, 'proposalId:', n.metadata?.proposalId);
+          if (!notificationTypeEnabled) console.log('[Notification Email Debug] Workflow notifications disabled for userId:', n.recipientUserId);
+          continue;
+        }
+        
+        // Fallback: try to fetch assignment again with flexible matching
         if (!email) {
-          // Fallback: try to fetch assignment again with flexible matching
           try {
             const fallbackAssignment = await HierarchicalUserAssignment.findOne({
               $or: [
@@ -237,6 +278,7 @@ exports.createNotifications = async (notificationsData) => {
             console.warn('[Notification Email Debug] Fallback assignment error for userId:', n.recipientUserId, fallbackErr.message);
           }
         }
+        
         if (email) {
           try {
             const html = `<h2 style='color:#1976d2;'>${n.title || 'Notification'}</h2>

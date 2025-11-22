@@ -494,10 +494,27 @@ const sendWorkflowEmails = async (action, proposal, recipientUserIds, currentUse
       return;
     }
     
+    // Get user email preferences
+    const userPrefs = await User.find({ userId: { $in: recipientUserIds } }).select('userId emailPreferences');
+    const prefsMap = {};
+    userPrefs.forEach(u => {
+      prefsMap[u.userId] = u.emailPreferences;
+    });
+    
     const emailMap = {};
     users.forEach(user => {
-      emailMap[user.userId] = user.email;
-      console.log('[sendWorkflowEmails] Mapped userId:', user.userId, '-> email:', user.email);
+      // Check email preferences before including in email map
+      const prefs = prefsMap[user.userId] || {};
+      const emailEnabled = prefs.enabled !== false;
+      const proposalMuted = proposal && prefs.mutedProposals && prefs.mutedProposals.includes(proposal._id || proposal.id);
+      const notificationTypeEnabled = prefs.notificationTypes?.workflow !== false;
+      
+      if (emailEnabled && !proposalMuted && notificationTypeEnabled && user.email) {
+        emailMap[user.userId] = user.email;
+        console.log('[sendWorkflowEmails] Mapped userId:', user.userId, '-> email:', user.email);
+      } else {
+        console.log('[sendWorkflowEmails] Skipped userId:', user.userId, 'emailEnabled:', emailEnabled, 'muted:', proposalMuted, 'typeEnabled:', notificationTypeEnabled);
+      }
     });
 
     // Prepare email subject and body

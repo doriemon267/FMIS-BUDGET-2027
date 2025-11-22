@@ -23,7 +23,21 @@ const UserSchema = new mongoose.Schema({
   roles: [{
     type: String,
     required: true
-  }]
+  }],
+  emailPreferences: {
+    enabled: {
+      type: Boolean,
+      default: true
+    },
+    mutedProposals: [{
+      type: String // proposal IDs that user doesn't want email notifications for
+    }],
+    notificationTypes: {
+      workflow: { type: Boolean, default: true },
+      security: { type: Boolean, default: true },
+      system: { type: Boolean, default: false }
+    }
+  }
 }, {
   timestamps: true
 });

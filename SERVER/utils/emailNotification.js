@@ -1,4 +1,18 @@
 const nodemailer = require('nodemailer');
+const sanitizeHtml = require('sanitize-html');
+
+// Configure sanitizer options for email content
+const sanitizeOptions = {
+  allowedTags: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'br', 'strong', 'b', 'em', 'i', 'u', 'a', 'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
+  allowedAttributes: {
+    'a': ['href', 'title'],
+    'table': ['border', 'cellpadding', 'cellspacing', 'style'],
+    'th': ['style'],
+    'td': ['style', 'colspan', 'rowspan']
+  },
+  allowedSchemes: ['http', 'https', 'mailto'],
+  selfClosing: ['br']
+};
 
 // Configure transporter - supports both Gmail and generic SMTP
 let transporter;
@@ -34,12 +48,14 @@ if (process.env.MAIL_HOST) {
 }
 
 /**
- * Send notification email
+ * Send notification email with retry logic
  * @param {string} to - Recipient email
  * @param {string} subject - Email subject
  * @param {string} text - Email body
+ * @param {string} html - Email HTML content (optional)
+ * @param {number} maxRetries - Maximum number of retry attempts (default: 3)
  */
-function sendNotificationEmail(to, subject, text, html) {
+function sendNotificationEmail(to, subject, text, html, maxRetries = 3) {
   if (!transporter) {
     throw new Error('Email transporter is not configured. Check environment variables.');
   }
@@ -54,15 +70,43 @@ function sendNotificationEmail(to, subject, text, html) {
   // Format: "Name <email@domain.com>"
   const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
 
+  // Sanitize HTML content if provided
+  let sanitizedHtml = html;
+  if (html) {
+    sanitizedHtml = sanitizeHtml(html, sanitizeOptions);
+  }
+
   const mailOptions = {
     from,
     to,
     subject,
     text,
-    html
+    html: sanitizedHtml
   };
-  
-  return transporter.sendMail(mailOptions);
+
+  // Retry logic
+  const sendWithRetry = async (attempt = 1) => {
+    try {
+      const result = await transporter.sendMail(mailOptions);
+      console.log(`[Email] Successfully sent to ${to} on attempt ${attempt}`);
+      return result;
+    } catch (error) {
+      console.warn(`[Email] Attempt ${attempt} failed for ${to}:`, error.message);
+      
+      if (attempt < maxRetries) {
+        // Exponential backoff: wait 2^attempt seconds
+        const delay = Math.pow(2, attempt) * 1000;
+        console.log(`[Email] Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return sendWithRetry(attempt + 1);
+      } else {
+        console.error(`[Email] All ${maxRetries} attempts failed for ${to}`);
+        throw new Error(`Email delivery failed after ${maxRetries} attempts: ${error.message}`);
+      }
+    }
+  };
+
+  return sendWithRetry();
 }
 
 module.exports = { sendNotificationEmail };
