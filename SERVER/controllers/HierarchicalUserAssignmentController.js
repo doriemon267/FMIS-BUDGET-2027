@@ -97,37 +97,66 @@ const lookupUserFromMainDB = async (req, res) => {
     };
 
     // Determine the appropriate budget role based on user's main roles
-    // Following the 6-step workflow hierarchy
+    // Following the 6-step workflow hierarchy, but now supporting MULTIPLE LEGITIMATE ROLES
     //  ONLY accept these role names - 6-step workflow + 3 admin roles
     // Map ANY incoming role name to standardized versions ONLY (with underscores)
-    let budgetRole = 'BUDGET_PREPARER'; // default (STEP 1)
+    let budgetRoles = []; // Array to hold multiple roles
+    let primaryRole = 'BUDGET_PREPARER'; // default (STEP 1)
 
   if (DEBUG) console.debug(`🔍 User ${userId} roles from DB:`, roleNames);
 
     if (roleNames.includes('SUPER ADMIN') || roleNames.includes('SUPER_ADMIN') || roleNames.includes('ADMIN')) {
-      budgetRole = 'SUPER_ADMIN';
-    } else if (roleNames.includes('OVERALL_BUDGET_APPROVER') || roleNames.includes('OVERALL BUDGET APPROVER')) {
-      // STEP 6: OVERALL_BUDGET_APPROVER
-      budgetRole = 'OVERALL_BUDGET_APPROVER';
-    } else if (roleNames.includes('BUDGET OFFICER') || roleNames.includes('BUDGET_OFFICER')) {
-      // STEP 5: BUDGET_OFFICER
-      budgetRole = 'BUDGET_OFFICER';
-    } else if (roleNames.includes('BUDGET PLANNING ANALYST') || roleNames.includes('BUDGET_PLANNING_ANALYST')) {
-      // STEP 4: BUDGET_PLANNING_ANALYST
-      budgetRole = 'BUDGET_PLANNING_ANALYST';
-    } else if (roleNames.includes('BUDGET APPROVER') || roleNames.includes('BUDGET_APPROVER')) {
-      // STEP 3: BUDGET_APPROVER
-      budgetRole = 'BUDGET_APPROVER';
-    } else if (roleNames.includes('BUDGET REVIEWER') || roleNames.includes('BUDGET_REVIEWER')) {
-      // STEP 2: BUDGET_REVIEWER
-      budgetRole = 'BUDGET_REVIEWER';
-    } else if (roleNames.includes('BUDGET PREPARER') || roleNames.includes('BUDGET_PREPARER')) {
-      // STEP 1: BUDGET_PREPARER
-      budgetRole = 'BUDGET_PREPARER';
+      budgetRoles.push('SUPER_ADMIN');
+      primaryRole = 'SUPER_ADMIN';
+    } else {
+      // Check for each role type and add to budgetRoles array
+      // Allow multiple roles where it makes sense (e.g., Preparer + Reviewer, Approver + Reviewer)
+      
+      // Check for OVERALL_BUDGET_APPROVER
+      if (roleNames.includes('OVERALL_BUDGET_APPROVER') || roleNames.includes('OVERALL BUDGET APPROVER')) {
+        budgetRoles.push('OVERALL_BUDGET_APPROVER');
+        primaryRole = 'OVERALL_BUDGET_APPROVER';
+      }
+      
+      // Check for BUDGET_OFFICER
+      if (roleNames.includes('BUDGET OFFICER') || roleNames.includes('BUDGET_OFFICER')) {
+        budgetRoles.push('BUDGET_OFFICER');
+        if (primaryRole === 'BUDGET_PREPARER') primaryRole = 'BUDGET_OFFICER';
+      }
+      
+      // Check for BUDGET_PLANNING_ANALYST
+      if (roleNames.includes('BUDGET PLANNING ANALYST') || roleNames.includes('BUDGET_PLANNING_ANALYST')) {
+        budgetRoles.push('BUDGET_PLANNING_ANALYST');
+        if (primaryRole === 'BUDGET_PREPARER') primaryRole = 'BUDGET_PLANNING_ANALYST';
+      }
+      
+      // Check for BUDGET_APPROVER
+      if (roleNames.includes('BUDGET APPROVER') || roleNames.includes('BUDGET_APPROVER')) {
+        budgetRoles.push('BUDGET_APPROVER');
+        if (primaryRole === 'BUDGET_PREPARER') primaryRole = 'BUDGET_APPROVER';
+      }
+      
+      // Check for BUDGET_REVIEWER
+      if (roleNames.includes('BUDGET REVIEWER') || roleNames.includes('BUDGET_REVIEWER')) {
+        budgetRoles.push('BUDGET_REVIEWER');
+        if (primaryRole === 'BUDGET_PREPARER') primaryRole = 'BUDGET_REVIEWER';
+      }
+      
+      // Check for BUDGET_PREPARER
+      if (roleNames.includes('BUDGET PREPARER') || roleNames.includes('BUDGET_PREPARER')) {
+        budgetRoles.push('BUDGET_PREPARER');
+        // Don't change primaryRole if it's already set to higher role
+      }
+      
+      // If no specific budget roles found, default to BUDGET_PREPARER
+      if (budgetRoles.length === 0) {
+        budgetRoles.push('BUDGET_PREPARER');
+      }
     }
 
-  if (DEBUG) console.debug(`📋 Determined budgetRole for user ${userId}: ${budgetRole}`);
-    userInfo.budgetRole = budgetRole;
+  if (DEBUG) console.debug(`📋 Determined budgetRoles for user ${userId}:`, budgetRoles, `primaryRole: ${primaryRole}`);
+    userInfo.budgetRoles = budgetRoles; // Multiple roles
+    userInfo.budgetRole = primaryRole; // Primary role for backward compatibility
 
     res.json({
       success: true,
@@ -281,7 +310,9 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       userId,
       userName,
       email,
-      // Persist the requested role if provided, so the UI doesn't "downgrade" reviewer at RC level
+      // NEW: Support multiple roles from FMIS main system
+      userRoles: req.body.userRoles || [], // Array of roles from FMIS main
+      // Keep backward compatibility - primary role (highest in hierarchy)
       userRole: userRole || undefined,
       assignmentLevel: modelAssignmentLevel,
       regionId: assignmentData.regions?.[0] || null,
