@@ -515,9 +515,21 @@ router.get(
               m.departmentId && m.departmentId.toString() === dept._id.toString()
             );
 
-            // Special handling for departments that should be split by region
-            const departmentsToSplit = ['REGIONAL OFFICE', 'IRRIGATION MANAGEMENT OFFICE', 'HEAD OFFICE', 'DIVISION I', 'DIVISION II', 'DIVISION III', 'DIVISION IV'];
-            if (departmentsToSplit.includes(dept.Department) && deptMappings.length > 1) {
+            // Check if this is a central office (displayOrder < 100)
+            const isCentralOffice = deptMappings.length > 1 && (dept.displayOrder < 100);
+
+            if (isCentralOffice) {
+              // Central offices that serve multiple regions → Create ONE office with "All Regions"
+              officesMap.set(officeId.toString(), {
+                id: officeId,
+                name: dept.Department || dept.name || `Office ${index + 1}`,
+                code: dept.DepartmentCode || dept.code || `O${index + 1}`,
+                region: 'All Regions',
+                regionId: null,
+                departmentId: dept._id
+              });
+            } else if (deptMappings.length > 1) {
+              // Regional departments with multiple regional mappings → Create SEPARATE office for each region
               deptMappings.forEach((mapping, mappingIndex) => {
                 const region = regions.find(r => r._id.toString() === mapping.regionId.toString());
                 if (region) {
@@ -535,39 +547,16 @@ router.get(
                   });
                 }
               });
-            } else {
-              // Normal processing for other departments
-              let regionName = null; // No default region
+            } else if (deptMappings.length === 1) {
+              // Single region mapping → Create office for that specific region
+              const mapping = deptMappings[0];
+              const region = regions.find(r => r._id.toString() === mapping.regionId.toString());
+              let regionName = null;
               let regionId = null;
-
-              if (deptMappings.length > 0) {
-              // Check if this is a central office that serves multiple regions
-              const centralOfficeNames = [
-                'IRRIGATION MANAGEMENT OFFICE',
-                'PUBLIC AFFAIRS AND STAFF INFORMATION', 
-                'LEGAL SERVICES',
-                'INTERNAL AUDIT SERVICES',
-                'ADMINISTRATIVE DEPARTMENT',
-                'CORPORATE PLANNING SERVICES',
-                'FINANCIAL MANAGEMENT DEPARTMENT',
-                'HEAD OFFICE',
-                'OPERATIONS DEPARTMENT'
-              ];
-              const isCentralOffice = deptMappings.length > 1 || centralOfficeNames.includes(dept.Department);                if (isCentralOffice && deptMappings.length > 1) {
-                  // Central office serving multiple regions
-                  regionName = 'All Regions';
-                  regionId = null; // No specific region ID for multi-region offices
-                } else {
-                  // Regular office with single region mapping
-                  const firstMapping = deptMappings[0];
-                  if (firstMapping.regionId) {
-                    const region = regions.find(r => r._id.toString() === firstMapping.regionId.toString());
-                    if (region) {
-                      regionName = region.Region || region.name || region.regionName;
-                      regionId = region._id;
-                    }
-                  }
-                }
+              
+              if (region) {
+                regionName = region.Region || region.name || region.regionName;
+                regionId = region._id;
               }
 
               officesMap.set(officeId.toString(), {
@@ -590,23 +579,47 @@ router.get(
                   mappings.forEach((mapping) => {
                     if (mapping.divisions && mapping.divisions.length > 0) {
                       // Check if this department is split by region
-                      const departmentsToSplit = ['REGIONAL OFFICE', 'IRRIGATION MANAGEMENT OFFICE', 'HEAD OFFICE', 'DIVISION I', 'DIVISION II', 'DIVISION III', 'DIVISION IV'];
                       const dept = departments.find(d => d._id.toString() === mapping.departmentId.toString());
-                      const isSplitDepartment = dept && departmentsToSplit.includes(dept.Department);
+                      const deptMappings = mappings.filter(m => m.departmentId.toString() === mapping.departmentId.toString());
                       
-                      // For split departments, use composite officeId; otherwise use departmentId
-                      const officeId = isSplitDepartment && mapping.regionId 
+                      let isCentralOffice = deptMappings.length > 1 && dept && (dept.displayOrder < 100);
+                      const shouldSplitByRegion = deptMappings.length > 1 && !isCentralOffice;
+                      
+                      // For departments with multiple regions (except central offices), use composite officeId; otherwise use departmentId
+                      let officeId = shouldSplitByRegion && mapping.regionId 
                         ? `${mapping.departmentId}_${mapping.regionId}` 
                         : mapping.departmentId;
-                      const office = officesMap.get(officeId?.toString());
+                      let office = officesMap.get(officeId?.toString());
 
                       // Check if this is a central office
-                      const isCentralOffice = office && office.region === 'All Regions';
+                      isCentralOffice = office && office.region === 'All Regions';
 
                       if (isCentralOffice) {
                         // For central offices, create provincial IMO entries based on region
                         const region = regions.find(r => r._id.toString() === mapping.regionId.toString());
                         const regionName = region ? region.Region : 'Unknown';
+                        
+                        // If office is not found, create a default office for this central department
+                        let officeForRC = office;
+                        if (!office || !office.name) {
+                          const dept = departments.find(d => d._id.toString() === mapping.departmentId.toString());
+                          if (dept) {
+                            const defaultOfficeId = `${mapping.departmentId}`;
+                            officeForRC = {
+                              id: defaultOfficeId,
+                              name: dept.Department || 'Central Office',
+                              code: dept.DepartmentCode || 'CO',
+                              region: 'All Regions',
+                              regionId: null,
+                              departmentId: mapping.departmentId
+                            };
+                            if (!officesMap.has(defaultOfficeId.toString())) {
+                              officesMap.set(defaultOfficeId.toString(), officeForRC);
+                            }
+                            officeId = defaultOfficeId;
+                            office = officeForRC;
+                          }
+                        }
 
                         // Define provincial IMOs for each region
                         const provincialIMOs = {
@@ -699,7 +712,7 @@ router.get(
 
                         regionIMOs.forEach((provincialIMO, imoIndex) => {
                           // Skip if office is not found (prevents "Unknown Office" entries)
-                          if (!office || !office.name) {
+                          if (!officeForRC || !officeForRC.name) {
                             return;
                           }
 
@@ -711,7 +724,7 @@ router.get(
                             name: rcName,
                             code: `RC${imoIndex + 1}`,
                             officeId: officeId,
-                            officeName: office.name,
+                            officeName: officeForRC.name,
                             region: regionName,
                             regionId: mapping.regionId,
                             departmentId: mapping.departmentId,
@@ -732,9 +745,34 @@ router.get(
                       } else {
                         // For regular offices, create responsibility centers as before
                         mapping.divisions.forEach((division, divIndex) => {
-                          // Skip if office is not found (prevents "Unknown Office" entries)
+                          // If office is not found, create a default office for this department
+                          let officeForRC = office;
                           if (!office || !office.name) {
-                            return;
+                            // Create a default office for this department/region combination
+                            const dept = departments.find(d => d._id.toString() === mapping.departmentId.toString());
+                            if (dept) {
+                              const defaultOfficeId = `${mapping.departmentId}`;
+                              const defaultRegion = regions.find(r => r._id.toString() === mapping.regionId.toString());
+                              const defaultRegionName = defaultRegion ? (defaultRegion.Region || defaultRegion.name) : null;
+                              
+                              officeForRC = {
+                                id: defaultOfficeId,
+                                name: dept.Department || `Office ${divIndex + 1}`,
+                                code: dept.DepartmentCode || `O${divIndex + 1}`,
+                                region: defaultRegionName,
+                                regionId: mapping.regionId,
+                                departmentId: mapping.departmentId
+                              };
+                              
+                              // Add this office to the officesMap if it's not already there
+                              if (!officesMap.has(defaultOfficeId.toString())) {
+                                officesMap.set(defaultOfficeId.toString(), officeForRC);
+                              }
+                              officeId = defaultOfficeId;
+                            } else {
+                              // Skip if we can't create a default office
+                              return;
+                            }
                           }
 
                           const rcId = `rc_${mapping._id || mappingIndex}_${divIndex}`;
@@ -744,9 +782,9 @@ router.get(
                             name: division.name || `Responsibility Center ${divIndex + 1}`,
                             code: division.code || `RC${divIndex + 1}`,
                             officeId: officeId,
-                            officeName: office.name,
-                            region: office.region,
-                            regionId: office.regionId || null,
+                            officeName: officeForRC.name,
+                            region: officeForRC.region,
+                            regionId: officeForRC.regionId || null,
                             departmentId: mapping.departmentId,
                             departmentName: mapping.departmentName
                           };
@@ -785,6 +823,27 @@ router.get(
 
         const formattedOffices = Array.from(officesMap.values());
         const formattedResponsibilityCenters = Array.from(responsibilityCentersMap.values());
+
+        // Sort offices by displayOrder (central offices first, then regional)
+        formattedOffices.sort((a, b) => {
+          // Find displayOrder from departments
+          const deptA = departments.find(d => d._id.toString() === a.departmentId?.toString());
+          const deptB = departments.find(d => d._id.toString() === b.departmentId?.toString());
+          
+          const orderA = deptA?.displayOrder || 999;
+          const orderB = deptB?.displayOrder || 999;
+          
+          // If orders are different, sort by order
+          if (orderA !== orderB) {
+            return orderA - orderB;
+          }
+          
+          // If same order, sort by region then name
+          const regionCompare = (a.region || '').localeCompare(b.region || '');
+          if (regionCompare !== 0) return regionCompare;
+          
+          return a.name.localeCompare(b.name);
+        });
 
         // Create region mapping for easy lookup
         const regionMapping = {};
