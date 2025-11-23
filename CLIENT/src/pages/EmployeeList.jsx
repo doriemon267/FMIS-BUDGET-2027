@@ -104,6 +104,12 @@ const EmployeeList = () => {
           name: regionName || 'Your Region',
           scope: `${regionName || 'Region'}`
         };
+      case 'BUDGET_AND_REVENUE_DIVISION':
+        return {
+          level: 'BRD',
+          name: 'Budget & Revenue Division',
+          scope: 'Full System Access'
+        };
       case 'FULL':
         return {
           level: 'System',
@@ -775,6 +781,8 @@ const EmployeeList = () => {
                           ? `You can view and manage employees in ${userDivision || 'your division'}. You can process personnel within your division scope only.`
                           : userAccessLevel === 'DEPARTMENT'
                           ? `You can view all employees in ${userDepartment || 'your department'} and oversee all divisions.`
+                          : userAccessLevel === 'BUDGET_AND_REVENUE_DIVISION'
+                          ? `You have full access to view and manage all employees across all regions, divisions, and departments.`
                           : `You have full access to view and manage employees within ${regionName || 'your region'}.`
                         }
                       </Typography>

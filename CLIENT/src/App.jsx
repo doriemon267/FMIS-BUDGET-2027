@@ -32,6 +32,7 @@ import MealAllowancePage from "./pages/MealAllowancePage";
 import MedicalAllowancePage from "./pages/MedicalAllowancePage";
 import ChildrenAllowancePage from "./pages/ChildrenAllowancePage";
 import IncomeManagementPage from "./pages/IncomeManagementPage";
+import SalaryManagement from "./components/management/SalaryManagement";
 import GroupedIncomeCategoryPage from "./pages/GroupedIncomeCategoryPage";
 import RetireePage from "./pages/RetireePage";
 
@@ -197,6 +198,18 @@ const App = () => {
               requiredWorkflowRoles={["superAdmin"]}
             >
               <IncomeManagementPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/salary-management"
+          element={
+            <ProtectedRoute
+              requiredPermissions={["ManageSettings"]}
+              requiredWorkflowRoles={["superAdmin"]}
+            >
+              <SalaryManagement />
             </ProtectedRoute>
           }
         />

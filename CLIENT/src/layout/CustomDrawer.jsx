@@ -12,6 +12,7 @@ import {
   FaClipboardList,
   FaInfoCircle,
   FaRegMoneyBillAlt,
+  FaMoneyBillWave,
   FaPhone,
   FaHome,
   FaFileAlt,
@@ -309,6 +310,15 @@ const CustomDrawer = ({ collapsed = false }) => {
                   hasPermission(currentUser, "ManageSettings") ||
                   isOverallApprover,
                 icon: <TbCategory />,
+              },
+
+              {
+                link: "/salary-management",
+                name: "Salary Management",
+                isAllow:
+                  hasPermission(currentUser, "ManageSettings") ||
+                  isOverallApprover,
+                icon: <FaMoneyBillWave />,
               },
 
               // {

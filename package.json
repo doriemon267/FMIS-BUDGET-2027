@@ -3,7 +3,8 @@
     "axios": "^1.12.2",
     "cors": "^2.8.5",
     "express": "^5.1.0",
-    "mongoose": "^8.18.1"
+    "mongoose": "^8.18.1",
+    "xlsx": "^0.18.5"
   },
   "scripts": {
     "organize-utils": "node SERVER/utils/organize-utils.js",

@@ -1180,17 +1180,8 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
             A. SOURCES OF FUNDS
           </Typography>
           <Box display="flex" alignItems="center" gap={1}>
-            <Chip
-              label="Auto-calculated from available data"
-              size="small"
-              color="info"
-              variant="outlined"
-            />
-            <Tooltip title="PROJECTED CORPORATE INCOME comes from income data. PROJECTED SUBSIDY is government funding. PROPOSED BUDGET is the total requirement.">
-              <IconButton size="small">
-                <InfoIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
+           
+           
           </Box>
         </Box>
         <TableContainer sx={{ mb: 3, boxShadow: 2, borderRadius: 2, border: '1px solid #e0e0e0' }}>
@@ -1198,7 +1189,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
             <TableHead>
               <TableRow sx={{ backgroundColor: '#1976d2' }}>
                 <TableCell sx={{ fontWeight: 'bold', color: 'white', width: '40%', fontSize: compactView ? '0.95rem' : '1.05rem', letterSpacing: 0.5, py: 2 }}>
-                  1. CORPORATE INCOME
+                  CORPORATE INCOME
                 </TableCell>
                 <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '20%', fontSize: compactView ? '0.95rem' : '1.05rem', letterSpacing: 0.5, py: 2 }}>
                   PROJECTED CORPORATE INCOME
@@ -1213,10 +1204,10 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
             </TableHead>
             <TableBody>
               {[
-                { label: 'A.1.1 IRRIGATION SERVICE FEES', key: 'Irrigation Service Fees' },
-                { label: 'A.1.2 RENT INCOME', key: 'Rent Income' },
-                { label: 'A.1.3 WATER SERVICE FEE', key: 'Water Service Fee' },
-                { label: 'A.1.4 MISCELLENEOUS INCOME', key: 'Miscellaneous Income' }
+                { label: 'IRRIGATION SERVICE FEES', key: 'Irrigation Service Fees' },
+                { label: 'RENT INCOME', key: 'Rent Income' },
+                { label: 'WATER SERVICE FEE', key: 'Water Service Fee' },
+                { label: 'MISCELLENEOUS INCOME', key: 'Miscellaneous Income' }
               ].map((row, idx) => (
                 <TableRow key={row.key} sx={{ 
                   backgroundColor: idx % 2 === 0 ? '#f9f9f9' : '#fff',
@@ -1273,35 +1264,13 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
             </TableBody>
           </Table>
         </TableContainer>
-      </CardContent>
-    </Card>
 
-      <Card sx={{ mb: 3, bgcolor: '#fff', boxShadow: 3, borderRadius: 3 }}>
-        <CardContent sx={{ p: 3 }}>
-          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-            <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1976d2', letterSpacing: 0.5 }}>
-              2. BUDGETARY SUPPORT
-            </Typography>
-            <Box display="flex" alignItems="center" gap={1}>
-              <Chip
-                label="Auto-calculated subsidy requirements"
-                size="small"
-                color="success"
-                variant="outlined"
-              />
-              <Tooltip title="PROJECTED CORPORATE INCOME comes from region-specific income data. PROJECTED SUBSIDY is government funding. PROPOSED BUDGET is the total requirement.">
-                <IconButton size="small">
-                  <InfoIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </Box>
-          </Box>
-          <TableContainer sx={{ mb: 3, boxShadow: 2, borderRadius: 2, border: '1px solid #e0e0e0' }}>
+   <TableContainer sx={{ mb: 3, boxShadow: 2, borderRadius: 2, border: '1px solid #e0e0e0' }}>
             <Table size={compactView ? 'small' : 'medium'}>
               <TableHead>
                 <TableRow sx={{ backgroundColor: '#1976d2' }}>
                   <TableCell sx={{ fontWeight: 'bold', color: 'white', width: '40%', fontSize: compactView ? '0.95rem' : '1.05rem', letterSpacing: 0.5, py: 2 }}>
-                    2. BUDGETARY SUPPORT
+                    BUDGETARY SUPPORT
                   </TableCell>
                   <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '20%', fontSize: compactView ? '0.95rem' : '1.05rem', letterSpacing: 0.5, py: 2 }}>
                     PROJECTED CORPORATE INCOME
@@ -1431,9 +1400,12 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
             </TableBody>
           </Table>
         </TableContainer>
-        </CardContent>
-      </Card>
 
+
+      </CardContent>
+    </Card>
+
+   
       <Card sx={{ mb: 3, bgcolor: '#fff', boxShadow: 3, borderRadius: 3 }}>
         <CardContent sx={{ p: 3 }}>
           <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
@@ -1441,17 +1413,8 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
               B. USES OF FUNDS
             </Typography>
             <Box display="flex" alignItems="center" gap={1}>
-              <Chip
-                label="CORPORATE INCOME and SUBSIDY breakdown"
-                size="small"
-                color="info"
-                variant="outlined"
-              />
-              <Tooltip title="PROJECTED CORPORATE INCOME comes from specific income data. PROJECTED SUBSIDY is government funding. PROPOSED BUDGET is the total requirement.">
-                <IconButton size="small">
-                  <InfoIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
+             
+              
             </Box>
           </Box>
           <TableContainer sx={{ mb: 3, boxShadow: 2, borderRadius: 2, border: '1px solid #e0e0e0' }}>
@@ -1480,11 +1443,9 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
               }}>
                 <TableCell sx={{ pl: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                   <Typography variant="body2" sx={{ fontWeight: 500, letterSpacing: 0.2 }}>
-                    B.1.1 Personnel Services
+                    PERSONNEL SERVICES
                   </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontStyle: 'italic' }}>
-                    (Charged to Income + Non-Charged Subsidy)
-                  </Typography>
+                  
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                   <Typography variant="body2" sx={{ fontWeight: 500, color: '#d32f2f', letterSpacing: 0.2 }}>
@@ -1512,11 +1473,9 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
               }}>
                 <TableCell sx={{ pl: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                   <Typography variant="body2" sx={{ fontWeight: 500, letterSpacing: 0.2 }}>
-                    B.1.2 MAINTENANCE AND OTHER OPERATING EXPENSES
+                    MAINTENANCE AND OTHER OPERATING EXPENSES
                   </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontStyle: 'italic' }}>
-                    (Mixed funding: Income + Subsidy)
-                  </Typography>
+              
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                   <Typography variant="body2" sx={{ fontWeight: 500, color: '#d32f2f', letterSpacing: 0.2 }}>
@@ -1542,11 +1501,9 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
               }}>
                 <TableCell sx={{ pl: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                   <Typography variant="body2" sx={{ fontWeight: 500, letterSpacing: 0.2 }}>
-                    B.2 CAPITAL OUTLAYS
+                    CAPITAL OUTLAYS
                   </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontStyle: 'italic' }}>
-                    (Mixed funding: Income + Subsidy)
-                  </Typography>
+               
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                   <Typography variant="body2" sx={{ fontWeight: 500, color: '#d32f2f', letterSpacing: 0.2 }}>

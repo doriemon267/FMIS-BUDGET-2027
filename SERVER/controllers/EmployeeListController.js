@@ -118,8 +118,8 @@ exports.getAllEmployees = async (req, res) => {
       }
     }
 
-    // If no active filters and no processBy, require region parameter
-    if (!Object.keys(dbFilters).length && !processBy && !region) {
+    // If no active filters and no processBy, require region parameter (except for FULL access users)
+    if (!Object.keys(dbFilters).length && !processBy && !region && userLevel !== 'FULL' && userLevel !== 'BUDGET_AND_REVENUE_DIVISION') {
       return res.status(400).json({
         error: "Region parameter is required",
         message: "Please specify a region to view employees"
@@ -145,8 +145,11 @@ exports.getAllEmployees = async (req, res) => {
       } else if (userLevel === 'DIVISION' || userLevel === 'DEPARTMENT') {
         // For Division/Department level users, they can only see their assigned scope
         // Region parameter is ignored - they stay within their hierarchical constraints
+      } else if (userLevel === 'FULL' || userLevel === 'BUDGET_AND_REVENUE_DIVISION') {
+        // For FULL access users, do not restrict by region - they can see all employees
+        // Region parameter is ignored for full access
       } else {
-        // For other levels (FULL, NONE), use region parameter if provided
+        // For other levels (NONE), use region parameter if provided
         if (!query.Region) {
           query.Region = region;
         }
@@ -182,13 +185,16 @@ exports.getAllEmployees = async (req, res) => {
             searchConditions
           ]
         };
-      } else {
+      } else if (region && userLevel !== 'FULL' && userLevel !== 'BUDGET_AND_REVENUE_DIVISION') {
         query = {
           $and: [
             { Region: region },
             searchConditions
           ]
         };
+      } else {
+        // For FULL access users or when no region is specified, search across all employees
+        query = searchConditions;
       }
     }
     // Apply other filters while preserving hierarchical filters
