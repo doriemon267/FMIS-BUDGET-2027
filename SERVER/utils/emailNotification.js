@@ -3,15 +3,19 @@ const sanitizeHtml = require('sanitize-html');
 
 // Configure sanitizer options for email content
 const sanitizeOptions = {
-  allowedTags: ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'br', 'strong', 'b', 'em', 'i', 'u', 'a', 'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
+  allowedTags: [
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'br', 'strong', 'b', 'em', 'i', 'u', 'a', 'ul', 'ol', 'li',
+    'table', 'thead', 'tbody', 'tr', 'th', 'td', 'span', 'div', 'hr'
+  ],
   allowedAttributes: {
-    'a': ['href', 'title'],
-    'table': ['border', 'cellpadding', 'cellspacing', 'style'],
-    'th': ['style'],
-    'td': ['style', 'colspan', 'rowspan']
+    '*': ['style', 'class', 'align', 'valign', 'width', 'height', 'cellpadding', 'cellspacing', 'border', 'bgcolor', 'color', 'title', 'colspan', 'rowspan'],
+    'a': ['href', 'title', 'style'],
+    'img': ['src', 'alt', 'title', 'width', 'height', 'style']
   },
-  allowedSchemes: ['http', 'https', 'mailto'],
-  selfClosing: ['br']
+  allowedSchemes: ['http', 'https', 'mailto', 'data'],
+  allowProtocolRelative: true,
+  selfClosing: ['br', 'hr'],
+  allowVulnerableTags: true
 };
 
 // Configure transporter - supports both Gmail and generic SMTP

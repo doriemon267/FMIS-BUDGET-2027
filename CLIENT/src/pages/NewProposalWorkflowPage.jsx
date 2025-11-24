@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Box,
   Paper,
@@ -33,6 +33,8 @@ import {
   FormControl,
   InputLabel,
   InputAdornment,
+  Switch,
+  FormControlLabel,
 } from "@mui/material";
 import {
   Send as SendIcon,
@@ -141,9 +143,11 @@ const NewProposalWorkflowPage = () => {
   const [activeTab, setActiveTab] = useState(0);
 
   // Build tabs dynamically (include Monitoring for Budget Manager)
-  const isBudgetManager =
-    currentUser?.Roles?.includes("BUDGET MANAGER") ||
-    currentUser?.Roles?.includes("BUDGET_MANAGER");
+  const isBudgetManager = (currentUser?.Roles || []).some((r) => {
+    const norm = String(r || '').toUpperCase().replace(/[^A-Z]/g, '');
+    // matches BUDGETMANAGER, BUDGET_MANAGER, BUDGET MANAGER
+    return norm === 'BUDGETMANAGER';
+  });
   const tabs = isBudgetManager
     ? [...BASE_TABS, { label: "Monitoring", value: "monitoring" }]
     : BASE_TABS;
@@ -196,6 +200,7 @@ const NewProposalWorkflowPage = () => {
   const [chargedPersonnelPage, setChargedPersonnelPage] = useState(0);
   const [chargedPersonnelRowsPerPage, setChargedPersonnelRowsPerPage] = useState(10);
   const [actionLoading, setActionLoading] = useState(false);
+  const [showAllRegions, setShowAllRegions] = useState(false);
 
   // Edit mode and change tracking for reviewers - now for items
   const [editableItems, setEditableItems] = useState({
@@ -239,18 +244,42 @@ const NewProposalWorkflowPage = () => {
         localStorage.getItem("activeWorkflowRef")
       : null);
 
-  const fetchProposals = useCallback(async () => {
+  const fallbackAttemptedRef = useRef(false);
+  const fetchProposals = useCallback(async (options = {}) => {
     setLoading(true);
     try {
       const activeTabView = tabs[activeTab].value;
+      const resolvedRegion = activeRegion && typeof activeRegion === 'object'
+        ? (activeRegion._id || activeRegion.id || activeRegion.Region || activeRegion.regionName || activeRegion.name)
+        : activeRegion;
       const params = {
-        region: activeRegion,
+        region: options.forceAllRegions ? undefined : resolvedRegion,
         view: activeTabView, // Pass the active tab's value to the API
       };
+      console.debug('[getProposals] Request params:', params);
       const response = await api.get(WORKFLOW_API_BASE, { params });
       setProposals(response.data.proposals || []);
+      try { console.debug('[getProposals] Received proposals count:', (response.data.proposals || []).length); } catch (e) { /* ignore */ }
       if (activeTabView === "monitoring") {
+        // Debug: log returned metrics so we can trace why monitoring cards may be empty
+        try { console.debug('[MONITORING] Server metrics:', response.data.metrics); } catch (e) { /* ignore */ }
         setMonitoringMetrics(response.data.metrics || {});
+        // If there are metrics but proposals are empty, try fetching again without region filter (one-time fallback)
+        const metricsTotal = response.data.metrics?.total || 0;
+        const proposalsCount = (response.data.proposals || []).length;
+        if (metricsTotal > 0 && proposalsCount === 0 && !fallbackAttemptedRef.current) {
+          fallbackAttemptedRef.current = true;
+          try {
+            console.debug('[MONITORING] Fallback fetch without region due to metrics present but no proposals');
+            const fallbackParams = { ...params, region: undefined };
+            const fallbackRes = await api.get(WORKFLOW_API_BASE, { params: fallbackParams });
+            setProposals(fallbackRes.data.proposals || []);
+            setMonitoringMetrics(fallbackRes.data.metrics || {});
+            try { console.debug('[MONITORING] Fallback server metrics:', fallbackRes.data.metrics); } catch (e) {}
+          } catch (fallbackError) {
+            console.error('[MONITORING] Fallback fetch failed:', fallbackError);
+          }
+        }
       } else {
         setMonitoringMetrics(null);
       }
@@ -262,11 +291,16 @@ const NewProposalWorkflowPage = () => {
     }
   }, [activeRegion, activeTab]);
 
+  // Human readable resolved region for UI badge
+  const resolvedRegionString = activeRegion && typeof activeRegion === 'object'
+    ? (activeRegion.regionName || activeRegion.Region || activeRegion.name || activeRegion._id)
+    : (activeRegion || 'No region');
+
   // tabs already built above
 
   useEffect(() => {
-    fetchProposals();
-  }, [fetchProposals]);
+    fetchProposals({ forceAllRegions: showAllRegions });
+  }, [fetchProposals, showAllRegions]);
 
   // Auto-select proposal from deep link (notification)
   useEffect(() => {
@@ -623,7 +657,7 @@ const NewProposalWorkflowPage = () => {
       setActionType("");
       setActionComment("");
       
-      await fetchProposals();
+      await fetchProposals({ forceAllRegions: showAllRegions });
       
       queryClient.invalidateQueries({ queryKey: ["workflowNotifications"] });
     } catch (error) {
@@ -840,7 +874,7 @@ const NewProposalWorkflowPage = () => {
       toast.success(`Changes saved successfully`);
       setChangedItems(new Set());
 
-      await fetchProposals();
+      await fetchProposals({ forceAllRegions: showAllRegions });
       
       queryClient.invalidateQueries({ queryKey: ["workflowNotifications"] });
 
@@ -1004,10 +1038,13 @@ const NewProposalWorkflowPage = () => {
         currentStatus === "Returned to Preparer" ||
         currentStatus === "RETURNED_TO_PREPARER"
       ) {
-        console.log("[DEBUG] Adding Submit to Budget Reviewer action!");
+        // If the current user is a PREPARER assigned at OFFICE level, show Submit to Approver label
+        const assignmentLevel = currentUser?.hierarchicalAccess?.assignmentLevel || currentUser?.assignmentLevel;
+        const isOfficePreparer = assignmentLevel && String(assignmentLevel).toUpperCase() === 'OFFICE';
+        console.log("[DEBUG] Adding Submit action (office preparer?:", isOfficePreparer, ")");
         actions.push({
-          label: "Submit to Budget Reviewer",
-          value: "submit-to-reviewer",
+          label: isOfficePreparer ? "Submit to Approver" : "Submit to Budget Reviewer",
+          value: isOfficePreparer ? "submit-to-approver" : "submit-to-reviewer",
           icon: <SendIcon />,
           color: "primary",
         });
@@ -1168,12 +1205,10 @@ const NewProposalWorkflowPage = () => {
   const filteredProposals = proposals.filter((proposal) => {
     const matchesSearch =
       searchQuery === "" ||
-      proposal.responsibilityCenter
-        ?.toLowerCase()
-        .includes(searchQuery.toLowerCase()) ||
-      proposal.division?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      proposal.budgetType?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      proposal.status?.toLowerCase().includes(searchQuery.toLowerCase());
+      (proposal.responsibilityCenter && proposal.responsibilityCenter.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (proposal.division && proposal.division.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (proposal.budgetType && proposal.budgetType.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (proposal.status && proposal.status.toLowerCase().includes(searchQuery.toLowerCase()));
 
     // Map the filter enum to actual database status and do case-insensitive comparison
     const filterDbStatus = statusEnumToDbMap[filterStatus];
@@ -1280,43 +1315,7 @@ const NewProposalWorkflowPage = () => {
               justifyContent: "flex-end",
             }}
           >
-            {resolvedWorkflowRef && (
-              <Box
-                sx={{
-                  bgcolor: "#1f3d1f",
-                  border: "1px solid #486848",
-                  px: 1.5,
-                  py: 0.75,
-                  borderRadius: "8px",
-                  display: "flex",
-                  flexDirection: "column",
-                  minWidth: "200px",
-                }}
-              >
-                <Typography
-                  variant="caption"
-                  sx={{
-                    fontSize: "0.6rem",
-                    letterSpacing: 1,
-                    color: "#bcd8bc",
-                  }}
-                >
-                  ACTIVE WORKFLOW REF
-                </Typography>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    fontFamily: "monospace",
-                    fontSize: "0.75rem",
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                >
-                  {resolvedWorkflowRef}
-                </Typography>
-              </Box>
-            )}
+           
             <TextField
               placeholder="Search"
               value={searchQuery}
@@ -1360,7 +1359,7 @@ const NewProposalWorkflowPage = () => {
             />
             <Tooltip title="Refresh proposals" arrow>
               <IconButton
-                onClick={fetchProposals}
+                onClick={() => fetchProposals({ forceAllRegions: showAllRegions })}
                 sx={{
                   bgcolor: "rgba(255, 255, 255, 0.2)",
                   color: "white",
@@ -1452,13 +1451,39 @@ const NewProposalWorkflowPage = () => {
           {tabs[activeTab].value === "monitoring" && monitoringMetrics && (
             <Box sx={{ display: "flex", gap: 1, alignItems: "stretch", p: 1.5, bgcolor: "white", flexWrap: "nowrap", borderBottom: "1px solid #e0e0e0", justifyContent: "space-between", minHeight: "100px" }}>
               {Object.entries(monitoringMetrics.byStatus || {}).map(([status, count]) => {
+                // Normalization: server may return human-readable labels OR enum codes as keys.
+                // Normalize both into a stable enum-style key to let the UI map to icons & labels consistently.
+                const normalizeStatusKey = (s) => {
+                  const mapping = {
+                    'Forwarded to Budget Planning Analyst': 'FORWARDED_TO_BRD_ANALYST',
+                    'Forwarded to Budget Officer': 'FORWARDED_TO_BRD_OFFICER',
+                    'Forwarded to Overall Budget Approver': 'FORWARDED_TO_BRD_MANAGER',
+                    'Returned to Budget Planning Analyst': 'RETURNED_TO_PLANNING_ANALYST',
+                    'Returned to Budget Officer': 'RETURNED_TO_OFFICER',
+                    'Finalized': 'FINALIZED',
+                    'Draft': 'DRAFT',
+                    'Forwarded to Reviewer': 'FORWARDED_TO_REVIEWER',
+                    'Forwarded to Approver': 'FORWARDED_TO_APPROVER',
+                    'Returned to Preparer': 'RETURNED_TO_PREPARER',
+                    'Returned to Reviewer': 'RETURNED_TO_REVIEWER',
+                    'Returned to Approver': 'RETURNED_TO_APPROVER',
+                  };
+                  return mapping[s] || s;
+                };
+                const normalized = normalizeStatusKey(status);
                 const statusLabels = {
                   'FORWARDED_TO_BRD_ANALYST': 'Forwarded to Analyst',
                   'FORWARDED_TO_BRD_OFFICER': 'Forwarded to Officer',
                   'FORWARDED_TO_BRD_MANAGER': 'Forwarded to Manager',
                   'RETURNED_TO_PLANNING_ANALYST': 'Returned to Analyst',
                   'RETURNED_TO_OFFICER': 'Returned to Officer',
-                  'FINALIZED': 'Finalized'
+                  'FINALIZED': 'Finalized',
+                  'FORWARDED_TO_REVIEWER': 'Forwarded to Reviewer',
+                  'FORWARDED_TO_APPROVER': 'Forwarded to Approver',
+                  'RETURNED_TO_PREPARER': 'Returned to Preparer',
+                  'RETURNED_TO_REVIEWER': 'Returned to Reviewer',
+                  'RETURNED_TO_APPROVER': 'Returned to Approver',
+                  'DRAFT': 'Draft',
                 };
                 const statusIcons = {
                   'FORWARDED_TO_BRD_ANALYST': '→',
@@ -1466,7 +1491,13 @@ const NewProposalWorkflowPage = () => {
                   'FORWARDED_TO_BRD_MANAGER': '→',
                   'RETURNED_TO_PLANNING_ANALYST': '↩',
                   'RETURNED_TO_OFFICER': '↩',
-                  'FINALIZED': '✓'
+                  'FINALIZED': '✓',
+                  'FORWARDED_TO_REVIEWER': '→',
+                  'FORWARDED_TO_APPROVER': '→',
+                  'RETURNED_TO_PREPARER': '↩',
+                  'RETURNED_TO_REVIEWER': '↩',
+                  'RETURNED_TO_APPROVER': '↩',
+                  'DRAFT': '✎',
                 };
                 return (
                   <Box 
@@ -1492,13 +1523,13 @@ const NewProposalWorkflowPage = () => {
                     }}
                   >
                     <Box sx={{ fontSize: "1.8rem", mb: 0.8, lineHeight: 1 }}>
-                      {statusIcons[status]}
+                      {statusIcons[normalized] || statusIcons[status] || '•'}
                     </Box>
                     <Box sx={{ fontSize: "2rem", fontWeight: 700, color: "#2d5016", mb: 0.5, lineHeight: 1 }}>
                       {count}
                     </Box>
                     <Typography sx={{ fontSize: "0.7rem", color: "#555", fontWeight: 500, lineHeight: 1.2, wordWrap: "break-word" }}>
-                      {statusLabels[status]}
+                      {statusLabels[normalized] || statusLabels[status] || status}
                     </Typography>
                   </Box>
                 );
@@ -1535,6 +1566,25 @@ const NewProposalWorkflowPage = () => {
                   Total
                 </Typography>
               </Box>
+            </Box>
+          )}
+          {/* If monitoringTab is active but there's no metrics or no activity, show a helpful message */}
+          {tabs[activeTab].value === "monitoring" && monitoringMetrics && (!monitoringMetrics.total || Object.keys(monitoringMetrics.byStatus || {}).length === 0) && (
+            <Box sx={{ p: 3, display: "flex", justifyContent: "center", alignItems: "center" }}>
+              <Typography sx={{ color: "#6e6e6e", fontSize: "1rem" }}>
+                No monitored proposals — ensure you're signed in as a Budget Manager and that there are proposals that are not Draft.
+              </Typography>
+            </Box>
+          )}
+          {/* If monitoring shows metrics but no proposals in table, show hint + Refresh */}
+          {tabs[activeTab].value === "monitoring" && monitoringMetrics && (monitoringMetrics.total > 0) && (!proposals || proposals.length === 0) && (
+            <Box sx={{ p: 2, display: 'flex', gap: 2, alignItems: 'center', justifyContent: 'center' }}>
+              <Typography sx={{ color: '#6e6e6e', fontSize: '0.95rem' }}>
+                May nakitang {monitoringMetrics.total} na naka-monitor na proposal pero hindi ito lumalabas sa table. Siguruhing naka-sign in bilang Budget Manager at piliin ang tamang region. I-click ang "Refresh" para subukang muli.
+              </Typography>
+              <Button size='small' variant='outlined' startIcon={<RefreshIcon />} onClick={() => fetchProposals({ forceAllRegions: showAllRegions })}>
+                Refresh
+              </Button>
             </Box>
           )}
           {/* Search and Filter Bar */}
@@ -1658,6 +1708,38 @@ const NewProposalWorkflowPage = () => {
                 flexWrap: "wrap",
               }}
             >
+              {tabs[activeTab].value === "monitoring" && isBudgetManager && (
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={showAllRegions}
+                      onChange={(e) => {
+                        const v = e.target.checked;
+                        setShowAllRegions(v);
+                        fetchProposals({ forceAllRegions: v });
+                      }}
+                      color="primary"
+                      size="small"
+                    />
+                  }
+                  label="Show all regions"
+                />
+              )}
+
+              {/* Monitoring badge showing which region is being used */}
+              {tabs[activeTab].value === "monitoring" && (
+                <Chip
+                  label={showAllRegions ? 'Showing: All regions' : `Region: ${resolvedRegionString}`}
+                  size="small"
+                  sx={{
+                    bgcolor: showAllRegions ? "#e7f6ff" : "#f1f8ed",
+                    color: showAllRegions ? "#035388" : "#2d5016",
+                    fontWeight: 600,
+                    ml: 1,
+                  }}
+                />
+              )}
+
               <Chip
                 label={`${filteredProposals.length} Result${
                   filteredProposals.length !== 1 ? "s" : ""

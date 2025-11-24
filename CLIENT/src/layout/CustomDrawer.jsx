@@ -17,6 +17,7 @@ import {
   FaHome,
   FaFileAlt,
   FaRegChartBar,
+  FaArrowLeft,
 } from "react-icons/fa";
 import { TbReportAnalytics } from "react-icons/tb";
 import { FiUsers } from "react-icons/fi";
@@ -37,6 +38,7 @@ import {
 } from "../utils/checkRole";
 import { hasPermission } from "../utils/permissions";
 import { useUser } from "../context/UserContext";
+import IS_PRODUCTION from "../utils/IS_PRODUCTION";
 const CustomDrawer = ({ collapsed = false }) => {
   const [openSettings, setOpenSettings] = useState(false);
   const { currentUser } = useUser();
@@ -68,6 +70,7 @@ const CustomDrawer = ({ collapsed = false }) => {
   
   // BUDGET_PLANNING_ANALYST should have same access as APPROVER for menus
   const isBudgetPlanningAnalystOrApprover = isBudgetPlanningAnalyst || isApprover;
+  const fmisUrl = process.env.NODE_ENV === 'production' ? 'https://fmis.nia.gov.ph/dashboard' : 'http://localhost:3000/dashboard';
   return (
     <Box
       sx={{
@@ -350,6 +353,31 @@ const CustomDrawer = ({ collapsed = false }) => {
               // }
             ]}
           />
+{/* 
+          <LinkTo
+            icon={<FaArrowLeft />}
+            name="Back To FMIS"
+            link={fmisUrl}
+            
+            isAllow
+            collapsed={collapsed}
+          /> */}
+
+
+
+ {/* GO BACK TO FMIS */}
+        <Divider sx={{ borderColor: "secondary.light" }} />
+        <LinkTo
+          isAllow
+          icon={<FaArrowLeft size={22} />}
+          name="Back To FMIS"
+          link={
+            IS_PRODUCTION
+              ? "https://fmis.nia.gov.ph/dashboard"
+              : "http://localhost:3000/dashboard"
+          }
+        />
+
 
           {/* <LinkTo icon={<FiUsers />} name="Uploader" link="/uploader" isAllow /> */}
         </List>

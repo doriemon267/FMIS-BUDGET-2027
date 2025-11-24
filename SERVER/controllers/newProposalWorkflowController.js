@@ -17,10 +17,13 @@ const { sendNotificationEmail } = require('../utils/emailNotification');
 const WORKFLOW_TRANSITIONS = {
   'BUDGET PREPARER': {
     'DRAFT': {
-      'submit-to-reviewer': 'FORWARDED_TO_REVIEWER'
+      'submit-to-reviewer': 'FORWARDED_TO_REVIEWER',
+      // Allow direct submit to approver for PREPARER when they are Office-level (validated in performAction)
+      'submit-to-approver': 'FORWARDED_TO_APPROVER'
     },
     'RETURNED_TO_PREPARER': {
-      'submit-to-reviewer': 'FORWARDED_TO_REVIEWER'
+      'submit-to-reviewer': 'FORWARDED_TO_REVIEWER',
+      'submit-to-approver': 'FORWARDED_TO_APPROVER'
     }
   },
   'BUDGET REVIEWER': {
@@ -99,6 +102,9 @@ const getUserRole = (req) => {
     'BUDGET OFFICER': 'BUDGET OFFICER',
     'BUDGET_MANAGER': 'BUDGET MANAGER',
     'BUDGET MANAGER': 'BUDGET MANAGER',
+    'OVERALL_BUDGET_APPROVER': 'BUDGET MANAGER',
+    'OVERALL BUDGET APPROVER': 'BUDGET MANAGER',
+    'OVERALLBUDGETAPPROVER': 'BUDGET MANAGER',
     'SUPER_ADMIN': 'SUPER ADMIN',
     'SUPER ADMIN': 'SUPER ADMIN'
   };
@@ -854,6 +860,12 @@ exports.createProposal = async (req, res) => {
 exports.getProposals = async (req, res) => {
   try {
   const userRole = getUserRole(req);
+  // Debug: Log incoming request context for troubleshooting monitoring visibility
+  try {
+    console.log('[getProposals] userRole:', userRole, 'userRoles:', req.user?.Roles, 'userId:', userIdString, 'view:', view, 'region:', req.query?.region);
+  } catch (e) {
+    console.log('[getProposals] Failed to log debug context');
+  }
   const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
   const userName = [req.user?.name, req.user?.UserName, `${req.user?.FirstName || ''} ${req.user?.LastName || ''}`.trim(), req.user?.email].find(v => v && v.length > 0) || 'UNKNOWN_USER';
   const { status, modelType, fiscalYear, page = 1, limit = 10, view } = req.query;
@@ -966,27 +978,21 @@ exports.getProposals = async (req, res) => {
         query.status = { $ne: 'DRAFT' };  // Use DRAFT enum
         break;
       case 'monitoring':
-        // Provide aggregated monitoring for Budget Manager
-        if (userRole === 'BUDGET MANAGER') {
-          // Use enum format to match what's stored in NewProposalWorkflow
-          const monitorStatuses = [
-            'FORWARDED_TO_BRD_ANALYST',
-            'FORWARDED_TO_BRD_OFFICER',
-            'FORWARDED_TO_BRD_MANAGER',
-            'RETURNED_TO_PLANNING_ANALYST',
-            'RETURNED_TO_OFFICER',
-            'FINALIZED'  // Include finalized proposals for manager review
-          ];
-          query.status = { $in: monitorStatuses };
-        } else {
-          return res.json({
-            success: true,
-            proposals: [],
-            metrics: {},
-            pagination: { page: 1, limit: 10, total: 0, pages: 0 }
-          });
-        }
-        break;
+          // Monitoring tab for Budget Manager: show all proposals except drafts, including all workflow statuses
+          if (userRole === 'BUDGET MANAGER') {
+                  // Show all non-DRAFT statuses. Using a list of enums was brittle, because the DB might
+                  // store different human-readable strings or variants. Query for everything except DRAFT
+                  // so Budget Manager's Monitoring tab shows Finalized and all BRD-level statuses.
+                  query.status = { $ne: 'DRAFT' };
+          } else {
+            return res.json({
+              success: true,
+              proposals: [],
+              metrics: {},
+              pagination: { page: 1, limit: 10, total: 0, pages: 0 }
+            });
+          }
+          break;
       default:
         // Default to 'my-proposals' if view is not specified
         query.createdBy = userId;
@@ -1007,6 +1013,22 @@ exports.getProposals = async (req, res) => {
       .skip(skip)
       .limit(limitNum)
       .populate('region', 'Region regionName RegionName');
+    if (view === 'monitoring' && userRole === 'BUDGET MANAGER') {
+      console.log('[MONITORING] Query:', query);
+      console.log('[MONITORING] Found proposals:', newProposals.length);
+      if (newProposals.length > 0) {
+        newProposals.forEach((p, idx) => {
+          console.log(`[MONITORING] Proposal #${idx + 1}:`, {
+            _id: p._id,
+            title: p.title,
+            status: p.status,
+            division: p.division,
+            department: p.department,
+            region: p.region
+          });
+        });
+      }
+    }
 
     // Fetch legacy proposals for totals/region string mapping
     const wfIds = newProposals.map(p => p._id);
@@ -1115,9 +1137,10 @@ exports.getProposals = async (req, res) => {
     // Map NewProposalWorkflow status to legacy format for consistency
     const mappedNewProposals = newProposals.map(p => {
       const legacy = legacyMap.get(String(p._id));
-      const regionName = legacy?.region || (p.region && (p.region.Region || p.region.regionName || p.region.RegionName));
-      const divisionName = legacy?.division || '';
-      const departmentName = legacy?.department || '';
+      // Use legacy info if available, otherwise fallback to NewProposalWorkflow fields
+      const regionName = legacy?.region || p.region?.Region || p.region?.regionName || p.region?.RegionName || '';
+      const divisionName = legacy?.division || p.division || '';
+      const departmentName = legacy?.department || p.department || '';
       const responsibilityCenter = divisionName || departmentName || regionName || undefined;
       return ({
         _id: p._id,
@@ -1138,8 +1161,8 @@ exports.getProposals = async (req, res) => {
         createdAt: p.createdAt,
         updatedAt: p.updatedAt,
         amount: Number(p.amount || 0),
-        totalIncome: Number(legacy?.totalIncome || 0),
-        totalExpenses: Number(legacy?.totalExpenses || 0),
+        totalIncome: Number(legacy?.totalIncome ?? p.totalIncome ?? 0),
+        totalExpenses: Number(legacy?.totalExpenses ?? p.totalExpenses ?? 0),
         proposedBudget: Number(legacy?.proposedBudget ?? p.amount ?? 0),
         projectedCorporateIncome: p.projectedCorporateIncome,
         projectedSubsidy: p.projectedSubsidy,
@@ -1151,10 +1174,28 @@ exports.getProposals = async (req, res) => {
     // Metrics aggregation for monitoring view
     let metrics = undefined;
     if (view === 'monitoring' && userRole === 'BUDGET MANAGER') {
+      // Normalize statuses for metrics (map either human-readable or enum codes to consistent enum keys)
+      const humanToEnumStatusMap = {
+        'Draft': 'DRAFT',
+        'Forwarded to Reviewer': 'FORWARDED_TO_REVIEWER',
+        'Forwarded to Approver': 'FORWARDED_TO_APPROVER',
+        'Forwarded to Budget Planning Analyst': 'FORWARDED_TO_BRD_ANALYST',
+        'Forwarded to Budget Officer': 'FORWARDED_TO_BRD_OFFICER',
+        'Forwarded to Overall Budget Approver': 'FORWARDED_TO_BRD_MANAGER',
+        'Finalized': 'FINALIZED',
+        'Returned': 'RETURNED_TO_PREPARER',
+        'Returned to Reviewer': 'RETURNED_TO_REVIEWER',
+        'Returned to Approver': 'RETURNED_TO_APPROVER',
+        'Returned to Budget Planning Analyst': 'RETURNED_TO_PLANNING_ANALYST',
+        'Returned to Budget Officer': 'RETURNED_TO_OFFICER'
+      };
+
       metrics = mappedNewProposals.reduce((acc, p) => {
         acc.total = (acc.total || 0) + 1;
         acc.byStatus = acc.byStatus || {};
-        acc.byStatus[p.status] = (acc.byStatus[p.status] || 0) + 1;
+        // p.status may already be an enum or a human-readable string; map to enum
+        const enumStatus = humanToEnumStatusMap[p.status] || p.status || 'UNKNOWN';
+        acc.byStatus[enumStatus] = (acc.byStatus[enumStatus] || 0) + 1;
         return acc;
       }, {});
     }
@@ -1318,10 +1359,26 @@ exports.performAction = async (req, res) => {
     const { action, comment } = req.body;
     const userRole = getUserRole(req);
     const userId = req.user.id;
+    const userIdString = String(userId);
     const userName = req.user.name || req.user.email;
 
     console.log('[PERFORM_ACTION] User:', { userRole, userId, userName });
     console.log('[PERFORM_ACTION] Request:', { proposalId: id, action, comment });
+
+    // Check assignment and override submit-to-reviewer -> submit-to-approver for Office-level PREPARER
+    let userAssignment = null;
+    if (action === 'submit-to-reviewer' && userRole === 'BUDGET PREPARER') {
+      try {
+        userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString }).lean();
+        console.debug('[PERFORM_ACTION] User assignment found:', !!userAssignment, userAssignment ? userAssignment.assignmentLevel : 'N/A');
+        if (userAssignment && String(userAssignment.assignmentLevel).toUpperCase() === 'OFFICE') {
+          console.debug('[PERFORM_ACTION] Office-level Submission: overriding action to submit-to-approver');
+          action = 'submit-to-approver';
+        }
+      } catch (assignmentErr) {
+        console.warn('[PERFORM_ACTION] Error fetching user assignment:', assignmentErr.message);
+      }
+    }
 
     const proposal = await NewProposalWorkflow.findById(id);
     if (!proposal) {
@@ -1397,6 +1454,19 @@ exports.performAction = async (req, res) => {
     }
 
     const newWorkflowStatus = transitions[workflowStatus][action];
+
+    // Final enforcement: If PREPARER is attempting submit-to-approver, ensure they are Office-level
+    if (action === 'submit-to-approver' && userRole === 'BUDGET PREPARER') {
+      try {
+        userAssignment = userAssignment || await HierarchicalUserAssignment.findOne({ userId: userIdString }).lean();
+        if (!userAssignment || String(userAssignment.assignmentLevel).toUpperCase() !== 'OFFICE') {
+          console.warn('[PERFORM_ACTION] 403 - Budget Preparer submit-to-approver is only allowed for Office-level users');
+          return res.status(403).json({ success: false, message: 'Direct submit to approver is only allowed for Office-level preparers' });
+        }
+      } catch (assignmentErr) {
+        console.warn('[PERFORM_ACTION] Error enforcing assignment level for submit-to-approver:', assignmentErr.message);
+      }
+    }
 
     // Map workflow status to legacy Proposal format
     const workflowToProposalStatus = {

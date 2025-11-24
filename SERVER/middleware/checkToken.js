@@ -7,17 +7,28 @@ module.exports = async (req, res, next) => {
     // Allow CORS preflight to pass through
     if (req.method === 'OPTIONS') return next();
 
+    console.log(`🔐 Auth check for ${req.method} ${req.path}`);
+
     // Extract token from Authorization header
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      console.log(`❌ No auth header for ${req.path}`);
       return res.status(403).json({ error: "Access denied." });
     }
     const jwtToken = authHeader.split(" ")[1]; // Extract token from "Bearer <token>"
+    
+    console.log(`🔑 Token received for ${req.path}:`, jwtToken ? 'present' : 'missing');
+    
     // Verify token
     const payload = jwt.verify(jwtToken, process.env.JWT_SECRET_KEY);
     if (!payload) {
+      console.log(`❌ Token verification failed for ${req.path}`);
       return res.status(401).json({ error: "Access denied." });
     }
+    
+    console.log(`✅ Token verified for ${req.path}, user:`, payload.Username || payload.userId || 'unknown');
+    console.log(`📋 JWT payload keys for ${req.path}:`, Object.keys(payload));
+    console.log(`📋 ACCOUNT_USER_API_URL defined:`, !!process.env.ACCOUNT_USER_API_URL);
     
     // Debug: Log payload structure (only once per unique path to avoid spam)
     if (!global._loggedPaths) global._loggedPaths = new Set();
@@ -32,6 +43,7 @@ module.exports = async (req, res, next) => {
     const accessToken = payload.accessToken;
     // Check if ACCOUNT_USER_API_URL is defined
     if (!process.env.ACCOUNT_USER_API_URL) {
+      console.log(`🏠 Using DEVELOPMENT MODE for ${req.path} (no ACCOUNT_USER_API_URL)`);
       // DEVELOPMENT MODE: Extract user info from JWT payload (using actual logged-in user data)
       // Payload logging removed for cleaner output
       
@@ -104,13 +116,45 @@ module.exports = async (req, res, next) => {
       }
       
       // Normalize roles - replace spaces with underscores for consistency
+      const fixRoleTypos = (role) => {
+        // Fix common typos for all budget roles
+        const typoMap = {
+          'BUDGET_PREPAPER': 'BUDGET_PREPARER',
+          'BUDGET PREPAPER': 'BUDGET_PREPARER',
+          'BUDGET_REVEWER': 'BUDGET_REVIEWER',
+          'BUDGET REVEWER': 'BUDGET_REVIEWER',
+          'BUDGET_APROVER': 'BUDGET_APPROVER',
+          'BUDGET APROVER': 'BUDGET_APPROVER',
+          'BUDGET_PLANING_ANALYST': 'BUDGET_PLANNING_ANALYST',
+          'BUDGET PLANING ANALYST': 'BUDGET_PLANNING_ANALYST',
+          'BUDGET_PLANNING_ANALST': 'BUDGET_PLANNING_ANALYST',
+          'BUDGET PLANNING ANALST': 'BUDGET_PLANNING_ANALYST',
+          'BUDGET_OFICER': 'BUDGET_OFFICER',
+          'BUDGET OFICER': 'BUDGET_OFFICER',
+          'BUDGET_MANAGER': 'OVERALL_BUDGET_APPROVER',
+          'BUDGET MANAGER': 'OVERALL_BUDGET_APPROVER',
+          'BUDGET_OVERALL_APPROVER': 'OVERALL_BUDGET_APPROVER',
+          'BUDGET OVERALL APPROVER': 'OVERALL_BUDGET_APPROVER',
+          'OVERAL_BUDGET_APPROVER': 'OVERALL_BUDGET_APPROVER',
+          'OVERAL BUDGET APPROVER': 'OVERALL_BUDGET_APPROVER',
+          'SUPERADMIN': 'SUPER_ADMIN',
+          'SUPER_ADMIN': 'SUPER_ADMIN',
+          'SUPER ADMIN': 'SUPER_ADMIN'
+        };
+        return typoMap[role] || role;
+      };
+      
+      console.log(`🔄 Processing roles for ${req.path}:`, userRoles);
+      
       if (userRoles && Array.isArray(userRoles)) {
         userRoles = userRoles.map(role => 
-          typeof role === 'string' ? role.replace(/\s+/g, '_').toUpperCase() : role
+          typeof role === 'string' ? fixRoleTypos(role.replace(/\s+/g, '_').toUpperCase()) : role
         );
       } else if (typeof userRoles === 'string') {
-        userRoles = [userRoles.replace(/\s+/g, '_').toUpperCase()];
+        userRoles = [fixRoleTypos(userRoles.replace(/\s+/g, '_').toUpperCase())];
       }
+      
+      console.log(`✅ Processed roles for ${req.path}:`, userRoles);
       
       // Role normalization completed silently
       if (!userRoles || userRoles.length === 0) {
@@ -155,13 +199,16 @@ module.exports = async (req, res, next) => {
         }
         req.user.identitySource = identity.source;
       }
+      console.log(`🎉 Authentication successful for ${req.path}, user: ${req.user?.id}, roles:`, req.user?.Roles);
       return next();
     }
     // Fetch user data from external API
+    console.log(`🌐 Using PRODUCTION API for ${req.path} (${process.env.ACCOUNT_USER_API_URL})`);
     const userRes = await fetch(process.env.ACCOUNT_USER_API_URL, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!userRes.ok) {
+      console.log(`❌ External API call failed for ${req.path}: ${userRes.status} ${userRes.statusText}`);
       return res.status(403).json({ error: "Access denied" });
     }
     const user = await userRes.json();
@@ -183,6 +230,7 @@ module.exports = async (req, res, next) => {
       }
       req.user.identitySource = identity.source;
     }
+    console.log(`🎉 Authentication successful for ${req.path} (production API), user: ${req.user?.id}`);
     next();
   } catch (error) {
     // Log basic error info; avoid printing authorization header or actual tokens

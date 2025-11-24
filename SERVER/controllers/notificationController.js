@@ -77,9 +77,40 @@ exports.createNotification = async (notificationData) => {
         } else if (!notificationTypeEnabled) {
           console.log('[Notification Email Debug] Workflow notifications disabled for userId:', notificationData.userId);
         } else {
-          const html = `<h2 style='color:#1976d2;'>${notificationData.title || 'Notification'}</h2>
-            <p>${notificationData.message || ''}</p>
-            ${notificationData.relatedLink ? `<a href='https://your-app.com${notificationData.relatedLink}' style='color:#1976d2;text-decoration:underline;'>View Proposal</a>` : ''}`;
+          const html = `
+            <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:600px;margin:auto;font-family:Arial,sans-serif;background:#f9f9f9;\">
+              <tr>
+                <td>
+                  <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\">
+                    <tr>
+                      <td style=\"background-color:#375e38;color:#fff;padding:18px 24px;font-size:1.3em;font-weight:bold;\">
+                        ${notificationData.title || 'FMIS - OSBPIS Notification'}
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr><td style=\"padding:24px;background:#fff;\">
+                <p>Dear Recipient,</p>
+                <p>${notificationData.message || ''}</p>
+                <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#fafafa;border-left:4px solid #375e38;margin:18px 0 18px 0;\">
+                  <tr><td style=\"padding:16px;\">
+                    <span style=\"font-weight:bold;color:#375e38;\">Proposal Details:</span><br>
+                    <span style=\"font-weight:bold;\">Title:</span> ${notificationData.metadata?.title || ''}<br>
+                    <span style=\"font-weight:bold;\">Fiscal Year:</span> ${notificationData.metadata?.fiscalYear || ''}<br>
+                    <span style=\"font-weight:bold;\">Budget Type:</span> ${notificationData.metadata?.budgetType || ''}<br>
+                    <span style=\"font-weight:bold;\">Region:</span> ${notificationData.metadata?.region || ''}<br>
+                    <span style=\"font-weight:bold;\">Department:</span> ${notificationData.metadata?.department || ''}<br>
+                    <span style=\"font-weight:bold;\">Division:</span> ${notificationData.metadata?.division || ''}
+                  </td></tr>
+                </table>
+                <p style=\"margin:18px 0 0 0;\"><span style=\"font-weight:bold;color:#375e38;\">Action Required:</span> Please log in to the system to view and process this proposal.</p>
+                <hr style=\"margin:24px 0;border:none;border-top:1px solid #e0e0e0;\">
+                <p style=\"color:#d32f2f;\">&#9888; <span style=\"color:#375e38;font-weight:bold;\">Note:</span> This is an automated message. Please do not reply to this email.</p>
+                <p style=\"color:#375e38;font-weight:bold;\">FMIS - NIA</p>
+              </td></tr>
+            </table>
+          `;
           await sendNotificationEmail(
             assignment.email,
             notificationData.title || 'New Notification',
@@ -281,9 +312,27 @@ exports.createNotifications = async (notificationsData) => {
         
         if (email) {
           try {
-            const html = `<h2 style='color:#1976d2;'>${n.title || 'Notification'}</h2>
-              <p>${n.message || ''}</p>
-              ${n.relatedLink ? `<a href='https://your-app.com${n.relatedLink}' style='color:#1976d2;text-decoration:underline;'>View Proposal</a>` : ''}`;
+            const html = `
+              <div style=\"max-width:600px;margin:auto;font-family:Arial,sans-serif;\">
+                <div style=\"background-color:#375e38;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0;\">
+                  <h2 style=\"margin:0;font-size:1.5em;\">${n.title || 'FMIS - OSBPIS Notification'}</h2>
+                </div>
+                <div style=\"background:#fff;padding:24px;border-radius:0 0 8px 8px;box-shadow:0 2px 8px rgba(55,94,56,0.08);\">
+                  <p>Dear Recipient,</p>
+                  <p>${n.message || ''}</p>
+                  ${n.relatedLink ? `<a href='https://your-app.com${n.relatedLink}' style='color:#375e38;text-decoration:underline;font-weight:bold;'>View Proposal</a>` : ''}
+                  <div style=\"margin:16px 0;\">
+                    <span style=\"color:#375e38;font-weight:bold;\">&#9888; Action Required:</span>
+                    <span> Please log in to the system to view and process this proposal.</span>
+                  </div>
+                  <div style=\"margin:16px 0;\">
+                    <span style=\"color:#375e38;font-weight:bold;\">&#x1F514; Note:</span>
+                    <span> This is an automated message. Please do not reply to this email.</span>
+                  </div>
+                  <p style=\"color:#888;\">FMIS - NIA</p>
+                </div>
+              </div>
+            `;
             await sendNotificationEmail(
               email,
               n.title || 'New Notification',

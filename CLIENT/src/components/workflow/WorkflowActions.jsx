@@ -381,9 +381,10 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
                                   (proposal?.workflowLevel === 'PREPARER' || proposal?.currentAssigneeRole === 'PREPARER');
 
       if (isDraft || isReturnedToPreparer) {
-        actions.push({
-          label: 'Submit to Budget Reviewer',
-          action: 'submit-to-reviewer',
+          const submitLabel = (userInfo && userInfo.assignmentLevel && String(userInfo.assignmentLevel).toUpperCase() === 'OFFICE') ? 'Submit to Approver' : 'Submit to Budget Reviewer';
+          actions.push({
+            label: submitLabel,
+            action: 'submit-to-reviewer',
           color: 'bg-blue-500 hover:bg-blue-600',
           icon: '📤',
           description: 'Forward proposal to Budget Reviewer for review',
@@ -786,6 +787,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
 
       switch (action) {
         case "submit-to-reviewer":
+          // Default endpoint: legacy workflow route
           endpoint = "/api/workflow/submit";
           successMessage = "Proposal submitted to Budget Reviewer successfully";
           break;
@@ -984,6 +986,12 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           fiscalYear: proposal.fiscalYear,
           budgetType: proposal.budgetType
         };
+      }
+
+      // If PREPARER at OFFICE level tries to submit, route to new workflow action endpoint
+      if (action === 'submit-to-reviewer' && userInfo && userInfo.assignmentLevel && String(userInfo.assignmentLevel).toUpperCase() === 'OFFICE') {
+        endpoint = `/api/allproposal/proposals/${proposal._id}/action`;
+        requestData.action = 'submit-to-approver';
       }
 
       const response = await api.post(endpoint, requestData);

@@ -59,7 +59,7 @@ const isReviewerStage = (status) => {
          normalized.includes('REVIEWER');
 };
 
-const getWorkflowActions = (userRole, proposalStatus) => {
+const getWorkflowActions = (userRole, proposalStatus, assignmentLevel) => {
   const role = normalizeRoleValue(userRole || '');
   const status = String(proposalStatus || '').toUpperCase();
 
@@ -67,14 +67,27 @@ const getWorkflowActions = (userRole, proposalStatus) => {
 
   if (role === 'BUDGET PREPARER') {
     if (status === 'DRAFT' || status === 'RETURNED' || status === 'INITIAL') {
-      actions.push({
-        id: 'submit-to-reviewer',
-        label: 'Submit to Reviewer',
-        icon: SendIcon,
-        color: 'success',
-        requiresComment: false,
-        endpoint: '/api/workflow/preparer/submit-to-reviewer'
-      });
+      // If user is assigned at the OFFICE level, allow direct submit to Approver
+      if (assignmentLevel && String(assignmentLevel).toUpperCase() === 'OFFICE') {
+        actions.push({
+          id: 'submit-to-approver',
+          label: 'Submit to Approver',
+          icon: SendIcon,
+          color: 'success',
+          requiresComment: false,
+          // Use platform-level action endpoint for new workflow routes - placeholder to be replaced
+          endpoint: '/api/allproposal/proposals/${proposalId}/action'
+        });
+      } else {
+        actions.push({
+          id: 'submit-to-reviewer',
+          label: 'Submit to Reviewer',
+          icon: SendIcon,
+          color: 'success',
+          requiresComment: false,
+          endpoint: '/api/workflow/preparer/submit-to-reviewer'
+        });
+      }
     }
   }
 
@@ -314,7 +327,7 @@ const WorkflowActionsRefactored = ({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  const actions = getWorkflowActions(effectiveUserRole, proposal?.status);
+  const actions = getWorkflowActions(effectiveUserRole, proposal?.status, userInfo?.assignmentLevel || userInfo?.hierarchicalAccess?.assignmentLevel || userInfo?.assignmentLevel);
 
   const handleCommentSubmit = useCallback(async () => {
     if (!commentDialog.action) return;
@@ -335,7 +348,11 @@ const WorkflowActionsRefactored = ({
     setError(null);
 
     try {
-      const response = await api.post(action.endpoint, {
+      // Allow placeholders in endpoint to be replaced with runtime values
+      const proposalId = proposal?._id || proposal?.id;
+      let endpoint = action.endpoint || '';
+      if (endpoint.includes('${proposalId}')) endpoint = endpoint.replace('${proposalId}', proposalId);
+      const response = await api.post(endpoint, {
         proposalId: proposalId,
         comment: comment || ''
       });
