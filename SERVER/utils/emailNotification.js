@@ -24,6 +24,11 @@ let transporter;
 if (process.env.MAIL_HOST) {
   // Use MAIL configuration from .env (Laravel-style)
   const secure = process.env.MAIL_ENCRYPTION === 'ssl' || process.env.MAIL_PORT === '465';
+  // Determine SNI hostname for secure TLS connections; avoid using an IP address for SNI
+  const net = require('net');
+  const mailSniOverride = process.env.MAIL_SNI_HOST && process.env.MAIL_SNI_HOST.trim();
+  const mailHost = process.env.MAIL_HOST;
+  const mailTlsServername = mailSniOverride || (!net.isIP(mailHost) ? mailHost : undefined);
   transporter = nodemailer.createTransport({
     host: process.env.MAIL_HOST,
     port: parseInt(process.env.MAIL_PORT) || 587,
@@ -32,6 +37,7 @@ if (process.env.MAIL_HOST) {
       user: process.env.MAIL_USERNAME,
       pass: process.env.MAIL_PASSWORD
     }
+    , tls: mailTlsServername ? { servername: mailTlsServername } : undefined
   });
   console.log('[emailNotification] ✓ Configured with MAIL_* settings');
 } else if (process.env.SMTP_HOST) {
@@ -44,6 +50,7 @@ if (process.env.MAIL_HOST) {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS
     }
+    , tls: ((!net.isIP(process.env.SMTP_HOST)) ? { servername: process.env.SMTP_HOST } : undefined)
   });
   console.log('[emailNotification] ✓ Configured with SMTP_* settings');
 } else {

@@ -66,10 +66,20 @@ if (enableMssql) {
     }
   });
 
+  const net = require('net');
+  // Only set servername for TLS SNI when host is a DNS name (not IP) or when an explicit override is set
+  const sniHostname = (process.env.MSSQL_SNI_HOST && process.env.MSSQL_SNI_HOST.trim()) || null;
+  if (sniHostname) {
+    dialectOptions.options.servername = sniHostname;
+  } else if (!net.isIP(hostVal)) {
+    // hostVal is not an IP (i.e., looks like DNS name), safe to set servername
+    dialectOptions.options.servername = hostVal;
+  }
+
   (async () => {
     try {
       await sequelize.authenticate();
-      console.log('[MSSQL] Connected to MSSQL', { host: hostVal, port: portVal, instance: instanceName });
+      console.log('[MSSQL] Connected to MSSQL', { host: hostVal, port: portVal, instance: instanceName, servername: dialectOptions.options.servername });
     } catch (err) {
       console.warn('[MSSQL] Connection failed:', err.message);
     }

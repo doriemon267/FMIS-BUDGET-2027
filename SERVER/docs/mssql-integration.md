@@ -72,6 +72,16 @@ Test-NetConnection -ComputerName HumanResourceDb -Port 1433
 ```
 If using a named instance without a fixed port, ensure `SQL Server Browser` service is running and that UDP port `1434` is reachable so the named instance can be resolved. For Azure, ensure `MSSQL_ENCRYPT=true` and use `server.database.windows.net` host.
 
+TLS SNI notes:
+- If your SMTP or MSSQL host is an IP address (e.g., `172.16.4.10`), Node will set the TLS Server Name to that IP, which raises the deprecation warning `DEP0123`. To avoid this:
+	- Use a DNS hostname (preferred) for `MSSQL_HOST` / `MAIL_HOST` (e.g., `hrdb.example.local`, `smtp.gmail.com`).
+	- Or set an explicit servername override for TLS using `MSSQL_SNI_HOST` for MSSQL and `MAIL_SNI_HOST` for email:
+		```dotenv
+		MSSQL_SNI_HOST=hrdb.example.local
+		MAIL_SNI_HOST=smtp.example.com
+		```
+	- This ensures the TLS SNI field is a valid hostname (not IP), removing the `DEP0123` warning.
+
 6) Extending
 
 - If you have a specific table structure, update `SERVER/mssql/models/ExternalProposal.js` to reflect actual column names and types.
