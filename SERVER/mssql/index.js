@@ -78,9 +78,11 @@ if (enableMssql) {
 
   (async () => {
     try {
-      if (net.isIP(hostVal) && !dialectOptions.options.serverName) {
-        console.warn('[MSSQL] Warning: MSSQL_HOST is an IP address and no MSSQL_SNI_HOST is provided; TLS SNI may use IP and cause DEP0123 deprecation. Consider set MSSQL_SNI_HOST to a DNS name to prevent this.');
-      }
+            if (net.isIP(hostVal) && !dialectOptions.options.serverName) {
+             if (!process.env.MSSQL_SUPPRESS_SNI_WARNING || process.env.MSSQL_SUPPRESS_SNI_WARNING !== 'true') {
+               console.warn('[MSSQL] Warning: MSSQL_HOST is an IP address and no MSSQL_SNI_HOST is provided; TLS SNI may use IP and cause DEP0123 deprecation. Consider set MSSQL_SNI_HOST to a DNS name to prevent this.');
+             }
+           }
       await sequelize.authenticate();
       console.log('[MSSQL] Connected to MSSQL', { host: hostVal, port: portVal, instance: instanceName, serverName: dialectOptions.options.serverName });
     } catch (err) {
