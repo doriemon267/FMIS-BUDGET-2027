@@ -16,6 +16,15 @@ Add the following to your `SERVER/.env`:
 ENABLE_MSSQL=true
 MSSQL_HOST=your-mssql-host
 MSSQL_PORT=1433
+Named instance example:
+```
+MSSQL_HOST=172.16.4.10
+MSSQL_INSTANCE=SQLEXPRESS
+# If instance uses dynamic port (SQL Browser), omit MSSQL_PORT
+MSSQL_PORT=1433   # optional; omit if using named instance with SQL Browser
+```
+
+If you set `MSSQL_HOST` using search pattern like `172.16.4.10\\SQLEXPRESS`, the init script will parse and use `172.16.4.10` as host and `SQLEXPRESS` as `instanceName`. However preferred approach is to set `MSSQL_HOST` and `MSSQL_INSTANCE` separately (see above) or set an explicit `MSSQL_PORT`.
 MSSQL_DB=your_database
 MSSQL_USER=your_user
 MSSQL_PASSWORD=your_password
@@ -37,6 +46,31 @@ MSSQL_EXTERNAL_TABLE_NAME=ExternalProposals
 - The MSSQL setup is optional and the server will continue to work if `ENABLE_MSSQL` is false or MSSQL connection fails.
 - You can change the table name by updating `MSSQL_EXTERNAL_TABLE_NAME` env var or updating the model file.
 - To combine MSSQL data with your MongoDB models, use the `listMerged` example or call `ExternalProposal` from other controllers.
+
+Troubleshooting (e.g., ENOTFOUND when host contains a backslash):
+- If you previously set `MSSQL_HOST=172.16.4.10\\SQLEXPRESS` or `MSSQL_HOST=172.16.4.10\\SQLEXPRESS:1433`, the environment variable should instead be split into `MSSQL_HOST` and `MSSQL_INSTANCE` (or just `MSSQL_HOST` and `MSSQL_PORT`).
+
+Correct forms:
+```
+MSSQL_HOST=172.16.4.10
+MSSQL_INSTANCE=SQLEXPRESS
+# Optionally set port if you know it
+MSSQL_PORT=1433
+```
+
+or explicitly:
+```
+MSSQL_HOST=172.16.4.10
+MSSQL_PORT=1433
+```
+
+Quick connectivity checks (PowerShell):
+``powershell
+Test-NetConnection -ComputerName 172.16.4.10 -Port 1433
+# or if pinging host name
+Test-NetConnection -ComputerName HumanResourceDb -Port 1433
+```
+If using a named instance without a fixed port, ensure `SQL Server Browser` service is running and that UDP port `1434` is reachable so the named instance can be resolved. For Azure, ensure `MSSQL_ENCRYPT=true` and use `server.database.windows.net` host.
 
 6) Extending
 
