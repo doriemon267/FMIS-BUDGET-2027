@@ -67,23 +67,46 @@ if (enableMssql) {
   });
 
   const net = require('net');
-  // Only set servername for TLS SNI when host is a DNS name (not IP) or when an explicit override is set
+  // Only set serverName for TLS SNI when host is a DNS name (not IP) or when an explicit override is set
   const sniHostname = (process.env.MSSQL_SNI_HOST && process.env.MSSQL_SNI_HOST.trim()) || null;
   if (sniHostname) {
-    dialectOptions.options.servername = sniHostname;
+    dialectOptions.options.serverName = sniHostname; // `tedious` expects `serverName` CamelCase
   } else if (!net.isIP(hostVal)) {
-    // hostVal is not an IP (i.e., looks like DNS name), safe to set servername
-    dialectOptions.options.servername = hostVal;
+    // hostVal is not an IP (i.e., looks like DNS name), safe to set serverName
+    dialectOptions.options.serverName = hostVal;
   }
 
   (async () => {
     try {
+      if (net.isIP(hostVal) && !dialectOptions.options.serverName) {
+        console.warn('[MSSQL] Warning: MSSQL_HOST is an IP address and no MSSQL_SNI_HOST is provided; TLS SNI may use IP and cause DEP0123 deprecation. Consider set MSSQL_SNI_HOST to a DNS name to prevent this.');
+      }
       await sequelize.authenticate();
-      console.log('[MSSQL] Connected to MSSQL', { host: hostVal, port: portVal, instance: instanceName, servername: dialectOptions.options.servername });
+      console.log('[MSSQL] Connected to MSSQL', { host: hostVal, port: portVal, instance: instanceName, serverName: dialectOptions.options.serverName });
     } catch (err) {
       console.warn('[MSSQL] Connection failed:', err.message);
     }
   })();
 }
+
+// Validate SNI and TLS configuration for stricter deployments
+const validateSniConfig = () => {
+  const net = require('net');
+  const encryptEnabled = (process.env.MSSQL_ENCRYPT === 'true' || process.env.MSSQL_ENCRYPT === '1');
+  const hostIsIp = net.isIP(hostVal);
+  const sniProvided = !!(process.env.MSSQL_SNI_HOST && process.env.MSSQL_SNI_HOST.trim()) || !!dialectOptions.options.serverName;
+  if (encryptEnabled && hostIsIp && !sniProvided) {
+    const strictFail = process.env.MSSQL_STRICT_SNI_FAIL === 'true';
+    const message = `[MSSQL] TLS SNI recommended: MSSQL host is an IP (${hostVal}) and encryption is enabled; specify MSSQL_SNI_HOST to avoid TLS SNI fallback to IP and Node deprecation warning DEP0123.`;
+    if (strictFail) {
+      throw new Error(message + ' (MSSQL_STRICT_SNI_FAIL=true)');
+    } else {
+      console.warn(message + ' (set MSSQL_STRICT_SNI_FAIL=true to enforce failure)');
+    }
+  }
+};
+
+// Expose validation helper for use by health checks / scripts
+module.exports = { sequelize, DataTypes, enableMssql, validateSniConfig };
 
 module.exports = { sequelize, DataTypes, enableMssql };
