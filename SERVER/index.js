@@ -86,6 +86,7 @@ const cosPersonnelRouter = require("./routers/cosPersonnelRoutes");
 const proposalSummaryRoutes = require("./routers/proposalSummary");
 // New Proposal Workflow Routes
 const newProposalWorkflowRoutes = require("./routes/newProposalWorkflowRoutes");
+const mssqlRoutes = require('./routers/mssqlRoutes');
 //PARA SA MGA UPLOADER
 const chartOfAccountsRouter = require("./routers/uploader/chartOfAccounts");
 const uploadcategories = require("./routers/uploader/categories");
@@ -406,6 +407,8 @@ app.use(cosPersonnelRouter);
 app.use('/', mooeRoutes);
 app.use('/api/proposalSummary', proposalSummaryRoutes);
 app.use('/api/allproposal', newProposalWorkflowRoutes);
+// MSSQL routes (optional): mount when MSSQL is configured
+app.use('/api/mssql', mssqlRoutes);
 //para sa mga uploader
 app.use(chartOfAccountsRouter);
 app.use(uploadcategories);
