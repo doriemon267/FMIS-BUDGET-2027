@@ -1,25 +1,33 @@
 require("dotenv").config();
+// If DEP0123 or other warnings are listed in SUPPRESS_NODE_DEPRECATION_WARNINGS,
+// set process.noDeprecation = true as early as possible to suppress Node deprecation warnings.
+const SUPPRESS_NODE_DEPRECATION_WARNINGS = (process.env.SUPPRESS_NODE_DEPRECATION_WARNINGS || '').split(',').map(s => s && s.trim()).filter(Boolean);
+if (SUPPRESS_NODE_DEPRECATION_WARNINGS.length > 0) {
+  try {
+    // Setting this suppresses Node runtime deprecation warnings globally (same as --no-deprecation)
+    process.noDeprecation = true;
+    console.log('[Server] process.noDeprecation enabled via SUPPRESS_NODE_DEPRECATION_WARNINGS.');
+  } catch (e) {
+    // ignore if not settable
+  }
+}
 // Optional: suppress specific Node deprecation warnings (comma-separated list of codes)
 const SUPPRESS_NODE_DEPRECATION_WARNINGS = (process.env.SUPPRESS_NODE_DEPRECATION_WARNINGS || '').split(',').map(s => s && s.trim()).filter(Boolean);
 if (SUPPRESS_NODE_DEPRECATION_WARNINGS.length > 0) {
-  const origEmitWarning = process.emitWarning;
-  process.emitWarning = function(warning, options) {
+  // Listen for 'warning' event and drop matching codes
+  process.on('warning', (warning) => {
     try {
-      let code = undefined;
-      if (options && typeof options === 'string') {
-        code = options;
-      } else if (options && typeof options === 'object') {
-        code = options.code || options.name;
-      } else if (warning && typeof warning === 'object') {
-        code = warning.code || warning.name;
+      const code = warning.code || warning.name || '';
+      if (!SUPPRESS_NODE_DEPRECATION_WARNINGS.includes(code)) {
+        // Print other warnings
+        console.warn(warning.name + ': ' + warning.message + '\n' + (warning.stack || ''));
       }
-      if (code && SUPPRESS_NODE_DEPRECATION_WARNINGS.includes(code)) {
-        // drop suppressed deprecation warning
-        return;
-      }
-    } catch (e) {/* ignore */}
-    return origEmitWarning.apply(process, arguments);
-  };
+      // Otherwise drop the warning entirely
+    } catch (e) {
+      // If handling fails, print the warning normally
+      console.warn(warning);
+    }
+  });
 }
 // Removed console silencing - we want essential startup messages to show
 
