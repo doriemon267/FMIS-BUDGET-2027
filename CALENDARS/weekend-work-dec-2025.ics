@@ -1,0 +1,72 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+CALSCALE:GREGORIAN
+PRODID:-//FMIS Budget//Weekend Work 2025//EN
+NAME:FMIS Weekend Work December 2025
+X-WR-CALNAME:FMIS Weekend Work December 2025
+
+BEGIN:VEVENT
+UID:fmischeduled-2025-12-06@fmis
+DTSTAMP:20251125T000000Z
+DTSTART;VALUE=DATE:20251206
+SUMMARY:FMIS - Specific Weekend Work
+DESCRIPTION:Please complete the assigned FMIS budget review tasks for the weekend of 06 December 2025.
+END:VEVENT
+
+BEGIN:VEVENT
+UID:fmischeduled-2025-12-07@fmis
+DTSTAMP:20251125T000000Z
+DTSTART;VALUE=DATE:20251207
+SUMMARY:FMIS - Specific Weekend Work
+DESCRIPTION:Please complete the assigned FMIS budget review tasks for the weekend of 07 December 2025.
+END:VEVENT
+
+BEGIN:VEVENT
+UID:fmischeduled-2025-12-13@fmis
+DTSTAMP:20251125T000000Z
+DTSTART;VALUE=DATE:20251213
+SUMMARY:FMIS - Specific Weekend Work
+DESCRIPTION:Please complete the assigned FMIS budget review tasks for the weekend of 13 December 2025.
+END:VEVENT
+
+BEGIN:VEVENT
+UID:fmischeduled-2025-12-14@fmis
+DTSTAMP:20251125T000000Z
+DTSTART;VALUE=DATE:20251214
+SUMMARY:FMIS - Specific Weekend Work
+DESCRIPTION:Please complete the assigned FMIS budget review tasks for the weekend of 14 December 2025.
+END:VEVENT
+
+BEGIN:VEVENT
+UID:fmischeduled-2025-12-20@fmis
+DTSTAMP:20251125T000000Z
+DTSTART;VALUE=DATE:20251220
+SUMMARY:FMIS - Specific Weekend Work
+DESCRIPTION:Please complete the assigned FMIS budget review tasks for the weekend of 20 December 2025.
+END:VEVENT
+
+BEGIN:VEVENT
+UID:fmischeduled-2025-12-21@fmis
+DTSTAMP:20251125T000000Z
+DTSTART;VALUE=DATE:20251221
+SUMMARY:FMIS - Specific Weekend Work
+DESCRIPTION:Please complete the assigned FMIS budget review tasks for the weekend of 21 December 2025.
+END:VEVENT
+
+BEGIN:VEVENT
+UID:fmischeduled-2025-12-27@fmis
+DTSTAMP:20251125T000000Z
+DTSTART;VALUE=DATE:20251227
+SUMMARY:FMIS - Specific Weekend Work
+DESCRIPTION:Please complete the assigned FMIS budget review tasks for the weekend of 27 December 2025.
+END:VEVENT
+
+BEGIN:VEVENT
+UID:fmischeduled-2025-12-28@fmis
+DTSTAMP:20251125T000000Z
+DTSTART;VALUE=DATE:20251228
+SUMMARY:FMIS - Specific Weekend Work
+DESCRIPTION:Please complete the assigned FMIS budget review tasks for the weekend of 28 December 2025.
+END:VEVENT
+
+END:VCALENDAR

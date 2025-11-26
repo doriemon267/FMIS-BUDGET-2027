@@ -9,6 +9,20 @@ module.exports = async (req, res, next) => {
 
     console.log(`🔐 Auth check for ${req.method} ${req.path}`);
 
+    // DEVELOPMENT: Allow dev-only mock auth if enabled with ALLOW_MOCK_AUTH=true
+    // This is only intended for local testing; still requires an X-Dev-User-Id header.
+    const allowMockAuth = process.env.ALLOW_MOCK_AUTH === 'true';
+    const devUserIdHeader = req.headers['x-dev-user-id'] || req.headers['X-Dev-User-Id'];
+    if (allowMockAuth && devUserIdHeader) {
+      // Attach a minimal dev user and continue
+      const uid = String(devUserIdHeader).trim();
+      req.user = { id: uid, userId: uid, Id: uid, Username: [uid], Roles: ['DEVELOPER'], name: uid };
+      console.log(`🧪 DEV auth bypass enabled for ${req.path}, user: ${uid}`);
+      const identity = await resolveUserIdentity({ req });
+      req.identity = identity;
+      return next();
+    }
+
     // Extract token from Authorization header
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {

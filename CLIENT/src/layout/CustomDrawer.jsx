@@ -315,9 +315,17 @@ const CustomDrawer = ({ collapsed = false }) => {
                 icon: <TbCategory />,
               },
 
+              // {
+              //   link: "/salary-management",
+              //   name: "Salary Management",
+              //   isAllow:
+              //     hasPermission(currentUser, "ManageSettings") ||
+              //     isOverallApprover,
+              //   icon: <FaMoneyBillWave />,
+              // },
               {
-                link: "/salary-management",
-                name: "Salary Management",
+                link: "/salary-table",
+                name: "Salary Table",
                 isAllow:
                   hasPermission(currentUser, "ManageSettings") ||
                   isOverallApprover,

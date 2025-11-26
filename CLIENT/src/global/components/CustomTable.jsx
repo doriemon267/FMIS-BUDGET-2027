@@ -36,6 +36,12 @@ const CustomTable = ({
   dataListName = "",
   orderByDefault = "updatedAt",
   filter = {}, // Added filter prop
+  /**
+   * If `true` (default), CustomTable will use `data.count` if present
+   * for the pagination `count`. Set to `false` to disable this behavior
+   * and retain the legacy fallback behavior.
+   */
+  useCount = false,
 }) => {
   const { searchValue, setSearchValue } = useSearch();
   const [debouncedSearch, setDebouncedSearch] = useState(searchValue);
@@ -563,7 +569,12 @@ const CustomTable = ({
           <TablePagination
             rowsPerPageOptions={[10, ROWS_PER_PAGE, 50]}
             component="div"
-            count={data.pagination?.totalCount || data.totalRecords || (data[dataListName] || []).length}
+            // Use `data.count` if the API returns it and `useCount` is enabled
+            count={
+              useCount && data.count !== undefined
+                ? data.count
+                : data.pagination?.totalCount || data.totalRecords || (data[dataListName] || []).length
+            }
             rowsPerPage={rowsPerPage}
             page={page}
             onPageChange={handleChangePage}

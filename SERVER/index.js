@@ -1,6 +1,7 @@
 require("dotenv").config();
 // If DEP0123 or other warnings are listed in SUPPRESS_NODE_DEPRECATION_WARNINGS,
-// set process.noDeprecation = true as early as possible to suppress Node deprecation warnings.
+// set process.noDeprecation = true as early as possible to suppress Node deprecation warnings
+// and also filter the emitted 'warning' events that match codes in that list.
 const SUPPRESS_NODE_DEPRECATION_WARNINGS = (process.env.SUPPRESS_NODE_DEPRECATION_WARNINGS || '').split(',').map(s => s && s.trim()).filter(Boolean);
 if (SUPPRESS_NODE_DEPRECATION_WARNINGS.length > 0) {
   try {
@@ -10,11 +11,7 @@ if (SUPPRESS_NODE_DEPRECATION_WARNINGS.length > 0) {
   } catch (e) {
     // ignore if not settable
   }
-}
-// Optional: suppress specific Node deprecation warnings (comma-separated list of codes)
-const SUPPRESS_NODE_DEPRECATION_WARNINGS = (process.env.SUPPRESS_NODE_DEPRECATION_WARNINGS || '').split(',').map(s => s && s.trim()).filter(Boolean);
-if (SUPPRESS_NODE_DEPRECATION_WARNINGS.length > 0) {
-  // Listen for 'warning' event and drop matching codes
+  // Listen for 'warning' events and drop matching codes
   process.on('warning', (warning) => {
     try {
       const code = warning.code || warning.name || '';
@@ -29,6 +26,7 @@ if (SUPPRESS_NODE_DEPRECATION_WARNINGS.length > 0) {
     }
   });
 }
+// Note: No re-declaration of SUPPRESS_NODE_DEPRECATION_WARNINGS here; handled above
 // Removed console silencing - we want essential startup messages to show
 
 // Apply log redaction and debug mode globally
@@ -117,6 +115,8 @@ const proposalSummaryRoutes = require("./routers/proposalSummary");
 // New Proposal Workflow Routes
 const newProposalWorkflowRoutes = require("./routes/newProposalWorkflowRoutes");
 const mssqlRoutes = require('./routers/mssqlRoutes');
+const mssqlSalaryTableRoutes = require('./routers/mssqlSalaryTableRoutes');
+const debugRoutes = require('./routers/debugRoutes');
 //PARA SA MGA UPLOADER
 const chartOfAccountsRouter = require("./routers/uploader/chartOfAccounts");
 const uploadcategories = require("./routers/uploader/categories");
@@ -438,7 +438,14 @@ app.use('/', mooeRoutes);
 app.use('/api/proposalSummary', proposalSummaryRoutes);
 app.use('/api/allproposal', newProposalWorkflowRoutes);
 // MSSQL routes (optional): mount when MSSQL is configured
+// Dedicated route for SalaryTable MSSQL table (mount before generic mssql routes)
+app.use('/api/mssql/salarytable', mssqlSalaryTableRoutes);
+// MSSQL routes (optional): mount when MSSQL is configured
 app.use('/api/mssql', mssqlRoutes);
+// Only register debug routes in development / when explicitly allowed
+if (process.env.DEBUG_MODE === 'true' || process.env.ALLOW_MOCK_AUTH === 'true') {
+  app.use('/api/debug', debugRoutes);
+}
 //para sa mga uploader
 app.use(chartOfAccountsRouter);
 app.use(uploadcategories);

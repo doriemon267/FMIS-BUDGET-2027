@@ -36,10 +36,17 @@ MSSQL_EXTERNAL_TABLE_NAME=ExternalProposals
 
 - The example MSSQL model `ExternalProposal` is in `SERVER/mssql/models/ExternalProposal.js`.
 - The controller is `SERVER/controllers/mssqlController.js`. It exports CRUD functions and an example `listMerged` method that attempts to merge MSSQL rows with `NewProposalWorkflow` documents (if present) from MongoDB.
+ - A sample model for the `SalaryTable` (as requested) is in `SERVER/mssql/models/SalaryTable.js` and is exposed via a dedicated controller and router `SERVER/controllers/mssqlSalaryTableController.js` and `SERVER/routers/mssqlSalaryTableRoutes.js`.
+	 - The new endpoints are registered at `/api/mssql/salarytable` and support:
+		 - GET `/api/mssql/salarytable?q=...&limit=...&offset=...` — list rows, with `q` search and optional filters `SG`, `JG`, `StatusOfAppointment`.
+		 - GET `/api/mssql/salarytable/:id` — fetch a single row by Id.
+		 - GET `/api/mssql/salarytable/search?q=...` — lightweight search endpoint by Id or Source field.
 
 4) Routes
 
 - The routes are exposed under `/api/mssql` (e.g., GET `/api/mssql`, GET `/api/mssql/merged`). These are protected by the existing `checkToken` middleware.
+
+If you'd like this `salarytable` route to be public for test or UI consumption without JWT, you can edit `SERVER/routers/mssqlSalaryTableRoutes.js` to remove or conditionally apply `checkToken` (useful for local testing only).
 
 5) Notes
 
