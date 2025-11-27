@@ -117,6 +117,7 @@ const newProposalWorkflowRoutes = require("./routes/newProposalWorkflowRoutes");
 const mssqlRoutes = require('./routers/mssqlRoutes');
 const mssqlSalaryTableRoutes = require('./routers/mssqlSalaryTableRoutes');
 const debugRoutes = require('./routers/debugRoutes');
+const todoRouter = require('./routers/todo_router');
 //PARA SA MGA UPLOADER
 const chartOfAccountsRouter = require("./routers/uploader/chartOfAccounts");
 const uploadcategories = require("./routers/uploader/categories");
@@ -423,6 +424,7 @@ app.use('/api', require('./routers/notificationRoutes'));
 app.use(rataRoutes);
 app.use(settings);
 app.use("/api", regionRouter);
+app.use('/api', todoRouter);
 app.use(annexRouter);
 app.use(personnelServicesAnnexesRoutes);
 app.use(setupRouter);

@@ -274,11 +274,7 @@ const SalaryTablePage = () => {
               '& .MuiDataGrid-columnSeparator': {
                 backgroundColor: 'rgba(255,255,255,0.15) !important',
               },
-              '& .MuiDataGrid-columnHeaderTitle': {
-                fontWeight: 600,
-                letterSpacing: 0.2,
-                textTransform: 'none'
-              },
+              // Consolidated column header title style. (Styles merged above; duplicate removed.)
               '& .MuiDataGrid-cell': {
                 color: theme.palette.text.primary,
                 borderBottom: '1px solid rgba(0,0,0,0.06)'

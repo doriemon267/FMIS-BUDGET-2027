@@ -30,6 +30,8 @@ import { WorkflowNotificationProvider } from "../context/WorkflowNotificationCon
 import WorkflowNotifications from "../components/workflow/WorkflowNotifications";
 import ActiveRegionDisplay from "../components/common/ActiveRegionDisplay";
 import { useRegion } from "../context/RegionContext";
+import AppTrayLauncher from "../global/components/floating_apps/AppTrayLauncher";
+import { ErrorBoundary } from 'react-error-boundary';
 
 const drawerWidth = 280;
 const collapsedDrawerWidth = 80;
@@ -237,6 +239,20 @@ const DashboardContent = () => {
         <Toolbar />
         <Box sx={{ maxWidth: "100%", overflowX: "auto" }}>
           <Outlet />
+             <ErrorBoundary
+               FallbackComponent={({ error }) => (
+                 <div style={{ padding: 12, color: 'red' }}>
+                   <strong>AppTrayLauncher failed to render:</strong>
+                   <pre style={{ whiteSpace: 'pre-wrap' }}>{error?.message}</pre>
+                 </div>
+               )}
+               onError={(error, info) => {
+                 // Log stack/message so we can capture details in the terminal as well
+                 console.error('[ErrorBoundary] AppTrayLauncher render error', error, info);
+               }}
+             >
+               <AppTrayLauncher />
+             </ErrorBoundary>
         </Box>
         <Typography
           variant="body2"
