@@ -30,6 +30,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import api from '../../config/api';
+import { displayUacs } from '../../utils/uacsDisplayHelper';
 import { getUserInfo } from '../../utils/auth';
 import WorkflowActionsRefactored from './WorkflowActionsRefactored';
 
@@ -650,7 +651,7 @@ const ProposalDetailsPage = () => {
                              <TableCell sx={{ fontWeight: 600 }}>{item.categoryName || item.category || '—'}</TableCell>
                              <TableCell>{item.sublineItem || '—'}</TableCell>
                              <TableCell>{item.accountingTitle || '—'}</TableCell>
-                             <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>{item.uacsCode || '—'}</TableCell>
+                             <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>{displayUacs(item.uacsCode, item.sublineItem)}</TableCell>
                              <TableCell align="right">{formatCurrency(income)}</TableCell>
                              <TableCell align="right">{formatCurrency(subsidy)}</TableCell>
                              <TableCell align="right" sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5', borderLeft: `3px solid ${theme.palette.secondary.main}` }}>

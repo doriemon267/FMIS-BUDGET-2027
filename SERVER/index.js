@@ -118,6 +118,7 @@ const mssqlRoutes = require('./routers/mssqlRoutes');
 const mssqlSalaryTableRoutes = require('./routers/mssqlSalaryTableRoutes');
 const debugRoutes = require('./routers/debugRoutes');
 const todoRouter = require('./routers/todo_router');
+const eventsRouter = require('./routers/eventsRouter');
 //PARA SA MGA UPLOADER
 const chartOfAccountsRouter = require("./routers/uploader/chartOfAccounts");
 const uploadcategories = require("./routers/uploader/categories");
@@ -162,6 +163,7 @@ const myProposalsRoutes = require("./routes/myProposalsRoutes");
 require("./config/mongo_db")();
 // Fix database index for region isolation
 const mongoose = require('mongoose');
+const { initAgenda } = require('./schedulers/agenda');
 // Load UserOrganizationalAssignment model to ensure it's registered with mongoose
 require('./models/UserOrganizationalAssignment');
 mongoose.connection.once('open', async () => {
@@ -213,6 +215,13 @@ mongoose.connection.once('open', async () => {
     }
   } catch (error) {
     // Database index check failed
+  }
+  // Initialize Agenda scheduler after DB connection
+  try {
+    await initAgenda({ mongoConnection: mongoose.connection });
+    console.log('Agenda scheduler initialized');
+  } catch (e) {
+    console.error('Failed to initialize Agenda scheduler:', e.stack || e);
   }
 });
 const app = express();
@@ -425,6 +434,7 @@ app.use(rataRoutes);
 app.use(settings);
 app.use("/api", regionRouter);
 app.use('/api', todoRouter);
+  app.use('/api/events', eventsRouter);
 app.use(annexRouter);
 app.use(personnelServicesAnnexesRoutes);
 app.use(setupRouter);

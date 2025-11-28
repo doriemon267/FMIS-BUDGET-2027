@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { shouldHideGenericOtherUacs, getIndentLevelFromSubline } from '../../../utils/uacsDisplayHelper';
 import {
   Table,
   TableBody,
@@ -64,8 +65,16 @@ const ComparisonMOOETable = ({ data }) => {
     return {};
   };
 
-  const renderComparisonCell = (item, field, { isCurrency = false, align = 'left' } = {}) => {
+  const renderComparisonCell = (item, field, { isCurrency = false, align = 'left', sx = {} } = {}) => {
     const cellStyle = getCellStyle(item, field);
+    // Hide generic 'Other' UACS code for Other Maintenance and Operating Expenses
+    if (field === 'uacsCode' && shouldHideGenericOtherUacs(item.uacsCode, item.sublineItem)) {
+      return (
+        <TableCell sx={cellStyle} align={align}>
+          {''}
+        </TableCell>
+      );
+    }
     const currentValue = item[field];
     const displayValue = currentValue ?? (isCurrency ? 0 : '—');
     
@@ -73,7 +82,7 @@ const ComparisonMOOETable = ({ data }) => {
       const oldValue = item.originalValues[field];
       if (!isEqual(oldValue, currentValue)) {
         return (
-          <TableCell sx={cellStyle} align={align}>
+          <TableCell sx={{ ...cellStyle, ...sx }} align={align}>
             <Box>
               <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
                 {isCurrency ? formatCurrency(displayValue) : displayValue}
@@ -88,7 +97,7 @@ const ComparisonMOOETable = ({ data }) => {
     }
     
     return (
-      <TableCell sx={cellStyle} align={align}>
+      <TableCell sx={{ ...cellStyle, ...sx }} align={align}>
         {isCurrency ? formatCurrency(displayValue) : displayValue}
       </TableCell>
     );
@@ -316,11 +325,12 @@ const ComparisonMOOETable = ({ data }) => {
 
                     {isExpanded && group.entries.map(({ item }, idx) => {
                       const rowKey = `${group.key}-${idx}`;
+                      const indentLevel = getIndentLevelFromSubline(item.sublineItem || item.accountingTitle || group.key, item.uacsCode);
                       return (
                         <TableRow key={rowKey}>
                           <TableCell></TableCell>
                           {renderComparisonCell(item, 'sublineItem')}
-                          {renderComparisonCell(item, 'accountingTitle')}
+                          {renderComparisonCell(item, 'accountingTitle', { sx: { pl: indentLevel * 3 } })}
                           {renderComparisonCell(item, 'uacsCode')}
                           {renderComparisonCell(item, 'income', { isCurrency: true, align: 'right' })}
                           {renderComparisonCell(item, 'subsidy', { isCurrency: true, align: 'right' })}

@@ -22,6 +22,7 @@ import {
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import api from "../../config/api";
+import { displayUacs } from '../../utils/uacsDisplayHelper';
 
 const ProposalDetails = ({ proposal }) => {
   const [loading, setLoading] = useState(false);
@@ -362,7 +363,7 @@ const ProposalDetails = ({ proposal }) => {
           <TableBody>
             {detailedData.map((item, index) => (
               <TableRow key={item._id || item.uacsCode || index}>
-                <TableCell>{item.uacsCode}</TableCell>
+                <TableCell>{displayUacs(item.uacsCode, item.sublineItem)}</TableCell>
                 <TableCell>{item.description}</TableCell>
                 <TableCell>{formatCurrency(item.amount)}</TableCell>
                 <TableCell>{item.department}</TableCell>

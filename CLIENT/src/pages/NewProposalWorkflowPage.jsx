@@ -54,6 +54,7 @@ import { toast } from "react-toastify";
 import { useWorkflowRef } from "../hooks/useWorkflowRef";
 import { prettyRole } from '../utils/role-utils';
 import { useQueryClient } from "@tanstack/react-query";
+import { displayUacs } from '../utils/uacsDisplayHelper';
 
 // Brand colors aligned to Transactions Processing UI
 const BRAND_COLORS = {
@@ -4739,7 +4740,7 @@ const NewProposalWorkflowPage = () => {
                                                   "N/A"}
                                               </TableCell>
                                               <TableCell>
-                                                {item.uacsCode || "N/A"}
+                                                {displayUacs(item.uacsCode, item.sublineItem)}
                                               </TableCell>
                                               <TableCell
                                                 align="right"

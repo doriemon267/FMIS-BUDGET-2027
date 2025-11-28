@@ -1,10 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import {
-  Snackbar,
   Alert,
-  Slide,
-  Grow,
-  Collapse,
   Box,
   Typography,
   LinearProgress,
@@ -22,7 +18,7 @@ import {
   ListItem,
   ListItemText,
   ListItemIcon,
-  Divider
+  
 } from '@mui/material';
 import {
   CheckCircle,

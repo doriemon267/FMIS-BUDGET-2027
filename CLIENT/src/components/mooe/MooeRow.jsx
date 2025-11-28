@@ -1,4 +1,5 @@
 import React, { memo, useMemo } from "react";
+import { shouldHideGenericOtherUacs, getIndentLevelFromSubline } from '../../utils/uacsDisplayHelper';
 import {
   TableRow,
   TableCell,
@@ -78,7 +79,7 @@ const MooeRow = ({
 
   // Memoize the check for "Other MOOE" UACS code
   const hasOtherMOOE = useMemo(() => {
-    return row.children.some(child => child.uacsCode === "5-02-99-990");
+    return row.children.some(child => child.uacsCode && child.uacsCode.startsWith("5-02-99-990"));
   }, [row.children]);
 
   return (
@@ -117,7 +118,7 @@ const MooeRow = ({
         <TableRow key={child.id}>
           <TableCell></TableCell>
           <TableCell></TableCell>
-          <TableCell>
+          <TableCell sx={{ pl: getIndentLevelFromSubline(child.sublineItem || child.accountingTitle || row.sublineItem, child.uacsCode) ? 3 : 0 }}>
             {child.custom ? (
               <TextField
                 fullWidth
@@ -132,7 +133,9 @@ const MooeRow = ({
               child.accountingTitle
             )}
           </TableCell>
-          <TableCell>{child.uacsCode}</TableCell>
+          <TableCell>
+            {shouldHideGenericOtherUacs(child.uacsCode, row.sublineItem) ? '' : child.uacsCode}
+          </TableCell>
           
           {/* Income field with NumberFormatCustom */}
           <TableCell>

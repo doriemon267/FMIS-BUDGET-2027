@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import { displayUacs, getIndentLevelFromSubline } from '../../../utils/uacsDisplayHelper';
 import {
   Table,
   TableBody,
@@ -290,6 +291,7 @@ const EditableMOOETable = ({ data, onChange }) => {
               paginatedGroups.map((group) => {
                 const displayLabel = group.key === 'UNCATEGORIZED' ? 'Uncategorized' : group.key;
                 const isExpanded = expandedGroups[group.key] !== false;
+                const indentLevelGroup = getIndentLevelFromSubline(group.key);
                 return (
                   <React.Fragment key={group.key}>
                     <TableRow sx={{ backgroundColor: '#eef2ff' }}>
@@ -318,6 +320,8 @@ const EditableMOOETable = ({ data, onChange }) => {
                     {isExpanded && group.entries.map(({ item, index }) => {
                       const changeType = item.changeType || 'unchanged';
                       const amount = item.amount != null ? Number(item.amount) : Number(item.income || 0) + Number(item.subsidy || 0);
+                      // Determine indent level per item using sublineItem/accountingTitle so nested "Other" variants indent
+                      const indentLevel = getIndentLevelFromSubline(item.sublineItem || item.accountingTitle || group.key, item.uacsCode);
                       return (
                         <TableRow key={`${group.key}-${index}`} sx={getRowStyle(changeType)}>
                           <TableCell></TableCell>
@@ -326,14 +330,14 @@ const EditableMOOETable = ({ data, onChange }) => {
                               {displayLabel}
                             </Typography>
                           </TableCell>
-                          <TableCell>
+                          <TableCell sx={{ pl: indentLevel * 3 }}>
                             <Typography variant="body2" sx={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
                               {item.accountingTitle || '—'}
                             </Typography>
                           </TableCell>
                           <TableCell>
                             <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                              {item.uacsCode || '—'}
+                              {displayUacs(item.uacsCode, item.sublineItem)}
                             </Typography>
                           </TableCell>
                           <TableCell align="right" sx={{ maxWidth: 140 }}>

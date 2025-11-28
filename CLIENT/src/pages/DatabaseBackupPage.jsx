@@ -36,8 +36,7 @@ import {
   TablePagination,
   Stack,
   useTheme,
-  alpha,
-  Snackbar
+  alpha
 } from '@mui/material';
 import {
   Backup,

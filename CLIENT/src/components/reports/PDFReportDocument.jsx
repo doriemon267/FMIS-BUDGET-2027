@@ -1,4 +1,5 @@
 import React from 'react';
+import { shouldHideGenericOtherUacs, getIndentLevelFromSubline } from '../../utils/uacsDisplayHelper';
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 
 // Define styles for PDF
@@ -245,13 +246,17 @@ const PDFReportDocument = ({ fiscalYear, psSummary = {}, mooe = [], co = [] }) =
         </View>
         
         {/* MOOE Items */}
-        {mooe.map((item, idx) => (
-          <View key={idx} style={styles.row}>
-            <Text style={{ width: "15%" }}>{item.uacsCode}</Text>
-            <Text style={{ width: "55%" }}>{item.accountingTitle || item.lineItem}</Text>
-            <Text style={{ width: "30%", textAlign: "right" }}>{formatCurrency(item.amount, true)}</Text>
-          </View>
-        ))}
+        {mooe.map((item, idx) => {
+          const hideGenericUACS = shouldHideGenericOtherUacs(item.uacsCode, item.sublineItem);
+          const indentLevel = getIndentLevelFromSubline(item.sublineItem || item.accountingTitle || '', item.uacsCode);
+          return (
+            <View key={idx} style={styles.row}>
+              <Text style={{ width: "15%" }}>{hideGenericUACS ? '' : item.uacsCode}</Text>
+              <Text style={{ width: "55%", marginLeft: indentLevel ? 10 : 0 }}>{item.accountingTitle || item.lineItem}</Text>
+              <Text style={{ width: "30%", textAlign: "right" }}>{formatCurrency(item.amount, true)}</Text>
+            </View>
+          );
+        })}
         
         {/* Regular MOOE Total */}
         <View style={styles.row}>

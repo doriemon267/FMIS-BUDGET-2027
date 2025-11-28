@@ -27,7 +27,6 @@ import {
   Checkbox,
   ListItemText,
   Autocomplete,
-  Snackbar,
   CircularProgress,
   FormGroup,
   FormControlLabel

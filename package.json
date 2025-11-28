@@ -10,5 +10,8 @@
     "organize-utils": "node SERVER/utils/organize-utils.js",
     "backfill:co-particulars": "node SERVER/scripts/backfill-capitaloutlay-particulars.js",
     "recalc:proposals": "node SERVER/scripts/recalculate-all-proposals.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.57.0"
   }
 }

@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState, useEffect } from "react";
+import { shouldHideGenericOtherUacs, getIndentLevelFromSubline } from '../../utils/uacsDisplayHelper';
 import { useRegion } from "../../context/RegionContext";
 import {
   Table,
@@ -30,7 +31,6 @@ import {
   FormGroup,
   Divider,
   Alert,
-  Snackbar,
   Zoom,
   Fade,
   FormControl,
@@ -926,7 +926,7 @@ const Mooe = ({ onDataChange, locked = false }) => {
           if (row.id !== rowId) return row;
           
           // Find the Other MOOE category to get its details
-          const otherMooeItem = row.children.find(child => child.uacsCode === "5-02-99-990");
+          const otherMooeItem = row.children.find(child => child.uacsCode && child.uacsCode.startsWith("5-02-99-990"));
           
           if (!otherMooeItem) return row;
           
@@ -1845,13 +1845,18 @@ const Mooe = ({ onDataChange, locked = false }) => {
                     const hierarchicalIncomeSum = hierarchicalChildren.reduce((sum, c) => sum + parseFloat(c.income || 0), 0);
                     const hierarchicalSubsidySum = hierarchicalChildren.reduce((sum, c) => sum + parseFloat(c.subsidy || 0), 0);
                     
+                    const base = 'Other Maintenance and Operating Expenses';
+                    const isOto = row.sublineItem && row.sublineItem.startsWith(base);
+                    const indentLevel = getIndentLevelFromSubline(child.sublineItem || child.accountingTitle || row.sublineItem, child.uacsCode);
+                    const hideGenericUacs = shouldHideGenericOtherUacs(child.uacsCode, row.sublineItem);
+
                     return (
                       <TableRow key={child.id}>
                         <TableCell></TableCell>
                         {viewMode === "consolidated" && <TableCell></TableCell>}
                         <TableCell></TableCell>
-                        <TableCell>{child.accountingTitle || child.name}</TableCell>
-                        <TableCell>{child.uacsCode || child.particulars}</TableCell>
+                        <TableCell sx={{ pl: indentLevel ? 3 : 0 }}>{child.accountingTitle || child.name}</TableCell>
+                        <TableCell>{hideGenericUacs ? '' : (child.uacsCode || child.particulars)}</TableCell>
 
                         {/* Income field */}
                         <TableCell>

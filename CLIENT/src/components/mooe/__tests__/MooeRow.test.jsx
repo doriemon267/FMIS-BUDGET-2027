@@ -130,7 +130,7 @@ describe('MooeRow Component', () => {
         {
           id: 'child-3',
           accountingTitle: 'Other MOOE',
-          uacsCode: '5-02-99-990',
+          uacsCode: '5-02-99-990-1',
           income: '0',
           subsidy: '0',
           amount: '0',
@@ -147,6 +147,9 @@ describe('MooeRow Component', () => {
     render(<MooeRow {...otherMooeProps} />);
 
     expect(screen.getByText('Add Other MOOE')).toBeInTheDocument();
+    // The generic 'Other' UACS code should be hidden in the UI for this category
+    expect(screen.queryByText('5-02-99-990')).not.toBeInTheDocument();
+    expect(screen.queryByText('5-02-99-990-1')).not.toBeInTheDocument();
   });
 
   test('handles Add Other MOOE button click', () => {
@@ -157,7 +160,7 @@ describe('MooeRow Component', () => {
         {
           id: 'child-3',
           accountingTitle: 'Other MOOE',
-          uacsCode: '5-02-99-990',
+          uacsCode: '5-02-99-990-2',
           income: '0',
           subsidy: '0',
           amount: '0',
@@ -198,7 +201,7 @@ describe('MooeRow Component', () => {
         {
           id: 'custom-1',
           accountingTitle: 'Custom Entry',
-          uacsCode: '5-02-99-990',
+          uacsCode: '5-02-99-990-3',
           income: '0',
           subsidy: '0',
           amount: '0',

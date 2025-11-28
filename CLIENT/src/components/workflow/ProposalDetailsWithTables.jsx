@@ -39,6 +39,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import WarningIcon from '@mui/icons-material/Warning';
 import api from '../../config/api';
+import { displayUacs } from '../../utils/uacsDisplayHelper';
 
 const ProposalDetailsWithTables = ({ open, onClose, proposal, userInfo }) => {
   const [loading, setLoading] = useState(false);
@@ -564,7 +565,7 @@ const ProposalDetailsWithTables = ({ open, onClose, proposal, userInfo }) => {
                                 {item.sublimeItem || item.sublineItem || '—'}
                               </TableCell>
                               <TableCell>{item.accountingTitle || item.particular || '—'}</TableCell>
-                              <TableCell>{item.uacsCode || '—'}</TableCell>
+                              <TableCell>{displayUacs(item.uacsCode, item.sublineItem)}</TableCell>
                               <TableCell align="right">{formatCurrency(item.amount || 0)}</TableCell>
                               <TableCell align="right">{formatCurrency(item.income || 0)}</TableCell>
                               <TableCell align="right">{formatCurrency(item.subsidy || 0)}</TableCell>
@@ -652,7 +653,7 @@ const ProposalDetailsWithTables = ({ open, onClose, proposal, userInfo }) => {
                                 <TableCell>{item.sublineItem || item.sublimeItem || '—'}</TableCell>
                                 <TableCell>{item.accountingTitle || item.particulars || '—'}</TableCell>
                                 <TableCell sx={{ fontSize: '0.85rem', fontFamily: 'monospace' }}>
-                                  {item.uacsCode || '—'}
+                                  {displayUacs(item.uacsCode, item.sublineItem)}
                                 </TableCell>
                                 <TableCell align="right">{formatCurrency(income)}</TableCell>
                                 <TableCell align="right">{formatCurrency(subsidy)}</TableCell>
@@ -689,7 +690,7 @@ const ProposalDetailsWithTables = ({ open, onClose, proposal, userInfo }) => {
                                         <Grid item xs={12} sm={6}>
                                           <Typography variant="caption" color="textSecondary" sx={{ fontWeight: 600 }}>UACS Code</Typography>
                                           <Typography variant="body2" sx={{ fontFamily: 'monospace', mt: 0.5 }}>
-                                            {item.uacsCode || 'N/A'}
+                                            {displayUacs(item.uacsCode, item.sublineItem)}
                                           </Typography>
                                         </Grid>
                                         <Grid item xs={12}><Divider /></Grid>

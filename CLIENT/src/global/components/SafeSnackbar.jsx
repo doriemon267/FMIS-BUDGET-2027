@@ -1,5 +1,6 @@
 import React from 'react';
 import { Snackbar as MuiSnackbar } from '@mui/material';
+import sanitizeProps from '../../utils/sanitizeProps';
 import PropTypes from 'prop-types';
 
 /**
@@ -8,8 +9,7 @@ import PropTypes from 'prop-types';
  * (like ownerState) forwarded to DOM nodes or internal components.
  */
 const SafeSnackbar = ({ children, ...props }) => {
-  // Remove props that MUI's ClickAwayListener and others don't expect
-  const { ownerState, ...rest } = props || {};
+  const rest = sanitizeProps(props, ['ownerState']);
   return <MuiSnackbar {...rest}>{children}</MuiSnackbar>;
 };
 
