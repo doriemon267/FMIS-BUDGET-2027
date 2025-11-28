@@ -154,8 +154,21 @@ const CalendarApp = () => {
   }, [events]);
 
   const addEvent = ({ title, date, time, description, type = "event", notify = true }) => {
+    // Create a local date using year/month/day/hours/minutes to avoid timezone shift issues
     const dateObj = typeof date === "string" ? new Date(date) : date;
-    const dateTime = time ? new Date(`${dateObj.toISOString().split("T")[0]}T${time}:00`) : dateObj;
+    const year = dateObj.getFullYear();
+    const monthIndex = dateObj.getMonth();
+    const day = dateObj.getDate();
+    let dateTime;
+    if (time) {
+      // time is in format HH:mm (24h) or 'HH:MM AM/PM' — prefer to parse HH:mm
+      const parts = time.includes(":") ? time.split(":") : ["09", "00"];
+      const hours = parseInt(parts[0], 10);
+      const minutes = parseInt(parts[1] || "0", 10);
+      dateTime = new Date(year, monthIndex, day, hours, minutes, 0);
+    } else {
+      dateTime = new Date(year, monthIndex, day, 0, 0, 0);
+    }
     const newEv = { id: `ev-${Date.now()}`, title, description, type, dateTime: dateTime.toISOString(), notified: false, notify };
     setEvents((prev) => [...prev, newEv]);
     return newEv;
@@ -164,8 +177,22 @@ const CalendarApp = () => {
   const removeEvent = (id) => setEvents((prev) => prev.filter((p) => p.id !== id));
 
   const getEventsForDate = (date) => {
-    const dateStr = date.toISOString().split("T")[0];
-    return events.filter((e) => e.dateTime.startsWith(dateStr));
+    // Compare events by local date (year, month, day) to avoid timezone mismatch
+    const y = date.getFullYear();
+    const m = date.getMonth();
+    const d = date.getDate();
+    return events.filter((e) => {
+      try {
+        const evDate = new Date(e.dateTime);
+        return (
+          evDate.getFullYear() === y &&
+          evDate.getMonth() === m &&
+          evDate.getDate() === d
+        );
+      } catch (_err) {
+        return false;
+      }
+    });
   };
 
   const openCreateDialogForDate = (date) => {
