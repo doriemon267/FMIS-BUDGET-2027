@@ -14,19 +14,21 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
 
   // Each app now has its own color
   const apps = useMemo(() => [
-    { Icon: BiCalculator, label: "Calculator", id: "calc", color: "#1976d2" }, // blue
+    { Icon: BiCalculator, label: "Calculator", id: "calc", color: "#1976d2", shortcut: 'Alt+C' }, // blue
     {
       Icon: MdOutlineChecklist,
       label: "Todo List",
       id: "todo",
       color: "#43a047",
+      shortcut: 'Alt+T'
     }, // green
-    { Icon: FiClock, label: "Clock", id: "clock", color: "#f57c00" }, // orange
+    { Icon: FiClock, label: "Clock", id: "clock", color: "#f57c00", shortcut: 'Alt+K' }, // orange
     {
       Icon: MdCalendarMonth,
       label: "Calendar",
       id: "calendar",
       color: "#6d4c41",
+      shortcut: 'Alt+A'
     }, // brown
     // {
     //   Icon: BsChatDots,
@@ -168,12 +170,12 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
             </Tooltip>
           </Box>
           <Stack direction="column-reverse" spacing={1}>
-                {apps.map(({ Icon, label, id, color }, idx) => {
+                {apps.map(({ Icon, label, id, color, shortcut }, idx) => {
               const isOpen = openAppIds.includes(id);
               const isActive = activeAppId === id;
               const refIndex = idx; // logical order
               return (
-              <Tooltip key={id} title={label} placement="left">
+                <Tooltip key={id} title={shortcut ? `${label} — ${shortcut}` : label} placement="left">
                 <Badge
                   overlap="circular"
                   color="primary"
@@ -191,6 +193,7 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
                     setTimeout(() => trayHandleRef.current?.focus(), 50);
                   }}
                   ref={(el) => (focusRefs.current[refIndex] = el)}
+                  aria-keyshortcuts={shortcut}
                   tabIndex={-1}
                   sx={{
                     bgcolor: color,
