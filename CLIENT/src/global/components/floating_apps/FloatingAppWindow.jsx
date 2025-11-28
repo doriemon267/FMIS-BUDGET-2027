@@ -33,6 +33,7 @@ const FloatingAppWindow = ({
     >
       <Box
         ref={nodeRef}
+        className="floating-app-window"
         sx={{
           position: "fixed",
           zIndex: zIndex ?? 1400,

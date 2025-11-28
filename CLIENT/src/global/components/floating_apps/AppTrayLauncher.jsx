@@ -31,40 +31,7 @@ const AppTrayLauncher = () => {
     }
   });
 
-  useEffect(() => {
-    console.debug("[AppTrayLauncher] openApps changed:", openApps.map((a) => a.id));
-    try {
-      const toSave = openApps.map(({ id, defaultPosition, minimized, key }) => ({ id, defaultPosition, minimized, key }));
-      localStorage.setItem("fmis_open_apps_v1", JSON.stringify(toSave));
-    } catch (e) {
-      console.warn("[AppTrayLauncher] failed to persist open apps", e);
-    }
-  }, [openApps, handleAppOpen]);
-
-  // Keyboard shortcuts (Alt+T/C/K/A) to open apps quickly; ignore when typing in inputs
-  useEffect(() => {
-    function onKey(e) {
-      if (e.altKey && !e.ctrlKey && !e.metaKey) {
-        const activeTag = document.activeElement?.tagName?.toLowerCase();
-        if (activeTag === 'input' || activeTag === 'textarea' || document.activeElement?.isContentEditable) return;
-        switch (e.key.toLowerCase()) {
-          case 't':
-            e.preventDefault(); handleAppOpen('todo'); break;
-          case 'c':
-            e.preventDefault(); handleAppOpen('calc'); break;
-          case 'k':
-            e.preventDefault(); handleAppOpen('clock'); break;
-          case 'a':
-            e.preventDefault(); handleAppOpen('calendar'); break;
-          default:
-            break;
-        }
-      }
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [openApps, handleAppOpen]);
-
+  // Declare open/close handler before effects that depend on it to avoid TDZ/ReferenceError.
   const handleAppOpen = useCallback((id) => {
     console.debug('[AppTrayLauncher] handleAppOpen called for id:', id);
     const isOpen = openApps.some((a) => a.id === id);
@@ -88,7 +55,6 @@ const AppTrayLauncher = () => {
     }
 
     const config = appConfig;
-
     const app = config[id];
     if (!app) return;
 
@@ -112,8 +78,46 @@ const AppTrayLauncher = () => {
         },
       ];
     });
-    
   }, [openApps, appConfig]);
+
+  useEffect(() => {
+    console.debug("[AppTrayLauncher] openApps changed:", openApps.map((a) => a.id));
+    try {
+      const toSave = openApps.map(({ id, defaultPosition, minimized, key }) => ({ id, defaultPosition, minimized, key }));
+      localStorage.setItem("fmis_open_apps_v1", JSON.stringify(toSave));
+    } catch (e) {
+      console.warn("[AppTrayLauncher] failed to persist open apps", e);
+    }
+  }, [openApps]);
+
+  // Keyboard shortcuts (Alt+T/C/K/A) to open apps quickly; ignore when typing in inputs
+  useEffect(() => {
+    function onKey(e) {
+      if (e.altKey && !e.ctrlKey && !e.metaKey) {
+        const activeTag = document.activeElement?.tagName?.toLowerCase();
+        const isContentEditable = document.activeElement?.isContentEditable;
+        const inFloatingApp = !!document.activeElement?.closest?.('.floating-app-window');
+        // Allow Alt shortcuts if focus is inside a floating app window to support toggling apps like Calculator
+        if (!inFloatingApp && (activeTag === 'input' || activeTag === 'textarea' || isContentEditable)) return;
+        switch (e.key.toLowerCase()) {
+          case 't':
+            e.preventDefault(); handleAppOpen('todo'); break;
+          case 'c':
+            e.preventDefault(); handleAppOpen('calc'); break;
+          case 'k':
+            e.preventDefault(); handleAppOpen('clock'); break;
+          case 'a':
+            e.preventDefault(); handleAppOpen('calendar'); break;
+          default:
+            break;
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [handleAppOpen]);
+
+  
 
   const handleMinimize = (id, minimize = true) => {
     setOpenApps((prev) => prev.map((a) => a.id === id ? { ...a, minimized: minimize } : a));
