@@ -14,12 +14,15 @@ import {
   Button,
   FormControlLabel,
   Checkbox,
-  Snackbar,
+  //Snackbar,
 } from "@mui/material";
+import CustomSnackbar from "../../CustomSnackbar";
 import { useQuery } from "@tanstack/react-query";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useContext } from "react";
 import { FiCalendar, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import api from "../../../../config/api";
+import io from 'socket.io-client';
+import { useUser } from '../../../../context/UserContext';
 import { STATIC_EVENTS } from "../utils/events";
 
 // Reuse same fetch function
@@ -30,10 +33,13 @@ const CalendarApp = () => {
   const [selectedDate, setSelectedDate] = useState(null);
   const [hoveredDate, setHoveredDate] = useState(null);
   const [events, setEvents] = useState([]);
+  const { currentUser } = useUser();
+  const socketRef = useRef(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ title: "", date: null, time: "09:00", description: "", type: "event", notify: true });
   const [snack, setSnack] = useState({ open: false, message: "" });
   const checkIntervalRef = useRef(null);
+  const scheduledTimersRef = useRef({});
 
   const { data: todos = [], isLoading } = useQuery({
     queryKey: ["todos"],
@@ -112,14 +118,38 @@ const CalendarApp = () => {
   const EVENTS_KEY = "fmis_calendar_events_v1";
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(EVENTS_KEY);
-      if (raw) setEvents(JSON.parse(raw));
-    } catch (e) {
-      console.warn("Failed to load calendar events", e);
-      setEvents([]);
-    }
-  }, []);
+    // If user is logged in, fetch server-side events
+    const fetchEvents = async () => {
+      try {
+        const res = await api.get('/api/events');
+        if (res?.data?.data) {
+          // Map to local format
+          const list = (res.data.data || []).map((ev) => ({
+            id: String(ev._id),
+            title: ev.title,
+            description: ev.description,
+            dateTime: new Date(ev.dateTime).toISOString(),
+            notify: !!ev.notify,
+            preReminders: ev.preReminders || [],
+          }));
+          setEvents(list);
+          return;
+        }
+      } catch (e) {
+        // fallback to localStorage if server fetch fails
+      }
+
+      try {
+        const raw = localStorage.getItem(EVENTS_KEY);
+        if (raw) setEvents(JSON.parse(raw));
+      } catch (e) {
+        console.warn("Failed to load calendar events", e);
+        setEvents([]);
+      }
+    };
+
+    fetchEvents();
+  }, [currentUser]);
 
   useEffect(() => {
     try {
@@ -127,6 +157,51 @@ const CalendarApp = () => {
     } catch (e) {
       console.warn("Failed to persist calendar events", e);
     }
+  }, [events]);
+
+  // Use local scheduling to trigger notifications at precise times (fallback if socket not present)
+  useEffect(() => {
+    // Clear previous timers
+    Object.values(scheduledTimersRef.current || {}).forEach((t) => clearTimeout(t));
+    scheduledTimersRef.current = {};
+
+    const now = Date.now();
+    events.forEach((ev) => {
+      try {
+        const dt = new Date(ev.dateTime);
+        const timeUntil = dt.getTime() - now;
+        if (timeUntil > 0 && timeUntil < 7 * 24 * 3600 * 1000) { // schedule only within 7 days to avoid huge timeouts
+          const id = setTimeout(() => {
+            setSnack({ open: true, message: `${ev.title} is due now` });
+            try {
+              if (window.Notification && Notification.permission === 'granted') {
+                new Notification(ev.title, { body: ev.description || '' });
+              }
+            } catch (_e) {}
+          }, timeUntil);
+          scheduledTimersRef.current[String(ev.id)] = id;
+        }
+        // schedule pre reminders
+        if (Array.isArray(ev.preReminders) && ev.preReminders.length) {
+          for (const minutes of ev.preReminders) {
+            const tms = dt.getTime() - minutes * 60000 - now;
+            if (tms > 0 && tms < 7 * 24 * 3600 * 1000) {
+              const prerid = setTimeout(() => {
+                setSnack({ open: true, message: `Reminder: ${ev.title} in ${minutes} minutes` });
+              }, tms);
+              scheduledTimersRef.current[`pre-${ev.id}-${minutes}`] = prerid;
+            }
+          }
+        }
+      } catch (e) {
+        // ignore invalid dates
+      }
+    });
+
+    return () => {
+      Object.values(scheduledTimersRef.current || {}).forEach((t) => clearTimeout(t));
+      scheduledTimersRef.current = {};
+    };
   }, [events]);
 
   useEffect(() => {
@@ -153,7 +228,40 @@ const CalendarApp = () => {
     return () => clearInterval(checkIntervalRef.current);
   }, [events]);
 
-  const addEvent = ({ title, date, time, description, type = "event", notify = true }) => {
+  // Socket & server notifications hookup
+  useEffect(() => {
+    if (!currentUser) return;
+    try {
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin;
+      const s = io(baseUrl, { path: '/socket.io', transports: ['polling', 'websocket'] });
+      socketRef.current = s;
+      const userId = (currentUser?.Id || currentUser?.id || currentUser?.userId || (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username));
+      if (userId) s.emit('join-user-room', userId);
+
+      s.on('calendar:event', (payload) => {
+        if (!payload) return;
+        setSnack({ open: true, message: `Event: ${payload.event?.title}` });
+        try {
+          if (window.Notification && Notification.permission === 'granted') {
+            new Notification(payload.event?.title || 'Event', { body: payload.event?.description || '' });
+          }
+        } catch (_e) {}
+      });
+
+      s.on('calendar:prereminder', (payload) => {
+        if (!payload) return;
+        setSnack({ open: true, message: `Reminder: ${payload.event?.title} (${payload.minutesBefore} min)` });
+      });
+
+      return () => {
+        try { s.disconnect(); } catch (e) { /* ignore */ }
+      };
+    } catch (err) {
+      console.warn('Failed to initialize socket for calendar', err?.message || err);
+    }
+  }, [currentUser]);
+
+  const addEvent = async ({ title, date, time, description, type = "event", notify = true }) => {
     // Create a local date using year/month/day/hours/minutes to avoid timezone shift issues
     const dateObj = typeof date === "string" ? new Date(date) : date;
     const year = dateObj.getFullYear();
@@ -169,12 +277,35 @@ const CalendarApp = () => {
     } else {
       dateTime = new Date(year, monthIndex, day, 0, 0, 0);
     }
+    const payload = { title, description, dateTime: dateTime.toISOString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, notify, preReminders: [] };
+    if (currentUser) {
+      try {
+        const res = await api.post('/api/events', payload);
+        if (res?.data?.data) {
+          const ev = res.data.data;
+          const mapped = { id: String(ev._id), title: ev.title, description: ev.description, dateTime: new Date(ev.dateTime).toISOString(), notify: !!ev.notify };
+          setEvents((prev) => [...prev, mapped]);
+          return mapped;
+        }
+      } catch (e) {
+        console.error('Failed to create event on server', e);
+      }
+    }
     const newEv = { id: `ev-${Date.now()}`, title, description, type, dateTime: dateTime.toISOString(), notified: false, notify };
     setEvents((prev) => [...prev, newEv]);
     return newEv;
   };
 
-  const removeEvent = (id) => setEvents((prev) => prev.filter((p) => p.id !== id));
+  const removeEvent = async (id) => {
+    if (currentUser && id && String(id).startsWith('ev-') === false) {
+      try {
+        await api.delete(`/api/events/${id}`);
+      } catch (e) {
+        console.warn('Failed to delete event on server', e?.message || e);
+      }
+    }
+    setEvents((prev) => prev.filter((p) => p.id !== id));
+  };
 
   const getEventsForDate = (date) => {
     // Compare events by local date (year, month, day) to avoid timezone mismatch
@@ -580,8 +711,8 @@ const CalendarApp = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Snack */}
-      <Snackbar open={snack.open} autoHideDuration={4000} onClose={() => setSnack((s) => ({ ...s, open: false }))} message={snack.message} />
+      {/* Custom Snack (replaces MUI Snackbar to avoid ownerState warnings) */}
+      <CustomSnackbar open={snack.open} autoHideDuration={4000} onClose={() => setSnack((s) => ({ ...s, open: false }))} message={snack.message} />
     </Box>
   );
 };

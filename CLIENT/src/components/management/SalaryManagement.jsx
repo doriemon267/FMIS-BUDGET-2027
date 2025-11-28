@@ -24,13 +24,13 @@ import {
   IconButton,
   Tooltip,
   Alert,
-  Snackbar,
   Tabs,
   Tab,
   Card,
   CardContent,
   Divider
 } from '@mui/material';
+import CustomSnackbar from '../../global/components/CustomSnackbar';
 import {
   Add as AddIcon,
   Edit as EditIcon,
@@ -601,17 +601,8 @@ const SalaryManagement = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Snackbar for notifications */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      >
-        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      {/* Custom Snackbar for notifications (avoid MUI ownerState warnings) */}
+      <CustomSnackbar open={snackbar.open} autoHideDuration={6000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} message={snackbar.message} severity={snackbar.severity} />
     </Box>
   );
 };
