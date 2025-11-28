@@ -6,9 +6,18 @@ import {
   Stack,
   Tooltip,
   Typography,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Button,
+  FormControlLabel,
+  Checkbox,
+  Snackbar,
 } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { FiCalendar, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import api from "../../../../config/api";
 import { STATIC_EVENTS } from "../utils/events";
@@ -20,6 +29,11 @@ const CalendarApp = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(null);
   const [hoveredDate, setHoveredDate] = useState(null);
+  const [events, setEvents] = useState([]);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState({ title: "", date: null, time: "09:00", description: "", type: "event", notify: true });
+  const [snack, setSnack] = useState({ open: false, message: "" });
+  const checkIntervalRef = useRef(null);
 
   const { data: todos = [], isLoading } = useQuery({
     queryKey: ["todos"],
@@ -93,6 +107,82 @@ const CalendarApp = () => {
     const dayStr = String(date.getDate()).padStart(2, "0");
     const key = `${monthStr}-${dayStr}`;
     return STATIC_EVENTS.filter((e) => e.date === key);
+  };
+
+  const EVENTS_KEY = "fmis_calendar_events_v1";
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(EVENTS_KEY);
+      if (raw) setEvents(JSON.parse(raw));
+    } catch (e) {
+      console.warn("Failed to load calendar events", e);
+      setEvents([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(EVENTS_KEY, JSON.stringify(events));
+    } catch (e) {
+      console.warn("Failed to persist calendar events", e);
+    }
+  }, [events]);
+
+  useEffect(() => {
+    const checkDueEvents = () => {
+      const now = new Date();
+      const pending = events.filter((ev) => !ev.notified && ev.notify && new Date(ev.dateTime) <= now);
+      pending.forEach((ev) => {
+        setSnack({ open: true, message: `${ev.title} is due now` });
+        try {
+          if (window.Notification && Notification.permission === "granted") {
+            new Notification(ev.title, { body: ev.description || "" });
+          }
+        } catch (_e) { /* ignore */ }
+      });
+      if (pending.length > 0) {
+        setEvents((prev) => prev.map((ev) => (pending.some((p) => p.id === ev.id) ? { ...ev, notified: true } : ev)));
+      }
+    };
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+    checkIntervalRef.current = setInterval(checkDueEvents, 20 * 1000);
+    checkDueEvents();
+    return () => clearInterval(checkIntervalRef.current);
+  }, [events]);
+
+  const addEvent = ({ title, date, time, description, type = "event", notify = true }) => {
+    const dateObj = typeof date === "string" ? new Date(date) : date;
+    const dateTime = time ? new Date(`${dateObj.toISOString().split("T")[0]}T${time}:00`) : dateObj;
+    const newEv = { id: `ev-${Date.now()}`, title, description, type, dateTime: dateTime.toISOString(), notified: false, notify };
+    setEvents((prev) => [...prev, newEv]);
+    return newEv;
+  };
+
+  const removeEvent = (id) => setEvents((prev) => prev.filter((p) => p.id !== id));
+
+  const getEventsForDate = (date) => {
+    const dateStr = date.toISOString().split("T")[0];
+    return events.filter((e) => e.dateTime.startsWith(dateStr));
+  };
+
+  const openCreateDialogForDate = (date) => {
+    setForm({ title: "", date: date?.toISOString().split("T")[0] || new Date().toISOString().split("T")[0], time: "09:00", description: "", type: "event", notify: true });
+    setCreating(true);
+  };
+
+  const handleCreateSubmit = () => {
+    try {
+      addEvent({ title: form.title || "Untitled", date: form.date, time: form.time, description: form.description, type: form.type, notify: form.notify });
+      setSnack({ open: true, message: "Event added" });
+      setCreating(false);
+      setForm({ title: "", date: null, time: "09:00", description: "", type: "event", notify: true });
+    } catch (e) {
+      console.error(e);
+      setSnack({ open: true, message: "Failed to add event" });
+    }
   };
 
   return (
@@ -185,11 +275,13 @@ const CalendarApp = () => {
         {calendarDays.map((item, index) => {
           const dateTodos = getTodosForDate(item.date);
           const staticEvents = getStaticEventsForDate(item.date);
+          const localEvents = getEventsForDate(item.date);
           const hasTodos = dateTodos.length > 0;
-          const hasEvents = staticEvents.length > 0;
+          const hasEvents = staticEvents.length > 0 || localEvents.length > 0;
+          const hasLocalEvents = localEvents.length > 0;
           const hasContent = hasTodos || hasEvents;
           const dateStr = item.date.toISOString().split("T")[0];
-          const eventColor = hasEvents ? staticEvents[0].color : null;
+          const eventColor = hasEvents ? (staticEvents[0]?.color || (hasLocalEvents ? '#1976d2' : null)) : null;
 
           // Only show tooltip if there's content
           const tooltipContent = hasContent ? (
@@ -219,6 +311,25 @@ const CalendarApp = () => {
                         variant="caption"
                         sx={{ color: "#ccc", fontSize: "0.7rem" }}
                       >
+                        {event.description}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+
+              {/* Local Events */}
+              {localEvents.length > 0 && (
+                <Box sx={{ mb: hasTodos ? 1 : 0 }}>
+                  <Typography variant="subtitle2" sx={{ color: "#90caf9", mb: 0.5 }}>
+                    {String(localEvents.length)} Event{localEvents.length > 1 ? "s" : ""}
+                  </Typography>
+                  {localEvents.map((event) => (
+                    <Box key={event.id} sx={{ mb: 0.8 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: "#90caf9", fontSize: "0.85rem" }}>
+                        {event.title}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: "#ccc", fontSize: "0.7rem" }}>
                         {event.description}
                       </Typography>
                     </Box>
@@ -391,6 +502,59 @@ const CalendarApp = () => {
           </IconButton>
         </Tooltip>
       </Stack>
+      <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center', gap: 1 }}>
+        <Button size="small" onClick={() => openCreateDialogForDate(selectedDate || new Date())}>Create Task/Event</Button>
+        {selectedDate && (
+          <Button size="small" onClick={() => openCreateDialogForDate(selectedDate)}>Add to Selected Date</Button>
+        )}
+      </Box>
+
+      {/* Selected date events list */}
+      {selectedDate && (
+        <Box sx={{ mt: 2, p: 1, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>Items on {selectedDate.toLocaleDateString()}</Typography>
+          {getStaticEventsForDate(selectedDate).map((ev) => (
+            <Box key={`static-${ev.id}`} sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+              <Typography variant="body2" sx={{ color: ev.color }}>{ev.title}</Typography>
+              <Typography variant="caption" sx={{ color: '#aaa' }}>{ev.description}</Typography>
+            </Box>
+          ))}
+          {getTodosForDate(selectedDate).map((todo) => (
+            <Box key={todo._id} sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+              <Typography variant="body2" sx={{ textDecoration: todo.done ? 'line-through' : 'none' }}>{todo.text}</Typography>
+              <Typography variant="caption" sx={{ color: '#aaa' }}>{todo.dueDate ? new Date(todo.dueDate).toLocaleTimeString() : ''}</Typography>
+            </Box>
+          ))}
+          {getEventsForDate(selectedDate).map((ev) => (
+            <Box key={ev.id} sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+              <Typography variant="body2">{ev.title}</Typography>
+              <Box>
+                <Typography variant="caption" sx={{ color: '#aaa' }}>{new Date(ev.dateTime).toLocaleTimeString()}</Typography>
+                <Button size="small" sx={{ ml: 1 }} onClick={() => removeEvent(ev.id)}>Remove</Button>
+              </Box>
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      {/* Create Dialog */}
+      <Dialog open={creating} onClose={() => setCreating(false)}>
+        <DialogTitle>Create Task / Event</DialogTitle>
+        <DialogContent>
+          <TextField label="Title" fullWidth sx={{ mt: 1 }} value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} />
+          <TextField label="Date" type="date" fullWidth sx={{ mt: 1 }} value={form.date || ''} onChange={(e) => setForm((p) => ({ ...p, date: e.target.value }))} />
+          <TextField label="Time" type="time" fullWidth sx={{ mt: 1 }} value={form.time} onChange={(e) => setForm((p) => ({ ...p, time: e.target.value }))} />
+          <TextField label="Description" fullWidth sx={{ mt: 1 }} multiline rows={3} value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} />
+          <FormControlLabel control={<Checkbox checked={form.notify} onChange={(e) => setForm((p) => ({ ...p, notify: e.target.checked }))} />} label="Notify when due" />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCreating(false)}>Cancel</Button>
+          <Button onClick={handleCreateSubmit} variant="contained">Create</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Snack */}
+      <Snackbar open={snack.open} autoHideDuration={4000} onClose={() => setSnack((s) => ({ ...s, open: false }))} message={snack.message} />
     </Box>
   );
 };
