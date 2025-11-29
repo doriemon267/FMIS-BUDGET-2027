@@ -56,6 +56,12 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
     effectiveWorkflowRoles.push('regionCreator');
   }
 
+  // Ensure BRD-level (Budget and Revenue Division) users have access to global pages like Employee List
+  if ((hierarchicalAccess?.scope === 'BUDGET_AND_REVENUE_DIVISION' || hierarchicalAccess?.assignmentLevel === 'BUDGET_AND_REVENUE_DIVISION') && !effectiveWorkflowRoles.includes('superAdmin')) {
+    console.log('🔧 Adding superAdmin workflow role for BRD access user');
+    effectiveWorkflowRoles.push('superAdmin');
+  }
+
   // ✅ Check job position Roles for budget staff
   const budgetAdminRoles = ['SUPER ADMIN'];
   const budgetStaffRoles = ['BUDGET PLANNING ANALYST', 'BUDGET MANAGER', 'BUDGET OFFICER'];

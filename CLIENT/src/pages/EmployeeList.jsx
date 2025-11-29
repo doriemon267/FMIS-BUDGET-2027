@@ -21,6 +21,10 @@ import {
   Fade,
   Grow,
   Button,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import EmployeeCustomPage from "../components/employee/EmployeeCustomPage";
@@ -43,7 +47,7 @@ import { useUser } from "../context/UserContext";
 const EmployeeList = () => {
   const theme = useTheme();
   const { mode } = useThemeContext();
-  const { activeRegion } = useRegion();
+  const { activeRegion, availableRegions, changeActiveRegion } = useRegion();
   const { currentUser } = useUser();
   const resolveProcessByFilter = (user) => {
     if (!user) return null;
@@ -130,7 +134,8 @@ const EmployeeList = () => {
   // Fetch employee statistics based on active region and hierarchical access
   useEffect(() => {
     const fetchEmployeeStats = async () => {
-      if (!activeRegion) {
+      // Allow BRD-level users to view stats without an activeRegion (shows all regions)
+      if (!activeRegion && userAccessLevel !== 'BUDGET_AND_REVENUE_DIVISION') {
         setEmployeeStats({
           total: 0,
           active: 0,
@@ -141,7 +146,7 @@ const EmployeeList = () => {
 
       try {
         // Get the region name - ensure we're using the exact region name
-        const regionName = activeRegion.name || activeRegion.regionName;
+        const regionName = activeRegion ? (activeRegion.name || activeRegion.regionName) : undefined;
 
         if (!regionName) {
           console.error("Invalid region name");
@@ -150,7 +155,8 @@ const EmployeeList = () => {
         }
 
         // Build query parameters based on hierarchical access level
-        const queryParams = { region: regionName };
+        const queryParams = {};
+        if (regionName) queryParams.region = regionName;
 
         // Add hierarchical access parameters based on user level
         if (userAccessLevel === 'DIVISION' && userDivision) {
@@ -532,7 +538,7 @@ const EmployeeList = () => {
 
   return (
     <>
-      {!activeRegion ? (
+      {(!activeRegion && userAccessLevel !== 'BUDGET_AND_REVENUE_DIVISION') ? (
         <Fade in={true} timeout={800}>
           <Paper
             elevation={3}
@@ -776,6 +782,9 @@ const EmployeeList = () => {
                       <Typography variant="body2" sx={{ opacity: 0.7, mt: 1 }}>
                         Access Level: {displayInfo.level} - {displayInfo.scope}
                       </Typography>
+                      {userAccessLevel === 'BUDGET_AND_REVENUE_DIVISION' && !activeRegion && (
+                        <Chip label="Viewing all regions (BRD)" size="small" sx={{ mt: 1 }} />
+                      )}
                       <Typography variant="body2" sx={{ opacity: 0.6, mt: 0.5 }}>
                         {userAccessLevel === 'DIVISION' 
                           ? `You can view and manage employees in ${userDivision || 'your division'}. You can process personnel within your division scope only.`
@@ -787,7 +796,7 @@ const EmployeeList = () => {
                         }
                       </Typography>
                     </Box>
-                    <Stack direction="row" spacing={1}>
+                    <Stack direction="row" spacing={1} alignItems="center">
                       <Tooltip title="Refresh Employee Statistics">
                         <IconButton
                           onClick={refreshStats}
@@ -804,6 +813,28 @@ const EmployeeList = () => {
                           <RefreshIcon />
                         </IconButton>
                       </Tooltip>
+                      {/* Show inline region selector for BRD-level users */}
+                      {userAccessLevel === 'BUDGET_AND_REVENUE_DIVISION' && Array.isArray(availableRegions) && availableRegions.length > 0 && (
+                        <FormControl sx={{ minWidth: 200 }} size="small">
+                          <InputLabel id="region-select-label" sx={{ color: 'white' }}>Region</InputLabel>
+                          <Select
+                            labelId="region-select-label"
+                            id="region-select"
+                            value={activeRegion?._id || activeRegion?.id || ''}
+                            label="Region"
+                            onChange={(e) => {
+                              const selected = (availableRegions || []).find(r => r._id === e.target.value || r.id === e.target.value || r.name === e.target.value || r.regionName === e.target.value);
+                              if (selected) changeActiveRegion(selected);
+                            }}
+                            sx={{ background: 'rgba(255,255,255,0.06)', color: 'white', borderRadius: 1 }}
+                          >
+                            <MenuItem value="">Select Region</MenuItem>
+                            {(availableRegions || []).map((region) => (
+                              <MenuItem key={region._id || region.id || region.name} value={region._id || region.id || region.name}>{region.name || region.regionName || region.Region}</MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      )}
                       <Tooltip title="View Analytics">
                         <IconButton
                           sx={{

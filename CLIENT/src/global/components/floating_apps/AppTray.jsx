@@ -2,12 +2,14 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { IconButton, Box, Tooltip, Fade, Stack, Paper, Badge } from "@mui/material";
 import { FiGrid, FiClock } from "react-icons/fi";
+import { BsChatDots } from 'react-icons/bs';
 import { BiCalculator } from "react-icons/bi";
 import { MdOutlineChecklist, MdCalendarMonth } from "react-icons/md";
 import { MdClose, MdRemove } from "react-icons/md";
 
 const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, onMinimizeAll }) => {
   const [openTray, setOpenTray] = useState(false);
+  const [chatUnreadCount, setChatUnreadCount] = useState(0);
   const nodeRef = useRef(null);
   const trayHandleRef = useRef(null);
   const focusRefs = useRef([]);
@@ -30,12 +32,13 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
       color: "#6d4c41",
       shortcut: 'Alt+A'
     }, // brown
-    // {
-    //   Icon: BsChatDots,
-    //   label: "Messages",
-    //   id: "chat",
-    //   color: "#00b0ff", // Telegram-like blue
-    // },
+    {
+      Icon: BsChatDots,
+      label: "Messages",
+      id: "chat",
+      color: "#00b0ff", // Telegram-like blue
+      shortcut: 'Alt+M'
+    },
   ], []);
 
   // Close tray when clicking outside or pressing Escape
@@ -58,6 +61,37 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [openTray, apps]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      try {
+        const c = e?.detail?.count || 0;
+        // Check persisted setting
+        const chatSettings = JSON.parse(localStorage.getItem('chatSettings') || '{}');
+        if (chatSettings && chatSettings.badge === false) {
+          setChatUnreadCount(0);
+          return;
+        }
+        setChatUnreadCount(Number(c));
+      } catch (ex) {}
+    };
+    window.addEventListener('chat-unread', handler);
+    const storageHandler = (e) => {
+      if (e.key === 'chatSettings') {
+        try {
+          const s = JSON.parse(e.newValue || '{}');
+          if (s && s.badge === false) setChatUnreadCount(0);
+        } catch (err) {}
+      }
+    };
+    window.addEventListener('storage', storageHandler);
+    return () => { window.removeEventListener('chat-unread', handler); window.removeEventListener('storage', storageHandler); };
+    // Load persisted chat badge setting to manage initial unread
+    try {
+      const s = JSON.parse(localStorage.getItem('chatSettings') || '{}');
+      if (s && s.badge === false) setChatUnreadCount(0);
+    } catch (e) {}
+  }, []);
 
   // When tray opens, focus on the first visual app (top of stack).
   useEffect(() => {
@@ -179,8 +213,9 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
                 <Badge
                   overlap="circular"
                   color="primary"
-                  variant="dot"
-                  invisible={!isOpen}
+                  variant={id === 'chat' && chatUnreadCount > 0 ? 'standard' : 'dot'}
+                  badgeContent={id === 'chat' && chatUnreadCount > 0 ? chatUnreadCount : undefined}
+                  invisible={id !== 'chat' ? !isOpen : false}
                 >
                 <IconButton
                   role="menuitem"

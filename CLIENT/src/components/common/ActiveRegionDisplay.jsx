@@ -75,22 +75,10 @@ const ActiveRegionDisplay = ({ variant = 'default', showButton = true }) => {
   const regionName = (activeRegion && (activeRegion.name || activeRegion.regionName || activeRegion.Region))
     || regionLabelFromHA;
 
+  const isFullScope = scope === 'FULL';
+
   // If no activeRegion, try to still show assignment chips from hierarchical access
   if (!activeRegion) {
-    // Special case: admins with full access
-    if (scope === 'FULL') {
-      return (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Chip
-            icon={<AccountTreeIcon />}
-            label="Full Access"
-            color="success"
-            size="small"
-            sx={{ fontWeight: 600 }}
-          />
-        </Box>
-      );
-    }
 
     // If user has any assignment info, reflect it instead of showing "No Region Assigned"
     if (divisionLabel || departmentLabel || regionLabelFromHA) {
@@ -130,16 +118,29 @@ const ActiveRegionDisplay = ({ variant = 'default', showButton = true }) => {
     // No assignments found at all
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Chip
-          icon={<LocationIcon />}
-          label="No Region Assigned"
-          color="error"
-          size="small"
-          sx={{ fontWeight: 500 }}
-        />
-        <Typography variant="caption" color="text.secondary">
-          Contact administrator
-        </Typography>
+        {isFullScope && (
+          <Chip
+            icon={<AccountTreeIcon />}
+            label="Full Access"
+            color="success"
+            size="small"
+            sx={{ fontWeight: 600 }}
+          />
+        )}
+        {!isFullScope && (
+          <>
+            <Chip
+              icon={<LocationIcon />}
+              label="No Region Assigned"
+              color="error"
+              size="small"
+              sx={{ fontWeight: 500 }}
+            />
+            <Typography variant="caption" color="text.secondary">
+              Contact administrator
+            </Typography>
+          </>
+        )}
       </Box>
     );
   }
@@ -149,9 +150,19 @@ const ActiveRegionDisplay = ({ variant = 'default', showButton = true }) => {
     const primaryLabel = divisionLabel || departmentLabel || regionName;
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Chip
-          icon={<LocationIcon />}
-          label={primaryLabel}
+        {isFullScope && (
+          <Chip
+            icon={<AccountTreeIcon />}
+            label="Full Access"
+            color="success"
+            size="small"
+            sx={{ fontWeight: 600 }}
+          />
+        )}
+        {primaryLabel && (
+          <Chip
+            icon={<LocationIcon />}
+            label={primaryLabel}
           color="primary"
           size="small"
           onClick={hasMultipleRegions() ? handleRegionMenuClick : undefined}
@@ -164,7 +175,8 @@ const ActiveRegionDisplay = ({ variant = 'default', showButton = true }) => {
               backgroundColor: '#2e4e2e'
             } : {}
           }}
-        />
+          />
+        )}
         {hasMultipleRegions() && (
           <ExpandMoreIcon 
             sx={{ 
@@ -204,6 +216,15 @@ const ActiveRegionDisplay = ({ variant = 'default', showButton = true }) => {
   // Default variant with more information
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      {isFullScope && (
+        <Chip
+          icon={<AccountTreeIcon />}
+          label="Full Access"
+          color="success"
+          size="small"
+          sx={{ fontWeight: 600 }}
+        />
+      )}
       {divisionLabel && (
         <Chip
           icon={<AccountTreeIcon />}

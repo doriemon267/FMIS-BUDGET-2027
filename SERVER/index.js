@@ -1,4 +1,11 @@
 require("dotenv").config();
+// Normalize a few env variable names for developer convenience (do not override explicit settings)
+// Ensure we use what the user's `.env` provides; allow multiple aliases while respecting user values
+process.env.MONGODB_URI = process.env.MONGODB_URI || process.env.MONGODB_BUDGET_URL || process.env.MONGODB_MAIN_URL || process.env.MONGODB_URL;
+process.env.MONGODB_BUDGET_URL = process.env.MONGODB_BUDGET_URL || process.env.MONGODB_URI;
+process.env.MONGODB_MAIN_URL = process.env.MONGODB_MAIN_URL || process.env.MONGODB_URI;
+process.env.JWT_SECRET_KEY = process.env.JWT_SECRET_KEY || process.env.JWT_SECRET || process.env.SECRET_KEY;
+// Keep ALLOW_MOCK_AUTH exactly as provided: no normalization here so .env determines its value
 // If DEP0123 or other warnings are listed in SUPPRESS_NODE_DEPRECATION_WARNINGS,
 // set process.noDeprecation = true as early as possible to suppress Node deprecation warnings
 // and also filter the emitted 'warning' events that match codes in that list.
@@ -82,6 +89,8 @@ const cookieParser = require("cookie-parser");
 const cors = require("cors");
 const http = require("http");
 const socketIo = require("socket.io");
+const jwt = require('jsonwebtoken');
+const { resolveUserIdentity } = require('./utils/requestContext');
 const personnelRoutes = require("./routers/personnel");
 const positionTitleRoutes = require("./routers/PositionTitle");
 const departmentRouter = require("./routers/Department");
@@ -225,9 +234,22 @@ mongoose.connection.once('open', async () => {
   }
 });
 const app = express();
+// Startup diagnostics: log which critical env variables are present (redact tokens)
+console.log('[Server] Startup env diagnostics:');
+console.log('  DEBUG_MODE:', process.env.DEBUG_MODE === 'true');
+console.log('  ALLOW_MOCK_AUTH:', process.env.ALLOW_MOCK_AUTH === 'true');
+console.log('  JWT_SECRET_KEY set:', !!process.env.JWT_SECRET_KEY);
+console.log('  MONGODB_URI resolved to:', (!!process.env.MONGODB_URI) ? process.env.MONGODB_URI : '(not set)');
+console.log('  MONGODB_BUDGET_URL:', (!!process.env.MONGODB_BUDGET_URL) ? process.env.MONGODB_BUDGET_URL : '(not set)');
+console.log('  MONGODB_MAIN_URL:', (!!process.env.MONGODB_MAIN_URL) ? process.env.MONGODB_MAIN_URL : '(not set)');
+if (!process.env.MONGODB_URI && !process.env.MONGODB_BUDGET_URL && !process.env.MONGODB_MAIN_URL) {
+  console.warn('[Server] ⚠️ No MongoDB URI found in .env (MONGODB_URI or MONGODB_BUDGET_URL or MONGODB_MAIN_URL). The server will likely fail to connect.');
+}
 // Attach workflowRef middleware early so body gets populated before routers
 const attachWorkflowRef = require('./middleware/attachWorkflowRef');
 const server = http.createServer(app);
+// Ensure default port uses .env but provide safe default
+process.env.APP_PORT = process.env.APP_PORT || process.env.PORT || '5005';
 // Socket.IO setup with explicit allowed origins (separate from Express CORS)
 const allowedSocketOrigins = [
   process.env.CLIENT1,
@@ -244,6 +266,109 @@ const io = socketIo(server, {
     origin: allowedSocketOrigins,
     methods: ["GET", "POST"],
     credentials: true
+  }
+});
+const Message = require('./models/Message');
+
+// Socket authentication middleware
+io.use(async (socket, next) => {
+  try {
+    // DEVELOPMENT: allow dev-only mock auth using X-Dev-User-Id header
+    const allowMockAuth = process.env.ALLOW_MOCK_AUTH === 'true' || process.env.DEBUG_MODE === 'true';
+    if (allowMockAuth && process.env.DEBUG_MODE === 'true') {
+      console.debug('[SocketAuth] DEBUG_MODE is on; allowMockAuth enabled for local testing');
+    }
+      const devUserIdHeader = socket.handshake.headers['x-dev-user-id'] || socket.handshake.headers['X-Dev-User-Id'];
+      const devUserIdAuth = socket.handshake.auth && (socket.handshake.auth.devUserId || socket.handshake.auth.xDevUserId);
+      if (allowMockAuth && (devUserIdHeader || devUserIdAuth)) {
+        const uid = String(devUserIdHeader || devUserIdAuth).trim();
+        const user = { Id: uid, id: uid, userId: uid, Username: [uid], Roles: ['DEVELOPER'], name: uid };
+        const identity = await resolveUserIdentity({ user, headers: socket.handshake.headers });
+        socket.user = user;
+        socket.identity = identity;
+        console.debug('[SocketAuth] Mock auth via devUserId:', uid);
+        return next();
+      }
+    // Extract token from handshake auth or Authorization header
+    const tokenFromAuth = socket.handshake.auth && socket.handshake.auth.token;
+    const authHeader = socket.handshake.headers && (socket.handshake.headers.authorization || socket.handshake.headers.Authorization);
+    const token = tokenFromAuth || (authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null);
+    if (debugMode || process.env.ALLOW_MOCK_AUTH === 'true') {
+      console.debug('[SocketAuth] tokenFromAuthPresent:', !!tokenFromAuth, 'authHeaderPresent:', !!authHeader, 'tokenPresent:', !!token);
+      if (socket.handshake.auth && (socket.handshake.auth.devUserId || socket.handshake.auth.xDevUserId)) {
+        console.debug('[SocketAuth] handshake.auth contains devUserId');
+      }
+    }
+
+    if (!token) {
+      if (allowMockAuth && (devUserIdHeader || devUserIdAuth)) {
+        // Should have taken the mock path earlier, but just in case, allow it here
+        const uid = String(devUserIdHeader || devUserIdAuth).trim();
+        const user = { Id: uid, id: uid, userId: uid, Username: [uid], Roles: ['DEVELOPER'], name: uid };
+        socket.user = user;
+        const identity = await resolveUserIdentity({ user, headers: socket.handshake.headers });
+        socket.identity = identity;
+        console.debug('[SocketAuth] Fallback: mock auth from devUserId in handshake');
+      } else {
+        console.warn('[SocketAuth] No token in handshake and no devUserId available, refusing connection');
+        return next(new Error('Authentication error: token missing'));
+      }
+    }
+
+    const payload = jwt.verify(token, process.env.JWT_SECRET_KEY);
+    if (!payload) return next(new Error('Authentication error: token invalid'));
+
+    // Build a minimal user object similar to checkToken middleware
+    let userId = null;
+    if (payload.Username && Array.isArray(payload.Username) && payload.Username[0]) userId = payload.Username[0];
+    else if (payload.Username) userId = payload.Username;
+    else if (payload.userId) userId = payload.userId;
+    else if (payload.Id) userId = payload.Id;
+    else if (payload.id) userId = payload.id;
+    else if (payload.sub) userId = payload.sub;
+    else if (payload.user_id) userId = payload.user_id;
+    else if (payload.username) userId = payload.username;
+
+    if (!userId && payload.accessToken && process.env.ACCOUNT_USER_API_URL) {
+      // In production, we might fetch user details from account API. Keep this async call optional and guarded.
+      try {
+        const res = await fetch(process.env.ACCOUNT_USER_API_URL, { headers: { Authorization: `Bearer ${payload.accessToken}` } });
+        if (res.ok) {
+          const u = await res.json();
+          userId = u.userId || u.id || u.Username?.[0] || u.username;
+        }
+      } catch (err) {
+        // ignore; proceed to fail if userId still not found
+      }
+    }
+
+    if (!userId) return next(new Error('Authentication error: cannot determine user id'));
+
+    // Normalize roles
+    let roles = payload.roles || payload.role || payload.Roles;
+    const devRolesHeader = socket.handshake.headers['x-dev-roles'] || socket.handshake.headers['X-Dev-Roles'];
+    if (devRolesHeader) roles = devRolesHeader.split(',').map(r => r.trim());
+    if (typeof roles === 'string') roles = [roles];
+
+    const normalizedRoles = (roles || []).map(r => typeof r === 'string' ? r.replace(/\s+/g, '_').toUpperCase() : r);
+
+    const user = {
+      Id: String(userId),
+      id: String(userId),
+      userId: String(userId),
+      Username: Array.isArray(payload.Username) ? payload.Username : (payload.Username ? [payload.Username] : [String(userId)]),
+      Roles: normalizedRoles,
+      name: payload.name || payload.username || String(userId)
+    };
+
+    // Enrich identity from DB or assignment if available
+    const identity = await resolveUserIdentity({ user, headers: socket.handshake.headers });
+    socket.user = user;
+    socket.identity = identity;
+    return next();
+  } catch (err) {
+    console.warn('Socket authentication failed', err.message);
+    return next(new Error('Authentication error'));
   }
 });
 // MIDDLEWARE
@@ -498,6 +623,8 @@ app.use(retireeRouter);
 app.use(budgetarySupportRoutes);
 app.use(chartOfAccountsCRUDRouter);
 app.use(titleMappingRouter);
+// Chat router
+app.use('/api/chat', require('./routers/chatRoutes'));
 // Legacy user-region and organizational assignment routers removed in favor of hierarchical RBAC
 // const userRegionAssignmentRouter = require('./routers/UserRegionAssignmentRoutes');
 // app.use("/api", userRegionAssignmentRouter);
@@ -516,14 +643,35 @@ app.use(employeeMasterRouter);
 const mooeExcelUploadRouter = require("./routers/mooeExcelUploadRoutes");
 app.use("/income", mooeExcelUploadRouter); // Mount under /income prefix for MOOE upload
 
+// Presence map for online users: Map<userId, count>
+// global.onlineUsers maps userId => { count: number, lastConnectedAt: number }
+global.onlineUsers = global.onlineUsers || new Map();
+
 // WebSocket connection handling
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
+  if (debugMode || process.env.ALLOW_MOCK_AUTH === 'true') {
+    try { console.debug(`[Socket] connected: ${socket.id} user=${JSON.stringify(socket.user)} onlineCount=${global.onlineUsers?.size || 0}`); } catch (e) {}
+  }
+  const uid = socket.user && (socket.user.Id || socket.user.id || socket.user.userId);
+  if (uid) {
+    const normalizedUid = String(uid);
+    const existing = global.onlineUsers.get(normalizedUid) || { count: 0, lastConnectedAt: null };
+    const updated = { count: existing.count + 1, lastConnectedAt: Date.now() };
+    global.onlineUsers.set(normalizedUid, updated);
+    // Notify all clients about who is online (filtered client-side)
+    try { io.emit('presence-update', { userId: normalizedUid, status: 'online' }); } catch (e) { }
+  }
 
   // Join user-specific room for targeted updates
   socket.on('join-user-room', (userId) => {
-    socket.join(`user_${userId}`);
-    console.log(`User ${userId} joined room user_${userId}`);
+    const authUserId = socket.user && (socket.user.Id || socket.user.id || socket.user.userId);
+    // Admins may request to join arbitrary user rooms; otherwise default to authenticated user
+    const allowAdminJoin = socket.user?.Roles?.includes('SUPER_ADMIN') || socket.user?.Roles?.includes('ADMIN');
+    const targetUserId = (allowAdminJoin && userId) ? userId : authUserId;
+    if (!targetUserId) return;
+    socket.join(`user_${targetUserId}`);
+    if (debugMode || process.env.ALLOW_MOCK_AUTH === 'true') console.debug(`Socket ${socket.id} joined user_${targetUserId}`);
   });
 
   // Join admin room for broadcasting permission updates
@@ -551,6 +699,80 @@ io.on('connection', (socket) => {
   // Handle disconnect
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
+    if (debugMode || process.env.ALLOW_MOCK_AUTH === 'true') {
+      try { console.debug(`[Socket] disconnected: ${socket.id} user=${JSON.stringify(socket.user)} onlineCount=${global.onlineUsers?.size || 0}`); } catch (e) {}
+    }
+    const uid = socket.user && (socket.user.Id || socket.user.id || socket.user.userId);
+    if (uid) {
+      const normalizedUid = String(uid);
+      const existing = global.onlineUsers.get(normalizedUid) || { count: 0, lastConnectedAt: null };
+      const current = existing.count;
+      if (current <= 1) {
+        global.onlineUsers.delete(normalizedUid);
+        try { io.emit('presence-update', { userId: normalizedUid, status: 'offline' }); } catch (e) { }
+      } else {
+          global.onlineUsers.set(normalizedUid, { count: current - 1, lastConnectedAt: existing.lastConnectedAt });
+      }
+    }
+  });
+
+  // Chat message sent from a client via socket
+  socket.on('chat-send', async (data) => {
+    try {
+      // Data should contain { to, text, metadata }
+      const from = socket.user && (socket.user.Id || socket.user.id || socket.user.userId);
+      const to = data.to;
+      const text = data.text;
+      const metadata = data.metadata || {};
+      if (!from || !to || !text) return;
+      const saved = await Message.create({ from, to, text, metadata });
+      // Enrich message metadata with sender toast-friendly name for client notifications (dev & prod)
+      try {
+        const HierarchicalUserAssignment = require('./models/HierarchicalUserAssignment');
+        const User = require('./models/User');
+        let fromName = null;
+        const assign = await HierarchicalUserAssignment.findOne({ userId: String(from) }).lean();
+        if (assign?.userName) fromName = assign.userName;
+        if (!fromName) {
+          const u = await User.findOne({ userId: String(from) }).lean();
+          fromName = u?.name || null;
+        }
+        if (fromName) {
+          saved.metadata = saved.metadata || {};
+          saved.metadata.fromName = fromName;
+        }
+      } catch (err) {
+        // ignore enrich errors
+      }
+      // Emit to the recipient and sender rooms
+      global.io.to(`user_${to}`).emit('chat-message', saved);
+      global.io.to(`user_${from}`).emit('chat-message', saved);
+    } catch (e) {
+      console.error('Error handling chat-send socket event:', e.stack || e.message);
+    }
+  });
+
+  // Typing indicator events
+  socket.on('typing-start', (data) => {
+    try {
+      const from = socket.user && (socket.user.Id || socket.user.id || socket.user.userId);
+      const to = data?.to;
+      if (!from || !to) return;
+      global.io.to(`user_${to}`).emit('typing-start', { from, to });
+    } catch (e) {
+      console.error('typing-start handler error', e.message);
+    }
+  });
+
+  socket.on('typing-stop', (data) => {
+    try {
+      const from = socket.user && (socket.user.Id || socket.user.id || socket.user.userId);
+      const to = data?.to;
+      if (!from || !to) return;
+      global.io.to(`user_${to}`).emit('typing-stop', { from, to });
+    } catch (e) {
+      console.error('typing-stop handler error', e.message);
+    }
   });
 });
 

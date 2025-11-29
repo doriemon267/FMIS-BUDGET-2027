@@ -2,10 +2,10 @@ export const getFilteredDepartments = (regionId, organizationStructure) => {
   if (!organizationStructure?.availableUnits?.departments) {
     return [];
   }
-  let depts = organizationStructure.availableUnits.departments;
+  let depts = organizationStructure?.availableUnits?.departments || [];
   if (regionId) {
     const regionMappings =
-      organizationStructure.mappings?.filter(
+      organizationStructure?.mappings?.filter(
         (mapping) => mapping.regionId === regionId
       ) || [];
     const departmentIds = regionMappings.map((mapping) => mapping.departmentId);
@@ -33,7 +33,7 @@ export const getAvailableDivisions = (
     return [];
   }
   let deptsWithDivisions =
-    organizationStructure.availableUnits.departmentsWithDivisions;
+    organizationStructure?.availableUnits?.departmentsWithDivisions || [];
   if (regionId) {
     deptsWithDivisions = deptsWithDivisions.filter(
       (dept) => dept.regionId === regionId
@@ -58,7 +58,7 @@ export const getDepartmentsWithDivisions = (
   if (!organizationStructure?.availableUnits?.departmentsWithDivisions) {
     return [];
   }
-  let depts = organizationStructure.availableUnits.departmentsWithDivisions;
+  let depts = organizationStructure?.availableUnits?.departmentsWithDivisions || [];
   if (regionId) {
     depts = depts.filter((dept) => dept.regionId === regionId);
   }
@@ -84,7 +84,7 @@ export const selectedDepartmentHasDivisions = (
     return false;
   }
   let deptsWithDivisions =
-    organizationStructure.availableUnits.departmentsWithDivisions;
+    organizationStructure?.availableUnits?.departmentsWithDivisions || [];
   if (regionId) {
     deptsWithDivisions = deptsWithDivisions.filter(
       (dept) => dept.regionId === regionId

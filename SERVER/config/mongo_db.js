@@ -20,6 +20,11 @@ module.exports = async () => {
         await db.admin().ping();
     } catch (e) {
         console.error('❌ Error connecting to MongoDB:', e.message)
+        // In DEBUG or when mock auth is enabled, don't crash the entire server - log and allow the server to boot
+        if (process.env.DEBUG_MODE === 'true' || process.env.ALLOW_MOCK_AUTH === 'true') {
+            console.warn('⚠️ Starting server in debug/mock mode without active MongoDB connection. Some features will be limited.');
+            return; // return early; server continues without DB
+        }
         process.exit(1)
     }
 }

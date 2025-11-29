@@ -2,11 +2,19 @@
 import { useState, useEffect, lazy, Suspense, useCallback, useMemo } from "react";
 import AppTray from "./AppTray";
 import FloatingAppWindow from "./FloatingAppWindow";
-const CalculatorApp = lazy(() => import("./apps/CalculatorApp"));
-const TodoApp = lazy(() => import("./apps/TodoApp"));
-const ClockApp = lazy(() => import("./apps/ClockApp"));
-const CalendarApp = lazy(() => import("./apps/CalendarApp"));
-// import ChatApp from "./apps/ChatApp"; // Chat app currently unused/commented
+const importWithDebug = (importer, name) => lazy(async () => {
+  try {
+    return await importer();
+  } catch (err) {
+    console.error(`[AppTrayLauncher] Failed to import ${name}:`, err);
+    throw err;
+  }
+});
+const CalculatorApp = importWithDebug(() => import("./apps/CalculatorApp"), 'CalculatorApp');
+const TodoApp = importWithDebug(() => import("./apps/TodoApp"), 'TodoApp');
+const ClockApp = importWithDebug(() => import("./apps/ClockApp"), 'ClockApp');
+const CalendarApp = importWithDebug(() => import("./apps/CalendarApp"), 'CalendarApp');
+const ChatApp = importWithDebug(() => import("./apps/ChatApp"), 'ChatApp');
 
 const AppTrayLauncher = () => {
   console.debug('[AppTrayLauncher] render start');
@@ -15,6 +23,7 @@ const AppTrayLauncher = () => {
     todo: { title: "Todo List", component: <TodoApp /> },
     clock: { title: "Clock", component: <ClockApp /> },
     calendar: { title: "Calendar", component: <CalendarApp /> },
+    chat: { title: 'Messages', component: <ChatApp /> },
   }), []);
 
   const [openApps, setOpenApps] = useState(() => {
@@ -108,6 +117,8 @@ const AppTrayLauncher = () => {
             e.preventDefault(); handleAppOpen('clock'); break;
           case 'a':
             e.preventDefault(); handleAppOpen('calendar'); break;
+          case 'm':
+            e.preventDefault(); handleAppOpen('chat'); break;
           default:
             break;
         }
@@ -163,7 +174,7 @@ const AppTrayLauncher = () => {
           const winComponent = component || cfg.component;
           console.debug('[AppTrayLauncher] rendering window', id, { defaultPosition, minimized });
           return minimized ? null : (
-            <Suspense key={key} fallback={<div />}>
+            <Suspense key={key} fallback={<div style={{ padding: 8, color: '#999' }}>Loading application...</div>}>
               <FloatingAppWindow
                 // key applied on Suspense
                 title={winTitle}

@@ -73,10 +73,46 @@ export const RegionProvider = ({ children }) => {
           return; // Exit early, no need to call API
         }
 
-        // If no regions in UserContext, the UserContext will handle the API call
-        // We just wait for it to update currentUser.regions
+        // If the user has FULL access or BRD-level access, fetch all available regions
+        const userScope = currentUser.hierarchicalAccess?.scope || currentUser.hierarchicalAccess?.assignmentLevel || 'REGION';
+        if (
+          userScope === 'FULL' ||
+          userScope === 'BUDGET_AND_REVENUE_DIVISION' ||
+          currentUser.Roles?.some(r => String(r).toUpperCase().includes('BRD'))
+        ) {
+          try {
+            const res = await api.get('/api/regions');
+            const rawRegions = Array.isArray(res.data) ? res.data : (res.data?.regions || []);
+            const regions = rawRegions.map((r) => ({
+              id: r._id || r.id,
+              _id: r._id || r.id,
+              name: r.regionName || r.Region || r.name,
+              regionName: r.regionName || r.Region || r.name,
+              Region: r.regionName || r.Region || r.name,
+            }));
+            setAvailableRegions(regions);
+
+            const savedRegion = localStorage.getItem('activeRegion');
+            if (savedRegion) {
+              try {
+                const parsed = JSON.parse(savedRegion);
+                // verify region exists
+                const verified = regions.find(r => r._id === parsed._id || r.name === parsed.name || r.Region === parsed.Region || r.regionName === parsed.regionName);
+                if (verified) {
+                  setActiveRegion(verified);
+                  localStorage.setItem('activeRegion', JSON.stringify(verified));
+                }
+              } catch (e) {}
+            }
+            // Do not automatically pick a default region to force selection if none saved
+            setLoading(false);
+            return;
+          } catch (err) {
+            console.error('Failed to fetch regions for BRD or FULL access', err);
+          }
+        }
         
-        // Set a timeout to prevent infinite loading
+        // Set a timeout to surface lack of assigned regions if user isn't BRD/FULL
         setTimeout(() => {
           if (!currentUser.regions || currentUser.regions.length === 0) {
             setError("No region assignments found. Please contact your administrator.");
@@ -95,6 +131,14 @@ export const RegionProvider = ({ children }) => {
   // Function to switch between assigned regions (if user has multiple)
   const changeActiveRegion = (region) => {
     if (!region) {
+      // Prevent clearing region for normal users but allow BRD/FULL users
+      const userScope = currentUser?.hierarchicalAccess?.scope || currentUser?.hierarchicalAccess?.assignmentLevel;
+      if (userScope === 'FULL' || userScope === 'BUDGET_AND_REVENUE_DIVISION' || currentUser?.Roles?.some(r => String(r).toUpperCase().includes('BRD'))) {
+        setActiveRegion(null);
+        localStorage.removeItem('activeRegion');
+        toast.info('Active region cleared');
+        return;
+      }
       toast.warning('You must have an active region. Cannot clear region selection.');
       return;
     }
@@ -123,6 +167,18 @@ export const RegionProvider = ({ children }) => {
     localStorage.setItem('activeRegion', JSON.stringify(region));
     const regionName = region.name || region.regionName || region.Region;
     toast.success(`Switched to ${regionName} region`);
+  };
+
+  // Clear the active region explicitly
+  const clearActiveRegion = () => {
+    const userScope = currentUser?.hierarchicalAccess?.scope || currentUser?.hierarchicalAccess?.assignmentLevel;
+    if (userScope === 'FULL' || userScope === 'BUDGET_AND_REVENUE_DIVISION' || currentUser?.Roles?.some(r => String(r).toUpperCase().includes('BRD'))) {
+      setActiveRegion(null);
+      localStorage.removeItem('activeRegion');
+      toast.info('Active region cleared');
+      return;
+    }
+    toast.warning('You cannot clear the region for your access level.');
   };
 
   // Function to get a region by its name or ID
@@ -158,6 +214,7 @@ export const RegionProvider = ({ children }) => {
     loading,
     error,
     changeActiveRegion,
+    clearActiveRegion,
     getRegionByNameOrId,
     hasRegionAccess,
     hasMultipleRegions,

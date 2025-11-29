@@ -723,7 +723,7 @@ const HierarchicalUserAssignmentPage = () => {
       return 'Not Available';
     }
 
-    const { offices = [], responsibilityCenters = [] } = organizationStructure.availableUnits;
+    const { offices = [], responsibilityCenters = [] } = organizationStructure?.availableUnits || {};
 
     // For FULL access, show special message
     if (normalizeAssignmentLevel(assignment.assignmentLevel) === 'FULL') {

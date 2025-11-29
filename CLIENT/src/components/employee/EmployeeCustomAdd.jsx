@@ -69,7 +69,7 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
   const { mode } = useThemeContext();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { currentUser } = useUser(); // Add this line to get currentUser from context
-  const { activeRegion } = useRegion(); // Add this line to get activeRegion from context
+  const { activeRegion, availableRegions } = useRegion(); // Add this line to get activeRegion from context and availableRegions
   const queryClient = useQueryClient(); // Add this line to get queryClient
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -235,14 +235,14 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
           // Set department options based on active region
           if (activeRegion) {
             const regionMappings =
-              response.data.data.mappings?.filter(
+              response.data.data?.mappings?.filter(
                 (mapping) => mapping.regionId === activeRegion._id
               ) || [];
             const departmentIds = regionMappings.map(
               (mapping) => mapping.departmentId
             );
             const depts =
-              response.data.data.availableUnits?.departments?.filter((dept) =>
+              response.data.data?.availableUnits?.departments?.filter((dept) =>
                 departmentIds.includes(dept.id)
               ) || [];
             setDepartmentOptions(depts);
@@ -264,15 +264,15 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
   // Update department options when activeRegion changes
   useEffect(() => {
     if (organizationStructure && activeRegion) {
-      const regionMappings =
-        organizationStructure.mappings?.filter(
+            const regionMappings =
+              organizationStructure?.mappings?.filter(
           (mapping) => mapping.regionId === activeRegion._id
         ) || [];
       const departmentIds = regionMappings.map(
         (mapping) => mapping.departmentId
       );
       const depts =
-        organizationStructure.availableUnits?.departments?.filter((dept) =>
+        organizationStructure?.availableUnits?.departments?.filter((dept) =>
           departmentIds.includes(dept.id)
         ) || [];
       setDepartmentOptions(depts);
@@ -295,7 +295,7 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
 
         // Find the department in the hierarchical structure
         const departmentsWithDivisions =
-          organizationStructure.availableUnits?.departmentsWithDivisions || [];
+          organizationStructure?.availableUnits?.departmentsWithDivisions || [];
         const matched = departmentsWithDivisions.find(
           (d) =>
             String(d.departmentName).toLowerCase() ===
@@ -318,7 +318,7 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
         } else {
           // Find the selected division in the hierarchical structure
           const departmentsWithDivisions =
-            organizationStructure.availableUnits?.departmentsWithDivisions ||
+            organizationStructure?.availableUnits?.departmentsWithDivisions ||
             [];
           const matchedDept = departmentsWithDivisions.find((dept) =>
             dept.divisions?.some((div) => div.name === divName)
@@ -355,15 +355,17 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
   useEffect(() => {
     const regionValue = watch("Region");
     if (regionValue && organizationStructure) {
+      const regionId = regionValue?._id || regionValue;
+      const regionName = regionValue?.regionName || regionValue;
       const regionMappings =
-        organizationStructure.mappings?.filter(
-          (mapping) => mapping.regionId === regionValue._id || mapping.regionName === regionValue
+        organizationStructure?.mappings?.filter(
+          (mapping) => mapping.regionId === regionId || mapping.regionName === regionName
         ) || [];
       const departmentIds = regionMappings.map(
         (mapping) => mapping.departmentId
       );
       const depts =
-        organizationStructure.availableUnits?.departments?.filter((dept) =>
+        organizationStructure?.availableUnits?.departments?.filter((dept) =>
           departmentIds.includes(dept.id)
         ) || [];
       setDepartmentOptions(depts);
@@ -376,7 +378,7 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
     if (deptValue && organizationStructure) {
       // Find the department in the hierarchical structure
       const departmentsWithDivisions =
-        organizationStructure.availableUnits?.departmentsWithDivisions || [];
+        organizationStructure?.availableUnits?.departmentsWithDivisions || [];
       const matched = departmentsWithDivisions.find(
         (d) =>
           String(d.departmentName).toLowerCase() ===
@@ -399,7 +401,7 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
     if (divValue && organizationStructure) {
       // Find the selected division in the hierarchical structure
       const departmentsWithDivisions =
-        organizationStructure.availableUnits?.departmentsWithDivisions ||
+        organizationStructure?.availableUnits?.departmentsWithDivisions ||
         [];
       const matchedDept = departmentsWithDivisions.find((dept) =>
         dept.divisions?.some((div) => div.name === divValue)
@@ -593,8 +595,9 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
   const handleConfirmSave = async () => {
     const data = formDataToSave;
     
-    // Check if a region is selected
-    if (!activeRegion) {
+    // Check if a region is selected - allow BRD users to specify Region in the form when activeRegion not set
+    const selectedRegionValue = activeRegion || data.Region;
+    if (!selectedRegionValue) {
       toast.error("Please select a region before adding an employee", {
         style: {
           borderRadius: "10px",
@@ -651,8 +654,8 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
       // Continue with save if duplicate check fails (don't block the user)
     }
 
-    // Ensure the Region field is set to the active region
-    data.Region = activeRegion.name || activeRegion.regionName;
+    // Ensure the Region field is set to the selected region value
+    data.Region = (activeRegion ? (activeRegion.name || activeRegion.regionName) : data.Region) || selectedRegionValue;
 
     // Add employee status field if not present
     if (!data.employeeStatus) {
@@ -1063,6 +1066,18 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                             sx={{ display: "none" }}
                           />
                         </Paper>
+                      ) : userAccessLevel === 'BUDGET_AND_REVENUE_DIVISION' ? (
+                        <Box sx={{ mb: 2 }}>
+                          <CustomAutoComplete
+                            fieldName="Region"
+                            label="Region"
+                            options={availableRegions || []}
+                            control={control}
+                            getOptionLabel={(opt) => opt.name || opt.regionName || opt.Region || opt}
+                            required
+                            rules={{ required: "Region is required for BRD users" }}
+                          />
+                        </Box>
                       ) : (
                         <Alert
                           severity="warning"

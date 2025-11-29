@@ -364,7 +364,7 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
 
         // Find the department in the hierarchical structure
         const departmentsWithDivisions =
-          organizationStructure.availableUnits?.departmentsWithDivisions || [];
+          organizationStructure?.availableUnits?.departmentsWithDivisions || [];
         const matched = departmentsWithDivisions.find(
           (d) =>
             String(d.departmentName).toLowerCase() ===
@@ -392,7 +392,7 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
           } else {
             // Find the selected division in the hierarchical structure
             const departmentsWithDivisions =
-              organizationStructure.availableUnits?.departmentsWithDivisions ||
+              organizationStructure?.availableUnits?.departmentsWithDivisions ||
               [];
             const matchedDept = departmentsWithDivisions.find((dept) =>
               dept.divisions?.some((div) => div.name === divName)
@@ -429,16 +429,18 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
   // Handle default Region value changes - fetch departments
   useEffect(() => {
     const regionValue = watch("Region");
-    if (regionValue && organizationStructure) {
-      const regionMappings =
-        organizationStructure.mappings?.filter(
-          (mapping) => mapping.regionId === regionValue._id || mapping.regionName === regionValue
-        ) || [];
+      if (regionValue && organizationStructure) {
+        const regionId = regionValue?._id || regionValue;
+        const regionName = regionValue?.regionName || regionValue;
+        const regionMappings =
+          organizationStructure?.mappings?.filter(
+            (mapping) => mapping.regionId === regionId || mapping.regionName === regionName
+          ) || [];
       const departmentIds = regionMappings.map(
         (mapping) => mapping.departmentId
       );
       const depts =
-        organizationStructure.availableUnits?.departments?.filter((dept) =>
+        organizationStructure?.availableUnits?.departments?.filter((dept) =>
           departmentIds.includes(dept.id)
         ) || [];
       setDepartmentOptions(depts);
@@ -451,7 +453,7 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
     if (deptValue && organizationStructure) {
       // Find the department in the hierarchical structure
       const departmentsWithDivisions =
-        organizationStructure.availableUnits?.departmentsWithDivisions || [];
+        organizationStructure?.availableUnits?.departmentsWithDivisions || [];
       const matched = departmentsWithDivisions.find(
         (d) =>
           String(d.departmentName).toLowerCase() ===
@@ -476,7 +478,7 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
     if (divValue && organizationStructure) {
       // Find the selected division in the hierarchical structure
       const departmentsWithDivisions =
-        organizationStructure.availableUnits?.departmentsWithDivisions ||
+        organizationStructure?.availableUnits?.departmentsWithDivisions ||
         [];
       const matchedDept = departmentsWithDivisions.find((dept) =>
         dept.divisions?.some((div) => div.name === divValue)

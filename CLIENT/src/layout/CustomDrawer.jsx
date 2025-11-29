@@ -67,6 +67,8 @@ const CustomDrawer = ({ collapsed = false }) => {
   const isApprover = hasApproverRole();
   const isReviewer = roles.includes("BUDGET REVIEWER");
   const isBudgetPlanningAnalyst = roles.includes("BUDGET PLANNING ANALYST");
+  // Determine if this user is BRD-level (Budget and Revenue Division) either by hierarchical access or by job role
+  const isBRDLevel = currentUser?.hierarchicalAccess?.scope === 'BUDGET_AND_REVENUE_DIVISION' || currentUser?.hierarchicalAccess?.assignmentLevel === 'BUDGET_AND_REVENUE_DIVISION' || roles.some(r => String(r).toUpperCase().includes('BRD'));
   
   // BUDGET_PLANNING_ANALYST should have same access as APPROVER for menus
   const isBudgetPlanningAnalystOrApprover = isBudgetPlanningAnalyst || isApprover;
@@ -225,12 +227,15 @@ const CustomDrawer = ({ collapsed = false }) => {
           <LinkTo
             icon={<FiUsers />}
             name="Employee List"
-            link="/Employee"
+            link="/employee"
             isAllow={
-              hasPermission(currentUser, "EditAllProposals") &&
-              !isOverallApprover &&
-              !isBudgetOfficer &&
-              !isBudgetPlanningAnalystOrApprover
+              (
+                hasPermission(currentUser, "EditAllProposals") &&
+              
+                !isBudgetOfficer &&
+                !isBudgetPlanningAnalystOrApprover
+
+              ) || isOverallApprover || isBRDLevel || isSuperAdmin(currentUser)
             }
             collapsed={collapsed}
           />
