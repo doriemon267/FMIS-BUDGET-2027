@@ -50,6 +50,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useUser } from "../context/UserContext";
 import { useRegion } from "../context/RegionContext";
 import api from "../config/api";
+import ProposalAttachments from "../components/workflow/ProposalAttachments";
 import { toast } from "react-toastify";
 import { useWorkflowRef } from "../hooks/useWorkflowRef";
 import { prettyRole } from '../utils/role-utils';
@@ -495,6 +496,17 @@ const NewProposalWorkflowPage = () => {
       };
 
       setProposalDetails(details);
+
+      // Fetch full proposal to include attachments/metadata
+      try {
+        const proposalRes = await api.get(`/api/proposals/${proposal._id}`);
+        if (proposalRes?.data) {
+          setSelectedProposal(proposalRes.data);
+        }
+      } catch (err) {
+        // If full proposal fetch fails, keep the selected proposal as-is
+        console.warn('Failed to fetch full proposal details for attachments', err?.message || err);
+      }
 
       setEditableItems({
         income: JSON.parse(JSON.stringify(details.income)),
@@ -3089,6 +3101,18 @@ const NewProposalWorkflowPage = () => {
                     </Box>
                   ))}
 
+                {/* Attachments (Income) */}
+                {detailsTab === "income" && (
+                  <Box sx={{ mt: 2, mb: 2 }}>
+                    <ProposalAttachments
+                      proposal={selectedProposal}
+                      moduleName="income"
+                      userInfo={currentUser}
+                      onChange={() => handleViewDetails(selectedProposal)}
+                    />
+                  </Box>
+                )}
+
                 {/* PS-Permanent Tab */}
                 {detailsTab === "ps-permanent" && (() => {
                   const permanentPersonnel = proposalDetails?.personnel?.filter(
@@ -3102,6 +3126,15 @@ const NewProposalWorkflowPage = () => {
 
                   return permanentPersonnel.length > 0 ? (
                     <>
+                      {/* Attachments (Personnel) */}
+                      <Box sx={{ mb: 2 }}>
+                        <ProposalAttachments
+                          proposal={selectedProposal}
+                          moduleName="personnel"
+                          userInfo={currentUser}
+                          onChange={() => handleViewDetails(selectedProposal)}
+                        />
+                      </Box>
                       <TableContainer>
                         <Table size="small">
                           <TableHead>
@@ -3418,6 +3451,15 @@ const NewProposalWorkflowPage = () => {
 
                   return casualPersonnel.length > 0 ? (
                     <>
+                      {/* Attachments (Personnel) */}
+                      <Box sx={{ mb: 2 }}>
+                        <ProposalAttachments
+                          proposal={selectedProposal}
+                          moduleName="personnel"
+                          userInfo={currentUser}
+                          onChange={() => handleViewDetails(selectedProposal)}
+                        />
+                      </Box>
                       <TableContainer>
                         <Table size="small">
                           <TableHead>
@@ -3734,6 +3776,15 @@ const NewProposalWorkflowPage = () => {
 
                   return chargedToIncomePersonnel.length > 0 ? (
                     <>
+                      {/* Attachments (Personnel - Charged) */}
+                      <Box sx={{ mb: 2 }}>
+                        <ProposalAttachments
+                          proposal={selectedProposal}
+                          moduleName="personnel"
+                          userInfo={currentUser}
+                          onChange={() => handleViewDetails(selectedProposal)}
+                        />
+                      </Box>
                       <TableContainer>
                         <Table size="small">
                           <TableHead>
@@ -4060,6 +4111,17 @@ const NewProposalWorkflowPage = () => {
 
                             return (
                               <Box key={category} sx={{ mb: 2 }}>
+                                {/* Attachments (MOOE) */}
+                                {expandedGroups[`mooe-${category}`] === false && (
+                                  <Box sx={{ mb: 1 }}>
+                                    <ProposalAttachments
+                                      proposal={selectedProposal}
+                                      moduleName="mooe"
+                                      userInfo={currentUser}
+                                      onChange={() => handleViewDetails(selectedProposal)}
+                                    />
+                                  </Box>
+                                )}
                                 <Box
                                   onClick={() =>
                                     setExpandedGroups((prev) => ({
@@ -4613,6 +4675,15 @@ const NewProposalWorkflowPage = () => {
 
                             return (
                               <Box key={category} sx={{ mb: 2 }}>
+                                {/* Attachments (Capital Outlay) */}
+                                <Box sx={{ mb: 1 }}>
+                                  <ProposalAttachments
+                                    proposal={selectedProposal}
+                                    moduleName="capital"
+                                    userInfo={currentUser}
+                                    onChange={() => handleViewDetails(selectedProposal)}
+                                  />
+                                </Box>
                                 <Box
                                   onClick={() =>
                                     setExpandedGroups((prev) => ({

@@ -399,6 +399,23 @@ const proposalSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+// Attachments uploaded by users, grouped by module
+proposalSchema.add({
+  attachments: [{
+    _id: false,
+    attachmentId: { type: mongoose.Schema.Types.ObjectId, default: () => new mongoose.Types.ObjectId() },
+    module: { type: String, enum: ['personnel', 'mooe', 'capital', 'income', 'general'], default: 'general' },
+    originalName: String,
+    filename: String,
+    mimeType: String,
+    size: Number,
+    url: String,
+    uploadedBy: String,
+    uploadedByName: String,
+    uploadedAt: { type: Date, default: Date.now }
+  }]
+});
+
 // Link to new workflow document (added for dual-model sync)
 proposalSchema.add({
   workflowRef: { type: mongoose.Schema.Types.ObjectId, ref: 'NewProposalWorkflow', index: true },

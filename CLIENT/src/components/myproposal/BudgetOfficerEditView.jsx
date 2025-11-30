@@ -24,6 +24,7 @@ import EditableIncomeTable from './tables/EditableIncomeTable';
 import EditablePersonnelTable from './tables/EditablePersonnelTable';
 import EditableMOOETable from './tables/EditableMOOETable';
 import EditableCapitalOutlayTable from './tables/EditableCapitalOutlayTable';
+import ProposalAttachments from '../workflow/ProposalAttachments';
 
 const BudgetOfficerEditView = forwardRef(({
   proposalData,
@@ -34,6 +35,7 @@ const BudgetOfficerEditView = forwardRef(({
   showTables = true,
   readOnly = false,
   showSaveDraftButton = true
+  , userInfo
 }, ref) => {
   const [activeTab, setActiveTab] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -525,6 +527,20 @@ const BudgetOfficerEditView = forwardRef(({
               />
             </Tabs>
           </Box>
+
+          {/* Attachments - per active tab */}
+          <ProposalAttachments proposal={proposal} moduleName={(() => {
+            switch (activeTab) {
+              case 0: return 'income';
+              case 1: return 'personnel';
+              case 2: return 'personnel';
+              case 3: return 'mooe';
+              case 4: return 'capital';
+              default: return 'general';
+            }
+          })()} userInfo={userInfo} onChange={() => {
+            // no-op; the parent can handle refresh if needed
+          }} />
 
           {/* Table Content */}
           <Box sx={{ minHeight: 400, mb: 3 }}>

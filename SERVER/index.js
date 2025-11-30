@@ -85,6 +85,8 @@ console.warn = (...args) => {
   else originalConsole.warn(...args);
 };
 const express = require("express");
+const path = require('path');
+const fs = require('fs');
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
 const http = require("http");
@@ -234,6 +236,16 @@ mongoose.connection.once('open', async () => {
   }
 });
 const app = express();
+// Ensure uploads folder exists for attachments
+try {
+  const uploadsPath = path.join(__dirname, 'uploads', 'proposal_attachments');
+  if (!fs.existsSync(uploadsPath)) {
+    fs.mkdirSync(uploadsPath, { recursive: true });
+    console.log('[Server] Created uploads folder for proposal attachments');
+  }
+} catch (e) {
+  console.error('Failed to create uploads folder', e.message || e);
+}
 // Startup diagnostics: log which critical env variables are present (redact tokens)
 console.log('[Server] Startup env diagnostics:');
 console.log('  DEBUG_MODE:', process.env.DEBUG_MODE === 'true');
@@ -280,7 +292,8 @@ io.use(async (socket, next) => {
     }
       const devUserIdHeader = socket.handshake.headers['x-dev-user-id'] || socket.handshake.headers['X-Dev-User-Id'];
       const devUserIdAuth = socket.handshake.auth && (socket.handshake.auth.devUserId || socket.handshake.auth.xDevUserId);
-      if (allowMockAuth && (devUserIdHeader || devUserIdAuth)) {
+      const userIdAuth = socket.handshake.auth && (socket.handshake.auth.userId || socket.handshake.auth.userid);
+      if (allowMockAuth && (devUserIdHeader || devUserIdAuth || userIdAuth)) {
         const uid = String(devUserIdHeader || devUserIdAuth).trim();
         const user = { Id: uid, id: uid, userId: uid, Username: [uid], Roles: ['DEVELOPER'], name: uid };
         const identity = await resolveUserIdentity({ user, headers: socket.handshake.headers });
@@ -289,10 +302,11 @@ io.use(async (socket, next) => {
         console.debug('[SocketAuth] Mock auth via devUserId:', uid);
         return next();
       }
-    // Extract token from handshake auth or Authorization header
+    // Extract token from handshake auth, query params or Authorization header
     const tokenFromAuth = socket.handshake.auth && socket.handshake.auth.token;
+    const tokenFromQuery = socket.handshake.query && (socket.handshake.query.token || socket.handshake.query.t);
     const authHeader = socket.handshake.headers && (socket.handshake.headers.authorization || socket.handshake.headers.Authorization);
-    const token = tokenFromAuth || (authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null);
+    const token = tokenFromAuth || tokenFromQuery || (authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null);
     if (debugMode || process.env.ALLOW_MOCK_AUTH === 'true') {
       console.debug('[SocketAuth] tokenFromAuthPresent:', !!tokenFromAuth, 'authHeaderPresent:', !!authHeader, 'tokenPresent:', !!token);
       if (socket.handshake.auth && (socket.handshake.auth.devUserId || socket.handshake.auth.xDevUserId)) {
@@ -301,9 +315,9 @@ io.use(async (socket, next) => {
     }
 
     if (!token) {
-      if (allowMockAuth && (devUserIdHeader || devUserIdAuth)) {
+      if (allowMockAuth && (devUserIdHeader || devUserIdAuth || userIdAuth)) {
         // Should have taken the mock path earlier, but just in case, allow it here
-        const uid = String(devUserIdHeader || devUserIdAuth).trim();
+        const uid = String(devUserIdHeader || devUserIdAuth || userIdAuth).trim();
         const user = { Id: uid, id: uid, userId: uid, Username: [uid], Roles: ['DEVELOPER'], name: uid };
         socket.user = user;
         const identity = await resolveUserIdentity({ user, headers: socket.handshake.headers });
@@ -367,8 +381,10 @@ io.use(async (socket, next) => {
     socket.identity = identity;
     return next();
   } catch (err) {
-    console.warn('Socket authentication failed', err.message);
-    return next(new Error('Authentication error'));
+    // In debug mode we include the underlying error message to assist with local development
+    console.warn('Socket authentication failed', err.message || err);
+    const msg = debugMode ? `Authentication error: ${err.message || err}` : 'Authentication error';
+    return next(new Error(msg));
   }
 });
 // MIDDLEWARE
@@ -539,6 +555,8 @@ app.use("/api", capitalOutlayDetailsRouter);
 app.use(categoryRouter);
 // app.use(proposalRouter);  // DISABLED - Using RBAC router instead
 app.use('/api', proposalRBACRouter);  // ✅ RBAC router with role-based visibility control
+// Serve uploaded files (attachments) via /uploads
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Budget Officer Edit Routes
 const { comparisonRouter } = require("./routers/budgetOfficerEditRoutes");
 app.use('/api/budget-officer-edits', comparisonRouter);

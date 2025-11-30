@@ -22,6 +22,9 @@ const {
 const Router = require("express").Router;
 const Proposal = require("../models/Proposal");
 const DraftProposal = require("../models/DraftProposal");
+const multer = require('multer');
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
 // Import enhanced RBAC middleware
 const { 
   authenticatedRoute, 
@@ -194,6 +197,25 @@ proposalRBACRouter.post(
   '/proposals/:id/recalculate',
   ...adminRoute(),
   require('../controllers/proposalController').recalculateProposalTotals
+);
+
+// Upload attachment for a proposal — owner (Budget Preparer) only
+proposalRBACRouter.post(
+  "/proposals/:id/attachments",
+  ...authenticatedRoute(),
+  proposalAccessControl('update'),
+  checkProposalOwnership(Proposal),
+  upload.single('file'),
+  require('../controllers/proposalController').uploadProposalAttachment
+);
+
+// Delete an attachment from a proposal — owner or admin
+proposalRBACRouter.delete(
+  "/proposals/:id/attachments/:attachmentId",
+  ...authenticatedRoute(),
+  proposalAccessControl('update'),
+  checkProposalOwnership(Proposal),
+  require('../controllers/proposalController').deleteProposalAttachment
 );
 // Simplified proposal endpoint (Authenticated users with filtering)
 proposalRBACRouter.get('/proposal-simple', 

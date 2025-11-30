@@ -1,6 +1,7 @@
 // src/components/AppTray.jsx
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { IconButton, Box, Tooltip, Fade, Stack, Paper, Badge } from "@mui/material";
+import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { FiGrid, FiClock } from "react-icons/fi";
 import { BsChatDots } from 'react-icons/bs';
 import { BiCalculator } from "react-icons/bi";
@@ -10,6 +11,7 @@ import { MdClose, MdRemove } from "react-icons/md";
 const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, onMinimizeAll }) => {
   const [openTray, setOpenTray] = useState(false);
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
+  const [chatSettings, setChatSettings] = useState({});
   const nodeRef = useRef(null);
   const trayHandleRef = useRef(null);
   const focusRefs = useRef([]);
@@ -85,6 +87,12 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
       }
     };
     window.addEventListener('storage', storageHandler);
+    // init local chatSettings for this AppTray and listen for local updates
+    try {
+      const s0 = JSON.parse(localStorage.getItem('chatSettings') || '{}'); setChatSettings(s0 || {});
+    } catch (e) { setChatSettings({}); }
+    const localSettings = () => { try { const s = JSON.parse(localStorage.getItem('chatSettings') || '{}'); setChatSettings(s || {}); } catch(e) { setChatSettings({}); } };
+    window.addEventListener('chat-settings-changed', (e) => { try { const s = e?.detail || JSON.parse(localStorage.getItem('chatSettings') || '{}'); setChatSettings(s || {}); } catch(e) { setChatSettings({}); } });
     return () => { window.removeEventListener('chat-unread', handler); window.removeEventListener('storage', storageHandler); };
     // Load persisted chat badge setting to manage initial unread
     try {
@@ -200,6 +208,21 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
             <Tooltip title="Close all" placement="top">
               <IconButton size='small' onClick={() => { onCloseAll?.(); setOpenTray(false); }}>
                 <MdClose />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title={chatSettings && chatSettings.hideSidebar ? 'Show conversations' : 'Hide conversations'} placement="top">
+              <IconButton size='small' onClick={() => {
+                try {
+                  const s = JSON.parse(localStorage.getItem('chatSettings') || '{}');
+                  const next = { ...(s || {}), hideSidebar: !s.hideSidebar };
+                  localStorage.setItem('chatSettings', JSON.stringify(next));
+                  setChatSettings(next);
+                  // notify same-window listeners
+                  window.dispatchEvent(new CustomEvent('chat-settings-changed', { detail: next }));
+                } catch (e) { }
+                setOpenTray(false);
+              }}>
+                {(chatSettings && chatSettings.hideSidebar) ? <FiChevronRight /> : <FiChevronLeft />}
               </IconButton>
             </Tooltip>
           </Box>

@@ -33,6 +33,7 @@ import api from '../../config/api';
 import { displayUacs } from '../../utils/uacsDisplayHelper';
 import { getUserInfo } from '../../utils/auth';
 import WorkflowActionsRefactored from './WorkflowActionsRefactored';
+import ProposalAttachments from './ProposalAttachments';
 
 const ProposalDetailsPage = () => {
   const theme = useTheme();
@@ -81,7 +82,17 @@ const ProposalDetailsPage = () => {
         if (response.data?.drafts) allProposals.push(...response.data.drafts);
 
         const found = allProposals.find(p => String(p._id) === String(proposalId));
-        if (found) setProposal(found);
+        if (found) {
+          // Fetch detailed proposal to include attachments and full metadata
+          try {
+            const details = await api.get(`/api/proposals/${proposalId}`);
+            if (details?.data) setProposal(details.data);
+            else setProposal(found);
+          } catch (err) {
+            console.warn('Failed to fetch full proposal details, falling back to minimal result', err?.message);
+            setProposal(found);
+          }
+        }
         else setError('Proposal not found');
       } catch (err) {
         setError('Failed to load proposal details');
@@ -93,6 +104,16 @@ const ProposalDetailsPage = () => {
 
     fetchProposalFromList();
   }, [proposalId, proposal]);
+
+  const fetchFullProposal = async () => {
+    if (!proposalId) return;
+    try {
+      const res = await api.get(`/api/proposals/${proposalId}`);
+      if (res?.data) setProposal(res.data);
+    } catch (err) {
+      console.warn('Failed to re-fetch full proposal details', err?.message);
+    }
+  };
 
   // Fetch tab data
   useEffect(() => {
@@ -391,6 +412,11 @@ const ProposalDetailsPage = () => {
         {/* Personnel */}
         {tabValue === 0 && (
           <Box>
+            <ProposalAttachments proposal={proposal} moduleName="personnel" userInfo={userInfo} onChange={() => {
+              // Refresh data and proposal after attachments change
+              fetchPersonnelServices();
+              fetchFullProposal();
+            }} />
             {tabLoading[0] ? <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box> :
              personnelData.length === 0 ? <Alert severity="info">No personnel data</Alert> :
              <>
@@ -511,6 +537,10 @@ const ProposalDetailsPage = () => {
         {/* MOOE */}
         {tabValue === 1 && (
           <Box>
+            <ProposalAttachments proposal={proposal} moduleName="mooe" userInfo={userInfo} onChange={() => {
+              fetchMooeData();
+              fetchFullProposal();
+            }} />
             {tabLoading[1] ? <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box> :
              mooeData.length === 0 ? <Alert severity="info">No MOOE data</Alert> :
              <>
@@ -611,6 +641,10 @@ const ProposalDetailsPage = () => {
         {/* Capital Outlay */}
         {tabValue === 2 && (
           <Box>
+            <ProposalAttachments proposal={proposal} moduleName="capital" userInfo={userInfo} onChange={() => {
+              fetchCapitalOutlayData();
+              fetchFullProposal();
+            }} />
             {tabLoading[2] ? <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box> :
              capitalOutlayData.length === 0 ? <Alert severity="info">No Capital Outlay data</Alert> :
              <>
@@ -710,6 +744,10 @@ const ProposalDetailsPage = () => {
         {/* Income */}
         {tabValue === 3 && (
           <Box>
+            <ProposalAttachments proposal={proposal} moduleName="income" userInfo={userInfo} onChange={() => {
+              fetchIncomeData();
+              fetchFullProposal();
+            }} />
             {tabLoading[3] ? <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box> :
              incomeData.length === 0 ? <Alert severity="info">No Income data</Alert> :
              <>

@@ -1,4 +1,6 @@
 import React, { useMemo, useState } from 'react';
+import { getUserInfo } from '../../utils/auth';
+import ProposalAttachments from '../workflow/ProposalAttachments';
 import {
   Alert,
   Box,
@@ -686,6 +688,9 @@ const BudgetManagerSubmissionView = ({ proposalData, proposal }) => {
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
         {tabMeta.map((tab) => buildSummaryChip(tab.label.split(' (')[0], tab.summary))}
       </Box>
+
+      {/* Attachments for current tab */}
+      <ProposalAttachments proposal={proposal} moduleName={activeTabConfig.key === 'personnelServices' ? 'personnel' : activeTabConfig.key} userInfo={getUserInfo()} onChange={() => {}} />
 
       <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 480 }}>
         <Table size="small" stickyHeader>

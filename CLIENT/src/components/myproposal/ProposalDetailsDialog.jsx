@@ -1225,6 +1225,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                   ref={budgetOfficerEditViewRef}
                   proposal={proposal}
                   proposalData={proposalData}
+                  userInfo={userInfo}
                   onSaveSuccess={async () => {
                     // IMPORTANT: Fetch updated proposal to show new status immediately
                     try {
@@ -1342,6 +1343,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                   ref={budgetOfficerEditViewRef}
                   proposal={proposal}
                   proposalData={proposalData}
+                  userInfo={userInfo}
                   variant={isApprover ? 'approver' : (isBudgetReviewerRole ? 'reviewer' : 'officer')}
                   allowSubmit={false}
                   showTables={true}

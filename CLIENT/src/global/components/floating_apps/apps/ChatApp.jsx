@@ -1,5 +1,7 @@
 // src/components/apps/ChatApp.jsx
 import { useState, useRef, useEffect } from "react";
+import { isTokenExpired } from '../../../../utils/jwt';
+import { idMatches as helperIdMatches, getOnlineMapMatchKey as helperGetOnlineMapMatchKey, isOnlineForItem as helperIsOnlineForItem } from '../../../utils/chatHelpers';
 import { dispatchChatUnread } from '../../../../utils/eventDispatcher';
 import {
   Box,
@@ -16,10 +18,13 @@ import {
   MenuItem,
   Switch,
   FormControlLabel,
-  Popover
+  Popover,
+  Drawer,
+  useMediaQuery
 } from "@mui/material";
+import { useTheme } from '@mui/material/styles';
 import { IoSend } from "react-icons/io5";
-import { FiSearch, FiRefreshCw, FiSettings, FiCheck, FiBell, FiBellOff } from "react-icons/fi";
+import { FiSearch, FiRefreshCw, FiSettings, FiCheck, FiBell, FiBellOff, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import io from 'socket.io-client';
 import api from '../../../../config/api';
 import env from '../../../../utils/env';
@@ -43,12 +48,17 @@ export default function ChatApp() {
   const messagesEndRef = useRef(null);
   const [socket, setSocket] = useState(null);
   const [socketConnected, setSocketConnected] = useState(false);
+  const [socketErrorMsg, setSocketErrorMsg] = useState(null);
+  const [socketTrigger, setSocketTrigger] = useState(0);
   const [serverOffline, setServerOffline] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
   const { currentUser } = useUser();
-  const [chatSettings, setChatSettings] = useState({ sound: true, desktop: true, badge: true, compact: false });
+  const [chatSettings, setChatSettings] = useState({ sound: true, desktop: true, badge: true, compact: false, hideSidebar: false, leftAlignMessages: true });
   const [chatMutedMap, setChatMutedMap] = useState({});
   const [settingsAnchor, setSettingsAnchor] = useState(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const theme = useTheme();
+  const isSmall = useMediaQuery(theme.breakpoints.down('sm'));
   const [soundFile, setSoundFile] = useState(localStorage.getItem('chatSoundFile') || '/sounds/chat-notify.mp3');
   const audioRef = useRef(null);
 
@@ -89,6 +99,10 @@ export default function ChatApp() {
     const idx = Math.abs(h) % colors.length;
     return colors[idx];
   };
+  // Local aliasing so we can keep code readable
+  const idMatches = helperIdMatches;
+  const getOnlineMapMatchKey = helperGetOnlineMapMatchKey;
+  const isOnlineForItem = helperIsOnlineForItem;
   // Contact search state
   const [searchQuery, setSearchQuery] = useState('');
   const [contactResults, setContactResults] = useState([]);
@@ -102,10 +116,10 @@ export default function ChatApp() {
         // fetch presence for these contacts
         try {
           const ids = contacts.map(c => c.id).join(',');
-          if (ids) {
+            if (ids) {
             const pres = await api.get(`/api/chat/presence?ids=${encodeURIComponent(ids)}`);
             const onlineMap = pres?.data?.online || {};
-            setContactResults(contacts.map(c => ({ ...c, online: !!onlineMap[c.id]?.online })));
+            setContactResults(contacts.map(c => ({ ...c, id: String(c.id), online: isOnlineForItem(c, onlineMap) })));
           } else {
             setContactResults(contacts);
           }
@@ -124,7 +138,7 @@ export default function ChatApp() {
   useEffect(() => {
     try {
       const s = JSON.parse(localStorage.getItem('chatSettings') || '{}');
-      setChatSettings({ sound: s.sound !== false, desktop: s.desktop !== false, badge: s.badge !== false, compact: s.compact === true });
+      setChatSettings({ sound: s.sound !== false, desktop: s.desktop !== false, badge: s.badge !== false, compact: s.compact === true, hideSidebar: !!s.hideSidebar, leftAlignMessages: s.leftAlignMessages !== false });
     } catch (e) {
       // ignore, use defaults
     }
@@ -134,6 +148,27 @@ export default function ChatApp() {
     } catch (e) { }
     // load persisted sound selection
     try { setSoundFile(localStorage.getItem('chatSoundFile') || '/sounds/chat-notify.mp3'); } catch (e) {}
+  }, []);
+
+  // Listen for changes to chatSettings from other contexts (AppTray, other tabs)
+  useEffect(() => {
+    const handler = (e) => {
+      try {
+        if (e && e.key === 'chatSettings') {
+          const s = JSON.parse(e.newValue || '{}');
+          setChatSettings({ sound: s.sound !== false, desktop: s.desktop !== false, badge: s.badge !== false, compact: s.compact === true, hideSidebar: !!s.hideSidebar });
+        }
+      } catch (err) {}
+    };
+    const customHandler = (ev) => {
+      try {
+        const s = ev?.detail || JSON.parse(localStorage.getItem('chatSettings') || '{}');
+        setChatSettings({ sound: s.sound !== false, desktop: s.desktop !== false, badge: s.badge !== false, compact: s.compact === true, hideSidebar: !!s.hideSidebar });
+      } catch (err) {}
+    };
+    window.addEventListener('storage', handler);
+    window.addEventListener('chat-settings-changed', customHandler);
+    return () => { window.removeEventListener('storage', handler); window.removeEventListener('chat-settings-changed', customHandler); };
   }, []);
 
   // Initialize audioRef whenever soundFile changes
@@ -151,6 +186,13 @@ export default function ChatApp() {
       try { if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; } } catch (e) {}
     }
   }, [soundFile]);
+
+  // Persist chat settings helper (also dispatch custom event to inform same-window listeners)
+  const persistChatSettings = (nextSettings) => {
+    try { setChatSettings(nextSettings); } catch (e) {}
+    try { localStorage.setItem('chatSettings', JSON.stringify(nextSettings)); } catch (e) {}
+    try { window.dispatchEvent(new CustomEvent('chat-settings-changed', { detail: nextSettings })); } catch (e) {}
+  };
 
   // Fetch messages helper
   async function fetchMessages(pageToLoad = 1, append = false) {
@@ -216,7 +258,7 @@ export default function ChatApp() {
       }
       if (res?.data?.conversations) {
           const convs = res.data.conversations.map((c) => ({
-          id: c._id || c.id,
+          id: String(c._id || c.id || c.userId || ''),
           name: c.name || c.displayName || c.username || c.id,
             avatar: getAvatarInitial(c.name || c.displayName, c.id),
             avatarUrl: c.avatarUrl || null,
@@ -225,7 +267,7 @@ export default function ChatApp() {
           lastAt: c.lastAt || c.lastMessageAt || c.updatedAt || c.createdAt,
           unread: c.unread || 0,
           online: false,
-        }));
+          }));
         console.debug('[ChatApp] loadConversations: conversations=', convs);
         updateConversations(convs);
         // Ensure we pick a real conversation as selected if none is currently selected
@@ -243,7 +285,7 @@ export default function ChatApp() {
             console.debug('[ChatApp] presence API response:', pres?.data);
               if (pres?.data?.online) {
               const onlineMap = pres.data.online;
-              updateConversations((prev) => prev.map(c => ({ ...c, online: !!onlineMap[c.id]?.online })));
+              updateConversations((prev) => prev.map(c => ({ ...c, online: isOnlineForItem(c, onlineMap) })));
             }
           } catch (e) { console.warn('[ChatApp] presence API call failed', e); }
         }
@@ -253,10 +295,10 @@ export default function ChatApp() {
             const contactsRes = await api.get('/api/chat/contacts');
             const contacts = contactsRes?.data?.contacts || [];
             if (contacts.length > 0) {
-              const ids = contacts.map(c => c.id).join(',');
+              const ids = contacts.map(c => String(c.id || c.userId)).join(',');
               const pres = ids ? await api.get(`/api/chat/presence?ids=${encodeURIComponent(ids)}`) : null;
               const onlineMap = pres?.data?.online || {};
-              const enriched = contacts.map(c => ({ ...c, online: !!onlineMap[c.id] }));
+              const enriched = contacts.map(c => ({ ...c, id: String(c.id || c.userId || ''), online: isOnlineForItem(c, onlineMap) }));
               console.debug('[ChatApp] available contacts:', enriched);
               setAvailableContacts(enriched);
             }
@@ -303,15 +345,29 @@ export default function ChatApp() {
     if (currentUserStr) {
       try { const cu = JSON.parse(currentUserStr); devUserId = (Array.isArray(cu?.Username) ? cu.Username[0] : cu?.Username) || cu?.Id || cu?.id || cu?.userId; } catch (e) { devUserId = null; }
     }
+    // Determine whether to attempt a socket connection. Only connect when we have a valid JWT token or a devUserId (dev mode).
     const authObj = {};
-    if (token) authObj.token = token;
+    const validToken = token && !isTokenExpired(token);
+    if (validToken) authObj.token = token;
     if (devUserId) authObj.devUserId = String(devUserId);
-    const conn = io(serverUrl, { path: '/socket.io', transports: ['polling', 'websocket'], withCredentials: true, auth: authObj });
+    // include resolved current user id (if any) to help server logging and routing
+    if (currentUser) {
+      const cuid = (currentUser?.Id || currentUser?.id || currentUser?.userId || (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username));
+      if (cuid) authObj.userId = String(cuid);
+    }
+    // If we have neither a valid token nor a dev user id, or if token exists but currentUser not loaded, do not create the connection.
+    if (!authObj.devUserId && (!authObj.token || !currentUser)) {
+      console.debug('[ChatApp] Not creating socket: no valid token or dev user id present');
+      return;
+    }
+    const conn = io(serverUrl, { path: '/socket.io', transports: ['polling', 'websocket'], withCredentials: true, auth: authObj, query: (token ? { token } : {}), transportOptions: { polling: { extraHeaders: token ? { Authorization: `Bearer ${token}` } : {} } }, reconnectionAttempts: 3 });
     if (devUserId) console.debug('[ChatApp] Passing devUserId to socket auth (if ALLOW_MOCK_AUTH enabled)');
     conn.on('connect', () => {
       const uid = (currentUser?.Id || currentUser?.id || currentUser?.userId || (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username) || null);
       console.debug('[ChatApp] socket connected', conn.id, 'uid=', uid, 'tokenPresent=', !!token);
       setSocketConnected(true);
+      setSocketErrorMsg(null);
+      setAuthRequired(false);
       if (uid) conn.emit('join-user-room', uid);
     });
     conn.on('chat-message', (payload) => {
@@ -413,8 +469,9 @@ export default function ChatApp() {
       // Update conversation list: last message/time and unread count; move to top
       updateConversations((prev) => {
         const peerId = isMine ? payload.to : payload.from;
-        const found = prev.findIndex(c => c.id === peerId);
-        const updated = prev.map(c => c.id === peerId ? { ...c, lastMsg: payload.text, lastAt: payload.createdAt, unread: (!isMine && c.id === peerId) ? (c.unread || 0) + 1 : (isMine ? c.unread : c.unread) } : c);
+        const peerIdStr = String(peerId);
+        const found = prev.findIndex(c => String(c.id) === peerIdStr);
+        const updated = prev.map(c => String(c.id) === peerIdStr ? { ...c, lastMsg: payload.text, lastAt: payload.createdAt, unread: (!isMine && String(c.id) === peerIdStr) ? (c.unread || 0) + 1 : (isMine ? c.unread : c.unread) } : c);
         if (found !== -1) {
           const [p] = updated.splice(found,1);
           return [p, ...updated];
@@ -425,8 +482,27 @@ export default function ChatApp() {
       });
     });
     conn.on('connect_error', (err) => {
+      const emsg = String(err?.message || err || '');
+      setSocketErrorMsg(err?.message || String(err || 'connect_error'));
+      // If the server refused the socket because of authentication or invalid/absent user id, show a warning and mark auth required.
+      if (emsg.toLowerCase().includes('authentication') || emsg.toLowerCase().includes('cannot determine user id') || emsg.toLowerCase().includes('invalid token') || emsg.toLowerCase().includes('jwt')) {
+        console.warn('Chat socket authentication error:', err?.message || err);
+        setSocketConnected(false);
+        setAuthRequired(true);
+        // Stop attempting to reconnect and disconnect
+        try { conn.disconnect(); } catch (e) { /* ignore */ }
+        try { setSocket(null); } catch (e) { }
+        return;
+      }
       console.error('Chat socket connect_error:', err?.message || err);
       setSocketConnected(false);
+      const msg = String(err?.message || '').toLowerCase();
+      // If server explicitly signals auth failure due to missing/determined user id, update UI (auth required) and stop trying to reconnect.
+      if (msg.includes('authentication error') || msg.includes('cannot determine user id') || msg.includes('invalid token') || msg.includes('jwt')) {
+        console.warn('[ChatApp] Socket authentication error: signaling auth required to UI');
+        setAuthRequired(true);
+        try { conn.disconnect(); } catch (e) { /* ignore */ }
+      }
     });
     conn.on('disconnect', (reason) => {
       console.debug('[ChatApp] socket disconnected', reason);
@@ -434,13 +510,24 @@ export default function ChatApp() {
     });
     conn.on('presence-update', ({ userId, status }) => {
       console.debug('[ChatApp] presence-update', userId, status);
-      updateConversations((prev) => prev.map(c => c.id === userId ? { ...c, online: status === 'online' } : c));
-      setAvailableContacts((prev) => prev.map(c => c.id === userId ? { ...c, online: status === 'online' } : c));
-      setContactResults((prev) => prev.map(c => c.id === userId ? { ...c, online: status === 'online' } : c));
+      if (debugEnabled) {
+        console.debug('[ChatApp] presence-update debugEnabled: userId=', userId);
+      }
+      const uidStr = String(userId);
+      updateConversations((prev) => prev.map(c => (idMatches(c, uidStr) ? { ...c, online: status === 'online' } : c)));
+      setAvailableContacts((prev) => prev.map(c => (String(c.id) === uidStr ? { ...c, online: status === 'online' } : c)));
+      setContactResults((prev) => prev.map(c => (idMatches(c, uidStr) ? { ...c, online: status === 'online' } : c)));
+      if (debugEnabled) {
+        console.debug('[ChatApp] presence-update completed for userId=', uidStr);
+      }
+      // Also update selected if it's the one that changed
+      if (idMatches(selected, uidStr)) {
+        setSelected(prev => ({ ...(prev || {}), online: status === 'online' }));
+      }
     });
     setSocket(conn);
     return () => { try { conn.emit('typing-stop', { to: selected?.id }); } catch (e) {}; conn.disconnect(); setSocket(null); };
-  }, [currentUser, chatSettings]);
+  }, [currentUser, chatSettings, socketTrigger]);
 
   // Helper to update conversations and broadcast unread counts to AppTray
   const updateConversations = (updater) => {
@@ -457,19 +544,65 @@ export default function ChatApp() {
     });
   };
 
+  // Keep the `selected` object in sync with conversation presence/attributes when the conversation list updates
+  useEffect(() => {
+    if (!selected) return;
+    const uid = String(selected.id || selected?.userId || selected?.Id || selected?.id);
+    // Try to find the updated info in conversations, availableContacts, or contactResults
+    const updated = (conversations || []).find(c => String(c.id) === uid) || (availableContacts || []).find(c => String(c.id) === uid) || (contactResults || []).find(c => String(c.id) === uid);
+    if (updated) {
+      // Only update selected when anything actually changed to avoid render loops
+      const wasOnline = Boolean(selected.online);
+      const nowOnline = Boolean(updated.online);
+      if (wasOnline !== nowOnline || selected.name !== updated.name || selected.muted !== updated.muted || selected.avatarUrl !== updated.avatarUrl) {
+        setSelected(prev => ({ ...(prev || {}), ...updated }));
+      }
+    }
+  }, [conversations, availableContacts, contactResults, selected?.id]);
+
+  // Check presence for selected peer immediately after selection and update selected and conversations state
+  useEffect(() => {
+    if (!selected?.id) return;
+    let mounted = true;
+    const checkPresence = async () => {
+      try {
+        const ids = encodeURIComponent(String(selected.id));
+        const res = await api.get(`/api/chat/presence?ids=${ids}`);
+        const onlineMap = res?.data?.online || {};
+        // Update conversations and available contacts using the normalized helper
+        updateConversations((prev) => prev.map(c => ({ ...c, online: isOnlineForItem(c, onlineMap) })));
+        setAvailableContacts((prev) => prev.map(a => ({ ...a, online: isOnlineForItem(a, onlineMap) })));
+        // Compute the selected peer's online value using our helper
+        const isOnline = isOnlineForItem(selected, onlineMap);
+        if (mounted) {
+          setSelected(prev => ({ ...(prev || {}), online: isOnline }));
+          // Also ensure the conversation in the list is updated
+          updateConversations(prev => prev.map(c => String(c.id) === String(selected.id) ? { ...c, online: isOnline } : c));
+        }
+      } catch (e) {
+        // ignore silently - presence check is non-critical
+      }
+    };
+    checkPresence();
+    return () => { mounted = false; };
+  }, [selected?.id]);
+
+  // Whether we should attempt to use the debug endpoint
+  const debugEnabled = Boolean(env('ALLOW_CHAT_DEBUG_DUMP') === 'true' || env('ALLOW_CHAT_DEBUG') === 'true' || (import.meta.env && import.meta.env.DEV));
   // Debug: expose function to fetch debug presence endpoint if available
   const refreshPresenceDebug = async () => {
     try {
       // Prefer debug endpoint if present
       let debugResp = null;
       try {
-        // Prefer the full dump endpoint if available
+        // Prefer the full dump endpoint if available, but only when explicitly enabled
+        if (!debugEnabled) throw new Error('debug-endpoint-disabled');
         debugResp = await api.get('/api/chat/debug/dump');
         console.debug('[ChatApp] /api/chat/debug/dump:', debugResp?.data);
         const onlineMap = debugResp?.data?.online || {};
         // Update UI mapping for conversations and availableContacts
-            updateConversations((prev) => prev.map(c => ({ ...c, online: !!onlineMap[c.id]?.online })));
-        setAvailableContacts((prev) => prev.map(ac => ({ ...ac, online: !!onlineMap[ac.id]?.online })));
+            updateConversations((prev) => prev.map(c => ({ ...c, online: isOnlineForItem(c, onlineMap) })));
+        setAvailableContacts((prev) => prev.map(ac => ({ ...ac, online: isOnlineForItem(ac, onlineMap) })));
         return debugResp.data;
       } catch (_e) {
         // Debug endpoint not available; fallback to presence on known peers
@@ -479,8 +612,8 @@ export default function ChatApp() {
       const pres = await api.get(`/api/chat/presence?ids=${encodeURIComponent(ids.join(','))}`);
       console.debug('[ChatApp] presence:', pres?.data);
       const onlineMap = pres?.data?.online || {};
-      updateConversations((prev) => prev.map(c => ({ ...c, online: !!onlineMap[c.id]?.online })));
-      setAvailableContacts((prev) => prev.map(a => ({ ...a, online: !!onlineMap[a.id]?.online })));
+      updateConversations((prev) => prev.map(c => ({ ...c, online: isOnlineForItem(c, onlineMap) })));
+      setAvailableContacts((prev) => prev.map(a => ({ ...a, online: isOnlineForItem(a, onlineMap) })));
       return pres?.data;
     } catch (e) {
       console.warn('[ChatApp] refreshPresenceDebug failed', e?.message || e);
@@ -516,7 +649,7 @@ export default function ChatApp() {
     next[String(id)] = !next[String(id)];
     setChatMutedMap(next);
     try { localStorage.setItem('chatMuted', JSON.stringify(next)); } catch (e) {}
-    updateConversations(prev => prev.map(c => c.id === String(id) ? { ...c, muted: !!next[String(id)] } : c));
+    updateConversations(prev => prev.map(c => String(c.id) === String(id) ? { ...c, muted: !!next[String(id)] } : c));
   };
   useEffect(() => {
     if (!socket) return;
@@ -533,8 +666,16 @@ export default function ChatApp() {
     socket.on('presence-update', ({ userId, status }) => {
       // status === 'online' or 'offline'
       const isOnline = status === 'online';
-      setAvailableContacts((prev) => prev.map(a => ({ ...a, online: a.id === String(userId) ? isOnline : a.online }))); 
-      updateConversations((prev) => prev.map(c => ({ ...c, online: c.id === String(userId) ? isOnline : c.online }))); 
+      if (debugEnabled) console.debug('[ChatApp] socket.presence-update userId=', userId, 'status=', status);
+      setAvailableContacts((prev) => prev.map(a => (idMatches(a, userId) ? { ...a, online: isOnline } : a))); 
+      updateConversations((prev) => prev.map(c => (idMatches(c, userId) ? { ...c, online: isOnline } : c))); 
+      // Also update `selected` if it matches (and log debug info if requested)
+      try {
+        if (idMatches(selected, userId)) {
+          if (debugEnabled) console.debug('[ChatApp] socket.presence-update selected matches userId:', userId, 'selected.id=', selected?.id);
+          setSelected(prev => ({ ...(prev || {}), online: isOnline }));
+        }
+      } catch (e) {}
     });
     return () => {
       socket.off('typing-start'); socket.off('typing-stop'); socket.off('message-read'); socket.off('presence-update');
@@ -551,6 +692,25 @@ export default function ChatApp() {
     }
     return () => { if (t) clearInterval(t); };
   }, [socket, conversations.length, availableContacts.length]);
+
+  // Keyboard shortcut: Ctrl/Cmd + M to toggle conversations sidebar
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'm' || e.key === 'M')) {
+        try {
+          e.preventDefault();
+          const next = { ...(chatSettings || {}), hideSidebar: !chatSettings?.hideSidebar };
+          persistChatSettings(next);
+          // notify other windows/components
+          window.dispatchEvent(new CustomEvent('chat-settings-changed', { detail: next }));
+        } catch (err) {
+          // ignore
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [chatSettings]);
   // Typing debounce
   const typingTimerRef = useRef(null);
   const startTyping = () => {
@@ -622,14 +782,16 @@ export default function ChatApp() {
         fontFamily: "'Inter', sans-serif",
       }}
     >
-      <Box sx={{ display: "flex", flex: 1, minHeight: 0, overflowX: 'hidden' }}>
+            <Box sx={{ display: "flex", flex: 1, minHeight: 0, overflowX: 'hidden' }}>
         {/* Sidebar */}
         <Box
           sx={{
             bgcolor: "rgba(10, 10, 20, 0.7)",
             borderRight: "1px solid rgba(255,255,255,0.05)",
-            width: 260,
-            minWidth: 260,
+            width: chatSettings?.hideSidebar ? 0 : 260,
+            minWidth: chatSettings?.hideSidebar ? 0 : 260,
+            transition: 'width 240ms ease',
+            overflow: 'hidden',
           }}
         >
           <Box sx={{ p: 1 }}>
@@ -675,7 +837,6 @@ export default function ChatApp() {
                       </Badge>
                       <Box>
                         <Typography color='white' fontSize='0.9rem'>{c.name}</Typography>
-                            width: chatSettings.compact ? 420 : 480,
                       </Box>
                     </ListItemButton>
                   </ListItem>
@@ -791,6 +952,13 @@ export default function ChatApp() {
         </Box>
 
         {/* Main Chat */}
+        {chatSettings?.hideSidebar && (
+          <Box sx={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', zIndex: 1400 }}>
+            <IconButton size='small' onClick={() => { const next = { ...chatSettings, hideSidebar: false }; persistChatSettings(next); }} sx={{ bgcolor: 'rgba(0,0,0,0.45)', color: '#fff', '&:hover': { bgcolor: 'rgba(0,0,0,0.6)' } }} title='Show conversations'>
+              <FiChevronRight />
+            </IconButton>
+          </Box>
+        )}
         <Box
           sx={{
             flex: 1,
@@ -850,10 +1018,20 @@ export default function ChatApp() {
             <Box sx={{ ml: 2, display: 'flex', alignItems: 'center' }}>
             <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: socketConnected ? '#4ade80' : '#666', mr: 1 }} title={socketConnected ? 'Connected' : 'Disconnected'} />
             <Typography variant='caption' color='rgba(255,255,255,0.6)'> {socketConnected ? 'Connected' : 'Disconnected'}</Typography>
+            {(!socketConnected && socketErrorMsg) && (
+              <Box sx={{ ml: 1, display: 'flex', alignItems: 'center' }}>
+                <Typography variant='caption' sx={{ color: '#ff6666', mr: 1 }}>{socketErrorMsg}</Typography>
+                <Button size='small' onClick={() => { setSocketErrorMsg(null); setSocketConnected(false); setAuthRequired(false); setSocketTrigger(s => s + 1); }} sx={{ ml: 1, color: 'white' }} title='Retry connection'>Retry</Button>
+              </Box>
+            )}
             <IconButton size='small' onClick={() => { refreshPresenceDebug(); }} sx={{ ml: 1, color: 'white' }} title='Refresh Presence (debug)'><FiRefreshCw /></IconButton>
             <IconButton size='small' onClick={() => toggleMuteSelected()} sx={{ ml: 1, color: 'white' }} title={selected && selected.id && (chatMutedMap[selected.id] ? 'Unmute' : 'Mute')}>{(selected && selected.id && chatMutedMap[selected.id]) ? <FiBellOff /> : <FiBell />}</IconButton>
-            <IconButton size='small' onClick={(e) => setSettingsAnchor(e.currentTarget)} sx={{ ml: 1, color: 'white' }} title='Chat Settings'><FiSettings /></IconButton>
+            <IconButton size='small' onClick={() => { const next = { ...chatSettings, hideSidebar: !chatSettings.hideSidebar }; persistChatSettings(next); }} sx={{ ml: 1, color: 'white' }} title={chatSettings && chatSettings.hideSidebar ? 'Show conversations' : 'Hide conversations'}>
+              {(chatSettings && chatSettings.hideSidebar) ? <FiChevronRight /> : <FiChevronLeft />}
+            </IconButton>
+            <IconButton size='small' onClick={(e) => { if (isSmall) { setDrawerOpen(true); } else { setSettingsAnchor(e.currentTarget); } }} sx={{ ml: 1, color: 'white' }} title='Chat Settings' aria-controls={Boolean(settingsAnchor) ? 'chat-settings-popover' : undefined} aria-haspopup='true'><FiSettings /></IconButton>
             <Popover
+              id='chat-settings-popover'
               open={Boolean(settingsAnchor)}
               anchorEl={settingsAnchor}
               onClose={() => setSettingsAnchor(null)}
@@ -862,7 +1040,7 @@ export default function ChatApp() {
             >
               <Box sx={{ p: 2, width: 240 }}>
                 <Typography variant='subtitle1' sx={{ mb: 1 }}>Chat settings</Typography>
-                <FormControlLabel control={<Switch checked={chatSettings.sound} onChange={(e) => { const next = { ...chatSettings, sound: e.target.checked }; setChatSettings(next); try { localStorage.setItem('chatSettings', JSON.stringify(next)); } catch (x) {} if (e.target.checked) { try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.type='sine'; o.frequency.value=880; o.connect(g); g.connect(ctx.destination); o.start(); setTimeout(() => { try { o.stop(); ctx.close(); } catch (_) {} }, 120); } catch(_){} } }} />} label='Sound' />
+                <FormControlLabel control={<Switch checked={chatSettings.sound} onChange={(e) => { const next = { ...chatSettings, sound: e.target.checked }; persistChatSettings(next); if (e.target.checked) { try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.type='sine'; o.frequency.value=880; o.connect(g); g.connect(ctx.destination); o.start(); setTimeout(() => { try { o.stop(); ctx.close(); } catch (_) {} }, 120); } catch(_){} } }} />} label='Sound' />
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mt: 1 }}>
                   <select value={soundFile} onChange={(e) => { const next = e.target.value; setSoundFile(next); try { localStorage.setItem('chatSoundFile', next); } catch (_) {} }} style={{ padding: 6, background: 'transparent', color: '#fff', borderRadius: 6, border: '1px solid rgba(255,255,255,0.06)' }}>
                     <option value="/sounds/chat-notify.mp3">Default</option>
@@ -872,11 +1050,33 @@ export default function ChatApp() {
                   <Button size='small' onClick={() => { try { if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; audioRef.current.play().catch(e => {}); } } catch(e) {} }}>Test</Button>
                   <input type='file' accept='audio/*' onChange={(e) => { const f = e.target.files?.[0]; if (f) { const url = URL.createObjectURL(f); setSoundFile(url); try { localStorage.setItem('chatSoundFile', url); } catch (_) {} } }} style={{ display: 'inline-block' }} title='Upload custom sound' />
                 </Box>
-                <FormControlLabel control={<Switch checked={chatSettings.desktop} onChange={(e) => { const next = { ...chatSettings, desktop: e.target.checked }; setChatSettings(next); try { localStorage.setItem('chatSettings', JSON.stringify(next)); } catch (x) {} if (e.target.checked && typeof Notification !== 'undefined' && Notification.permission === 'default') { try { Notification.requestPermission(); } catch(_){} } }} />} label='Desktop notifications' />
-                <FormControlLabel control={<Switch checked={chatSettings.badge} onChange={(e) => { const next = { ...chatSettings, badge: e.target.checked }; setChatSettings(next); try { localStorage.setItem('chatSettings', JSON.stringify(next)); } catch (x) {} }} />} label='Show tray badge' />
-                <FormControlLabel control={<Switch checked={chatSettings.compact} onChange={(e) => { const next = { ...chatSettings, compact: e.target.checked }; setChatSettings(next); try { localStorage.setItem('chatSettings', JSON.stringify(next)); } catch (x) {} }} />} label='Compact view' />
+                <FormControlLabel control={<Switch checked={chatSettings.desktop} onChange={(e) => { const next = { ...chatSettings, desktop: e.target.checked }; persistChatSettings(next); if (e.target.checked && typeof Notification !== 'undefined' && Notification.permission === 'default') { try { Notification.requestPermission(); } catch(_){} } }} />} label='Desktop notifications' />
+                <FormControlLabel control={<Switch checked={chatSettings.badge} onChange={(e) => { const next = { ...chatSettings, badge: e.target.checked }; persistChatSettings(next); }} />} label='Show tray badge' />
+                <FormControlLabel control={<Switch checked={chatSettings.compact} onChange={(e) => { const next = { ...chatSettings, compact: e.target.checked }; persistChatSettings(next); }} />} label='Compact view' />
+                <FormControlLabel control={<Switch checked={chatSettings.leftAlignMessages} onChange={(e) => { const next = { ...chatSettings, leftAlignMessages: e.target.checked }; persistChatSettings(next); }} />} label='Left align messages' />
+                <FormControlLabel control={<Switch checked={chatSettings.hideSidebar} onChange={(e) => { const next = { ...chatSettings, hideSidebar: e.target.checked }; persistChatSettings(next); }} />} label='Hide conversations' />
               </Box>
             </Popover>
+            <Drawer anchor='right' open={drawerOpen} onClose={() => setDrawerOpen(false)}>
+              <Box sx={{ width: 320, p: 2 }}>{/* replicate same settings content as Popover */}
+                <Typography variant='subtitle1' sx={{ mb: 1 }}>Chat settings</Typography>
+                <FormControlLabel control={<Switch checked={chatSettings.sound} onChange={(e) => { const next = { ...chatSettings, sound: e.target.checked }; persistChatSettings(next); if (e.target.checked) { try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.type='sine'; o.frequency.value=880; o.connect(g); g.connect(ctx.destination); o.start(); setTimeout(() => { try { o.stop(); ctx.close(); } catch (_) {} }, 120); } catch(_){} } }} />} label='Sound' />
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mt: 1 }}>
+                  <select value={soundFile} onChange={(e) => { const next = e.target.value; setSoundFile(next); try { localStorage.setItem('chatSoundFile', next); } catch (_) {} }} style={{ padding: 6, background: 'transparent', color: '#111', borderRadius: 6, border: '1px solid rgba(0,0,0,0.06)' }}>
+                    <option value="/sounds/chat-notify.mp3">Default</option>
+                    <option value="/sounds/chat-success.mp3">Chime</option>
+                    <option value="/sounds/chat-pop.mp3">Pop</option>
+                  </select>
+                  <Button size='small' onClick={() => { try { if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; audioRef.current.play().catch(e => {}); } } catch(e) {} }}>Test</Button>
+                  <input type='file' accept='audio/*' onChange={(e) => { const f = e.target.files?.[0]; if (f) { const url = URL.createObjectURL(f); setSoundFile(url); try { localStorage.setItem('chatSoundFile', url); } catch (_) {} } }} style={{ display: 'inline-block' }} title='Upload custom sound' />
+                </Box>
+                <FormControlLabel control={<Switch checked={chatSettings.desktop} onChange={(e) => { const next = { ...chatSettings, desktop: e.target.checked }; persistChatSettings(next); if (e.target.checked && typeof Notification !== 'undefined' && Notification.permission === 'default') { try { Notification.requestPermission(); } catch(_){} } }} />} label='Desktop notifications' />
+                <FormControlLabel control={<Switch checked={chatSettings.badge} onChange={(e) => { const next = { ...chatSettings, badge: e.target.checked }; persistChatSettings(next); }} />} label='Show tray badge' />
+                <FormControlLabel control={<Switch checked={chatSettings.compact} onChange={(e) => { const next = { ...chatSettings, compact: e.target.checked }; persistChatSettings(next); }} />} label='Compact view' />
+                  <FormControlLabel control={<Switch checked={chatSettings.leftAlignMessages} onChange={(e) => { const next = { ...chatSettings, leftAlignMessages: e.target.checked }; persistChatSettings(next); }} />} label='Left align messages' />
+                <FormControlLabel control={<Switch checked={chatSettings.hideSidebar} onChange={(e) => { const next = { ...chatSettings, hideSidebar: e.target.checked }; persistChatSettings(next); }} />} label='Hide conversations' />
+              </Box>
+            </Drawer>
           </Box>
               {serverOffline && (
                 <Box sx={{ ml: 2, display: 'flex', alignItems: 'center', color: '#ffcc00' }}>
@@ -905,72 +1105,58 @@ export default function ChatApp() {
                 <IconButton size='small' onClick={loadMoreMessages} sx={{ bgcolor: 'rgba(255,255,255,0.03)', color: '#ddd' }}>Load more</IconButton>
               </Box>
             )}
-            {messages.map((msg) => (
+            {messages.length > 0 ? messages.map((msg) => (
               <Box
                 key={msg.id}
                 sx={{
                   mb: 2.5,
-                  display: "flex",
-                  justifyContent:
-                    msg.sender === "me" ? "flex-end" : "flex-start",
+                  display: 'flex',
+                  justifyContent: (chatSettings.leftAlignMessages ? 'flex-start' : (msg.sender === 'me' ? 'flex-end' : 'flex-start')),
                 }}
               >
-                            {msg.sender !== 'me' && (
-                              <Box sx={{ display: 'flex', alignItems: 'flex-end', mr: 1 }}>
-                                {msg.avatarUrl ? <Avatar src={msg.avatarUrl} sx={{ width: chatSettings.compact ? 22 : 28, height: chatSettings.compact ? 22 : 28 }} /> : <Avatar sx={{ bgcolor: avatarColor(msg.displayName || msg.avatarInitial), width: chatSettings.compact ? 22 : 28, height: chatSettings.compact ? 22 : 28, fontSize: '0.9rem' }}>{msg.avatarInitial || 'U'}</Avatar>}
-                              </Box>
-                            )}
-                <Box
-                  sx={{
-                    maxWidth: "82%",
-                    ml: msg.sender === 'me' ? 0 : 1,
-                    px: chatSettings.compact ? 1.5 : 2.5,
-                    py: chatSettings.compact ? 1 : 1.8,
-                    borderRadius: 3,
-                    borderTopLeftRadius: msg.sender === "me" ? 18 : 4,
-                    borderTopRightRadius: msg.sender === "me" ? 4 : 18,
-                    borderBottomLeftRadius: msg.sender === "me" ? 18 : 18,
-                    borderBottomRightRadius: msg.sender === "me" ? 4 : 18,
-                    bgcolor:
-                    msg.sender === "me"
-                      ? "linear-gradient(135deg, #00b0ff, #0b93f6)"
-                      : "rgba(230,230,235,0.95)",
-                    color: msg.sender === "me" ? "white" : "#111",
-                    boxShadow:
-                    msg.sender === "me"
-                      ? "0 8px 20px rgba(0,176,255,0.3)"
-                      : "none",
-                    backdropFilter: "blur(10px)",
-                    position: "relative",
-                    transition: 'transform 140ms ease, box-shadow 140ms ease',
-                  }}
-                >
-                  <Typography
-                    variant="body1"
-                    sx={{ lineHeight: 1.4, wordBreak: "break-word", whiteSpace: 'pre-wrap', fontSize: chatSettings.compact ? '0.92rem' : '1rem' }}
-                  >
-                    {msg.text}
-                  </Typography>
-                  <Typography
-                    variant="caption"
+                {msg.sender !== 'me' && (
+                  <Box sx={{ display: 'flex', alignItems: 'flex-end', mr: 1 }}>
+                    {msg.avatarUrl ? (
+                      <Avatar src={msg.avatarUrl} sx={{ width: chatSettings.compact ? 22 : 28, height: chatSettings.compact ? 22 : 28 }} />
+                    ) : (
+                      <Avatar sx={{ bgcolor: avatarColor(msg.displayName || msg.avatarInitial), width: chatSettings.compact ? 22 : 28, height: chatSettings.compact ? 22 : 28, fontSize: '0.9rem' }}>{msg.avatarInitial || 'U'}</Avatar>
+                    )}
+                  </Box>
+                )}
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: (chatSettings.leftAlignMessages ? 'flex-start' : (msg.sender === 'me' ? 'flex-end' : 'flex-start')) }}>
+                  {msg.sender !== 'me' && msg.displayName && (
+                    <Typography variant='caption' sx={{ color: 'rgba(255,255,255,0.85)', fontWeight: 600, mb: 0.5, maxWidth: '72%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{msg.displayName}</Typography>
+                  )}
+                      <Box
                     sx={{
-                      opacity: 0.7,
-                      fontSize: "0.7rem",
-                      display: "block",
-                      textAlign: "right",
-                      mt: 0.5,
+                      maxWidth: '82%',
+                      ml: msg.sender === 'me' ? 0 : 1,
+                      px: chatSettings.compact ? 1.5 : 2.5,
+                      py: chatSettings.compact ? 1 : 1.8,
+                      borderRadius: 3,
+                      borderTopLeftRadius: msg.sender === 'me' ? 18 : 4,
+                      borderTopRightRadius: msg.sender === 'me' ? 4 : 18,
+                      borderBottomLeftRadius: msg.sender === 'me' ? 18 : 18,
+                      borderBottomRightRadius: msg.sender === 'me' ? 4 : 18,
+                      bgcolor: msg.sender === 'me' ? 'linear-gradient(135deg, #00b0ff, #0b93f6)' : 'rgba(230,230,235,0.95)',
+                      color: msg.sender === 'me' ? 'white' : '#111',
+                      boxShadow: msg.sender === 'me' ? '0 8px 20px rgba(0,176,255,0.3)' : 'none',
+                      backdropFilter: 'blur(10px)',
+                      position: 'relative',
+                      transition: 'transform 140ms ease, box-shadow 140ms ease',
                     }}
                   >
-                    {msg.time}
-                  </Typography>
-                  {msg.sender === 'me' && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
-                      {msg.read ? <FiCheck size={14} color='#4ade80' /> : <Typography variant='caption' sx={{ opacity: 0.6, fontSize: '0.65rem' }}>Sent</Typography>}
-                    </Box>
-                  )}
+                    <Typography variant='body1' sx={{ lineHeight: 1.4, wordBreak: 'break-word', whiteSpace: 'pre-wrap', fontSize: chatSettings.compact ? '0.92rem' : '1rem' }}>{msg.text}</Typography>
+                    <Typography variant='caption' sx={{ opacity: 0.7, fontSize: '0.7rem', display: 'block', textAlign: 'right', mt: 0.5 }}>{msg.time}</Typography>
+                    {msg.sender === 'me' && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
+                        {msg.read ? <FiCheck size={14} color='#4ade80' /> : <Typography variant='caption' sx={{ opacity: 0.6, fontSize: '0.65rem' }}>Sent</Typography>}
+                      </Box>
+                    )}
+                  </Box>
                 </Box>
               </Box>
-            ))}
+            )) : null}
             <div ref={messagesEndRef} />
           </Box>
 

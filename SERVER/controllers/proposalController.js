@@ -7,6 +7,8 @@ const CapitalOutlay = require('../models/CapitalOutlay');
 const BudgetarySupport = require('../models/BudgetarySupport');
 const Income = require('../models/Income');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+const fs = require('fs');
+const path = require('path');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const notificationController = require('./notificationController');
 const User = require('../models/User');
@@ -1094,6 +1096,116 @@ exports.saveAsDraft = async (req, res) => {
       message: "Error saving proposal as draft",
       error: error.message,
     });
+  }
+};
+
+// Upload proposal attachment (PDF or Excel) — only allowed for the proposal owner (preparer)
+exports.uploadProposalAttachment = async (req, res) => {
+  try {
+    const proposalId = req.params.id;
+    if (!proposalId) return res.status(400).json({ message: 'Missing proposal id' });
+    const Proposal = require('../models/Proposal');
+    const proposal = await Proposal.findById(proposalId);
+    if (!proposal) return res.status(404).json({ message: 'Proposal not found' });
+
+    // Ensure user is the owner (was checked by middleware but double-check)
+    const userId = req.user?.id;
+    if (!userId || proposal.processBy !== userId) {
+      return res.status(403).json({ message: 'Only proposal owner (Budget Preparer) can upload attachments' });
+    }
+
+    // Ensure the user has PREPARER role
+    const roles = req.user?.Roles || [];
+    const hasPreparer = roles.includes('BUDGET PREPARER') || roles.includes('BUDGET_PREPARER');
+    if (!hasPreparer) {
+      return res.status(403).json({ message: 'Only Budget Preparers can upload supporting documents' });
+    }
+
+    // Validate file
+    const file = req.file;
+    if (!file) return res.status(400).json({ message: 'No file uploaded' });
+    const allowedMimes = [
+      'application/pdf',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    ];
+    if (!allowedMimes.includes(file.mimetype)) {
+      return res.status(400).json({ message: 'Only PDF and Excel files are allowed' });
+    }
+    // Limit file size to 10MB
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      return res.status(400).json({ message: 'File too large. Maximum allowed size is 10MB' });
+    }
+
+    // Save file to disk (uploads/proposal_attachments)
+    const uploadDir = path.join(__dirname, '..', 'uploads', 'proposal_attachments');
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+    const timestamp = Date.now();
+    const safeName = (file.originalname || 'attachment').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const ext = path.extname(safeName) || '';
+    const filename = `proposal_${proposalId}_${timestamp}${ext}`;
+    const filepath = path.join(uploadDir, filename);
+    fs.writeFileSync(filepath, file.buffer);
+
+    // Build file url for serving via static files (relative path)
+    const url = `/uploads/proposal_attachments/${filename}`;
+
+    // Add metadata to proposal
+    const module = (req.query.module || 'general');
+    const metadata = {
+      module,
+      originalName: file.originalname,
+      filename,
+      mimeType: file.mimetype,
+      size: file.size,
+      url,
+      uploadedBy: userId,
+      uploadedByName: `${req.user?.FirstName || ''} ${req.user?.LastName || ''}`.trim(),
+      uploadedAt: new Date()
+    };
+    proposal.attachments = proposal.attachments || [];
+    proposal.attachments.push(metadata);
+    await proposal.save();
+
+    return res.status(201).json({ message: 'Attachment uploaded', attachment: metadata });
+  } catch (err) {
+    console.error('uploadProposalAttachment error:', err);
+    return res.status(500).json({ message: 'Error uploading attachment', error: err.message });
+  }
+};
+
+// Delete proposal attachment — only proposer or admin
+exports.deleteProposalAttachment = async (req, res) => {
+  try {
+    const proposalId = req.params.id;
+    const attachmentId = req.params.attachmentId;
+    const Proposal = require('../models/Proposal');
+    const proposal = await Proposal.findById(proposalId);
+    if (!proposal) return res.status(404).json({ message: 'Proposal not found' });
+
+    // Only owner or admin can delete
+    const userId = req.user?.id;
+    const roles = req.user?.Roles || [];
+    const isAdmin = roles.includes('SUPER ADMIN') || roles.includes('ADMIN') || roles.includes('BUDGET_ADMIN');
+    if (!isAdmin && proposal.processBy !== userId) {
+      return res.status(403).json({ message: 'Only proposal owner or admin can delete attachments' });
+    }
+
+    // Find attachment
+    const idx = (proposal.attachments || []).findIndex(a => String(a.attachmentId || a._id) === String(attachmentId));
+    if (idx === -1) return res.status(404).json({ message: 'Attachment not found' });
+    const attachment = proposal.attachments[idx];
+    // Delete file on disk
+    const filepath = path.join(__dirname, '..', attachment.url || '');
+    try { fs.unlinkSync(filepath); } catch (e) { /* ignore */ }
+    // Remove from DB
+    proposal.attachments.splice(idx, 1);
+    await proposal.save();
+    return res.status(200).json({ message: 'Attachment deleted' });
+  } catch (err) {
+    console.error('deleteProposalAttachment error:', err);
+    return res.status(500).json({ message: 'Error deleting attachment', error: err.message });
   }
 };
 
