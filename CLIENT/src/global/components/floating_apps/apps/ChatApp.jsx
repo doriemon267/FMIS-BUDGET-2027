@@ -18,13 +18,15 @@ import {
   MenuItem,
   Switch,
   FormControlLabel,
-  Popover,
+  Dialog,
+  DialogTitle,
+  DialogContent,
   Drawer,
   useMediaQuery
 } from "@mui/material";
 import { useTheme } from '@mui/material/styles';
 import { IoSend } from "react-icons/io5";
-import { FiSearch, FiRefreshCw, FiSettings, FiCheck, FiBell, FiBellOff, FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import { FiSearch, FiRefreshCw, FiSettings, FiCheck, FiBell, FiBellOff, FiChevronLeft, FiChevronRight, FiMapPin, FiTrash2, FiX } from "react-icons/fi";
 import io from 'socket.io-client';
 import api from '../../../../config/api';
 import env from '../../../../utils/env';
@@ -53,7 +55,7 @@ export default function ChatApp() {
   const [serverOffline, setServerOffline] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
   const { currentUser } = useUser();
-  const [chatSettings, setChatSettings] = useState({ sound: true, desktop: true, badge: true, compact: false, hideSidebar: false, leftAlignMessages: true });
+  const [chatSettings, setChatSettings] = useState({ sound: true, desktop: true, badge: true, compact: false, hideSidebar: false, leftAlignMessages: true, pinned: true, dimOnOpen: false });
   const [chatMutedMap, setChatMutedMap] = useState({});
   const [settingsAnchor, setSettingsAnchor] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -61,9 +63,99 @@ export default function ChatApp() {
   const isSmall = useMediaQuery(theme.breakpoints.down('sm'));
   const [soundFile, setSoundFile] = useState(localStorage.getItem('chatSoundFile') || '/sounds/chat-notify.mp3');
   const audioRef = useRef(null);
+  // Reference to the composer input (textarea) so we can insert emoji at the cursor
+  const inputRef = useRef(null);
+  const emojiBtnRef = useRef(null);
+  const [emojiAnchor, setEmojiAnchor] = useState(null);
+  const isComposingRef = useRef(false);
+  const [msgContextMenu, setMsgContextMenu] = useState(null);
+  const [convContextMenu, setConvContextMenu] = useState(null);
+  const [convDeleteAnchor, setConvDeleteAnchor] = useState(null);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      // Check if clicking on a delete button (FiTrash2 icon or its parent IconButton)
+      const isDeleteButton = event.target.closest('[title="Delete options"]');
+      
+      if (isDeleteButton) {
+        // Let the button's onClick handle it
+        return;
+      }
+
+      // Check if clicking inside the menu
+      const menuElement = document.querySelector('.MuiMenu-paper.chat-delete-menu, .MuiPopover-paper');
+      if (menuElement && menuElement.contains(event.target)) {
+        // Clicking inside menu, don't close
+        return;
+      }
+
+      // Close conversation menu if clicking outside
+      if (convContextMenu) {
+        setConvContextMenu(null);
+        setConvDeleteAnchor(null);
+      }
+
+      // Close message menu if clicking outside
+      if (msgContextMenu) {
+        setMsgContextMenu(null);
+      }
+    };
+
+    if (convContextMenu || msgContextMenu) {
+      // Use capture phase to handle before other handlers
+      document.addEventListener('mousedown', handleClickOutside, true);
+      return () => document.removeEventListener('mousedown', handleClickOutside, true);
+    }
+  }, [convContextMenu, msgContextMenu]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  // Delete conversation
+  const handleDeleteConversation = async (peerId, deleteForEveryone = false) => {
+    if (!peerId) return;
+    try {
+      await api.delete(`/api/chat/conversations/${peerId}`, {
+        data: { deleteForEveryone }
+      });
+      toast.success(deleteForEveryone ? 'Conversation deleted for everyone' : 'Conversation deleted for you');
+      // Remove from conversations list
+      updateConversations((prev) => prev.filter((c) => c.id !== peerId));
+      // If the deleted conversation was selected, clear selection
+      if (selected?.id === peerId) {
+        setSelected(null);
+        setMessages([]);
+      }
+      // Reload conversations to ensure sync
+      await loadConversations();
+      setConvContextMenu(null);
+    } catch (e) {
+      console.error('Delete conversation failed', e);
+      toast.error('Failed to delete conversation');
+    }
+  };
+
+  // Delete message
+  const handleDeleteMessage = async (messageId, deleteForEveryone = false) => {
+    if (!messageId) return;
+    try {
+      await api.delete(`/api/chat/messages/${messageId}`, {
+        data: { deleteForEveryone }
+      });
+      toast.success(deleteForEveryone ? 'Message deleted for everyone' : 'Message deleted for you');
+      // Remove message from UI
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      setMsgContextMenu(null);
+      // If no more messages, reload conversations
+      if (messages.length <= 1 && selected?.id) {
+        await loadConversations();
+      }
+    } catch (e) {
+      console.error('Delete message failed', e);
+      toast.error('Failed to delete message');
+    }
   };
 
   // Helper to compute a friendly avatar initial for a message/sender
@@ -138,7 +230,10 @@ export default function ChatApp() {
   useEffect(() => {
     try {
       const s = JSON.parse(localStorage.getItem('chatSettings') || '{}');
-      setChatSettings({ sound: s.sound !== false, desktop: s.desktop !== false, badge: s.badge !== false, compact: s.compact === true, hideSidebar: !!s.hideSidebar, leftAlignMessages: s.leftAlignMessages !== false });
+      const initial = { sound: s.sound !== false, desktop: s.desktop !== false, badge: s.badge !== false, compact: s.compact === true, hideSidebar: !!s.hideSidebar, leftAlignMessages: s.leftAlignMessages !== false, pinned: s.pinned !== false };
+      // On small screens default to hide conversations sidebar unless user explicitly set it
+      if (isSmall && s.hideSidebar === undefined) initial.hideSidebar = true;
+      setChatSettings(initial);
     } catch (e) {
       // ignore, use defaults
     }
@@ -171,19 +266,64 @@ export default function ChatApp() {
     return () => { window.removeEventListener('storage', handler); window.removeEventListener('chat-settings-changed', customHandler); };
   }, []);
 
+  // Helper to play a notification sound with graceful fallback
+  const playNotificationSound = async () => {
+    try {
+      const audio = audioRef.current;
+      if (audio) {
+        try {
+          // quick HEAD check to avoid unsupported caching behavior on some proxies/servers
+          try {
+            await fetch(audio.src || soundFile, { method: 'HEAD', cache: 'no-store', mode: 'same-origin' });
+          } catch (e) {
+            // HEAD failed, log and fallback
+            console.warn('[ChatApp] audio HEAD check failed, allowing play and catching runtime errors', e?.message || e);
+          }
+          await audio.play();
+          return;
+        } catch (playErr) {
+          console.warn('[ChatApp] audio play failed; falling back to oscillator', playErr);
+        }
+      }
+    } catch (err) {
+      console.warn('[ChatApp] playNotificationSound error', err);
+    }
+    // Fallback: oscillator beep
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.value = 880;
+      o.connect(g);
+      g.connect(ctx.destination);
+      o.start();
+      setTimeout(() => { try { o.stop(); ctx.close(); } catch (_) {} }, 140);
+    } catch (e) { /* ignore fallback errors */ }
+  };
+
   // Initialize audioRef whenever soundFile changes
   useEffect(() => {
+    // Lazy-load audio resource only when playing is attempted. Keep a lightweight audio object when "Test" is clicked.
     try {
       if (!soundFile) { audioRef.current = null; return; }
+      // Do not force preload; some dev servers/proxies may not support streaming requests.
       const a = new Audio(soundFile);
-      a.preload = 'auto';
+      a.preload = 'none';
+      // Attach error handler to fallback gracefully to oscillator if the audio cannot be fetched/decoded
+      const onAudioErr = (ev) => {
+        console.warn('[ChatApp] audio load error, will fallback to oscillator', ev);
+        try { a.removeEventListener('error', onAudioErr); } catch (_) {}
+        try { if (audioRef.current === a) audioRef.current = null; } catch (_) {}
+      };
+      a.addEventListener('error', onAudioErr);
       audioRef.current = a;
     } catch (e) {
-      console.warn('[ChatApp] failed to init audio', e);
+      console.warn('[ChatApp] failed to init audio resource', e);
       audioRef.current = null;
     }
     return () => {
-      try { if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; } } catch (e) {}
+      try { if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; audioRef.current = null; } } catch (e) {}
     }
   }, [soundFile]);
 
@@ -192,6 +332,25 @@ export default function ChatApp() {
     try { setChatSettings(nextSettings); } catch (e) {}
     try { localStorage.setItem('chatSettings', JSON.stringify(nextSettings)); } catch (e) {}
     try { window.dispatchEvent(new CustomEvent('chat-settings-changed', { detail: nextSettings })); } catch (e) {}
+  };
+
+  // Handler for toggling settings UI; when pinned, open Drawer as popover may be obscured
+  const handleSettingsClick = (e) => {
+    try {
+      // If chat is pinned or device is small, prefer Drawer for visibility
+      const pinned = chatSettings && chatSettings.pinned !== false;
+      if (isSmall || pinned) {
+        // Toggle Drawer rather than always opening it (so we can close if clicking again)
+        setSettingsAnchor(null);
+        setDrawerOpen((prev) => !prev);
+      } else {
+        // Toggle Popover anchor - clicking the icon again should close it
+        const anchor = settingsAnchor ? null : (e && e.currentTarget ? e.currentTarget : null);
+        setSettingsAnchor(anchor);
+        // Also close Drawer if it was open
+        if (drawerOpen) setDrawerOpen(false);
+      }
+    } catch (err) { console.warn('handleSettingsClick failed', err); }
   };
 
   // Fetch messages helper
@@ -289,24 +448,23 @@ export default function ChatApp() {
             }
           } catch (e) { console.warn('[ChatApp] presence API call failed', e); }
         }
-        // If there are no conversations, fetch available contacts (scoped assignments) so we can show an online roster
-        if (!convs || convs.length === 0) {
-          try {
-            const contactsRes = await api.get('/api/chat/contacts');
-            const contacts = contactsRes?.data?.contacts || [];
-            if (contacts.length > 0) {
-              const ids = contacts.map(c => String(c.id || c.userId)).join(',');
-              const pres = ids ? await api.get(`/api/chat/presence?ids=${encodeURIComponent(ids)}`) : null;
-              const onlineMap = pres?.data?.online || {};
-              const enriched = contacts.map(c => ({ ...c, id: String(c.id || c.userId || ''), online: isOnlineForItem(c, onlineMap) }));
-              console.debug('[ChatApp] available contacts:', enriched);
-              setAvailableContacts(enriched);
-            }
-          } catch (e) {
-            console.warn('[ChatApp] failed to fetch available contacts', e);
-            setAvailableContacts([]);
+        // Fetch available contacts to show users you can chat with
+        try {
+          const contactsRes = await api.get('/api/chat/contacts');
+          const contacts = contactsRes?.data?.contacts || [];
+          if (contacts.length > 0) {
+            const ids = contacts.map(c => String(c.id || c.userId)).join(',');
+            const pres = ids ? await api.get(`/api/chat/presence?ids=${encodeURIComponent(ids)}`) : null;
+            const onlineMap = pres?.data?.online || {};
+            // Filter out contacts that are already in conversations
+            const convIds = (convs || []).map(c => String(c.id));
+            const filtered = contacts.filter(c => !convIds.includes(String(c.id || c.userId)));
+            const enriched = filtered.map(c => ({ ...c, id: String(c.id || c.userId || ''), online: isOnlineForItem(c, onlineMap) }));
+            console.debug('[ChatApp] available contacts:', enriched);
+            setAvailableContacts(enriched);
           }
-        } else {
+        } catch (e) {
+          console.warn('[ChatApp] failed to fetch available contacts', e);
           setAvailableContacts([]);
         }
       }
@@ -396,7 +554,8 @@ export default function ChatApp() {
                   try {
                     audio.pause();
                     audio.currentTime = 0; // reset
-                    void audio.play();
+                    // prefer helper that performs a quick HEAD check and fallbacks
+                    void playNotificationSound();
                   } catch (playErr) {
                     // fallback to oscillator
                     try {
@@ -627,6 +786,8 @@ export default function ChatApp() {
       const count = badgeEnabled ? totalUnread : 0;
       // Defer to centralized dispatcher so it can manage timing
       dispatchChatUnread(count);
+      // Persist unread count so minimized chat shows correct readouts after refresh
+      try { const cs = JSON.parse(localStorage.getItem('chatSettings') || '{}'); const next = { ...(cs || {}), unread: count }; localStorage.setItem('chatSettings', JSON.stringify(next)); } catch (e) {}
     } catch (e) { /* ignore */ }
   }, [conversations, chatSettings && chatSettings.badge]);
 
@@ -711,6 +872,51 @@ export default function ChatApp() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [chatSettings]);
+  // Toggle emoji popover with Ctrl/Cmd+E for quick access
+  useEffect(() => {
+    const handler = (e) => {
+      // Toggle emoji with Ctrl/Cmd+E
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
+        try {
+          e.preventDefault();
+          // Prefer emoji button anchor; only fallback to input if emoji button not present
+          const anchorEl = emojiAnchor ? null : (emojiBtnRef.current || inputRef.current || null);
+          let pos = null;
+          if (anchorEl && anchorEl.getBoundingClientRect) {
+            const r = anchorEl.getBoundingClientRect();
+            pos = { top: Math.round(r.top), left: Math.round(r.left + r.width / 2) };
+          }
+          setEmojiAnchorPos(pos);
+          const anchor = anchorEl;
+          console.debug('[ChatApp] emoji keyboard toggle; anchor=', anchor);
+          setEmojiAnchor(anchor);
+          if (!anchor && inputRef.current) inputRef.current.focus();
+        } catch (err) {}
+      }
+      // Close emoji popover on Escape and restore focus
+      if (e.key === 'Escape' && emojiAnchor) {
+        try { setEmojiAnchor(null); if (inputRef.current) inputRef.current.focus(); } catch (_) {}
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [emojiAnchor]);
+
+  // Log and compute inline positioning for fallback if the Popover doesn't appear
+  useEffect(() => {
+    try {
+      console.debug('[ChatApp] emojiAnchor changed ->', emojiAnchor);
+      // Attach composition listeners to input to handle IME composition scenarios
+      const el = inputRef.current;
+      if (el && !el.__composition_listeners_attached) {
+        const onStart = () => { isComposingRef.current = true; };
+        const onEnd = () => { isComposingRef.current = false; };
+        el.addEventListener('compositionstart', onStart);
+        el.addEventListener('compositionend', onEnd);
+        el.__composition_listeners_attached = true;
+      }
+    } catch (e) { console.warn('[ChatApp] failed to attach composition listeners', e); }
+  }, [emojiAnchor]);
   // Typing debounce
   const typingTimerRef = useRef(null);
   const startTyping = () => {
@@ -727,7 +933,8 @@ export default function ChatApp() {
     const to = selected?.id;
     try {
       const clientId = `client-${Date.now()}-${Math.round(Math.random() * 10000)}`;
-      const payload = { to, text: input, metadata: { clientId } };
+      const myAvatarUrl = currentUser?.photo || currentUser?.Photo || currentUser?.avatarUrl || null;
+      const payload = { to, text: input, metadata: { clientId, avatarUrl: myAvatarUrl } };
       await api.post('/api/chat/messages', payload);
       try { socket?.emit('typing-stop', { to }); } catch (e) {}
       const optimisticMsg = {
@@ -740,6 +947,7 @@ export default function ChatApp() {
           hour: '2-digit', minute: '2-digit',
         }),
         avatar: getAvatarInitial((currentUser && (currentUser?.name || currentUser?.Name || currentUser?.displayName)) || null, (currentUser && (currentUser?.userId || currentUser?.id || currentUser?.Id)) || null),
+        avatarUrl: currentUser?.photo || currentUser?.Photo || currentUser?.avatarUrl || null,
       };
       setMessages((prev) => [...prev, optimisticMsg]);
     } catch (e) {
@@ -747,6 +955,81 @@ export default function ChatApp() {
     }
     setInput("");
   };
+
+    // Basic emoji list for quick insertion
+    const EMOJIS = ['😊','😂','😍','👍','🙏','😮','😢','🎉','😅','🤔','😎','🔥','🤝','🙌','💯','👏','😴','😇','🤗','😜','🤩','😬','🤐','🤤','🤒','🤕','😷','🤧','🥳','🫡','💥','🍀','🍻','🍕','🌟','✨','❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎'];
+    const SHORTCODE_MAP = {
+      ':smile:': '😊', ':laugh:': '😂', ':heart:': '😍', ':thumbsup:': '👍', ':pray:': '🙏', ':surprised:': '😮', ':cry:': '😢', ':tada:': '🎉', ':sweat_smile:': '😅', ':thinking:': '🤔', ':sunglasses:': '😎', ':fire:': '🔥'
+    };
+    const EMOTICON_MAP = {
+      ':)': '😊', ':-)': '😊', ':(': '☹️', ':-(': '☹️', ':D': '😄', 'XD': '😆', ';)' : '😉', ':P': '😛', ':p': '😛', ':/':'😕', ':|':'😐'
+    };
+
+    const insertEmojiAtCursor = (emoji) => {
+      try {
+        const el = inputRef.current;
+        if (!el) {
+          setInput((prev) => (prev || '') + emoji);
+          return;
+        }
+        const commit = () => {
+          try {
+            const start = Number.isInteger(el.selectionStart) ? el.selectionStart : 0;
+            const end = Number.isInteger(el.selectionEnd) ? el.selectionEnd : start;
+            const value = el.value || input || '';
+            const next = value.slice(0, start) + emoji + value.slice(end);
+            setInput(next);
+            setTimeout(() => {
+              try {
+                el.focus();
+                const pos = start + emoji.length;
+                if (typeof el.setSelectionRange === 'function') el.setSelectionRange(pos, pos);
+                else { el.selectionStart = el.selectionEnd = pos; }
+              } catch (e) { /* ignore caret restore error */ }
+            }, 8);
+          } catch (err) { setInput((prev) => (prev || '') + emoji); }
+        };
+
+        const replaceShortcodeAtCursor = (el) => {
+          try {
+            if (!el) return false;
+            const start = Number.isInteger(el.selectionStart) ? el.selectionStart : 0;
+            const value = el.value || input || '';
+            // find last word before cursor that looks like :shortcode:
+            const left = value.slice(0, start);
+            const match = left.match(/(:[a-z0-9_+-]+:)$/i);
+            let emoji = null;
+            if (match && match[1]) {
+              const key = match[1].toLowerCase();
+              emoji = SHORTCODE_MAP[key];
+            }
+            // If no shortcode matched, check simpler emoticon patterns
+            if (!emoji) {
+              // grab last up to 3 characters to match emoticons like ':-)' or 'XD'
+              const tail = left.slice(-3);
+              const candidates = [tail, tail.slice(-2), tail.slice(-1)];
+              for (const c of candidates) {
+                if (EMOTICON_MAP[c]) { emoji = EMOTICON_MAP[c]; break; }
+              }
+            }
+            if (!emoji) return false;
+            try { console.debug('[ChatApp] replaceShortcodeAtCursor replacing', { key: emoji, s: match ? match[1] : null, tail: left.slice(-3) }); } catch (e) {}
+            if (!emoji) return false;
+            const s = start - key.length;
+            const next = value.slice(0, s) + emoji + value.slice(start);
+            setInput(next);
+            setTimeout(() => { try { el.focus(); const pos = s + emoji.length; el.setSelectionRange(pos, pos); } catch(_) {} }, 8);
+            return true;
+          } catch (e) { return false; }
+        };
+        if (isComposingRef.current) {
+          const onComp = () => { commit(); el.removeEventListener('compositionend', onComp); };
+          el.addEventListener('compositionend', onComp);
+        } else {
+          commit();
+        }
+      } catch (e) { setInput((prev) => (prev || '') + emoji); }
+    };
 
   // Mark messages as read when selecting a conversation or when focused
   useEffect(() => {
@@ -769,120 +1052,264 @@ export default function ChatApp() {
   return (
     <Box
       sx={{
-        width: 480,
-        overflowX: 'hidden',
-        height: 620,
-        bgcolor: "rgba(15, 15, 25, 0.95)",
+        width: '100%',
+        maxWidth: '100%',
+        height: '100%',
+        maxHeight: '100%',
+        bgcolor: "rgba(20, 20, 35, 0.95)",
         overflow: "hidden",
-        boxShadow: "0 20px 40px rgba(0,0,0,0.6)",
-        backdropFilter: "blur(20px)",
-        border: "1px solid rgba(255,255,255,0.08)",
+        boxShadow: "0 24px 48px rgba(0,0,0,0.5)",
+        backdropFilter: "blur(30px)",
+        border: "1px solid rgba(255,255,255,0.06)",
+        borderRadius: 16,
         display: "flex",
         flexDirection: "column",
-        fontFamily: "'Inter', sans-serif",
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
       }}
     >
-            <Box sx={{ display: "flex", flex: 1, minHeight: 0, overflowX: 'hidden' }}>
+      {/* Message Context Menu */}
+      <Menu
+        open={!!msgContextMenu}
+        onClose={() => setMsgContextMenu(null)}
+        anchorReference="anchorPosition"
+        anchorPosition={msgContextMenu ? { top: msgContextMenu.mouseY, left: msgContextMenu.mouseX } : undefined}
+        disablePortal={false}
+        container={() => document.body}
+        PopoverClasses={{ root: 'chat-delete-menu' }}
+        BackdropProps={{
+          invisible: true,
+          sx: { pointerEvents: 'none' }
+        }}
+        slotProps={{
+          paper: {
+            sx: {
+              zIndex: 9999999,
+              bgcolor: 'rgba(30,30,45,0.98)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              backdropFilter: 'blur(10px)',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.6)'
+            },
+            elevation: 24
+          }
+        }}
+        MenuListProps={{
+          sx: { zIndex: 9999999 },
+          onMouseDown: (e) => e.stopPropagation()
+        }}
+      >
+        <MenuItem 
+          onClick={() => handleDeleteMessage(msgContextMenu?.messageId, false)}
+          sx={{ color: 'white', '&:hover': { bgcolor: 'rgba(0,176,255,0.2)' } }}
+        >
+          Delete for me
+        </MenuItem>
+        {msgContextMenu?.isMine && (
+          <MenuItem 
+            onClick={() => handleDeleteMessage(msgContextMenu?.messageId, true)}
+            sx={{ color: '#ff6b6b', '&:hover': { bgcolor: 'rgba(255,107,107,0.2)' } }}
+          >
+            Delete for everyone
+          </MenuItem>
+        )}
+      </Menu>
+
+      {/* Conversation Context Menu */}
+      <Menu
+        open={!!convContextMenu}
+        anchorEl={convDeleteAnchor}
+        onClose={() => { setConvContextMenu(null); setConvDeleteAnchor(null); }}
+        anchorOrigin={{
+          vertical: 'top',
+          horizontal: 'right',
+        }}
+        transformOrigin={{
+          vertical: 'bottom',
+          horizontal: 'right',
+        }}
+        disablePortal={false}
+        container={() => document.body}
+        PopoverClasses={{ root: 'chat-delete-menu' }}
+        BackdropProps={{
+          invisible: true,
+          sx: { pointerEvents: 'none' }
+        }}
+        slotProps={{
+          paper: {
+            sx: {
+              zIndex: 9999999,
+              bgcolor: 'rgba(30,30,45,0.98)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              backdropFilter: 'blur(10px)',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.6)'
+            },
+            elevation: 24
+          }
+        }}
+        MenuListProps={{
+          sx: { zIndex: 9999999 },
+          onMouseDown: (e) => e.stopPropagation()
+        }}
+      >
+        <MenuItem 
+          onClick={() => { handleDeleteConversation(convContextMenu?.peerId, false); }}
+          sx={{ color: 'white', '&:hover': { bgcolor: 'rgba(0,176,255,0.2)' } }}
+        >
+          Delete for me
+        </MenuItem>
+        <MenuItem 
+          onClick={() => { handleDeleteConversation(convContextMenu?.peerId, true); }}
+          sx={{ color: '#ff6b6b', '&:hover': { bgcolor: 'rgba(255,107,107,0.2)' } }}
+        >
+          Delete for everyone
+        </MenuItem>
+      </Menu>
+
+            <Box sx={{ display: "flex", flex: 1, minHeight: 0, overflow: 'hidden' }}>
         {/* Sidebar */}
         <Box
           sx={{
-            bgcolor: "rgba(10, 10, 20, 0.7)",
-            borderRight: "1px solid rgba(255,255,255,0.05)",
-            width: chatSettings?.hideSidebar ? 0 : 260,
-            minWidth: chatSettings?.hideSidebar ? 0 : 260,
-            transition: 'width 240ms ease',
+            bgcolor: "rgba(15, 15, 28, 0.8)",
+            borderRight: "1px solid rgba(255,255,255,0.08)",
+            width: chatSettings?.hideSidebar ? 0 : { xs: 0, sm: 280, md: 300 },
+            minWidth: chatSettings?.hideSidebar ? 0 : { xs: 0, sm: 280, md: 300 },
+            transition: 'width 300ms cubic-bezier(0.4, 0, 0.2, 1)',
             overflow: 'hidden',
+            display: { xs: 'none', sm: 'flex' },
+            flexDirection: 'column'
           }}
         >
-          <Box sx={{ p: 1 }}>
+          <Box sx={{ p: 2.5, flexShrink: 0 }}>
             <Box
               sx={{
-                bgcolor: "rgba(255,255,255,0.08)",
+                bgcolor: "rgba(255,255,255,0.06)",
                 borderRadius: 3,
                 display: "flex",
                 alignItems: "center",
-                p: 1,
+                px: 1.5,
+                py: 1,
+                transition: 'all 0.2s',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.09)' },
+                '&:focus-within': { bgcolor: 'rgba(255,255,255,0.09)', boxShadow: '0 0 0 2px rgba(0,176,255,0.3)' }
               }}
             >
               <InputBase
                 placeholder="Search contacts or conversations"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => { 
+                  setSearchQuery(e.target.value);
+                  if (e.target.value.trim()) {
+                    doContactSearch();
+                  } else {
+                    setContactResults([]);
+                  }
+                }}
                 onKeyDown={(e) => { if (e.key === 'Enter') doContactSearch(); }}
-                sx={{ ml: 1, color: '#ddd', width: '100%' }}
+                sx={{ ml: 1, color: '#e0e0e0', width: '100%', fontSize: '0.95rem', '& input::placeholder': { color: 'rgba(255,255,255,0.4)' } }}
               />
               <IconButton size='small' onClick={() => doContactSearch()}>
-                <FiSearch color="#888" />
+                <FiSearch color="#888" size={16} />
               </IconButton>
             </Box>
-            <Box sx={{ px: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-              <Typography color='rgba(255,255,255,0.6)' fontSize='0.8rem'>Online</Typography>
-              <Typography color='rgba(255,255,255,0.6)' fontSize='0.8rem'>{(availableContacts.filter(c => c.online).length + conversations.filter(c => c.online).length)}</Typography>
-            </Box>
+            {!searchQuery && (
+              <Box sx={{ px: 0.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, mt: 2 }}>
+                <Typography color='rgba(255,255,255,0.5)' fontSize='0.85rem' fontWeight={500}>Online</Typography>
+                <Box sx={{ bgcolor: 'rgba(74,222,128,0.15)', px: 1, py: 0.3, borderRadius: 2 }}>
+                  <Typography color='#4ade80' fontSize='0.85rem' fontWeight={600}>{(availableContacts.filter(c => c.online).length + conversations.filter(c => c.online).length)}</Typography>
+                </Box>
+              </Box>
+            )}
           </Box>
 
-          <List sx={{ pt: 0 }}>
+          <List sx={{ pt: 0, pb: 0, overflowY: 'auto', overflowX: 'hidden', flex: 1, minHeight: 0 }}>
             {/* Show contact search results if present */}
             {contactResults.length > 0 && (
-              <Box sx={{ px: 1, pb: 1 }}>
+              <Box>
+                <Box sx={{ px: 2, py: 1, bgcolor: 'rgba(0,176,255,0.1)' }}>
+                  <Typography color='#00b0ff' fontSize='0.85rem' fontWeight={600}>Search Results ({contactResults.length})</Typography>
+                </Box>
                 {contactResults.map((c) => (
                   <ListItem key={`contact-${c.id}`} disablePadding>
-                    <ListItemButton onClick={() => { setSelected({ id: c.id, name: c.name, avatar: (c.name||'U')[0], unread: 0, muted: (chatMutedMap && chatMutedMap[c.id]) || false }); setContactResults([]); }}>
+                    <ListItemButton 
+                      onClick={() => { 
+                        setSelected({ id: c.id, name: c.name, avatar: (c.name||'U')[0], unread: 0, muted: (chatMutedMap && chatMutedMap[c.id]) || false }); 
+                        setContactResults([]);
+                        setSearchQuery('');
+                      }}
+                      sx={{
+                        '&:hover': { bgcolor: 'rgba(0,176,255,0.15)' }
+                      }}
+                    >
                       <Badge
                         overlap='circular'
                         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
                         badgeContent={c.online ? <Box sx={{ width: 10, height: 10, bgcolor: '#4ade80', borderRadius: '50%', border: '2px solid #0f0f1a' }} /> : null}
                       >
-                          {c.avatarUrl ? <Avatar src={c.avatarUrl} sx={{ width: chatSettings.compact ? 28 : 32, height: chatSettings.compact ? 28 : 32, mr: 1 }} /> : <Avatar sx={{ bgcolor: avatarColor(c.name || c.id), width: chatSettings.compact ? 28 : 32, height: chatSettings.compact ? 28 : 32, mr: 1 }}>{getAvatarInitial(c.name, c.id)}</Avatar>}
+                          {c.avatarUrl ? <Avatar src={c.avatarUrl} sx={{ width: 36, height: 36, mr: 1.5 }} /> : <Avatar sx={{ bgcolor: avatarColor(c.name || c.id), width: 36, height: 36, mr: 1.5, fontWeight: 'bold' }}>{getAvatarInitial(c.name, c.id)}</Avatar>}
                       </Badge>
-                      <Box>
-                        <Typography color='white' fontSize='0.9rem'>{c.name}</Typography>
+                      <Box sx={{ flex: 1 }}>
+                        <Typography color='white' fontSize='0.95rem' fontWeight={600}>{c.name}</Typography>
+                        {c.email && <Typography variant='caption' color='rgba(255,255,255,0.5)'>{c.email}</Typography>}
                       </Box>
                     </ListItemButton>
                   </ListItem>
                 ))}
               </Box>
             )}
-            {availableContacts.length > 0 && (
-              <Box>
-                <Box sx={{ p: 1 }}>
-                  <Typography color='rgba(255,255,255,0.6)' fontSize='0.8rem' sx={{ px: 1, mb: 1 }}>Available</Typography>
-                </Box>
-                <Box sx={{ px: 1, pb: 1 }}>
-                  {availableContacts.map((c) => (
-                    <ListItem key={`available-${c.id}`} disablePadding>
-                      <ListItemButton onClick={() => { setSelected({ id: c.id, name: c.name, avatar: (c.name||'U')[0], unread: 0, muted: (chatMutedMap && chatMutedMap[c.id]) || false }); }}>
-                        <Badge
-                          overlap='circular'
-                          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-                          badgeContent={c.online ? <Box sx={{ width: 10, height: 10, bgcolor: '#4ade80', borderRadius: '50%', border: '2px solid #0f0f1a' }} /> : null}
-                        >
-                          <Avatar sx={{ bgcolor: '#00b0ff', width: 32, height: 32, mr: 1 }}>{getAvatarInitial(c.name, c.id)}</Avatar>
-                        </Badge>
-                        <Box>
-                          <Typography color='white' fontSize='0.9rem'>{c.name}</Typography>
-                          <Typography variant='caption' color='rgba(255,255,255,0.5)'>{c.email}</Typography>
-                        </Box>
-                      </ListItemButton>
-                    </ListItem>
-                  ))}
-                </Box>
+            {searchQuery && contactResults.length === 0 && (
+              <Box sx={{ p: 3, textAlign: 'center' }}>
+                <Typography color='rgba(255,255,255,0.5)' fontSize='0.9rem'>No contacts found</Typography>
               </Box>
             )}
-            {conversations.map((c) => (
+            {!searchQuery && availableContacts.length > 0 && (
+              <Box>
+                <Box sx={{ px: 2.5, py: 1.5, bgcolor: 'transparent', mb: 0.5 }}>
+                  <Typography color='rgba(255,255,255,0.4)' fontSize='0.8rem' fontWeight={700} letterSpacing={0.5}>AVAILABLE USERS</Typography>
+                </Box>
+                {availableContacts.map((c) => (
+                  <ListItem key={`available-${c.id}`} disablePadding>
+                    <ListItemButton 
+                      onClick={() => { setSelected({ id: c.id, name: c.name, avatar: (c.name||'U')[0], unread: 0, muted: (chatMutedMap && chatMutedMap[c.id]) || false }); }}
+                      sx={{ py: 1.2, px: 2, borderRadius: 2, mx: 1, mb: 0.5, transition: 'all 0.2s', '&:hover': { bgcolor: 'rgba(0,176,255,0.1)', transform: 'translateX(4px)' } }}
+                    >
+                      <Badge
+                        overlap='circular'
+                        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                        badgeContent={c.online ? <Box sx={{ width: 10, height: 10, bgcolor: '#4ade80', borderRadius: '50%', border: '2.5px solid rgba(15,15,28,0.9)' }} /> : null}
+                      >
+                        <Avatar sx={{ bgcolor: avatarColor(c.name || c.id), width: 38, height: 38, mr: 1.5, fontSize: '0.95rem', fontWeight: 600 }}>{getAvatarInitial(c.name, c.id)}</Avatar>
+                      </Badge>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography color='white' fontSize='0.95rem' fontWeight={600} noWrap>{c.name}</Typography>
+                        {c.email && <Typography variant='caption' color='rgba(255,255,255,0.45)' fontSize='0.8rem' noWrap>{c.email}</Typography>}
+                      </Box>
+                    </ListItemButton>
+                  </ListItem>
+                ))}
+              </Box>
+            )}
+            {!searchQuery && conversations.length > 0 && (
+              <Box sx={{ px: 2.5, py: 1.5, bgcolor: 'transparent', mt: availableContacts.length > 0 ? 2 : 0, mb: 0.5 }}>
+                <Typography color='rgba(255,255,255,0.4)' fontSize='0.8rem' fontWeight={700} letterSpacing={0.5}>CONVERSATIONS</Typography>
+              </Box>
+            )}
+            {!searchQuery && conversations.map((c) => (
               <ListItem key={c.id} disablePadding>
                 <ListItemButton
                   selected={selected?.id === c.id}
                   onClick={() => setSelected(c)}
                   sx={{
-                    flexDirection: "column",
+                    py: 1.2,
+                    px: 2,
                     position: "relative",
+                    borderRadius: 2,
+                    mx: 1,
+                    mb: 0.5,
+                    transition: 'all 0.2s',
                     bgcolor:
                       selected?.id === c.id
-                        ? "rgba(0, 176, 255, 0.15)"
+                        ? "rgba(0, 176, 255, 0.18)"
                         : "transparent",
-                    "&:hover": { bgcolor: "rgba(0, 176, 255, 0.08)" },
-                    borderRadius: 1,
+                    "&:hover": { bgcolor: selected?.id === c.id ? "rgba(0, 176, 255, 0.18)" : "rgba(0, 176, 255, 0.1)", transform: 'translateX(4px)' },
                   }}
                 >
                   {/* Avatar with online badge */}
@@ -893,29 +1320,54 @@ export default function ChatApp() {
                       c.online ? (
                         <Box
                           sx={{
-                            width: 14,
-                            height: 14,
+                            width: 10,
+                            height: 10,
                             bgcolor: "#4ade80",
-                            border: "3px solid #0f0f1a",
+                            border: "2px solid rgba(15,15,28,0.9)",
                             borderRadius: "50%",
                           }}
                         />
                       ) : null
                     }
                   >
-                      {c.avatarUrl ? <Avatar src={c.avatarUrl} sx={{ width: 36, height: 36, fontWeight: 'bold', fontSize: '1.1rem', boxShadow: '0 4px 12px rgba(0,176,255,0.3)', }} /> : <Avatar sx={{ width: 36, height: 36, bgcolor: avatarColor(c.name || c.id), fontWeight: 'bold', fontSize: '1.1rem', boxShadow: '0 4px 12px rgba(0,176,255,0.3)', }} >{c.avatar || getAvatarInitial(c.name, c.id)}</Avatar>}
+                      {c.avatarUrl ? <Avatar src={c.avatarUrl} sx={{ width: 44, height: 44, fontSize: '1rem', fontWeight: 600 }} /> : <Avatar sx={{ width: 44, height: 44, bgcolor: avatarColor(c.name || c.id), fontSize: '1rem', fontWeight: 600 }} >{c.avatar || getAvatarInitial(c.name, c.id)}</Avatar>}
                   </Badge>
 
-                  <Box sx={{ ml: 1, flex: 1, textAlign: 'left' }}>
-                    <Typography fontWeight={600} color='white' sx={{ fontSize: chatSettings.compact ? '0.85rem' : '0.95rem' }}>{c.name}</Typography>
-                    <Typography variant='caption' color='rgba(255,255,255,0.5)' sx={{ display: 'block' , fontSize: chatSettings.compact ? '0.7rem' : '0.8rem' }}>{c.lastMsg}</Typography>
+                  <Box sx={{ ml: 1.5, flex: 1, textAlign: 'left', minWidth: 0 }}>
+                    <Typography fontWeight={600} color='white' sx={{ fontSize: '0.95rem', mb: 0.3 }} noWrap>{c.name}</Typography>
+                    <Typography variant='caption' color='rgba(255,255,255,0.5)' sx={{ fontSize: '0.85rem' }} noWrap>{c.lastMsg}</Typography>
                   </Box>
-                  <Box sx={{ position: 'absolute', top: 6, right: 48 }}>
-                    <Typography variant='caption' color='rgba(255,255,255,0.5)'>{typeof c.time === 'string' ? c.time : (c.time ? new Date(c.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '')}</Typography>
+                  <Box sx={{ position: 'absolute', top: 12, right: 88 }}>
+                    <Typography variant='caption' color='rgba(255,255,255,0.35)' fontSize='0.75rem' fontWeight={500}>{typeof c.time === 'string' ? c.time : (c.time ? new Date(c.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '')}</Typography>
                   </Box>
-                  <Box sx={{ position: 'absolute', top: 6, right: 20 }}>
-                    <IconButton size='small' onClick={(e) => { e.stopPropagation(); toggleMute(c.id); }} sx={{ color: 'rgba(255,255,255,0.7)' }} title={chatMutedMap && chatMutedMap[c.id] ? 'Unmute' : 'Mute'}>
-                      {chatMutedMap && chatMutedMap[c.id] ? <FiBellOff /> : <FiBell />}
+                  <Box sx={{ position: 'absolute', top: 10, right: 52 }}>
+                    <IconButton size='small' onClick={(e) => { e.stopPropagation(); toggleMute(c.id); }} sx={{ color: 'rgba(255,255,255,0.5)', '&:hover': { color: '#00b0ff', bgcolor: 'rgba(0,176,255,0.1)' } }} title={chatMutedMap && chatMutedMap[c.id] ? 'Unmute' : 'Mute'}>
+                      {chatMutedMap && chatMutedMap[c.id] ? <FiBellOff size={16} /> : <FiBell size={16} />}
+                    </IconButton>
+                  </Box>
+                  <Box sx={{ position: 'absolute', top: 10, right: 20 }}>
+                    <IconButton 
+                      size='small' 
+                      onClick={(e) => { 
+                        e.stopPropagation();
+                        e.preventDefault();
+                        // Toggle menu - close if already open for this conversation
+                        const isOpen = convContextMenu?.peerId === c.id && convDeleteAnchor;
+                        if (isOpen) {
+                          setConvContextMenu(null);
+                          setConvDeleteAnchor(null);
+                        } else {
+                          setConvDeleteAnchor(e.currentTarget);
+                          setConvContextMenu({ peerId: c.id });
+                        }
+                      }} 
+                      sx={{ 
+                        color: convContextMenu?.peerId === c.id ? '#ff6b6b' : 'rgba(255,255,255,0.5)',
+                        '&:hover': { color: '#ff6b6b', bgcolor: 'rgba(255,107,107,0.1)' }
+                      }} 
+                      title='Delete options'
+                    >
+                      <FiTrash2 size={16} />
                     </IconButton>
                   </Box>
                   {c.muted && (
@@ -995,16 +1447,26 @@ export default function ChatApp() {
                 ) : null
               }
             >
-              <Avatar
-                sx={{
-                  bgcolor: "#00b0ff",
-                  width: chatSettings.compact ? 36 : 44,
-                  height: chatSettings.compact ? 36 : 44,
-                  fontWeight: "bold",
-                }}
-              >
-                {selected?.avatar || ''}
-              </Avatar>
+              {selected?.avatarUrl ? (
+                <Avatar
+                  src={selected.avatarUrl}
+                  sx={{
+                    width: chatSettings.compact ? 36 : 44,
+                    height: chatSettings.compact ? 36 : 44,
+                  }}
+                />
+              ) : (
+                <Avatar
+                  sx={{
+                    bgcolor: "#00b0ff",
+                    width: chatSettings.compact ? 36 : 44,
+                    height: chatSettings.compact ? 36 : 44,
+                    fontWeight: "bold",
+                  }}
+                >
+                  {selected?.avatar || ''}
+                </Avatar>
+              )}
             </Badge>
               <Box>
               <Typography fontWeight="700" color="white">
@@ -1029,34 +1491,52 @@ export default function ChatApp() {
             <IconButton size='small' onClick={() => { const next = { ...chatSettings, hideSidebar: !chatSettings.hideSidebar }; persistChatSettings(next); }} sx={{ ml: 1, color: 'white' }} title={chatSettings && chatSettings.hideSidebar ? 'Show conversations' : 'Hide conversations'}>
               {(chatSettings && chatSettings.hideSidebar) ? <FiChevronRight /> : <FiChevronLeft />}
             </IconButton>
-            <IconButton size='small' onClick={(e) => { if (isSmall) { setDrawerOpen(true); } else { setSettingsAnchor(e.currentTarget); } }} sx={{ ml: 1, color: 'white' }} title='Chat Settings' aria-controls={Boolean(settingsAnchor) ? 'chat-settings-popover' : undefined} aria-haspopup='true'><FiSettings /></IconButton>
-            <Popover
-              id='chat-settings-popover'
+            <IconButton size='small' onClick={(e) => { const next = { ...chatSettings, pinned: !(chatSettings && chatSettings.pinned === false) }; persistChatSettings(next); setSocketTrigger(s => s + 1); }} sx={{ ml: 1, color: chatSettings && chatSettings.pinned !== false ? '#ffd700' : 'white' }} title={chatSettings && chatSettings.pinned !== false ? 'Pinned: click to unpin' : 'Unpinned: click to pin'} aria-pressed={chatSettings && chatSettings.pinned !== false}><FiMapPin /></IconButton>
+            <IconButton size='small' onClick={(e) => { setSettingsAnchor(prev => !prev); }} sx={{ ml: 1, color: 'white' }} title='Chat Settings'><FiSettings /></IconButton>
+            <Dialog
               open={Boolean(settingsAnchor)}
-              anchorEl={settingsAnchor}
               onClose={() => setSettingsAnchor(null)}
-              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-              transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+              maxWidth="sm"
+              fullWidth
+              PaperProps={{ 
+                sx: { 
+                  bgcolor: 'rgba(28,28,32,0.98)',
+                  color: '#eaeaea',
+                  backdropFilter: 'blur(10px)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  zIndex: 999999
+                } 
+              }}
+              BackdropProps={{
+                sx: { zIndex: 999998 }
+              }}
             >
-              <Box sx={{ p: 2, width: 240 }}>
-                <Typography variant='subtitle1' sx={{ mb: 1 }}>Chat settings</Typography>
-                <FormControlLabel control={<Switch checked={chatSettings.sound} onChange={(e) => { const next = { ...chatSettings, sound: e.target.checked }; persistChatSettings(next); if (e.target.checked) { try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.type='sine'; o.frequency.value=880; o.connect(g); g.connect(ctx.destination); o.start(); setTimeout(() => { try { o.stop(); ctx.close(); } catch (_) {} }, 120); } catch(_){} } }} />} label='Sound' />
+              <DialogTitle sx={{ borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant='h6'>Chat Settings</Typography>
+                <IconButton size='small' onClick={() => setSettingsAnchor(null)} sx={{ color: 'rgba(255,255,255,0.7)' }}>
+                  <FiX size={20} />
+                </IconButton>
+              </DialogTitle>
+              <DialogContent sx={{ pt: 3 }}>
+                <FormControlLabel control={<Switch checked={!!chatSettings?.sound} onChange={(e) => { const next = { ...chatSettings, sound: e.target.checked }; persistChatSettings(next); if (e.target.checked) { try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.type='sine'; o.frequency.value=880; o.connect(g); g.connect(ctx.destination); o.start(); setTimeout(() => { try { o.stop(); ctx.close(); } catch (_) {} }, 120); } catch(_){} } }} />} label='Sound' />
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mt: 1 }}>
                   <select value={soundFile} onChange={(e) => { const next = e.target.value; setSoundFile(next); try { localStorage.setItem('chatSoundFile', next); } catch (_) {} }} style={{ padding: 6, background: 'transparent', color: '#fff', borderRadius: 6, border: '1px solid rgba(255,255,255,0.06)' }}>
                     <option value="/sounds/chat-notify.mp3">Default</option>
                     <option value="/sounds/chat-success.mp3">Chime</option>
                     <option value="/sounds/chat-pop.mp3">Pop</option>
                   </select>
-                  <Button size='small' onClick={() => { try { if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; audioRef.current.play().catch(e => {}); } } catch(e) {} }}>Test</Button>
+                  <Button size='small' onClick={() => { try { if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; playNotificationSound(); } } catch(e) {} }}>Test</Button>
                   <input type='file' accept='audio/*' onChange={(e) => { const f = e.target.files?.[0]; if (f) { const url = URL.createObjectURL(f); setSoundFile(url); try { localStorage.setItem('chatSoundFile', url); } catch (_) {} } }} style={{ display: 'inline-block' }} title='Upload custom sound' />
                 </Box>
-                <FormControlLabel control={<Switch checked={chatSettings.desktop} onChange={(e) => { const next = { ...chatSettings, desktop: e.target.checked }; persistChatSettings(next); if (e.target.checked && typeof Notification !== 'undefined' && Notification.permission === 'default') { try { Notification.requestPermission(); } catch(_){} } }} />} label='Desktop notifications' />
-                <FormControlLabel control={<Switch checked={chatSettings.badge} onChange={(e) => { const next = { ...chatSettings, badge: e.target.checked }; persistChatSettings(next); }} />} label='Show tray badge' />
-                <FormControlLabel control={<Switch checked={chatSettings.compact} onChange={(e) => { const next = { ...chatSettings, compact: e.target.checked }; persistChatSettings(next); }} />} label='Compact view' />
-                <FormControlLabel control={<Switch checked={chatSettings.leftAlignMessages} onChange={(e) => { const next = { ...chatSettings, leftAlignMessages: e.target.checked }; persistChatSettings(next); }} />} label='Left align messages' />
-                <FormControlLabel control={<Switch checked={chatSettings.hideSidebar} onChange={(e) => { const next = { ...chatSettings, hideSidebar: e.target.checked }; persistChatSettings(next); }} />} label='Hide conversations' />
-              </Box>
-            </Popover>
+                <FormControlLabel control={<Switch checked={!!chatSettings?.desktop} onChange={(e) => { const next = { ...chatSettings, desktop: e.target.checked }; persistChatSettings(next); if (e.target.checked && typeof Notification !== 'undefined' && Notification.permission === 'default') { try { Notification.requestPermission(); } catch(_){} } }} />} label='Desktop notifications' />
+                <FormControlLabel control={<Switch checked={!!(chatSettings?.pinned !== false)} onChange={(e) => { const next = { ...chatSettings, pinned: e.target.checked }; persistChatSettings(next); }} />} label='Pin chat to corner' />
+                <FormControlLabel control={<Switch checked={!!chatSettings?.dimOnOpen} onChange={(e) => { const next = { ...chatSettings, dimOnOpen: e.target.checked }; persistChatSettings(next); }} />} label='Dim background when chat opens' />
+                <FormControlLabel control={<Switch checked={!!chatSettings?.badge} onChange={(e) => { const next = { ...chatSettings, badge: e.target.checked }; persistChatSettings(next); }} />} label='Show tray badge' />
+                <FormControlLabel control={<Switch checked={!!chatSettings?.compact} onChange={(e) => { const next = { ...chatSettings, compact: e.target.checked }; persistChatSettings(next); }} />} label='Compact view' />
+                <FormControlLabel control={<Switch checked={!!chatSettings?.leftAlignMessages} onChange={(e) => { const next = { ...chatSettings, leftAlignMessages: e.target.checked }; persistChatSettings(next); }} />} label='Left align messages' />
+                <FormControlLabel control={<Switch checked={!!chatSettings?.hideSidebar} onChange={(e) => { const next = { ...chatSettings, hideSidebar: e.target.checked }; persistChatSettings(next); }} />} label='Hide conversations' />
+              </DialogContent>
+            </Dialog>
             <Drawer anchor='right' open={drawerOpen} onClose={() => setDrawerOpen(false)}>
               <Box sx={{ width: 320, p: 2 }}>{/* replicate same settings content as Popover */}
                 <Typography variant='subtitle1' sx={{ mb: 1 }}>Chat settings</Typography>
@@ -1067,14 +1547,14 @@ export default function ChatApp() {
                     <option value="/sounds/chat-success.mp3">Chime</option>
                     <option value="/sounds/chat-pop.mp3">Pop</option>
                   </select>
-                  <Button size='small' onClick={() => { try { if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; audioRef.current.play().catch(e => {}); } } catch(e) {} }}>Test</Button>
+                  <Button size='small' onClick={() => { try { if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; playNotificationSound(); } } catch(e) {} }}>Test</Button>
                   <input type='file' accept='audio/*' onChange={(e) => { const f = e.target.files?.[0]; if (f) { const url = URL.createObjectURL(f); setSoundFile(url); try { localStorage.setItem('chatSoundFile', url); } catch (_) {} } }} style={{ display: 'inline-block' }} title='Upload custom sound' />
                 </Box>
-                <FormControlLabel control={<Switch checked={chatSettings.desktop} onChange={(e) => { const next = { ...chatSettings, desktop: e.target.checked }; persistChatSettings(next); if (e.target.checked && typeof Notification !== 'undefined' && Notification.permission === 'default') { try { Notification.requestPermission(); } catch(_){} } }} />} label='Desktop notifications' />
-                <FormControlLabel control={<Switch checked={chatSettings.badge} onChange={(e) => { const next = { ...chatSettings, badge: e.target.checked }; persistChatSettings(next); }} />} label='Show tray badge' />
-                <FormControlLabel control={<Switch checked={chatSettings.compact} onChange={(e) => { const next = { ...chatSettings, compact: e.target.checked }; persistChatSettings(next); }} />} label='Compact view' />
-                  <FormControlLabel control={<Switch checked={chatSettings.leftAlignMessages} onChange={(e) => { const next = { ...chatSettings, leftAlignMessages: e.target.checked }; persistChatSettings(next); }} />} label='Left align messages' />
-                <FormControlLabel control={<Switch checked={chatSettings.hideSidebar} onChange={(e) => { const next = { ...chatSettings, hideSidebar: e.target.checked }; persistChatSettings(next); }} />} label='Hide conversations' />
+                <FormControlLabel control={<Switch checked={!!chatSettings?.desktop} onChange={(e) => { const next = { ...chatSettings, desktop: e.target.checked }; persistChatSettings(next); if (e.target.checked && typeof Notification !== 'undefined' && Notification.permission === 'default') { try { Notification.requestPermission(); } catch(_){} } }} />} label='Desktop notifications' />
+                <FormControlLabel control={<Switch checked={!!chatSettings?.badge} onChange={(e) => { const next = { ...chatSettings, badge: e.target.checked }; persistChatSettings(next); }} />} label='Show tray badge' />
+                <FormControlLabel control={<Switch checked={!!chatSettings?.compact} onChange={(e) => { const next = { ...chatSettings, compact: e.target.checked }; persistChatSettings(next); }} />} label='Compact view' />
+                  <FormControlLabel control={<Switch checked={!!chatSettings?.leftAlignMessages} onChange={(e) => { const next = { ...chatSettings, leftAlignMessages: e.target.checked }; persistChatSettings(next); }} />} label='Left align messages' />
+                <FormControlLabel control={<Switch checked={!!chatSettings?.hideSidebar} onChange={(e) => { const next = { ...chatSettings, hideSidebar: e.target.checked }; persistChatSettings(next); }} />} label='Hide conversations' />
               </Box>
             </Drawer>
           </Box>
@@ -1098,6 +1578,16 @@ export default function ChatApp() {
               p: 3,
               backgroundImage: `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="%23333333" stroke-width="0.5"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>')`,
               backgroundAttachment: "fixed",
+              // Subtle, thin scrollbar styling to avoid the large default scrollbar and keep it visually minimal
+              scrollbarWidth: 'thin', // Firefox
+              scrollbarColor: 'rgba(255,255,255,0.12) transparent',
+              '&::-webkit-scrollbar': { width: 8, height: 8 },
+              // Darken the thumb and increase contrast so the thumb is visible on dark backgrounds
+              '&::-webkit-scrollbar-thumb': { backgroundColor: 'rgba(255,255,255,0.20)', borderRadius: 6, border: '2px solid rgba(0,0,0,0.0)' },
+              '&:hover::-webkit-scrollbar-thumb': { backgroundColor: 'rgba(255,255,255,0.30)' },
+              '&::-webkit-scrollbar-track': { background: 'transparent' },
+              // Keep the space for the scrollbar stable to avoid layout shifts on show/hide
+              scrollbarGutter: 'stable',
             }}
           >
             {page < totalPages && (
@@ -1128,22 +1618,34 @@ export default function ChatApp() {
                     <Typography variant='caption' sx={{ color: 'rgba(255,255,255,0.85)', fontWeight: 600, mb: 0.5, maxWidth: '72%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{msg.displayName}</Typography>
                   )}
                       <Box
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setMsgContextMenu({
+                        mouseX: e.clientX,
+                        mouseY: e.clientY,
+                        messageId: msg.id,
+                        isMine: msg.sender === 'me'
+                      });
+                    }}
                     sx={{
                       maxWidth: '82%',
                       ml: msg.sender === 'me' ? 0 : 1,
                       px: chatSettings.compact ? 1.5 : 2.5,
                       py: chatSettings.compact ? 1 : 1.8,
-                      borderRadius: 3,
-                      borderTopLeftRadius: msg.sender === 'me' ? 18 : 4,
-                      borderTopRightRadius: msg.sender === 'me' ? 4 : 18,
-                      borderBottomLeftRadius: msg.sender === 'me' ? 18 : 18,
-                      borderBottomRightRadius: msg.sender === 'me' ? 4 : 18,
+                      borderRadius: 10,
+                      // Less extreme rounding for the chat bubbles; more pill-like but not too circular
+                      borderTopLeftRadius: msg.sender === 'me' ? 12 : 6,
+                      borderTopRightRadius: msg.sender === 'me' ? 6 : 12,
+                      borderBottomLeftRadius: 12,
+                      borderBottomRightRadius: 12,
                       bgcolor: msg.sender === 'me' ? 'linear-gradient(135deg, #00b0ff, #0b93f6)' : 'rgba(230,230,235,0.95)',
                       color: msg.sender === 'me' ? 'white' : '#111',
                       boxShadow: msg.sender === 'me' ? '0 8px 20px rgba(0,176,255,0.3)' : 'none',
                       backdropFilter: 'blur(10px)',
                       position: 'relative',
                       transition: 'transform 140ms ease, box-shadow 140ms ease',
+                      cursor: 'context-menu',
+                      overflow: 'hidden',
                     }}
                   >
                     <Typography variant='body1' sx={{ lineHeight: 1.4, wordBreak: 'break-word', whiteSpace: 'pre-wrap', fontSize: chatSettings.compact ? '0.92rem' : '1rem' }}>{msg.text}</Typography>
@@ -1165,6 +1667,7 @@ export default function ChatApp() {
             sx={{
               borderTop: "1px solid rgba(255,255,255,0.08)",
               bgcolor: "rgba(15,15,25,0.8)",
+              flexShrink: 0,
             }}
           >
             <InputBase
@@ -1173,12 +1676,25 @@ export default function ChatApp() {
               maxRows={4}
               placeholder="Type a message..."
               value={input}
+              inputRef={inputRef}
               onChange={(e) => { setInput(e.target.value); startTyping(); }}
-              onKeyDown={(e) =>
-                e.key === "Enter" &&
-                !e.shiftKey &&
-                (e.preventDefault(), sendMessage())
-              }
+              onKeyDown={(e) => {
+                try {
+                  // When the user types space/punctuation/enter/tab, attempt to replace any shortcode
+                  if (e.key === ' ' || e.key === 'Enter' || e.key === 'Tab' || /[.,!?:;]/.test(e.key)) {
+                    const el = e.currentTarget;
+                    const replaced = replaceShortcodeAtCursor(el);
+                    if (replaced) {
+                      e.preventDefault();
+                      return;
+                    }
+                  }
+                } catch (err) { /* ignore */ }
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage();
+                }
+              }}
               sx={{
                 bgcolor: "rgba(255,255,255,0.07)",
                 px: 3,
@@ -1187,26 +1703,105 @@ export default function ChatApp() {
                 fontSize: "1rem",
                 backdropFilter: "blur(10px)",
                 border: "1px solid rgba(255,255,255,0.1)",
+                width: '100%',
+                maxWidth: '100%',
+                boxSizing: 'border-box',
                 "&:hover": { borderColor: "rgba(0,176,255,0.4)" },
                 "&:focus": { outline: "none", borderColor: "#00b0ff" },
               }}
               endAdornment={
-                <IconButton
-                  onClick={sendMessage}
-                  disabled={!input.trim() || !selected?.id}
-                  sx={{
-                bgcolor: input.trim() ? "#0b93f6" : "rgba(255,255,255,0.06)",
-                color: input.trim() ? 'white' : 'rgba(255,255,255,0.6)',
-                borderRadius: '50%',
-                width: 44,
-                height: 44,
-                ml: 1,
-                    "&:hover": { bgcolor: "#0099e6" },
-                    transition: "all 0.2s",
-                  }}
-                >
-                  <IoSend />
-                </IconButton>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <IconButton size='small' ref={emojiBtnRef} onClick={(e) => { e.stopPropagation(); setEmojiAnchor(emojiAnchor ? null : emojiBtnRef.current); if (emojiAnchor && inputRef.current) try { inputRef.current.focus(); } catch (err) {} }} aria-label='Open emoji picker' aria-haspopup='true' aria-expanded={Boolean(emojiAnchor)} title='Emoji' sx={{ color: 'rgba(255,255,255,0.85)', bgcolor: 'transparent' }}>
+                    <span style={{ fontSize: 18 }}>😊</span>
+                  </IconButton>
+                  {emojiAnchor && (
+                    <Box
+                      sx={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        zIndex: 209999,
+                        backdropFilter: 'blur(0px)',
+                        bgcolor: 'transparent'
+                      }}
+                      onClick={() => {
+                        setEmojiAnchor(null);
+                        try {
+                          if (inputRef.current) inputRef.current.focus();
+                        } catch (_) {}
+                      }}
+                    />
+                  )}
+                  <Box
+                    sx={{
+                      position: 'fixed',
+                      bottom: 20,
+                      right: 20,
+                      zIndex: 210000,
+                      p: 2,
+                      borderRadius: 2,
+                      bgcolor: 'rgba(28,28,32,0.98)',
+                      color: '#eaeaea',
+                      minWidth: 320,
+                      maxHeight: '420px',
+                      overflowY: 'auto',
+                      boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                      display: emojiAnchor ? 'block' : 'none',
+                      '&::-webkit-scrollbar': {
+                        width: '8px'
+                      },
+                      '&::-webkit-scrollbar-track': {
+                        bgcolor: 'transparent'
+                      },
+                      '&::-webkit-scrollbar-thumb': {
+                        bgcolor: 'rgba(255,255,255,0.2)',
+                        borderRadius: '4px',
+                        '&:hover': {
+                          bgcolor: 'rgba(255,255,255,0.3)'
+                        }
+                      }
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5, pb: 1, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                      <Typography sx={{ fontWeight: 600, fontSize: '0.95rem' }}>Pick an emoji</Typography>
+                      <IconButton 
+                        size="small" 
+                        onClick={() => { 
+                          setEmojiAnchor(null); 
+                          try { if (inputRef.current) inputRef.current.focus(); } catch(_) {} 
+                        }} 
+                        sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' } }}
+                        title="Close"
+                      >
+                        <FiX size={18} />
+                      </IconButton>
+                    </Box>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 1.5 }}>
+                      {EMOJIS.map((em) => (
+                        <Button key={em} onClick={() => { insertEmojiAtCursor(em); setEmojiAnchor(null); try { if (inputRef.current) inputRef.current.focus(); } catch(_) {} }} sx={{ minWidth: 44, minHeight: 44, p: 1, borderRadius: 1, bgcolor: 'transparent', color: '#eaeaea', fontSize: '1.5rem', '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' }, transition: 'all 0.2s' }}>{em}</Button>
+                      ))}
+                    </Box>
+                  </Box>
+                  <IconButton
+                    onClick={sendMessage}
+                    disabled={!input.trim() || !selected?.id}
+                    sx={{
+                      bgcolor: input.trim() ? "#0b93f6" : "rgba(255,255,255,0.06)",
+                      color: input.trim() ? 'white' : 'rgba(255,255,255,0.6)',
+                      borderRadius: '50%',
+                      width: 44,
+                      height: 44,
+                      ml: 1,
+                      "&:hover": { bgcolor: "#0099e6" },
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    <IoSend />
+                  </IconButton>
+                </Box>
               }
             />
           </Box>

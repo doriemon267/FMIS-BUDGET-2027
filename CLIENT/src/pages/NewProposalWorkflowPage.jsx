@@ -499,9 +499,10 @@ const NewProposalWorkflowPage = () => {
 
       // Fetch full proposal to include attachments/metadata
       try {
-        const proposalRes = await api.get(`/api/proposals/${proposal._id}`);
-        if (proposalRes?.data) {
-          setSelectedProposal(proposalRes.data);
+        const proposalRes = await api.get(`/api/allproposal/proposals/${proposal._id}`);
+        const proposalData = proposalRes.data?.data || proposalRes.data;
+        if (proposalData) {
+          setSelectedProposal(proposalData);
         }
       } catch (err) {
         // If full proposal fetch fails, keep the selected proposal as-is
@@ -808,8 +809,6 @@ const NewProposalWorkflowPage = () => {
         changedByCategory[category].push(editableItems[category][idx]);
       });
 
-      console.log("[DEBUG] Changed items by category:", changedByCategory);
-
       const savePromises = [];
       const activeWorkflowRef =
         selectedProposal?._id ||
@@ -817,7 +816,6 @@ const NewProposalWorkflowPage = () => {
           ? sessionStorage.getItem("activeWorkflowRef") ||
             localStorage.getItem("activeWorkflowRef")
           : null);
-      console.log("[DEBUG] Active workflow ref:", activeWorkflowRef);
 
       const headerOpt = activeWorkflowRef
         ? { headers: { "X-Workflow-Ref": activeWorkflowRef } }
@@ -829,10 +827,6 @@ const NewProposalWorkflowPage = () => {
         }));
 
       if (changedByCategory.income) {
-        console.log(
-          "[DEBUG] Saving income items:",
-          injectRef(changedByCategory.income)
-        );
         savePromises.push(
           api.put(
             "/income/bulk-update",
@@ -842,10 +836,6 @@ const NewProposalWorkflowPage = () => {
         );
       }
       if (changedByCategory.personnel) {
-        console.log(
-          "[DEBUG] Saving personnel items:",
-          injectRef(changedByCategory.personnel)
-        );
         savePromises.push(
           api.put(
             "/api/personnel/bulk-update",
@@ -855,10 +845,6 @@ const NewProposalWorkflowPage = () => {
         );
       }
       if (changedByCategory.mooe) {
-        console.log(
-          "[DEBUG] Saving mooe items:",
-          injectRef(changedByCategory.mooe)
-        );
         savePromises.push(
           api.put(
             "/mooe/bulk-update",
@@ -868,10 +854,6 @@ const NewProposalWorkflowPage = () => {
         );
       }
       if (changedByCategory.capitalOutlay) {
-        console.log(
-          "[DEBUG] Saving capitalOutlay items:",
-          injectRef(changedByCategory.capitalOutlay)
-        );
         savePromises.push(
           api.put(
             "/capital-outlay/bulk-update",
@@ -882,7 +864,6 @@ const NewProposalWorkflowPage = () => {
       }
 
       const results = await Promise.all(savePromises);
-      console.log("[DEBUG] Save results:", results);
 
       toast.success(`Changes saved successfully`);
       setChangedItems(new Set());
@@ -1024,27 +1005,12 @@ const NewProposalWorkflowPage = () => {
     const userName =
       currentUser?.name ||
       `${currentUser?.FirstName || ""} ${currentUser?.LastName || ""}`.trim();
-    console.log("[DEBUG] User Roles:", userRoles);
-    console.log(
-      "[DEBUG] Has BUDGET PREPARER role:",
-      userRoles.includes("BUDGET PREPARER")
-    );
-    console.log(
-      "[DEBUG] Has BUDGET_PREPARER role:",
-      userRoles.includes("BUDGET_PREPARER")
-    );
-    console.log("[DEBUG] Current User Name:", userName);
-    console.log("[DEBUG] Proposal processBy:", proposal.processBy);
-    console.log("[DEBUG] Proposal status:", currentStatus);
-    console.log("[DEBUG] Match:", proposal.processBy === userName);
 
     if (
       (userRoles.includes("BUDGET PREPARER") ||
         userRoles.includes("BUDGET_PREPARER")) &&
       proposal.processBy === userName
     ) {
-      console.log("[DEBUG] Passed role and processBy check!");
-      console.log("[DEBUG] Checking status:", currentStatus);
       if (
         currentStatus === "DRAFT" ||
         currentStatus === "Draft" ||
@@ -1054,7 +1020,6 @@ const NewProposalWorkflowPage = () => {
         // If the current user is a PREPARER assigned at OFFICE level, show Submit to Approver label
         const assignmentLevel = currentUser?.hierarchicalAccess?.assignmentLevel || currentUser?.assignmentLevel;
         const isOfficePreparer = assignmentLevel && String(assignmentLevel).toUpperCase() === 'OFFICE';
-        console.log("[DEBUG] Adding Submit action (office preparer?:", isOfficePreparer, ")");
         actions.push({
           label: isOfficePreparer ? "Submit to Approver" : "Submit to Budget Reviewer",
           value: isOfficePreparer ? "submit-to-approver" : "submit-to-reviewer",

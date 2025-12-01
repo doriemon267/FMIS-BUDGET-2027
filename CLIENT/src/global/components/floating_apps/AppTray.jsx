@@ -8,7 +8,7 @@ import { BiCalculator } from "react-icons/bi";
 import { MdOutlineChecklist, MdCalendarMonth } from "react-icons/md";
 import { MdClose, MdRemove } from "react-icons/md";
 
-const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, onMinimizeAll }) => {
+const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, onMinimizeAll, chatPinned = true }) => {
   const [openTray, setOpenTray] = useState(false);
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
   const [chatSettings, setChatSettings] = useState({});
@@ -233,6 +233,7 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
               const refIndex = idx; // logical order
               return (
                 <Tooltip key={id} title={shortcut ? `${label} — ${shortcut}` : label} placement="left">
+                <Box sx={{ position: 'relative', display: 'inline-block' }}>
                 <Badge
                   overlap="circular"
                   color="primary"
@@ -287,6 +288,12 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
                   <Icon size={20} />
                 </IconButton>
                 </Badge>
+                {id === 'chat' && chatPinned && (
+                  <Box sx={{ position: 'absolute', top: -6, right: -6, zIndex: 10 }}>
+                    <Box sx={{ width: 10, height: 10, bgcolor: '#ffd700', borderRadius: '50%', boxShadow: '0 1px 2px rgba(0,0,0,0.3)' }} />
+                  </Box>
+                )}
+                </Box>
               </Tooltip>
               );
             })}

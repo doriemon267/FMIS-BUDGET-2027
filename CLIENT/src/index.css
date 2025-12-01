@@ -53,3 +53,84 @@ table {
 input, select, textarea {
   color: #000000;
 }
+
+/* When chat is open, prevent scroll on the page and main app root(s) */
+.chat-open, html.chat-open, body.chat-open, #root.chat-open, #app.chat-open, .App.chat-open, main.chat-open, .layout-content.chat-open {
+  overflow: hidden !important;
+  /* Avoid clipping layout shifts: compensate for removed scrollbar if needed */
+}
+
+/* Emoji popover dark style */
+.chat-emoji-popover {
+  background: rgba(30,30,35,0.98);
+  color: #eaeaea;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+  min-width: 260px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+/* Backdrop used for modal-style chat (only on mobile or centered modal) */
+.chat-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.54);
+  z-index: 99998;
+}
+
+/* When pinned chat is open, hide other modal Backdrops (MUI) so the page isn't dimmed */
+.chat-pinned-no-dim .MuiBackdrop-root,
+body.chat-pinned-no-dim .MuiBackdrop-root,
+.chat-pinned-no-dim .MuiModal-root .MuiBackdrop-root,
+body.chat-pinned-no-dim .MuiModal-root .MuiBackdrop-root {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+/* Also hide any other full-window dark overlays that could come from other libs (defensive) */
+.chat-pinned-no-dim [data-backdrop],
+body.chat-pinned-no-dim [data-backdrop],
+.chat-pinned-no-dim .fullscreen-overlay,
+body.chat-pinned-no-dim .fullscreen-overlay {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+/* Also neutralize pseudo element overlays applied to app root(s) */
+#root.chat-pinned-no-dim::before, #root.chat-pinned-no-dim::after,
+#app.chat-pinned-no-dim::before, #app.chat-pinned-no-dim::after,
+#root.chat-pinned-no-dim *::before, #root.chat-pinned-no-dim *::after,
+#app.chat-pinned-no-dim *::before, #app.chat-pinned-no-dim *::after {
+  background: transparent !important;
+  opacity: 1 !important;
+  pointer-events: none !important;
+  filter: none !important;
+}
+
+/* Neutralize pseudo-element overlays applied to html/documentElement as well */
+html.chat-pinned-no-dim::before, html.chat-pinned-no-dim::after,
+html.chat-pinned-no-dim *::before, html.chat-pinned-no-dim *::after {
+  background: transparent !important;
+  opacity: 1 !important;
+  pointer-events: none !important;
+  filter: none !important;
+}
+
+/* Aggressive defensive rule: when chat is pinned, neutralize full-screen overlays by making them transparent
+   Exclude the chat portal itself so the chat UI is not affected. This prevents site-wide dimming from other overlays. */
+/* NOTE: The aggressive global wipe above caused layout/background to be removed. We only hide known overlay/backdrop elements now. */
+
+/* Ensure chat delete menus always appear on top with highest z-index */
+.chat-delete-menu,
+.chat-delete-menu .MuiPaper-root,
+.chat-delete-menu .MuiMenu-paper,
+.chat-delete-menu .MuiPopover-paper {
+  z-index: 9999999 !important;
+  position: fixed !important;
+}
+
+/* Ensure menu backdrop appears above chat window if present */
+.chat-delete-menu + .MuiBackdrop-root {
+  z-index: 9999998 !important;
+}

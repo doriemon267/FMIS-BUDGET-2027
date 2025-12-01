@@ -1,5 +1,5 @@
 // src/components/FloatingAppWindow.jsx
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import Draggable from "react-draggable";
 import { Paper, IconButton, Box, Typography } from "@mui/material";
@@ -18,7 +18,8 @@ const FloatingAppWindow = ({
 }) => {
   const nodeRef = useRef(null);
   const focusRef = useRef(null);
-
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { const id = setTimeout(() => setMounted(true), 50); return () => { clearTimeout(id); setMounted(false); }; }, []);
   console.log('[FloatingAppWindow] render content for', title, defaultPosition, 'zIndex', zIndex);
   const content = (
     <Draggable
@@ -60,6 +61,9 @@ const FloatingAppWindow = ({
             boxShadow: "0 8px 40px rgba(0,0,0,0.35)",
             background: "rgba(255,255,255,0.95)",
             border: "1px solid rgba(0,0,0,0.08)",
+            transition: 'transform 240ms cubic-bezier(.2,.9,.2,1), opacity 240ms ease',
+            transform: mounted ? 'translateY(0) scale(1)' : 'translateY(8px) scale(0.98)',
+            opacity: mounted ? 1 : 0.96,
           }}
         >
           {/* Drag Handle */}

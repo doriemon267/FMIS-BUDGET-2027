@@ -15,6 +15,7 @@ const TodoApp = importWithDebug(() => import("./apps/TodoApp"), 'TodoApp');
 const ClockApp = importWithDebug(() => import("./apps/ClockApp"), 'ClockApp');
 const CalendarApp = importWithDebug(() => import("./apps/CalendarApp"), 'CalendarApp');
 const ChatApp = importWithDebug(() => import("./apps/ChatApp"), 'ChatApp');
+import FixedChatWindow from './FixedChatWindow';
 
 const AppTrayLauncher = () => {
   console.debug('[AppTrayLauncher] render start');
@@ -38,6 +39,12 @@ const AppTrayLauncher = () => {
       console.warn("[AppTrayLauncher] failed to read persisted open apps", e);
       return [];
     }
+  });
+  const [chatPinned, setChatPinned] = useState(() => {
+    try { const s = JSON.parse(localStorage.getItem('chatSettings') || '{}'); return s && s.pinned !== false; } catch (e) { return true; }
+  });
+  const [trayChatSettings, setTrayChatSettings] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('chatSettings') || '{}') || {}; } catch (e) { return {}; }
   });
 
   // Declare open/close handler before effects that depend on it to avoid TDZ/ReferenceError.
@@ -98,6 +105,17 @@ const AppTrayLauncher = () => {
       console.warn("[AppTrayLauncher] failed to persist open apps", e);
     }
   }, [openApps]);
+
+  // Sync chat pinned state whenever chatSettings change (from ChatApp)
+  useEffect(() => {
+    const handler = (e) => {
+      try { const s = e?.detail || JSON.parse(localStorage.getItem('chatSettings') || '{}'); setChatPinned(s && s.pinned !== false); setTrayChatSettings(s || {}); } catch (err) {}
+    };
+    window.addEventListener('chat-settings-changed', handler);
+    return () => window.removeEventListener('chat-settings-changed', handler);
+  }, []);
+
+  // NOTE: Removed automatic opening of chat when pinned to avoid surprise UI behavior.
 
   // Keyboard shortcuts (Alt+T/C/K/A) to open apps quickly; ignore when typing in inputs
   useEffect(() => {
@@ -164,7 +182,7 @@ const AppTrayLauncher = () => {
   console.debug('[AppTrayLauncher] about to render, openApps:', openApps.map(a => a.id));
   return (
     <>
-      <AppTray onAppOpen={handleAppOpen} openAppIds={openApps.map((a) => a.id)} activeAppId={activeAppId} onCloseAll={closeAll} onMinimizeAll={minimizeAll} />
+      <AppTray onAppOpen={handleAppOpen} openAppIds={openApps.map((a) => a.id)} activeAppId={activeAppId} onCloseAll={closeAll} onMinimizeAll={minimizeAll} chatPinned={chatPinned} />
 
       {/* Each window is completely independent */}
       {openApps.map(({ id, title, component, key, defaultPosition, minimized }, idx) => {
@@ -173,6 +191,44 @@ const AppTrayLauncher = () => {
           const winTitle = title || cfg.title;
           const winComponent = component || cfg.component;
           console.debug('[AppTrayLauncher] rendering window', id, { defaultPosition, minimized });
+          // Use specialized fixed, responsive container for Chat so it's always anchored bottom-right and mobile responsive
+          if (id === 'chat') {
+            console.debug('[AppTrayLauncher] rendering chat window: chatPinned=', chatPinned, 'trayChatSettings.dimOnOpen=', trayChatSettings?.dimOnOpen);
+            if (chatPinned) {
+              return (
+                <Suspense key={key} fallback={<div style={{ padding: 8, color: '#999' }}>Loading chat...</div>}>
+                  <FixedChatWindow
+                    onClose={() => closeApp(id)}
+                    onMinimize={(min) => handleMinimize(id, min)}
+                    minimized={minimized}
+                    isPinned={chatPinned}
+                    dimOnOpen={trayChatSettings?.dimOnOpen === true}
+                    zIndex={1400 + idx}
+                  >
+                    {component}
+                  </FixedChatWindow>
+                </Suspense>
+              );
+            }
+            // Not pinned -> render as a draggable floating window
+            return minimized ? null : (
+              <Suspense key={key} fallback={<div style={{ padding: 8, color: '#999' }}>Loading chat...</div>}>
+                <FloatingAppWindow
+                  title={winTitle}
+                  onClose={() => closeApp(id)}
+                  zIndex={1400 + idx}
+                  onActivate={() => bringToTop(id)}
+                  onMinimize={(min) => handleMinimize(id, min)}
+                  onPositionChange={(pos) => handlePositionChange(id, pos)}
+                  defaultPosition={defaultPosition}
+                  active={activeAppId === id}
+                >
+                  {component}
+                </FloatingAppWindow>
+              </Suspense>
+            );
+          }
+
           return minimized ? null : (
             <Suspense key={key} fallback={<div style={{ padding: 8, color: '#999' }}>Loading application...</div>}>
               <FloatingAppWindow
