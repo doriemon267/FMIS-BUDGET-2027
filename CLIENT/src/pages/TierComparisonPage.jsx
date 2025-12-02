@@ -51,7 +51,6 @@ const TierComparisonPage = () => {
   const [fiscalYears, setFiscalYears] = useState([]);
   const [selectedComparisonRegion, setSelectedComparisonRegion] = useState(selectedRegion || '');
   const [fiscalYear, setFiscalYear] = useState('');
-  const [budgetType, setBudgetType] = useState('Initial');
   const [loading, setLoading] = useState(false);
   const [copying, setCopying] = useState(false);
   
@@ -66,12 +65,19 @@ const TierComparisonPage = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedTier2, setSelectedTier2] = useState(null);
   const [editFormData, setEditFormData] = useState({});
+  const [displayAmount, setDisplayAmount] = useState('');
 
-  // Fetch regions and fiscal years on component mount and when filters change
+  // Fetch regions and fiscal years on component mount
   useEffect(() => {
     fetchRegions();
-    fetchFiscalYears();
-  }, [budgetType]);
+  }, []);
+
+  // Fetch fiscal years when region is selected
+  useEffect(() => {
+    if (selectedComparisonRegion) {
+      fetchFiscalYears();
+    }
+  }, [selectedComparisonRegion]);
 
   // Fetch data when region or filters change
   useEffect(() => {
@@ -79,7 +85,7 @@ const TierComparisonPage = () => {
       fetchTier1Data();
       fetchTier2Data();
     }
-  }, [selectedComparisonRegion, fiscalYear, budgetType]);
+  }, [selectedComparisonRegion, fiscalYear]);
 
   // Set first fiscal year as default when fiscal years are loaded
   useEffect(() => {
@@ -99,7 +105,7 @@ const TierComparisonPage = () => {
   const fetchRegions = async () => {
     try {
       const response = await api.get('/api/tier-comparison/regions', {
-        params: { fiscalYear, budgetType }
+        params: { fiscalYear }
       });
       if (response.data.success) {
         setRegions(response.data.data);
@@ -118,7 +124,7 @@ const TierComparisonPage = () => {
   const fetchFiscalYears = async () => {
     try {
       const response = await api.get('/api/tier-comparison/fiscal-years', {
-        params: { region: selectedComparisonRegion, budgetType }
+        params: { region: selectedComparisonRegion }
       });
       if (response.data.success) {
         setFiscalYears(response.data.data);
@@ -138,8 +144,7 @@ const TierComparisonPage = () => {
       const response = await api.get('/api/tier-comparison/tier1/finalized', {
         params: {
           region: selectedComparisonRegion,
-          fiscalYear,
-          budgetType
+          fiscalYear
         }
       });
       
@@ -164,8 +169,7 @@ const TierComparisonPage = () => {
       const response = await api.get('/api/tier-comparison/tier2', {
         params: {
           region: selectedComparisonRegion,
-          fiscalYear,
-          budgetType
+          fiscalYear
         }
       });
       
@@ -200,8 +204,7 @@ const TierComparisonPage = () => {
     try {
       const response = await api.post('/api/tier-comparison/tier2/copy-from-tier1', {
         region: selectedComparisonRegion,
-        fiscalYear,
-        budgetType
+        fiscalYear
       });
 
       if (response.data.success) {
@@ -220,14 +223,16 @@ const TierComparisonPage = () => {
   // Open edit dialog for Tier 2 proposal
   const handleEditTier2 = (tier2Proposal) => {
     setSelectedTier2(tier2Proposal);
+    const amount = Number(tier2Proposal.tier2Amount || 0).toFixed(2);
     setEditFormData({
       title: tier2Proposal.title || '',
       description: tier2Proposal.description || '',
-      tier2Amount: tier2Proposal.tier2Amount || 0,
+      tier2Amount: parseFloat(amount),
       tier2Remarks: tier2Proposal.tier2Remarks || '',
       priority: tier2Proposal.priority || 'Medium',
       tier2Status: tier2Proposal.tier2Status || 'Draft'
     });
+    setDisplayAmount(Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
     setEditDialogOpen(true);
   };
 
@@ -293,56 +298,501 @@ const TierComparisonPage = () => {
     }
 
     const categories = [
-      { key: 'personnel', label: 'Personnel Services' },
-      { key: 'mooe', label: 'MOOE' },
-      { key: 'capital', label: 'Capital Outlay' },
-      { key: 'income', label: 'Income' },
-      { key: 'budgetarySupport', label: 'Budgetary Support' }
+      { key: 'personnel', label: 'PERSONNEL SERVICES' },
+      { key: 'mooe', label: 'MAINTENANCE AND OTHER OPERATING EXPENSES' },
+      { key: 'capital', label: 'CAPITAL OUTLAYS' }
+    ];
+
+    const incomeCategories = [
+      { key: 'income', label: 'CORPORATE INCOME', items: [
+        { label: 'IRRIGATION SERVICE FEES', filter: (item) => item.accountingTitle?.toLowerCase().includes('irrigation') },
+        { label: 'RENT INCOME', filter: (item) => item.accountingTitle?.toLowerCase().includes('rent') },
+        { label: 'WATER SERVICE FEE', filter: (item) => item.accountingTitle?.toLowerCase().includes('water') },
+        { label: 'MISCELLANEOUS INCOME', filter: (item) => item.accountingTitle?.toLowerCase().includes('misc') }
+      ]}
     ];
 
     return (
-      <TableContainer component={Paper} sx={{ maxHeight: '600px', overflow: 'auto' }}>
-        <Table stickyHeader>
-          <TableHead>
-            <TableRow>
-              <TableCell><strong>Category</strong></TableCell>
-              <TableCell><strong>Department</strong></TableCell>
-              <TableCell><strong>Description</strong></TableCell>
-              <TableCell align="right"><strong>Amount</strong></TableCell>
-              <TableCell><strong>Status</strong></TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {categories.map(category => {
-              const items = tier1Data[category.key] || [];
-              return items.map((item, idx) => (
-                <TableRow key={`${category.key}-${idx}`} hover>
-                  <TableCell>{category.label}</TableCell>
-                  <TableCell>{item.department || 'N/A'}</TableCell>
-                  <TableCell>
-                    {item.particulars || item.accountingTitle || item.description || item.positionTitle || 'N/A'}
+      <Box>
+        {/* SECTION A: SOURCES OF FUNDS */}
+        <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: '#1976d2' }}>
+          A. SOURCES OF FUNDS
+        </Typography>
+
+        {/* CORPORATE INCOME TABLE - Only show if there's data */}
+        {tier1Data.income && tier1Data.income.length > 0 && (
+          <TableContainer sx={{ mb: 3, boxShadow: 2, borderRadius: 2, border: '1px solid #e0e0e0' }}>
+            <Table size="medium">
+              <TableHead>
+                <TableRow sx={{ backgroundColor: '#1976d2' }}>
+                  <TableCell sx={{ fontWeight: 'bold', color: 'white', width: '25%', fontSize: '0.95rem', letterSpacing: 0.5, py: 2 }}>
+                    CORPORATE INCOME
                   </TableCell>
-                  <TableCell align="right">
-                    {formatCurrency(item.amount || item.cost || item.total || item.grandTotal || 0)}
+                  <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '15%', fontSize: '0.95rem', letterSpacing: 0.5, py: 2 }}>
+                    PROJECTED CORPORATE INCOME<br />(a)
                   </TableCell>
-                  <TableCell>
-                    <Chip label={item.status} color="success" size="small" />
+                  <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '15%', fontSize: '0.95rem', letterSpacing: 0.5, py: 2 }}>
+                    PROJECTED SUBSIDY<br />TIER 1 (b)
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '15%', fontSize: '0.95rem', letterSpacing: 0.5, py: 2 }}>
+                    PROJECTED SUBSIDY<br />TIER 2 (c)
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '15%', fontSize: '0.95rem', letterSpacing: 0.5, py: 2 }}>
+                    TOTAL<br />(d = b + c)
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '15%', fontSize: '0.95rem', letterSpacing: 0.5, py: 2 }}>
+                    PROPOSED BUDGET<br />(e = a + d)
                   </TableCell>
                 </TableRow>
-              ));
-            })}
-            {tier1Totals && (
-              <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
-                <TableCell colSpan={3}><strong>Grand Total</strong></TableCell>
-                <TableCell align="right">
-                  <strong>{formatCurrency(tier1Totals.grandTotal)}</strong>
+              </TableHead>
+              <TableBody>
+                {incomeCategories[0].items.map((row, idx) => {
+                  const incomeItems = tier1Data.income || [];
+                  const matchingItems = incomeItems.filter(row.filter);
+                  const subtotal = matchingItems.reduce((sum, item) => sum + (item.amount || item.cost || item.total || 0), 0);
+                  
+                  return (
+                    <TableRow key={row.label} sx={{ 
+                      backgroundColor: idx % 2 === 0 ? '#f9f9f9' : '#fff',
+                      '&:hover': { backgroundColor: '#f0f4f8' }
+                    }}>
+                      <TableCell sx={{ pl: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                        <Typography variant="body2" sx={{ fontWeight: 500, letterSpacing: 0.2 }}>
+                          {row.label}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                        <Typography variant="body2" sx={{ fontWeight: 500, color: '#1565c0', letterSpacing: 0.2 }}>
+                          {formatCurrency(subtotal)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                        <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.secondary', letterSpacing: 0.2 }}>
+                          -
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                        <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.secondary', letterSpacing: 0.2 }}>
+                          -
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                        <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.secondary', letterSpacing: 0.2 }}>
+                          -
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                        <Typography variant="body2" sx={{ fontWeight: 500, color: '#1565c0', letterSpacing: 0.2 }}>
+                          {formatCurrency(subtotal)}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+
+                <TableRow sx={{ backgroundColor: '#e3f2fd', borderTop: '2px solid #1976d2' }}>
+                  <TableCell sx={{ pl: 3, py: 2 }}>
+                    <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', color: '#1976d2', letterSpacing: 0.5 }}>
+                      TOTAL CORPORATE INCOME
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                    <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', letterSpacing: 0.5, color: '#1565c0' }}>
+                      {formatCurrency(tier1Totals?.income || 0)}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                    <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', color: 'text.secondary', letterSpacing: 0.5 }}>
+                      -
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                    <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', color: 'text.secondary', letterSpacing: 0.5 }}>
+                      -
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                    <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', color: 'text.secondary', letterSpacing: 0.5 }}>
+                      -
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                    <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', letterSpacing: 0.5, color: '#1565c0' }}>
+                      {formatCurrency(tier1Totals?.income || 0)}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+
+        {/* BUDGETARY SUPPORT TABLE */}
+        <TableContainer sx={{ mb: 3, boxShadow: 2, borderRadius: 2, border: '1px solid #e0e0e0' }}>
+          <Table size="medium">
+            <TableHead>
+              <TableRow sx={{ backgroundColor: '#1976d2' }}>
+                <TableCell sx={{ fontWeight: 'bold', color: 'white', width: '25%', fontSize: '0.95rem', letterSpacing: 0.5, py: 2 }}>
+                  BUDGETARY SUPPORT
                 </TableCell>
-                <TableCell />
+                <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '15%', fontSize: '0.95rem', letterSpacing: 0.5, py: 2 }}>
+                  PROJECTED CORPORATE INCOME<br />(a)
+                </TableCell>
+                <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '15%', fontSize: '0.95rem', letterSpacing: 0.5, py: 2 }}>
+                  PROJECTED SUBSIDY<br />TIER 1 (b)
+                </TableCell>
+                <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '15%', fontSize: '0.95rem', letterSpacing: 0.5, py: 2 }}>
+                  PROJECTED SUBSIDY<br />TIER 2 (c)
+                </TableCell>
+                <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '15%', fontSize: '0.95rem', letterSpacing: 0.5, py: 2 }}>
+                  TOTAL<br />(d = b + c)
+                </TableCell>
+                <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '15%', fontSize: '0.95rem', letterSpacing: 0.5, py: 2 }}>
+                  PROPOSED BUDGET<br />(e = a + d)
+                </TableCell>
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+            </TableHead>
+            <TableBody>
+              <TableRow sx={{ 
+                backgroundColor: '#f9f9f9',
+                '&:hover': { backgroundColor: '#f0f4f8' }
+              }}>
+                <TableCell sx={{ pl: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, letterSpacing: 0.2 }}>
+                    Subsidy to the National Irrigation Administration:
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ color: 'text.secondary', letterSpacing: 0.2 }}>
+                    -
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ color: 'text.secondary', letterSpacing: 0.2 }}>
+                    -
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ color: 'text.secondary', letterSpacing: 0.2 }}>
+                    -
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ color: 'text.secondary', letterSpacing: 0.2 }}>
+                    -
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ color: 'text.secondary', letterSpacing: 0.2 }}>
+                    -
+                  </Typography>
+                </TableCell>
+              </TableRow>
+              <TableRow sx={{ 
+                backgroundColor: '#fff',
+                '&:hover': { backgroundColor: '#f0f4f8' }
+              }}>
+                <TableCell sx={{ pl: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <Typography variant="body2" sx={{ fontWeight: 500, letterSpacing: 0.2 }}>
+                      a. Operating Requirements
+                    </Typography>
+                    <Chip label="Auto-calculated" size="small" color="info" sx={{ fontSize: '0.75rem' }} />
+                  </Box>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#d32f2f', letterSpacing: 0.2 }}>
+                    {formatCurrency(
+                      ((tier1Totals?.personnel || 0) * 0.6) + 
+                      ((tier1Totals?.mooe || 0) * 0.5)
+                    )}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#2e7d32', letterSpacing: 0.2 }}>
+                    {formatCurrency(
+                      ((tier1Totals?.personnel || 0) * 0.4) + 
+                      ((tier1Totals?.mooe || 0) * 0.5) + 
+                      (tier1Totals?.capital || 0)
+                    )}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#ff6f00', letterSpacing: 0.2 }}>
+                    {formatCurrency(tier2Totals?.tier2Amount || 0)}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#7b1fa2', letterSpacing: 0.2 }}>
+                    {formatCurrency(
+                      ((tier1Totals?.personnel || 0) * 0.4) + 
+                      ((tier1Totals?.mooe || 0) * 0.5) + 
+                      (tier1Totals?.capital || 0) +
+                      (tier2Totals?.tier2Amount || 0)
+                    )}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: '#1565c0', letterSpacing: 0.2 }}>
+                    {formatCurrency(
+                      ((tier1Totals?.personnel || 0) * 0.6) + 
+                      ((tier1Totals?.mooe || 0) * 0.5) +
+                      ((tier1Totals?.personnel || 0) * 0.4) + 
+                      ((tier1Totals?.mooe || 0) * 0.5) + 
+                      (tier1Totals?.capital || 0) +
+                      (tier2Totals?.tier2Amount || 0)
+                    )}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+
+              <TableRow sx={{ backgroundColor: '#e3f2fd', borderTop: '2px solid #1976d2' }}>
+                <TableCell sx={{ pl: 3, py: 2 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', color: '#1976d2', letterSpacing: 0.5 }}>
+                    TOTAL BUDGETARY SUPPORT
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', letterSpacing: 0.5, color: '#d32f2f' }}>
+                    {formatCurrency(
+                      ((tier1Totals?.personnel || 0) * 0.6) + 
+                      ((tier1Totals?.mooe || 0) * 0.5)
+                    )}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', letterSpacing: 0.5, color: '#2e7d32' }}>
+                    {formatCurrency(
+                      ((tier1Totals?.personnel || 0) * 0.4) + 
+                      ((tier1Totals?.mooe || 0) * 0.5) + 
+                      (tier1Totals?.capital || 0)
+                    )}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', letterSpacing: 0.5, color: '#ff6f00' }}>
+                    {formatCurrency(tier2Totals?.tier2Amount || 0)}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', letterSpacing: 0.5, color: '#7b1fa2' }}>
+                    {formatCurrency(
+                      ((tier1Totals?.personnel || 0) * 0.4) + 
+                      ((tier1Totals?.mooe || 0) * 0.5) + 
+                      (tier1Totals?.capital || 0) +
+                      (tier2Totals?.tier2Amount || 0)
+                    )}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', letterSpacing: 0.5, color: '#1565c0' }}>
+                    {formatCurrency(
+                      ((tier1Totals?.personnel || 0) * 0.6) + 
+                      ((tier1Totals?.mooe || 0) * 0.5) +
+                      ((tier1Totals?.personnel || 0) * 0.4) + 
+                      ((tier1Totals?.mooe || 0) * 0.5) + 
+                      (tier1Totals?.capital || 0) +
+                      (tier2Totals?.tier2Amount || 0)
+                    )}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </TableContainer>
+
+        {/* TOTAL SOURCES OF FUNDS */}
+        <TableContainer sx={{ mb: 4, boxShadow: 2, borderRadius: 2, border: '1px solid #e0e0e0' }}>
+          <Table>
+            <TableBody>
+              <TableRow sx={{ backgroundColor: '#2e7d32' }}>
+                <TableCell sx={{ pl: 3, py: 2, width: '25%' }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', color: 'white', letterSpacing: 0.5 }}>
+                    TOTAL SOURCES OF FUNDS
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, width: '15%' }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', color: 'white', letterSpacing: 0.5 }}>
+                    {formatCurrency(
+                      (tier1Totals?.income || 0) +
+                      ((tier1Totals?.personnel || 0) * 0.6) + 
+                      ((tier1Totals?.mooe || 0) * 0.5)
+                    )}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, width: '15%' }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', color: 'white', letterSpacing: 0.5 }}>
+                    {formatCurrency(
+                      ((tier1Totals?.personnel || 0) * 0.4) + 
+                      ((tier1Totals?.mooe || 0) * 0.5) + 
+                      (tier1Totals?.capital || 0)
+                    )}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, width: '15%' }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', color: 'white', letterSpacing: 0.5 }}>
+                    {formatCurrency(tier2Totals?.tier2Amount || 0)}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, width: '15%' }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', color: 'white', letterSpacing: 0.5 }}>
+                    {formatCurrency(
+                      ((tier1Totals?.personnel || 0) * 0.4) + 
+                      ((tier1Totals?.mooe || 0) * 0.5) + 
+                      (tier1Totals?.capital || 0) +
+                      (tier2Totals?.tier2Amount || 0)
+                    )}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2, width: '15%' }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', color: 'white', letterSpacing: 0.5 }}>
+                    {formatCurrency(
+                      (tier1Totals?.income || 0) + 
+                      (tier1Totals?.personnel || 0) + 
+                      (tier1Totals?.mooe || 0) + 
+                      (tier1Totals?.capital || 0) +
+                      (tier2Totals?.tier2Amount || 0)
+                    )}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </TableContainer>
+
+        {/* SECTION B: USES OF FUNDS */}
+        <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold', color: '#1976d2' }}>
+          B. USES OF FUNDS
+        </Typography>
+
+        {/* USES OF FUNDS TABLE */}
+        <TableContainer sx={{ mb: 3, boxShadow: 2, borderRadius: 2, border: '1px solid #e0e0e0' }}>
+          <Table size="medium">
+            <TableHead>
+              <TableRow sx={{ backgroundColor: '#1976d2' }}>
+                <TableCell sx={{ fontWeight: 'bold', color: 'white', width: '25%', fontSize: '0.95rem', letterSpacing: 0.5, py: 2 }}>
+                  USE OF FUNDS
+                </TableCell>
+                <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '15%', fontSize: '0.95rem', letterSpacing: 0.5, py: 2 }}>
+                  PROJECTED CORPORATE INCOME<br />(a)
+                </TableCell>
+                <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '15%', fontSize: '0.95rem', letterSpacing: 0.5, py: 2 }}>
+                  PROJECTED SUBSIDY<br />TIER 1 (b)
+                </TableCell>
+                <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '15%', fontSize: '0.95rem', letterSpacing: 0.5, py: 2 }}>
+                  PROJECTED SUBSIDY<br />TIER 2 (c)
+                </TableCell>
+                <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '15%', fontSize: '0.95rem', letterSpacing: 0.5, py: 2 }}>
+                  TOTAL<br />(d = b + c)
+                </TableCell>
+                <TableCell align="right" sx={{ fontWeight: 'bold', color: 'white', width: '15%', fontSize: '0.95rem', letterSpacing: 0.5, py: 2 }}>
+                  PROPOSED BUDGET<br />(e = a + d)
+                </TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {categories.map((category, idx) => {
+                const categoryTotal = tier1Totals?.[category.key] || 0;
+                // Calculate distribution: typically PS and MOOE are split, Capital is usually from subsidy
+                const corporateIncome = category.key === 'personnel' ? categoryTotal * 0.6 : (category.key === 'mooe' ? categoryTotal * 0.5 : 0);
+                const tier1Subsidy = categoryTotal - corporateIncome;
+                // Tier 2 adjustments (for now showing 0, will be populated when tier2 data has category breakdown)
+                const tier2Amount = 0;
+                const totalSubsidy = tier1Subsidy + tier2Amount;
+                const proposedBudget = corporateIncome + totalSubsidy;
+                
+                return (
+                  <TableRow key={category.key} sx={{ 
+                    backgroundColor: idx % 2 === 0 ? '#f9f9f9' : '#fff',
+                    '&:hover': { backgroundColor: '#f0f4f8' }
+                  }}>
+                    <TableCell sx={{ pl: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 500, letterSpacing: 0.2 }}>
+                        {category.label}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#d32f2f', letterSpacing: 0.2 }}>
+                        {formatCurrency(corporateIncome)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#2e7d32', letterSpacing: 0.2 }}>
+                        {formatCurrency(tier1Subsidy)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#ff6f00', letterSpacing: 0.2 }}>
+                        {formatCurrency(tier2Amount)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#7b1fa2', letterSpacing: 0.2 }}>
+                        {formatCurrency(totalSubsidy)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: '1rem', verticalAlign: 'middle' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#1565c0', letterSpacing: 0.2 }}>
+                        {formatCurrency(proposedBudget)}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+
+              <TableRow sx={{ backgroundColor: '#e3f2fd', borderTop: '2px solid #1976d2' }}>
+                <TableCell sx={{ pl: 3, py: 2 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', color: '#1976d2', letterSpacing: 0.5 }}>
+                    TOTAL USES OF FUNDS
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', letterSpacing: 0.5, color: '#d32f2f' }}>
+                    {formatCurrency(
+                      ((tier1Totals?.personnel || 0) * 0.6) + 
+                      ((tier1Totals?.mooe || 0) * 0.5)
+                    )}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', letterSpacing: 0.5, color: '#2e7d32' }}>
+                    {formatCurrency(
+                      ((tier1Totals?.personnel || 0) * 0.4) + 
+                      ((tier1Totals?.mooe || 0) * 0.5) + 
+                      (tier1Totals?.capital || 0)
+                    )}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', letterSpacing: 0.5, color: '#ff6f00' }}>
+                    {formatCurrency(tier2Totals?.tier2Amount || 0)}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', letterSpacing: 0.5, color: '#7b1fa2' }}>
+                    {formatCurrency(
+                      ((tier1Totals?.personnel || 0) * 0.4) + 
+                      ((tier1Totals?.mooe || 0) * 0.5) + 
+                      (tier1Totals?.capital || 0) +
+                      (tier2Totals?.tier2Amount || 0)
+                    )}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ pr: 3, py: 2 }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: '1.05rem', letterSpacing: 0.5, color: '#1565c0' }}>
+                    {formatCurrency(
+                      (tier1Totals?.personnel || 0) + 
+                      (tier1Totals?.mooe || 0) + 
+                      (tier1Totals?.capital || 0) +
+                      (tier2Totals?.tier2Amount || 0)
+                    )}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Box>
     );
   };
 
@@ -474,7 +924,7 @@ const TierComparisonPage = () => {
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid item xs={12} sm={6} md={4}>
               <FormControl fullWidth>
                 <InputLabel>Region</InputLabel>
                 <Select
@@ -491,7 +941,7 @@ const TierComparisonPage = () => {
               </FormControl>
             </Grid>
             
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid item xs={12} sm={6} md={4}>
               <FormControl fullWidth>
                 <InputLabel>Fiscal Year</InputLabel>
                 <Select
@@ -508,22 +958,7 @@ const TierComparisonPage = () => {
               </FormControl>
             </Grid>
 
-            <Grid item xs={12} sm={6} md={3}>
-              <FormControl fullWidth>
-                <InputLabel>Budget Type</InputLabel>
-                <Select
-                  value={budgetType}
-                  label="Budget Type"
-                  onChange={(e) => setBudgetType(e.target.value)}
-                >
-                  <MenuItem value="Initial">Initial</MenuItem>
-                  <MenuItem value="NEP">NEP</MenuItem>
-                  <MenuItem value="GAA">GAA</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid item xs={12} sm={6} md={4}>
               <Box display="flex" gap={1}>
                 <Button
                   variant="contained"
@@ -649,9 +1084,24 @@ const TierComparisonPage = () => {
             <TextField
               fullWidth
               label="Tier 2 Amount"
-              type="number"
-              value={editFormData.tier2Amount || 0}
-              onChange={(e) => setEditFormData({ ...editFormData, tier2Amount: parseFloat(e.target.value) || 0 })}
+              value={displayAmount}
+              onChange={(e) => {
+                const rawValue = e.target.value.replace(/,/g, '');
+                // Allow only numbers and one decimal point
+                if (/^\d*\.?\d*$/.test(rawValue)) {
+                  setDisplayAmount(e.target.value);
+                  setEditFormData({ ...editFormData, tier2Amount: parseFloat(rawValue) || 0 });
+                }
+              }}
+              onBlur={() => {
+                // Format on blur
+                const formatted = Number(editFormData.tier2Amount || 0).toLocaleString('en-US', { 
+                  minimumFractionDigits: 2, 
+                  maximumFractionDigits: 2 
+                });
+                setDisplayAmount(formatted);
+              }}
+              helperText="Enter amount with decimal format (e.g., 12,345,678.90)"
             />
 
             <TextField
@@ -662,34 +1112,6 @@ const TierComparisonPage = () => {
               value={editFormData.tier2Remarks || ''}
               onChange={(e) => setEditFormData({ ...editFormData, tier2Remarks: e.target.value })}
             />
-
-            <FormControl fullWidth>
-              <InputLabel>Priority</InputLabel>
-              <Select
-                value={editFormData.priority || 'Medium'}
-                label="Priority"
-                onChange={(e) => setEditFormData({ ...editFormData, priority: e.target.value })}
-              >
-                <MenuItem value="Low">Low</MenuItem>
-                <MenuItem value="Medium">Medium</MenuItem>
-                <MenuItem value="High">High</MenuItem>
-                <MenuItem value="Critical">Critical</MenuItem>
-              </Select>
-            </FormControl>
-
-            <FormControl fullWidth>
-              <InputLabel>Status</InputLabel>
-              <Select
-                value={editFormData.tier2Status || 'Draft'}
-                label="Status"
-                onChange={(e) => setEditFormData({ ...editFormData, tier2Status: e.target.value })}
-              >
-                <MenuItem value="Draft">Draft</MenuItem>
-                <MenuItem value="Under Review">Under Review</MenuItem>
-                <MenuItem value="Approved">Approved</MenuItem>
-                <MenuItem value="Finalized">Finalized</MenuItem>
-              </Select>
-            </FormControl>
           </Box>
         </DialogContent>
         <DialogActions>

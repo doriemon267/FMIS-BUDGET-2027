@@ -842,6 +842,16 @@ exports.createProposal = async (req, res) => {
     const legacyProposal = new Proposal(legacyProposalData);
     await legacyProposal.save();
 
+    // CRITICAL FIX: Recalculate and sync totals after creating proposal
+    // This ensures NewProposalWorkflow has correct initial totals (0 if no data yet)
+    try {
+      const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
+      await recalculateAndSaveProposalTotals({ proposalId: legacyProposal._id });
+    } catch (err) {
+      console.error('Warning: Failed to recalculate initial proposal totals:', err.message);
+      // Continue - don't block proposal creation if recalculation fails
+    }
+
     res.status(201).json({
       success: true,
       message: 'Proposal created successfully',
@@ -1120,12 +1130,8 @@ exports.getProposals = async (req, res) => {
           
           console.log(`[ORG_FILTER] Results: ${newProposals.length} proposals before, ${filteredProposals.length} after`);
           
-          // Only apply filter if it results in proposals
-          if (filteredProposals.length > 0) {
-            newProposals = filteredProposals;
-          } else {
-            console.log('[ORG_FILTER] Filter returned 0 results, keeping all proposals as fallback');
-          }
+          // Always apply filter - don't show proposals from other responsibility centers
+          newProposals = filteredProposals;
         } else {
           console.log('[ORG_FILTER] No assignment found for user, showing all proposals');
         }

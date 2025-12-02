@@ -26,11 +26,14 @@ router.get('/tier1/finalized', checkToken, async (req, res) => {
     // Build query filter
     const query = { 
       region,
-      status: 'Finalized'
+      status: 'Finalized',
+      budgetType: 'Initial' // Always filter for Initial budget type
     };
     
-    if (fiscalYear) query.fiscalYear = fiscalYear;
-    if (budgetType) query.budgetType = budgetType;
+    // fiscalYear is stored as string in the database
+    if (fiscalYear) {
+      query.fiscalYear = String(fiscalYear);
+    }
 
     // Fetch finalized proposals from all categories
     const [personnel, mooe, capital, income, budgetarySupport] = await Promise.all([
@@ -58,7 +61,11 @@ router.get('/tier1/finalized', checkToken, async (req, res) => {
 
     // Calculate totals
     const calculateTotal = (items) => items.reduce((sum, item) => {
-      const amount = item.amount || item.cost || item.total || item.grandTotal || 0;
+      // Handle different field names across models:
+      // - PersonnelServices uses: Total (capital T)
+      // - MOOE/CapitalOutlay uses: cost or amount
+      // - Income/BudgetarySupport uses: amount or total
+      const amount = item.Total || item.total || item.amount || item.cost || item.grandTotal || 0;
       return sum + Number(amount);
     }, 0);
 
@@ -100,7 +107,7 @@ router.get('/tier1/finalized', checkToken, async (req, res) => {
  */
 router.get('/tier2', checkToken, async (req, res) => {
   try {
-    const { region, fiscalYear, budgetType, tier2Status } = req.query;
+    const { region, fiscalYear, tier2Status } = req.query;
 
     if (!region) {
       return res.status(400).json({ 
@@ -109,9 +116,11 @@ router.get('/tier2', checkToken, async (req, res) => {
       });
     }
 
-    const query = { region };
-    if (fiscalYear) query.fiscalYear = fiscalYear;
-    if (budgetType) query.budgetType = budgetType;
+    const query = { 
+      region,
+      budgetType: 'Initial' // Always filter for Initial budget type
+    };
+    if (fiscalYear) query.fiscalYear = String(fiscalYear);
     if (tier2Status) query.tier2Status = tier2Status;
 
     const tier2Proposals = await Tier2Proposal.find(query)
@@ -138,13 +147,17 @@ router.get('/tier2', checkToken, async (req, res) => {
       metadata: {
         region,
         fiscalYear: fiscalYear || 'All',
-        budgetType: budgetType || 'All',
+        budgetType: 'Initial',
         totalRecords: tier2Proposals.length
       }
     });
 
   } catch (error) {
-    console.error('Error fetching Tier 2 proposals:', error);
+    console.error('Error fetching Tier 2 proposals:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
     res.status(500).json({
       success: false,
       message: 'Failed to fetch Tier 2 proposals',
@@ -159,7 +172,7 @@ router.get('/tier2', checkToken, async (req, res) => {
  */
 router.post('/tier2/copy-from-tier1', checkToken, async (req, res) => {
   try {
-    const { region, fiscalYear, budgetType } = req.body;
+    const { region, fiscalYear } = req.body;
     const user = req.user;
 
     if (!region) {
@@ -169,14 +182,17 @@ router.post('/tier2/copy-from-tier1', checkToken, async (req, res) => {
       });
     }
 
-    // Fetch Tier 1 finalized data
+    // Fetch Tier 1 finalized data (always Initial budget type)
     const query = { 
       region,
-      status: 'Finalized'
+      status: 'Finalized',
+      budgetType: 'Initial'
     };
     
-    if (fiscalYear) query.fiscalYear = fiscalYear;
-    if (budgetType) query.budgetType = budgetType;
+    // fiscalYear is stored as string in the database
+    if (fiscalYear) {
+      query.fiscalYear = String(fiscalYear);
+    }
 
     const [personnel, mooe, capital, income, budgetarySupport] = await Promise.all([
       PersonnelService.find(query).lean(),
@@ -188,7 +204,8 @@ router.post('/tier2/copy-from-tier1', checkToken, async (req, res) => {
 
     // Helper function to extract amount from various field names
     const getAmount = (item) => {
-      return item.amount || item.cost || item.total || item.grandTotal || 0;
+      // Check for Total field first (PersonnelServices uses this)
+      return item.Total || item.total || item.amount || item.cost || item.grandTotal || 0;
     };
 
     // Create Tier 2 proposals grouped by category
@@ -210,7 +227,7 @@ router.post('/tier2/copy-from-tier1', checkToken, async (req, res) => {
         description: `Tier 2 copy of finalized ${categoryName} proposals for ${region}`,
         region,
         fiscalYear: fiscalYear || items[0]?.fiscalYear,
-        budgetType: budgetType || items[0]?.budgetType,
+        budgetType: 'Initial', // Always Initial budget type
         tier1References,
         tier1Amount,
         tier2Amount: tier1Amount, // Initially same as Tier 1
@@ -234,9 +251,9 @@ router.post('/tier2/copy-from-tier1', checkToken, async (req, res) => {
     };
 
     // Create entries for each category
-    const personnelEntry = createTier2Entry(personnel, 'personnelServices', 'Personnel Services');
+    const personnelEntry = createTier2Entry(personnel, 'personnel', 'Personnel Services');
     const mooeEntry = createTier2Entry(mooe, 'mooe', 'MOOE');
-    const capitalEntry = createTier2Entry(capital, 'capitalOutlay', 'Capital Outlay');
+    const capitalEntry = createTier2Entry(capital, 'capital', 'Capital Outlay');
     const incomeEntry = createTier2Entry(income, 'income', 'Income');
     const budgetarySupportEntry = createTier2Entry(budgetarySupport, 'budgetarySupport', 'Budgetary Support');
 
@@ -256,7 +273,7 @@ router.post('/tier2/copy-from-tier1', checkToken, async (req, res) => {
     const existingTier2 = await Tier2Proposal.findOne({
       region,
       fiscalYear: fiscalYear || tier2Proposals[0].fiscalYear,
-      budgetType: budgetType || tier2Proposals[0].budgetType
+      budgetType: 'Initial'
     });
 
     if (existingTier2) {
@@ -277,16 +294,21 @@ router.post('/tier2/copy-from-tier1', checkToken, async (req, res) => {
         totalCreated: result.length,
         region,
         fiscalYear: fiscalYear || 'Current',
-        budgetType: budgetType || 'All'
+        budgetType: 'Initial'
       }
     });
 
   } catch (error) {
-    console.error('Error copying Tier 1 to Tier 2:', error);
+    console.error('Error copying Tier 1 to Tier 2:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
     res.status(500).json({
       success: false,
       message: 'Failed to copy Tier 1 proposals to Tier 2',
-      error: error.message
+      error: error.message,
+      details: error.stack
     });
   }
 });
@@ -415,11 +437,16 @@ router.delete('/tier2/:id', checkToken, async (req, res) => {
  */
 router.get('/regions', checkToken, async (req, res) => {
   try {
-    const { fiscalYear, budgetType } = req.query;
+    const { fiscalYear } = req.query;
     
-    const query = { status: 'Finalized' };
-    if (fiscalYear) query.fiscalYear = fiscalYear;
-    if (budgetType) query.budgetType = budgetType;
+    const query = { 
+      status: 'Finalized',
+      budgetType: 'Initial' // Always filter for Initial budget type only
+    };
+    // fiscalYear is stored as string in the database
+    if (fiscalYear) {
+      query.fiscalYear = String(fiscalYear);
+    }
 
     // Get unique regions from all proposal types
     const [personnelRegions, mooeRegions, capitalRegions, incomeRegions, budgetarySupportRegions] = await Promise.all([
@@ -445,12 +472,16 @@ router.get('/regions', checkToken, async (req, res) => {
       metadata: {
         totalRegions: allRegions.length,
         fiscalYear: fiscalYear || 'All',
-        budgetType: budgetType || 'All'
+        budgetType: 'Initial'
       }
     });
 
   } catch (error) {
-    console.error('Error fetching regions:', error);
+    console.error('Error fetching regions:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
     res.status(500).json({
       success: false,
       message: 'Failed to fetch regions',
@@ -465,13 +496,15 @@ router.get('/regions', checkToken, async (req, res) => {
  */
 router.get('/fiscal-years', checkToken, async (req, res) => {
   try {
-    const { region, budgetType } = req.query;
+    const { region } = req.query;
     
-    const query = { status: 'Finalized' };
+    const query = { 
+      status: 'Finalized',
+      budgetType: 'Initial' // Always filter for Initial budget type only
+    };
     if (region) query.region = region;
-    if (budgetType) query.budgetType = budgetType;
 
-    // Get unique fiscal years from all proposal types
+    // Get unique fiscal years from all proposal types (fiscalYear is stored as string)
     const [personnelYears, mooeYears, capitalYears, incomeYears, budgetarySupportYears] = await Promise.all([
       PersonnelService.distinct('fiscalYear', query),
       MooeProposal.distinct('fiscalYear', query),
@@ -480,14 +513,14 @@ router.get('/fiscal-years', checkToken, async (req, res) => {
       BudgetarySupport.distinct('fiscalYear', query)
     ]);
 
-    // Combine and deduplicate fiscal years
+    // Combine and deduplicate fiscal years (keep as strings, sort numerically)
     const allFiscalYears = [...new Set([
       ...personnelYears,
       ...mooeYears,
       ...capitalYears,
       ...incomeYears,
       ...budgetarySupportYears
-    ])].filter(year => year).sort((a, b) => b - a); // Filter and sort descending
+    ])].filter(year => year).sort((a, b) => parseInt(b) - parseInt(a)); // Filter and sort descending
 
     res.json({
       success: true,
@@ -495,12 +528,16 @@ router.get('/fiscal-years', checkToken, async (req, res) => {
       metadata: {
         totalYears: allFiscalYears.length,
         region: region || 'All',
-        budgetType: budgetType || 'All'
+        budgetType: 'Initial'
       }
     });
 
   } catch (error) {
-    console.error('Error fetching fiscal years:', error);
+    console.error('Error fetching fiscal years:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
     res.status(500).json({
       success: false,
       message: 'Failed to fetch fiscal years',
