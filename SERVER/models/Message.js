@@ -7,6 +7,7 @@ const MessageSchema = new mongoose.Schema({
   read: { type: Boolean, default: false, index: true },
   readAt: { type: Date },
   metadata: mongoose.Schema.Types.Mixed,
+  deletedFor: { type: [String], default: [] },
   createdAt: { type: Date, default: Date.now, index: true },
 });
 

@@ -1,5 +1,7 @@
 const Notification = require('../models/Notification');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+const Region = require('../models/Region');
+const User = require('../models/User');
 const { sendNotificationEmail } = require('../utils/emailNotification');
 
 const normalizeRecipientId = (val) => {
@@ -138,7 +140,12 @@ exports.createNotification = async (notificationData) => {
  * @param {Array<Object>} notificationsData - Array of notification data objects
  * @returns {Promise<Array<Object>>} The created notifications
  */
-exports.createNotifications = async (notificationsData) => {
+/**
+ * Create multiple notifications
+ * @param {Array<Object>} notificationsData - Array of notification data objects
+ * @param {Object} options - Optional parameters: { initiatorUserId }
+ */
+exports.createNotifications = async (notificationsData, options = {}) => {
   try {
     // Dedupe per recipient + uniqueKey if provided in metadata
     const notifications = [];
@@ -157,6 +164,8 @@ exports.createNotifications = async (notificationsData) => {
 
   const expandRolesGlobally = String(process.env.NOTIFICATIONS_EXPAND_ROLE_TO_USERS || 'true').toLowerCase() === 'true';
   for (const data of notificationsData) {
+      // allow passing initiator for permission checks (e.g., NIA-wide sends)
+      const initiatorUserId = options?.initiatorUserId || options?.initiator || null;
       const uniqueKey = data.metadata?.uniqueKey;
       if (uniqueKey) {
         try {
@@ -172,6 +181,100 @@ exports.createNotifications = async (notificationsData) => {
       }
       // If data.userId looks like a role identifier (e.g., 'BUDGET_MANAGER', 'BUDGET MANAGER') expand it
       const recipientId = data.userId;
+      // Region-based expansion: check metadata.targetRegions
+      const targetRegions = (data.metadata?.targetRegions || []).filter(Boolean).map(r => String(r).trim().toUpperCase());
+      const niaWideFlag = data.metadata?.niaWide === true;
+      // If targetRegions is provided or niaWide is true, expand recipients accordingly
+      if ((Array.isArray(targetRegions) && targetRegions.length > 0) || niaWideFlag) {
+        // Handle niaWide: confirm initiator has BRD-level permission
+        if (niaWideFlag) {
+          // If no initiator provided, skip expanding NIA-wide
+          if (!initiatorUserId) {
+            console.warn('[createNotifications] NIA-wide expansion requested but no initiator provided; skipping');
+          } else {
+            try {
+              const initiatorAssign = await HierarchicalUserAssignment.getUserPermissions(String(initiatorUserId));
+              const isBudgetAndRevenue = initiatorAssign && typeof initiatorAssign.isBudgetAndRevenueUser === 'function' ? initiatorAssign.isBudgetAndRevenueUser() : false;
+              const isAdmin = (initiatorAssign && (Array.isArray(initiatorAssign.userRoles) && initiatorAssign.userRoles.some(r => ['SUPER_ADMIN','ADMIN','BUDGET_ADMIN','BUDGET ADMIN'].includes(r))) || initiatorAssign.userRole === 'ADMIN');
+              if (!isBudgetAndRevenue && !isAdmin) {
+                console.warn('[createNotifications] Initiator is not authorized to perform NIA-wide send, skipping NIA-wide expansion for initiator:', initiatorUserId);
+              } else {
+                // Expand to all active users
+                const allAssigns = await HierarchicalUserAssignment.find({ isActive: true }).select('userId').lean();
+                for (const a of allAssigns) {
+                  const uid = a.userId || String(a._id);
+                  if (data.metadata?.proposalId && mutedByProposal[data.metadata.proposalId] && mutedByProposal[data.metadata.proposalId].has(uid)) continue;
+                  if (uniqueKey) {
+                    const exists = await Notification.findOne({ recipientUserId: uid, status: 'UNREAD', 'metadata.uniqueKey': uniqueKey }).lean();
+                    if (exists) continue;
+                  }
+                  notifications.push({
+                    recipientUserId: uid,
+                    recipientUserIdNormalized: normalizeRecipientId(uid),
+                    recipientUserIdOriginal: uid,
+                    type: data.type || 'INFO',
+                    title: data.title,
+                    message: data.message,
+                    relatedEntityId: data.relatedId,
+                    relatedEntityType: data.relatedType,
+                    relatedLink: data.relatedLink,
+                    metadata: data.metadata || {},
+                    status: 'UNREAD',
+                    createdAt: new Date()
+                  });
+                }
+                // continue to next data item
+                continue;
+              }
+            } catch (err) {
+              console.warn('[createNotifications] NIA-wide permission check failed', err?.message || err);
+            }
+          }
+        }
+        // Handle region-based expansion (targetRegions)
+        if (Array.isArray(targetRegions) && targetRegions.length > 0) {
+          try {
+            // Find region ids by Region.Region equals code
+            const regionDocs = await Region.find({ Region: { $in: targetRegions } }).select('_id Region').lean();
+            const regionIds = regionDocs.map(r => String(r._id));
+            // Find assignments with matching assignedRegions OR regionId in ids OR isNIAWide true
+            const assignments = await HierarchicalUserAssignment.find({
+              isActive: true,
+              $or: [
+                { assignedRegions: { $in: targetRegions } },
+                { regionId: { $in: regionIds } },
+                { isNIAWide: true }
+              ]
+            }).select('userId').lean();
+            for (const a of assignments) {
+              const uid = a.userId || String(a._id);
+              if (data.metadata?.proposalId && mutedByProposal[data.metadata.proposalId] && mutedByProposal[data.metadata.proposalId].has(uid)) continue;
+              if (uniqueKey) {
+                const exists = await Notification.findOne({ recipientUserId: uid, status: 'UNREAD', 'metadata.uniqueKey': uniqueKey }).lean();
+                if (exists) continue;
+              }
+              notifications.push({
+                recipientUserId: uid,
+                recipientUserIdNormalized: normalizeRecipientId(uid),
+                recipientUserIdOriginal: uid,
+                type: data.type || 'INFO',
+                title: data.title,
+                message: data.message,
+                relatedEntityId: data.relatedId,
+                relatedEntityType: data.relatedType,
+                relatedLink: data.relatedLink,
+                metadata: data.metadata || {},
+                status: 'UNREAD',
+                createdAt: new Date()
+              });
+            }
+            // Skip further processing for this data (we've expanded)
+            continue;
+          } catch (err) {
+            console.warn('[createNotifications] Region expansion failed:', err?.message || err);
+          }
+        }
+      }
       const isRoleCandidate = (val) => {
         if (!val || typeof val !== 'string') return false;
         const v = val.trim();
@@ -188,7 +291,19 @@ exports.createNotifications = async (notificationsData) => {
         // Expand the role into user ids by querying User model
   try {
           const users = await User.find({ roles: { $in: [recipientId, recipientId.toUpperCase()] } }).select('userId');
-          for (const u of users) {
+          // If targetRegions is specified, narrow the role users to those in the regions
+          let regionFilterUserIds = null;
+          if (Array.isArray(targetRegions) && targetRegions.length > 0) {
+            try {
+              const regionDocs = await Region.find({ Region: { $in: targetRegions } }).select('_id Region').lean();
+              const regionIds = regionDocs.map(r => String(r._id));
+              const assigns = await HierarchicalUserAssignment.find({ isActive: true, $or: [ { assignedRegions: { $in: targetRegions } }, { regionId: { $in: regionIds } }, { isNIAWide: true } ] }).select('userId').lean();
+              regionFilterUserIds = new Set(assigns.map(a => String(a.userId || a._id)));
+            } catch (err) { /* ignore region filter if it fails */ }
+          }
+            for (const u of users) {
+              // If region filter exists, skip users not in the region filter
+              if (regionFilterUserIds && !regionFilterUserIds.has(String(u.userId || u._id))) continue;
             const uid = u.userId || String(u._id);
             const uniqueKeyPerRecipient = uniqueKey || null;
             // If this user has muted the proposal referenced in metadata, skip

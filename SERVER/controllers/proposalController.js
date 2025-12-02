@@ -1168,7 +1168,9 @@ exports.uploadProposalAttachment = async (req, res) => {
     proposal.attachments.push(metadata);
     await proposal.save();
 
-    return res.status(201).json({ message: 'Attachment uploaded', attachment: metadata });
+    // Fetch the saved attachment (Mongoose may have applied defaults like attachmentId)
+    const savedAttachment = proposal.attachments[proposal.attachments.length - 1];
+    return res.status(201).json({ message: 'Attachment uploaded', attachment: savedAttachment });
   } catch (err) {
     console.error('uploadProposalAttachment error:', err);
     return res.status(500).json({ message: 'Error uploading attachment', error: err.message });
@@ -6342,7 +6344,7 @@ exports.performProposalAction = async (req, res) => {
 
           // Add a uniqueKey to prevent duplicates for same action and proposal
           notificationsData.forEach(n => { n.metadata = n.metadata || {}; n.metadata.uniqueKey = `${action}_${id}`; });
-          await notificationController.createNotifications(notificationsData);
+          await notificationController.createNotifications(notificationsData, { initiatorUserId: req?.user?.Id || req?.user?.id || req?.user?.userId });
           console.log(`Notifications sent to ${targetUsers.length} ${targetRole} users`);
         }
       }

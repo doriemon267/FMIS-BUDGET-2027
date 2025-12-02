@@ -1,6 +1,6 @@
 const Router = require('express').Router;
 const checkToken = require('../middleware/checkToken');
-const { getConversations, getMessagesWithUser, sendMessage, markMessagesRead, searchContacts, getPresence, debugDump } = require('../controllers/chatController');
+const { getConversations, getMessagesWithUser, sendMessage, markMessagesRead, searchContacts, getPresence, deleteMessage, deleteConversation, debugDump } = require('../controllers/chatController');
 
 const router = Router();
 
@@ -13,6 +13,8 @@ router.post('/messages/:userId/read', markMessagesRead);
 router.get('/contacts', searchContacts);
 router.get('/presence', getPresence);
 router.post('/messages', sendMessage);
+router.delete('/messages/:messageId', deleteMessage);
+router.delete('/conversations/:peerId', deleteConversation);
 
 // Dev / debug-only: return server presence map
 if (process.env.DEBUG_MODE === 'true' || process.env.ALLOW_MOCK_AUTH === 'true') {

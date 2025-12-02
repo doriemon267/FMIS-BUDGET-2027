@@ -308,9 +308,59 @@ exports.getAllIncome = async (req, res) => {
         query = { ...query, ...hierarchicalFilters };
       }
     }
-    const incomeEntries = await Income.find(query)
+    let incomeEntries = await Income.find(query)
       .populate('incomecategory')
       .sort({ createdAt: -1 });
+    
+    // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's CURRENT organizational assignment
+    const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
+    const userIdString = userId ? String(userId) : undefined;
+    const userRoles = req.user?.Roles || [];
+    
+    const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
+    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+    
+    if (!isSuperAdmin && !isBudgetManager && userIdString) {
+      try {
+        const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+        const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
+          .populate('departmentId', 'Department DepartmentName department')
+          .populate('regionId', 'Region RegionName region')
+          .lean();
+        
+        if (userAssignment) {
+          const assignedDepartment = userAssignment.departmentId?.Department || 
+                                    userAssignment.departmentId?.DepartmentName ||
+                                    userAssignment.departmentId?.department;
+          const assignedRegion = userAssignment.regionId?.Region ||
+                                userAssignment.regionId?.RegionName ||
+                                userAssignment.regionId?.region;
+          const assignedDivision = userAssignment.divisionName;
+          
+          const filteredIncome = incomeEntries.filter(inc => {
+            if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
+              return inc.division === assignedDivision;
+            }
+            if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
+              return inc.department === assignedDepartment;
+            }
+            if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
+              return inc.region === assignedRegion;
+            }
+            if (userAssignment.assignmentLevel === 'FULL') {
+              return true;
+            }
+            return false;
+          });
+          
+          if (filteredIncome.length > 0 || userAssignment.assignmentLevel !== 'FULL') {
+            incomeEntries = filteredIncome;
+          }
+        }
+      } catch (err) {
+        console.error('[ORG_FILTER] Error in getAllIncome:', err.message);
+      }
+    }
     
     res.status(200).json(incomeEntries);
   } catch (error) {

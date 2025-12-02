@@ -129,7 +129,46 @@ const newProposalWorkflowSchema = new mongoose.Schema({
   },
   personnelData: {
     type: mongoose.Schema.Types.Mixed
-  }
+  },
+  // Attachments array for storing uploaded files
+  attachments: [{
+    attachmentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: () => new mongoose.Types.ObjectId()
+    },
+    module: {
+      type: String,
+      enum: ['general', 'income', 'personnel', 'mooe', 'capital'],
+      default: 'general'
+    },
+    originalName: {
+      type: String,
+      required: true
+    },
+    filename: {
+      type: String,
+      required: true
+    },
+    mimeType: {
+      type: String
+    },
+    size: {
+      type: Number
+    },
+    url: {
+      type: String
+    },
+    uploadedBy: {
+      type: String
+    },
+    uploadedByName: {
+      type: String
+    },
+    uploadedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }]
 }, {
   timestamps: true
 });

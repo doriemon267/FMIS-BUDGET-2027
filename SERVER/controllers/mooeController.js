@@ -1421,7 +1421,70 @@ exports.getMooeList = async (req, res) => {
       filter.fiscalYear = fiscalYear;
     }
     
-    const mooeProposals = await MooeProposal.find(filter);
+    let mooeProposals = await MooeProposal.find(filter);
+    
+    // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's CURRENT organizational assignment
+    // This ensures Budget Preparers only see proposals from their CURRENT assigned office/division
+    const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
+    const userIdString = userId ? String(userId) : undefined;
+    const userRoles = req.user?.Roles || [];
+    
+    // Check if user has special roles that bypass filtering
+    const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
+    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+    
+    if (!isSuperAdmin && !isBudgetManager && userIdString) {
+      try {
+        const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+        const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
+          .populate('departmentId', 'Department DepartmentName department')
+          .populate('regionId', 'Region RegionName region')
+          .lean();
+        
+        if (userAssignment) {
+          // Get assigned organizational unit names
+          const assignedDepartment = userAssignment.departmentId?.Department || 
+                                    userAssignment.departmentId?.DepartmentName ||
+                                    userAssignment.departmentId?.department;
+          const assignedRegion = userAssignment.regionId?.Region ||
+                                userAssignment.regionId?.RegionName ||
+                                userAssignment.regionId?.region;
+          const assignedDivision = userAssignment.divisionName;
+          
+          const filteredProposals = mooeProposals.filter(p => {
+            // CASE 1: User assigned at DIVISION level - only show proposals from that division
+            if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
+              return p.division === assignedDivision;
+            }
+            
+            // CASE 2: User assigned at DEPARTMENT level - only show proposals from that department
+            if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
+              return p.department === assignedDepartment;
+            }
+            
+            // CASE 3: User assigned at REGION level - only show proposals from that region
+            if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
+              return p.region === assignedRegion;
+            }
+            
+            // CASE 4: Full access (no restrictions)
+            if (userAssignment.assignmentLevel === 'FULL') {
+              return true;
+            }
+            
+            return false;
+          });
+          
+          // Only apply filter if it results in proposals
+          if (filteredProposals.length > 0 || userAssignment.assignmentLevel !== 'FULL') {
+            mooeProposals = filteredProposals;
+          }
+        }
+      } catch (err) {
+        console.error('[ORG_FILTER] Error in getMooeList:', err.message);
+        // On error, keep original proposals (don't hide data)
+      }
+    }
     
     res.status(200).json(mooeProposals);
   } catch (error) {

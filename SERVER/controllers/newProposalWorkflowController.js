@@ -12,6 +12,7 @@ const Notification = require('../models/Notification');
 const notificationController = require('./notificationController');
 const consolidationService = require('../utils/consolidationService');
 const { sendNotificationEmail } = require('../utils/emailNotification');
+const mongoose = require('mongoose');
 
 // Workflow status transitions based on the specification
 const WORKFLOW_TRANSITIONS = {
@@ -1808,6 +1809,146 @@ exports.deleteProposal = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to delete proposal',
+      error: error.message
+    });
+  }
+};
+
+// Upload attachment to proposal
+exports.uploadAttachment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { module = 'general' } = req.query;
+    
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded'
+      });
+    }
+
+    const proposal = await NewProposalWorkflow.findById(id);
+    if (!proposal) {
+      return res.status(404).json({
+        success: false,
+        message: 'Proposal not found'
+      });
+    }
+
+    // Create attachment object
+    const attachment = {
+      attachmentId: new mongoose.Types.ObjectId(),
+      module: module,
+      originalName: req.file.originalname,
+      filename: req.file.filename,
+      mimeType: req.file.mimetype,
+      size: req.file.size,
+      url: `/uploads/${req.file.filename}`, // URL to access the file
+      uploadedBy: req.user?.id || req.user?.userId || req.user?.Username?.[0],
+      uploadedByName: req.user?.username || req.user?.email || 'Unknown',
+      uploadedAt: new Date()
+    };
+
+    // Initialize attachments array if it doesn't exist
+    if (!proposal.attachments) {
+      proposal.attachments = [];
+    }
+
+    proposal.attachments.push(attachment);
+    await proposal.save();
+
+    res.json({
+      success: true,
+      message: 'Attachment uploaded successfully',
+      attachment: attachment
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to upload attachment',
+      error: error.message
+    });
+  }
+};
+
+// Delete attachment from proposal
+exports.deleteAttachment = async (req, res) => {
+  try {
+    const { id, attachmentId } = req.params;
+
+    const proposal = await NewProposalWorkflow.findById(id);
+    if (!proposal) {
+      return res.status(404).json({
+        success: false,
+        message: 'Proposal not found'
+      });
+    }
+
+    if (!proposal.attachments || proposal.attachments.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No attachments found'
+      });
+    }
+
+    // Remove attachment
+    const initialLength = proposal.attachments.length;
+    proposal.attachments = proposal.attachments.filter(
+      att => String(att.attachmentId || att._id) !== String(attachmentId)
+    );
+    
+    // Check if attachment was found and deleted
+    if (proposal.attachments.length === initialLength) {
+      return res.status(404).json({
+        success: false,
+        message: 'Attachment not found'
+      });
+    }
+
+    await proposal.save();
+
+    res.json({
+      success: true,
+      message: 'Attachment deleted successfully'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete attachment',
+      error: error.message
+    });
+  }
+};
+
+// Get attachments for a proposal
+exports.getAttachments = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { module } = req.query;
+
+    const proposal = await NewProposalWorkflow.findById(id);
+    if (!proposal) {
+      return res.status(404).json({
+        success: false,
+        message: 'Proposal not found'
+      });
+    }
+
+    let attachments = proposal.attachments || [];
+    if (module) {
+      attachments = attachments.filter(att => (att.module || 'general') === module);
+    }
+
+    res.json({
+      success: true,
+      message: 'Attachments retrieved successfully',
+      data: attachments
+    });
+  } catch (error) {
+    console.error('Error retrieving attachments:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve attachments',
       error: error.message
     });
   }

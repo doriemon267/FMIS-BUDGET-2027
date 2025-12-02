@@ -349,6 +349,56 @@ exports.getAllPersonnelServices = async (req, res) => {
       console.log("DEBUG: Charged to income filter was applied, looking for chargedToIncomeEligible =", chargedToIncomeFilter);
     }
     
+    // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's CURRENT organizational assignment
+    const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
+    const userIdString = userId ? String(userId) : undefined;
+    const userRoles = req.user?.Roles || [];
+    
+    const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
+    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+    
+    if (!isSuperAdmin && !isBudgetManager && userIdString) {
+      try {
+        const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+        const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
+          .populate('departmentId', 'Department DepartmentName department')
+          .populate('regionId', 'Region RegionName region')
+          .lean();
+        
+        if (userAssignment) {
+          const assignedDepartment = userAssignment.departmentId?.Department || 
+                                    userAssignment.departmentId?.DepartmentName ||
+                                    userAssignment.departmentId?.department;
+          const assignedRegion = userAssignment.regionId?.Region ||
+                                userAssignment.regionId?.RegionName ||
+                                userAssignment.regionId?.region;
+          const assignedDivision = userAssignment.divisionName;
+          
+          const filteredPersonnel = personnelServices.filter(ps => {
+            if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
+              return ps.division === assignedDivision;
+            }
+            if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
+              return (ps.department || ps.Department) === assignedDepartment;
+            }
+            if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
+              return ps.region === assignedRegion;
+            }
+            if (userAssignment.assignmentLevel === 'FULL') {
+              return true;
+            }
+            return false;
+          });
+          
+          if (filteredPersonnel.length > 0 || userAssignment.assignmentLevel !== 'FULL') {
+            personnelServices = filteredPersonnel;
+          }
+        }
+      } catch (err) {
+        console.error('[ORG_FILTER] Error in getAllPersonnelServices:', err.message);
+      }
+    }
+    
     // Recalculate fields
     personnelServices = personnelServices.map((personnel) => {
       const recalculatedSubsistenceAllowanceMDS =

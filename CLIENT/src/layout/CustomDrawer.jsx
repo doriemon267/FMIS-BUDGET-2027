@@ -136,6 +136,12 @@ const CustomDrawer = ({ collapsed = false }) => {
                 isAllow: isBudgetPlanningAnalyst || isBudgetOfficer || isOverallApprover || isSuperAdmin(currentUser),
                 icon: <BiData />,
               },
+              {
+                link: "/tier-comparison",
+                name: "Tier Comparison",
+                isAllow: isBudgetPlanningAnalyst || isBudgetOfficer || isOverallApprover || isSuperAdmin(currentUser),
+                icon: <FaChartBar />,
+              },
               // {
               //   link: "/myProposals",
               //   name: "My Proposals",

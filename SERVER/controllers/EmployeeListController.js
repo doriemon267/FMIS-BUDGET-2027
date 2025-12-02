@@ -462,8 +462,13 @@ exports.deleteEmployee = async (req, res) => {
 };
 exports.getPersonnels = async (req, res) => {
   try {
-    const { search } = req.query;
+    const { search, region, fiscalYear } = req.query;
     let query = {};
+    
+    // Add region and fiscal year filters if provided
+    if (region) query.region = region;
+    if (fiscalYear) query.fiscalYear = fiscalYear;
+    
     if (search) {
       query.$or = [
         { EmployeeFullName: { $regex: search, $options: "i" } },
@@ -477,7 +482,68 @@ exports.getPersonnels = async (req, res) => {
         { Status: { $regex: search, $options: "i" } },
       ];
     }
-    const employees = await PersonnelServices.find(query).limit(20);
+    
+    let employees = await PersonnelServices.find(query).limit(500);
+    
+    // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's CURRENT organizational assignment
+    const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
+    const userIdString = userId ? String(userId) : undefined;
+    const userRoles = req.user?.Roles || [];
+    
+    // Check if user has special roles that bypass filtering
+    const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
+    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+    
+    if (!isSuperAdmin && !isBudgetManager && userIdString) {
+      try {
+        const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+        const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
+          .populate('departmentId', 'Department DepartmentName department')
+          .populate('regionId', 'Region RegionName region')
+          .lean();
+        
+        if (userAssignment) {
+          const assignedDepartment = userAssignment.departmentId?.Department || 
+                                    userAssignment.departmentId?.DepartmentName ||
+                                    userAssignment.departmentId?.department;
+          const assignedRegion = userAssignment.regionId?.Region ||
+                                userAssignment.regionId?.RegionName ||
+                                userAssignment.regionId?.region;
+          const assignedDivision = userAssignment.divisionName;
+          
+          const filteredEmployees = employees.filter(emp => {
+            // CASE 1: User assigned at DIVISION level
+            if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
+              return emp.division === assignedDivision;
+            }
+            
+            // CASE 2: User assigned at DEPARTMENT level
+            if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
+              return (emp.Department || emp.department) === assignedDepartment;
+            }
+            
+            // CASE 3: User assigned at REGION level
+            if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
+              return emp.region === assignedRegion;
+            }
+            
+            // CASE 4: Full access
+            if (userAssignment.assignmentLevel === 'FULL') {
+              return true;
+            }
+            
+            return false;
+          });
+          
+          if (filteredEmployees.length > 0 || userAssignment.assignmentLevel !== 'FULL') {
+            employees = filteredEmployees;
+          }
+        }
+      } catch (err) {
+        console.error('[ORG_FILTER] Error in getPersonnels:', err.message);
+      }
+    }
+    
     const formattedEmployees = employees.map((emp) => ({
       _id: emp._id,
       employeeNumber: emp.employeeNumber,
@@ -488,7 +554,7 @@ exports.getPersonnels = async (req, res) => {
     }));
     return res.json(formattedEmployees);
   } catch (error) {
-    // Error in getPersonnels
+    console.error('[getPersonnels] Error:', error);
     return res.status(500).json({ error: "Failed to fetch personnel data" });
   }
 };

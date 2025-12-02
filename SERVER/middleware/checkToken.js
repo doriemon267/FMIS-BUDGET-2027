@@ -7,7 +7,7 @@ module.exports = async (req, res, next) => {
     // Allow CORS preflight to pass through
     if (req.method === 'OPTIONS') return next();
 
-    console.log(`🔐 Auth check for ${req.method} ${req.path}`);
+    // console.log(`🔐 Auth check for ${req.method} ${req.path}`);
 
     // DEVELOPMENT: Allow dev-only mock auth if enabled with ALLOW_MOCK_AUTH=true
     // This is only intended for local testing; still requires an X-Dev-User-Id header.
@@ -17,8 +17,32 @@ module.exports = async (req, res, next) => {
     if (allowMockAuth && devUserIdHeader) {
       // Attach a minimal dev user and continue
       const uid = String(devUserIdHeader).trim();
-      req.user = { id: uid, userId: uid, Id: uid, Username: [uid], Roles: ['DEVELOPER'], name: uid };
-      console.log(`🧪 DEV auth bypass enabled for ${req.path}, user: ${uid}, allowMockAuth=${allowMockAuth}`);
+      // Allow specifying dev roles via header (X-Dev-Roles) to support admin access during mock mode
+      const devRolesHeader = req.headers['x-dev-roles'] || req.headers['X-Dev-Roles'];
+      const devRolesRaw = devRolesHeader ? String(devRolesHeader).split(',').map(r => r.trim()).filter(Boolean) : ['DEVELOPER'];
+      // Normalize dev roles to match server role normalization (spaces -> underscores, uppercase, fix typos)
+      const normalizeDevRole = (role) => {
+        const fixed = role.replace(/\s+/g, '_').toUpperCase();
+        const typoMap = {
+          'BUDGET_PREPAPER': 'BUDGET_PREPARER',
+          'BUDGET_PREPAPER': 'BUDGET_PREPARER',
+          'BUDGET_REVEWER': 'BUDGET_REVIEWER',
+          'BUDGET_APROVER': 'BUDGET_APPROVER',
+          'BUDGET_PLANING_ANALYST': 'BUDGET_PLANNING_ANALYST',
+          'BUDGET_PLANNING_ANALST': 'BUDGET_PLANNING_ANALYST',
+          'BUDGET_OFICER': 'BUDGET_OFFICER',
+          'BUDGET_MANAGER': 'OVERALL_BUDGET_APPROVER',
+          'BUDGET_OVERALL_APPROVER': 'OVERALL_BUDGET_APPROVER',
+          'OVERAL_BUDGET_APPROVER': 'OVERALL_BUDGET_APPROVER',
+          'SUPERADMIN': 'SUPER_ADMIN',
+          'SUPER ADMIN': 'SUPER_ADMIN'
+        };
+        return typoMap[fixed] || fixed;
+      };
+      const devRoles = devRolesRaw.map(normalizeDevRole);
+      req.user = { id: uid, userId: uid, Id: uid, Username: [uid], Roles: devRoles, name: uid };
+      if (DEBUG) console.debug(`🧪 Mock auth: dev user ${uid} with roles: ${JSON.stringify(devRoles)}`);
+      // console.log(`🧪 DEV auth bypass enabled for ${req.path}, user: ${uid}, allowMockAuth=${allowMockAuth}`);
       const identity = await resolveUserIdentity({ req });
       req.identity = identity;
       return next();

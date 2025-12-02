@@ -148,7 +148,9 @@ const adminRoute = () => {
         PERMISSION_LEVELS.BUDGET_ANALYST,
         PERMISSION_LEVELS.BUDGET_PLANNING_ANALYST, // ✅ NEW: Support BUDGET PLANNING ANALYST role
         'BUDGET PLANNING ANALYST',                 // Support display format
-        PERMISSION_LEVELS.BUDGET_MANAGER
+        PERMISSION_LEVELS.BUDGET_MANAGER,
+        PERMISSION_LEVELS.OVERALL_BUDGET_APPROVER, // Accept either alias for budget manager
+        'OVERALL_BUDGET_APPROVER'
       ];
       if (!hasRequiredRole(req.user?.Roles, adminRoles)) {
         return res.status(403).json({

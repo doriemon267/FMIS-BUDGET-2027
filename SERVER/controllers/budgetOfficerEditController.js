@@ -1933,7 +1933,7 @@ exports.submitEdit = async (req, res) => {
     // Send all notifications
     if (notificationsToSend.length > 0) {
       try {
-        await createNotifications(notificationsToSend);
+        await createNotifications(notificationsToSend, { initiatorUserId: userId });
         console.log(`📧 Sent ${notificationsToSend.length} notification(s) to ${currentAssigneeRole} users`);
       } catch (notifError) {
         console.error('❌ Error sending notifications:', notifError);

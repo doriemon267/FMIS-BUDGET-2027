@@ -9,7 +9,7 @@ async function getConversations(req, res) {
     const userId = (req.user && (req.user.Id || req.user.id || req.user.userId || (Array.isArray(req.user?.Username) ? req.user.Username[0] : req.user?.Username))) || req.query.userId || null;
     if (!userId) return res.status(400).json({ message: 'Missing user id' });
     if (process.env.DEBUG_MODE === 'true' || process.env.ALLOW_MOCK_AUTH === 'true') {
-      console.debug('[chatController] getConversations request userId:', userId, 'req.user:', req.user ? { Id: req.user.Id, id: req.user.id, userId: req.user.userId } : null);
+      // console.debug('[chatController] getConversations request userId:', userId, 'req.user:', req.user ? { Id: req.user.Id, id: req.user.id, userId: req.user.userId } : null);
     }
     // Pagination params
     const page = Math.max(1, parseInt(req.query.page || '1', 10));
@@ -28,7 +28,10 @@ async function getConversations(req, res) {
     let peers = [];
     try {
       peers = await Message.aggregate([
-      { $match: { $or: [{ from: userId }, { to: userId }] } },
+      { $match: { 
+        $or: [{ from: userId }, { to: userId }],
+        deletedFor: { $ne: userId }
+      }},
       { $sort: { createdAt: -1 } },
       {
         $project: {
@@ -87,33 +90,36 @@ async function getConversations(req, res) {
       const objectIdPeerIds = peerIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => mongoose.Types.ObjectId(id));
       const stringPeerIds = peerIds.filter(id => !mongoose.Types.ObjectId.isValid(id));
       if (process.env.DEBUG_MODE === 'true' || process.env.ALLOW_MOCK_AUTH === 'true') {
-        console.debug('[chatController] peerIds split -> objectIdPeerIds:', objectIdPeerIds, 'stringPeerIds:', stringPeerIds);
+        // console.debug('[chatController] peerIds split -> objectIdPeerIds:', objectIdPeerIds, 'stringPeerIds:', stringPeerIds);
       }
     if (!peerIds || peerIds.length === 0) {
-      if (process.env.DEBUG_MODE === 'true' || process.env.ALLOW_MOCK_AUTH === 'true') console.debug('[chatController] getConversations: No peers found - returning empty conversations');
+      if (process.env.DEBUG_MODE === 'true' || process.env.ALLOW_MOCK_AUTH === 'true') 
+        // console.debug('[chatController] getConversations: No peers found - returning empty conversations');
       return res.json({ conversations: [], page, limit });
     }
     // Debug logging
     if (process.env.DEBUG_MODE === 'true' || process.env.ALLOW_MOCK_AUTH === 'true') {
-      console.debug('[chatController] getConversations -> peerIds:', peerIds);
+      // console.debug('[chatController] getConversations -> peerIds:', peerIds);
     }
       const assigns = await HierarchicalUserAssignment.find({ userId: { $in: peerIds } }).lean();
     if (!assigns || assigns.length === 0) {
-      if (process.env.DEBUG_MODE === 'true' || process.env.ALLOW_MOCK_AUTH === 'true') console.debug('[chatController] getConversations: No assignments found for peerIds:', peerIds);
+      if (process.env.DEBUG_MODE === 'true' || process.env.ALLOW_MOCK_AUTH === 'true');
+        //  console.debug('[chatController] getConversations: No assignments found for peerIds:', peerIds);
     }
     if (process.env.DEBUG_MODE === 'true' || process.env.ALLOW_MOCK_AUTH === 'true') {
-      console.debug('[chatController] assignments found for peerIds:', assigns.map(a => a.userId));
+      // console.debug('[chatController] assignments found for peerIds:', assigns.map(a => a.userId));
     }
     const assignMap = assigns.reduce((acc, a) => { acc[a.userId] = a; return acc; }, {});
       const userQueryOrs = [{ userId: { $in: stringPeerIds } }];
       if (objectIdPeerIds.length > 0) userQueryOrs.push({ _id: { $in: objectIdPeerIds } });
       const users = await User.find({ $or: userQueryOrs }).lean();
     if (!users || users.length === 0) {
-      if (process.env.DEBUG_MODE === 'true' || process.env.ALLOW_MOCK_AUTH === 'true') console.debug('[chatController] getConversations: No user documents found for peerIds:', peerIds);
+      if (process.env.DEBUG_MODE === 'true' || process.env.ALLOW_MOCK_AUTH === 'true') ;
+        // console.debug('[chatController] getConversations: No user documents found for peerIds:', peerIds);
     }
     const userMap = users.reduce((acc, u) => { acc[u.userId || String(u._id)] = u; return acc; }, {});
     if (process.env.DEBUG_MODE === 'true' || process.env.ALLOW_MOCK_AUTH === 'true') {
-      console.debug('[chatController] users mapped:', Object.keys(userMap));
+      // console.debug('[chatController] users mapped:', Object.keys(userMap));
     }
     // Build conversation list with resolved display names (try assign -> user -> resolveUserIdentity fallback)
     const conversations = [];
@@ -135,7 +141,7 @@ async function getConversations(req, res) {
       }
       const finalName = name || uid;
       if (!assign && !user && process.env.DEBUG_MODE === 'true') {
-        console.debug('[chatController] getConversations: no assign/user for uid', uid, 'using fallback name', finalName);
+        // console.debug('[chatController] getConversations: no assign/user for uid', uid, 'using fallback name', finalName);
       }
       conversations.push({ id: uid, lastMessage: p.lastMessage, lastAt: p.lastAt, unread: unreadMap[uid] || 0, name: finalName, email });
     }
@@ -244,7 +250,7 @@ async function getPresence(req, res) {
   try {
     const ids = String(req.query.ids || '').split(',').map(s => s.trim()).filter(Boolean);
     if (process.env.DEBUG_MODE === 'true' || process.env.ALLOW_MOCK_AUTH === 'true') {
-      console.debug('[chatController] getPresence for ids:', ids);
+      // console.debug('[chatController] getPresence for ids:', ids);
     }
     const online = {};
     ids.forEach(id => {
@@ -252,7 +258,7 @@ async function getPresence(req, res) {
       online[id] = { online: info.count > 0, count: info.count, lastConnectedAt: info.lastConnectedAt };
     });
     if (process.env.DEBUG_MODE === 'true' || process.env.ALLOW_MOCK_AUTH === 'true') {
-      console.debug('[chatController] getPresence results:', online);
+      // console.debug('[chatController] getPresence results:', online);
     }
     return res.json({ online });
   } catch (error) {
@@ -307,7 +313,66 @@ async function sendMessage(req, res) {
   }
 }
 
-module.exports = { getConversations, getMessagesWithUser, sendMessage, markMessagesRead, searchContacts, getPresence };
+// Delete message
+async function deleteMessage(req, res) {
+  try {
+    const userId = (req.user && (req.user.Id || req.user.id || req.user.userId)) || req.query.userId;
+    if (!userId) return res.status(400).json({ message: 'Missing user id' });
+    const { messageId } = req.params;
+    const { deleteForEveryone } = req.body;
+    
+    const message = await Message.findById(messageId);
+    if (!message) return res.status(404).json({ message: 'Message not found' });
+    
+    if (deleteForEveryone) {
+      // Only the sender can delete for everyone
+      if (String(message.from) !== String(userId)) {
+        return res.status(403).json({ message: 'You can only delete your own messages for everyone' });
+      }
+      await Message.findByIdAndDelete(messageId);
+      return res.json({ message: 'Message deleted for everyone' });
+    } else {
+      // Delete for current user only
+      await Message.findByIdAndUpdate(messageId, {
+        $addToSet: { deletedFor: String(userId) }
+      });
+      return res.json({ message: 'Message deleted for you' });
+    }
+  } catch (error) {
+    console.error('Error deleteMessage', error);
+    return res.status(500).json({ message: 'Server error', error: error.message });
+  }
+}
+
+// Delete conversation
+async function deleteConversation(req, res) {
+  try {
+    const userId = (req.user && (req.user.Id || req.user.id || req.user.userId)) || req.query.userId;
+    if (!userId) return res.status(400).json({ message: 'Missing user id' });
+    const { peerId } = req.params;
+    const { deleteForEveryone } = req.body;
+    
+    if (deleteForEveryone) {
+      // Delete all messages in this conversation permanently
+      await Message.deleteMany({
+        $or: [{ from: userId, to: peerId }, { from: peerId, to: userId }]
+      });
+      return res.json({ message: 'Conversation deleted for everyone' });
+    } else {
+      // Mark all messages with this peer as deleted for current user only
+      await Message.updateMany(
+        { $or: [{ from: userId, to: peerId }, { from: peerId, to: userId }] },
+        { $addToSet: { deletedFor: String(userId) } }
+      );
+      return res.json({ message: 'Conversation deleted for you' });
+    }
+  } catch (error) {
+    console.error('Error deleteConversation', error);
+    return res.status(500).json({ message: 'Server error', error: error.message });
+  }
+}
+
+module.exports = { getConversations, getMessagesWithUser, sendMessage, markMessagesRead, searchContacts, getPresence, deleteMessage, deleteConversation };
 // Export debugDump as well (dev only)
 module.exports.debugDump = debugDump;
 

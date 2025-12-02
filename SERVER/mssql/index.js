@@ -84,7 +84,8 @@ if (enableMssql) {
              }
            }
       await sequelize.authenticate();
-      console.log('[MSSQL] Connected to MSSQL', { host: hostVal, port: portVal, instance: instanceName, serverName: dialectOptions.options.serverName });
+      // console.log('[MSSQL] Connected to MSSQL', { host: hostVal, port: portVal, instance: instanceName, serverName: dialectOptions.options.serverName });
+      
     } catch (err) {
       console.warn('[MSSQL] Connection failed:', err.message);
     }

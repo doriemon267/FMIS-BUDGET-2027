@@ -24,6 +24,10 @@ const UserSchema = new mongoose.Schema({
     type: String,
     required: true
   }],
+  photo: {
+    type: String,
+    default: null
+  },
   emailPreferences: {
     enabled: {
       type: Boolean,
