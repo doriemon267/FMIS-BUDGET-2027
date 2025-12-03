@@ -14,12 +14,17 @@ import {
   Button,
   FormControlLabel,
   Checkbox,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Chip,
   //Snackbar,
 } from "@mui/material";
 import CustomSnackbar from "../../CustomSnackbar";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect, useRef, useContext } from "react";
-import { FiCalendar, FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import { FiCalendar, FiChevronLeft, FiChevronRight, FiDownload, FiFilter } from "react-icons/fi";
 import api from "../../../../config/api";
 import io from 'socket.io-client';
 import { useUser } from '../../../../context/UserContext';
@@ -36,10 +41,52 @@ const CalendarApp = () => {
   const { currentUser } = useUser();
   const socketRef = useRef(null);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ title: "", date: null, time: "09:00", description: "", type: "event", notify: true });
+  const [form, setForm] = useState({ title: "", date: null, time: "09:00", description: "", type: "event", notify: true, category: "work" });
   const [snack, setSnack] = useState({ open: false, message: "" });
   const checkIntervalRef = useRef(null);
   const scheduledTimersRef = useRef({});
+  
+  // New enhancements
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem("calendarTheme") || "light";
+    } catch { return "light"; }
+  });
+  const [viewMode, setViewMode] = useState(() => {
+    try {
+      return localStorage.getItem("calendarViewMode") || "month";
+    } catch { return "month"; }
+  });
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  
+  // Event categories with colors
+  const eventCategories = {
+    work: { color: "#1976d2", label: "Work" },
+    personal: { color: "#d32f2f", label: "Personal" },
+    meeting: { color: "#f57c00", label: "Meeting" },
+    deadline: { color: "#c2185b", label: "Deadline" },
+    holiday: { color: "#ffd700", label: "Holiday" },
+    birthday: { color: "#9c27b0", label: "Birthday" },
+  };
+
+  // Save theme preference
+  useEffect(() => {
+    try {
+      localStorage.setItem("calendarTheme", theme);
+    } catch (e) {
+      console.warn("Failed to save theme preference", e);
+    }
+  }, [theme]);
+
+  // Save view mode preference
+  useEffect(() => {
+    try {
+      localStorage.setItem("calendarViewMode", viewMode);
+    } catch (e) {
+      console.warn("Failed to save view mode preference", e);
+    }
+  }, [viewMode]);
 
   const { data: todos = [], isLoading } = useQuery({
     queryKey: ["todos"],
@@ -261,7 +308,7 @@ const CalendarApp = () => {
     }
   }, [currentUser]);
 
-  const addEvent = async ({ title, date, time, description, type = "event", notify = true }) => {
+  const addEvent = async ({ title, date, time, description, type = "event", notify = true, category = "work" }) => {
     // Create a local date using year/month/day/hours/minutes to avoid timezone shift issues
     const dateObj = typeof date === "string" ? new Date(date) : date;
     const year = dateObj.getFullYear();
@@ -277,13 +324,13 @@ const CalendarApp = () => {
     } else {
       dateTime = new Date(year, monthIndex, day, 0, 0, 0);
     }
-    const payload = { title, description, dateTime: dateTime.toISOString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, notify, preReminders: [] };
+    const payload = { title, description, dateTime: dateTime.toISOString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, notify, preReminders: [], category };
     if (currentUser) {
       try {
         const res = await api.post('/api/events', payload);
         if (res?.data?.data) {
           const ev = res.data.data;
-          const mapped = { id: String(ev._id), title: ev.title, description: ev.description, dateTime: new Date(ev.dateTime).toISOString(), notify: !!ev.notify };
+          const mapped = { id: String(ev._id), title: ev.title, description: ev.description, dateTime: new Date(ev.dateTime).toISOString(), notify: !!ev.notify, category: ev.category || "work" };
           setEvents((prev) => [...prev, mapped]);
           return mapped;
         }
@@ -291,7 +338,7 @@ const CalendarApp = () => {
         console.error('Failed to create event on server', e);
       }
     }
-    const newEv = { id: `ev-${Date.now()}`, title, description, type, dateTime: dateTime.toISOString(), notified: false, notify };
+    const newEv = { id: `ev-${Date.now()}`, title, description, type, dateTime: dateTime.toISOString(), notified: false, notify, category };
     setEvents((prev) => [...prev, newEv]);
     return newEv;
   };
@@ -333,28 +380,128 @@ const CalendarApp = () => {
 
   const handleCreateSubmit = () => {
     try {
-      addEvent({ title: form.title || "Untitled", date: form.date, time: form.time, description: form.description, type: form.type, notify: form.notify });
+      addEvent({ title: form.title || "Untitled", date: form.date, time: form.time, description: form.description, type: form.type, notify: form.notify, category: form.category });
       setSnack({ open: true, message: "Event added" });
       setCreating(false);
-      setForm({ title: "", date: null, time: "09:00", description: "", type: "event", notify: true });
+      setForm({ title: "", date: null, time: "09:00", description: "", type: "event", notify: true, category: "work" });
     } catch (e) {
       console.error(e);
       setSnack({ open: true, message: "Failed to add event" });
     }
   };
 
+  // Export events to iCal format
+  const exportToICalendar = () => {
+    let ical = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//FMIS Calendar//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:FMIS Calendar
+X-WR-TIMEZONE:${Intl.DateTimeFormat().resolvedOptions().timeZone}
+`;
+    
+    events.forEach((ev) => {
+      try {
+        const dt = new Date(ev.dateTime);
+        const dtStart = dt.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+        const dtEnd = new Date(dt.getTime() + 3600000).toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+        
+        ical += `BEGIN:VEVENT
+UID:${ev.id}@fmis-calendar
+DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").split(".")[0]}Z
+DTSTART:${dtStart}
+DTEND:${dtEnd}
+SUMMARY:${ev.title || "Untitled"}
+DESCRIPTION:${(ev.description || "").replace(/\n/g, "\\n")}
+END:VEVENT
+`;
+      } catch (e) {
+        console.warn("Failed to export event", e);
+      }
+    });
+    
+    ical += `END:VCALENDAR`;
+    
+    const blob = new Blob([ical], { type: "text/calendar" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `calendar-${new Date().toISOString().split("T")[0]}.ics`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setSnack({ open: true, message: "Calendar exported to iCal" });
+  };
+
+  // Export events to CSV format
+  const exportToCSV = () => {
+    const headers = ["Title", "Date", "Time", "Description", "Category", "Type", "Notify"];
+    const rows = events.map((ev) => {
+      const dt = new Date(ev.dateTime);
+      return [
+        ev.title,
+        dt.toLocaleDateString(),
+        dt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        ev.description || "",
+        ev.category || "work",
+        ev.type || "event",
+        ev.notify ? "Yes" : "No",
+      ];
+    });
+    
+    const csv = [
+      headers.join(","),
+      ...rows.map((r) => r.map((v) => `"${v}"`).join(",")),
+    ].join("\n");
+    
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `calendar-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setSnack({ open: true, message: "Calendar exported to CSV" });
+  };
+
+  // Get week of the month for the selected date
+  const getWeekView = () => {
+    if (!selectedDate) return [];
+    const start = new Date(selectedDate);
+    start.setDate(start.getDate() - start.getDay()); // Start of week (Sunday)
+    const week = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start);
+      d.setDate(d.getDate() + i);
+      week.push(d);
+    }
+    return week;
+  };
+
+  const themeBg = theme === "dark" ? "rgba(20, 20, 20, 0.95)" : "rgba(255, 255, 255, 0.95)";
+  const themeText = theme === "dark" ? "#fff" : "#000";
+  const themeBorder = theme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.3)";
+
+  // Filter events based on category and type
+  const filteredEvents = events.filter((e) => {
+    if (categoryFilter !== "all" && e.category !== categoryFilter) return false;
+    if (typeFilter !== "all" && e.type !== typeFilter) return false;
+    return true;
+  });
+
   return (
     <Box
       sx={{
-        width: 340,
+        width: 360,
         p: 2,
-        bgcolor: "rgba(255, 255, 255, 0.95)",
+        bgcolor: themeBg,
         backdropFilter: "blur(12px)",
-        border: "1px solid rgba(255,255,255,0.3)",
+        border: `1px solid ${themeBorder}`,
         userSelect: "none",
         fontFamily: "monospace",
         position: "relative",
         minHeight: 400,
+        color: themeText,
       }}
     >
       {isLoading && (
@@ -380,7 +527,8 @@ const CalendarApp = () => {
         direction="row"
         justifyContent="space-between"
         alignItems="center"
-        mb={2}
+        mb={1}
+        sx={{ flexWrap: "wrap", gap: 1 }}
       >
         <IconButton onClick={goToPrevMonth} size="small">
           <FiChevronLeft />
@@ -390,7 +538,7 @@ const CalendarApp = () => {
           variant="h6"
           sx={{
             fontWeight: "bold",
-            color: "#8e24aa",
+            color: theme === "dark" ? "#90caf9" : "#8e24aa",
             letterSpacing: "1px",
           }}
         >
@@ -403,6 +551,73 @@ const CalendarApp = () => {
         <IconButton onClick={goToNextMonth} size="small">
           <FiChevronRight />
         </IconButton>
+      </Stack>
+
+      {/* Controls Row */}
+      <Stack direction="row" spacing={1} mb={1} sx={{ flexWrap: "wrap", gap: 0.5 }}>
+        <Tooltip title="Toggle theme">
+          <Button 
+            size="small" 
+            variant="outlined"
+            onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+            sx={{ fontSize: "0.7rem", py: 0.3 }}
+          >
+            {theme === "light" ? "🌙" : "☀️"}
+          </Button>
+        </Tooltip>
+        
+        <Tooltip title="View mode">
+          <FormControl size="small" sx={{ minWidth: 70 }}>
+            <Select 
+              value={viewMode} 
+              onChange={(e) => setViewMode(e.target.value)}
+              sx={{ fontSize: "0.8rem", py: 0.3 }}
+            >
+              <MenuItem value="month">Month</MenuItem>
+              <MenuItem value="week">Week</MenuItem>
+            </Select>
+          </FormControl>
+        </Tooltip>
+
+        <Tooltip title="Export calendar">
+          <IconButton 
+            size="small" 
+            onClick={() => exportToICalendar()}
+            sx={{ fontSize: "0.7rem" }}
+          >
+            <FiDownload size={14} />
+          </IconButton>
+        </Tooltip>
+
+        <Tooltip title="Filter events">
+          <IconButton 
+            size="small"
+            sx={{ fontSize: "0.7rem" }}
+          >
+            <FiFilter size={14} />
+          </IconButton>
+        </Tooltip>
+      </Stack>
+
+      {/* Filter Chips */}
+      <Stack direction="row" spacing={0.5} mb={1} sx={{ flexWrap: "wrap" }}>
+        <Chip 
+          label="All Categories" 
+          size="small"
+          onClick={() => setCategoryFilter("all")}
+          variant={categoryFilter === "all" ? "filled" : "outlined"}
+          sx={{ fontSize: "0.7rem" }}
+        />
+        {Object.entries(eventCategories).map(([key, val]) => (
+          <Chip
+            key={key}
+            label={val.label}
+            size="small"
+            onClick={() => setCategoryFilter(key)}
+            variant={categoryFilter === key ? "filled" : "outlined"}
+            sx={{ fontSize: "0.7rem", bgcolor: categoryFilter === key ? val.color : "transparent" }}
+          />
+        ))}
       </Stack>
 
       <Stack direction="row" spacing={0.5} mb={1}>
@@ -645,20 +860,29 @@ const CalendarApp = () => {
         })}
       </Box>
 
-      <Stack direction="row" justifyContent="center" mt={2}>
+      <Stack direction="row" justifyContent="center" mt={2} gap={1}>
         <Tooltip title="Go to Today" placement="top">
           <IconButton
             onClick={goToToday}
             size="small"
             sx={{
-              bgcolor: "#8e24aa",
+              bgcolor: theme === "dark" ? "#1976d2" : "#8e24aa",
               color: "white",
-              "&:hover": { bgcolor: "#6a1b9a" },
+              "&:hover": { bgcolor: theme === "dark" ? "#1565c0" : "#6a1b9a" },
             }}
           >
             <FiCalendar size={16} />
           </IconButton>
         </Tooltip>
+        
+        <Button 
+          size="small" 
+          variant="outlined"
+          onClick={exportToCSV}
+          sx={{ fontSize: "0.75rem" }}
+        >
+          Export CSV
+        </Button>
       </Stack>
       <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center', gap: 1 }}>
         <Button size="small" onClick={() => openCreateDialogForDate(selectedDate || new Date())}>Create Task/Event</Button>
@@ -703,7 +927,21 @@ const CalendarApp = () => {
           <TextField label="Date" type="date" fullWidth sx={{ mt: 1 }} value={form.date || ''} onChange={(e) => setForm((p) => ({ ...p, date: e.target.value }))} />
           <TextField label="Time" type="time" fullWidth sx={{ mt: 1 }} value={form.time} onChange={(e) => setForm((p) => ({ ...p, time: e.target.value }))} />
           <TextField label="Description" fullWidth sx={{ mt: 1 }} multiline rows={3} value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} />
-          <FormControlLabel control={<Checkbox checked={form.notify} onChange={(e) => setForm((p) => ({ ...p, notify: e.target.checked }))} />} label="Notify when due" />
+          
+          <FormControl fullWidth sx={{ mt: 1 }}>
+            <InputLabel>Category</InputLabel>
+            <Select
+              value={form.category}
+              label="Category"
+              onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}
+            >
+              {Object.entries(eventCategories).map(([key, val]) => (
+                <MenuItem key={key} value={key}>{val.label}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          
+          <FormControlLabel control={<Checkbox checked={form.notify} onChange={(e) => setForm((p) => ({ ...p, notify: e.target.checked }))} />} label="Notify when due" sx={{ mt: 1 }} />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setCreating(false)}>Cancel</Button>
