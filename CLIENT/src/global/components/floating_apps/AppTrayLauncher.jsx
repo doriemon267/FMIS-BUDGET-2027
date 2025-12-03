@@ -15,6 +15,14 @@ const TodoApp = importWithDebug(() => import("./apps/TodoApp"), 'TodoApp');
 const ClockApp = importWithDebug(() => import("./apps/ClockApp"), 'ClockApp');
 const CalendarApp = importWithDebug(() => import("./apps/CalendarApp"), 'CalendarApp');
 const ChatApp = importWithDebug(() => import("./apps/ChatApp"), 'ChatApp');
+const NotificationsCenter = importWithDebug(() => import("./apps/NotificationsCenter"), 'NotificationsCenter');
+const BudgetStatusWidget = importWithDebug(() => import("./apps/BudgetStatusWidget"), 'BudgetStatusWidget');
+const QuickActionsPanel = importWithDebug(() => import("./apps/QuickActionsPanel"), 'QuickActionsPanel');
+const GlobalSearch = importWithDebug(() => import("./apps/GlobalSearch"), 'GlobalSearch');
+const BudgetTimeline = importWithDebug(() => import("./apps/BudgetTimeline"), 'BudgetTimeline');
+const AuditTrail = importWithDebug(() => import("./apps/AuditTrail"), 'AuditTrail');
+const PerformanceMetrics = importWithDebug(() => import("./apps/PerformanceMetrics"), 'PerformanceMetrics');
+const FloatingNotes = importWithDebug(() => import("./apps/FloatingNotes"), 'FloatingNotes');
 import FixedChatWindow from './FixedChatWindow';
 
 const AppTrayLauncher = () => {
@@ -25,6 +33,14 @@ const AppTrayLauncher = () => {
     clock: { title: "Clock", component: <ClockApp /> },
     calendar: { title: "Calendar", component: <CalendarApp /> },
     chat: { title: 'Messages', component: <ChatApp /> },
+    notifications: { title: "Notifications", component: <NotificationsCenter /> },
+    budget: { title: "Budget Overview", component: <BudgetStatusWidget /> },
+    actions: { title: "Quick Actions", component: <QuickActionsPanel /> },
+    search: { title: "Global Search", component: <GlobalSearch /> },
+    timeline: { title: "Budget Timeline", component: <BudgetTimeline /> },
+    audit: { title: "Audit Trail", component: <AuditTrail /> },
+    metrics: { title: "Performance KPIs", component: <PerformanceMetrics /> },
+    notes: { title: "Quick Notes", component: <FloatingNotes /> },
   }), []);
 
   const [openApps, setOpenApps] = useState(() => {

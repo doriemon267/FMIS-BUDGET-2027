@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { IconButton, Box, Tooltip, Fade, Stack, Paper, Badge } from "@mui/material";
 import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
-import { FiGrid, FiClock } from "react-icons/fi";
+import { FiGrid, FiClock, FiBell, FiTrendingUp, FiZap, FiSearch, FiCalendar, FiShield, FiBarChart2, FiEdit } from "react-icons/fi";
 import { BsChatDots } from 'react-icons/bs';
 import { BiCalculator } from "react-icons/bi";
 import { MdOutlineChecklist, MdCalendarMonth } from "react-icons/md";
@@ -11,6 +11,7 @@ import { MdClose, MdRemove } from "react-icons/md";
 const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, onMinimizeAll, chatPinned = true }) => {
   const [openTray, setOpenTray] = useState(false);
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
+  const [notificationCount, setNotificationCount] = useState(0);
   const [chatSettings, setChatSettings] = useState({});
   const nodeRef = useRef(null);
   const trayHandleRef = useRef(null);
@@ -18,29 +19,37 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
 
   // Each app now has its own color
   const apps = useMemo(() => [
-    { Icon: BiCalculator, label: "Calculator", id: "calc", color: "#1976d2", shortcut: 'Alt+C' }, // blue
+    { Icon: BiCalculator, label: "Calculator", id: "calc", color: "#1976d2", shortcut: 'Alt+C' },
     {
       Icon: MdOutlineChecklist,
       label: "Todo List",
       id: "todo",
       color: "#43a047",
       shortcut: 'Alt+T'
-    }, // green
-    { Icon: FiClock, label: "Clock", id: "clock", color: "#f57c00", shortcut: 'Alt+K' }, // orange
+    },
+    { Icon: FiClock, label: "Clock", id: "clock", color: "#f57c00", shortcut: 'Alt+K' },
     {
       Icon: MdCalendarMonth,
       label: "Calendar",
       id: "calendar",
       color: "#6d4c41",
       shortcut: 'Alt+A'
-    }, // brown
+    },
     {
       Icon: BsChatDots,
       label: "Messages",
       id: "chat",
-      color: "#00b0ff", // Telegram-like blue
+      color: "#00b0ff",
       shortcut: 'Alt+M'
     },
+    { Icon: FiBell, label: "Notifications", id: "notifications", color: "#e91e63", shortcut: 'Alt+N' },
+    { Icon: FiTrendingUp, label: "Budget Overview", id: "budget", color: "#0066cc", shortcut: 'Alt+B' },
+    { Icon: FiZap, label: "Quick Actions", id: "actions", color: "#43a047", shortcut: 'Alt+Q' },
+    { Icon: FiSearch, label: "Search", id: "search", color: "#9c27b0", shortcut: 'Ctrl+K' },
+    { Icon: FiCalendar, label: "Timeline", id: "timeline", color: "#f57c00", shortcut: 'Alt+L' },
+    { Icon: FiShield, label: "Audit Trail", id: "audit", color: "#d32f2f", shortcut: 'Alt+U' },
+    { Icon: FiBarChart2, label: "Performance", id: "metrics", color: "#009688", shortcut: 'Alt+P' },
+    { Icon: FiEdit, label: "Notes", id: "notes", color: "#fbc02d", shortcut: 'Alt+O' },
   ], []);
 
   // Close tray when clicking outside or pressing Escape
@@ -77,13 +86,24 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
         setChatUnreadCount(Number(c));
       } catch (ex) {}
     };
+    const notificationHandler = (e) => {
+      try {
+        const stored = JSON.parse(localStorage.getItem('notificationsCenter') || '[]');
+        const unread = stored.filter(n => !n.read).length;
+        setNotificationCount(unread);
+      } catch (ex) {}
+    };
     window.addEventListener('chat-unread', handler);
+    window.addEventListener('system-notification', notificationHandler);
     const storageHandler = (e) => {
       if (e.key === 'chatSettings') {
         try {
           const s = JSON.parse(e.newValue || '{}');
           if (s && s.badge === false) setChatUnreadCount(0);
         } catch (err) {}
+      }
+      if (e.key === 'notificationsCenter') {
+        notificationHandler();
       }
     };
     window.addEventListener('storage', storageHandler);
@@ -93,7 +113,9 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
     } catch (e) { setChatSettings({}); }
     const localSettings = () => { try { const s = JSON.parse(localStorage.getItem('chatSettings') || '{}'); setChatSettings(s || {}); } catch(e) { setChatSettings({}); } };
     window.addEventListener('chat-settings-changed', (e) => { try { const s = e?.detail || JSON.parse(localStorage.getItem('chatSettings') || '{}'); setChatSettings(s || {}); } catch(e) { setChatSettings({}); } });
-    return () => { window.removeEventListener('chat-unread', handler); window.removeEventListener('storage', storageHandler); };
+    // Initial notification count
+    notificationHandler();
+    return () => { window.removeEventListener('chat-unread', handler); window.removeEventListener('storage', storageHandler); window.removeEventListener('system-notification', notificationHandler); };
     // Load persisted chat badge setting to manage initial unread
     try {
       const s = JSON.parse(localStorage.getItem('chatSettings') || '{}');
@@ -237,9 +259,9 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
                 <Badge
                   overlap="circular"
                   color="primary"
-                  variant={id === 'chat' && chatUnreadCount > 0 ? 'standard' : 'dot'}
-                  badgeContent={id === 'chat' && chatUnreadCount > 0 ? chatUnreadCount : undefined}
-                  invisible={id !== 'chat' ? !isOpen : false}
+                  variant='standard'
+                  badgeContent={(id === 'chat' && chatUnreadCount > 0) ? chatUnreadCount : (id === 'notifications' && notificationCount > 0) ? notificationCount : undefined}
+                  invisible={(id !== 'chat' && id !== 'notifications') ? !isOpen : false}
                 >
                 <IconButton
                   role="menuitem"
