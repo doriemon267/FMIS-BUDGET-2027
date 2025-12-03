@@ -560,21 +560,38 @@ END:VEVENT
             size="small" 
             variant="outlined"
             onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-            sx={{ fontSize: "0.7rem", py: 0.3 }}
+            sx={{ fontSize: "0.7rem", py: 0.3, color: themeText, borderColor: themeText }}
           >
             {theme === "light" ? "🌙" : "☀️"}
           </Button>
         </Tooltip>
         
-        <Tooltip title="View mode">
-          <FormControl size="small" sx={{ minWidth: 70 }}>
+        <Tooltip title="Jump to month">
+          <FormControl size="small" sx={{ minWidth: 100 }}>
             <Select 
-              value={viewMode} 
-              onChange={(e) => setViewMode(e.target.value)}
-              sx={{ fontSize: "0.8rem", py: 0.3 }}
+              value={month} 
+              onChange={(e) => setCurrentDate(new Date(year, e.target.value, 1))}
+              sx={{ 
+                fontSize: "0.8rem", 
+                py: 0.3,
+                color: themeText,
+                "& .MuiOutlinedInput-notchedOutline": { borderColor: themeText },
+                "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: themeText },
+                "& .MuiSvgIcon-root": { color: themeText },
+              }}
             >
-              <MenuItem value="month">Month</MenuItem>
-              <MenuItem value="week">Week</MenuItem>
+              <MenuItem value={0}>January</MenuItem>
+              <MenuItem value={1}>February</MenuItem>
+              <MenuItem value={2}>March</MenuItem>
+              <MenuItem value={3}>April</MenuItem>
+              <MenuItem value={4}>May</MenuItem>
+              <MenuItem value={5}>June</MenuItem>
+              <MenuItem value={6}>July</MenuItem>
+              <MenuItem value={7}>August</MenuItem>
+              <MenuItem value={8}>September</MenuItem>
+              <MenuItem value={9}>October</MenuItem>
+              <MenuItem value={10}>November</MenuItem>
+              <MenuItem value={11}>December</MenuItem>
             </Select>
           </FormControl>
         </Tooltip>
@@ -606,7 +623,7 @@ END:VEVENT
           size="small"
           onClick={() => setCategoryFilter("all")}
           variant={categoryFilter === "all" ? "filled" : "outlined"}
-          sx={{ fontSize: "0.7rem" }}
+          sx={{ fontSize: "0.7rem", color: categoryFilter === "all" ? "#fff" : themeText }}
         />
         {Object.entries(eventCategories).map(([key, val]) => (
           <Chip
@@ -615,7 +632,12 @@ END:VEVENT
             size="small"
             onClick={() => setCategoryFilter(key)}
             variant={categoryFilter === key ? "filled" : "outlined"}
-            sx={{ fontSize: "0.7rem", bgcolor: categoryFilter === key ? val.color : "transparent" }}
+            sx={{ 
+              fontSize: "0.7rem", 
+              bgcolor: categoryFilter === key ? val.color : "transparent",
+              color: categoryFilter === key ? "#fff" : themeText,
+              borderColor: categoryFilter !== key ? themeText : "transparent"
+            }}
           />
         ))}
       </Stack>
@@ -629,7 +651,7 @@ END:VEVENT
               textAlign: "center",
               fontSize: "0.75rem",
               fontWeight: "bold",
-              color: "#555",
+              color: theme === "dark" ? "#aaa" : "#555",
               py: 0.5,
             }}
           >
