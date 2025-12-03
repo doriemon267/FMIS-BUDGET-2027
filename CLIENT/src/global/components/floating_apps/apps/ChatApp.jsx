@@ -55,10 +55,13 @@ export default function ChatApp() {
   const [serverOffline, setServerOffline] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
   const { currentUser } = useUser();
-  const [chatSettings, setChatSettings] = useState({ sound: true, desktop: true, badge: true, compact: false, hideSidebar: false, leftAlignMessages: true, pinned: true, dimOnOpen: false });
+  const [chatSettings, setChatSettings] = useState({ sound: true, desktop: true, badge: true, compact: false, hideSidebar: false, leftAlignMessages: true, pinned: true, dimOnOpen: false, autoOpen: true, autoOpenPriority: false, autoOpenMentionsOnly: false, autoOpenDND: false, dndStart: '22:00', dndEnd: '08:00', autoScrollToNew: true, toastOnMobile: false, cooldownMs: 30000 });
   const [chatMutedMap, setChatMutedMap] = useState({});
   const [settingsAnchor, setSettingsAnchor] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [lastAutoOpenTime, setLastAutoOpenTime] = useState({});
+  const [pageHidden, setPageHidden] = useState(false);
+  const [lastWindowCloseTime, setLastWindowCloseTime] = useState(null);
   const theme = useTheme();
   const isSmall = useMediaQuery(theme.breakpoints.down('sm'));
   const [soundFile, setSoundFile] = useState(localStorage.getItem('chatSoundFile') || '/sounds/chat-notify.mp3');
@@ -230,7 +233,7 @@ export default function ChatApp() {
   useEffect(() => {
     try {
       const s = JSON.parse(localStorage.getItem('chatSettings') || '{}');
-      const initial = { sound: s.sound !== false, desktop: s.desktop !== false, badge: s.badge !== false, compact: s.compact === true, hideSidebar: !!s.hideSidebar, leftAlignMessages: s.leftAlignMessages !== false, pinned: s.pinned !== false };
+      const initial = { sound: s.sound !== false, desktop: s.desktop !== false, badge: s.badge !== false, compact: s.compact === true, hideSidebar: !!s.hideSidebar, leftAlignMessages: s.leftAlignMessages !== false, pinned: s.pinned !== false, dimOnOpen: s.dimOnOpen === true, autoOpen: s.autoOpen !== false, autoOpenPriority: s.autoOpenPriority === true, autoOpenMentionsOnly: s.autoOpenMentionsOnly === true, autoOpenDND: s.autoOpenDND === true, dndStart: s.dndStart || '22:00', dndEnd: s.dndEnd || '08:00', autoScrollToNew: s.autoScrollToNew !== false, toastOnMobile: s.toastOnMobile === true, cooldownMs: s.cooldownMs || 30000 };
       // On small screens default to hide conversations sidebar unless user explicitly set it
       if (isSmall && s.hideSidebar === undefined) initial.hideSidebar = true;
       setChatSettings(initial);
@@ -243,6 +246,15 @@ export default function ChatApp() {
     } catch (e) { }
     // load persisted sound selection
     try { setSoundFile(localStorage.getItem('chatSoundFile') || '/sounds/chat-notify.mp3'); } catch (e) {}
+  }, []);
+
+  // Detect page visibility changes for focus detection
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setPageHidden(document.hidden);
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
   // Listen for changes to chatSettings from other contexts (AppTray, other tabs)
@@ -258,13 +270,48 @@ export default function ChatApp() {
     const customHandler = (ev) => {
       try {
         const s = ev?.detail || JSON.parse(localStorage.getItem('chatSettings') || '{}');
-        setChatSettings({ sound: s.sound !== false, desktop: s.desktop !== false, badge: s.badge !== false, compact: s.compact === true, hideSidebar: !!s.hideSidebar });
+        setChatSettings({ sound: s.sound !== false, desktop: s.desktop !== false, badge: s.badge !== false, compact: s.compact === true, hideSidebar: !!s.hideSidebar, dimOnOpen: s.dimOnOpen === true, autoOpen: s.autoOpen !== false, autoOpenPriority: s.autoOpenPriority === true, autoOpenMentionsOnly: s.autoOpenMentionsOnly === true, autoOpenDND: s.autoOpenDND === true, dndStart: s.dndStart || '22:00', dndEnd: s.dndEnd || '08:00', autoScrollToNew: s.autoScrollToNew !== false, toastOnMobile: s.toastOnMobile === true, cooldownMs: s.cooldownMs || 30000 });
       } catch (err) {}
     };
     window.addEventListener('storage', handler);
     window.addEventListener('chat-settings-changed', customHandler);
     return () => { window.removeEventListener('storage', handler); window.removeEventListener('chat-settings-changed', customHandler); };
   }, []);
+
+  // Helper: Check if current time is in DND (Do Not Disturb) hours
+  const isInDNDHours = (dndStart, dndEnd) => {
+    const now = new Date();
+    const [startH, startM] = dndStart.split(':').map(Number);
+    const [endH, endM] = dndEnd.split(':').map(Number);
+    const currentTime = now.getHours() * 60 + now.getMinutes();
+    const startTime = startH * 60 + startM;
+    const endTime = endH * 60 + endM;
+    
+    if (startTime < endTime) {
+      return currentTime >= startTime && currentTime < endTime;
+    } else {
+      return currentTime >= startTime || currentTime < endTime;
+    }
+  };
+
+  // Helper: Check if message contains @mention to current user
+  const hasMention = (text, userName) => {
+    if (!text || !userName) return false;
+    const nameToCheck = Array.isArray(userName) ? userName[0] : userName;
+    return new RegExp(`@${nameToCheck}|@everyone`, 'i').test(text);
+  };
+
+  // Helper: Check if cooldown has passed for auto-open
+  const shouldAutoOpen = (peerId, cooldownMs) => {
+    const lastOpen = lastAutoOpenTime[peerId] || 0;
+    const now = Date.now();
+    return (now - lastOpen) > cooldownMs;
+  };
+
+  // Helper: Update cooldown tracking
+  const recordAutoOpen = (peerId) => {
+    setLastAutoOpenTime(prev => ({ ...prev, [peerId]: Date.now() }));
+  };
 
   // Helper to play a notification sound with graceful fallback
   const playNotificationSound = async () => {
@@ -539,9 +586,43 @@ export default function ChatApp() {
       const mapped = { id: serverId || (clientId || `srv-${Date.now()}`), clientId: clientId || null, text: payload.text || payload.message || '', sender: isMine ? 'me' : 'them', time: new Date(payload.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), read: !!payload.read, avatarInitial: fromInitial, avatarUrl: fromAvUrl, displayName: fromDisplay };
       // Play notification sound and show a desktop notification if message is not mine
       if (!isMine) {
-        const { sound: soundEnabled, desktop: desktopEnabled } = chatSettings || { sound: true, desktop: true };
-        // If the conversation is muted, skip notifications
+        const { sound: soundEnabled, desktop: desktopEnabled, autoOpen, autoOpenPriority, autoOpenMentionsOnly, autoOpenDND, dndStart, dndEnd, autoScrollToNew, cooldownMs } = chatSettings || { sound: true, desktop: true, autoOpen: true };
         const peerId = payload.from;
+        const messageText = payload.text || payload.message || '';
+        const fromName = payload.metadata?.fromName || payload.from;
+        const currentUserId = currentUser?.Id || currentUser?.id || currentUser?.userId || (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username);
+        
+        // Determine if should auto-open based on priority/mention settings
+        let shouldAttemptAutoOpen = autoOpen;
+        if (autoOpen && autoOpenMentionsOnly) {
+          shouldAttemptAutoOpen = hasMention(messageText, currentUser?.Username);
+        }
+        
+        // Check DND hours
+        if (shouldAttemptAutoOpen && autoOpenDND && isInDNDHours(dndStart, dndEnd)) {
+          shouldAttemptAutoOpen = false;
+        }
+        
+        // Check cooldown
+        if (shouldAttemptAutoOpen && !shouldAutoOpen(peerId, cooldownMs)) {
+          shouldAttemptAutoOpen = false;
+        }
+        
+        // Check focus (don't auto-open if page is hidden)
+        if (shouldAttemptAutoOpen && pageHidden) {
+          shouldAttemptAutoOpen = false;
+        }
+        
+        // Auto-open chat window if enabled and all conditions met
+        if (shouldAttemptAutoOpen) {
+          try {
+            window.dispatchEvent(new CustomEvent('open-app', { detail: { appId: 'chat' } }));
+            recordAutoOpen(peerId);
+          } catch (e) {
+            console.debug('[ChatApp] failed to dispatch open-app event', e);
+          }
+        }
+        
         try {
           if (chatMutedMap && chatMutedMap[String(peerId)]) {
             // No desktop or sound notifications for muted conversations
@@ -615,7 +696,12 @@ export default function ChatApp() {
           }
         }
         // Otherwise append
-        return [...prev, mapped];
+        const newList = [...prev, mapped];
+        // Auto-scroll to new message if enabled
+        if (chatSettings?.autoScrollToNew && !isMine) {
+          setTimeout(() => scrollToBottom(), 0);
+        }
+        return newList;
       });
       // If this message is for another conversation, update unread counts
       const activePeerId = selected?.id;
@@ -1512,15 +1598,16 @@ export default function ChatApp() {
               }}
             >
               <DialogTitle sx={{ borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant='h6'>Chat Settings</Typography>
+                Chat Settings
                 <IconButton size='small' onClick={() => setSettingsAnchor(null)} sx={{ color: 'rgba(255,255,255,0.7)' }}>
                   <FiX size={20} />
                 </IconButton>
               </DialogTitle>
-              <DialogContent sx={{ pt: 3 }}>
+              <DialogContent sx={{ pt: 3, maxHeight: '70vh', overflowY: 'auto' }}>
+                <Typography variant='subtitle2' sx={{ mb: 1.5, fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>Notifications</Typography>
                 <FormControlLabel control={<Switch checked={!!chatSettings?.sound} onChange={(e) => { const next = { ...chatSettings, sound: e.target.checked }; persistChatSettings(next); if (e.target.checked) { try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.type='sine'; o.frequency.value=880; o.connect(g); g.connect(ctx.destination); o.start(); setTimeout(() => { try { o.stop(); ctx.close(); } catch (_) {} }, 120); } catch(_){} } }} />} label='Sound' />
-                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mt: 1 }}>
-                  <select value={soundFile} onChange={(e) => { const next = e.target.value; setSoundFile(next); try { localStorage.setItem('chatSoundFile', next); } catch (_) {} }} style={{ padding: 6, background: 'transparent', color: '#fff', borderRadius: 6, border: '1px solid rgba(255,255,255,0.06)' }}>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mt: 1, ml: 4 }}>
+                  <select value={soundFile} onChange={(e) => { const next = e.target.value; setSoundFile(next); try { localStorage.setItem('chatSoundFile', next); } catch (_) {} }} style={{ padding: 6, background: 'transparent', color: '#fff', borderRadius: 6, border: '1px solid rgba(255,255,255,0.06)', fontSize: '12px' }}>
                     <option value="/sounds/chat-notify.mp3">Default</option>
                     <option value="/sounds/chat-success.mp3">Chime</option>
                     <option value="/sounds/chat-pop.mp3">Pop</option>
@@ -1529,20 +1616,45 @@ export default function ChatApp() {
                   <input type='file' accept='audio/*' onChange={(e) => { const f = e.target.files?.[0]; if (f) { const url = URL.createObjectURL(f); setSoundFile(url); try { localStorage.setItem('chatSoundFile', url); } catch (_) {} } }} style={{ display: 'inline-block' }} title='Upload custom sound' />
                 </Box>
                 <FormControlLabel control={<Switch checked={!!chatSettings?.desktop} onChange={(e) => { const next = { ...chatSettings, desktop: e.target.checked }; persistChatSettings(next); if (e.target.checked && typeof Notification !== 'undefined' && Notification.permission === 'default') { try { Notification.requestPermission(); } catch(_){} } }} />} label='Desktop notifications' />
+                
+                <Typography variant='subtitle2' sx={{ mb: 1.5, mt: 2.5, fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>Auto-Open Behavior</Typography>
+                <FormControlLabel control={<Switch checked={!!chatSettings?.autoOpen} onChange={(e) => { const next = { ...chatSettings, autoOpen: e.target.checked }; persistChatSettings(next); }} />} label='Auto-open chat on new messages' />
+                <FormControlLabel control={<Switch disabled={!chatSettings?.autoOpen} checked={!!chatSettings?.autoOpenMentionsOnly && chatSettings?.autoOpen} onChange={(e) => { const next = { ...chatSettings, autoOpenMentionsOnly: e.target.checked }; persistChatSettings(next); }} />} label='  Only for @mentions' sx={{ ml: 2 }} />
+                <FormControlLabel control={<Switch disabled={!chatSettings?.autoOpen} checked={!!chatSettings?.autoOpenDND && chatSettings?.autoOpen} onChange={(e) => { const next = { ...chatSettings, autoOpenDND: e.target.checked }; persistChatSettings(next); }} />} label='  Respect Do Not Disturb' sx={{ ml: 2 }} />
+                {chatSettings?.autoOpenDND && (
+                  <Box sx={{ ml: 4, mt: 1, display: 'flex', gap: 2, alignItems: 'center' }}>
+                    <Box>
+                      <Typography variant='caption' sx={{ display: 'block', mb: 0.5 }}>From:</Typography>
+                      <input type='time' value={chatSettings?.dndStart || '22:00'} onChange={(e) => { const next = { ...chatSettings, dndStart: e.target.value }; persistChatSettings(next); }} style={{ padding: 4, background: 'rgba(255,255,255,0.06)', color: '#fff', borderRadius: 4, border: '1px solid rgba(255,255,255,0.1)', fontSize: '12px' }} />
+                    </Box>
+                    <Box>
+                      <Typography variant='caption' sx={{ display: 'block', mb: 0.5 }}>To:</Typography>
+                      <input type='time' value={chatSettings?.dndEnd || '08:00'} onChange={(e) => { const next = { ...chatSettings, dndEnd: e.target.value }; persistChatSettings(next); }} style={{ padding: 4, background: 'rgba(255,255,255,0.06)', color: '#fff', borderRadius: 4, border: '1px solid rgba(255,255,255,0.1)', fontSize: '12px' }} />
+                    </Box>
+                  </Box>
+                )}
+                <Box sx={{ mt: 1.5, display: 'flex', gap: 1, alignItems: 'center' }}>
+                  <Typography variant='caption' sx={{ color: 'rgba(255,255,255,0.7)' }}>Cooldown (sec):</Typography>
+                  <input type='number' min='5' max='300' step='5' value={Math.round((chatSettings?.cooldownMs || 30000) / 1000)} onChange={(e) => { const next = { ...chatSettings, cooldownMs: parseInt(e.target.value) * 1000 }; persistChatSettings(next); }} style={{ width: 60, padding: 4, background: 'rgba(255,255,255,0.06)', color: '#fff', borderRadius: 4, border: '1px solid rgba(255,255,255,0.1)', fontSize: '12px' }} />
+                </Box>
+                
+                <Typography variant='subtitle2' sx={{ mb: 1.5, mt: 2.5, fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>Display & Layout</Typography>
                 <FormControlLabel control={<Switch checked={!!(chatSettings?.pinned !== false)} onChange={(e) => { const next = { ...chatSettings, pinned: e.target.checked }; persistChatSettings(next); }} />} label='Pin chat to corner' />
                 <FormControlLabel control={<Switch checked={!!chatSettings?.dimOnOpen} onChange={(e) => { const next = { ...chatSettings, dimOnOpen: e.target.checked }; persistChatSettings(next); }} />} label='Dim background when chat opens' />
                 <FormControlLabel control={<Switch checked={!!chatSettings?.badge} onChange={(e) => { const next = { ...chatSettings, badge: e.target.checked }; persistChatSettings(next); }} />} label='Show tray badge' />
+                <FormControlLabel control={<Switch checked={!!chatSettings?.autoScrollToNew} onChange={(e) => { const next = { ...chatSettings, autoScrollToNew: e.target.checked }; persistChatSettings(next); }} />} label='Auto-scroll to new messages' />
                 <FormControlLabel control={<Switch checked={!!chatSettings?.compact} onChange={(e) => { const next = { ...chatSettings, compact: e.target.checked }; persistChatSettings(next); }} />} label='Compact view' />
                 <FormControlLabel control={<Switch checked={!!chatSettings?.leftAlignMessages} onChange={(e) => { const next = { ...chatSettings, leftAlignMessages: e.target.checked }; persistChatSettings(next); }} />} label='Left align messages' />
                 <FormControlLabel control={<Switch checked={!!chatSettings?.hideSidebar} onChange={(e) => { const next = { ...chatSettings, hideSidebar: e.target.checked }; persistChatSettings(next); }} />} label='Hide conversations' />
               </DialogContent>
             </Dialog>
             <Drawer anchor='right' open={drawerOpen} onClose={() => setDrawerOpen(false)}>
-              <Box sx={{ width: 320, p: 2 }}>{/* replicate same settings content as Popover */}
-                <Typography variant='subtitle1' sx={{ mb: 1 }}>Chat settings</Typography>
+              <Box sx={{ width: 320, p: 2, overflowY: 'auto', maxHeight: '100vh' }}>
+                <Typography variant='subtitle1' sx={{ mb: 2 }}>Chat settings</Typography>
+                <Typography variant='subtitle2' sx={{ mb: 1, fontWeight: 600, fontSize: '12px', color: '#666' }}>Notifications</Typography>
                 <FormControlLabel control={<Switch checked={chatSettings.sound} onChange={(e) => { const next = { ...chatSettings, sound: e.target.checked }; persistChatSettings(next); if (e.target.checked) { try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.type='sine'; o.frequency.value=880; o.connect(g); g.connect(ctx.destination); o.start(); setTimeout(() => { try { o.stop(); ctx.close(); } catch (_) {} }, 120); } catch(_){} } }} />} label='Sound' />
-                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mt: 1 }}>
-                  <select value={soundFile} onChange={(e) => { const next = e.target.value; setSoundFile(next); try { localStorage.setItem('chatSoundFile', next); } catch (_) {} }} style={{ padding: 6, background: 'transparent', color: '#111', borderRadius: 6, border: '1px solid rgba(0,0,0,0.06)' }}>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mt: 1, ml: 4 }}>
+                  <select value={soundFile} onChange={(e) => { const next = e.target.value; setSoundFile(next); try { localStorage.setItem('chatSoundFile', next); } catch (_) {} }} style={{ padding: 6, background: 'transparent', color: '#111', borderRadius: 6, border: '1px solid rgba(0,0,0,0.06)', fontSize: '12px' }}>
                     <option value="/sounds/chat-notify.mp3">Default</option>
                     <option value="/sounds/chat-success.mp3">Chime</option>
                     <option value="/sounds/chat-pop.mp3">Pop</option>
@@ -1551,9 +1663,19 @@ export default function ChatApp() {
                   <input type='file' accept='audio/*' onChange={(e) => { const f = e.target.files?.[0]; if (f) { const url = URL.createObjectURL(f); setSoundFile(url); try { localStorage.setItem('chatSoundFile', url); } catch (_) {} } }} style={{ display: 'inline-block' }} title='Upload custom sound' />
                 </Box>
                 <FormControlLabel control={<Switch checked={!!chatSettings?.desktop} onChange={(e) => { const next = { ...chatSettings, desktop: e.target.checked }; persistChatSettings(next); if (e.target.checked && typeof Notification !== 'undefined' && Notification.permission === 'default') { try { Notification.requestPermission(); } catch(_){} } }} />} label='Desktop notifications' />
-                <FormControlLabel control={<Switch checked={!!chatSettings?.badge} onChange={(e) => { const next = { ...chatSettings, badge: e.target.checked }; persistChatSettings(next); }} />} label='Show tray badge' />
+                
+                <Typography variant='subtitle2' sx={{ mb: 1, mt: 2, fontWeight: 600, fontSize: '12px', color: '#666' }}>Auto-Open Behavior</Typography>
+                <FormControlLabel control={<Switch checked={!!chatSettings?.autoOpen} onChange={(e) => { const next = { ...chatSettings, autoOpen: e.target.checked }; persistChatSettings(next); }} />} label='Auto-open on messages' />
+                <FormControlLabel control={<Switch disabled={!chatSettings?.autoOpen} checked={!!chatSettings?.autoOpenMentionsOnly && chatSettings?.autoOpen} onChange={(e) => { const next = { ...chatSettings, autoOpenMentionsOnly: e.target.checked }; persistChatSettings(next); }} />} label='  @mentions only' sx={{ ml: 2 }} />
+                <FormControlLabel control={<Switch disabled={!chatSettings?.autoOpen} checked={!!chatSettings?.autoOpenDND && chatSettings?.autoOpen} onChange={(e) => { const next = { ...chatSettings, autoOpenDND: e.target.checked }; persistChatSettings(next); }} />} label='  Respect DND' sx={{ ml: 2 }} />
+                
+                <Typography variant='subtitle2' sx={{ mb: 1, mt: 2, fontWeight: 600, fontSize: '12px', color: '#666' }}>Display & Layout</Typography>
+                <FormControlLabel control={<Switch checked={!!(chatSettings?.pinned !== false)} onChange={(e) => { const next = { ...chatSettings, pinned: e.target.checked }; persistChatSettings(next); }} />} label='Pin to corner' />
+                <FormControlLabel control={<Switch checked={!!chatSettings?.dimOnOpen} onChange={(e) => { const next = { ...chatSettings, dimOnOpen: e.target.checked }; persistChatSettings(next); }} />} label='Dim background' />
+                <FormControlLabel control={<Switch checked={!!chatSettings?.badge} onChange={(e) => { const next = { ...chatSettings, badge: e.target.checked }; persistChatSettings(next); }} />} label='Show badge' />
+                <FormControlLabel control={<Switch checked={!!chatSettings?.autoScrollToNew} onChange={(e) => { const next = { ...chatSettings, autoScrollToNew: e.target.checked }; persistChatSettings(next); }} />} label='Auto-scroll to new' />
                 <FormControlLabel control={<Switch checked={!!chatSettings?.compact} onChange={(e) => { const next = { ...chatSettings, compact: e.target.checked }; persistChatSettings(next); }} />} label='Compact view' />
-                  <FormControlLabel control={<Switch checked={!!chatSettings?.leftAlignMessages} onChange={(e) => { const next = { ...chatSettings, leftAlignMessages: e.target.checked }; persistChatSettings(next); }} />} label='Left align messages' />
+                <FormControlLabel control={<Switch checked={!!chatSettings?.leftAlignMessages} onChange={(e) => { const next = { ...chatSettings, leftAlignMessages: e.target.checked }; persistChatSettings(next); }} />} label='Left align messages' />
                 <FormControlLabel control={<Switch checked={!!chatSettings?.hideSidebar} onChange={(e) => { const next = { ...chatSettings, hideSidebar: e.target.checked }; persistChatSettings(next); }} />} label='Hide conversations' />
               </Box>
             </Drawer>

@@ -146,7 +146,18 @@ const AppTrayLauncher = () => {
     return () => window.removeEventListener('keydown', onKey);
   }, [handleAppOpen]);
 
-  
+  // Listen for open-app event (e.g., from ChatApp when new message arrives)
+  useEffect(() => {
+    const handler = (e) => {
+      const appId = e?.detail?.appId;
+      if (appId) {
+        console.debug('[AppTrayLauncher] open-app event received for:', appId);
+        handleAppOpen(appId);
+      }
+    };
+    window.addEventListener('open-app', handler);
+    return () => window.removeEventListener('open-app', handler);
+  }, [handleAppOpen]);
 
   const handleMinimize = (id, minimize = true) => {
     setOpenApps((prev) => prev.map((a) => a.id === id ? { ...a, minimized: minimize } : a));

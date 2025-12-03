@@ -160,7 +160,8 @@ const CustomDrawer = ({ collapsed = false }) => {
           <LinkTo
             icon={<TbReportAnalytics />}
             name="Reports & Analytics"
-            isAllow={hasPermission(currentUser, "ViewReports")}
+            
+            isAllow ={ isBudgetPlanningAnalyst || isBudgetOfficer || isOverallApprover || isSuperAdmin(currentUser)}
             collapsed={collapsed}
             iconRight={<FaChevronCircleDown />}
             subLinks={[
