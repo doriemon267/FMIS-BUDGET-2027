@@ -31,7 +31,6 @@ import {
   InputAdornment,
 } from '@mui/material';
 import {
-  Notifications as NotificationsIcon,
   NotificationsNone as NotificationsNoneIcon,
   Close as CloseIcon,
   Delete as DeleteIcon,
@@ -39,6 +38,7 @@ import {
   VolumeUp as UnmuteIcon,
   Search as SearchIcon,
 } from '@mui/icons-material';
+import { GrNotification } from 'react-icons/gr';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import api from '../../config/api';
@@ -225,11 +225,7 @@ const WorkflowNotifications = () => {
           sx={{ position: 'relative' }}
         >
           <Badge badgeContent={unreadCount} color="error">
-            {unreadCount > 0 ? (
-              <NotificationsIcon sx={{ color: '#ff6b6b' }} />
-            ) : (
-              <NotificationsNoneIcon />
-            )}
+            <GrNotification style={{ color: unreadCount > 0 ? '#ff6b6b' : '#ffffff' }} />
           </Badge>
         </IconButton>
       </Tooltip>

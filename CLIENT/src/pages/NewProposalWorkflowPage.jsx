@@ -995,7 +995,7 @@ const NewProposalWorkflowPage = () => {
 
     // VIEW AUDIT TRAIL (always available)
     actions.push({
-      label: "View Audit Trail",
+      label: "View Logs",
       value: "view-audit-trail",
       icon: <ExpandMoreIcon />,
       color: "#d97706",
@@ -5332,7 +5332,7 @@ const NewProposalWorkflowPage = () => {
           >
             <ExpandMoreIcon sx={{ fontSize: "1.2rem" }} />
           </Box>
-          Change Log & Audit Trail
+          Change Log
         </DialogTitle>
         <DialogContent sx={{ p: 3, bgcolor: "#f8fafb" }}>
           {auditTrailLoading ? (

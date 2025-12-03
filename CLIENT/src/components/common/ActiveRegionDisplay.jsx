@@ -146,19 +146,15 @@ const ActiveRegionDisplay = ({ variant = 'default', showButton = true }) => {
   }
 
   // Compact variant (for headers, etc.)
+  // Hide region selector completely for Full Access users
   if (variant === 'compact') {
+    if (isFullScope) {
+      return null; // Hide completely for BRD Level users
+    }
+
     const primaryLabel = divisionLabel || departmentLabel || regionName;
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        {isFullScope && (
-          <Chip
-            icon={<AccountTreeIcon />}
-            label="Full Access"
-            color="success"
-            size="small"
-            sx={{ fontWeight: 600 }}
-          />
-        )}
         {primaryLabel && (
           <Chip
             icon={<LocationIcon />}

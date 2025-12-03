@@ -19,6 +19,7 @@ import { keyframes } from "@mui/system";
 import React, { useContext, useEffect, useState } from "react";
 import { FaCaretLeft } from "react-icons/fa6";
 import { GiHamburgerMenu } from "react-icons/gi";
+import { GrNotification } from "react-icons/gr";
 import { Outlet, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import UserAvatarMenu from "../global/components/UserAvatarMenu";
