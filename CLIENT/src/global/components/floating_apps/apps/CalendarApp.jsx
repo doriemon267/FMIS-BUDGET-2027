@@ -502,6 +502,7 @@ END:VEVENT
         position: "relative",
         minHeight: 400,
         color: themeText,
+        zIndex: 1300,
       }}
     >
       {isLoading && (
@@ -578,6 +579,23 @@ END:VEVENT
                 "& .MuiOutlinedInput-notchedOutline": { borderColor: themeText },
                 "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: themeText },
                 "& .MuiSvgIcon-root": { color: themeText },
+              }}
+              MenuProps={{
+                PaperProps: {
+                  sx: {
+                    bgcolor: theme === "dark" ? "rgba(20, 20, 20, 0.95)" : "#fff",
+                    zIndex: 1400,
+                    "& .MuiMenuItem-root": {
+                      color: themeText,
+                      "&:hover": {
+                        bgcolor: theme === "dark" ? "rgba(111, 207, 151, 0.2)" : "rgba(0,0,0,0.05)",
+                      },
+                      "&.Mui-selected": {
+                        bgcolor: theme === "dark" ? "rgba(111, 207, 151, 0.3)" : "rgba(0,0,0,0.1)",
+                      },
+                    },
+                  },
+                },
               }}
             >
               <MenuItem value={0}>January</MenuItem>

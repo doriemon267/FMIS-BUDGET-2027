@@ -308,6 +308,8 @@ const ClockApp = () => {
           width: 340,
           mx: "auto",
           p: 2,
+          position: "relative",
+          zIndex: 1300,
         }}
       >
         {/* Mode Selector */}
@@ -706,7 +708,17 @@ const ClockApp = () => {
           <Box>
             <Box sx={{ mb: 2, display: "flex", gap: 1 }}>
               <FormControl size="small" sx={{ flex: 1 }}>
-                <Select value={newTimeZone} onChange={(e) => setNewTimeZone(e.target.value)}>
+                <Select 
+                  value={newTimeZone} 
+                  onChange={(e) => setNewTimeZone(e.target.value)}
+                  MenuProps={{
+                    PaperProps: {
+                      sx: {
+                        zIndex: 1400,
+                      },
+                    },
+                  }}
+                >
                   {commonTimeZones.map(tz => (
                     <MenuItem key={tz} value={tz}>{tz}</MenuItem>
                   ))}

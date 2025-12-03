@@ -205,6 +205,8 @@ const TodoApp = () => {
         flexDirection: "column",
         transition: "all 0.3s ease",
         backdropFilter: "blur(6px)",
+        position: "relative",
+        zIndex: 1300,
         "&:hover": { boxShadow: "0 6px 20px rgba(0,0,0,0.6)" },
       }}
     >
@@ -273,7 +275,20 @@ const TodoApp = () => {
           <Select 
             value={priority} 
             onChange={(e) => setPriority(e.target.value)}
-            sx={{ fontSize: "0.8rem", color: "#fff" }}
+            MenuProps={{
+              PaperProps: {
+                sx: {
+                  zIndex: 1400,
+                },
+              },
+            }}
+            sx={{ 
+              fontSize: "0.8rem", 
+              color: "#fff",
+              "& .MuiOutlinedInput-notchedOutline": { borderColor: "#555" },
+              "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "#777" },
+              "& .MuiSvgIcon-root": { color: "#fff" },
+            }}
           >
             <MenuItem value="low">Low</MenuItem>
             <MenuItem value="medium">Medium</MenuItem>
@@ -285,7 +300,20 @@ const TodoApp = () => {
           <Select 
             value={category} 
             onChange={(e) => setCategory(e.target.value)}
-            sx={{ fontSize: "0.8rem", color: "#fff" }}
+            MenuProps={{
+              PaperProps: {
+                sx: {
+                  zIndex: 1400,
+                },
+              },
+            }}
+            sx={{ 
+              fontSize: "0.8rem", 
+              color: "#fff",
+              "& .MuiOutlinedInput-notchedOutline": { borderColor: "#555" },
+              "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "#777" },
+              "& .MuiSvgIcon-root": { color: "#fff" },
+            }}
           >
             {Object.entries(CATEGORIES).map(([key, val]) => (
               <MenuItem key={key} value={key}>{val.label}</MenuItem>
@@ -297,7 +325,20 @@ const TodoApp = () => {
           <Select 
             value={recurring} 
             onChange={(e) => setRecurring(e.target.value)}
-            sx={{ fontSize: "0.8rem", color: "#fff" }}
+            MenuProps={{
+              PaperProps: {
+                sx: {
+                  zIndex: 1400,
+                },
+              },
+            }}
+            sx={{ 
+              fontSize: "0.8rem", 
+              color: "#fff",
+              "& .MuiOutlinedInput-notchedOutline": { borderColor: "#555" },
+              "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "#777" },
+              "& .MuiSvgIcon-root": { color: "#fff" },
+            }}
           >
             {Object.entries(RECURRING_OPTIONS).map(([key, label]) => (
               <MenuItem key={key} value={key}>{label}</MenuItem>
@@ -331,7 +372,7 @@ const TodoApp = () => {
         onKeyDown={handleKeyDown}
         InputLabelProps={{ shrink: true }}
         sx={{
-          input: { color: "#8d8d8dff", fontSize: "0.9rem" },
+          input: { color: "#fff", fontSize: "0.9rem" },
           mb: 1.5,
           "& .MuiOutlinedInput-root": {
             "& fieldset": { borderColor: "#555" },
@@ -349,7 +390,7 @@ const TodoApp = () => {
           size="small"
           onClick={() => setFilterCategory("all")}
           variant={filterCategory === "all" ? "filled" : "outlined"}
-          sx={{ fontSize: "0.7rem" }}
+          sx={{ fontSize: "0.7rem", color: filterCategory === "all" ? "#000" : "#fff" }}
         />
         {Object.entries(CATEGORIES).map(([key, val]) => (
           <Chip
@@ -358,7 +399,7 @@ const TodoApp = () => {
             size="small"
             onClick={() => setFilterCategory(key)}
             variant={filterCategory === key ? "filled" : "outlined"}
-            sx={{ fontSize: "0.7rem" }}
+            sx={{ fontSize: "0.7rem", color: filterCategory === key ? "#fff" : "#fff", borderColor: filterCategory !== key ? "#666" : "transparent" }}
           />
         ))}
       </Stack>
@@ -371,7 +412,20 @@ const TodoApp = () => {
           <Select 
             value={sortBy} 
             onChange={(e) => setSortBy(e.target.value)}
-            sx={{ fontSize: "0.75rem", color: "#fff" }}
+            MenuProps={{
+              PaperProps: {
+                sx: {
+                  zIndex: 1400,
+                },
+              },
+            }}
+            sx={{ 
+              fontSize: "0.75rem", 
+              color: "#fff",
+              "& .MuiOutlinedInput-notchedOutline": { borderColor: "#555" },
+              "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "#777" },
+              "& .MuiSvgIcon-root": { color: "#fff" },
+            }}
           >
             <MenuItem value="dueDate">Sort: Due Date</MenuItem>
             <MenuItem value="priority">Sort: Priority</MenuItem>
@@ -383,7 +437,7 @@ const TodoApp = () => {
           size="small"
           variant={showCompleted ? "contained" : "outlined"}
           onClick={() => setShowCompleted(!showCompleted)}
-          sx={{ fontSize: "0.7rem", py: 0.3 }}
+          sx={{ fontSize: "0.7rem", py: 0.3, color: "#fff" }}
         >
           {showCompleted ? "Hide" : "Show"} Done
         </Button>
@@ -465,14 +519,14 @@ const TodoApp = () => {
                           <Chip 
                             label={CATEGORIES[todo.category]?.label || "Other"} 
                             size="small" 
-                            sx={{ height: 18, fontSize: "0.65rem" }} 
+                            sx={{ height: 18, fontSize: "0.65rem", color: "#fff" }} 
                           />
                           {todo.recurring && todo.recurring !== "none" && (
                             <Chip 
                               label={RECURRING_OPTIONS[todo.recurring]} 
                               size="small" 
                               variant="outlined"
-                              sx={{ height: 18, fontSize: "0.65rem" }} 
+                              sx={{ height: 18, fontSize: "0.65rem", color: "#fff", borderColor: "#666" }} 
                             />
                           )}
                         </Stack>
