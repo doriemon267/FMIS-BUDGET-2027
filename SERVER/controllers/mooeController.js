@@ -150,6 +150,33 @@ exports.getMOOEData = async (req, res) => {
       chartOfAccounts = results[0];
       mooeProposals = results[1];
       cosPersonnels = results[2];
+      
+      console.log('[getMOOEData] Query results:', {
+        filter: filter,
+        mooeCount: mooeProposals.length,
+        firstMooe: mooeProposals[0]?.accountingTitle,
+        fiscalYear: activeFiscalYear,
+        region: region
+      });
+      
+      // If no results with strict filter, try broader query to diagnose
+      if (mooeProposals.length === 0) {
+        console.warn('[getMOOEData] No MOOE data with strict filter, trying fallback query...');
+        const fallbackMooe = await MooeProposal.find({
+          fiscalYear: activeFiscalYear,
+          ...(region ? { region } : {})
+        }).lean();
+        console.warn('[getMOOEData] Fallback query found:', fallbackMooe.length, 'entries');
+        if (fallbackMooe.length > 0) {
+          console.warn('[getMOOEData] First fallback entry:', {
+            uacsCode: fallbackMooe[0].uacsCode,
+            department: fallbackMooe[0].department,
+            division: fallbackMooe[0].division,
+            status: fallbackMooe[0].status
+          });
+        }
+      }
+      
       // Add Financial Expenses entries to the Chart of Accounts data
       const financialExpensesEntries = [
         {
@@ -893,8 +920,16 @@ exports.bulkSaveMOOE = async (req, res) => {
     console.log('   Meta:', meta);
     console.log('   First entry sample:', entries?.[0]);
     
+    if (!entries || !Array.isArray(entries)) {
+      console.error('❌ ERROR: entries is not an array or missing');
+      return res.status(400).json({ error: 'entries must be an array' });
+    }
+    
     // Resolve organizational ownership using submission workflow data (preferred)
     const workflowData = req.submissionWorkflowData || {};
+    console.log('   Meta.department:', meta?.department, 'Meta.division:', meta?.division);
+    console.log('   WorkflowData:', { region: workflowData?.region, department: workflowData?.department, division: workflowData?.division });
+    
     const ownerRegion = meta?.region ?? workflowData.region ?? req.body.region ?? req.user?.Region;
     const ownerDepartment = meta?.department ?? workflowData.department ?? req.body.department ?? null;
     // Division should be cleared for Department-origin records to avoid leaking into division scope
@@ -1113,29 +1148,44 @@ exports.bulkSaveMOOE = async (req, res) => {
         if (ownerWorkflowId) {
           updateObj.workflowRef = ownerWorkflowId; // Track originating workflow
         }
+        
+        // ENSURE department and division are always set so entries are visible after save
+        if (!updateObj.department && ownerDepartment) {
+          updateObj.department = ownerDepartment;
+        }
+        if (!updateObj.division && ownerDivision !== undefined) {
+          updateObj.division = ownerDivision;  // Can be null/empty for dept-level entries
+        }
+        
+        console.log('   Entry to save:', {
+          uacsCode: item.uacsCode,
+          income: updateObj.income,
+          department: updateObj.department,
+          division: updateObj.division,
+          proposalId: updateObj.proposalId,
+          filterUsed: {
+            uacsCode: item.uacsCode,
+            fiscalYear: updateObj.fiscalYear,
+            region: updateObj.region,
+            department: updateObj.department,
+            division: updateObj.division
+          }
+        });
         return {
         updateOne: {
           filter: hasExistingId && mongoose.Types.ObjectId.isValid(item.id) ? 
             { _id: new mongoose.Types.ObjectId(item.id) } : // Match by _id for existing records
+            // For new entries: use unique combination that includes department/division
+            // This ensures entries from different divisions stay separate
             { 
               uacsCode: item.uacsCode,
               fiscalYear: updateObj.fiscalYear,
-              region: updateObj.region,  // Add region to filter for proper isolation
-              $or: [
-                { status: { $exists: false } },  // New records
-                // Allow editing when in editable states: Draft or Returned (including common variants)
-                { status: { $in: [
-                  "Draft",
-                  "Returned",
-                  "Division Draft",
-                  "Responsibility Center Draft",
-                  "DRAFT",
-                  "RETURNED"
-                ] } }
-              ]
+              region: updateObj.region,
+              department: updateObj.department || null,  // Use null for missing values
+              division: updateObj.division || null       // Use null for missing values
             },
           update: { $set: updateObj },
-          upsert: !hasExistingId || !mongoose.Types.ObjectId.isValid(item.id) // Only upsert for new records or invalid IDs
+          upsert: true  // Creates new entry if this exact combination doesn't exist
         }
       };
     });
@@ -1254,7 +1304,7 @@ exports.bulkSaveMOOE = async (req, res) => {
         warning: err.message 
       });
     }
-  }
+    }
   } catch (error) {
     console.error('Error in bulk save MOOE:', error);
     res.status(500).json({ error: 'Internal Server Error' });
@@ -1267,13 +1317,16 @@ exports.fixDatabaseIndex = async (req, res) => {
     const collection = db.collection('mooeproposals');
     // Get current indexes
     const indexes = await collection.indexes();
+    console.log('📋 Current indexes:', indexes.map(i => ({ name: i.name, key: i.key })));
+    
     // Find ALL problematic indexes
     const problematicIndexes = indexes.filter(idx => {
-      // Remove old compound index without region
+      // Remove old compound index WITHOUT department/division (causes duplicates with different divisions)
       const isOldCompoundIndex = idx.key && 
         idx.key.uacsCode === 1 && 
         idx.key.fiscalYear === 1 && 
-        !idx.key.region;
+        idx.key.region === 1 &&
+        !idx.key.department;
       // Remove single uacsCode index that's causing conflicts
       const isSingleUacsIndex = idx.key && 
         Object.keys(idx.key).length === 1 && 
@@ -1285,38 +1338,35 @@ exports.fixDatabaseIndex = async (req, res) => {
     if (problematicIndexes.length > 0) {
       for (const idx of problematicIndexes) {
         try {
+          console.log('🗑️  Dropping old index:', idx.name);
           await collection.dropIndex(idx.name);
           result.droppedIndexes.push(idx.name);
         } catch (error) {
-          // Log error but continue
+          console.warn('⚠️ Could not drop index:', idx.name, error.message);
         }
       }
     } else {
       result.message += ' (no problematic indexes found)';
     }
-    // Create new index
+    // Create NEW index that includes department and division
     try {
+      console.log('✨ Creating new index with department and division...');
       await collection.createIndex(
-        { uacsCode: 1, fiscalYear: 1, region: 1 }, 
-        { unique: true, name: 'uacsCode_fiscalYear_region_unique' }
+        { uacsCode: 1, fiscalYear: 1, region: 1, department: 1, division: 1 }, 
+        { unique: true, name: 'uacsCode_fiscalYear_region_department_division_unique' }
       );
-      result.createdIndex = 'uacsCode_fiscalYear_region_unique';
+      result.createdIndex = 'uacsCode_fiscalYear_region_department_division_unique';
+      console.log('✅ New index created successfully');
     } catch (error) {
       if (error.code === 85) {
-        result.indexStatus = 'already exists';
+        result.indexStatus = 'new index already exists';
       } else {
-        throw error;
+        console.error('Error creating new index:', error.message);
+        result.indexError = error.message;
       }
     }
     // Verify final state
     const finalIndexes = await collection.indexes();
-    const hasRegionIndex = finalIndexes.some(idx => 
-      idx.key && 
-      idx.key.uacsCode === 1 && 
-      idx.key.fiscalYear === 1 && 
-      idx.key.region === 1
-    );
-    result.hasRegionIndex = hasRegionIndex;
     result.allIndexes = finalIndexes.map(idx => ({ name: idx.name, key: idx.key }));
     res.status(200).json(result);
   } catch (error) {

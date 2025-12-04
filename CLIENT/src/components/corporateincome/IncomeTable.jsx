@@ -85,7 +85,7 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [newSubcategories, setNewSubcategories] = useState({});
   const [addingToCategoryId, setAddingToCategoryId] = useState(null);
-  const [autoSave, setAutoSave] = useState(false);
+  const [autoSave, setAutoSave] = useState(false);  // Auto-save disabled - use SAVE button instead
   const [lastSaved, setLastSaved] = useState(null);
   const [compactView, setCompactView] = useState(false);
   const [showSummaryCard, setShowSummaryCard] = useState(true);
@@ -758,16 +758,17 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
     toast.info("Unsaved changes cleared");
   };
 
-  useEffect(() => {
-    if (autoSave && hasUnsavedChanges) {
-      const timer = setTimeout(() => {
-        handleSaveAll();
-        setLastSaved(new Date());
-      }, 3000);
-      setAutoSaveTimer(timer);
-      return () => clearTimeout(timer);
-    }
-  }, [autoSave, hasUnsavedChanges, handleSaveAll]);
+  // Auto-save timer disabled - users must click SAVE button explicitly
+  // useEffect(() => {
+  //   if (autoSave && hasUnsavedChanges) {
+  //     const timer = setTimeout(() => {
+  //       handleSaveAll();
+  //       setLastSaved(new Date());
+  //     }, 1500);
+  //     setAutoSaveTimer(timer);
+  //     return () => clearTimeout(timer);
+  //   }
+  // }, [autoSave, hasUnsavedChanges, handleSaveAll]);
 
   const handleAddSubcategoryField = (categoryId) => {
     setAddingToCategoryId(categoryId);

@@ -101,14 +101,16 @@ import BarChartIcon from "@mui/icons-material/BarChart";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
 
-const Mooe = ({ onDataChange, locked = false }) => {
+const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, fiscalYear = null }) => {  // ADDED: Accept region, proposalId, fiscalYear from parent
   const { currentUser } = useUser();
-  const { activeRegion } = useRegion(); // Get the active region from context
+  const contextRegion = useRegion(); // Get the active region from context
+  const activeRegion = region || contextRegion.activeRegion; // ADDED: Use prop first, then context
   const queryClient = useQueryClient();
   const [expandedRows, setExpandedRows] = useState([]);
   const [disableIncomeInputs, setDisableIncomeInputs] = useState(false);
   const { workflowRef, headerConfig } = useWorkflowRef();
-  const hasWorkflowRef = Boolean(workflowRef);
+  const effectiveProposalId = proposalId || workflowRef;  // ADDED: Use prop first, then hook
+  const hasWorkflowRef = Boolean(effectiveProposalId);
 
   // Debug user and region loading
   useEffect(() => {
@@ -144,7 +146,7 @@ const Mooe = ({ onDataChange, locked = false }) => {
     hasValues: false,
     emptyValues: false
   });
-  const [autoSave, setAutoSave] = useState(false); // Default to false as requested
+  const [autoSave, setAutoSave] = useState(false); // Auto-save disabled - use SAVE button instead
   const [bulkEditMode, setBulkEditMode] = useState(false);
   const [selectedRows, setSelectedRows] = useState([]);
   const [viewMode, setViewMode] = useState("table"); // table, chart, summary, consolidated
@@ -389,7 +391,8 @@ const Mooe = ({ onDataChange, locked = false }) => {
       }
       grouped[key].children.push({
         ...item,
-        id: `${key}-${item.uacsCode || "none"}-${Date.now()}-${Math.random()}`,
+        // Use stable ID based on data content, not timestamp/random
+        id: item._id || `${key}-${item.uacsCode || "none"}`,
       });
     }
 
@@ -405,7 +408,8 @@ const Mooe = ({ onDataChange, locked = false }) => {
           if (grouped[key]) {
             grouped[key].children.push({
               ...child,
-              id: `${key}-${child.uacsCode || "none"}-${Date.now()}-${Math.random()}`,
+              // Use stable ID based on data content, not timestamp/random
+              id: child._id || `${key}-${child.uacsCode || "none"}`,
             });
             foundParent = true;
             break;
@@ -415,7 +419,7 @@ const Mooe = ({ onDataChange, locked = false }) => {
 
       // If no parent found, create a new group or add to unknown
       if (!foundParent) {
-        const key = child.sublineItem || `unknown-${Date.now()}-${Math.random()}`;
+        const key = child.sublineItem || `unknown-${child.uacsCode || "other"}`;
         if (!grouped[key]) {
           grouped[key] = {
             id: key,
@@ -425,7 +429,8 @@ const Mooe = ({ onDataChange, locked = false }) => {
         }
         grouped[key].children.push({
           ...child,
-          id: `${key}-${child.uacsCode || "none"}-${Date.now()}-${Math.random()}`,
+          // Use stable ID based on data content, not timestamp/random
+          id: child._id || `${key}-${child.uacsCode || "none"}`,
         });
       }
     }
@@ -798,16 +803,6 @@ const Mooe = ({ onDataChange, locked = false }) => {
       return updatedData;
     });
 
-    // Clear draft once debounced update is applied to data cache
-    setDraftInputs(prev => {
-      const next = { ...prev };
-      if (next[childId]) {
-        next[childId] = { ...(next[childId]), income: undefined };
-        if (!next[childId].subsidy) delete next[childId];
-      }
-      return next;
-    });
-
     trackChanges();
     setHasUnsavedChanges(true);
   }, 300), [disableIncomeInputs, queryClient, trackChanges, activeRegion?.name]);
@@ -1129,7 +1124,7 @@ const Mooe = ({ onDataChange, locked = false }) => {
     });
 
     const payload = {
-      proposalId: workflowRef,
+      proposalId: effectiveProposalId,  // ADDED: Use prop first, then hook
       meta: {
         processBy: `${currentUser.FirstName} ${currentUser.LastName}`,
         processDate: new Date(),
@@ -1163,6 +1158,13 @@ const Mooe = ({ onDataChange, locked = false }) => {
     }
 
     // Save all MOOE data including IAs O&M Cost entries
+    console.log('📤 MOOE SAVE DEBUG:', {
+      entriesCount: payload.entries.length,
+      firstEntry: payload.entries[0],
+      draftInputsState: Object.keys(draftInputs).length,
+      proposalId: payload.proposalId
+    });
+    
     saveMutation.mutate(payload, {
       onSuccess: () => {
         setHasUnsavedChanges(false);
@@ -1174,8 +1176,11 @@ const Mooe = ({ onDataChange, locked = false }) => {
           toast.success("Data saved successfully!");
         }
 
-        // Clear any remaining drafts after successful save
-        setDraftInputs({});
+        // Wait a bit for the refetch to start, then clear draft inputs
+        // This prevents the UI from showing blank fields momentarily
+        setTimeout(() => {
+          setDraftInputs({});
+        }, 300);
 
         // Refresh the data after saving so the latest entries appear immediately
         queryClient.invalidateQueries(["mooeData", activeRegion?.name || activeRegion?.regionName]);
@@ -1232,31 +1237,26 @@ const Mooe = ({ onDataChange, locked = false }) => {
   useEffect(() => {
 
     // Clear existing timer
-    if (autoSaveTimer) {
-      clearTimeout(autoSaveTimer);
-      setAutoSaveTimer(null);
-    }
-
-    if (autoSave && hasUnsavedChanges) {
-
-      const timer = setTimeout(async () => {
-        try {
-          await handleSave(true); // true indicates auto-save
-        } catch (error) {
-          console.error("Auto-save failed:", error);
-          // Don't show error toast for auto-save failures to avoid spam
-          // The user can manually save if needed
-        }
-      }, 5000); // Auto-save after 5 seconds of inactivity (increased for better UX)
-
-      setAutoSaveTimer(timer);
-
-      return () => {
-        clearTimeout(timer);
-        setAutoSaveTimer(null);
-      };
-    }
-  }, [autoSave, hasUnsavedChanges]); // Removed handleSave from dependencies to prevent infinite loops
+    // Auto-save timer disabled - users must click SAVE button explicitly
+    // if (autoSaveTimer) {
+    //   clearTimeout(autoSaveTimer);
+    //   setAutoSaveTimer(null);
+    // }
+    // if (autoSave && hasUnsavedChanges) {
+    //   const timer = setTimeout(async () => {
+    //     try {
+    //       await handleSave(true);
+    //     } catch (error) {
+    //       console.error("Auto-save failed:", error);
+    //     }
+    //   }, 1500);
+    //   setAutoSaveTimer(timer);
+    //   return () => {
+    //     clearTimeout(timer);
+    //     setAutoSaveTimer(null);
+    //   };
+    // }
+  }, [autoSave, hasUnsavedChanges]);
 
   // Enhanced loading state with better UX
   if (isLoading) {

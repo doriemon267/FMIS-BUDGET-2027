@@ -124,7 +124,7 @@ const formatNumber = (number) => {
   }).format(number);
 };
 
-const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
+const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false, proposalId = null, region = null, fiscalYear: providedFiscalYear = null }) => {  // ADDED: Accept region, proposalId, fiscalYear from parent
   // Basic state
   const [capitalOutlays, setCapitalOutlays] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -136,10 +136,11 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
   const [editedOutlay, setEditedOutlay] = useState({});
   const [newOutlays, setNewOutlays] = useState({});
   const [addingCategoryId, setAddingCategoryId] = useState(null);
-  const [fiscalYear, setFiscalYear] = useState("");
+  const [fiscalYear, setFiscalYear] = useState(providedFiscalYear || "");  // ADDED: Initialize with prop
   const [budgetType, setBudgetType] = useState("");
   const { currentUser } = useUser();
-  const { activeRegion } = useRegion();
+  const contextRegion = useRegion();
+  const activeRegion = region || contextRegion.activeRegion; // ADDED: Use prop first, then context
   const [regionFilter, setRegionFilter] = useState("");
   const [status, setStatus] = useState("");
   const [errors, setErrors] = useState({});
@@ -161,7 +162,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
     hasValues: false,
     emptyValues: false
   });
-  const [autoSave, setAutoSave] = useState(false); // Default to false as requested
+  const [autoSave, setAutoSave] = useState(false); // Auto-save disabled - use SAVE button instead
   const [bulkEditMode, setBulkEditMode] = useState(false);
   const [selectedRows, setSelectedRows] = useState([]);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
@@ -202,15 +203,16 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
   }, [currentUser]);
 
   const { workflowRef, headerConfig } = useWorkflowRef();
-  const hasWorkflowRef = Boolean(workflowRef);
+  const effectiveProposalId = proposalId || workflowRef;  // ADDED: Use prop first, then hook
+  const hasWorkflowRef = Boolean(effectiveProposalId);
 
   const ensureWorkflowRef = useCallback(() => {
-    if (!workflowRef) {
+    if (!effectiveProposalId) {
       toast.error("Create a proposal first to modify capital outlay entries.");
       return false;
     }
     return true;
-  }, [workflowRef]);
+  }, [effectiveProposalId]);
 
   // Enhanced filtering and search
   const filteredData = useMemo(() => {
@@ -288,20 +290,17 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
       }, 0);
   }, []);
 
-  // Auto-save functionality
-  useEffect(() => {
-    if (autoSave && hasUnsavedChanges) {
-      if (autoSaveTimer) clearTimeout(autoSaveTimer);
-
-      const timer = setTimeout(() => {
-        handleAutoSave();
-      }, 3000); // Auto-save after 3 seconds of inactivity
-
-      setAutoSaveTimer(timer);
-
-      return () => clearTimeout(timer);
-    }
-  }, [autoSave, hasUnsavedChanges]);
+  // Auto-save functionality - disabled, users must click SAVE button explicitly
+  // useEffect(() => {
+  //   if (autoSave && hasUnsavedChanges) {
+  //     if (autoSaveTimer) clearTimeout(autoSaveTimer);
+  //     const timer = setTimeout(() => {
+  //       handleAutoSave();
+  //     }, 1500);
+  //     setAutoSaveTimer(timer);
+  //     return () => clearTimeout(timer);
+  //   }
+  // }, [autoSave, hasUnsavedChanges]);
 
   // Track unsaved changes
   const trackChanges = useCallback(() => {
@@ -1029,7 +1028,7 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false }) => {
           fiscalYear,
           budgetType,
           status: "Not Submitted",
-          proposalId: workflowRef,
+          proposalId: effectiveProposalId,  // ADDED: Use prop first, then hook
         }, { headers: headerConfig() });
 
         // Add the new item to existing state instead of refetching all data

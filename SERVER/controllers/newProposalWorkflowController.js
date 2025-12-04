@@ -1170,7 +1170,7 @@ exports.getProposals = async (req, res) => {
         amount: Number(p.amount || 0),
         totalIncome: Number(legacy?.totalIncome ?? p.totalIncome ?? 0),
         totalExpenses: Number(legacy?.totalExpenses ?? p.totalExpenses ?? 0),
-        proposedBudget: Number(legacy?.proposedBudget ?? p.amount ?? 0),
+        proposedBudget: Number(legacy?.proposedBudget ?? ((Number(legacy?.totalExpenses ?? p.totalExpenses ?? 0) + Number(legacy?.totalIncome ?? p.totalIncome ?? 0)) || p.amount || 0)),
         projectedCorporateIncome: p.projectedCorporateIncome,
         projectedSubsidy: p.projectedSubsidy,
         workflowHistory: p.workflowHistory || [],

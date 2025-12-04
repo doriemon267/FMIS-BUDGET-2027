@@ -76,6 +76,7 @@ const PSCOSCustomPageTable = ({
   additionalMenuOptions = [],
   ROWS_PER_PAGE = 20,
   locked = false,
+  proposalId = null,  // ADDED: Accept proposalId from parent
 }) => {
   const [openDialog, setOpenDialog] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -163,7 +164,7 @@ const PSCOSCustomPageTable = ({
         statusOfAppointment,
         fiscalYear: currentFiscalYear,
         budgetType: currentBudgetType,
-        proposalId: workflowRef,
+        proposalId: proposalId || workflowRef,  // ADDED: Use prop first, then hook storage
         // Remove hardcoded region - controller now filters based on user's actual assignment
         // region: currentUser?.organizationalAssignment?.regions?.[0]?.regionName || 'CENTRAL OFFICE'
       }, { headers: headerConfig() });

@@ -74,6 +74,7 @@ const PSCasualCustomPageTable = ({
   additionalMenuOptions = [],
   ROWS_PER_PAGE = 20,
   locked = false,
+  proposalId = null,  // ADDED: Accept proposalId from parent
 }) => {
   const [rows, setRows] = useState([]);
   const [filteredRows, setFilteredRows] = useState([]);
@@ -240,7 +241,7 @@ const PSCasualCustomPageTable = ({
         RATA: RATA.map(item => ({ grade: item.SG, amount: item.RATA })),
         compensation: currentCompensation,
         region, // Include the active region in the request
-        proposalId: workflowRef
+        proposalId: proposalId || workflowRef  // ADDED: Use prop first, then hook storage
       }, { headers: headerConfig() });
 
       if (response.data.added && Array.isArray(response.data.added)) {

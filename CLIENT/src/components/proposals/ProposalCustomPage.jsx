@@ -314,6 +314,14 @@ const ProposalCustomPage = ({
   const [validationErrors, setValidationErrors] = useState({});
   const [isValidating, setIsValidating] = useState(false);
 
+  // ADDED: Restore activeWorkflowRef from storage on mount to preserve proposal ID across page refreshes
+  useEffect(() => {
+    const storedWorkflowRef = sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef');
+    if (storedWorkflowRef && !currentProposalId) {
+      setCurrentProposalId(storedWorkflowRef);
+    }
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const storedPreference = window.localStorage.getItem(
@@ -3331,7 +3339,7 @@ const ProposalCustomPage = ({
         <Box sx={{ mt: 3, mb: 3, width: '100%' }}>
           {activeTab === "Income" && (
             <IncomeTable
-              proposalId={currentProposalId || (dataListName !== "tests" ? dataListName : undefined)}
+              proposalId={currentProposalId || sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef') || (dataListName !== "tests" ? dataListName : undefined)}
               region={activeRegion}
               fiscalYear={selectedFiscalYear}
               onGrandTotalUpdate={(grandTotal) => {
@@ -3349,6 +3357,7 @@ const ProposalCustomPage = ({
               schema={schema}
               region={activeRegion}
               fiscalYear={selectedFiscalYear}
+              proposalId={currentProposalId || sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef') || (dataListName !== "tests" ? dataListName : undefined)}
             />
           )}
 
@@ -3358,6 +3367,7 @@ const ProposalCustomPage = ({
               schema={schema}
               region={activeRegion}
               fiscalYear={selectedFiscalYear}
+              proposalId={currentProposalId || sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef') || (dataListName !== "tests" ? dataListName : undefined)}
             />
           )}
 
@@ -3367,6 +3377,7 @@ const ProposalCustomPage = ({
               schema={schema}
               region={activeRegion}
               fiscalYear={selectedFiscalYear}
+              proposalId={currentProposalId || sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef') || (dataListName !== "tests" ? dataListName : undefined)}
             />
           )}
 
@@ -3376,6 +3387,7 @@ const ProposalCustomPage = ({
               schema={schema}
               region={activeRegion}
               fiscalYear={selectedFiscalYear}
+              proposalId={currentProposalId || sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef') || (dataListName !== "tests" ? dataListName : undefined)}
             />
           )}
 
@@ -3385,6 +3397,7 @@ const ProposalCustomPage = ({
               schema={schema}
               region={activeRegion}
               fiscalYear={selectedFiscalYear}
+              proposalId={currentProposalId || sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef') || (dataListName !== "tests" ? dataListName : undefined)}
             />
           )}
 
@@ -3395,6 +3408,7 @@ const ProposalCustomPage = ({
                 schema={schema}
                 region={activeRegion}
                 fiscalYear={selectedFiscalYear}
+                proposalId={currentProposalId || sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef') || (dataListName !== "tests" ? dataListName : undefined)}
               />
             ) : (
               <CapitalOutlayTable
@@ -3402,6 +3416,7 @@ const ProposalCustomPage = ({
                 schema={schema}
                 region={activeRegion}
                 fiscalYear={selectedFiscalYear}
+                proposalId={currentProposalId || sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef') || (dataListName !== "tests" ? dataListName : undefined)}
               />
             )
           )}

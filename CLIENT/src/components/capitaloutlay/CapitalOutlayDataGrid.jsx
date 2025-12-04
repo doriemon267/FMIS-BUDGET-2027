@@ -912,7 +912,7 @@ function AddNewDialog({ open, onClose, categories = [], capitalOutlays = [], onS
 }
 
 // Main Component
-const CapitalOutlayDataGrid = ({ fiscalYear, onDataChange, disableIncomeInputs: _disableIncomeInputs = false, locked = false }) => {
+const CapitalOutlayDataGrid = ({ fiscalYear: providedFiscalYear, onDataChange, disableIncomeInputs: _disableIncomeInputs = false, locked = false, proposalId = null, region = null }) => {  // ADDED: Accept region from parent
   // State
   const [capitalOutlays, setCapitalOutlays] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -928,16 +928,18 @@ const CapitalOutlayDataGrid = ({ fiscalYear, onDataChange, disableIncomeInputs: 
 
   // Context
   const { currentUser } = useUser();
-  const { activeRegion } = useRegion();
+  const contextRegion = useRegion();
+  const activeRegion = region || contextRegion.activeRegion; // ADDED: Use prop first, then context
   const { workflowRef, headerConfig } = useWorkflowRef();
-  const hasWorkflowRef = Boolean(workflowRef);
+  const effectiveProposalId = proposalId || workflowRef;  // ADDED: Use prop first, then hook
+  const hasWorkflowRef = Boolean(effectiveProposalId);
   const ensureWorkflowRef = useCallback(() => {
-    if (!workflowRef) {
+    if (!effectiveProposalId) {
       toast.error("Create a proposal first to modify capital outlay entries.");
       return false;
     }
     return true;
-  }, [workflowRef]);
+  }, [effectiveProposalId]);
 
   // Permissions
   const canEdit = useMemo(() => {
@@ -1081,7 +1083,7 @@ const CapitalOutlayDataGrid = ({ fiscalYear, onDataChange, disableIncomeInputs: 
     await api.post(`/api/capital-outlay/${parentId}/details`, {
       details: updatedDetails,
       processBy: currentUser?.username || "System",
-      proposalId: workflowRef
+      proposalId: effectiveProposalId  // ADDED: Use prop first, then hook
     }, { headers: headerConfig() });
 
     setCapitalOutlayDetails((prev) => {
@@ -1103,7 +1105,7 @@ const CapitalOutlayDataGrid = ({ fiscalYear, onDataChange, disableIncomeInputs: 
         ...formData,
         region: activeRegion,
         fiscalYear: fiscalYear || new Date().getFullYear(),
-        proposalId: workflowRef
+        proposalId: effectiveProposalId  // ADDED: Use prop first, then hook
       }, { headers: headerConfig() });
     } else if (type === "detail") {
       const capitalOutlayId = formData.capitalOutlayId;
@@ -1131,7 +1133,7 @@ const CapitalOutlayDataGrid = ({ fiscalYear, onDataChange, disableIncomeInputs: 
       await api.post(`/api/capital-outlay/${capitalOutlayId}/details`, {
         details: updatedDetails,
         processBy: currentUser?.username || "System",
-        proposalId: workflowRef
+        proposalId: effectiveProposalId  // ADDED: Use prop first, then hook
       }, { headers: headerConfig() });
 
       setCapitalOutlayDetails((prev) => {

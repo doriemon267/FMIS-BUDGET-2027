@@ -552,9 +552,49 @@ exports.bulkAddPersonnelServices = async (req, res) => {
       legacyProposalPS = await Proposal.findOne({ workflowRef: workflowProposalId }).select('_id');
       if (!legacyProposalPS) {
         console.warn('[bulkAddPersonnelServices] No legacy Proposal found for workflowRef:', workflowProposalId);
+        // FALLBACK: Try to infer legacy proposal from org keys (same as Income controller)
+        try {
+          const Settings = require('../models/Settings');
+          const activeSettings = await Settings.findOne({ isActive: true });
+          const inferQuery = {
+            fiscalYear: activeSettings?.fiscalYear ? String(activeSettings.fiscalYear) : req.body.fiscalYear,
+            budgetType: activeSettings?.budgetType || req.body.budgetType,
+            region: workflowData.region || req.body.region
+          };
+          Object.keys(inferQuery).forEach(k => inferQuery[k] === undefined && delete inferQuery[k]);
+          const inferredLegacy = await Proposal.findOne(inferQuery).select('_id');
+          if (inferredLegacy) {
+            legacyProposalPS = inferredLegacy;
+            console.warn('[bulkAddPersonnelServices] Inferred legacy Proposal linkage:', legacyProposalPS._id);
+          } else {
+            console.warn('[bulkAddPersonnelServices] Inference failed; PS entries will remain unlinked');
+          }
+        } catch (infErr) {
+          console.warn('[bulkAddPersonnelServices] Inference error:', infErr.message);
+        }
       }
     } else {
       console.warn('[bulkAddPersonnelServices] Missing workflow proposalId; PS entries will not aggregate');
+      // FALLBACK: Try to infer if we have enough org info
+      try {
+        const Settings = require('../models/Settings');
+        const activeSettings = await Settings.findOne({ isActive: true });
+        const inferQuery = {
+          fiscalYear: activeSettings?.fiscalYear ? String(activeSettings.fiscalYear) : req.body.fiscalYear,
+          budgetType: activeSettings?.budgetType || req.body.budgetType,
+          region: workflowData.region || req.body.region
+        };
+        Object.keys(inferQuery).forEach(k => inferQuery[k] === undefined && delete inferQuery[k]);
+        if (Object.keys(inferQuery).length > 0) {
+          const inferredLegacy = await Proposal.findOne(inferQuery).select('_id');
+          if (inferredLegacy) {
+            legacyProposalPS = inferredLegacy;
+            console.warn('[bulkAddPersonnelServices] Inferred legacy Proposal from org keys:', legacyProposalPS._id);
+          }
+        }
+      } catch (infErr) {
+        console.warn('[bulkAddPersonnelServices] Org-key inference error:', infErr.message);
+      }
     }
     const userLevel = userAssignment.assignmentLevel || workflowData.userLevel;
     

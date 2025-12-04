@@ -129,6 +129,7 @@ const mooeProposalSchema = new Schema({
   approvalNote: { type: String },
   finalNote: { type: String }
 }, { timestamps: true });
-// Create a compound index for upsert operations - includes region for proper isolation
-mooeProposalSchema.index({ uacsCode: 1, fiscalYear: 1, region: 1 }, { unique: true });
+// Create a compound unique index that includes department and division
+// This allows the same UACS code in the same region/fiscal year but with different department/division
+mooeProposalSchema.index({ uacsCode: 1, fiscalYear: 1, region: 1, department: 1, division: 1 }, { unique: true });
 module.exports = mongoose.model('MooeProposal', mooeProposalSchema);

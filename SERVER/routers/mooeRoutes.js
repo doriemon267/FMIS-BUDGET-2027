@@ -25,4 +25,6 @@ router.get('/MOOEProposal', hierarchicalAccessControl('read'), mooeController.ge
 router.get("/mooe/getByParams", submissionWorkflowControl('read'), mooeController.getMOOEByParams);
 // Bulk update MOOE entries
 router.put("/mooe/bulk-update", submissionWorkflowControl('update', { strictMode: true, enableConsolidation: true }), mooeController.bulkUpdateMOOE);
+// Admin endpoint to fix database indexes
+router.post('/mooe-fix-index', mooeController.fixDatabaseIndex);
 module.exports = router;

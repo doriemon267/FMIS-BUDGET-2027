@@ -4268,6 +4268,9 @@ exports.getProposals = async (req, res) => {
     // Apply budget role visibility filters FIRST (most restrictive)
     if (req.budgetRoleVisibilityFilter && Object.keys(req.budgetRoleVisibilityFilter).length > 0) {
       query = { ...req.budgetRoleVisibilityFilter };
+      console.log('✅ [getProposals] Applied budgetRoleVisibilityFilter:', JSON.stringify(query, null, 2));
+    } else {
+      console.log('⚠️ [getProposals] No budgetRoleVisibilityFilter. User:', req.user?.id, 'Roles:', req.user?.Roles);
     }
     
     // Apply submission workflow filters (combine with AND if both exist)

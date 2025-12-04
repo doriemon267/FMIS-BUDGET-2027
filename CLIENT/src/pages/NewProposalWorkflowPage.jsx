@@ -2401,6 +2401,8 @@ const NewProposalWorkflowPage = () => {
           }
           setViewDetailsDialogOpen(false);
           setChangedItems(new Set());
+          // Refresh proposals list to show updated amounts (e.g., proposedBudget after items are added)
+          fetchProposals({ forceAllRegions: showAllRegions });
         }}
         maxWidth="lg"
         fullWidth

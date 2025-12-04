@@ -146,6 +146,19 @@ async function computeModuleTotals(filterKeys, proposalId) {
   // Subsidy components (should match UI logic for Budget Summary)
   const mooeSubsidyTotal = await tryMatch(MOOE, { $sum: { $toDouble: { $ifNull: ["$subsidy", 0] } } });
   const coSubsidyTotal = await tryMatch(CapitalOutlay, { $sum: { $toDouble: { $ifNull: ["$subsidy", 0] } } });
+  
+  // ADDED: Calculate PersonnelServices subsidy (all except charged-to-income ones)
+  let psSubsidyTotal = 0;
+  if (proposalId) {
+    const byProposal = { 
+      proposalId: new mongoose.Types.ObjectId(proposalId),
+      chargedToIncomeEligible: { $ne: true }  // Exclude charged-to-income
+    };
+    psSubsidyTotal = await aggregateSum(PersonnelServices, byProposal, { $sum: { $toDouble: { $ifNull: ["$subsidyAmount", 0] } } });
+  } else {
+    const psMatch = { ...orgMatch, chargedToIncomeEligible: { $ne: true } };
+    psSubsidyTotal = await aggregateSum(PersonnelServices, psMatch, { $sum: { $toDouble: { $ifNull: ["$subsidyAmount", 0] } } });
+  }
 
   return {
     incomeTotal,
@@ -154,6 +167,7 @@ async function computeModuleTotals(filterKeys, proposalId) {
     coAmountTotal,
     mooeSubsidyTotal,
     coSubsidyTotal,
+    psSubsidyTotal,  // ADDED: Include PersonnelServices subsidies
     chargedToIncomeTotal,
     chargedToIncomeSubsidyTotal
   };
@@ -210,6 +224,7 @@ async function persistProposalTotals(proposal) {
     coAmountTotal,
     mooeSubsidyTotal,
     coSubsidyTotal,
+    psSubsidyTotal,  // ADDED: Include PersonnelServices subsidies
     chargedToIncomeTotal,
     chargedToIncomeSubsidyTotal
   } = await computeModuleTotals(filterKeys, proposal._id);
@@ -220,7 +235,7 @@ async function persistProposalTotals(proposal) {
   // 3. Subsidy is reduced by the subsidy amounts of charged-to-income personnel
   const adjustedIncomeTotal = (incomeTotal || 0) + (chargedToIncomeTotal || 0);
   const adjustedPsTotal = (psTotal || 0); // psTotal already excludes chargedToIncome (it's filtered out in query)
-  const adjustedSubsidyTotal = ((mooeSubsidyTotal || 0) + (coSubsidyTotal || 0)) - (chargedToIncomeSubsidyTotal || 0);
+  const adjustedSubsidyTotal = ((psSubsidyTotal || 0) + (mooeSubsidyTotal || 0) + (coSubsidyTotal || 0)) - (chargedToIncomeSubsidyTotal || 0);  // ADDED: Include psSubsidyTotal
 
   const expenseSum = (adjustedPsTotal || 0) + (mooeAmountTotal || 0) + (coAmountTotal || 0);
   const projectedSubsidy = Math.max(0, adjustedSubsidyTotal); // Ensure it doesn't go negative

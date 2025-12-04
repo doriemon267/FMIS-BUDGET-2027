@@ -145,6 +145,9 @@ const budgetRoleVisibilityControl = () => {
         assignmentLoaded: !!assignment.userId
       }));
 
+      // Declare userName once for use in multiple cases
+      const userName = req.user?.name || req.user?.Username || req.user?.displayName || req.user?.fullName;
+
       switch (budgetRole) {
         case 'BUDGET_PLANNING_ANALYST':
           // STEP 4 of 6-step workflow: PREPARER → BUDGET REVIEWER → BUDGET APPROVER → [BUDGET_PLANNING_ANALYST] → BUDGET_OFFICER → OVERALL_APPROVER
@@ -274,14 +277,31 @@ const budgetRoleVisibilityControl = () => {
 
         case 'SUPER ADMIN':
         case 'SUPER_ADMIN':
-          // ADMIN: Can see all proposals regardless of status
-          visibilityFilter = {}; // No filter for admins
+          // ADMIN: Can see only proposals they created, processed, or are assigned to
+          // This prevents SUPER ADMIN from seeing proposals from other users/departments unless involved
+          // NOTE: Different models use different field names:
+          // - Proposal model uses: createdByUserId, processBy
+          // - Entity models (PersonnelService, MooeProposal, etc.) use: processBy
+          visibilityFilter = {
+            $or: [
+              // Proposals created by this user (Proposal model)
+              { createdByUserId: userId },
+              // Proposals processed by this user (used in both Proposal and entity models)
+              { processBy: userId },
+              { processBy: userName },
+              // Proposals in their organizational scope
+              ...(userDivision ? [{ division: userDivision }] : []),
+              ...(userDepartment ? [{ department: userDepartment }] : []),
+              ...(userRegion ? [{ region: userRegion }] : []),
+              // Proposals assigned to them in workflow
+              { 'workflowHistory.userId': userId }
+            ]
+          };
           break;
 
         case 'BUDGET PREPARER':
           // STEP 1 of 6-step workflow: [BUDGET PREPARER] → BUDGET REVIEWER → BUDGET APPROVER → BUDGET_ANALYST → BUDGET_OFFICER → OVERALL_APPROVER
           // BUDGET PREPARER creates drafts and can see all their proposals
-          const userName = req.user?.name || req.user?.Username || req.user?.displayName || req.user?.fullName;
           visibilityFilter = {
             $or: [
               // Own proposals created by this user
@@ -471,6 +491,12 @@ const budgetRoleVisibilityControl = () => {
 
       // Attach visibility filter to request for use in controllers
       req.budgetRoleVisibilityFilter = visibilityFilter;
+      
+      // Log the actual filter being applied for SUPER ADMIN
+      if (budgetRole === 'SUPER ADMIN' || budgetRole === 'SUPER_ADMIN') {
+        console.log('📋 SUPER ADMIN VISIBILITY FILTER:', JSON.stringify(visibilityFilter, null, 2));
+        logToFile('SUPER ADMIN FILTER: ' + JSON.stringify(visibilityFilter));
+      }
       
       next();
     } catch (error) {
