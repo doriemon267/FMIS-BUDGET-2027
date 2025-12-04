@@ -367,16 +367,23 @@ const NewProposalWorkflowPage = () => {
         "Returned to Preparer",
         "RETURNED_TO_PREPARER",
       ];
+      const currentUserId = currentUser?.id || currentUser?._id || currentUser?.UserId || currentUser?.Id;
+      
+      // Check ownership by: name match, createdBy ID match, or processBy ID match
       const isOwnerByName =
         selectedProposal?.processBy &&
         userName &&
         selectedProposal.processBy === userName;
-      const isOwnerById =
-        selectedProposal?.createdBy && (currentUser?.id || currentUser?._id)
-          ? String(selectedProposal.createdBy) ===
-            String(currentUser.id || currentUser?._id)
+      const isOwnerByCreatedId =
+        selectedProposal?.createdBy && currentUserId
+          ? String(selectedProposal.createdBy) === String(currentUserId)
           : false;
-      if (draftStatuses.includes(status) && (isOwnerByName || isOwnerById)) {
+      const isOwnerByProcessId =
+        selectedProposal?.processBy && currentUserId
+          ? String(selectedProposal.processBy) === String(currentUserId)
+          : false;
+          
+      if (draftStatuses.includes(status) && (isOwnerByName || isOwnerByCreatedId || isOwnerByProcessId)) {
         return true;
       }
     }
@@ -647,6 +654,16 @@ const NewProposalWorkflowPage = () => {
     return actionMapping[frontendAction] || frontendAction;
   };
 
+  // Calculate projected subsidy from MOOE data
+  const calculateProjectedSubsidy = () => {
+    if (!proposalDetails?.mooe || proposalDetails.mooe.length === 0) {
+      return 0;
+    }
+    return proposalDetails.mooe.reduce((sum, item) => {
+      return sum + (item.subsidy || 0);
+    }, 0);
+  };
+
   // Handle proposal actions
   const handleProposalAction = async () => {
     if (!selectedProposal || !actionType) return;
@@ -660,9 +677,14 @@ const NewProposalWorkflowPage = () => {
     setActionLoading(true);
     try {
       const backendAction = mapActionToBackend(actionType);
+      
+      // Calculate and include projectedSubsidy before submission
+      const projectedSubsidy = calculateProjectedSubsidy();
+      
       await api.post(`${WORKFLOW_API_BASE}/${selectedProposal._id}/action`, {
         action: backendAction,
         comment: actionComment,
+        projectedSubsidy, // Include calculated subsidy
       });
 
       toast.success("Action completed successfully");
@@ -1009,11 +1031,16 @@ const NewProposalWorkflowPage = () => {
     
     const currentUserId = currentUser?.id || currentUser?._id || currentUser?.UserId || currentUser?.Id;
     const proposalCreatedById = proposal?.createdBy;
+    const proposalProcessById = proposal?.processBy;
 
-    // Check if user owns the proposal (by name OR by createdBy ID)
+    // Check if user owns the proposal by:
+    // 1. Name match on processBy
+    // 2. ID match on createdBy 
+    // 3. ID match on processBy (since processBy can store user ID)
     const isProposalOwner = 
       proposal.processBy === userName || 
-      (currentUserId && proposalCreatedById && String(currentUserId) === String(proposalCreatedById));
+      (currentUserId && proposalCreatedById && String(currentUserId) === String(proposalCreatedById)) ||
+      (currentUserId && proposalProcessById && String(currentUserId) === String(proposalProcessById));
 
     if (
       (userRoles.includes("BUDGET PREPARER") ||
@@ -2537,6 +2564,7 @@ const NewProposalWorkflowPage = () => {
                     >
                       ₱
                       {(
+                        calculateProjectedSubsidy() || // Use calculated value from MOOE data
                         selectedProposal?.projectedSubsidy ||
                         selectedProposal?.totalExpenses ||
                         0
@@ -2561,9 +2589,8 @@ const NewProposalWorkflowPage = () => {
                     >
                       ₱
                       {(
-                        selectedProposal?.proposedBudget ||
-                        selectedProposal?.amount ||
-                        0
+                        (selectedProposal?.projectedCorporateIncome || 0) + 
+                        (calculateProjectedSubsidy() || selectedProposal?.projectedSubsidy || selectedProposal?.totalExpenses || 0)
                       ).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                     </Typography>
                   </Grid>

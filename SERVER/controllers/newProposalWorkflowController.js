@@ -1494,6 +1494,12 @@ exports.performAction = async (req, res) => {
     // Update proposal
     const oldStatus = proposal.status;
     proposal.status = newWorkflowStatus;
+    
+    // Update projectedSubsidy if provided by frontend
+    if (req.body.projectedSubsidy !== undefined) {
+      proposal.projectedSubsidy = Number(req.body.projectedSubsidy) || 0;
+    }
+    
     proposal.workflowHistory = proposal.workflowHistory || [];
     proposal.workflowHistory.push({
       action,
@@ -1528,13 +1534,20 @@ exports.performAction = async (req, res) => {
     // Also update the legacy Proposal collection to keep it in sync
     try {
       const legacyStatus = workflowToProposalStatus[newWorkflowStatus] || newWorkflowStatus;
+      const updateData = {
+        status: legacyStatus,
+        workflowLevel: userRole,
+        updatedAt: new Date()
+      };
+      
+      // Include projectedSubsidy if it was provided
+      if (req.body.projectedSubsidy !== undefined) {
+        updateData.projectedSubsidy = Number(req.body.projectedSubsidy) || 0;
+      }
+      
       const updateResult = await Proposal.findOneAndUpdate(
         { $or: [{ workflowRef: proposal._id }, { proposalId: proposal._id }] },
-        {
-          status: legacyStatus,
-          workflowLevel: userRole,
-          updatedAt: new Date()
-        },
+        updateData,
         { new: true }
       );
       if (updateResult) {
