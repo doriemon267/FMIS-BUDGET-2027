@@ -362,6 +362,7 @@ const NewProposalWorkflowPage = () => {
       const draftStatuses = [
         "DRAFT",
         "Draft",
+        "draft",
         "Returned",
         "Returned to Preparer",
         "RETURNED_TO_PREPARER",
@@ -1011,12 +1012,15 @@ const NewProposalWorkflowPage = () => {
         userRoles.includes("BUDGET_PREPARER")) &&
       proposal.processBy === userName
     ) {
-      if (
-        currentStatus === "DRAFT" ||
-        currentStatus === "Draft" ||
-        currentStatus === "Returned to Preparer" ||
-        currentStatus === "RETURNED_TO_PREPARER"
-      ) {
+      const draftStatusVariants = [
+        "DRAFT",
+        "Draft",
+        "draft",
+        "Returned to Preparer",
+        "RETURNED_TO_PREPARER",
+        "Returned",
+      ];
+      if (draftStatusVariants.includes(currentStatus)) {
         // If the current user is a PREPARER assigned at OFFICE level, show Submit to Approver label
         const assignmentLevel = currentUser?.hierarchicalAccess?.assignmentLevel || currentUser?.assignmentLevel;
         const isOfficePreparer = assignmentLevel && String(assignmentLevel).toUpperCase() === 'OFFICE';
@@ -2505,7 +2509,7 @@ const NewProposalWorkflowPage = () => {
                       sx={{ fontWeight: 600, color: "#1976d2" }}
                     >
                       ₱
-                      {(selectedProposal?.totalIncome || 0).toLocaleString(
+                      {(selectedProposal?.projectedCorporateIncome || selectedProposal?.totalIncome || 0).toLocaleString(
                         "en-US",
                         { minimumFractionDigits: 2 }
                       )}
@@ -4059,6 +4063,15 @@ const NewProposalWorkflowPage = () => {
                 {detailsTab === "mooe" &&
                   (proposalDetails?.mooe?.length > 0 ? (
                     <>
+                      {/* Attachments (MOOE) - Render ONCE before categories, not inside loop */}
+                      <Box sx={{ mb: 2 }}>
+                        <ProposalAttachments
+                          proposal={selectedProposal}
+                          moduleName="mooe"
+                          userInfo={currentUser}
+                          onChange={() => handleViewDetails(selectedProposal)}
+                        />
+                      </Box>
                       {(() => {
                         const groupedMOOE = proposalDetails.mooe.reduce(
                           (acc, item) => {
@@ -4078,17 +4091,6 @@ const NewProposalWorkflowPage = () => {
 
                             return (
                               <Box key={category} sx={{ mb: 2 }}>
-                                {/* Attachments (MOOE) */}
-                                {expandedGroups[`mooe-${category}`] === false && (
-                                  <Box sx={{ mb: 1 }}>
-                                    <ProposalAttachments
-                                      proposal={selectedProposal}
-                                      moduleName="mooe"
-                                      userInfo={currentUser}
-                                      onChange={() => handleViewDetails(selectedProposal)}
-                                    />
-                                  </Box>
-                                )}
                                 <Box
                                   onClick={() =>
                                     setExpandedGroups((prev) => ({
