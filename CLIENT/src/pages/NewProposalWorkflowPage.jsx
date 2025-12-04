@@ -654,6 +654,22 @@ const NewProposalWorkflowPage = () => {
     return actionMapping[frontendAction] || frontendAction;
   };
 
+  // Helper function to calculate displayed amounts for any proposal in the table
+  const getDisplayAmounts = (proposal) => {
+    // For the current selected proposal, use the detailed calculations
+    if (selectedProposal && proposal._id === selectedProposal._id && proposalDetails) {
+      return {
+        projectedSubsidy: calculateProjectedSubsidy(),
+        proposedBudget: calculateTotalBudget()
+      };
+    }
+    // For other proposals, use database values as fallback
+    return {
+      projectedSubsidy: proposal.projectedSubsidy || proposal.totalExpenses || 0,
+      proposedBudget: proposal.proposedBudget || proposal.amount || 0
+    };
+  };
+
   // Calculate projected subsidy from MOOE + Personnel Services + Capital Outlay
   const calculateProjectedSubsidy = () => {
     let total = 0;
@@ -2090,11 +2106,7 @@ const NewProposalWorkflowPage = () => {
                                 sx={{ fontWeight: 600, color: "#d32f2f" }}
                               >
                                 ₱
-                                {(
-                                  proposal.projectedSubsidy ||
-                                  proposal.totalExpenses ||
-                                  0
-                                ).toLocaleString("en-US", {
+                                {getDisplayAmounts(proposal).projectedSubsidy.toLocaleString("en-US", {
                                   minimumFractionDigits: 2,
                                   maximumFractionDigits: 2,
                                 })}
@@ -2117,13 +2129,7 @@ const NewProposalWorkflowPage = () => {
                                 }}
                               >
                                 ₱
-                                {(
-                                  proposal.proposedBudget ||
-                                  proposal.totalExpenses +
-                                    proposal.totalIncome ||
-                                  proposal.amount ||
-                                  0
-                                ).toLocaleString("en-US", {
+                                {getDisplayAmounts(proposal).proposedBudget.toLocaleString("en-US", {
                                   minimumFractionDigits: 2,
                                   maximumFractionDigits: 2,
                                 })}
