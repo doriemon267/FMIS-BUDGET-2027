@@ -654,14 +654,40 @@ const NewProposalWorkflowPage = () => {
     return actionMapping[frontendAction] || frontendAction;
   };
 
-  // Calculate projected subsidy from MOOE data
+  // Calculate projected subsidy from MOOE + Personnel Services + Capital Outlay
   const calculateProjectedSubsidy = () => {
-    if (!proposalDetails?.mooe || proposalDetails.mooe.length === 0) {
-      return 0;
+    let total = 0;
+    
+    // Add MOOE subsidy
+    if (proposalDetails?.mooe && proposalDetails.mooe.length > 0) {
+      total += proposalDetails.mooe.reduce((sum, item) => {
+        return sum + (item.subsidy || 0);
+      }, 0);
     }
-    return proposalDetails.mooe.reduce((sum, item) => {
-      return sum + (item.subsidy || 0);
-    }, 0);
+    
+    // Add Personnel Services (Total field) for same division
+    if (proposalDetails?.personnel && proposalDetails.personnel.length > 0) {
+      const sameDivision = proposalDetails.personnel.filter(p => 
+        p.division === selectedProposal?.division
+      );
+      total += sameDivision.reduce((sum, item) => {
+        return sum + (item.Total || 0);
+      }, 0);
+    }
+    
+    // Add Capital Outlay subsidy
+    if (proposalDetails?.capitalOutlay && proposalDetails.capitalOutlay.length > 0) {
+      total += proposalDetails.capitalOutlay.reduce((sum, item) => {
+        return sum + (item.subsidy || 0);
+      }, 0);
+    }
+    
+    return total;
+  };
+
+  // Calculate total proposed budget (Income + Subsidy)
+  const calculateTotalBudget = () => {
+    return (selectedProposal?.projectedCorporateIncome || 0) + calculateProjectedSubsidy();
   };
 
   // Handle proposal actions
@@ -2588,10 +2614,9 @@ const NewProposalWorkflowPage = () => {
                       }}
                     >
                       ₱
-                      {(
-                        (selectedProposal?.projectedCorporateIncome || 0) + 
-                        (calculateProjectedSubsidy() || selectedProposal?.projectedSubsidy || selectedProposal?.totalExpenses || 0)
-                      ).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      {calculateTotalBudget().toLocaleString("en-US", {
+                        minimumFractionDigits: 2,
+                      })}
                     </Typography>
                   </Grid>
                   <Grid item xs={12} md={6}>
