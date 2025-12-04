@@ -127,7 +127,10 @@ const mooeProposalSchema = new Schema({
   finalApprovedBy: { type: String },
   submissionNote: { type: String },
   approvalNote: { type: String },
-  finalNote: { type: String }
+  finalNote: { type: String },
+  createdBy: {
+    type: String
+  }
 }, { timestamps: true });
 // Create a compound unique index that includes department and division
 // This allows the same UACS code in the same region/fiscal year but with different department/division

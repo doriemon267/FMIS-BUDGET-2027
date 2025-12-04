@@ -3,7 +3,8 @@ const {
   getAllCOSPersonnel,
   updateCOSPersonnel,
   deleteCOSPersonnel,
-  getGrandTotalCOS
+  getGrandTotalCOS,
+  getCOSByParams
 } = require("../controllers/cospersonnelController");
 const Router = require("express").Router;
 const checkDueDate = require("../middleware/checkDueDate");
@@ -18,6 +19,11 @@ cosPersonnelRouter.get(
   "/cosPersonnels",
   submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
   getAllCOSPersonnel
+);
+cosPersonnelRouter.get(
+  "/api/cos/getByParams",
+  submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }),
+  getCOSByParams
 );
 cosPersonnelRouter.get(
   "/grandtotalCOS",

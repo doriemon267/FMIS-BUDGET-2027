@@ -70,6 +70,9 @@ const COSPersonnelSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    createdBy: {
+      type: String,
+    },
   },
   {
     timestamps: true,

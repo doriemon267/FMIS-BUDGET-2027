@@ -77,6 +77,7 @@ const PSCOSCustomPageTable = ({
   ROWS_PER_PAGE = 20,
   locked = false,
   proposalId = null,  // ADDED: Accept proposalId from parent
+  region = null,  // ADDED: Accept region from parent for SUPER_ADMIN
 }) => {
   const [openDialog, setOpenDialog] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -159,14 +160,28 @@ const PSCOSCustomPageTable = ({
       }
 
       const processBy = `${currentUser.FirstName} ${currentUser.LastName}`;
+      
+      // Get active region from prop first, then fallback to localStorage (same as Permanent/Casual)
+      let requestRegion = region;
+      if (!requestRegion) {
+        try {
+          const activeRegionStr = localStorage.getItem('activeRegion');
+          if (activeRegionStr) {
+            const activeRegion = JSON.parse(activeRegionStr);
+            requestRegion = activeRegion.name || activeRegion.regionName;
+          }
+        } catch (error) {
+          console.error('Error parsing active region:', error);
+        }
+      }
+
       const response = await api.post(`/cos-personnel/bulk-add`, {
         processBy,
         statusOfAppointment,
         fiscalYear: currentFiscalYear,
         budgetType: currentBudgetType,
         proposalId: proposalId || workflowRef,  // ADDED: Use prop first, then hook storage
-        // Remove hardcoded region - controller now filters based on user's actual assignment
-        // region: currentUser?.organizationalAssignment?.regions?.[0]?.regionName || 'CENTRAL OFFICE'
+        region: requestRegion,  // Include region from prop or localStorage
       }, { headers: headerConfig() });
 
       // Check for successful response - server returns different structures

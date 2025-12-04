@@ -299,6 +299,9 @@ courtAppearance: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'NewProposalWorkflow',
       index: true
+    },
+    createdBy: {
+      type: String
     }
   },
   { timestamps: true }

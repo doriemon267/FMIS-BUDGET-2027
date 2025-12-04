@@ -357,7 +357,16 @@ exports.getAllPersonnelServices = async (req, res) => {
     const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
     const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
     
-    if (!isSuperAdmin && !isBudgetManager && userIdString) {
+    // SUPER_ADMIN must filter by the region parameter passed from frontend (from employee page)
+    // BUDGET_MANAGER sees ALL records (no filtering)
+    // Other users are filtered by their organizational assignment
+    if (isSuperAdmin && region) {
+      // SUPER_ADMIN: Filter by the region parameter (selected on employee page)
+      const filteredPersonnel = personnelServices.filter(ps => ps.region === region);
+      if (filteredPersonnel.length > 0) {
+        personnelServices = filteredPersonnel;
+      }
+    } else if (!isSuperAdmin && !isBudgetManager && userIdString) {
       try {
         const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
         const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
@@ -885,7 +894,9 @@ exports.bulkAddPersonnelServices = async (req, res) => {
         processorDivision: ownerDivision || null,
         // CRITICAL: Link to specific proposal to prevent cross-proposal data mixing
         ...(legacyProposalPS?._id && { proposalId: legacyProposalPS._id }),
-        ...(workflowProposalId && { workflowRef: workflowProposalId })
+        ...(workflowProposalId && { workflowRef: workflowProposalId }),
+        // Track who created this record for SUPER_ADMIN visibility filtering
+        createdBy: req.user?.id ? String(req.user.id) : undefined
       };
       if (statusAppointment === "COS") {
         personnelService = {

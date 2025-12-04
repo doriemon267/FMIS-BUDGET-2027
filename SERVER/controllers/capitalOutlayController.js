@@ -237,6 +237,7 @@ exports.addCapitalOutlay = async (req, res) => {
       originalLevel: workflowData.originalLevel || (userLevel === 'DIVISION' ? 'DIVISION' : userLevel === 'DEPARTMENT' ? 'DEPARTMENT' : userLevel === 'REGION' ? 'REGION' : null),
       workflowLevel: workflowData.workflowLevel || (userLevel === 'DIVISION' ? 'DIVISION' : userLevel === 'DEPARTMENT' ? 'DEPARTMENT' : userLevel === 'REGION' ? 'REGION' : null),
       status: req.body.status || 'Draft',
+      createdBy: req.user?.id ? String(req.user.id) : undefined, // Track who created this record
       proposalId: legacyProposal ? legacyProposal._id : undefined, // Link to legacy Proposal for aggregation
       workflowRef: incomingWorkflowId ? new mongoose.Types.ObjectId(incomingWorkflowId) : undefined // Track workflow origin
     });

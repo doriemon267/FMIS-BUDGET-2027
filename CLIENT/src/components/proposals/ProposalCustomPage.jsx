@@ -2770,18 +2770,31 @@ const ProposalCustomPage = ({
             </Button>
           )}
           {currentProposalId && (
-            <Tooltip title={`Linked Proposal ID: ${currentProposalId}`}> 
+            <Tooltip title={`Linked Proposal ID: ${currentProposalId} - Click to unlink`}> 
               <Chip
                 icon={<CheckCircleIcon />}
                 label="Proposal Linked"
+                onDelete={() => {
+                  setCurrentProposalId(null);
+                  sessionStorage.removeItem('activeWorkflowRef');
+                  localStorage.removeItem('activeWorkflowRef');
+                  toast.info("Proposal unlinked successfully");
+                }}
                 sx={{
                   backgroundColor: "#4CAF50",
                   color: "white",
                   fontWeight: 600,
                   letterSpacing: "0.3px",
+                  cursor: "pointer",
                   "& .MuiChip-icon": {
                     color: "white !important",
                   },
+                  "& .MuiChip-deleteIcon": {
+                    color: "white !important",
+                    "&:hover": {
+                      color: "#f0f0f0 !important",
+                    }
+                  }
                 }}
               />
             </Tooltip>

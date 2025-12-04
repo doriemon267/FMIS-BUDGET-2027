@@ -5,46 +5,88 @@ const { searchFilter, textFilter } = require("../utils/controller_get_process");
 
 exports.bulkAddCOSPersonnel = async (req, res) => {
   try {
+    console.log('🔍 [COS BULK ADD] ==================== INCOMING REQUEST ====================');
+    console.log('🔍 [COS BULK ADD] Request Body:', JSON.stringify(req.body, null, 2));
+    console.log('🔍 [COS BULK ADD] User:', { id: req.user?.id, roles: req.user?.Roles });
+    console.log('🔍 [COS BULK ADD] ================================================================');
+
     const { statusOfAppointment } = req.body; // Removed region requirement
+    
+    // Check if user is SUPER_ADMIN
+    const userRoles = req.user?.Roles || [];
+    const isSuperAdmin = userRoles.includes('SUPER_ADMIN') || userRoles.includes('SUPER ADMIN');
 
     // ⚠️ CRITICAL: Get user's assignment DIRECTLY to ensure proper filtering
     const userId = req.user.id;
     const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
-    const userAssignment = await HierarchicalUserAssignment.getUserPermissions(userId);
-
-    if (!userAssignment || userAssignment.assignmentLevel === 'NONE') {
-      return res.status(403).json({
-        message: 'No organizational assignment found. Cannot perform bulk add.',
-        code: 'NO_ORG_ASSIGNMENT'
-      });
+    let userAssignment = null;
+    
+    if (!isSuperAdmin) {
+      userAssignment = await HierarchicalUserAssignment.getUserPermissions(userId);
+      if (!userAssignment || userAssignment.assignmentLevel === 'NONE') {
+        return res.status(403).json({
+          message: 'No organizational assignment found. Cannot perform bulk add.',
+          code: 'NO_ORG_ASSIGNMENT'
+        });
+      }
     }
 
     // Get hierarchical filters from middleware (as backup)
     const hierarchicalFilters = req.submissionWorkflowFilters || req.hierarchicalFilters || {};
 
     // Get the user's ACTUAL assigned organizational units
-    const userRegion = userAssignment.regions?.[0]?.regionName || req.body.region;
-    const userDepartment = userAssignment.departments?.[0]?.departmentName;
-    const userDivision = userAssignment.divisions?.[0];
+    // For SUPER_ADMIN: use req.body region without requiring assignment
+    const userRegion = isSuperAdmin 
+      ? req.body.region 
+      : (userAssignment?.regions?.length > 0 
+        ? userAssignment.regions[0]?.regionName 
+        : (req.body.region || userAssignment?.region));
+    const userDepartment = isSuperAdmin
+      ? req.body.department
+      : (userAssignment?.departments?.length > 0 
+        ? userAssignment.departments[0]?.departmentName 
+        : (req.body.department || userAssignment?.department));
+    const userDivision = isSuperAdmin
+      ? req.body.division
+      : (userAssignment?.divisions?.length > 0 
+        ? userAssignment.divisions[0] 
+        : (req.body.division || userAssignment?.division));
 
     console.log('🔍 [COS BULK ADD] ==================== USER ASSIGNMENT ====================');
     console.log('🔍 [COS BULK ADD] User ID:', userId);
-    console.log('🔍 [COS BULK ADD] Assignment Level:', userAssignment.assignmentLevel);
+    console.log('🔍 [COS BULK ADD] Is SUPER_ADMIN:', isSuperAdmin);
+    console.log('🔍 [COS BULK ADD] Assignment Level:', userAssignment?.assignmentLevel || 'N/A');
     console.log('🔍 [COS BULK ADD] User Region:', userRegion);
     console.log('🔍 [COS BULK ADD] User Department:', userDepartment);
     console.log('🔍 [COS BULK ADD] User Division:', userDivision);
     console.log('🔍 [COS BULK ADD] =================================================================');
 
-    // CRITICAL VALIDATION: Ensure user has a region assignment for COS personnel
+    // CRITICAL VALIDATION: Ensure region is specified (from assignment or request body)
     if (!userRegion) {
+      console.error('🚨 [COS BULK ADD] USER REGION IS MISSING:', {
+        isSuperAdmin,
+        userAssignment,
+        userRegion,
+        requestRegion: req.body.region
+      });
       return res.status(400).json({
         error: "No region assignment found",
-        message: "You must be assigned to a region to perform COS personnel bulk add operations"
+        message: isSuperAdmin 
+          ? "Region must be specified in request body for SUPER_ADMIN"
+          : "You must be assigned to a region to perform COS personnel bulk add operations",
+        debug: { userRegion, requestRegion: req.body.region, assignmentLevel: userAssignment?.assignmentLevel }
       });
     }
 
     if (!statusOfAppointment || statusOfAppointment !== "COS") {
-      return res.status(400).json({ message: "Missing or invalid required field: statusOfAppointment" });
+      console.error('🚨 [COS BULK ADD] INVALID STATUS:', {
+        statusOfAppointment,
+        requestBody: req.body
+      });
+      return res.status(400).json({ 
+        message: "Missing or invalid required field: statusOfAppointment",
+        debug: { received: statusOfAppointment }
+      });
     }
     const activeSettings = await Settings.findOne({ isActive: true });
     if (!activeSettings) {
@@ -59,23 +101,28 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
       StatusOfAppointment: statusOfAppointment
     };
 
-    // Apply hierarchical filtering based on user's DIRECT assignment level
-    if (userRegion) {
-      employeeQuery.Region = userRegion;
-    } else if (region) {
-      employeeQuery.Region = region;
-    }
-
-    if (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'DIVISION') {
-      if (userDepartment) {
-        employeeQuery.Department = userDepartment;
+    // For SUPER_ADMIN: Get ALL employees (no region restriction)
+    // For regular users: Apply hierarchical filtering based on assignment
+    if (!isSuperAdmin) {
+      // Apply hierarchical filtering based on user's DIRECT assignment level
+      if (userRegion) {
+        employeeQuery.Region = userRegion;
       }
-    }
 
-    if (userAssignment.assignmentLevel === 'DIVISION') {
-      if (userDivision) {
-        employeeQuery.Division = userDivision;
-        console.log('🔍 [COS BULK ADD] ⚠️⚠️⚠️ DIVISION LEVEL - STRICT FILTER:', userDivision);
+      // Only apply department/division filtering if user has assignment
+      if (userAssignment) {
+        if (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'DIVISION') {
+          if (userDepartment) {
+            employeeQuery.Department = userDepartment;
+          }
+        }
+
+        if (userAssignment.assignmentLevel === 'DIVISION') {
+          if (userDivision) {
+            employeeQuery.Division = userDivision;
+            console.log('🔍 [COS BULK ADD] ⚠️⚠️⚠️ DIVISION LEVEL - STRICT FILTER:', userDivision);
+          }
+        }
       }
     }
 
@@ -113,14 +160,14 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
     }
     const checks = await Promise.all(
       employees.map(async (employee) => {
-        // Double-check that employee belongs to user's assigned region
-        if (employee.Region !== userRegion) {
+        // For non-SUPER_ADMIN: Double-check that employee belongs to user's assigned region
+        if (!isSuperAdmin && employee.Region !== userRegion) {
           console.error(`SECURITY WARNING: Employee ${employee.EmployeeFullName} has region ${employee.Region} but user's assigned region is ${userRegion}`);
           return null;
         }
 
         // Additional validation: Check if Division user is processing employee from their division
-        if (userAssignment?.assignmentLevel === 'DIVISION' && employee.Division !== userDivision) {
+        if (!isSuperAdmin && userAssignment?.assignmentLevel === 'DIVISION' && employee.Division !== userDivision) {
           console.warn(`WORKFLOW WARNING: Division user ${req.user.id} processing employee ${employee.EmployeeFullName} from division ${employee.Division} (user's division: ${userDivision})`);
         }
 
@@ -190,6 +237,7 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
           statusOfAppointment: employee.StatusOfAppointment,
           monthlySalary: monthlySalary,
           annualSalary: annualSalary,
+          createdBy: req.user?.id ? String(req.user.id) : undefined, // Track who created this record
           Total: annualSalary,
         };
       })
@@ -199,7 +247,7 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
       const addedRecords = await COSPersonnel.insertMany(cosPersonnelData);
       return res.status(200).json({
         addedRecords,
-        region,
+        region: userRegion,
         count: addedRecords.length,
         processedBy: {
           userId: req.user.id,
@@ -298,6 +346,49 @@ exports.getAllCOSPersonnel = async (req, res) => {
       };
     } else {
       query.region = region;
+    }
+
+    // SUPER_ADMIN filtering: Only show COS records they created
+    const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
+    const userRoles = req.user?.Roles || [];
+    const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
+    
+    if (isSuperAdmin && userId) {
+      const userIdString = String(userId);
+      // Add createdBy filter to only show records created by SUPER_ADMIN
+      if (query.$and) {
+        query.$and.push({ 
+          $or: [
+            { createdBy: userIdString }, 
+            { createdBy: userId }, 
+            { userId: userIdString }, 
+            { userId: userId }
+          ]
+        });
+      } else if (Object.keys(query).length > 0) {
+        query = {
+          $and: [
+            query, 
+            { 
+              $or: [
+                { createdBy: userIdString }, 
+                { createdBy: userId }, 
+                { userId: userIdString }, 
+                { userId: userId }
+              ]
+            }
+          ]
+        };
+      } else {
+        query = {
+          $or: [
+            { createdBy: userIdString }, 
+            { createdBy: userId }, 
+            { userId: userIdString }, 
+            { userId: userId }
+          ]
+        };
+      }
     }
 
     if (activeSettings) {
@@ -618,5 +709,111 @@ exports.getGrandTotalCOS = async (req, res) => {
     return res
       .status(500)
       .json({ message: "Server error", error });
+  }
+};
+
+// Get COS Personnel by Parameters (for proposal workflow)
+exports.getCOSByParams = async (req, res) => {
+  try {
+    const { proposalId, region } = req.query;
+    const query = {};
+
+    // If proposalId is provided, use it to find related COS personnel
+    if (proposalId) {
+      query.proposalId = proposalId;
+    }
+
+    // Apply region filter if provided
+    if (region) {
+      query.region = region;
+    }
+
+    // Apply hierarchical filters from middleware
+    if (req.hierarchicalFilters && Object.keys(req.hierarchicalFilters).length > 0) {
+      Object.assign(query, req.hierarchicalFilters);
+    }
+
+    // Get active settings for fiscal year
+    const Settings = require('../models/Settings');
+    const activeSettings = await Settings.findOne({ isActive: true });
+    if (activeSettings) {
+      query.fiscalYear = activeSettings.fiscalYear;
+    }
+
+    // Fetch COS personnel
+    const COSPersonnel = require('../models/COSPersonnel');
+    let cosList = await COSPersonnel.find(query).lean();
+
+    // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's CURRENT organizational assignment
+    const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
+    const userIdString = userId ? String(userId) : undefined;
+    const userRoles = req.user?.Roles || [];
+
+    const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
+    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+
+    // SUPER_ADMIN must filter by the region parameter passed from frontend
+    // BUDGET_MANAGER sees ALL records (no filtering)
+    // Other users are filtered by their organizational assignment
+    if (isSuperAdmin && region) {
+      // SUPER_ADMIN: Filter by the region parameter AND by createdBy (self-created records only)
+      const userIdString = userId ? String(userId) : undefined;
+      const filteredCosList = cosList.filter(cos => {
+        const cosRegionMatch = cos.region === region;
+        const createdByMatch = userIdString && (
+          String(cos.createdBy || cos.userId || '') === userIdString ||
+          String(cos.userId || '') === userIdString
+        );
+        return cosRegionMatch && createdByMatch;
+      });
+      if (filteredCosList.length > 0) {
+        cosList = filteredCosList;
+      }
+    } else if (!isSuperAdmin && !isBudgetManager && userIdString) {
+      try {
+        const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+        const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
+          .populate('departmentId', 'Department DepartmentName department')
+          .populate('regionId', 'Region RegionName region')
+          .lean();
+
+        if (userAssignment) {
+          const assignedDepartment = userAssignment.departmentId?.Department ||
+            userAssignment.departmentId?.DepartmentName ||
+            userAssignment.departmentId?.department;
+          const assignedRegion = userAssignment.regionId?.Region ||
+            userAssignment.regionId?.RegionName ||
+            userAssignment.regionId?.region;
+          const assignedDivision = userAssignment.divisionName;
+
+          const filteredCosList = cosList.filter(cos => {
+            if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
+              return cos.division === assignedDivision;
+            }
+            if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
+              return (cos.department || cos.Department) === assignedDepartment;
+            }
+            if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
+              return cos.region === assignedRegion;
+            }
+            if (userAssignment.assignmentLevel === 'FULL') {
+              return true;
+            }
+            return false;
+          });
+
+          if (filteredCosList.length > 0 || userAssignment.assignmentLevel !== 'FULL') {
+            cosList = filteredCosList;
+          }
+        }
+      } catch (err) {
+        console.error('[ORG_FILTER] Error in getCOSByParams:', err.message);
+      }
+    }
+
+    res.status(200).json(cosList);
+  } catch (error) {
+    console.error("Error fetching COS personnel by params:", error);
+    res.status(500).json({ message: "Failed to fetch COS data" });
   }
 };

@@ -83,6 +83,7 @@ exports.createIncome = async (req, res) => {
   workflowLevel: workflowData.workflowLevel || workflowData.originalLevel || 'DIVISION',
       processBy: processBy || req.user?.userName || req.user?.id,
       processDate: processDate || new Date(),
+      createdBy: req.user?.id ? String(req.user.id) : undefined, // Track who created this record
       status: workflowData.status || "Draft", // Use new workflow status
       proposalId: legacyProposalId ? legacyProposalId : undefined, // Link to legacy Proposal for aggregation
       workflowRef: finalWorkflowId ? new mongoose.Types.ObjectId(finalWorkflowId) : undefined // Link back to workflow
@@ -457,7 +458,19 @@ exports.getIncomeByParams = async (req, res) => {
     const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
     const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
     
-    if (!isSuperAdmin && !isBudgetManager && userIdString) {
+    // SUPER_ADMIN: Filter by createdBy (self-created records only)
+    if (isSuperAdmin && userIdString) {
+      const filteredIncome = income.filter(inc => {
+        const createdByMatch = (
+          String(inc.createdBy || inc.userId || '') === userIdString ||
+          String(inc.userId || '') === userIdString
+        );
+        return createdByMatch;
+      });
+      if (filteredIncome.length > 0) {
+        income = filteredIncome;
+      }
+    } else if (!isSuperAdmin && !isBudgetManager && userIdString) {
       try {
         const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
         const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })

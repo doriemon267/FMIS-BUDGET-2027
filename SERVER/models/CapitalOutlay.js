@@ -118,7 +118,10 @@ const CapitalOutlaySchema = new mongoose.Schema(
     finalApprovedBy: { type: String },
     submissionNote: { type: String },
     approvalNote: { type: String },
-    finalNote: { type: String }
+    finalNote: { type: String },
+    createdBy: {
+      type: String
+    }
   },
   { timestamps: true }
 );

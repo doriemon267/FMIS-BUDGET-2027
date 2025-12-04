@@ -108,7 +108,19 @@ capitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl
     const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
     const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
     
-    if (!isSuperAdmin && !isBudgetManager && userIdString) {
+    // SUPER_ADMIN: Filter by createdBy (self-created records only)
+    if (isSuperAdmin && userIdString) {
+      const filteredOutlay = capitalOutlay.filter(co => {
+        const createdByMatch = (
+          String(co.createdBy || co.userId || '') === userIdString ||
+          String(co.userId || '') === userIdString
+        );
+        return createdByMatch;
+      });
+      if (filteredOutlay.length > 0) {
+        capitalOutlay = filteredOutlay;
+      }
+    } else if (!isSuperAdmin && !isBudgetManager && userIdString) {
       try {
         const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
         const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })

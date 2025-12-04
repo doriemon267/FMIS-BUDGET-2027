@@ -29,9 +29,19 @@ exports.getMOOEData = async (req, res) => {
         const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
         const assignment = await HierarchicalUserAssignment.getUserPermissions(req.user.id);
         
-        // SUPER ADMIN can see all data without filtering
+        // SUPER ADMIN can see their own records only (filtered by userId)
         if (userRoles.includes('SUPER ADMIN')) {
-          // No additional filtering needed - keep base filter only
+          // SUPER ADMIN sees only their own MOOE records
+          const userId = String(req.user.id);
+          filter = {
+            ...filter,
+            $or: [
+              { createdBy: userId },
+              { createdBy: req.user.id },
+              { userId: userId },
+              { userId: req.user.id }
+            ]
+          };
         } else if (assignment && assignment.assignmentLevel === 'DEPARTMENT') {
           // Get department name from assignment
           const userDept = assignment.departments?.[0]?.departmentName;
@@ -1100,6 +1110,11 @@ exports.bulkSaveMOOE = async (req, res) => {
         updateObj.budgetType = meta?.budgetType || item.budgetType;
         updateObj.region = ownerRegion || meta?.region || item.region;
         
+        // Add createdBy field to track who created this MOOE record
+        if (!item.createdBy && req.user?.id) {
+          updateObj.createdBy = String(req.user.id);
+        }
+        
         // Validate required fields for bulkWrite filter
         if (!updateObj.fiscalYear) {
           console.warn('⚠️  Missing fiscalYear for item:', item.uacsCode);
@@ -1483,7 +1498,13 @@ exports.getMooeList = async (req, res) => {
     const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
     const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
     
-    if (!isSuperAdmin && !isBudgetManager && userIdString) {
+    // SUPER_ADMIN sees only their own records, not all records
+    if (isSuperAdmin && userIdString) {
+      mooeProposals = mooeProposals.filter(p => {
+        const createdBy = String(p.createdBy || p.userId || '');
+        return createdBy === userIdString;
+      });
+    } else if (!isBudgetManager && userIdString) {
       try {
         const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
         const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
@@ -1608,7 +1629,13 @@ exports.getMOOEByParams = async (req, res) => {
     const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
     const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
     
-    if (!isSuperAdmin && !isBudgetManager && userIdString) {
+    // SUPER_ADMIN sees only their own records
+    if (isSuperAdmin && userIdString) {
+      mooe = mooe.filter(m => {
+        const createdBy = String(m.createdBy || m.userId || '');
+        return createdBy === userIdString;
+      });
+    } else if (!isBudgetManager && userIdString) {
       try {
         const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
         const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })

@@ -144,13 +144,22 @@ const NewProposalWorkflowPage = () => {
   // State management - default to "All Proposals" (index 0)
   const [activeTab, setActiveTab] = useState(0);
 
-  // Build tabs dynamically (include Monitoring for Budget Manager)
+  // Build tabs dynamically (include Monitoring for Budget Manager and SUPER_ADMIN)
   const isBudgetManager = (currentUser?.Roles || []).some((r) => {
     const norm = String(r || '').toUpperCase().replace(/[^A-Z]/g, '');
     // matches BUDGETMANAGER, BUDGET_MANAGER, BUDGET MANAGER
     return norm === 'BUDGETMANAGER';
   });
-  const tabs = isBudgetManager
+
+  // Check if user is SUPER_ADMIN
+  const isSuperAdmin = (currentUser?.Roles || []).some((role) =>
+    [
+      "SUPER_ADMIN",
+      "SUPER ADMIN",
+    ].includes(role)
+  );
+
+  const tabs = (isBudgetManager || isSuperAdmin)
     ? [...BASE_TABS, { label: "Monitoring", value: "monitoring" }]
     : BASE_TABS;
 
@@ -484,14 +493,25 @@ const NewProposalWorkflowPage = () => {
     setProposalEditDirty(false);
 
     try {
+      // Resolve region name for Personnel Services filtering
+      const regionName = activeRegion && typeof activeRegion === 'object'
+        ? (activeRegion.regionName || activeRegion.Region || activeRegion.name)
+        : activeRegion;
+
       const queryParams = {
         proposalId: proposal._id,
         _t: Date.now(), // Cache buster - force fresh data
       };
 
+      // Add region to personnel query for SUPER_ADMIN filtering
+      const personnelParams = {
+        ...queryParams,
+        ...(regionName && { region: regionName }),
+      };
+
       const [incomeRes, personnelRes, mooeRes, capitalRes] = await Promise.all([
         api.get("/income/getByParams", { params: queryParams }),
-        api.get("/api/personnel/getByParams", { params: queryParams }),
+        api.get("/api/personnel/getByParams", { params: personnelParams }),
         api.get("/mooe/getByParams", { params: queryParams }),
         api.get("/capital-outlay/getByParams", { params: queryParams }),
       ]);
@@ -933,6 +953,40 @@ const NewProposalWorkflowPage = () => {
       toast.success(`Changes saved successfully`);
       setChangedItems(new Set());
 
+      // Calculate the projected subsidy from saved items
+      let calculatedSubsidy = 0;
+      
+      // Sum MOOE subsidies
+      if (changedByCategory.mooe) {
+        calculatedSubsidy += changedByCategory.mooe.reduce((sum, item) => sum + (item.subsidy || 0), 0);
+      } else if (proposalDetails?.mooe) {
+        calculatedSubsidy += proposalDetails.mooe.reduce((sum, item) => sum + (item.subsidy || 0), 0);
+      }
+      
+      // Sum Personnel Services
+      if (changedByCategory.personnel) {
+        calculatedSubsidy += changedByCategory.personnel.reduce((sum, item) => sum + (item.amount || 0), 0);
+      } else if (proposalDetails?.personnel) {
+        calculatedSubsidy += proposalDetails.personnel.reduce((sum, item) => sum + (item.amount || 0), 0);
+      }
+      
+      // Sum Capital Outlay
+      if (changedByCategory.capitalOutlay) {
+        calculatedSubsidy += changedByCategory.capitalOutlay.reduce((sum, item) => sum + (item.amount || 0), 0);
+      } else if (proposalDetails?.capitalOutlay) {
+        calculatedSubsidy += proposalDetails.capitalOutlay.reduce((sum, item) => sum + (item.amount || 0), 0);
+      }
+
+      // Update the proposal with the calculated subsidy
+      try {
+        await api.put(
+          `/api/allproposal/proposals/${selectedProposal._id}`,
+          { projectedSubsidy: calculatedSubsidy }
+        );
+      } catch (error) {
+        console.warn("Failed to update projected subsidy:", error);
+      }
+
       await fetchProposals({ forceAllRegions: showAllRegions });
       
       queryClient.invalidateQueries({ queryKey: ["workflowNotifications"] });
@@ -948,14 +1002,26 @@ const NewProposalWorkflowPage = () => {
         setDetailsLoading(true);
         setDetailsTab("income");
         try {
+          // Resolve region name for Personnel Services filtering
+          const regionName = activeRegion && typeof activeRegion === 'object'
+            ? (activeRegion.regionName || activeRegion.Region || activeRegion.name)
+            : activeRegion;
+
           const queryParams = {
             proposalId: updatedProposal._id,
             _t: Date.now(),
           };
+
+          // Add region to personnel query for SUPER_ADMIN filtering
+          const personnelParams = {
+            ...queryParams,
+            ...(regionName && { region: regionName }),
+          };
+
           const [incomeRes, personnelRes, mooeRes, capitalRes] =
             await Promise.all([
               api.get("/income/getByParams", { params: queryParams }),
-              api.get("/api/personnel/getByParams", { params: queryParams }),
+              api.get("/api/personnel/getByParams", { params: personnelParams }),
               api.get("/mooe/getByParams", { params: queryParams }),
               api.get("/capital-outlay/getByParams", { params: queryParams }),
             ]);
@@ -1066,7 +1132,166 @@ const NewProposalWorkflowPage = () => {
       color: "#d97706",
     });
 
+    // Check for SUPER_ADMIN
+    const isSuperAdmin = userRoles.some((r) => 
+      ["SUPER_ADMIN", "SUPER ADMIN"].includes(r)
+    );
+
+    // SUPER_ADMIN: Can perform ANY action at ANY step (full workflow control)
+    if (isSuperAdmin) {
+      const draftStatusVariants = [
+        "DRAFT",
+        "Draft",
+        "draft",
+        "Returned to Preparer",
+        "RETURNED_TO_PREPARER",
+        "Returned",
+      ];
+
+      // Super admin can create/submit if in draft
+      if (draftStatusVariants.includes(currentStatus)) {
+        actions.push({
+          label: "Submit to Budget Reviewer",
+          value: "submit-to-reviewer",
+          icon: <SendIcon />,
+          color: "primary",
+        });
+      }
+
+      // Super admin can review
+      if (
+        [
+          "Forwarded to Reviewer",
+          "Returned to Reviewer",
+          "FORWARDED_TO_REVIEWER",
+          "RETURNED_TO_REVIEWER",
+        ].includes(currentStatus)
+      ) {
+        actions.push(
+          {
+            label: "Approve & Forward to Budget Approver",
+            value: "reviewer-approve-forward-approver",
+            icon: <SendIcon />,
+            color: "primary",
+          },
+          {
+            label: "Return to Budget Preparer",
+            value: "reviewer-return",
+            icon: <RejectIcon />,
+            color: "warning",
+          }
+        );
+      }
+
+      // Super admin can approve
+      if (
+        [
+          "Forwarded to Approver",
+          "Returned to Approver",
+          "FORWARDED_TO_APPROVER",
+          "RETURNED_TO_APPROVER",
+        ].includes(currentStatus)
+      ) {
+        actions.push(
+          {
+            label: "Approve & Forward to Budget Planning Analyst",
+            value: "approver-approve-forward-analyst",
+            icon: <SendIcon />,
+            color: "primary",
+          },
+          {
+            label: "Return to Budget Reviewer",
+            value: "approver-return",
+            icon: <RejectIcon />,
+            color: "warning",
+          }
+        );
+      }
+
+      // Super admin can do analyst actions
+      if (
+        [
+          "Forwarded to Budget Planning Analyst",
+          "Returned to Budget Planning Analyst",
+          "Returned",
+          "FORWARDED_TO_BRD_ANALYST",
+          "RETURNED_TO_PLANNING_ANALYST",
+        ].includes(currentStatus)
+      ) {
+        actions.push(
+          {
+            label: "Submit to Budget Officer",
+            value: "analyst-submit-to-officer",
+            icon: <SendIcon />,
+            color: "primary",
+          },
+          {
+            label: "Return to Budget Approver",
+            value: "analyst-return",
+            icon: <RejectIcon />,
+            color: "warning",
+          }
+        );
+      }
+
+      // Super admin can do officer actions
+      if (
+        [
+          "Forwarded to Budget Officer",
+          "Returned to Budget Officer",
+          "Returned",
+          "FORWARDED_TO_BRD_OFFICER",
+          "RETURNED_TO_OFFICER",
+        ].includes(currentStatus)
+      ) {
+        actions.push(
+          {
+            label: "Submit to Budget Manager",
+            value: "officer-submit-to-manager",
+            icon: <SendIcon />,
+            color: "primary",
+          },
+          {
+            label: "Return to Budget Planning Analyst",
+            value: "officer-return",
+            icon: <RejectIcon />,
+            color: "warning",
+          }
+        );
+      }
+
+      // Super admin can finalize
+      if (
+        [
+          "Forwarded to Overall Budget Approver",
+          "Forwarded to Manager",
+          "FORWARDED_TO_BRD_MANAGER",
+          "FORWARDED_TO_MANAGER",
+        ].includes(currentStatus) ||
+        (currentStatus === "Returned" && proposal?.currentAssigneeRole === "BUDGET_MANAGER") ||
+        (currentStatus === "RETURNED" && proposal?.currentAssigneeRole === "BUDGET_MANAGER")
+      ) {
+        actions.push(
+          {
+            label: "Finalize Proposal",
+            value: "manager-approve",
+            icon: <ApproveIcon />,
+            color: "success",
+          },
+          {
+            label: "Return to Budget Officer",
+            value: "manager-return",
+            icon: <RejectIcon />,
+            color: "warning",
+          }
+        );
+      }
+
+      return actions;
+    }
+
     // BUDGET PREPARER actions
+    // Note: BUDGET PREPARER can submit ANY Draft proposal, not just their own
     const userName =
       currentUser?.name ||
       `${currentUser?.FirstName || ""} ${currentUser?.LastName || ""}`.trim();
@@ -1075,19 +1300,10 @@ const NewProposalWorkflowPage = () => {
     const proposalCreatedById = proposal?.createdBy;
     const proposalProcessById = proposal?.processBy;
 
-    // Check if user owns the proposal by:
-    // 1. Name match on processBy
-    // 2. ID match on createdBy 
-    // 3. ID match on processBy (since processBy can store user ID)
-    const isProposalOwner = 
-      proposal.processBy === userName || 
-      (currentUserId && proposalCreatedById && String(currentUserId) === String(proposalCreatedById)) ||
-      (currentUserId && proposalProcessById && String(currentUserId) === String(proposalProcessById));
-
+    // For BUDGET PREPARER, allow submission of ANY Draft proposal (no ownership check)
     if (
       (userRoles.includes("BUDGET PREPARER") ||
-        userRoles.includes("BUDGET_PREPARER")) &&
-      isProposalOwner
+        userRoles.includes("BUDGET_PREPARER"))
     ) {
       const draftStatusVariants = [
         "DRAFT",
@@ -1097,10 +1313,22 @@ const NewProposalWorkflowPage = () => {
         "RETURNED_TO_PREPARER",
         "Returned",
       ];
+      
+      console.log('✅ User is BUDGET PREPARER. Status check:', {
+        currentStatus,
+        isDraft: draftStatusVariants.includes(currentStatus),
+        variants: draftStatusVariants
+      });
+      
       if (draftStatusVariants.includes(currentStatus)) {
         // If the current user is a PREPARER assigned at OFFICE level, show Submit to Approver label
         const assignmentLevel = currentUser?.hierarchicalAccess?.assignmentLevel || currentUser?.assignmentLevel;
         const isOfficePreparer = assignmentLevel && String(assignmentLevel).toUpperCase() === 'OFFICE';
+        console.log('📤 Adding Submit action:', {
+          label: isOfficePreparer ? "Submit to Approver" : "Submit to Budget Reviewer",
+          assignmentLevel,
+          isOfficePreparer
+        });
         actions.push({
           label: isOfficePreparer ? "Submit to Approver" : "Submit to Budget Reviewer",
           value: isOfficePreparer ? "submit-to-approver" : "submit-to-reviewer",
@@ -1464,6 +1692,9 @@ const NewProposalWorkflowPage = () => {
           >
             {tabs
               .filter((tab) => {
+                // SUPER_ADMIN sees all tabs
+                if (isSuperAdmin) return true;
+                // BRD Users don't see "my-proposals" tab
                 if (tab.value === "my-proposals" && isBRDUser) return false;
                 return true;
               })
@@ -2703,12 +2934,15 @@ const NewProposalWorkflowPage = () => {
                   </Box>
                 )}
 
-                {/* Inline Proposal Details Edit (Budget Preparer owner while Draft) */}
+                {/* Inline Proposal Details Edit (Budget Preparer or Super Admin in Draft) */}
                 {(() => {
                   if (!selectedProposal) return null;
                   const userRoles = currentUser?.Roles || [];
                   const isPreparer = userRoles.some((r) =>
                     ["BUDGET PREPARER", "BUDGET_PREPARER"].includes(r)
+                  );
+                  const isSuperAdmin = userRoles.some((r) =>
+                    ["SUPER_ADMIN", "SUPER ADMIN"].includes(r)
                   );
                   const draftStatuses = [
                     "DRAFT",
@@ -2716,25 +2950,10 @@ const NewProposalWorkflowPage = () => {
                     "Returned to Preparer",
                     "RETURNED_TO_PREPARER",
                   ];
-                  const userName =
-                    currentUser?.name ||
-                    `${currentUser?.FirstName || ""} ${
-                      currentUser?.LastName || ""
-                    }`.trim();
-                  const isOwnerByName =
-                    selectedProposal?.processBy &&
-                    userName &&
-                    selectedProposal.processBy === userName;
-                  const isOwnerById =
-                    selectedProposal?.createdBy &&
-                    (currentUser?.id || currentUser?._id)
-                      ? String(selectedProposal.createdBy) ===
-                        String(currentUser.id || currentUser?._id)
-                      : false;
+                  // Budget Preparers or Super Admin can edit ANY Draft proposal (no ownership check needed)
                   const canEditMeta =
-                    isPreparer &&
-                    draftStatuses.includes(selectedProposal.status) &&
-                    (isOwnerByName || isOwnerById);
+                    (isPreparer || isSuperAdmin) &&
+                    draftStatuses.includes(selectedProposal.status);
                   if (!canEditMeta) return null;
                   return (
                     <Box sx={{ mt: 4, pt: 3, borderTop: "2px dashed #d0d0d0" }}>
