@@ -26,14 +26,15 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
   }
 
   // ✅ Check role permissions using centralized permission logic
-  console.log('🔍 ProtectedRoute Debug:', {
-    requiredPermissions,
-    requiredWorkflowRoles,
-    userRoles: currentUser.Roles,
-    hierarchicalAccess: hierarchicalAccess,
-    allFields: hierarchicalAccess ? Object.keys(hierarchicalAccess) : 'NO HIERARCHICAL ACCESS',
-    hasStaffRole: hasStaffRole
-  });
+  // DEBUG: Disabled verbose logging - uncomment for troubleshooting
+  // console.log('🔍 ProtectedRoute Debug:', {
+  //   requiredPermissions,
+  //   requiredWorkflowRoles,
+  //   userRoles: currentUser.Roles,
+  //   hierarchicalAccess: hierarchicalAccess,
+  //   allFields: hierarchicalAccess ? Object.keys(hierarchicalAccess) : 'NO HIERARCHICAL ACCESS',
+  //   hasStaffRole: hasStaffRole
+  // });
 
   // Use the hasPermission function from permissions.js for consistency
   const hasRequiredPermissions = requiredPermissions.length === 0 ||
@@ -121,7 +122,7 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
     effectiveWorkflowRoles,
     hasRequiredWorkflowRoles,
     missingRoles: requiredWorkflowRoles.filter(role => !effectiveWorkflowRoles.includes(role)),
-    isFullAccess: hierarchicalAccess.scope === 'FULL'
+    isFullAccess: hierarchicalAccess?.scope === 'FULL'
   });
 
   // User must have both required permissions AND required workflow roles, and no excluded roles

@@ -1006,11 +1006,19 @@ const NewProposalWorkflowPage = () => {
     const userName =
       currentUser?.name ||
       `${currentUser?.FirstName || ""} ${currentUser?.LastName || ""}`.trim();
+    
+    const currentUserId = currentUser?.id || currentUser?._id || currentUser?.UserId || currentUser?.Id;
+    const proposalCreatedById = proposal?.createdBy;
+
+    // Check if user owns the proposal (by name OR by createdBy ID)
+    const isProposalOwner = 
+      proposal.processBy === userName || 
+      (currentUserId && proposalCreatedById && String(currentUserId) === String(proposalCreatedById));
 
     if (
       (userRoles.includes("BUDGET PREPARER") ||
         userRoles.includes("BUDGET_PREPARER")) &&
-      proposal.processBy === userName
+      isProposalOwner
     ) {
       const draftStatusVariants = [
         "DRAFT",
