@@ -701,13 +701,14 @@ const NewProposalWorkflowPage = () => {
       }, 0);
     }
     
-    // Add Personnel Services (Total field) for same division
+    // Add Personnel Services SUBSIDY (NOT Total) for same division, EXCLUDING charged-to-income
     if (proposalDetails?.personnel && proposalDetails.personnel.length > 0) {
       const sameDivision = proposalDetails.personnel.filter(p => 
-        p.division === selectedProposal?.division
+        p.division === selectedProposal?.division && !p.chargedToIncomeEligible // CRITICAL: Exclude charged-to-income
       );
       total += sameDivision.reduce((sum, item) => {
-        return sum + (item.Total || 0);
+        // Use subsidyAmount field, NOT Total field
+        return sum + (item.subsidyAmount || item.subsidy || 0);
       }, 0);
     }
     
