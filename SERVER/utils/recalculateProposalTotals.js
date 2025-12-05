@@ -154,6 +154,10 @@ async function computeModuleTotals(filterKeys, proposalId) {
       proposalId: new mongoose.Types.ObjectId(proposalId),
       chargedToIncomeEligible: { $ne: true }  // Exclude charged-to-income
     };
+    // DEBUG: Count all PS records and those marked as charged-to-income
+    const allPsCount = await PersonnelServices.countDocuments({ proposalId: new mongoose.Types.ObjectId(proposalId) });
+    const chargedPsCount = await PersonnelServices.countDocuments({ proposalId: new mongoose.Types.ObjectId(proposalId), chargedToIncomeEligible: true });
+    console.log('[recalculate] DEBUG PS Records for proposalId ' + proposalId + ':', { allPsCount, chargedPsCount, toExclude: allPsCount - chargedPsCount });
     psSubsidyTotal = await aggregateSum(PersonnelServices, byProposal, { $sum: { $toDouble: { $ifNull: ["$subsidyAmount", 0] } } });
   } else {
     const psMatch = { ...orgMatch, chargedToIncomeEligible: { $ne: true } };
@@ -244,17 +248,21 @@ async function persistProposalTotals(proposal) {
   const proposedBudget = expenseSum + (adjustedIncomeTotal || 0);
 
   console.log('[recalculate] DEBUG Subsidy calculation:', {
-    psSubsidyTotal,
-    mooeSubsidyTotal,
-    coSubsidyTotal,
-    chargedToIncomeSubsidyTotal,
-    adjustedSubsidyTotal,
-    projectedSubsidy
+    psSubsidyTotal: parseFloat(psSubsidyTotal).toFixed(2),
+    mooeSubsidyTotal: parseFloat(mooeSubsidyTotal).toFixed(2),
+    coSubsidyTotal: parseFloat(coSubsidyTotal).toFixed(2),
+    chargedToIncomeSubsidyTotal: parseFloat(chargedToIncomeSubsidyTotal).toFixed(2),
+    adjustedSubsidyTotal: parseFloat(adjustedSubsidyTotal).toFixed(2),
+    projectedSubsidy: parseFloat(projectedSubsidy).toFixed(2)
   });
-
-  const expenseSum = (adjustedPsTotal || 0) + (mooeAmountTotal || 0) + (coAmountTotal || 0);
-  const projectedSubsidy = Math.max(0, adjustedSubsidyTotal); // Ensure it doesn't go negative
-  const proposedBudget = expenseSum + (adjustedIncomeTotal || 0);
+  
+  // DETAILED BREAKDOWN
+  console.log('[recalculate] Subsidy breakdown - Individual personnel records:');
+  const allRecords = await PersonnelServices.find({ proposalId: proposal._id }).select('name subsidyAmount chargedToIncomeEligible chargedToIncomeSubsidyAmount').lean();
+  console.log('[recalculate] Total records:', allRecords.length);
+  for (const rec of allRecords) {
+    console.log(`  - ${rec.name}: subsidyAmount=${rec.subsidyAmount}, chargedToIncomeEligible=${rec.chargedToIncomeEligible}, chargedToIncomeSubsidyAmount=${rec.chargedToIncomeSubsidyAmount}`);
+  }
 
   proposal.totalIncome = adjustedIncomeTotal;
   proposal.totalExpenses = expenseSum;
