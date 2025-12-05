@@ -1,7 +1,3 @@
-/**
- * Sequelize model for MSSQL SalaryTable
- * Columns mapped from provided sample SELECT statement
- */
 const { sequelize, DataTypes, enableMssql } = require('../index');
 
 if (!enableMssql) {
