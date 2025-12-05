@@ -419,8 +419,9 @@ const PSCasualCustomPageTable = ({
       setSelectedRows([]);
       setChargedToIncomeDialog({ open: false, mode: "tag", amount: "", notes: "" });
       await fetchData();
-      // Invalidate proposal queries so budget totals update
+      // Invalidate and refetch proposal queries so budget totals update immediately
       await queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      await queryClient.refetchQueries({ queryKey: ["proposals"] });
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to update charged to income");
     } finally {

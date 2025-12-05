@@ -313,6 +313,19 @@ const NewProposalWorkflowPage = () => {
     fetchProposals({ forceAllRegions: showAllRegions });
   }, [fetchProposals, showAllRegions]);
 
+  // Listen for query cache invalidation and auto-refetch proposals
+  // This ensures that when personnel are marked as charged-to-income, the proposal totals update
+  useEffect(() => {
+    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+      if (event.type === 'added' && event.query.queryKey?.[0] === 'proposals') {
+        // Query was re-added after invalidation, which means it's refetching
+        console.debug('[ProposalPage] Detected proposals query invalidation, auto-refetching');
+        fetchProposals({ forceAllRegions: showAllRegions });
+      }
+    });
+    return unsubscribe;
+  }, [queryClient, fetchProposals, showAllRegions]);
+
   // Auto-select proposal from deep link (notification)
   useEffect(() => {
     if (targetProposalId && proposals.length > 0) {
