@@ -179,12 +179,21 @@ async function computeModuleTotals(filterKeys, proposalId) {
     console.log('[recalculate] DEBUG PS Records for proposalId ' + proposalId + ':', { allPsCount, chargedPsCount, notChargedPsCount, expectedToSum: notChargedPsCount });
     
     // Also list which ones have subsidies
-    const recordsWithSubsidy = await PersonnelServices.find(byProposal).select('name subsidyAmount chargedToIncomeEligible chargedToIncomeAmount').lean();
+    const recordsWithSubsidy = await PersonnelServices.find(byProposal).select('name subsidyAmount chargedToIncomeEligible chargedToIncomeAmount chargedToIncomeSubsidyAmount').lean();
     const subsidySum = recordsWithSubsidy.reduce((sum, r) => sum + (r.subsidyAmount || 0), 0);
-    console.log('[recalculate] DEBUG PS Subsidy records:', { 
+    console.log('[recalculate] DEBUG PS Subsidy records (NOT charged-to-income):', { 
       count: recordsWithSubsidy.length, 
       manualSum: subsidySum,
       records: recordsWithSubsidy.map(r => ({ name: r.name, subsidyAmount: r.subsidyAmount, chargedToIncomeAmount: r.chargedToIncomeAmount }))
+    });
+    
+    // ALSO list the CHARGED-TO-INCOME records to see their subsidies
+    const chargedRecords = await PersonnelServices.find({ proposalId: new mongoose.Types.ObjectId(proposalId), chargedToIncomeEligible: true }).select('name subsidyAmount chargedToIncomeEligible chargedToIncomeSubsidyAmount').lean();
+    const chargedSubsidySum = chargedRecords.reduce((sum, r) => sum + (r.chargedToIncomeSubsidyAmount || 0), 0);
+    console.log('[recalculate] DEBUG PS Charged-to-Income records:', { 
+      count: chargedRecords.length,
+      chargedSubsidySum: chargedSubsidySum,
+      records: chargedRecords.map(r => ({ name: r.name, subsidyAmount: r.subsidyAmount, chargedToIncomeSubsidyAmount: r.chargedToIncomeSubsidyAmount }))
     });
     
     psSubsidyTotal = await aggregateSum(PersonnelServices, byProposal, { $sum: { $toDouble: { $ifNull: ["$subsidyAmount", 0] } } });
