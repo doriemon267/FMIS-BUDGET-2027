@@ -1002,7 +1002,16 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
     }
 
     // Check if activeRegion is available
-    if (!activeRegion?.id) {
+    // For SUPER_ADMIN: region might be passed as prop without activeRegion selected in context
+    // Handle activeRegion as string (legacy) or object with id/name properties
+    const hasValidRegion = activeRegion && (
+      activeRegion?.id || 
+      activeRegion?.name || 
+      activeRegion?.regionName ||
+      typeof activeRegion === 'string'  // Support legacy string regions
+    );
+    
+    if (!hasValidRegion) {
       console.error("activeRegion is not available");
       if (!isAutoSave) {
         toast.error("Region information not available. Please select a region and try again.");
@@ -1123,12 +1132,17 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
       return { ...e, income, subsidy, amount: (parseFloat(income || 0) + parseFloat(subsidy || 0)) };
     });
 
+    // Extract region name safely, supporting multiple formats
+    const regionName = typeof activeRegion === 'string' 
+      ? activeRegion 
+      : (activeRegion?.name || activeRegion?.regionName || activeRegion?.Region || 'CENTRAL OFFICE');
+
     const payload = {
       proposalId: effectiveProposalId,  // ADDED: Use prop first, then hook
       meta: {
         processBy: `${currentUser.FirstName} ${currentUser.LastName}`,
         processDate: new Date(),
-        region: activeRegion?.name || activeRegion.regionName,
+        region: regionName,
         department: currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName || undefined,
         division: currentUser?.hierarchicalAccess?.accessibleDivisions?.[0] || undefined,
         fiscalYear: data?.fiscalYear,

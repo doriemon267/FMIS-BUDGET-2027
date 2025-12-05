@@ -30,7 +30,8 @@ exports.getMOOEData = async (req, res) => {
         const assignment = await HierarchicalUserAssignment.getUserPermissions(req.user.id);
         
         // SUPER ADMIN can see their own records only (filtered by userId)
-        if (userRoles.includes('SUPER ADMIN')) {
+        const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
+        if (isSuperAdmin) {
           // SUPER ADMIN sees only their own MOOE records
           const userId = String(req.user.id);
           filter = {
