@@ -55,7 +55,7 @@ const toNumber = (value) => {
   return 0;
 };
 
-const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, groupedItems = {}, onChargedToIncomeChange = null, onNonChargedPersonnelServicesChange = null, onBudgetDeficitChange = null }) => {
+const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrandTotal = 0, groupedItems = {}, onChargedToIncomeChange = null, onNonChargedPersonnelServicesChange = null, onBudgetDeficitChange = null }) => {
   const [amount, setAmount] = useState(0);
   const [exportMenuAnchor, setExportMenuAnchor] = useState(null);
   const [compactView, setCompactView] = useState(false);
@@ -509,7 +509,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
 
   // Fetch charged-to-income personnel data for budget breakdown
   const { data: chargedToIncomeData, isLoading: isLoadingChargedToIncome, error: chargedToIncomeError } = useQuery({
-    queryKey: ['personnelServices', 'chargedToIncome', fiscalYear, budgetType],
+    queryKey: ['personnelServices', 'chargedToIncome', proposalId, fiscalYear, budgetType],
     queryFn: async () => {
       if (!hasValidParams) {
         console.warn('⚠️ ChargedToIncome query skipped - hasValidParams is false');
@@ -518,6 +518,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
       
       try {
         const baseParams = {
+          ...(proposalId && { proposalId }), // CRITICAL: Filter by proposalId if available
           fiscalYear: Number(fiscalYear),
           budgetType: budgetType,
           chargedToIncomeEligible: true,

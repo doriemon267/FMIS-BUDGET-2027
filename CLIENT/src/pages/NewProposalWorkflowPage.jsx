@@ -676,14 +676,8 @@ const NewProposalWorkflowPage = () => {
 
   // Helper function to calculate displayed amounts for any proposal in the table
   const getDisplayAmounts = (proposal) => {
-    // For the current selected proposal, use the detailed calculations
-    if (selectedProposal && proposal._id === selectedProposal._id && proposalDetails) {
-      return {
-        projectedSubsidy: calculateProjectedSubsidy(),
-        proposedBudget: calculateTotalBudget()
-      };
-    }
-    // For other proposals, use database values as fallback
+    // CRITICAL: Always use backend-calculated projectedSubsidy and proposedBudget
+    // The backend calculations are authoritative and properly exclude charged-to-income
     return {
       projectedSubsidy: proposal.projectedSubsidy || proposal.totalExpenses || 0,
       proposedBudget: proposal.proposedBudget || proposal.amount || 0

@@ -175,7 +175,18 @@ async function computeModuleTotals(filterKeys, proposalId) {
     // DEBUG: Count all PS records and those marked as charged-to-income
     const allPsCount = await PersonnelServices.countDocuments({ proposalId: new mongoose.Types.ObjectId(proposalId) });
     const chargedPsCount = await PersonnelServices.countDocuments({ proposalId: new mongoose.Types.ObjectId(proposalId), chargedToIncomeEligible: true });
-    console.log('[recalculate] DEBUG PS Records for proposalId ' + proposalId + ':', { allPsCount, chargedPsCount, toExclude: allPsCount - chargedPsCount });
+    const notChargedPsCount = await PersonnelServices.countDocuments({ proposalId: new mongoose.Types.ObjectId(proposalId), chargedToIncomeEligible: { $ne: true } });
+    console.log('[recalculate] DEBUG PS Records for proposalId ' + proposalId + ':', { allPsCount, chargedPsCount, notChargedPsCount, expectedToSum: notChargedPsCount });
+    
+    // Also list which ones have subsidies
+    const recordsWithSubsidy = await PersonnelServices.find(byProposal).select('name subsidyAmount chargedToIncomeEligible chargedToIncomeAmount').lean();
+    const subsidySum = recordsWithSubsidy.reduce((sum, r) => sum + (r.subsidyAmount || 0), 0);
+    console.log('[recalculate] DEBUG PS Subsidy records:', { 
+      count: recordsWithSubsidy.length, 
+      manualSum: subsidySum,
+      records: recordsWithSubsidy.map(r => ({ name: r.name, subsidyAmount: r.subsidyAmount, chargedToIncomeAmount: r.chargedToIncomeAmount }))
+    });
+    
     psSubsidyTotal = await aggregateSum(PersonnelServices, byProposal, { $sum: { $toDouble: { $ifNull: ["$subsidyAmount", 0] } } });
   } else {
     const psMatch = { ...orgMatch, chargedToIncomeEligible: { $ne: true } };
@@ -265,13 +276,15 @@ async function persistProposalTotals(proposal) {
   const projectedSubsidy = Math.max(0, adjustedSubsidyTotal); // Ensure it doesn't go negative
   const proposedBudget = expenseSum + (adjustedIncomeTotal || 0);
 
-  console.log('[recalculate] DEBUG Subsidy calculation:', {
+  console.log('[recalculate] FINAL CALCULATION:', {
+    proposalId: String(proposal._id),
     psSubsidyTotal: parseFloat(psSubsidyTotal).toFixed(2),
     mooeSubsidyTotal: parseFloat(mooeSubsidyTotal).toFixed(2),
     coSubsidyTotal: parseFloat(coSubsidyTotal).toFixed(2),
-    chargedToIncomeSubsidyTotal: parseFloat(chargedToIncomeSubsidyTotal).toFixed(2),
     adjustedSubsidyTotal: parseFloat(adjustedSubsidyTotal).toFixed(2),
-    projectedSubsidy: parseFloat(projectedSubsidy).toFixed(2)
+    projectedSubsidy: parseFloat(projectedSubsidy).toFixed(2),
+    'OLD VALUE': proposal.projectedSubsidy,
+    'NEW VALUE': projectedSubsidy
   });
   
   // DETAILED BREAKDOWN
@@ -290,6 +303,14 @@ async function persistProposalTotals(proposal) {
   proposal.proposedBudget = proposedBudget;
   proposal.updatedAt = new Date();
   await proposal.save({ validateBeforeSave: false });
+  
+  console.log('[recalculate] SAVED TO DATABASE:', {
+    proposalId: String(proposal._id),
+    projectedSubsidy: proposal.projectedSubsidy,
+    proposedBudget: proposal.proposedBudget,
+    totalExpenses: proposal.totalExpenses,
+    totalIncome: proposal.totalIncome
+  });
 
   // Also update the linked NewProposalWorkflow if it exists
   if (proposal.workflowRef || proposal.proposalId) {

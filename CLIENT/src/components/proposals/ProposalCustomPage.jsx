@@ -3451,6 +3451,7 @@ const ProposalCustomPage = ({
                 </Box>
               ) : (
                 <BudgetarySupportTable
+                  proposalId={currentProposalId}
                   fiscalYear={selectedFiscalYear || activeFiscalYear}
                   budgetType={activeBudgetType}
                   incomeGrandTotal={incomeGrandTotal}
