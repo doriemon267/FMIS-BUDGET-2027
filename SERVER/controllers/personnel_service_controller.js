@@ -1950,6 +1950,17 @@ exports.bulkSetPersonnelChargedToIncome = async (req, res) => {
       const normalizedAmount = Number.isFinite(resolvedAmount) && resolvedAmount > 0 ? resolvedAmount : 0;
       const resolvedNotes = payload.chargedToIncomeNotes ?? notes ?? record.chargedToIncomeNotes ?? null;
       
+      console.log("DEBUG: Amount resolution for record:", {
+        id: targetId,
+        payloadAmount: payload.chargedToIncomeAmount,
+        defaultAmount,
+        recordChargedAmount: record.chargedToIncomeAmount,
+        resolvedAmount,
+        normalizedAmount,
+        recordTotal: record.Total,
+        chargedToIncomeEligible
+      });
+      
       // CRITICAL: When marking as charged to income, capture the subsidy amount so it can be deducted from PROJECTED SUBSIDY
       const chargedToIncomeSubsidyAmount = chargedToIncomeEligible ? (record.subsidyAmount || 0) : 0;
 
