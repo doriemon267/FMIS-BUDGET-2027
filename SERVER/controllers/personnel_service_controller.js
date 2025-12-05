@@ -2020,7 +2020,11 @@ exports.bulkSetPersonnelChargedToIncome = async (req, res) => {
         console.log("DEBUG: Budget recalculation completed");
       }
     } catch (recalcError) {
-      console.error("ERROR: Failed to recalculate budget totals:", recalcError);
+      console.error("ERROR: Failed to recalculate budget totals:", {
+        message: recalcError?.message,
+        stack: recalcError?.stack,
+        fullError: recalcError
+      });
       // Don't fail the response, just log the error
     }
 
