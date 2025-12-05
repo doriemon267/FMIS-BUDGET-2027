@@ -232,10 +232,25 @@ async function persistProposalTotals(proposal) {
   // ADJUSTED TOTALS FOR CHARGED-TO-INCOME:
   // 1. Income includes charged-to-income amounts (they move from Personnel to Income)
   // 2. Personnel total excludes charged-to-income amounts (already moved to income)
-  // 3. Subsidy is reduced by the subsidy amounts of charged-to-income personnel
+  // 3. Subsidy calculation: psSubsidyTotal EXCLUDES charged-to-income (filtered in query)
+  //    So the final subsidy should not include their amounts
   const adjustedIncomeTotal = (incomeTotal || 0) + (chargedToIncomeTotal || 0);
   const adjustedPsTotal = (psTotal || 0); // psTotal already excludes chargedToIncome (it's filtered out in query)
-  const adjustedSubsidyTotal = ((psSubsidyTotal || 0) + (mooeSubsidyTotal || 0) + (coSubsidyTotal || 0)) - (chargedToIncomeSubsidyTotal || 0);  // ADDED: Include psSubsidyTotal
+  // NOTE: psSubsidyTotal already excludes charged-to-income personnel, so no deduction needed
+  const adjustedSubsidyTotal = ((psSubsidyTotal || 0) + (mooeSubsidyTotal || 0) + (coSubsidyTotal || 0));
+
+  const expenseSum = (adjustedPsTotal || 0) + (mooeAmountTotal || 0) + (coAmountTotal || 0);
+  const projectedSubsidy = Math.max(0, adjustedSubsidyTotal); // Ensure it doesn't go negative
+  const proposedBudget = expenseSum + (adjustedIncomeTotal || 0);
+
+  console.log('[recalculate] DEBUG Subsidy calculation:', {
+    psSubsidyTotal,
+    mooeSubsidyTotal,
+    coSubsidyTotal,
+    chargedToIncomeSubsidyTotal,
+    adjustedSubsidyTotal,
+    projectedSubsidy
+  });
 
   const expenseSum = (adjustedPsTotal || 0) + (mooeAmountTotal || 0) + (coAmountTotal || 0);
   const projectedSubsidy = Math.max(0, adjustedSubsidyTotal); // Ensure it doesn't go negative
