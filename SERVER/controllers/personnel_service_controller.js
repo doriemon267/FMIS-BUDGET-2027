@@ -1925,7 +1925,12 @@ exports.bulkSetPersonnelChargedToIncome = async (req, res) => {
         continue;
       }
 
-      console.log("DEBUG: Record found, checking access..."); 
+      console.log("DEBUG: Record found:", {
+        _id: record._id,
+        proposalId: record.proposalId,
+        workflowRef: record.workflowRef,
+        name: record.name
+      }); 
 
       if (!recordMatchesFilters(record, hierarchicalFilters)) {
         console.log("DEBUG: Access denied for record:", targetId);
@@ -2002,22 +2007,31 @@ exports.bulkSetPersonnelChargedToIncome = async (req, res) => {
 
     // Recalculate budget totals for all affected proposals
     try {
-      const proposalIds = new Set();
-      for (const item of results.updated) {
-        if (item.proposalId) {
-          proposalIds.add(item.proposalId.toString());
-        }
-        if (item.workflowRef) {
-          proposalIds.add(item.workflowRef.toString());
-        }
-      }
-
-      if (proposalIds.size > 0) {
-        console.log("DEBUG: Recalculating for proposalIds:", Array.from(proposalIds));
-        for (const proposalId of proposalIds) {
-          await recalculateAndSaveProposalTotals({ proposalId });
-        }
-        console.log("DEBUG: Budget recalculation completed");
+      if (results.updated.length === 0) {
+        console.log("DEBUG: No records updated, skipping recalculation");
+      } else {
+        // Extract organization keys from the first updated record
+        const firstRecord = results.updated[0];
+        const keys = {
+          fiscalYear: firstRecord.fiscalYear,
+          budgetType: firstRecord.budgetType,
+          region: firstRecord.region,
+          processBy: firstRecord.processBy,
+          department: firstRecord.department,
+          division: firstRecord.division,
+          originalDepartment: firstRecord.originalDepartment,
+          originalDivision: firstRecord.originalDivision
+        };
+        
+        console.log("DEBUG: Recalculating using org keys:", {
+          fiscalYear: keys.fiscalYear,
+          budgetType: keys.budgetType,
+          region: keys.region,
+          department: keys.department
+        });
+        
+        await recalculateAndSaveProposalTotals({ keys });
+        console.log("DEBUG: Budget recalculation completed successfully");
       }
     } catch (recalcError) {
       console.error("ERROR: Failed to recalculate budget totals:", {
