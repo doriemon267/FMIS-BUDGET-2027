@@ -1946,7 +1946,23 @@ exports.bulkSetPersonnelChargedToIncome = async (req, res) => {
 
       console.log("DEBUG: Updating record, chargedToIncomeEligible:", chargedToIncomeEligible);
 
-      const resolvedAmount = Number(payload.chargedToIncomeAmount ?? payload.amount ?? defaultAmount ?? record.chargedToIncomeAmount ?? 0);
+      // CRITICAL: When chargedToIncomeEligible is true and no amount is provided, default to the full record.Total
+      // This ensures that "Select All" + "Charge to Income" marks 100% of salary, not 0%
+      let resolvedAmount = 0;
+      if (chargedToIncomeEligible) {
+        // When marking as charged-to-income, prefer the provided amount, then fallback to full total
+        const providedAmount = Number(payload.chargedToIncomeAmount ?? defaultAmount ?? null);
+        if (Number.isFinite(providedAmount) && providedAmount > 0) {
+          resolvedAmount = providedAmount;
+        } else {
+          // No amount provided - use the full salary total
+          resolvedAmount = Number(record.Total || record.total || 0);
+        }
+      } else {
+        // When unmarking, use zero
+        resolvedAmount = 0;
+      }
+      
       const normalizedAmount = Number.isFinite(resolvedAmount) && resolvedAmount > 0 ? resolvedAmount : 0;
       const resolvedNotes = payload.chargedToIncomeNotes ?? notes ?? record.chargedToIncomeNotes ?? null;
       
@@ -1954,10 +1970,9 @@ exports.bulkSetPersonnelChargedToIncome = async (req, res) => {
         id: targetId,
         payloadAmount: payload.chargedToIncomeAmount,
         defaultAmount,
-        recordChargedAmount: record.chargedToIncomeAmount,
+        recordTotal: record.Total || record.total,
         resolvedAmount,
         normalizedAmount,
-        recordTotal: record.Total,
         chargedToIncomeEligible
       });
       

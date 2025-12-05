@@ -389,29 +389,48 @@ const CasualCustomTable = ({
 
   const handleSelectAllClick = async (event) => {
     if (!hasRowSelection) return;
+    
+    console.log('[SelectAll-Casual] Checkbox clicked, checked:', event.target.checked);
+    
     if (event.target.checked) {
       try {
+        console.log('[SelectAll-Casual] Fetching all records...');
         const response = await api.get(apiPath, {
           params: {
             statusOfAppointment: "CASUAL",
             limit: 10000,
-            selectFields: "_id",
+            page: 1,
             region: regionFilter || undefined,
           },
         });
 
-        if (response.data && response.data[dataListName]) {
-          const allIds = response.data[dataListName].map((row) => row._id);
-          onRowSelectionChange(Array.from(new Set(allIds)));
-          return;
+        let allIds = [];
+        
+        // Handle different response formats
+        if (response.data && Array.isArray(response.data)) {
+          allIds = response.data.map(row => row._id);
+        } else if (response.data && response.data.personnelServices && Array.isArray(response.data.personnelServices)) {
+          allIds = response.data.personnelServices.map(row => row._id);
+        } else if (response.data && response.data[dataListName] && Array.isArray(response.data[dataListName])) {
+          allIds = response.data[dataListName].map(row => row._id);
+        } else {
+          // Fallback to visible data
+          allIds = tableData.map((row) => row._id);
         }
+        
+        const uniqueIds = Array.from(new Set(allIds));
+        console.log('[SelectAll-Casual] Selected ' + uniqueIds.length + ' total records');
+        onRowSelectionChange(uniqueIds);
+        return;
       } catch (error) {
-        console.error("Error fetching all records for selection:", error);
+        console.error("[SelectAll-Casual] Error fetching all records:", error);
       }
 
       const fallbackIds = tableData.map((row) => row._id);
+      console.log('[SelectAll-Casual] Fallback: selected ' + fallbackIds.length + ' visible records');
       onRowSelectionChange(fallbackIds);
     } else {
+      console.log('[SelectAll-Casual] Deselecting all');
       onRowSelectionChange([]);
     }
   };

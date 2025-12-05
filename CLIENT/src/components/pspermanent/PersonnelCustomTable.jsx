@@ -214,33 +214,62 @@ const PermanentCustomTable = ({
 
   // Row selection handlers - Select ALL records, not just visible ones
   const handleSelectAllClick = async (event) => {
+    console.log('[SelectAll] Checkbox clicked, checked:', event.target.checked);
+    
     if (event.target.checked) {
       try {
-        // Fetch all permanent personnel IDs
+        // Fetch all permanent personnel records (with full data)
+        console.log('[SelectAll] Fetching all records...');
         const response = await api.get(apiPath, {
           params: {
             statusOfAppointment: "PERMANENT",
             limit: 10000, // Get all records
-            selectFields: "_id" // Only get IDs for performance
+            page: 1
           }
         });
 
-        if (response.data && response.data[dataListName]) {
-          const allIds = response.data[dataListName].map(row => row._id);
-          onRowSelectionChange && onRowSelectionChange(allIds);
+        let allRecords = [];
+        
+        // Handle different response formats
+        if (response.data && Array.isArray(response.data)) {
+          allRecords = response.data;
+        } else if (response.data && response.data.personnelServices && Array.isArray(response.data.personnelServices)) {
+          allRecords = response.data.personnelServices;
+        } else if (response.data && response.data[dataListName] && Array.isArray(response.data[dataListName])) {
+          allRecords = response.data[dataListName];
         } else {
-          // Fallback to visible data if API doesn't support selectFields
-          const newSelected = tableData.map((row) => row._id);
-          onRowSelectionChange && onRowSelectionChange(newSelected);
+          // Fallback to visible data
+          allRecords = tableData;
+        }
+        
+        const allIds = allRecords.map(row => row._id);
+        console.log('[SelectAll] Selected ' + allIds.length + ' total records');
+        
+        // CRITICAL: Also update the internal tableData so that when marking as charged-to-income,
+        // the backend can properly resolve chargedToIncomeAmount from record.Total
+        // This ensures the full salary amounts are sent in the payload
+        if (onRowSelectionChange) {
+          onRowSelectionChange(allIds);
+          // Also update table data context if available
+          if (setFilteredRows) {
+            console.log('[SelectAll] Updating filtered rows with all fetched records for amount resolution');
+            setFilteredRows(allRecords);
+          }
         }
       } catch (error) {
-        console.error("Error fetching all records for selection:", error);
+        console.error("[SelectAll] Error fetching all records:", error);
         // Fallback to visible data
         const newSelected = tableData.map((row) => row._id);
-        onRowSelectionChange && onRowSelectionChange(newSelected);
+        console.log('[SelectAll] Fallback: selected ' + newSelected.length + ' visible records');
+        if (onRowSelectionChange) {
+          onRowSelectionChange(newSelected);
+        }
       }
     } else {
-      onRowSelectionChange && onRowSelectionChange([]);
+      console.log('[SelectAll] Deselecting all');
+      if (onRowSelectionChange) {
+        onRowSelectionChange([]);
+      }
     }
   };
 
