@@ -241,6 +241,10 @@ courtAppearance: {
       type: Number,
       default: 0,
     },
+    chargedToIncomeSubsidyAmount: {
+      type: Number,
+      default: 0,
+    },
     chargedToIncomeNotes: {
       type: String,
       trim: true,

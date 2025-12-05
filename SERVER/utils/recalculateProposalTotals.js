@@ -137,10 +137,10 @@ async function computeModuleTotals(filterKeys, proposalId) {
       proposalId: new mongoose.Types.ObjectId(proposalId),
       chargedToIncomeEligible: true 
     };
-    chargedToIncomeSubsidyTotal = await aggregateSum(PersonnelServices, byProposal, { $sum: { $toDouble: { $ifNull: ["$subsidyAmount", 0] } } });
+    chargedToIncomeSubsidyTotal = await aggregateSum(PersonnelServices, byProposal, { $sum: { $toDouble: { $ifNull: ["$chargedToIncomeSubsidyAmount", 0] } } });
   } else {
     const chargedMatch = { ...orgMatch, chargedToIncomeEligible: true };
-    chargedToIncomeSubsidyTotal = await aggregateSum(PersonnelServices, chargedMatch, { $sum: { $toDouble: { $ifNull: ["$subsidyAmount", 0] } } });
+    chargedToIncomeSubsidyTotal = await aggregateSum(PersonnelServices, chargedMatch, { $sum: { $toDouble: { $ifNull: ["$chargedToIncomeSubsidyAmount", 0] } } });
   }
 
   // Subsidy components (should match UI logic for Budget Summary)

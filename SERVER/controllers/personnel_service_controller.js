@@ -1944,6 +1944,9 @@ exports.bulkSetPersonnelChargedToIncome = async (req, res) => {
       const resolvedAmount = Number(payload.chargedToIncomeAmount ?? payload.amount ?? defaultAmount ?? record.chargedToIncomeAmount ?? 0);
       const normalizedAmount = Number.isFinite(resolvedAmount) && resolvedAmount > 0 ? resolvedAmount : 0;
       const resolvedNotes = payload.chargedToIncomeNotes ?? notes ?? record.chargedToIncomeNotes ?? null;
+      
+      // CRITICAL: When marking as charged to income, capture the subsidy amount so it can be deducted from PROJECTED SUBSIDY
+      const chargedToIncomeSubsidyAmount = chargedToIncomeEligible ? (record.subsidyAmount || 0) : 0;
 
       const updateDocument = chargedToIncomeEligible
         ? {
@@ -1952,6 +1955,7 @@ exports.bulkSetPersonnelChargedToIncome = async (req, res) => {
             chargedToIncomeNotes: resolvedNotes,
             chargedToIncomeTaggedBy: req.user?.userName || req.user?.email || req.user?.id || "SYSTEM",
             chargedToIncomeTaggedAt: new Date(),
+            chargedToIncomeSubsidyAmount: chargedToIncomeSubsidyAmount,  // ADDED: Store subsidy to deduct from PROJECTED SUBSIDY
           }
         : {
             chargedToIncomeEligible: false,
@@ -1959,6 +1963,7 @@ exports.bulkSetPersonnelChargedToIncome = async (req, res) => {
             chargedToIncomeNotes: null,
             chargedToIncomeTaggedBy: null,
             chargedToIncomeTaggedAt: null,
+            chargedToIncomeSubsidyAmount: 0,  // ADDED: Clear subsidy when unmarking
           };
 
       console.log("DEBUG: updateDocument:", updateDocument);
