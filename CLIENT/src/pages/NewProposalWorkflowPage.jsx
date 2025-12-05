@@ -699,6 +699,14 @@ const NewProposalWorkflowPage = () => {
 
   // Calculate projected subsidy from MOOE + Personnel Services + Capital Outlay
   const calculateProjectedSubsidy = () => {
+    // CRITICAL: Use the backend-calculated projectedSubsidy value directly
+    // The backend has already calculated it correctly including all subsidies minus charged-to-income
+    // Frontend calculation is unreliable due to data filtering/caching issues
+    if (selectedProposal?.projectedSubsidy !== undefined && selectedProposal?.projectedSubsidy !== null) {
+      return selectedProposal.projectedSubsidy;
+    }
+    
+    // Fallback to manual calculation only if backend value not available
     let total = 0;
     
     // Add MOOE subsidy
