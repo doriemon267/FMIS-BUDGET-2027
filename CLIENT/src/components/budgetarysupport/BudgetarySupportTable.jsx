@@ -830,7 +830,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, incomeGrandTotal = 0, g
       }, 0);
       
       chargedToIncomeSubsidy = filteredChargedToIncome.reduce((sum, p) => {
-        return sum + toNumber(p.subsidyAmount || 0);
+        return sum + toNumber(p.chargedToIncomeSubsidyAmount || 0);  // Use chargedToIncomeSubsidyAmount, NOT subsidyAmount
       }, 0);
     } else {
       console.log('DEBUG useOfFundsBreakdown - chargedToIncomeData missing or not array:', {
