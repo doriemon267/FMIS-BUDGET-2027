@@ -111,9 +111,27 @@ async function computeModuleTotals(filterKeys, proposalId) {
     return aggregateSum(model, orgMatch, withAmountExpr);
   };
 
+  // Helper: like tryMatch but EXCLUDES charged-to-income PersonnelServices
+  const tryMatchExcludingChargedToIncome = async (model, withAmountExpr) => {
+    if (model.modelName !== 'PersonnelServices') {
+      return tryMatch(model, withAmountExpr);
+    }
+    // For PersonnelServices, exclude chargedToIncomeEligible = true
+    if (proposalId) {
+      const byProposal = { 
+        proposalId: new mongoose.Types.ObjectId(proposalId),
+        chargedToIncomeEligible: { $ne: true }  // CRITICAL: Exclude charged-to-income
+      };
+      return aggregateSum(model, byProposal, withAmountExpr);
+    }
+    const excludeMatch = { ...orgMatch, chargedToIncomeEligible: { $ne: true } };
+    return aggregateSum(model, excludeMatch, withAmountExpr);
+  };
+
   // Totals by module
   const incomeTotal = await tryMatch(Income, { $sum: { $toDouble: { $ifNull: ["$amount", 0] } } });
-  const psTotal = await tryMatch(PersonnelServices, { $sum: { $toDouble: { $ifNull: ["$total", { $ifNull: ["$Total", 0] }] } } });
+  // CRITICAL: psTotal MUST exclude charged-to-income personnel (they've moved to income)
+  const psTotal = await tryMatchExcludingChargedToIncome(PersonnelServices, { $sum: { $toDouble: { $ifNull: ["$total", { $ifNull: ["$Total", 0] }] } } });
   const mooeAmountTotal = await tryMatch(MOOE, { $sum: { $toDouble: { $ifNull: ["$amount", 0] } } });
   const coAmountTotal = await tryMatch(CapitalOutlay, { $sum: { $toDouble: { $ifNull: ["$cost", { $ifNull: ["$total", 0] }] } } });
 
