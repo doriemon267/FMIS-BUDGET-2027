@@ -236,9 +236,28 @@ async function recalculateAndSaveProposalTotals({ proposalId, workflowRef, keys 
   
   // Fall back to org keys
   if (keys) {
-    const query = { ...keys };
+    // Build query by filtering out undefined/null values
+    const query = {};
+    if (keys.fiscalYear) query.fiscalYear = keys.fiscalYear;
+    if (keys.budgetType) query.budgetType = keys.budgetType;
+    if (keys.region) query.region = keys.region;
+    if (keys.department) query.department = keys.department;
+    if (keys.division) query.division = keys.division;
+    
+    if (Object.keys(query).length === 0) {
+      throw new Error('keys parameter contains no usable fields (all undefined/null)');
+    }
+    
+    console.log('[recalculate] Querying Proposal with keys:', query);
     proposal = await Proposal.findOne(query).sort({ updatedAt: -1 });
-    if (proposal) return await persistProposalTotals(proposal);
+    
+    if (!proposal) {
+      console.log('[recalculate] No proposal found with keys:', query);
+      throw new Error(`No proposal found matching keys: ${JSON.stringify(query)}`);
+    }
+    
+    console.log('[recalculate] Found proposal via org keys:', proposal._id);
+    return await persistProposalTotals(proposal);
   }
   
   throw new Error('Must provide proposalId, workflowRef, or keys');
