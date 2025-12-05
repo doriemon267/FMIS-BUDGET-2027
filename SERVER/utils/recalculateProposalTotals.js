@@ -316,7 +316,8 @@ async function persistProposalTotals(proposal) {
 
   const expenseSum = (adjustedPsTotal || 0) + (mooeAmountTotal || 0) + (coAmountTotal || 0);
   const projectedSubsidy = Math.max(0, adjustedSubsidyTotal); // Ensure it doesn't go negative
-  const proposedBudget = expenseSum + (adjustedIncomeTotal || 0);
+  // CRITICAL: Proposed Budget formula = Projected Subsidy + Projected Corporate Income (no expenses added)
+  const proposedBudget = projectedSubsidy + (adjustedIncomeTotal || 0);
 
   console.log('[recalculate] FINAL CALCULATION:', {
     proposalId: String(proposal._id),
