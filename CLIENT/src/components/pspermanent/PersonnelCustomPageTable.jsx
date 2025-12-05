@@ -126,6 +126,9 @@ const PSPCustomPageTable = ({
       // Invalidate and refetch proposal queries so budget totals update immediately
       await queryClient.invalidateQueries({ queryKey: ["proposals"] });
       await queryClient.refetchQueries({ queryKey: ["proposals"] });
+      // Also invalidate personnel services queries to update BudgetarySupportTable
+      await queryClient.invalidateQueries({ queryKey: ["personnel-services-combined"] });
+      await queryClient.refetchQueries({ queryKey: ["personnel-services-combined"] });
     } catch (error) {
       toast.error("Error refreshing personnel data.");
       console.error("Error refreshing data:", error);
