@@ -112,25 +112,20 @@ async function computeModuleTotals(filterKeys, proposalId) {
   };
 
   // Helper: like tryMatch but EXCLUDES charged-to-income PersonnelServices
+  // NOTE: This is now DEPRECATED - we want to include all PS records and handle charged-to-income separately
   const tryMatchExcludingChargedToIncome = async (model, withAmountExpr) => {
     if (model.modelName !== 'PersonnelServices') {
       return tryMatch(model, withAmountExpr);
     }
-    // For PersonnelServices, exclude chargedToIncomeEligible = true
-    if (proposalId) {
-      const byProposal = { 
-        proposalId: new mongoose.Types.ObjectId(proposalId),
-        chargedToIncomeEligible: { $ne: true }  // CRITICAL: Exclude charged-to-income
-      };
-      return aggregateSum(model, byProposal, withAmountExpr);
-    }
-    const excludeMatch = { ...orgMatch, chargedToIncomeEligible: { $ne: true } };
-    return aggregateSum(model, excludeMatch, withAmountExpr);
+    // For PersonnelServices, INCLUDE all records (even charged-to-income)
+    // We'll handle the charged-to-income adjustment separately
+    return tryMatch(model, withAmountExpr);
   };
 
   // Totals by module
   const incomeTotal = await tryMatch(Income, { $sum: { $toDouble: { $ifNull: ["$amount", 0] } } });
-  // CRITICAL: psTotal MUST exclude charged-to-income personnel (they've moved to income)
+  // CHANGED: psTotal now INCLUDES all PersonnelServices, including those marked as charged-to-income
+  // We handle the charged-to-income deduction separately below
   const psTotal = await tryMatchExcludingChargedToIncome(PersonnelServices, { $sum: { $toDouble: { $ifNull: ["$total", { $ifNull: ["$Total", 0] }] } } });
   const mooeAmountTotal = await tryMatch(MOOE, { $sum: { $toDouble: { $ifNull: ["$amount", 0] } } });
   const coAmountTotal = await tryMatch(CapitalOutlay, { $sum: { $toDouble: { $ifNull: ["$cost", { $ifNull: ["$total", 0] }] } } });
@@ -165,40 +160,33 @@ async function computeModuleTotals(filterKeys, proposalId) {
   const mooeSubsidyTotal = await tryMatch(MOOE, { $sum: { $toDouble: { $ifNull: ["$subsidy", 0] } } });
   const coSubsidyTotal = await tryMatch(CapitalOutlay, { $sum: { $toDouble: { $ifNull: ["$subsidy", 0] } } });
   
-  // ADDED: Calculate PersonnelServices subsidy (all except charged-to-income ones)
+  // ADDED: Calculate PersonnelServices subsidy (all including charged-to-income)
+  // We'll deduct the charged-to-income subsidy separately
   let psSubsidyTotal = 0;
   if (proposalId) {
     const byProposal = { 
-      proposalId: new mongoose.Types.ObjectId(proposalId),
-      chargedToIncomeEligible: { $ne: true }  // Exclude charged-to-income
+      proposalId: new mongoose.Types.ObjectId(proposalId)
+      // NOTE: NOW INCLUDING all PS records, even charged-to-income ones
     };
     // DEBUG: Count all PS records and those marked as charged-to-income
     const allPsCount = await PersonnelServices.countDocuments({ proposalId: new mongoose.Types.ObjectId(proposalId) });
     const chargedPsCount = await PersonnelServices.countDocuments({ proposalId: new mongoose.Types.ObjectId(proposalId), chargedToIncomeEligible: true });
     const notChargedPsCount = await PersonnelServices.countDocuments({ proposalId: new mongoose.Types.ObjectId(proposalId), chargedToIncomeEligible: { $ne: true } });
-    console.log('[recalculate] DEBUG PS Records for proposalId ' + proposalId + ':', { allPsCount, chargedPsCount, notChargedPsCount, expectedToSum: notChargedPsCount });
+    console.log('[recalculate] DEBUG PS Records for proposalId ' + proposalId + ':', { allPsCount, chargedPsCount, notChargedPsCount });
     
-    // Also list which ones have subsidies
+    // List which ones have subsidies
     const recordsWithSubsidy = await PersonnelServices.find(byProposal).select('name subsidyAmount chargedToIncomeEligible chargedToIncomeAmount chargedToIncomeSubsidyAmount').lean();
     const subsidySum = recordsWithSubsidy.reduce((sum, r) => sum + (r.subsidyAmount || 0), 0);
-    console.log('[recalculate] DEBUG PS Subsidy records (NOT charged-to-income):', { 
+    console.log('[recalculate] DEBUG PS Subsidy records (ALL, including charged-to-income):', { 
       count: recordsWithSubsidy.length, 
       manualSum: subsidySum,
-      records: recordsWithSubsidy.map(r => ({ name: r.name, subsidyAmount: r.subsidyAmount, chargedToIncomeAmount: r.chargedToIncomeAmount }))
-    });
-    
-    // ALSO list the CHARGED-TO-INCOME records to see their subsidies
-    const chargedRecords = await PersonnelServices.find({ proposalId: new mongoose.Types.ObjectId(proposalId), chargedToIncomeEligible: true }).select('name subsidyAmount chargedToIncomeEligible chargedToIncomeSubsidyAmount').lean();
-    const chargedSubsidySum = chargedRecords.reduce((sum, r) => sum + (r.chargedToIncomeSubsidyAmount || 0), 0);
-    console.log('[recalculate] DEBUG PS Charged-to-Income records:', { 
-      count: chargedRecords.length,
-      chargedSubsidySum: chargedSubsidySum,
-      records: chargedRecords.map(r => ({ name: r.name, subsidyAmount: r.subsidyAmount, chargedToIncomeSubsidyAmount: r.chargedToIncomeSubsidyAmount }))
+      records: recordsWithSubsidy.slice(0, 3).map(r => ({ name: r.name, subsidyAmount: r.subsidyAmount, chargedToIncomeEligible: r.chargedToIncomeEligible, chargedToIncomeSubsidyAmount: r.chargedToIncomeSubsidyAmount }))
     });
     
     psSubsidyTotal = await aggregateSum(PersonnelServices, byProposal, { $sum: { $toDouble: { $ifNull: ["$subsidyAmount", 0] } } });
   } else {
-    const psMatch = { ...orgMatch, chargedToIncomeEligible: { $ne: true } };
+    const psMatch = { ...orgMatch };
+    // NOW INCLUDING all PS records, even charged-to-income ones
     psSubsidyTotal = await aggregateSum(PersonnelServices, psMatch, { $sum: { $toDouble: { $ifNull: ["$subsidyAmount", 0] } } });
   }
 
@@ -236,13 +224,18 @@ async function recalculateAndSaveProposalTotals({ proposalId, workflowRef, keys 
   
   // Fall back to org keys
   if (keys) {
-    // Build query by filtering out undefined/null values
+    // Build query by filtering out undefined/null/empty values
+    // Proposals are typically at region level, not department level
     const query = {};
+    
+    // Core identifying fields (always required)
     if (keys.fiscalYear) query.fiscalYear = keys.fiscalYear;
     if (keys.budgetType) query.budgetType = keys.budgetType;
     if (keys.region) query.region = keys.region;
-    if (keys.department) query.department = keys.department;
-    if (keys.division) query.division = keys.division;
+    
+    // Optional fields - only add if provided and non-empty
+    if (keys.department && keys.department.trim()) query.department = keys.department;
+    if (keys.division && keys.division.trim()) query.division = keys.division;
     
     if (Object.keys(query).length === 0) {
       throw new Error('keys parameter contains no usable fields (all undefined/null)');
@@ -253,10 +246,23 @@ async function recalculateAndSaveProposalTotals({ proposalId, workflowRef, keys 
     
     if (!proposal) {
       console.log('[recalculate] No proposal found with keys:', query);
-      throw new Error(`No proposal found matching keys: ${JSON.stringify(query)}`);
+      // If not found with these keys, try with just region + fiscal year + budget type
+      // (proposals might be at organizational level, not department level)
+      const basicQuery = {
+        fiscalYear: keys.fiscalYear,
+        budgetType: keys.budgetType,
+        region: keys.region
+      };
+      console.log('[recalculate] Retrying with basic keys:', basicQuery);
+      proposal = await Proposal.findOne(basicQuery).sort({ updatedAt: -1 });
+      
+      if (!proposal) {
+        throw new Error(`No proposal found matching keys: ${JSON.stringify(query)}`);
+      }
+      console.log('[recalculate] Found proposal via basic keys:', proposal._id);
+    } else {
+      console.log('[recalculate] Found proposal via org keys:', proposal._id);
     }
-    
-    console.log('[recalculate] Found proposal via org keys:', proposal._id);
     return await persistProposalTotals(proposal);
   }
   
@@ -291,14 +297,22 @@ async function persistProposalTotals(proposal) {
   } = await computeModuleTotals(filterKeys, proposal._id);
 
   // ADJUSTED TOTALS FOR CHARGED-TO-INCOME:
-  // 1. Income includes charged-to-income amounts (they move from Personnel to Income)
-  // 2. Personnel total excludes charged-to-income amounts (already moved to income)
-  // 3. Subsidy calculation: psSubsidyTotal EXCLUDES charged-to-income (filtered in query)
-  //    So the final subsidy should not include their amounts
+  // Logic: When personnel are marked as "charged to income", their chargedToIncomeAmount
+  // moves from expenses (totalExpenses) to income (totalIncome), but the remainder stays as expenses
+  // 
+  // Example: Personnel with Total=₱100,000, chargedToIncomeAmount=₱40,000
+  //   - OLD: Full ₱100,000 was in expenses
+  //   - NEW: ₱40,000 moves to income, ₱60,000 stays in expenses
+  //
+  // 1. psTotal includes ALL PersonnelServices (including charged-to-income)
+  // 2. Subtract chargedToIncomeTotal from psTotal to get the remaining expenses
+  // 3. Add chargedToIncomeTotal to income
+  // 4. Subsidy: deduct the subsidy of charged-to-income personnel
+  
   const adjustedIncomeTotal = (incomeTotal || 0) + (chargedToIncomeTotal || 0);
-  const adjustedPsTotal = (psTotal || 0); // psTotal already excludes chargedToIncome (it's filtered out in query)
-  // NOTE: psSubsidyTotal already excludes charged-to-income personnel, so no deduction needed
-  const adjustedSubsidyTotal = ((psSubsidyTotal || 0) + (mooeSubsidyTotal || 0) + (coSubsidyTotal || 0));
+  const adjustedPsTotal = (psTotal || 0) - (chargedToIncomeTotal || 0); // psTotal minus the amounts moved to income
+  // NOTE: psSubsidyTotal now includes charged-to-income subsidies, so we must deduct them
+  const adjustedSubsidyTotal = ((psSubsidyTotal || 0) - (chargedToIncomeSubsidyTotal || 0) + (mooeSubsidyTotal || 0) + (coSubsidyTotal || 0));
 
   const expenseSum = (adjustedPsTotal || 0) + (mooeAmountTotal || 0) + (coAmountTotal || 0);
   const projectedSubsidy = Math.max(0, adjustedSubsidyTotal); // Ensure it doesn't go negative
