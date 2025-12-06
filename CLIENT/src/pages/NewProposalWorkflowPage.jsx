@@ -699,14 +699,12 @@ const NewProposalWorkflowPage = () => {
 
   // Calculate projected subsidy from MOOE + Personnel Services + Capital Outlay
   const calculateProjectedSubsidy = () => {
-    // CRITICAL: Use the backend-calculated projectedSubsidy value directly
-    // The backend has already calculated it correctly including all subsidies minus charged-to-income
-    // Frontend calculation is unreliable due to data filtering/caching issues
-    if (selectedProposal?.projectedSubsidy !== undefined && selectedProposal?.projectedSubsidy !== null) {
+    // If backend already has a non-zero subsidy, trust it.
+    if (selectedProposal?.projectedSubsidy && selectedProposal.projectedSubsidy > 0) {
       return selectedProposal.projectedSubsidy;
     }
     
-    // Fallback to manual calculation only if backend value not available
+    // Otherwise, compute from line items to avoid showing 0 when data exists.
     let total = 0;
     
     // Add MOOE subsidy
@@ -718,11 +716,10 @@ const NewProposalWorkflowPage = () => {
     
     // Add Personnel Services SUBSIDY (NOT Total) for same division, EXCLUDING charged-to-income
     if (proposalDetails?.personnel && proposalDetails.personnel.length > 0) {
-      const sameDivision = proposalDetails.personnel.filter(p => 
-        p.division === selectedProposal?.division && !p.chargedToIncomeEligible // CRITICAL: Exclude charged-to-income
+      const sameDivision = proposalDetails.personnel.filter((p) =>
+        p.division === selectedProposal?.division && !p.chargedToIncomeEligible
       );
       total += sameDivision.reduce((sum, item) => {
-        // Use subsidyAmount field, NOT Total field
         return sum + (item.subsidyAmount || item.subsidy || 0);
       }, 0);
     }
@@ -734,7 +731,8 @@ const NewProposalWorkflowPage = () => {
       }, 0);
     }
     
-    return total;
+    // If still zero, fall back to backend 0/undefined; otherwise return computed total
+    return total || selectedProposal?.projectedSubsidy || 0;
   };
 
   // Calculate total proposed budget (Income + Subsidy)
@@ -969,7 +967,7 @@ const NewProposalWorkflowPage = () => {
       toast.success(`Changes saved successfully`);
       setChangedItems(new Set());
 
-      // Calculate the projected subsidy from saved items
+      // Calculate the projected subsidy from saved items using subsidy-only values
       let calculatedSubsidy = 0;
       
       // Sum MOOE subsidies
@@ -979,18 +977,20 @@ const NewProposalWorkflowPage = () => {
         calculatedSubsidy += proposalDetails.mooe.reduce((sum, item) => sum + (item.subsidy || 0), 0);
       }
       
-      // Sum Personnel Services
+      // Sum Personnel Services subsidy (exclude charged-to-income)
       if (changedByCategory.personnel) {
-        calculatedSubsidy += changedByCategory.personnel.reduce((sum, item) => sum + (item.amount || 0), 0);
+        const sameDivision = changedByCategory.personnel.filter((p) => p.division === selectedProposal?.division && !p.chargedToIncomeEligible);
+        calculatedSubsidy += sameDivision.reduce((sum, item) => sum + (item.subsidyAmount || item.subsidy || 0), 0);
       } else if (proposalDetails?.personnel) {
-        calculatedSubsidy += proposalDetails.personnel.reduce((sum, item) => sum + (item.amount || 0), 0);
+        const sameDivision = proposalDetails.personnel.filter((p) => p.division === selectedProposal?.division && !p.chargedToIncomeEligible);
+        calculatedSubsidy += sameDivision.reduce((sum, item) => sum + (item.subsidyAmount || item.subsidy || 0), 0);
       }
       
-      // Sum Capital Outlay
+      // Sum Capital Outlay subsidy
       if (changedByCategory.capitalOutlay) {
-        calculatedSubsidy += changedByCategory.capitalOutlay.reduce((sum, item) => sum + (item.amount || 0), 0);
+        calculatedSubsidy += changedByCategory.capitalOutlay.reduce((sum, item) => sum + (item.subsidy || 0), 0);
       } else if (proposalDetails?.capitalOutlay) {
-        calculatedSubsidy += proposalDetails.capitalOutlay.reduce((sum, item) => sum + (item.amount || 0), 0);
+        calculatedSubsidy += proposalDetails.capitalOutlay.reduce((sum, item) => sum + (item.subsidy || 0), 0);
       }
 
       // Update the proposal with the calculated subsidy
