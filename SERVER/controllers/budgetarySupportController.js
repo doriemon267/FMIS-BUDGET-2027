@@ -386,11 +386,17 @@ const calculateBudgetarySupport = async (req, res) => {
       personnelQueryConditions.fiscal_year = Number(fiscalYear);
     }
 
-    // 1. Personnel Services (B.1.1) - ENTIRE AMOUNT IS GOVERNMENT SUBSIDY
+    // 1. Personnel Services (B.1.1) - SPLIT: GOVERNMENT SUBSIDY vs CHARGED TO INCOME
+    let totalChargedToIncome = 0;
     try {
       const personnelServices = await PersonnelServices.find(personnelQueryConditions);
 
       const personnelTotal = personnelServices.reduce((sum, item) => {
+        // CRITICAL: Only count PS that are NOT charged to income
+        if (item.chargedToIncomeEligible === true) {
+          totalChargedToIncome += (Number(item.Total) || 0);
+          return sum; // Skip - this is charged to income
+        }
         return sum + (Number(item.Total) || Number(item.annualSalary) || Number(item.total) || 0);
       }, 0);
 
@@ -399,7 +405,7 @@ const calculateBudgetarySupport = async (req, res) => {
         breakdown.push({
           source: 'B.1.1 - Personnel Services',
           amount: personnelTotal,
-          description: 'Government funding for all personnel services'
+          description: 'Government funding for personnel services (subsidy portion)'
         });
       } else {
       }
@@ -487,6 +493,8 @@ const calculateBudgetarySupport = async (req, res) => {
       const mooeData = await mooeProposals.find(mooeQueryConditions);
 
       const mooeTotal = mooeData.reduce((sum, item) => {
+        // Add to income tracking
+        totalChargedToIncome += (Number(item.income) || 0);
         return sum + (Number(item.subsidy) || Number(item.totalSubsidy) || 0);
       }, 0);
 
@@ -533,6 +541,8 @@ const calculateBudgetarySupport = async (req, res) => {
     }
     res.json({
       totalSubsidy,
+      totalChargedToIncome,
+      totalBudget: totalSubsidy + totalChargedToIncome,
       breakdown,
       fiscalYear,
       budgetType,

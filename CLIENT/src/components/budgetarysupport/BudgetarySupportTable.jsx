@@ -514,7 +514,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
       try {
         if (proposalId) {
           console.log('[BudgetarySupportTable] Fetching proposal totals by workflowRefId:', proposalId);
-          const response = await api.get(`/proposals/${proposalId}/totals`);
+          const response = await api.get(`/api/allproposal/proposals/${proposalId}/totals`);
           console.log('[BudgetarySupportTable] Proposal totals fetched:', {
             projectedSubsidy: response.data?.data?.projectedSubsidy,
             projectedCorporateIncome: response.data?.data?.projectedCorporateIncome
@@ -796,17 +796,21 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
 
     }
 
-    // B.1.2 MOOE - Use TOTAL expenses from mooeData, NOT just subsidies
-    let maintenanceAndOperating = 0;
+    // B.1.2 MOOE - Split income vs subsidy from MOOE records
+    let maintenanceAndOperatingIncome = 0;
+    let maintenanceAndOperatingSubsidy = 0;
     if (mooeData && Array.isArray(mooeData)) {
       const filteredMooe = hasAssignmentFilters
         ? mooeData.filter((item) => matchesAssignmentScope(item))
         : mooeData;
       
-      maintenanceAndOperating = filteredMooe.reduce((sum, item) => {
-        return sum + toNumber(item?.cost || item?.amount || item?.expense || 0);
-      }, 0);
+      filteredMooe.forEach((item) => {
+        maintenanceAndOperatingIncome += toNumber(item?.income || 0);
+        maintenanceAndOperatingSubsidy += toNumber(item?.subsidy || item?.totalSubsidy || 0);
+      });
     }
+
+    const maintenanceAndOperating = maintenanceAndOperatingIncome + maintenanceAndOperatingSubsidy;
 
     // B.2 CAPITAL OUTLAYS - Use TOTAL expenses from capitalOutlayData, NOT just subsidies
     let capitalOutlays = 0;
@@ -822,7 +826,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
     }
 
     // Operating Requirements Total
-    const operatingRequirements = personalServices + maintenanceAndOperating + capitalOutlays;
+    const operatingRequirements = personalServices + maintenanceAndOperatingIncome + maintenanceAndOperatingSubsidy + capitalOutlays;
     
     // Charged to Income Totals
     let chargedToIncomeAmount = 0;
@@ -878,6 +882,8 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
       corporateIncome,
       personalServices,
       maintenanceAndOperating,
+      maintenanceAndOperatingIncome,
+      maintenanceAndOperatingSubsidy,
       capitalOutlays,
       operatingRequirements,
       chargedToIncomeAmount,
@@ -934,9 +940,9 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
       },
       {
         'Description': 'B.1.2 MAINTENANCE AND OTHER OPERATING EXPENSES',
-        'Projected Corporate Income': parseFloat(mooeIncomeFromRegion || 0),
-        'Projected Subsidy': parseFloat(useOfFundsBreakdown.maintenanceAndOperating || 0),
-        'Proposed Budget': parseFloat((Number(mooeIncomeFromRegion) + Number(useOfFundsBreakdown.maintenanceAndOperating)) || 0),
+        'Projected Corporate Income': parseFloat(useOfFundsBreakdown.maintenanceAndOperatingIncome || 0),
+        'Projected Subsidy': parseFloat(useOfFundsBreakdown.maintenanceAndOperatingSubsidy || 0),
+        'Proposed Budget': parseFloat((Number(useOfFundsBreakdown.maintenanceAndOperatingIncome) + Number(useOfFundsBreakdown.maintenanceAndOperatingSubsidy)) || 0),
         'Fiscal Year': fiscalYear,
         'Budget Type': budgetType,
         'Region': selectedRegion || '',
@@ -1004,8 +1010,8 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
   const irrigationServiceFees = useOfFundsBreakdown.corporateIncome || 0;
 
   const corporateIncomeFromMOOE = useMemo(
-    () => getCorporateIncomeFromBreakdown('MOOE'),
-    [getCorporateIncomeFromBreakdown]
+    () => Number(useOfFundsBreakdown.maintenanceAndOperatingIncome || 0),
+    [useOfFundsBreakdown.maintenanceAndOperatingIncome]
   );
 
   const corporateIncomeFromCapitalOutlay = useMemo(
@@ -1013,13 +1019,18 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
     [getCorporateIncomeFromBreakdown]
   );
 
-  const totalCorporateIncomeSources = Number(useOfFundsBreakdown.corporateIncome || 0);
+  const totalCorporateIncomeSources = proposalData?.totalIncome !== undefined ? Number(proposalData.totalIncome || 0) : Number(useOfFundsBreakdown.corporateIncome || 0);
   const totalCorporateIncomeUses = corporateIncomeFromMOOE + corporateIncomeFromCapitalOutlay + Number(useOfFundsBreakdown.chargedToIncomeAmount || 0);
 
-  const totalSubsidySources = proposalData?.projectedSubsidy !== undefined ? Number(proposalData.projectedSubsidy || 0) : Number(useOfFundsBreakdown.operatingRequirements || 0);
+  // Prefer provided projectedSubsidy when truthy; otherwise fall back to subsidy-only needs (PS + MOOE subsidy + CO)
+  const calculatedSubsidyNeed =
+    (Number(useOfFundsBreakdown.personalServices || 0) - Number(useOfFundsBreakdown.chargedToIncomeAmount || 0)) +
+    Number(useOfFundsBreakdown.maintenanceAndOperatingSubsidy || 0) +
+    Number(useOfFundsBreakdown.capitalOutlays || 0);
+  const totalSubsidySources = proposalData?.projectedSubsidy ? Number(proposalData.projectedSubsidy) : calculatedSubsidyNeed;
   const totalSubsidyUses =
     (Number(useOfFundsBreakdown.personalServices || 0) - Number(useOfFundsBreakdown.chargedToIncomeAmount || 0)) +
-    Number(useOfFundsBreakdown.maintenanceAndOperating || 0) +
+    Number(useOfFundsBreakdown.maintenanceAndOperatingSubsidy || 0) +
     Number(useOfFundsBreakdown.capitalOutlays || 0);
 
   const totalProposedBudgetSources = totalCorporateIncomeSources + totalSubsidySources;
@@ -1363,7 +1374,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                   </TableCell>
                   <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                     <Typography sx={{ fontWeight: 'medium', fontSize: compactView ? '0.95rem' : '1rem', color: '#1565c0' }}>
-                      ₱{totalProposedBudgetSources.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₱{totalSubsidySources.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
                   </TableCell>
                 </TableRow>
@@ -1391,7 +1402,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                   </TableCell>
                   <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: compactView ? '0.95rem' : '1.05rem', pr: 3, py: 2 }}>
                     <Typography variant="body2" fontWeight="bold" sx={{ color: '#1976d2' }}>
-                      ₱{totalProposedBudgetSources.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₱{totalSubsidySources.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
                   </TableCell>
                 </TableRow>
@@ -1504,17 +1515,17 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                   <Typography variant="body2" sx={{ fontWeight: 500, color: '#d32f2f', letterSpacing: 0.2 }}>
-                    ₱{corporateIncomeFromMOOE.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₱{Number(useOfFundsBreakdown.maintenanceAndOperatingIncome || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                   <Typography variant="body2" sx={{ fontWeight: 500, color: '#2e7d32', letterSpacing: 0.2 }}>
-                    ₱{Number(useOfFundsBreakdown.maintenanceAndOperating || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₱{Number(useOfFundsBreakdown.maintenanceAndOperatingSubsidy || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                   <Typography variant="body2" sx={{ fontWeight: 500, color: '#1976d2', letterSpacing: 0.2 }}>
-                    ₱{(corporateIncomeFromMOOE + Number(useOfFundsBreakdown.maintenanceAndOperating || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₱{(Number(useOfFundsBreakdown.maintenanceAndOperatingIncome || 0) + Number(useOfFundsBreakdown.maintenanceAndOperatingSubsidy || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
               </TableRow>
