@@ -1358,12 +1358,12 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                   </TableCell>
                   <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                     <Typography sx={{ fontWeight: 'medium', fontSize: compactView ? '0.95rem' : '1rem', color: '#2e7d32' }}>
-                      ₱{useOfFundsBreakdown.operatingRequirements.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₱{totalSubsidySources.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
                   </TableCell>
                   <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                     <Typography sx={{ fontWeight: 'medium', fontSize: compactView ? '0.95rem' : '1rem', color: '#1565c0' }}>
-                      ₱{useOfFundsBreakdown.operatingRequirements.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₱{totalProposedBudgetSources.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
                   </TableCell>
                 </TableRow>
@@ -1386,12 +1386,12 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                   </TableCell>
                   <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: compactView ? '0.95rem' : '1.05rem', pr: 3, py: 2 }}>
                     <Typography variant="body2" fontWeight="bold" sx={{ color: '#2e7d32' }}>
-                      ₱{useOfFundsBreakdown.operatingRequirements.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₱{totalSubsidySources.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
                   </TableCell>
                   <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: compactView ? '0.95rem' : '1.05rem', pr: 3, py: 2 }}>
                     <Typography variant="body2" fontWeight="bold" sx={{ color: '#1976d2' }}>
-                      ₱{useOfFundsBreakdown.operatingRequirements.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₱{totalProposedBudgetSources.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
                   </TableCell>
                 </TableRow>
