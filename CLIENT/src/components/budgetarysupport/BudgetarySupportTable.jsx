@@ -507,6 +507,22 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
     }
   });
 
+  // Fetch Proposal record to get backend-calculated projectedSubsidy
+  const { data: proposalData } = useQuery({
+    queryKey: ['proposal', proposalId],
+    queryFn: async () => {
+      if (!proposalId) return null;
+      try {
+        const response = await api.get(`/proposals/${proposalId}`);
+        return response.data;
+      } catch (err) {
+        console.error('Error fetching proposal:', err);
+        return null;
+      }
+    },
+    enabled: !!proposalId,
+  });
+
   // Fetch charged-to-income personnel data for budget breakdown
   const { data: chargedToIncomeData, isLoading: isLoadingChargedToIncome, error: chargedToIncomeError } = useQuery({
     queryKey: ['personnelServices', 'chargedToIncome', proposalId, fiscalYear, budgetType],
@@ -992,7 +1008,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
   const totalCorporateIncomeSources = Number(useOfFundsBreakdown.corporateIncome || 0);
   const totalCorporateIncomeUses = corporateIncomeFromMOOE + corporateIncomeFromCapitalOutlay + Number(useOfFundsBreakdown.chargedToIncomeAmount || 0);
 
-  const totalSubsidySources = Number(useOfFundsBreakdown.operatingRequirements || 0);
+  const totalSubsidySources = proposalData?.projectedSubsidy !== undefined ? Number(proposalData.projectedSubsidy || 0) : Number(useOfFundsBreakdown.operatingRequirements || 0);
   const totalSubsidyUses =
     (Number(useOfFundsBreakdown.personalServices || 0) - Number(useOfFundsBreakdown.chargedToIncomeAmount || 0)) +
     Number(useOfFundsBreakdown.maintenanceAndOperating || 0) +
