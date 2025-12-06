@@ -59,6 +59,8 @@ router.get('/proposals/pending-review', newProposalWorkflowController.getPending
 // Specific routes with parameters must come BEFORE generic /:id routes
 router.get('/proposals/:id/audit-trail', newProposalWorkflowController.getAuditTrail);
 router.post('/proposals/:id/action', newProposalWorkflowController.performAction);
+// NEW: Get proposal totals by workflow ref (for BudgetarySupportTable)
+router.get('/proposals/:workflowRefId/totals', newProposalWorkflowController.getProposalTotalsByWorkflowRef);
 
 // Attachment routes - BEFORE generic /:id routes
 router.post('/proposals/:id/attachments', upload.single('file'), newProposalWorkflowController.uploadAttachment);

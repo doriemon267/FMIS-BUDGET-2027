@@ -1378,7 +1378,20 @@ exports.getProposalById = async (req, res) => {
     const userRole = getUserRole(req);
     const userId = req.user.id;
 
-    const proposal = await NewProposalWorkflow.findById(id)
+    // CRITICAL: First try to fetch from Proposal model (fmis_budget) which has projectedSubsidy
+    // This is needed for BudgetarySupportTable which passes Proposal._id, not NewProposalWorkflow._id
+    let proposal = await Proposal.findById(id).lean();
+    
+    if (proposal) {
+      console.log('[getProposalById] Found Proposal with ID:', id, '- returning with projectedSubsidy:', proposal.projectedSubsidy);
+      return res.json({
+        success: true,
+        data: proposal
+      });
+    }
+
+    // Fallback: Try NewProposalWorkflow model (fmis_budget)
+    proposal = await NewProposalWorkflow.findById(id)
       .populate('region', 'name regionName');
 
     if (!proposal) {
@@ -2022,6 +2035,47 @@ exports.getAttachments = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to retrieve attachments',
+      error: error.message
+    });
+  }
+};
+
+// NEW ENDPOINT: Get Proposal totals by NewProposalWorkflow ID
+// This is used by BudgetarySupportTable to fetch projectedSubsidy
+exports.getProposalTotalsByWorkflowRef = async (req, res) => {
+  try {
+    const { workflowRefId } = req.params;
+    
+    // Find the Proposal that references this NewProposalWorkflow
+    const proposal = await Proposal.findOne({
+      $or: [
+        { workflowRef: workflowRefId },
+        { proposalId: workflowRefId }
+      ]
+    }).lean();
+    
+    if (!proposal) {
+      console.log('[getProposalTotalsByWorkflowRef] Proposal not found for workflowRef:', workflowRefId);
+      return res.status(404).json({
+        success: false,
+        message: 'Proposal not found'
+      });
+    }
+    
+    console.log('[getProposalTotalsByWorkflowRef] Found Proposal for workflowRef:', workflowRefId);
+    console.log('  projectedSubsidy:', proposal.projectedSubsidy);
+    console.log('  projectedCorporateIncome:', proposal.projectedCorporateIncome);
+    console.log('  proposedBudget:', proposal.proposedBudget);
+    
+    res.json({
+      success: true,
+      data: proposal
+    });
+  } catch (error) {
+    console.error('[getProposalTotalsByWorkflowRef] Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch proposal totals',
       error: error.message
     });
   }

@@ -509,14 +509,22 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
 
   // Fetch Proposal record to get backend-calculated projectedSubsidy
   const { data: proposalData } = useQuery({
-    queryKey: ['proposal', proposalId],
+    queryKey: ['proposal', 'totals', proposalId],
     queryFn: async () => {
-      if (!proposalId) return null;
       try {
-        const response = await api.get(`/proposals/${proposalId}`);
-        return response.data;
+        if (proposalId) {
+          console.log('[BudgetarySupportTable] Fetching proposal totals by workflowRefId:', proposalId);
+          const response = await api.get(`/proposals/${proposalId}/totals`);
+          console.log('[BudgetarySupportTable] Proposal totals fetched:', {
+            projectedSubsidy: response.data?.data?.projectedSubsidy,
+            projectedCorporateIncome: response.data?.data?.projectedCorporateIncome
+          });
+          return response.data?.data;
+        }
+        
+        return null;
       } catch (err) {
-        console.error('Error fetching proposal:', err);
+        console.error('[BudgetarySupportTable] Error fetching proposal totals:', err.response?.status, err.message);
         return null;
       }
     },
