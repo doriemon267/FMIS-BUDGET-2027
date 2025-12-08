@@ -657,6 +657,111 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
     toast.info("Data refreshed");
   }, [queryClient, fiscalYear, budgetType]); // Removed regionName from dependencies
 
+  // Fetch Income data to ensure we have the breakdown even if IncomeTable is not mounted
+  const { data: incomeData } = useQuery({
+    queryKey: ['income-items-budgetary', fiscalYear, budgetType, proposalId, regionName],
+    queryFn: async () => {
+      if (!hasValidParams) return [];
+      const params = { 
+        fiscalYear, 
+        budgetType,
+        proposalId, // Filter by proposalId to get correct items
+        // Also filter by region to avoid cross-region data leakage
+        region: regionName || undefined
+      };
+      const response = await api.get('/income/getByParams', { params });
+      return response.data || [];
+    },
+    enabled: hasValidParams
+  });
+
+  // Fallback: If proposal-based query returns nothing, fetch by fiscalYear/budgetType/region
+  const { data: incomeDataByFY } = useQuery({
+    queryKey: ['income-items-budgetary-fallback', fiscalYear, budgetType, regionName],
+    queryFn: async () => {
+      if (!hasValidParams) return [];
+      const params = {
+        fiscalYear,
+        budgetType,
+        region: regionName || undefined
+      };
+      console.log('[BudgetarySupportTable] Fallback /income params:', params);
+      const response = await api.get('/income', { params });
+      const items = response.data || [];
+      console.log('[BudgetarySupportTable] Fallback /income returned:', Array.isArray(items) ? items.length : 'not-array');
+      if (Array.isArray(items) && items.length > 0) {
+        console.log('[BudgetarySupportTable] Sample income item:', {
+          amount: items[0]?.amount,
+          category: items[0]?.incomecategory?.incomeCategoryName || items[0]?.incomecategory?.name || items[0]?.category,
+          region: items[0]?.region || items[0]?.Region
+        });
+      }
+      return items;
+    },
+    enabled: hasValidParams && Array.isArray(incomeData) && incomeData.length === 0
+  });
+
+  // Calculate grouped items and subtotal locally
+  const localIncomeStats = useMemo(() => {
+    const items = (incomeData && incomeData.length > 0) ? incomeData : (incomeDataByFY || []);
+    // Debug counts for income items used to compute corporate subtotal
+    console.log('[BudgetarySupportTable] Corporate Income subtotal source counts:', {
+      proposalItems: Array.isArray(incomeData) ? incomeData.length : 0,
+      fyRegionItems: Array.isArray(incomeDataByFY) ? incomeDataByFY.length : 0
+    });
+    const grouped = {
+      'Irrigation Service Fees': { subtotal: 0 },
+      'Rent Income': { subtotal: 0 },
+      'Water Service Fee': { subtotal: 0 },
+      'Miscellaneous Income': { subtotal: 0 }
+    };
+    let total = 0;
+
+    items.forEach(item => {
+      // Handle populated incomecategory object or string
+      const categoryName = item.incomecategory?.name || item.incomecategory?.incomeCategoryName || item.category || '';
+      const amount = Number(item.amount || 0);
+      
+      // Map to display categories
+      let displayCategory = 'Miscellaneous Income';
+      if (categoryName.includes('Irrigation')) displayCategory = 'Irrigation Service Fees';
+      else if (categoryName.includes('Rent')) displayCategory = 'Rent Income';
+      else if (categoryName.includes('Water')) displayCategory = 'Water Service Fee';
+      else if (categoryName.includes('Miscellaneous')) displayCategory = 'Miscellaneous Income';
+      else displayCategory = 'Miscellaneous Income'; // Default to Misc for others
+      
+      if (grouped[displayCategory]) {
+        grouped[displayCategory].subtotal += amount;
+      }
+      total += amount;
+    });
+
+    return { grouped, total };
+  }, [incomeData]);
+
+  // Use local stats if props are missing (which happens when IncomeTable is not mounted)
+  // Prefer props from IncomeTable, but if they are present with zero total, fall back to local stats
+  const propsTotal = useMemo(() => {
+    try {
+      return Object.values(groupedItems || {}).reduce((sum, g) => sum + (Number(g?.subtotal) || 0), 0);
+    } catch {
+      return 0;
+    }
+  }, [groupedItems]);
+
+  const effectiveGroupedItems = (Object.keys(groupedItems).length > 0 && propsTotal > 0)
+    ? groupedItems
+    : localIncomeStats.grouped;
+  const effectiveIncomeGrandTotal = (incomeGrandTotal > 0)
+    ? incomeGrandTotal
+    : (propsTotal > 0 ? propsTotal : localIncomeStats.total);
+
+  console.log('[BudgetarySupportTable] Effective corporate income totals:', {
+    propsTotal,
+    localTotal: localIncomeStats.total,
+    using: (Object.keys(groupedItems).length > 0 && propsTotal > 0) ? 'props' : 'local'
+  });
+
   // Helper function to get corporate income from actual data sources
   const getCorporateIncomeFromBreakdown = useCallback((category) => {
     let totalIncome = 0;
@@ -750,8 +855,8 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
     return totalIncome;
   }, [calculatedBudgetarySupport, capitalOutlayData, mooeData, matchesAssignmentScope, hasAssignmentFilters]);
   const useOfFundsBreakdown = useMemo(() => {
-    // A.1 CORPORATE INCOME - Direct copy from IncomeTable
-    const corporateIncome = incomeGrandTotal || 0;
+    // A.1 CORPORATE INCOME - Sum of grouped items to ensure consistency with displayed rows
+    const corporateIncome = Object.values(effectiveGroupedItems || {}).reduce((sum, item) => sum + (item.subtotal || 0), 0);
 
     // B.1.1 Personnel Services - Use Total field approach like Budget Summary cards
     let personalServices = 0;
@@ -889,7 +994,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
       chargedToIncomeAmount,
       chargedToIncomeSubsidy
     };
-  }, [mooeData, capitalOutlayData, personalServicesData, chargedToIncomeData, incomeGrandTotal, matchesAssignmentScope, hasAssignmentFilters]);
+  }, [mooeData, capitalOutlayData, personalServicesData, chargedToIncomeData, effectiveGroupedItems, matchesAssignmentScope, hasAssignmentFilters]);
 
   useEffect(() => {
     if (onChargedToIncomeChange && useOfFundsBreakdown.chargedToIncomeAmount !== undefined) {
@@ -1019,7 +1124,13 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
     [getCorporateIncomeFromBreakdown]
   );
 
-  const totalCorporateIncomeSources = proposalData?.totalIncome !== undefined ? Number(proposalData.totalIncome || 0) : Number(useOfFundsBreakdown.corporateIncome || 0);
+  // Separate the "Corporate Income" subtotal (from the list) from the "Total Projected Income" (Grand Total)
+  const corporateIncomeSubtotal = Number(useOfFundsBreakdown.corporateIncome || 0);
+  
+  // Use ONLY the Corporate Income subtotal for Sources (separate from uses)
+  // Always use the displayed subtotal from category breakdown to keep UI consistent
+  const totalCorporateIncomeSources = corporateIncomeSubtotal;
+  
   const totalCorporateIncomeUses = corporateIncomeFromMOOE + corporateIncomeFromCapitalOutlay + Number(useOfFundsBreakdown.chargedToIncomeAmount || 0);
 
   // Prefer provided projectedSubsidy when truthy; otherwise fall back to subsidy-only needs (PS + MOOE subsidy + CO)
@@ -1033,7 +1144,10 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
     Number(useOfFundsBreakdown.maintenanceAndOperatingSubsidy || 0) +
     Number(useOfFundsBreakdown.capitalOutlays || 0);
 
-  const totalProposedBudgetSources = totalCorporateIncomeSources + totalSubsidySources;
+  // TOTAL SOURCES: Projected Corporate Income should reflect ONLY TOTAL CORPORATE INCOME
+  const totalProjectedCorporateIncomeSources = totalCorporateIncomeSources;
+  // Proposed Budget Sources = Total Corporate Income + Total Subsidy Sources
+  const totalProposedBudgetSources = totalProjectedCorporateIncomeSources + totalSubsidySources;
   const totalProposedBudgetUses = totalCorporateIncomeUses + totalSubsidyUses;
 
   const surplusDeficit = {
@@ -1256,7 +1370,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                   </TableCell>
                   <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                     <Typography variant="body2" sx={{ fontWeight: 500, color: '#1565c0', letterSpacing: 0.2 }}>
-                      ₱{(groupedItems?.[row.key]?.subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₱{(effectiveGroupedItems?.[row.key]?.subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
                   </TableCell>
                   <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
@@ -1266,7 +1380,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                   </TableCell>
                   <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                     <Typography variant="body2" sx={{ fontWeight: 500, color: '#1565c0', letterSpacing: 0.2 }}>
-                      ₱{(groupedItems?.[row.key]?.subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₱{(effectiveGroupedItems?.[row.key]?.subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
                   </TableCell>
                 </TableRow>
@@ -1277,13 +1391,19 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                 borderTop: '2px solid #1976d2'
               }}>
                 <TableCell sx={{ pl: 3, py: 2 }}>
-                  <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', color: '#1976d2', letterSpacing: 0.5 }}>
-                    TOTAL CORPORATE INCOME
-                  </Typography>
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', color: '#1976d2', letterSpacing: 0.5 }}>
+                      TOTAL CORPORATE INCOME
+                    </Typography>
+                    <Chip label={`Items: ${Object.values(effectiveGroupedItems || {}).reduce((acc, g) => acc + ((g.items && Array.isArray(g.items)) ? g.items.length : 0), 0)}`}
+                          size="small"
+                          variant="outlined"
+                          sx={{ fontSize: '0.7rem' }} />
+                  </Box>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2 }}>
                   <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: '#1565c0' }}>
-                    ₱{totalCorporateIncomeSources.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₱{corporateIncomeSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2 }}>
@@ -1293,7 +1413,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2 }}>
                   <Typography variant="body2" fontWeight="bold" sx={{ fontSize: compactView ? '1rem' : '1.05rem', letterSpacing: 0.5, color: '#1565c0' }}>
-                    ₱{totalCorporateIncomeSources.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₱{corporateIncomeSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
               </TableRow>
@@ -1363,7 +1483,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                     </Box>
                   </TableCell>
                   <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.secondary', letterSpacing: 0.2 }}>
                       -
                     </Typography>
                   </TableCell>
@@ -1374,7 +1494,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                   </TableCell>
                   <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                     <Typography sx={{ fontWeight: 'medium', fontSize: compactView ? '0.95rem' : '1rem', color: '#1565c0' }}>
-                      ₱{totalSubsidySources.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₱{(totalCorporateIncomeUses + totalSubsidySources).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
                   </TableCell>
                 </TableRow>
@@ -1391,7 +1511,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                     </Box>
                   </TableCell>
                   <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: compactView ? '0.95rem' : '1.05rem', pr: 3, py: 2 }}>
-                    <Typography variant="body2" fontWeight="bold" sx={{ color: '#666' }}>
+                    <Typography variant="body2" fontWeight="bold" color="text.secondary">
                       -
                     </Typography>
                   </TableCell>
@@ -1402,7 +1522,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                   </TableCell>
                   <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: compactView ? '0.95rem' : '1.05rem', pr: 3, py: 2 }}>
                     <Typography variant="body2" fontWeight="bold" sx={{ color: '#1976d2' }}>
-                      ₱{totalSubsidySources.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₱{(totalCorporateIncomeUses + totalSubsidySources).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
                   </TableCell>
                 </TableRow>
@@ -1419,7 +1539,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                   </TableCell>
                   <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: compactView ? '0.95rem' : '1.05rem', pr: 3, py: 2 }}>
                     <Typography variant="body2" fontWeight="bold" sx={{ color: 'white' }}>
-                      ₱{totalCorporateIncomeSources.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₱{totalProjectedCorporateIncomeSources.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
                   </TableCell>
                   <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: compactView ? '0.95rem' : '1.05rem', pr: 3, py: 2 }}>

@@ -229,20 +229,41 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
   };
 
   const { data: incomeItems = [], isLoading } = useQuery({
-    queryKey: ["income-items", fiscalYear, budgetType, regionFilter],
+    queryKey: ["income-items", fiscalYear, budgetType, regionFilter, proposalId],
     queryFn: async () => {
       try {
-        
-        const response = await api.get("/income", {
-          params: { fiscalYear, budgetType, region: regionFilter }
-        });
+        // First, attempt proposal-linked query to ensure records tied to the active proposal are included
+        let items = [];
+        if (proposalId) {
+          const params = { fiscalYear, budgetType, proposalId, region: regionFilter };
+          console.log('[IncomeTable] /income/getByParams with:', params);
+          const respByProposal = await api.get('/income/getByParams', { params });
+          items = Array.isArray(respByProposal.data) ? respByProposal.data : [];
+          console.log('[IncomeTable] /income/getByParams returned:', items.length);
+        }
 
-        const filteredItems = response.data.filter(item => checkRegionMatch(item));
-        
+        // If proposal-linked query empty, fall back to FY/Budget/Region list
+        if (!Array.isArray(items) || items.length === 0) {
+          const response = await api.get("/income", {
+            params: { fiscalYear, budgetType, region: regionFilter }
+          });
+          items = Array.isArray(response.data) ? response.data : [];
+          console.log('[IncomeTable] /income fallback returned:', items.length);
+        }
+
+        const filteredItems = items.filter(item => checkRegionMatch(item));
+        console.log('[IncomeTable] Scope:', { fiscalYear, budgetType, region: regionFilter });
+        console.log('[IncomeTable] After region filter:', filteredItems.length);
+
+        // Fallback: if region filter yields zero but there are items, return unfiltered items
+        if (filteredItems.length === 0 && items.length > 0) {
+          console.warn('[IncomeTable] Region filter returned 0; using unfiltered items');
+          return items;
+        }
+
         return filteredItems;
       } catch (error) {
         console.error("❌ Error fetching income items:", error);
-        
         toast.error(getRegionErrorMessage(regionFilter, error));
         return [];
       }
@@ -470,7 +491,12 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
   });
 
   const groupedItems = useMemo(() => {
-    
+    // Scope debug: show active filters
+    console.log('[IncomeTable] Scope params:', {
+      fiscalYear,
+      budgetType,
+      regionFilter
+    });
     const categoryMap = new Map();
     incomeCategories.forEach(category => {
       if (!category?.incomeCategoryName || category.incomeCategoryName.toLowerCase() === 'test') return;
@@ -490,6 +516,7 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
     let currentAccountTotal = 0;
     let hasIsfCategory = false;
 
+    const preCount = Array.isArray(incomeItems) ? incomeItems.length : 0;
     incomeItems.forEach(item => {
       // Add comprehensive null checking for default region
       if (!item || !item.incomecategory) {
@@ -499,7 +526,9 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
       const categoryName = typeof item.incomecategory === 'object' ?
         (item.incomecategory.name || item.incomecategory.incomeCategoryName) : item.incomecategory;
         
-      if (!categoryName || !checkRegionMatch(item)) return;
+      if (!categoryName) return;
+      const regionMatch = checkRegionMatch(item);
+      if (!regionMatch) return;
       const trimmedName = categoryName.trim();
       if (!categoryMap.has(trimmedName)) {
         categoryMap.set(trimmedName, {
@@ -521,6 +550,20 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
         }
       }
     });
+
+    const postCount = Array.from(categoryMap.values()).reduce((acc, cat) => acc + (Array.isArray(cat.items) ? cat.items.length : 0), 0);
+    console.log('[IncomeTable] Region filter counts:', { before: preCount, after: postCount });
+    if (postCount > 0) {
+      const firstCat = Array.from(categoryMap.keys())[0];
+      const sampleItem = firstCat ? categoryMap.get(firstCat)?.items?.[0] : null;
+      if (sampleItem) {
+        console.log('[IncomeTable] Sample matched item:', {
+          amount: sampleItem.amount,
+          category: typeof sampleItem.incomecategory === 'object' ? (sampleItem.incomecategory.name || sampleItem.incomecategory.incomeCategoryName) : sampleItem.incomecategory,
+          region: sampleItem.region || sampleItem.Region || sampleItem.meta?.region
+        });
+      }
+    }
 
     if (hasIsfCategory && applyDiscount && discountSettings?.region === regionFilter) {
       const discountAmount = discountType === "percentage" ?
@@ -593,6 +636,8 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
 
     return result;
   }, [incomeItems, incomeCategories, categorySubcategories, discountType, discountValue, applyDiscount, subcategoryAmounts]);
+
+    // Scope banner removed per request
 
   const grandTotal = useMemo(() => {
     // Define categories to include based on discount status
@@ -860,6 +905,7 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
 
   return (
     <Paper sx={{ p: 2, mb: 3 }}>
+      
       <Box sx={{ mb: 3 }}>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
           <Box display="flex" alignItems="center" gap={2}>
