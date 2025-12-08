@@ -160,34 +160,34 @@ async function computeModuleTotals(filterKeys, proposalId) {
   const mooeSubsidyTotal = await tryMatch(MOOE, { $sum: { $toDouble: { $ifNull: ["$subsidy", 0] } } });
   const coSubsidyTotal = await tryMatch(CapitalOutlay, { $sum: { $toDouble: { $ifNull: ["$subsidy", 0] } } });
   
+  // ADDED: Income components for MOOE and Capital Outlay
+  const mooeIncomeTotal = await tryMatch(MOOE, { $sum: { $toDouble: { $ifNull: ["$income", 0] } } });
+  const coIncomeTotal = await tryMatch(CapitalOutlay, { $sum: { $toDouble: { $ifNull: ["$income", 0] } } });
+
   // ADDED: Calculate PersonnelServices subsidy (all including charged-to-income)
-  // We'll deduct the charged-to-income subsidy separately
+  // Logic: Subsidy = Total - ChargedToIncomeAmount
+  // This works for both cases:
+  // 1. Not charged: ChargedToIncomeAmount is 0, so Subsidy = Total
+  // 2. Charged: Subsidy = Total - ChargedToIncomeAmount (the remainder)
   let psSubsidyTotal = 0;
+  
+  const psSubsidyExpr = {
+    $sum: {
+      $subtract: [
+        { $toDouble: { $ifNull: ["$Total", 0] } },
+        { $toDouble: { $ifNull: ["$chargedToIncomeAmount", 0] } }
+      ]
+    }
+  };
+
   if (proposalId) {
     const byProposal = { 
       proposalId: new mongoose.Types.ObjectId(proposalId)
-      // NOTE: NOW INCLUDING all PS records, even charged-to-income ones
     };
-    // DEBUG: Count all PS records and those marked as charged-to-income
-    const allPsCount = await PersonnelServices.countDocuments({ proposalId: new mongoose.Types.ObjectId(proposalId) });
-    const chargedPsCount = await PersonnelServices.countDocuments({ proposalId: new mongoose.Types.ObjectId(proposalId), chargedToIncomeEligible: true });
-    const notChargedPsCount = await PersonnelServices.countDocuments({ proposalId: new mongoose.Types.ObjectId(proposalId), chargedToIncomeEligible: { $ne: true } });
-    console.log('[recalculate] DEBUG PS Records for proposalId ' + proposalId + ':', { allPsCount, chargedPsCount, notChargedPsCount });
-    
-    // List which ones have subsidies
-    const recordsWithSubsidy = await PersonnelServices.find(byProposal).select('name subsidyAmount chargedToIncomeEligible chargedToIncomeAmount chargedToIncomeSubsidyAmount').lean();
-    const subsidySum = recordsWithSubsidy.reduce((sum, r) => sum + (r.subsidyAmount || 0), 0);
-    console.log('[recalculate] DEBUG PS Subsidy records (ALL, including charged-to-income):', { 
-      count: recordsWithSubsidy.length, 
-      manualSum: subsidySum,
-      records: recordsWithSubsidy.slice(0, 3).map(r => ({ name: r.name, subsidyAmount: r.subsidyAmount, chargedToIncomeEligible: r.chargedToIncomeEligible, chargedToIncomeSubsidyAmount: r.chargedToIncomeSubsidyAmount }))
-    });
-    
-    psSubsidyTotal = await aggregateSum(PersonnelServices, byProposal, { $sum: { $toDouble: { $ifNull: ["$subsidyAmount", 0] } } });
+    psSubsidyTotal = await aggregateSum(PersonnelServices, byProposal, psSubsidyExpr);
   } else {
     const psMatch = { ...orgMatch };
-    // NOW INCLUDING all PS records, even charged-to-income ones
-    psSubsidyTotal = await aggregateSum(PersonnelServices, psMatch, { $sum: { $toDouble: { $ifNull: ["$subsidyAmount", 0] } } });
+    psSubsidyTotal = await aggregateSum(PersonnelServices, psMatch, psSubsidyExpr);
   }
 
   return {
@@ -197,6 +197,8 @@ async function computeModuleTotals(filterKeys, proposalId) {
     coAmountTotal,
     mooeSubsidyTotal,
     coSubsidyTotal,
+    mooeIncomeTotal, // ADDED
+    coIncomeTotal,   // ADDED
     psSubsidyTotal,  // ADDED: Include PersonnelServices subsidies
     chargedToIncomeTotal,
     chargedToIncomeSubsidyTotal
@@ -291,6 +293,8 @@ async function persistProposalTotals(proposal) {
     coAmountTotal,
     mooeSubsidyTotal,
     coSubsidyTotal,
+    mooeIncomeTotal, // ADDED
+    coIncomeTotal,   // ADDED
     psSubsidyTotal,  // ADDED: Include PersonnelServices subsidies
     chargedToIncomeTotal,
     chargedToIncomeSubsidyTotal
@@ -309,10 +313,12 @@ async function persistProposalTotals(proposal) {
   // 3. Add chargedToIncomeTotal to income
   // 4. Subsidy: deduct the subsidy of charged-to-income personnel
   
-  const adjustedIncomeTotal = (incomeTotal || 0) + (chargedToIncomeTotal || 0);
+  // PROJECTED INCOME = Corporate Income + Personnelservices(charged to income total) + mooe(income) + capitaloutlay(income)
+  const adjustedIncomeTotal = (incomeTotal || 0) + (chargedToIncomeTotal || 0) + (mooeIncomeTotal || 0) + (coIncomeTotal || 0);
+  
   const adjustedPsTotal = (psTotal || 0) - (chargedToIncomeTotal || 0); // psTotal minus the amounts moved to income
-  // NOTE: psSubsidyTotal now includes charged-to-income subsidies, so we must deduct them
-  const adjustedSubsidyTotal = ((psSubsidyTotal || 0) - (chargedToIncomeSubsidyTotal || 0) + (mooeSubsidyTotal || 0) + (coSubsidyTotal || 0));
+  // NOTE: psSubsidyTotal now correctly calculates subsidy based on charged-to-income status
+  const adjustedSubsidyTotal = ((psSubsidyTotal || 0) + (mooeSubsidyTotal || 0) + (coSubsidyTotal || 0));
 
   const expenseSum = (adjustedPsTotal || 0) + (mooeAmountTotal || 0) + (coAmountTotal || 0);
   const projectedSubsidy = Math.max(0, adjustedSubsidyTotal); // Ensure it doesn't go negative
@@ -324,8 +330,11 @@ async function persistProposalTotals(proposal) {
     psSubsidyTotal: parseFloat(psSubsidyTotal).toFixed(2),
     mooeSubsidyTotal: parseFloat(mooeSubsidyTotal).toFixed(2),
     coSubsidyTotal: parseFloat(coSubsidyTotal).toFixed(2),
+    mooeIncomeTotal: parseFloat(mooeIncomeTotal).toFixed(2),
+    coIncomeTotal: parseFloat(coIncomeTotal).toFixed(2),
     adjustedSubsidyTotal: parseFloat(adjustedSubsidyTotal).toFixed(2),
     projectedSubsidy: parseFloat(projectedSubsidy).toFixed(2),
+    adjustedIncomeTotal: parseFloat(adjustedIncomeTotal).toFixed(2),
     'OLD VALUE': proposal.projectedSubsidy,
     'NEW VALUE': projectedSubsidy
   });

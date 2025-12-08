@@ -110,16 +110,7 @@ capitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl
     
     // SUPER_ADMIN: Filter by createdBy (self-created records only)
     if (isSuperAdmin && userIdString) {
-      const filteredOutlay = capitalOutlay.filter(co => {
-        const createdByMatch = (
-          String(co.createdBy || co.userId || '') === userIdString ||
-          String(co.userId || '') === userIdString
-        );
-        return createdByMatch;
-      });
-      if (filteredOutlay.length > 0) {
-        capitalOutlay = filteredOutlay;
-      }
+      // Allow SUPER_ADMIN to see all records (removed restriction)
     } else if (!isSuperAdmin && !isBudgetManager && userIdString) {
       try {
         const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');

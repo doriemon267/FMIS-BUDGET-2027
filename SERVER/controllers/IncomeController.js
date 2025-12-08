@@ -448,7 +448,7 @@ exports.getIncomeByParams = async (req, res) => {
       }
     }
 
-    let income = await Income.find(query).lean();
+    let income = await Income.find(query).populate('incomecategory').lean();
     
     // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's CURRENT organizational assignment
     const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;

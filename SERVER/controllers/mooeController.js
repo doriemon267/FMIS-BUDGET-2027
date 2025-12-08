@@ -1632,10 +1632,7 @@ exports.getMOOEByParams = async (req, res) => {
     
     // SUPER_ADMIN sees only their own records
     if (isSuperAdmin && userIdString) {
-      mooe = mooe.filter(m => {
-        const createdBy = String(m.createdBy || m.userId || '');
-        return createdBy === userIdString;
-      });
+      // Allow SUPER_ADMIN to see all records (removed restriction)
     } else if (!isBudgetManager && userIdString) {
       try {
         const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');

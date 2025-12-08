@@ -18,6 +18,7 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
   const focusRefs = useRef([]);
 
   // Each app now has its own color
+  // Base app registry (full set). Use local/user settings to hide items.
   const apps = useMemo(() => [
     { Icon: BiCalculator, label: "Calculator", id: "calc", color: "#1976d2", shortcut: 'Alt+C' },
     {
@@ -51,6 +52,30 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
     { Icon: FiBarChart2, label: "Performance", id: "metrics", color: "#009688", shortcut: 'Alt+P' },
     { Icon: FiEdit, label: "Notes", id: "notes", color: "#fbc02d", shortcut: 'Alt+O' },
   ], []);
+
+  // Compute visible apps — prefer explicit allowed list, fallback to disabled list
+  const visibleApps = useMemo(() => {
+    try {
+      // Highest priority: allowed list (exactly what to show)
+      const allowedRaw = localStorage.getItem('appTrayAllowed');
+      const allowed = Array.isArray(JSON.parse(allowedRaw || '[]')) ? JSON.parse(allowedRaw || '[]') : [];
+      if (allowed && allowed.length > 0) {
+        return apps.filter(a => allowed.includes(a.id));
+      }
+      // Fallback: disabled list (what to hide)
+      const disabledRaw = localStorage.getItem('appTrayDisabled');
+      const disabled = Array.isArray(JSON.parse(disabledRaw || '[]')) ? JSON.parse(disabledRaw || '[]') : [];
+      if (disabled && disabled.length > 0) {
+        return apps.filter(a => !disabled.includes(a.id));
+      }
+      // Default: show only five core apps to match request
+      const defaultFive = ['calc','todo','chat','notifications','notes'];
+      return apps.filter(a => defaultFive.includes(a.id));
+    } catch (e) {
+      const fallbackFive = ['calc','todo','chat','notifications','notes'];
+      return apps.filter(a => fallbackFive.includes(a.id));
+    }
+  }, [apps]);
 
   // Close tray when clicking outside or pressing Escape
   useEffect(() => {
@@ -249,7 +274,7 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
             </Tooltip>
           </Box>
           <Stack direction="column-reverse" spacing={1}>
-                {apps.map(({ Icon, label, id, color, shortcut }, idx) => {
+                {visibleApps.map(({ Icon, label, id, color, shortcut }, idx) => {
               const isOpen = openAppIds.includes(id);
               const isActive = activeAppId === id;
               const refIndex = idx; // logical order
