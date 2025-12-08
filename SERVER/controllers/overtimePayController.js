@@ -1,7 +1,8 @@
 // controllers/overtimePayController.js
 const OvertimePay       = require("../models/overtimePay");
 const Settings          = require("../models/Settings");
-const PersonnelService = require('../models/PersonnelServices');
+const CompensationSettings = require("../models/CompensationSettings");
+const PersonnelServices = require('../models/PersonnelServices');
 /**
  * Helper: compute total overtime for an employee in a fiscal year
  */
@@ -22,14 +23,47 @@ const computeOvertimeAmount = (
   weekdayMultiplier,
   weekendMultiplier
 ) => {
-  const wd = Math.max(0, Number(weekdayHours));
-  const we = Math.max(0, Number(weekendHours));
-  const dailyRate = monthlySalary / 22;
+  // Ensure all inputs are valid numbers
+  const wd = Math.max(0, Number(weekdayHours) || 0);
+  const we = Math.max(0, Number(weekendHours) || 0);
+  const salary = Number(monthlySalary) || 0;
+  
+  // Use default multipliers if not provided
+  const wdMult = Number(weekdayMultiplier) || 1.25;
+  const weMult = Number(weekendMultiplier) || 1.5;
+  
+  console.log('📊 computeOvertimeAmount inputs:', {
+    weekdayHours: wd,
+    weekendHours: we,
+    monthlySalary: salary,
+    weekdayMultiplier: wdMult,
+    weekendMultiplier: weMult,
+    receivedMultipliers: { weekdayMultiplier, weekendMultiplier }
+  });
+  
+  // If salary is invalid or zero, return 0
+  if (!salary || isNaN(salary)) {
+    console.log('❌ Invalid salary, returning 0');
+    return 0;
+  }
+  
+  const dailyRate = salary / 22;
   const hourlyRate = dailyRate / 8;
-  return (
-    wd * hourlyRate * weekdayMultiplier +
-    we * hourlyRate * weekendMultiplier
+  const result = (
+    wd * hourlyRate * wdMult +
+    we * hourlyRate * weMult
   );
+  
+  console.log('✅ Calculation details:', {
+    dailyRate,
+    hourlyRate,
+    weekdayComponent: wd * hourlyRate * wdMult,
+    weekendComponent: we * hourlyRate * weMult,
+    result
+  });
+  
+  // Ensure result is a valid number
+  return isNaN(result) ? 0 : result;
 };
 /**
  * Check if overtime exceeds 50% of annual salary
@@ -50,6 +84,8 @@ async function checkOvertimeLimit(employeeFullName, fiscalYear, monthlySalary, n
 }
 exports.createOvertimePay = async (req, res) => {
   try {
+    console.log('📨 Received request body:', JSON.stringify(req.body, null, 2));
+    
     const {
       employeeNumber,
       employeeFullName,
@@ -67,6 +103,33 @@ exports.createOvertimePay = async (req, res) => {
       status,     // Add status field from middleware
       originalLevel, // Add originalLevel field from middleware
     } = req.body;
+
+    console.log('📋 Extracted values:', { monthlySalary, weekdayHours, weekendHours, employeeFullName });
+
+    // --- VALIDATION: Check required fields
+    if (!employeeFullName) {
+      return res.status(400).json({
+        message: "Employee full name is required"
+      });
+    }
+    if (!fiscalYear) {
+      return res.status(400).json({
+        message: "Fiscal year is required"
+      });
+    }
+    
+    // CRITICAL: Validate that monthlySalary is a valid positive number
+    const validMonthlySalary = Number(monthlySalary);
+    console.log('💰 Salary validation:', { received: monthlySalary, asNumber: validMonthlySalary, isNaN: isNaN(validMonthlySalary) });
+    
+    if (!validMonthlySalary || isNaN(validMonthlySalary) || validMonthlySalary <= 0) {
+      console.error('❌ Invalid monthlySalary received:', { monthlySalary, validMonthlySalary });
+      return res.status(400).json({
+        message: "Valid monthly salary is required. Received: " + monthlySalary,
+        code: "INVALID_SALARY"
+      });
+    }
+
     // --- NEW: Prevent adding if personnel status is Submitted or Approved
     const existingPerson = await PersonnelServices.findOne({ employeeFullName, fiscalYear });
     if (existingPerson && ["Submitted", "Approved"].includes(existingPerson.status)) {
@@ -82,17 +145,45 @@ exports.createOvertimePay = async (req, res) => {
           "Walang active settings na nahanap para sa fiscal year na ito.",
       });
     }
-    const { weekdayMultiplier, weekendMultiplier } = settings;
+    
+    // Get compensation settings for overtime multipliers
+    let weekdayMultiplier = 1.25; // default
+    let weekendMultiplier = 1.5;  // default
+    
+    if (settings.compensationSettingsId) {
+      const compensationSettings = await CompensationSettings.findById(settings.compensationSettingsId).lean();
+      if (compensationSettings) {
+        weekdayMultiplier = compensationSettings.weekdayMultiplier || 1.25;
+        weekendMultiplier = compensationSettings.weekendMultiplier || 1.5;
+      }
+    }
+    
+    console.log('⚙️ Settings fetched:', {
+      weekdayMultiplier,
+      weekendMultiplier,
+      settingsId: settings._id,
+      compensationSettingsId: settings.compensationSettingsId
+    });
     // 2) Compute amount
     const amount = computeOvertimeAmount(
       weekdayHours,
       weekendHours,
-      monthlySalary,
+      validMonthlySalary,
       weekdayMultiplier,
       weekendMultiplier
     );
+    
+    console.log('💾 Amount computed and about to save:', {
+      amount,
+      weekdayHours,
+      weekendHours,
+      monthlySalary: validMonthlySalary,
+      weekdayMultiplier,
+      weekendMultiplier
+    });
+    
     // NEW: Check if overtime exceeds 50% of annual salary
-    const limitCheck = await checkOvertimeLimit(employeeFullName, fiscalYear, monthlySalary, amount);
+    const limitCheck = await checkOvertimeLimit(employeeFullName, fiscalYear, validMonthlySalary, amount);
     if (limitCheck.willExceed) {
       return res.status(400).json({
         message: `Hindi pwedeng lumampas sa 50% ng annual salary ang overtime. Current: ₱${limitCheck.currentTotal.toLocaleString()}, New Total: ₱${limitCheck.newTotal.toLocaleString()}, Max Allowed: ₱${limitCheck.maxAllowed.toLocaleString()}`
@@ -106,7 +197,7 @@ exports.createOvertimePay = async (req, res) => {
       weekdayHours,
       weekendHours,
       amount,
-      monthlySalary,
+      monthlySalary: validMonthlySalary,
       fiscalYear,
       processBy,
       processDate,

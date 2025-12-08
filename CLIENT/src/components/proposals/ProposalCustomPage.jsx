@@ -322,6 +322,65 @@ const ProposalCustomPage = ({
     }
   }, []);
 
+  // NEW: Check backend for existing proposals for this fiscal year and budget type
+  // This ensures the button is disabled even in a different browser session
+  useEffect(() => {
+    const checkExistingProposals = async () => {
+      if (!activeFiscalYear || !activeBudgetType || !currentUser?.UserId) {
+        return;
+      }
+
+      try {
+        // Query for existing proposals: use view='my-proposals' to get DRAFT proposals
+        // Then also check for submitted/approved proposals with explicit status queries
+        const draftResponse = await api.get('/api/allproposal/proposals', {
+          params: {
+            view: 'my-proposals', // This filters for createdBy current user and status=DRAFT
+            fiscalYear: activeFiscalYear
+          }
+        });
+
+        const draftProposals = draftResponse.data?.proposals || draftResponse.data?.data || [];
+        
+        // Also check for submitted/approved proposals
+        const allProposalsResponse = await api.get('/api/allproposal/proposals', {
+          params: {
+            view: 'all-proposals', // Non-DRAFT proposals
+            fiscalYear: activeFiscalYear
+          }
+        });
+
+        const allProposals = allProposalsResponse.data?.proposals || allProposalsResponse.data?.data || [];
+        
+        // Combine and filter by createdBy
+        const allUserProposals = [
+          ...draftProposals,
+          ...allProposals
+        ].filter(p => String(p.createdBy) === String(currentUser.UserId) || p.createdByName === `${currentUser.FirstName} ${currentUser.LastName}`);
+
+        if (allUserProposals.length > 0) {
+          // Found existing proposal(s) - set the first one
+          const existingProposal = allUserProposals[0];
+          setCurrentProposalId(existingProposal.workflowRef || existingProposal._id);
+          sessionStorage.setItem('activeWorkflowRef', existingProposal.workflowRef || existingProposal._id);
+          console.log('Found existing proposal:', existingProposal);
+        } else if (currentProposalId) {
+          // No proposals found but currentProposalId is set - proposal was deleted
+          // Clear the state and storage
+          console.log('Proposal was deleted from database. Clearing currentProposalId.');
+          setCurrentProposalId(null);
+          sessionStorage.removeItem('activeWorkflowRef');
+          localStorage.removeItem('activeWorkflowRef');
+        }
+      } catch (error) {
+        console.error('Error checking existing proposals:', error);
+        // Don't disable button on error - allow user to proceed
+      }
+    };
+
+    checkExistingProposals();
+  }, [activeFiscalYear, activeBudgetType, currentUser?.UserId]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const storedPreference = window.localStorage.getItem(

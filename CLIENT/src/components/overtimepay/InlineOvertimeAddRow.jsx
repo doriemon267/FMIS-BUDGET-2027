@@ -130,8 +130,22 @@ const InlineOvertimeAddRow = ({ refreshData, employeeOptions }) => {
 
   // compute amount
   const computeAmount = useCallback(() => {
-    if (!selectedEmployee || !selectedEmployee.monthlySalary) return 0;
-    const monthlySalary = Number(selectedEmployee.monthlySalary) || 0;
+    if (!selectedEmployee) return 0;
+    
+    // Get monthly salary from employee data - support both monthlySalary and annualSalary fields
+    let monthlySalary = Number(selectedEmployee.monthlySalary) || 0;
+    
+    // Fallback: if monthlySalary is not available, try to calculate from annualSalary
+    if (!monthlySalary && selectedEmployee.annualSalary) {
+      monthlySalary = Number(selectedEmployee.annualSalary) / 12;
+    }
+    
+    // If still no valid salary, return 0
+    if (!monthlySalary || isNaN(monthlySalary) || monthlySalary <= 0) {
+      console.warn('Employee has no valid salary:', selectedEmployee);
+      return 0;
+    }
+    
     const weekdayRate = (monthlySalary / 22 / 8) * multipliers.weekdayMultiplier;
     const weekendRate = (monthlySalary / 22 / 8) * multipliers.weekendMultiplier;
     const computed =
@@ -145,7 +159,12 @@ const InlineOvertimeAddRow = ({ refreshData, employeeOptions }) => {
   }, [computeAmount]);
 
   const mutation = useMutation({
-    mutationFn: async (data) => await api.post("/overtime-pay", data),
+    mutationFn: async (data) => {
+      console.log('🚀 About to send request with data:', JSON.stringify(data, null, 2));
+      const response = await api.post("/overtime-pay", data);
+      console.log('✅ Response received:', response.data);
+      return response;
+    },
     onSuccess: () => {
       toast.success("Overtime record added successfully");
       setSelectedEmployee(null);
@@ -155,6 +174,7 @@ const InlineOvertimeAddRow = ({ refreshData, employeeOptions }) => {
       fetchExistingRecords();
     },
     onError: (err) => {
+      console.error('❌ Mutation error:', err);
       toast.error(err.response?.data?.message || "Error adding record");
     },
   });
@@ -168,15 +188,37 @@ const InlineOvertimeAddRow = ({ refreshData, employeeOptions }) => {
       toast.error("Settings not loaded. Please refresh.");
       return;
     }
+    
+    // Get monthly salary - support both monthlySalary and annualSalary fields
+    let monthlySalary = Number(selectedEmployee.monthlySalary) || 0;
+    if (!monthlySalary && selectedEmployee.annualSalary) {
+      monthlySalary = Number(selectedEmployee.annualSalary) / 12;
+    }
+    
+    // Debug log
+    console.log('Selected Employee Data:', {
+      employeeFullName: selectedEmployee.employeeFullName,
+      monthlySalary: selectedEmployee.monthlySalary,
+      annualSalary: selectedEmployee.annualSalary,
+      calculatedMonthlySalary: monthlySalary,
+      allFields: selectedEmployee
+    });
+    
+    // Validate monthly salary
+    if (!monthlySalary || isNaN(monthlySalary) || monthlySalary <= 0) {
+      toast.error("Selected employee does not have a valid monthly salary. Data: " + JSON.stringify({monthlySalary, annualSalary: selectedEmployee.annualSalary}));
+      return;
+    }
+    
     // Get hierarchical data for saving
     const hierarchical = currentUser?.hierarchicalAccess || {};
     
     const payload = {
       employeeFullName: selectedEmployee.employeeFullName,
       positionTitle: selectedEmployee.positionTitle,
-      weekdayHours: Number(weekdayHours),
-      weekendHours: Number(weekendHours),
-      monthlySalary: Number(selectedEmployee.monthlySalary) || 0,
+      weekdayHours: Number(weekdayHours) || 0,
+      weekendHours: Number(weekendHours) || 0,
+      monthlySalary: monthlySalary,
       processBy,
       fiscalYear,
       budgetType,
@@ -186,6 +228,15 @@ const InlineOvertimeAddRow = ({ refreshData, employeeOptions }) => {
       department: hierarchical.accessibleDepartments?.[0]?.departmentName || null,
       division: hierarchical.accessibleDivisions?.[0] || currentUser?.divisionName || null,
     };
+    
+    console.log('Payload being sent - Full details:');
+    console.log('  employeeFullName:', payload.employeeFullName);
+    console.log('  monthlySalary:', payload.monthlySalary);
+    console.log('  weekdayHours:', payload.weekdayHours);
+    console.log('  weekendHours:', payload.weekendHours);
+    console.log('  fiscalYear:', payload.fiscalYear);
+    console.log('  budgetType:', payload.budgetType);
+    console.log('  Full payload:', JSON.stringify(payload));
     mutation.mutate(payload);
   };
 

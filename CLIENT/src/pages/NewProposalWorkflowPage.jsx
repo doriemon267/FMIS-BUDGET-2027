@@ -752,16 +752,13 @@ const NewProposalWorkflowPage = () => {
     );
   };
 
-  // Calculate projected income from Corporate Income + PS Charged + MOOE Income + CO Income
+  // Calculate projected income from PS Charged + MOOE Income + CO Income (excluding Corporate Income)
   const calculateProjectedIncome = () => {
     // If we have detailed line items, compute from them
     if (proposalDetails) {
       let total = 0;
       
-      // Corporate Income (Income model)
-      if (proposalDetails.income?.length) {
-        total += proposalDetails.income.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-      }
+      // NOTE: Corporate Income (Income model) is NOT included in Projected Income
       
       // Personnel Services Charged to Income
       if (proposalDetails.personnel?.length) {

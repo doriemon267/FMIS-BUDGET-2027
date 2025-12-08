@@ -560,7 +560,7 @@ const handleSubmissionWorkflowWrite = async (req, res, next, assignment, operati
   // Log successful access
   // Apply submission workflow consolidation for create operations
   if (operation === 'create') {
-    applySubmissionWorkflowConsolidation(req, assignment);
+    applySubmissionWorkflowConsolidation(req, assignment, isNewStructure);
   }
 
   // ⚠️ CRITICAL FIX: Set hierarchical filters for write operations too
