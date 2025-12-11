@@ -497,7 +497,7 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
           proposalId: new mongoose.Types.ObjectId(budgetOfficerEdit.proposalId)
         };
 
-        const [incomeTotal, psTotal, mooeTotal, coTotal] = await Promise.all([
+        const [incomeTotal, psTotal, mooeTotal, coTotal, psChargedToIncome, mooeIncome, coIncome] = await Promise.all([
           Income.aggregate([
             { $match: filterCriteria },
             { $group: { _id: null, total: { $sum: '$amount' } } }
@@ -513,19 +513,44 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
           CapitalOutlay.aggregate([
             { $match: filterCriteria },
             { $group: { _id: null, total: { $sum: { $ifNull: ['$cost', { $ifNull: ['$total', 0] }] } } } }
+          ]),
+          // PS Charged to Income Amount
+          PersonnelServices.aggregate([
+            { $match: { ...filterCriteria, chargedToIncomeEligible: true } },
+            { $group: { _id: null, total: { $sum: { $ifNull: ['$chargedToIncomeAmount', 0] } } } }
+          ]),
+          // MOOE Income
+          require('../models/mooeProposals').aggregate([
+            { $match: filterCriteria },
+            { $group: { _id: null, total: { $sum: { $ifNull: ['$income', 0] } } } }
+          ]),
+          // Capital Outlay Income
+          CapitalOutlay.aggregate([
+            { $match: filterCriteria },
+            { $group: { _id: null, total: { $sum: { $ifNull: ['$income', 0] } } } }
           ])
         ]);
 
-        const incomeSum = incomeTotal[0]?.total || 0;
+        const incomeSum = incomeTotal[0]?.total || 0; // Corporate Income (NOT included in projectedCorporateIncome)
         const psSum = psTotal[0]?.total || 0;
         const mooeSum = mooeTotal[0]?.total || 0;
         const coSum = coTotal[0]?.total || 0;
+        const psChargedSum = psChargedToIncome[0]?.total || 0;
+        const mooeIncomeSum = mooeIncome[0]?.total || 0;
+        const coIncomeSum = coIncome[0]?.total || 0;
+        
         const expenseSum = psSum + mooeSum + coSum;
-        const newTotal = incomeSum + expenseSum;
+        // Projected Income = PS Charged to Income + MOOE Income + CO Income (NOT including Corporate Income)
+        const projectedIncomeSum = psChargedSum + mooeIncomeSum + coIncomeSum;
+        const newTotal = projectedIncomeSum + expenseSum;
 
         console.log('📊 Recalculated proposal totals after edits:', {
           proposalId: proposal._id,
-          income: incomeSum,
+          corporateIncome: incomeSum + ' (NOT included in projectedCorporateIncome)',
+          psChargedToIncome: psChargedSum,
+          mooeIncome: mooeIncomeSum,
+          coIncome: coIncomeSum,
+          projectedIncome: projectedIncomeSum,
           personnelServices: psSum,
           mooe: mooeSum,
           capitalOutlay: coSum,
@@ -535,10 +560,11 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
         });
 
         // Update proposal with new totals
-        proposal.totalIncome = incomeSum;
+        // NOTE: projectedCorporateIncome = PS Charged + MOOE Income + CO Income (NOT Corporate Income)
+        proposal.totalIncome = projectedIncomeSum;
         proposal.totalExpenses = expenseSum;
-        proposal.proposedBudget = expenseSum;
-        proposal.projectedCorporateIncome = incomeSum;
+        proposal.proposedBudget = projectedIncomeSum + expenseSum;
+        proposal.projectedCorporateIncome = projectedIncomeSum;
         proposal.updatedAt = new Date();
         
         await proposal.save();

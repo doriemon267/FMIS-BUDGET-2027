@@ -97,6 +97,10 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
   const handleRefresh = useCallback(() => {
     queryClient.invalidateQueries(["income-items", fiscalYear, budgetType, regionFilter]);
     queryClient.invalidateQueries(["income-categories", regionFilter]);
+    // Also invalidate allProposals for NewProposalWorkflowPage to update totals
+    queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+    queryClient.invalidateQueries({ queryKey: ["proposals"] });
+    queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
     toast.info("Data refreshed");
   }, [queryClient, fiscalYear, budgetType, regionFilter]);
 

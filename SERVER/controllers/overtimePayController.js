@@ -3,6 +3,7 @@ const OvertimePay       = require("../models/overtimePay");
 const Settings          = require("../models/Settings");
 const CompensationSettings = require("../models/CompensationSettings");
 const PersonnelServices = require('../models/PersonnelServices');
+const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 /**
  * Helper: compute total overtime for an employee in a fiscal year
  */
@@ -186,7 +187,7 @@ exports.createOvertimePay = async (req, res) => {
     const limitCheck = await checkOvertimeLimit(employeeFullName, fiscalYear, validMonthlySalary, amount);
     if (limitCheck.willExceed) {
       return res.status(400).json({
-        message: `Hindi pwedeng lumampas sa 50% ng annual salary ang overtime. Current: ₱${limitCheck.currentTotal.toLocaleString()}, New Total: ₱${limitCheck.newTotal.toLocaleString()}, Max Allowed: ₱${limitCheck.maxAllowed.toLocaleString()}`
+        message: `Not exceed to 50% the annual salary and overtime. Current: ₱${limitCheck.currentTotal.toLocaleString()}, New Total: ₱${limitCheck.newTotal.toLocaleString()}, Max Allowed: ₱${limitCheck.maxAllowed.toLocaleString()}`
       });
     }
     // 3) Save new OvertimePay record
@@ -215,6 +216,15 @@ exports.createOvertimePay = async (req, res) => {
     if (person) {
       person.overtimePay = totalOvertime;
       await person.save();
+      
+      // Trigger recalculation of proposal totals
+      if (person.proposalId) {
+        try {
+          await recalculateAndSaveProposalTotals({ proposalId: person.proposalId });
+        } catch (recalcErr) {
+          console.error('Error recalculating proposal totals:', recalcErr);
+        }
+      }
     }
     return res.status(201).json({
       message: "Overtime record saved and PersonnelServices updated",
@@ -313,6 +323,15 @@ exports.updateOvertimePay = async (req, res) => {
         0
       );
       await person.save();
+      
+      // Trigger recalculation of proposal totals
+      if (person.proposalId) {
+        try {
+          await recalculateAndSaveProposalTotals({ proposalId: person.proposalId });
+        } catch (recalcErr) {
+          console.error('Error recalculating proposal totals:', recalcErr);
+        }
+      }
     }
     return res.status(200).json(record);
   } catch (error) {
@@ -346,6 +365,15 @@ exports.deleteOvertimePay = async (req, res) => {
         0
       );
       await person.save();
+      
+      // Trigger recalculation of proposal totals
+      if (person.proposalId) {
+        try {
+          await recalculateAndSaveProposalTotals({ proposalId: person.proposalId });
+        } catch (recalcErr) {
+          console.error('Error recalculating proposal totals:', recalcErr);
+        }
+      }
     }
     return res
       .status(200)

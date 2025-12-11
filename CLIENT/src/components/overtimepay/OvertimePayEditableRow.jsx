@@ -57,8 +57,9 @@ const OvertimePayEditableRow = ({ row, refreshData, activeSettings: propActiveSe
     }
   }, [activeSettings, row.employeeFullName]);
 
-  // Settings multipliers
-  const localSettings = activeSettings || { weekdayMultiplier: 1.25, weekendMultiplier: 1.5 };
+  // Settings multipliers - check both locations: direct activeSettings (legacy) or compensationSettingsId (new architecture)
+  const compSettings = activeSettings?.compensationSettingsId || activeSettings;
+  const localSettings = compSettings || { weekdayMultiplier: 1.25, weekendMultiplier: 1.5 };
 
   const getMonthlySalary = () => {
     const salary = Number(row.monthlySalary);

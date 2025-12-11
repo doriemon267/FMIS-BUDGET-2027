@@ -483,7 +483,7 @@ exports.getPersonnels = async (req, res) => {
       ];
     }
     
-    let employees = await PersonnelServices.find(query).limit(500);
+    let employees = await PersonnelService.find(query).limit(500);
     
     // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's CURRENT organizational assignment
     const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
@@ -634,7 +634,7 @@ exports.getEligibleForLoyaltyPay = async (req, res) => {
       DateOfAppointment: { $exists: true, $ne: null },
       ...baseFilters // Apply hierarchical filters
     };
-    const personnelServices = await PersonnelServices.find(personnelQuery).lean();
+    const personnelServices = await PersonnelService.find(personnelQuery).lean();
     // Filter employees based on years of service with June 22 cutoff
     const eligibleEmployees = [];
     for (const employee of personnelServices) {
@@ -892,7 +892,7 @@ exports.getEligibleForRetirement = async (req, res) => {
       DateOfBirth: { $exists: true, $ne: null },
       ...dbHierarchicalFilters // Apply hierarchical filters
     };
-    const personnelServices = await PersonnelServices.find(personnelQuery).lean();
+    const personnelServices = await PersonnelService.find(personnelQuery).lean();
     // Filter employees based on age and years of service
     const eligibleEmployees = [];
     for (const employee of personnelServices) {

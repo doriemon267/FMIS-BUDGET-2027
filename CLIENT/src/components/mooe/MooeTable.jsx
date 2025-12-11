@@ -1199,6 +1199,10 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
         // Refresh the data after saving so the latest entries appear immediately
         queryClient.invalidateQueries(["mooeData", activeRegion?.name || activeRegion?.regionName]);
         queryClient.invalidateQueries(["consolidatedData", activeRegion?.name || activeRegion?.regionName]);
+        // Also invalidate allProposals for NewProposalWorkflowPage to update totals
+        queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+        queryClient.invalidateQueries({ queryKey: ["proposals"] });
+        queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
       },
       onError: (error) => {
         console.error("Save error:", error);

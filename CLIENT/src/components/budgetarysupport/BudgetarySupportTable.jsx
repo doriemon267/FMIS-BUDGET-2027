@@ -1138,11 +1138,11 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
     (Number(useOfFundsBreakdown.personalServices || 0) - Number(useOfFundsBreakdown.chargedToIncomeAmount || 0)) +
     Number(useOfFundsBreakdown.maintenanceAndOperatingSubsidy || 0) +
     Number(useOfFundsBreakdown.capitalOutlays || 0);
-  const totalSubsidySources = proposalData?.projectedSubsidy ? Number(proposalData.projectedSubsidy) : calculatedSubsidyNeed;
-  const totalSubsidyUses =
-    (Number(useOfFundsBreakdown.personalServices || 0) - Number(useOfFundsBreakdown.chargedToIncomeAmount || 0)) +
-    Number(useOfFundsBreakdown.maintenanceAndOperatingSubsidy || 0) +
-    Number(useOfFundsBreakdown.capitalOutlays || 0);
+  
+  // IMPORTANT: Always use calculated value for both SOURCES and USES to keep them in sync
+  // This ensures that when line items are updated, both sides reflect the same total
+  const totalSubsidySources = calculatedSubsidyNeed;
+  const totalSubsidyUses = calculatedSubsidyNeed;
 
   // TOTAL SOURCES: Projected Corporate Income should reflect ONLY TOTAL CORPORATE INCOME
   const totalProjectedCorporateIncomeSources = totalCorporateIncomeSources;

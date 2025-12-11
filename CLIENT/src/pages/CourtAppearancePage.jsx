@@ -396,10 +396,11 @@ const EmployeeCourtAppearancePage = () => {
       prev.map((row) => {
         if (row.employeeNumber === employeeNumber) {
           const num = Number(value);
+          const courtRate = settings?.courtAppearance ?? settings?.compensationSettingsId?.courtAppearance ?? 0;
           const newRow = {
             ...row,
             noOfCourtAppearance: isNaN(num) ? 0 : num,
-            courtAppearanceAmount: settings ? num * settings.courtAppearance : 0,
+            courtAppearanceAmount: settings ? num * courtRate : 0,
             isModified: true,
           };
           return newRow;
@@ -452,7 +453,7 @@ const EmployeeCourtAppearancePage = () => {
             division: row.division,
             region: row.region,
             noOfCourtAppearance: row.noOfCourtAppearance,
-            courtAppearanceAmount: row.noOfCourtAppearance * settings.courtAppearance,
+            courtAppearanceAmount: row.noOfCourtAppearance * (settings?.courtAppearance ?? settings?.compensationSettingsId?.courtAppearance ?? 0),
             processBy,
             processDate,
             fiscalYear,

@@ -1,6 +1,7 @@
 const EmployeeCourtAppearance = require("../models/employeeCourtAppearance");
 const Settings = require("../models/Settings");
 const PersonnelServices = require('../models/PersonnelServices');
+const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const {
   numberFilter,
   dateFilter,
@@ -142,6 +143,15 @@ exports.addAppearance = async (req, res) => {
     if (personnelRecord) {
       personnelRecord.courtAppearance = courtAppearanceAmount;
       await personnelRecord.save();
+      
+      // Trigger recalculation of proposal totals
+      if (personnelRecord.proposalId) {
+        try {
+          await recalculateAndSaveProposalTotals({ proposalId: personnelRecord.proposalId });
+        } catch (recalcErr) {
+          console.error('Error recalculating proposal totals:', recalcErr);
+        }
+      }
     }
     res.status(201).json({ message: "Record created successfully.", data: newEntry });
   } catch (err) {
@@ -181,6 +191,15 @@ exports.editAppearance = async (req, res) => {
     if (personnelRecord) {
       personnelRecord.courtAppearance = updated.courtAppearanceAmount;
       await personnelRecord.save();
+      
+      // Trigger recalculation of proposal totals
+      if (personnelRecord.proposalId) {
+        try {
+          await recalculateAndSaveProposalTotals({ proposalId: personnelRecord.proposalId });
+        } catch (recalcErr) {
+          console.error('Error recalculating proposal totals:', recalcErr);
+        }
+      }
     }
     res.json({ message: "Record updated successfully.", data: updated });
   } catch (err) {

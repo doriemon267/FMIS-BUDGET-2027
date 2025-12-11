@@ -54,7 +54,7 @@ import ProposalAttachments from "../components/workflow/ProposalAttachments";
 import { toast } from "react-toastify";
 import { useWorkflowRef } from "../hooks/useWorkflowRef";
 import { prettyRole } from '../utils/role-utils';
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { displayUacs } from '../utils/uacsDisplayHelper';
 
 // Brand colors aligned to Transactions Processing UI
@@ -182,8 +182,6 @@ const NewProposalWorkflowPage = () => {
       setTargetProposalId(proposalIdParam);
     }
   }, [searchParams, tabs]);
-  const [loading, setLoading] = useState(false);
-  const [proposals, setProposals] = useState([]);
   const [selectedProposal, setSelectedProposal] = useState(null);
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
   const [viewDetailsDialogOpen, setViewDetailsDialogOpen] = useState(false);
@@ -255,52 +253,56 @@ const NewProposalWorkflowPage = () => {
         localStorage.getItem("activeWorkflowRef")
       : null);
 
-  const fallbackAttemptedRef = useRef(false);
-  const fetchProposals = useCallback(async (options = {}) => {
-    setLoading(true);
-    try {
-      const activeTabView = tabs[activeTab].value;
-      const resolvedRegion = activeRegion && typeof activeRegion === 'object'
-        ? (activeRegion._id || activeRegion.id || activeRegion.Region || activeRegion.regionName || activeRegion.name)
-        : activeRegion;
+  // Compute resolved region for API calls
+  const resolvedRegion = activeRegion && typeof activeRegion === 'object'
+    ? (activeRegion._id || activeRegion.id || activeRegion.Region || activeRegion.regionName || activeRegion.name)
+    : activeRegion;
+
+  // Get current tab view
+  const activeTabView = tabs[activeTab]?.value || 'all-proposals';
+
+  // React Query for real-time proposal fetching with polling
+  const {
+    data: proposalsData,
+    isLoading: proposalsLoading,
+    refetch: refetchProposals,
+    isFetching: proposalsFetching,
+  } = useQuery({
+    queryKey: ['workflowProposals', activeTabView, showAllRegions ? null : resolvedRegion],
+    queryFn: async () => {
       const params = {
-        region: options.forceAllRegions ? undefined : resolvedRegion,
-        view: activeTabView, // Pass the active tab's value to the API
+        region: showAllRegions ? undefined : resolvedRegion,
+        view: activeTabView,
       };
       console.debug('[getProposals] Request params:', params);
       const response = await api.get(WORKFLOW_API_BASE, { params });
-      setProposals(response.data.proposals || []);
-      try { console.debug('[getProposals] Received proposals count:', (response.data.proposals || []).length); } catch (e) { /* ignore */ }
-      if (activeTabView === "monitoring") {
-        // Debug: log returned metrics so we can trace why monitoring cards may be empty
-        try { console.debug('[MONITORING] Server metrics:', response.data.metrics); } catch (e) { /* ignore */ }
-        setMonitoringMetrics(response.data.metrics || {});
-        // If there are metrics but proposals are empty, try fetching again without region filter (one-time fallback)
-        const metricsTotal = response.data.metrics?.total || 0;
-        const proposalsCount = (response.data.proposals || []).length;
-        if (metricsTotal > 0 && proposalsCount === 0 && !fallbackAttemptedRef.current) {
-          fallbackAttemptedRef.current = true;
-          try {
-            console.debug('[MONITORING] Fallback fetch without region due to metrics present but no proposals');
-            const fallbackParams = { ...params, region: undefined };
-            const fallbackRes = await api.get(WORKFLOW_API_BASE, { params: fallbackParams });
-            setProposals(fallbackRes.data.proposals || []);
-            setMonitoringMetrics(fallbackRes.data.metrics || {});
-            try { console.debug('[MONITORING] Fallback server metrics:', fallbackRes.data.metrics); } catch (e) {}
-          } catch (fallbackError) {
-            console.error('[MONITORING] Fallback fetch failed:', fallbackError);
-          }
-        }
-      } else {
-        setMonitoringMetrics(null);
-      }
-    } catch (error) {
-      console.error("Error fetching proposals:", error);
-      toast.error("Failed to fetch proposals. Please try again.");
-    } finally {
-      setLoading(false);
+      console.debug('[getProposals] Received proposals count:', (response.data.proposals || []).length);
+      return response.data;
+    },
+    staleTime: 5000, // Consider data stale after 5 seconds
+    refetchInterval: 10000, // Poll every 10 seconds for real-time updates
+    refetchOnWindowFocus: true, // Refetch when window regains focus
+    refetchIntervalInBackground: false, // Don't poll when tab is not visible
+  });
+
+  // Sync proposals state from React Query
+  const proposals = proposalsData?.proposals || [];
+  const loading = proposalsLoading;
+
+  // Handle monitoring metrics from query data
+  useEffect(() => {
+    if (activeTabView === "monitoring" && proposalsData?.metrics) {
+      setMonitoringMetrics(proposalsData.metrics);
+    } else if (activeTabView !== "monitoring") {
+      setMonitoringMetrics(null);
     }
-  }, [activeRegion, activeTab]);
+  }, [activeTabView, proposalsData]);
+
+  // Manual refetch function for backward compatibility
+  const fetchProposals = useCallback(async (options = {}) => {
+    // Trigger React Query refetch
+    refetchProposals();
+  }, [refetchProposals]);
 
   // Human readable resolved region for UI badge
   const resolvedRegionString = activeRegion && typeof activeRegion === 'object'
@@ -309,22 +311,21 @@ const NewProposalWorkflowPage = () => {
 
   // tabs already built above
 
-  useEffect(() => {
-    fetchProposals({ forceAllRegions: showAllRegions });
-  }, [fetchProposals, showAllRegions]);
-
   // Listen for query cache invalidation and auto-refetch proposals
-  // This ensures that when personnel are marked as charged-to-income, the proposal totals update
+  // This ensures that when employee benefits are updated, the proposal totals update in real-time
   useEffect(() => {
     const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
-      if (event.type === 'added' && event.query.queryKey?.[0] === 'proposals') {
-        // Query was re-added after invalidation, which means it's refetching
-        console.debug('[ProposalPage] Detected proposals query invalidation, auto-refetching');
-        fetchProposals({ forceAllRegions: showAllRegions });
+      // Listen for 'proposals', 'allProposals', or 'personnelServices' invalidation
+      if (event.type === 'added' && 
+          (event.query.queryKey?.[0] === 'proposals' || 
+           event.query.queryKey?.[0] === 'allProposals' ||
+           event.query.queryKey?.[0] === 'personnelServices')) {
+        console.debug('[ProposalPage] Detected query invalidation, triggering refetch');
+        refetchProposals();
       }
     });
     return unsubscribe;
-  }, [queryClient, fetchProposals, showAllRegions]);
+  }, [queryClient, refetchProposals]);
 
   // Auto-select proposal from deep link (notification)
   useEffect(() => {
@@ -2385,7 +2386,7 @@ const NewProposalWorkflowPage = () => {
                                 sx={{ fontWeight: 600, color: "#1976d2" }}
                               >
                                 ₱
-                                {(proposal.projectedCorporateIncome || proposal.totalIncome || 0).toLocaleString(
+                                {(proposal.projectedCorporateIncome || 0).toLocaleString(
                                   "en-US",
                                   {
                                     minimumFractionDigits: 2,
@@ -2877,7 +2878,11 @@ const NewProposalWorkflowPage = () => {
                       sx={{ fontWeight: 600, color: "#1976d2" }}
                     >
                       ₱
-                      {(selectedProposal?.projectedCorporateIncome || selectedProposal?.totalIncome || 0).toLocaleString(
+                      {(
+                        calculateProjectedIncome() || // Use calculated value (excludes Corporate Income)
+                        selectedProposal?.projectedCorporateIncome || 
+                        0
+                      ).toLocaleString(
                         "en-US",
                         { minimumFractionDigits: 2 }
                       )}
@@ -3093,13 +3098,8 @@ const NewProposalWorkflowPage = () => {
                               setSelectedProposal((prev) =>
                                 prev ? { ...prev, ...payload } : prev
                               );
-                              setProposals((prev) =>
-                                prev.map((p) =>
-                                  p._id === selectedProposal._id
-                                    ? { ...p, ...payload }
-                                    : p
-                                )
-                              );
+                              // Invalidate query to refetch updated proposals
+                              queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
                               setProposalEditDirty(false);
                               queryClient.invalidateQueries({ queryKey: ["workflowNotifications"] });
                             } catch (err) {

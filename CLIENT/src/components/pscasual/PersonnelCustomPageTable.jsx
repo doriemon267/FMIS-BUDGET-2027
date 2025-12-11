@@ -116,20 +116,23 @@ const PSCasualCustomPageTable = ({
       const response = await api.get("/settings/active");
       if (response.data) {
         const settings = response.data;
+        // Get compensation from populated compensationSettingsId or directly from settings (legacy)
+        const comp = settings.compensationSettingsId || settings;
         setFiscalYear(settings.fiscalYear || "");
         setBudgetType(settings.budgetType || "");
-        setPERA(settings.PERA || 0);
+        setPERA(comp.PERA || 0);
         setCompensation({
-          uniformALLOWANCE: settings.uniformAllowance,
-          productivityIncentive: settings.productivityIncentive,
-          medicalAllowance: settings.medicalAllowance,
-          meal: settings.meal,
-          cashGift: settings.cashGift,
-          pagibigPremium: settings.pagibigPremium,
-          gsisPremium: settings.gsisPremium,
-          employeeCompensation: settings.employeeCompensation,
+          uniformALLOWANCE: comp.uniformAllowance,
+          productivityIncentive: comp.productivityIncentive,
+          medicalAllowance: comp.medicalAllowance,
+          meal: comp.meal,
+          cashGift: comp.cashGift,
+          pagibigPremium: comp.pagibigPremium,
+          gsisPremium: comp.gsisPremium,
+          employeeCompensation: comp.employeeCompensation,
         });
-        return settings;
+        // Return merged settings with compensation fields flattened for backward compatibility
+        return { ...settings, ...comp, fiscalYear: settings.fiscalYear, budgetType: settings.budgetType };
       }
       toast.error("Active settings not found.");
       return null;
@@ -429,6 +432,9 @@ const PSCasualCustomPageTable = ({
       // Invalidate and refetch proposal queries so budget totals update immediately
       await queryClient.invalidateQueries({ queryKey: ["proposals"] });
       await queryClient.refetchQueries({ queryKey: ["proposals"] });
+      // Also invalidate allProposals for NewProposalWorkflowPage to update
+      await queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+      await queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
       // Also invalidate personnel services queries to update BudgetarySupportTable
       await queryClient.invalidateQueries({ queryKey: ["personnel-services-combined"] });
       await queryClient.refetchQueries({ queryKey: ["personnel-services-combined"] });

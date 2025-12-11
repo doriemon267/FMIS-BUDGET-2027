@@ -82,7 +82,8 @@ const LoyaltyPayDialog = ({ row, endpoint, dataListName, schema, onDialogClose }
       // Calculate years in service based on DateOfAppointment with June 22 cutoff
       if (selectedEmployee.dateOfAppointment) {
         const fiscalYear = settings?.fiscalYear || new Date().getFullYear().toString();
-        const cutoffDate = settings?.loyaltyPay?.cutoffDate || "06-22";
+        const loyaltyConfig = settings?.loyaltyPay || settings?.compensationSettingsId?.loyaltyPay;
+        const cutoffDate = loyaltyConfig?.cutoffDate || "06-22";
 
         // Calculate years of service with June 22 cutoff
         const yearsOfService = calculateLoyaltyPayYearsOfService(
@@ -149,18 +150,21 @@ const LoyaltyPayDialog = ({ row, endpoint, dataListName, schema, onDialogClose }
   };
 
   // computeAmount function – tumatanggap na ng parameter na 'yrs'
-  const computeAmount = (yrs) => {
+  // Note: This should NOT call toast during render to avoid React warnings
+  const computeAmount = (yrs, showError = false) => {
     if (!settings) {
       return 0;
     }
-    const loyalty = settings.loyaltyPay;
+    // Check both locations: direct settings.loyaltyPay (legacy) or populated compensationSettingsId.loyaltyPay (new architecture)
+    const loyalty = settings.loyaltyPay || settings.compensationSettingsId?.loyaltyPay;
     if (
       !loyalty ||
       loyalty.baseAmount === undefined ||
       loyalty.succeedingAmount === undefined
     ) {
-      if (!toastShownRef.current) {
-        toast.error("Loyalty Pay settings are incomplete.");
+      // Only show error toast when explicitly requested (not during render)
+      if (showError && !toastShownRef.current) {
+        toast.error("Loyalty Pay settings are incomplete. Please configure Loyalty Pay in Compensation Settings.");
         toastShownRef.current = true;
       }
       return 0;
@@ -203,8 +207,8 @@ const LoyaltyPayDialog = ({ row, endpoint, dataListName, schema, onDialogClose }
         appointmentDate: isEditing
           ? row.appointmentDate
           : data.employee?.dateOfAppointment, // Include appointment date for cutoff calculation
-        // Gamitin ang computeAmount function na may parameter
-        amount: computeAmount(data.yearsInService),
+        // Gamitin ang computeAmount function na may parameter (showError=true during submit)
+        amount: computeAmount(data.yearsInService, true),
         processBy,
         processDate,
         fiscalYear,
@@ -217,6 +221,10 @@ const LoyaltyPayDialog = ({ row, endpoint, dataListName, schema, onDialogClose }
     },
     onSuccess: () => {
       queryClient.invalidateQueries([dataListName]);
+      // Invalidate proposal queries so NewProposalWorkflowPage updates totals
+      queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+      queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
       toast.success(isEditing ? "Record updated" : "Record created");
       handleClose();
     },
@@ -285,10 +293,10 @@ const LoyaltyPayDialog = ({ row, endpoint, dataListName, schema, onDialogClose }
               <Typography variant="body2" sx={{ opacity: 0.9 }}>
                 {isEditing ? "Update employee loyalty pay details" : "Add new loyalty pay record"}
               </Typography>
-              {settings?.loyaltyPay?.cutoffDate && (
+              {(settings?.loyaltyPay?.cutoffDate || settings?.compensationSettingsId?.loyaltyPay?.cutoffDate) && (
                 <>
                   <Typography variant="caption" sx={{ opacity: 0.8, display: 'block', mt: 0.5 }}>
-                    Loyalty Pay Cutoff: {formatCutoffDate(settings.loyaltyPay.cutoffDate)} each year
+                    Loyalty Pay Cutoff: {formatCutoffDate(settings.loyaltyPay?.cutoffDate || settings.compensationSettingsId?.loyaltyPay?.cutoffDate)} each year
                   </Typography>
                   <Typography variant="caption" sx={{ opacity: 0.8, display: 'block' }}>
                     Only employees with exactly 10, 15, 20, 25, 30, 35, 40, 45, or 50 years of service are eligible

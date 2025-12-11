@@ -122,7 +122,7 @@ exports.updateRetiree = async (req, res) => {
       return res.status(404).json({ message: "Retiree not found" });
     }
     // Update PersonnelServices record
-    const personnel = await PersonnelServices.findOne({
+    const personnel = await PersonnelService.findOne({
       employeeNumber,
       fiscalYear: usedFiscalYear,
     });
@@ -162,7 +162,7 @@ exports.deleteRetiree = async (req, res) => {
       return res.status(404).json({ message: "Retiree not found" });
     }
     // First, update the PersonnelServices record to remove retirement benefits
-    const personnel = await PersonnelServices.findOne({
+    const personnel = await PersonnelService.findOne({
       employeeNumber: retiree.employeeNumber,
       fiscalYear: retiree.fiscalYear,
     });
@@ -339,7 +339,7 @@ exports.getEligibleForRetirement = async (req, res) => {
       query.region = region;
     }
     // Get employees based on query
-    const employees = await PersonnelServices.find(query).lean();
+    const employees = await PersonnelService.find(query).lean();
     // Remove duplicates based on employeeNumber
     const uniqueEmployees = employees.filter((emp, index, self) => 
       index === self.findIndex(e => e.employeeNumber === emp.employeeNumber || e.EmployeeID === emp.EmployeeID)

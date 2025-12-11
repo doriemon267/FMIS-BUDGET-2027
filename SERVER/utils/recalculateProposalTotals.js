@@ -313,8 +313,12 @@ async function persistProposalTotals(proposal) {
   // 3. Add chargedToIncomeTotal to income
   // 4. Subsidy: deduct the subsidy of charged-to-income personnel
   
-  // PROJECTED INCOME = Corporate Income + Personnelservices(charged to income total) + mooe(income) + capitaloutlay(income)
-  const adjustedIncomeTotal = (incomeTotal || 0) + (chargedToIncomeTotal || 0) + (mooeIncomeTotal || 0) + (coIncomeTotal || 0);
+  // PROJECTED INCOME = Personnelservices(charged to income total) + mooe(income) + capitaloutlay(income)
+  // NOTE: Corporate Income (Income model) is NOT included in Projected Income per user requirement
+  // Corporate Income is tracked separately via incomeTotal
+  const adjustedIncomeTotal = (chargedToIncomeTotal || 0) + (mooeIncomeTotal || 0) + (coIncomeTotal || 0);
+  // Keep Corporate Income amount for reference (not used in projectedCorporateIncome)
+  const corporateIncomeTotal = incomeTotal || 0;
   
   const adjustedPsTotal = (psTotal || 0) - (chargedToIncomeTotal || 0); // psTotal minus the amounts moved to income
   // NOTE: psSubsidyTotal now correctly calculates subsidy based on charged-to-income status
@@ -327,6 +331,8 @@ async function persistProposalTotals(proposal) {
 
   console.log('[recalculate] FINAL CALCULATION:', {
     proposalId: String(proposal._id),
+    corporateIncomeTotal: parseFloat(corporateIncomeTotal).toFixed(2) + ' (NOT included in projectedIncome)',
+    chargedToIncomeTotal: parseFloat(chargedToIncomeTotal).toFixed(2),
     psSubsidyTotal: parseFloat(psSubsidyTotal).toFixed(2),
     mooeSubsidyTotal: parseFloat(mooeSubsidyTotal).toFixed(2),
     coSubsidyTotal: parseFloat(coSubsidyTotal).toFixed(2),
@@ -334,7 +340,7 @@ async function persistProposalTotals(proposal) {
     coIncomeTotal: parseFloat(coIncomeTotal).toFixed(2),
     adjustedSubsidyTotal: parseFloat(adjustedSubsidyTotal).toFixed(2),
     projectedSubsidy: parseFloat(projectedSubsidy).toFixed(2),
-    adjustedIncomeTotal: parseFloat(adjustedIncomeTotal).toFixed(2),
+    adjustedIncomeTotal: parseFloat(adjustedIncomeTotal).toFixed(2) + ' (PS Charged + MOOE Income + CO Income)',
     'OLD VALUE': proposal.projectedSubsidy,
     'NEW VALUE': projectedSubsidy
   });

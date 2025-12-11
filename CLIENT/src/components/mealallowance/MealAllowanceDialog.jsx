@@ -131,9 +131,11 @@ const MealAllowanceDialog = ({ row, endpoint, dataListName }) => {
   }, [activeRegion]); // Re-fetch when region changes
 
   const computeAmount = useMemo(() => {
-    if (!settings || !settings.meal || actualDays === undefined) return 0;
+    // Check both locations: direct settings (legacy) or populated compensationSettingsId (new architecture)
+    const mealRate = settings?.meal ?? settings?.compensationSettingsId?.meal;
+    if (!settings || !mealRate || actualDays === undefined) return 0;
     // Calculate monthly amount first
-    const monthlyAmount = Number(settings.meal) * Number(actualDays);
+    const monthlyAmount = Number(mealRate) * Number(actualDays);
     // Return annual amount (monthly × 12)
     return (monthlyAmount * 12).toFixed(2);
   }, [settings, actualDays]);
@@ -165,6 +167,10 @@ const MealAllowanceDialog = ({ row, endpoint, dataListName }) => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries([dataListName]);
+      // Invalidate proposal queries so NewProposalWorkflowPage updates totals
+      queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+      queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
       toast.success(isEditing ? "Record updated successfully" : "Record created successfully");
       handleClose();
     },

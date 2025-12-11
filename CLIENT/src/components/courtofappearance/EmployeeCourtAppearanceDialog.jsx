@@ -125,6 +125,9 @@ const EmployeeCourtAppearanceDialog = ({ row, endpoint, dataListName }) => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries([dataListName]);
+      // Invalidate proposal queries so NewProposalWorkflowPage updates totals
+      queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+      queryClient.invalidateQueries({ queryKey: ["proposals"] });
       toast.success(isEditing ? "Record updated" : "Record created");
       handleClose();
     },

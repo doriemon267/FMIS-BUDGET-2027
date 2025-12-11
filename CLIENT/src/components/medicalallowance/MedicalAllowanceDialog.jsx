@@ -304,8 +304,10 @@ const MedicalAllowanceDialog = ({ row, schema, endpoint, dataListName }) => {
   }, [selectedEmployee, personnelService, setValue, isEditing]);
 
   const computeAmount = useMemo(() => {
-    if (!settings || !settings.medicalAllowance || noOfDependents === undefined) return 0;
-    return (Number(settings.medicalAllowance) * Number(noOfDependents) * 12).toFixed(2);
+    // Check both locations: direct settings (legacy) or populated compensationSettingsId (new architecture)
+    const medicalRate = settings?.medicalAllowance ?? settings?.compensationSettingsId?.medicalAllowance;
+    if (!settings || !medicalRate || noOfDependents === undefined) return 0;
+    return (Number(medicalRate) * Number(noOfDependents) * 12).toFixed(2);
   }, [settings, noOfDependents]);
 
   const mutation = useMutation({
@@ -338,6 +340,10 @@ const MedicalAllowanceDialog = ({ row, schema, endpoint, dataListName }) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [dataListName] });
       queryClient.invalidateQueries({ queryKey: ["personnelServices"] });
+      // Invalidate proposal queries so NewProposalWorkflowPage updates totals
+      queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+      queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
       toast.success(
         isEditing
           ? "Medical allowance updated successfully"
@@ -534,8 +540,9 @@ const MedicalAllowanceDialog = ({ row, schema, endpoint, dataListName }) => {
                         field.onChange(validValue);
                         
                         // Recalculate amount when noOfDependents changes
-                        if (settings?.medicalAllowance) {
-                          const amount = validValue * settings.medicalAllowance;
+                        const medicalRate = settings?.medicalAllowance ?? settings?.compensationSettingsId?.medicalAllowance;
+                        if (medicalRate) {
+                          const amount = validValue * medicalRate;
                           setValue("amount", amount);
                         }
                       }}

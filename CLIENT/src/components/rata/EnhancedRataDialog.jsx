@@ -169,6 +169,9 @@ const EnhancedRataDialog = ({ open, onClose, editData = null }) => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries(["ratas"]);
+      // Invalidate proposal queries so NewProposalWorkflowPage updates totals
+      queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+      queryClient.invalidateQueries({ queryKey: ["proposals"] });
       const message = isEditing 
         ? "RATA updated successfully" 
         : selectedFiscalYears.length > 0

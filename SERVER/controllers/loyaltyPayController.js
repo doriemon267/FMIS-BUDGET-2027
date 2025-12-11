@@ -2,6 +2,7 @@
 const LoyaltyPay        = require("../models/loyaltyPay");
 const Settings          = require("../models/Settings");
 const PersonnelService = require('../models/PersonnelServices');
+const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const {
   calculateLoyaltyPayYearsOfService,
   isEligibleForLoyaltyPay,
@@ -85,6 +86,15 @@ exports.createLoyaltyPay = async (req, res) => {
     if (person) {
       person.loyaltyAward = totalLoyalty;
       await person.save();
+      
+      // Trigger recalculation of proposal totals
+      if (person.proposalId) {
+        try {
+          await recalculateAndSaveProposalTotals({ proposalId: person.proposalId });
+        } catch (recalcErr) {
+          console.error('Error recalculating proposal totals:', recalcErr);
+        }
+      }
     }
     return res.status(201).json({
       message: "Loyalty Pay record saved and PersonnelServices updated",
@@ -233,6 +243,15 @@ exports.updateLoyaltyPay = async (req, res) => {
     if (person) {
       person.loyaltyAward = totalLoyalty;
       await person.save();
+      
+      // Trigger recalculation of proposal totals
+      if (person.proposalId) {
+        try {
+          await recalculateAndSaveProposalTotals({ proposalId: person.proposalId });
+        } catch (recalcErr) {
+          console.error('Error recalculating proposal totals:', recalcErr);
+        }
+      }
     }
     return res.status(200).json({
       ...updated.toObject(),
@@ -265,6 +284,15 @@ exports.deleteLoyaltyPay = async (req, res) => {
         0
       );
       await person.save();
+      
+      // Trigger recalculation of proposal totals
+      if (person.proposalId) {
+        try {
+          await recalculateAndSaveProposalTotals({ proposalId: person.proposalId });
+        } catch (recalcErr) {
+          console.error('Error recalculating proposal totals:', recalcErr);
+        }
+      }
     }
     return res.status(200).json({ message: "Deleted and PersonnelServices updated." });
   } catch (err) {

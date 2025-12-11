@@ -2,6 +2,7 @@
 const SubsistenceAllowanceST = require("../models/subsistenceAllowanceST");
 const Settings               = require("../models/Settings");
 const PersonnelService = require('../models/PersonnelServices');  // :contentReference[oaicite:0]{index=0}&#8203;:contentReference[oaicite:1]{index=1}
+const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 /**
  * Helper: compute combined ST (sum of all ST entries) for an employee in a fiscal year
  */
@@ -83,6 +84,15 @@ exports.createSubsistenceST = async (req, res) => {
     if (person) {
       person.subsistenceAllowanceST = combinedST;
       await person.save();
+      
+      // Trigger recalculation of proposal totals
+      if (person.proposalId) {
+        try {
+          await recalculateAndSaveProposalTotals({ proposalId: person.proposalId });
+        } catch (recalcErr) {
+          console.error('Error recalculating proposal totals:', recalcErr);
+        }
+      }
     }
     return res.status(201).json({ message: "Record created and synced.", data: record });
   } catch (err) {
@@ -241,6 +251,15 @@ exports.updateSubsistenceST = async (req, res) => {
     if (person) {
       person.subsistenceAllowanceST = combinedST;
       await person.save();
+      
+      // Trigger recalculation of proposal totals
+      if (person.proposalId) {
+        try {
+          await recalculateAndSaveProposalTotals({ proposalId: person.proposalId });
+        } catch (recalcErr) {
+          console.error('Error recalculating proposal totals:', recalcErr);
+        }
+      }
     }
     return res.status(200).json(updated);
   } catch (err) {
@@ -262,6 +281,15 @@ exports.deleteSubsistenceST = async (req, res) => {
     if (person) {
       person.subsistenceAllowanceST = combinedST;
       await person.save();
+      
+      // Trigger recalculation of proposal totals
+      if (person.proposalId) {
+        try {
+          await recalculateAndSaveProposalTotals({ proposalId: person.proposalId });
+        } catch (recalcErr) {
+          console.error('Error recalculating proposal totals:', recalcErr);
+        }
+      }
     }
     return res.status(200).json({ message: "Deleted and synced successfully." });
   } catch (err) {

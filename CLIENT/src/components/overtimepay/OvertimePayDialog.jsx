@@ -113,6 +113,10 @@ const OvertimePayDialog = ({ row, endpoint, dataListName, schema }) => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries([dataListName]);
+      // Invalidate proposal queries so NewProposalWorkflowPage updates totals
+      queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+      queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
       toast.success(isEditing ? "Record updated" : "Record created");
       handleClose();
     },

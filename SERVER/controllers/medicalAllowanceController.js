@@ -3,6 +3,8 @@ const Employee = require("../models/employee_master");
 const Settings = require("../models/Settings");
 const { calculateMedicalAllowance, getAllowanceRates } = require("../utils/allowanceUtils");
 const PersonnelService = require('../models/PersonnelServices');
+const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
+
 // Function to sync medical allowance with personnel services
 async function syncWithPersonnelServices(employeeNumber, fiscalYear, amount, noOfDependents) {
   try {
@@ -46,6 +48,15 @@ async function syncWithPersonnelServices(employeeNumber, fiscalYear, amount, noO
         0
       );
       await personnelService.save();
+      
+      // Trigger recalculation of proposal totals
+      if (personnelService.proposalId) {
+        try {
+          await recalculateAndSaveProposalTotals({ proposalId: personnelService.proposalId });
+        } catch (recalcErr) {
+          console.error('Error recalculating proposal totals:', recalcErr);
+        }
+      }
       return true;
     }
     return false;

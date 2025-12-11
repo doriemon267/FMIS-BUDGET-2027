@@ -3,6 +3,7 @@ import { NumericFormat } from "react-number-format";
 import PropTypes from "prop-types";
 import api from "../../config/api";
 import { useRegion } from "../../context/RegionContext";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Table,
   TableBody,
@@ -125,6 +126,9 @@ const formatNumber = (number) => {
 };
 
 const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false, proposalId = null, region = null, fiscalYear: providedFiscalYear = null }) => {  // ADDED: Accept region, proposalId, fiscalYear from parent
+  // Query client for cache invalidation
+  const queryClient = useQueryClient();
+  
   // Basic state
   const [capitalOutlays, setCapitalOutlays] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -473,6 +477,10 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false, proposa
       }
 
       toast.success("Capital outlay item created successfully with breakdown details!");
+      // Invalidate proposal queries so NewProposalWorkflowPage updates totals
+      queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+      queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
     } else if (result.capitalOutlayId) {
       // Fallback path: details were saved to an existing item we attached to
       if (detailsList.length > 0) {
@@ -487,6 +495,10 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false, proposa
         console.error("Error saving details for existing item:", error);
       }
       toast.success("Capital outlay details saved to existing item successfully");
+      // Invalidate proposal queries so NewProposalWorkflowPage updates totals
+      queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+      queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
     } else if (selectedCapitalOutlay && selectedCapitalOutlay._id) {
       // Handle existing item update
       if (detailsList.length > 0) {
@@ -594,6 +606,11 @@ const CapitalOutlayTable = ({ onDataChange, disableIncomeInputs = false, proposa
         setHasUnsavedChanges(false);
         setLastSaved(new Date());
         toast.success("Auto-saved successfully!", { autoClose: 2000 });
+        
+        // Invalidate proposal queries so NewProposalWorkflowPage updates totals
+        queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+        queryClient.invalidateQueries({ queryKey: ["proposals"] });
+        queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
 
       } else if (Object.keys(newOutlays).length > 0) {
         // Check if there are any new outlays being added

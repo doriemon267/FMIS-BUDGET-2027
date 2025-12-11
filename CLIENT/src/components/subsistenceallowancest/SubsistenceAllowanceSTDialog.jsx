@@ -135,7 +135,8 @@ const SubsistenceAllowanceSTDialog = ({ row, endpoint, dataListName, schema }) =
 
   const computeAmount = () => {
     if (!settings || !monthlySalary || !actualExposureDays || !riskLevel) return 0;
-    const rates = settings.subsistenceAllowanceSTRates;
+    // Check both locations: direct settings (legacy) or populated compensationSettingsId (new architecture)
+    const rates = settings.subsistenceAllowanceSTRates || settings.compensationSettingsId?.subsistenceAllowanceSTRates;
     let percentage = 0;
 
     if (riskLevel === "High") {
@@ -188,6 +189,10 @@ const SubsistenceAllowanceSTDialog = ({ row, endpoint, dataListName, schema }) =
     },
     onSuccess: () => {
       queryClient.invalidateQueries([dataListName]);
+      // Invalidate proposal queries so NewProposalWorkflowPage updates totals
+      queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+      queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
       toast.success(isEditing ? "Record updated" : "Record created");
       handleClose();
     },

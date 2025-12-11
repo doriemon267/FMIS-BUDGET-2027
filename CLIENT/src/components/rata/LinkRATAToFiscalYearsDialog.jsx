@@ -108,6 +108,9 @@ const LinkRATAToFiscalYearsDialog = ({
     },
     onSuccess: () => {
       queryClient.invalidateQueries(["ratas"]);
+      // Invalidate proposal queries so NewProposalWorkflowPage updates totals
+      queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+      queryClient.invalidateQueries({ queryKey: ["proposals"] });
       toast.success("RATA linked to fiscal years successfully");
       handleClose();
       if (onSaved) onSaved();
@@ -127,6 +130,9 @@ const LinkRATAToFiscalYearsDialog = ({
     },
     onSuccess: () => {
       queryClient.invalidateQueries(["ratas"]);
+      // Invalidate proposal queries so NewProposalWorkflowPage updates totals
+      queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+      queryClient.invalidateQueries({ queryKey: ["proposals"] });
       toast.success("RATA unlinked from fiscal years successfully");
       handleClose();
       if (onSaved) onSaved();

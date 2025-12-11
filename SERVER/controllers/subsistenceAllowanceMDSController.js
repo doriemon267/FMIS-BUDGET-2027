@@ -2,6 +2,7 @@
 const SubsistenceAllowanceMDS = require("../models/subsistenceAllowanceMDS");
 const Settings = require("../models/Settings");
 const PersonnelServices = require('../models/PersonnelServices');
+const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 /**
  * Create a new Subsistence Allowance MDS record,
  * then immediately update the corresponding PersonnelServices entry.
@@ -56,6 +57,15 @@ exports.createSubsistenceAllowance = async (req, res) => {
     if (personnel) {
       personnel.subsistenceAllowanceMDS = amount;
       await personnel.save();
+      
+      // Trigger recalculation of proposal totals
+      if (personnel.proposalId) {
+        try {
+          await recalculateAndSaveProposalTotals({ proposalId: personnel.proposalId });
+        } catch (recalcErr) {
+          console.error('Error recalculating proposal totals:', recalcErr);
+        }
+      }
     }
     return res.status(201).json({
       message:
@@ -205,6 +215,15 @@ exports.updateSubsistenceAllowance = async (req, res) => {
     if (personnel) {
       personnel.subsistenceAllowanceMDS = amount;
       await personnel.save();
+      
+      // Trigger recalculation of proposal totals
+      if (personnel.proposalId) {
+        try {
+          await recalculateAndSaveProposalTotals({ proposalId: personnel.proposalId });
+        } catch (recalcErr) {
+          console.error('Error recalculating proposal totals:', recalcErr);
+        }
+      }
     }
     return res.status(200).json(updated);
   } catch (error) {
@@ -235,6 +254,15 @@ exports.deleteSubsistenceAllowance = async (req, res) => {
         0
       );
       await personnel.save();
+      
+      // Trigger recalculation of proposal totals
+      if (personnel.proposalId) {
+        try {
+          await recalculateAndSaveProposalTotals({ proposalId: personnel.proposalId });
+        } catch (recalcErr) {
+          console.error('Error recalculating proposal totals:', recalcErr);
+        }
+      }
     }
     return res.status(200).json({ message: "Deleted and synced successfully." });
   } catch (error) {

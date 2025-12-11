@@ -3,6 +3,7 @@ const Settings = require("../models/Settings");
 const PersonnelService = require('../models/PersonnelServices');
 const { body, validationResult } = require("express-validator");
 const { calculateMealAllowance, calculateMonthlyMealAllowance, getAllowanceRates } = require("../utils/allowanceUtils");
+const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const validateMealAllowance = [
   body("employeeNumber")
     .trim()
@@ -184,6 +185,15 @@ exports.createMealAllowance = [
           { employeeNumber, fiscalYear: usedFiscalYear },
           { Total: newTotal }
         );
+        
+        // Recalculate proposal totals if personnel has a proposalId
+        if (updatedPersonnel.proposalId) {
+          try {
+            await recalculateAndSaveProposalTotals({ proposalId: updatedPersonnel.proposalId });
+          } catch (recalcErr) {
+            console.error('Error recalculating proposal totals:', recalcErr);
+          }
+        }
       }
       return res.status(201).json(record);
     } catch (err) {
@@ -314,6 +324,15 @@ exports.updateMealAllowance = [
           { employeeNumber: updated.employeeNumber, fiscalYear: usedFiscalYear },
           { Total: newTotal }
         );
+        
+        // Recalculate proposal totals if personnel has a proposalId
+        if (updatedPersonnel.proposalId) {
+          try {
+            await recalculateAndSaveProposalTotals({ proposalId: updatedPersonnel.proposalId });
+          } catch (recalcErr) {
+            console.error('Error recalculating proposal totals:', recalcErr);
+          }
+        }
       }
       return res.status(200).json(updated);
     } catch (err) {

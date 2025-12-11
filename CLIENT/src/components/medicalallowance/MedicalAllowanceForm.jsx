@@ -93,10 +93,11 @@ const MedicalAllowanceForm = ({ onSubmit, initialData, isEditing }) => {
 
   // Calculate effective dependent count and estimated amount
   useEffect(() => {
-    if (noOfDependents !== undefined && settings?.medicalAllowance) {
+    const medicalRate = settings?.medicalAllowance ?? settings?.compensationSettingsId?.medicalAllowance;
+    if (noOfDependents !== undefined && medicalRate) {
       const effective = Math.min(Number(noOfDependents), 4);
       setEffectiveDependentCount(effective);
-      setEstimatedAmount(effective * settings.medicalAllowance);
+      setEstimatedAmount(effective * medicalRate);
     }
   }, [noOfDependents, settings]);
 
@@ -124,10 +125,11 @@ const MedicalAllowanceForm = ({ onSubmit, initialData, isEditing }) => {
         noOfDependents: initialData.noOfDependents || 0,
         updatePersonnelService: true,
       });
-      if (initialData.noOfDependents !== undefined && settings?.medicalAllowance) {
+      const medicalRate = settings?.medicalAllowance ?? settings?.compensationSettingsId?.medicalAllowance;
+      if (initialData.noOfDependents !== undefined && medicalRate) {
         const effective = Math.min(Number(initialData.noOfDependents), 4);
         setEffectiveDependentCount(effective);
-        setEstimatedAmount(effective * settings.medicalAllowance);
+        setEstimatedAmount(effective * medicalRate);
       }
     }
   }, [initialData, reset, settings]);
@@ -320,7 +322,7 @@ const MedicalAllowanceForm = ({ onSubmit, initialData, isEditing }) => {
           <Grid item xs={12} sm={6}>
             <TextField
               label="Rate per Dependent"
-              value={settings?.medicalAllowance ? `$${settings.medicalAllowance.toLocaleString()}` : "Loading..."}
+              value={(settings?.medicalAllowance ?? settings?.compensationSettingsId?.medicalAllowance) ? `$${(settings?.medicalAllowance ?? settings?.compensationSettingsId?.medicalAllowance).toLocaleString()}` : "Loading..."}
               fullWidth
               disabled
               variant="outlined"

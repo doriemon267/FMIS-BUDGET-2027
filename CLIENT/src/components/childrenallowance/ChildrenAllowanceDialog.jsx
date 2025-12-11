@@ -190,8 +190,10 @@ const ChildrenAllowanceDialog = ({ row, schema, endpoint, dataListName }) => {
   }, [isEditing, row, reset]);
 
   const computeAmount = useMemo(() => {
-    if (!settings || !settings.childrenAllowance || noOfDependents === undefined) return 0;
-    const monthlyAmount = Number(settings.childrenAllowance) * Number(noOfDependents);
+    // Check both locations: direct settings (legacy) or compensationSettingsId (new architecture)
+    const childAllowanceRate = settings?.childrenAllowance ?? settings?.compensationSettingsId?.childrenAllowance;
+    if (!settings || !childAllowanceRate || noOfDependents === undefined) return 0;
+    const monthlyAmount = Number(childAllowanceRate) * Number(noOfDependents);
     return (monthlyAmount * 12).toFixed(2);
   }, [settings, noOfDependents]);
 
@@ -222,6 +224,10 @@ const ChildrenAllowanceDialog = ({ row, schema, endpoint, dataListName }) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [dataListName] });
       queryClient.invalidateQueries({ queryKey: ["personnelServices"] });
+      // Invalidate proposal queries so NewProposalWorkflowPage updates totals
+      queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+      queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
       toast.success(
         isEditing
           ? "Children allowance updated successfully"
@@ -388,8 +394,9 @@ const ChildrenAllowanceDialog = ({ row, schema, endpoint, dataListName }) => {
                         field.onChange(validValue);
                         
                         // Recalculate amount when noOfDependents changes
-                        if (settings?.childrenAllowance) {
-                          const amount = validValue * settings.childrenAllowance;
+                        const childAllowanceRate = settings?.childrenAllowance ?? settings?.compensationSettingsId?.childrenAllowance;
+                        if (childAllowanceRate) {
+                          const amount = validValue * childAllowanceRate;
                           setValue("amount", amount);
                         }
                       }}
@@ -411,7 +418,7 @@ const ChildrenAllowanceDialog = ({ row, schema, endpoint, dataListName }) => {
                   fullWidth
                   disabled
                   InputLabelProps={{ shrink: true }}
-                  helperText={`Annual: ${noOfDependents} dependents × ${settings?.childrenAllowance || 0} PHP/month × 12 months = ${Number(computeAmount).toFixed(2)} PHP/year`}
+                  helperText={`Annual: ${noOfDependents} dependents × ${settings?.childrenAllowance ?? settings?.compensationSettingsId?.childrenAllowance ?? 0} PHP/month × 12 months = ${Number(computeAmount).toFixed(2)} PHP/year`}
                 />
               </Grid>
 

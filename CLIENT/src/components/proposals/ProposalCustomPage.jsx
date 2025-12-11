@@ -217,6 +217,26 @@ const ProposalCustomPage = ({
     },
   });
 
+  // Delete proposal mutation - deletes the proposal from database when unlinking
+  const deleteProposalMutation = useMutation({
+    mutationFn: (proposalId) => {
+      return api.delete(`/api/allproposal/proposals/${proposalId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+      setCurrentProposalId(null);
+      sessionStorage.removeItem('activeWorkflowRef');
+      localStorage.removeItem('activeWorkflowRef');
+      toast.success("Proposal deleted and unlinked successfully!");
+    },
+    onError: (error) => {
+      toast.error(
+        `Error deleting proposal: ${error.response?.data?.message || error.message}`
+      );
+    },
+  });
+
   // Normalize modelType coming from active settings to the enum accepted by backend
   const normalizeModelType = (value) => {
     if (!value) return 'Initial';
@@ -276,6 +296,12 @@ const ProposalCustomPage = ({
   
   // Capital Outlay view toggle (true = new DataGrid, false = old table)
   const [useDataGridView, setUseDataGridView] = useState(false);
+  
+  // Delete confirmation dialog state
+  const [deleteConfirmDialog, setDeleteConfirmDialog] = useState({
+    open: false,
+    source: null, // 'chip' or 'dialog' - to know where the delete was triggered
+  });
 
   // Use canCreate from the hook, but keep canEditOwn from permissions
   const canEditOwn = hasPermission(currentUser, PERMISSIONS.EDIT_OWN);
@@ -315,71 +341,35 @@ const ProposalCustomPage = ({
   const [isValidating, setIsValidating] = useState(false);
 
   // ADDED: Restore activeWorkflowRef from storage on mount to preserve proposal ID across page refreshes
+  // Also verify that the stored proposal still exists in the database
   useEffect(() => {
     const storedWorkflowRef = sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef');
     if (storedWorkflowRef && !currentProposalId) {
-      setCurrentProposalId(storedWorkflowRef);
-    }
-  }, []);
-
-  // NEW: Check backend for existing proposals for this fiscal year and budget type
-  // This ensures the button is disabled even in a different browser session
-  useEffect(() => {
-    const checkExistingProposals = async () => {
-      if (!activeFiscalYear || !activeBudgetType || !currentUser?.UserId) {
-        return;
-      }
-
-      try {
-        // Query for existing proposals: use view='my-proposals' to get DRAFT proposals
-        // Then also check for submitted/approved proposals with explicit status queries
-        const draftResponse = await api.get('/api/allproposal/proposals', {
-          params: {
-            view: 'my-proposals', // This filters for createdBy current user and status=DRAFT
-            fiscalYear: activeFiscalYear
+      // Verify the proposal still exists before setting it
+      const verifyProposal = async () => {
+        try {
+          const response = await api.get(`/api/allproposal/proposals/${storedWorkflowRef}`);
+          // Backend returns { success: true, data: proposal } - check for data property
+          if (response.data?.success && response.data?.data) {
+            setCurrentProposalId(storedWorkflowRef);
+          } else {
+            // Proposal not found - clear storage
+            console.log('[ProposalCustomPage] Stored proposal not found, clearing reference');
+            sessionStorage.removeItem('activeWorkflowRef');
+            localStorage.removeItem('activeWorkflowRef');
+            setCurrentProposalId(null);
           }
-        });
-
-        const draftProposals = draftResponse.data?.proposals || draftResponse.data?.data || [];
-        
-        // Also check for submitted/approved proposals
-        const allProposalsResponse = await api.get('/api/allproposal/proposals', {
-          params: {
-            view: 'all-proposals', // Non-DRAFT proposals
-            fiscalYear: activeFiscalYear
-          }
-        });
-
-        const allProposals = allProposalsResponse.data?.proposals || allProposalsResponse.data?.data || [];
-        
-        // Combine and filter by createdBy
-        const allUserProposals = [
-          ...draftProposals,
-          ...allProposals
-        ].filter(p => String(p.createdBy) === String(currentUser.UserId) || p.createdByName === `${currentUser.FirstName} ${currentUser.LastName}`);
-
-        if (allUserProposals.length > 0) {
-          // Found existing proposal(s) - set the first one
-          const existingProposal = allUserProposals[0];
-          setCurrentProposalId(existingProposal.workflowRef || existingProposal._id);
-          sessionStorage.setItem('activeWorkflowRef', existingProposal.workflowRef || existingProposal._id);
-          console.log('Found existing proposal:', existingProposal);
-        } else if (currentProposalId) {
-          // No proposals found but currentProposalId is set - proposal was deleted
-          // Clear the state and storage
-          console.log('Proposal was deleted from database. Clearing currentProposalId.');
-          setCurrentProposalId(null);
+        } catch (error) {
+          // Error fetching proposal (likely 404) - clear storage
+          console.log('[ProposalCustomPage] Error verifying stored proposal, clearing reference:', error.message);
           sessionStorage.removeItem('activeWorkflowRef');
           localStorage.removeItem('activeWorkflowRef');
+          setCurrentProposalId(null);
         }
-      } catch (error) {
-        console.error('Error checking existing proposals:', error);
-        // Don't disable button on error - allow user to proceed
-      }
-    };
-
-    checkExistingProposals();
-  }, [activeFiscalYear, activeBudgetType, currentUser?.UserId]);
+      };
+      verifyProposal();
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2724,14 +2714,36 @@ const ProposalCustomPage = ({
             <Chip icon={<AccountBalanceIcon />} label={`Budget Type: ${activeBudgetType || newProposalData.modelType || 'Initial'}`} color="primary" size="small" />
           </Box>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
-          <Button
-            onClick={handleCreateProposal}
-            disabled={createProposalMutation.isLoading || !!currentProposalId || !newProposalData.title || !activeFiscalYear || !activeRegion}
-          >
-            {createProposalMutation.isLoading ? <CircularProgress size={24} /> : !!currentProposalId ? 'Created' : 'Create'}
-          </Button>
+        <DialogActions sx={{ flexDirection: 'column', alignItems: 'stretch', gap: 1, p: 2 }}>
+          {/* Debug: Show what's missing */}
+          {(!newProposalData.title || !activeFiscalYear || !activeRegion) && (
+            <Box sx={{ fontSize: '12px', color: 'error.main', textAlign: 'center' }}>
+              Missing: {!newProposalData.title && 'Title, '}{!activeFiscalYear && 'Fiscal Year, '}{!activeRegion && 'Region'}
+            </Box>
+          )}
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+            <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
+            {currentProposalId && (
+              <Button
+                color="error"
+                variant="outlined"
+                disabled={deleteProposalMutation.isLoading}
+                onClick={() => {
+                  setDeleteConfirmDialog({ open: true, source: 'dialog' });
+                }}
+              >
+                {deleteProposalMutation.isLoading ? 'Deleting...' : 'Delete & Create New'}
+              </Button>
+            )}
+            <Button
+              onClick={handleCreateProposal}
+              variant="contained"
+              color="primary"
+              disabled={createProposalMutation.isLoading || !newProposalData.title || !activeFiscalYear || !activeRegion}
+            >
+              {createProposalMutation.isLoading ? <CircularProgress size={24} /> : 'Create'}
+            </Button>
+          </Box>
         </DialogActions>
       </Dialog>
 
@@ -2829,16 +2841,14 @@ const ProposalCustomPage = ({
             </Button>
           )}
           {currentProposalId && (
-            <Tooltip title={`Linked Proposal ID: ${currentProposalId} - Click to unlink`}> 
+            <Tooltip title={`Linked Proposal ID: ${currentProposalId} - Click to DELETE and unlink this proposal`}> 
               <Chip
                 icon={<CheckCircleIcon />}
-                label="Proposal Linked"
+                label={deleteProposalMutation.isLoading ? "Deleting..." : "Proposal Linked"}
                 onDelete={() => {
-                  setCurrentProposalId(null);
-                  sessionStorage.removeItem('activeWorkflowRef');
-                  localStorage.removeItem('activeWorkflowRef');
-                  toast.info("Proposal unlinked successfully");
+                  setDeleteConfirmDialog({ open: true, source: 'chip' });
                 }}
+                disabled={deleteProposalMutation.isLoading}
                 sx={{
                   backgroundColor: "#4CAF50",
                   color: "white",
@@ -2861,6 +2871,79 @@ const ProposalCustomPage = ({
         </Box>
         <AutoSaveIndicator />
       </Box>
+
+      {/* Delete Proposal Confirmation Dialog */}
+      <Dialog
+        open={deleteConfirmDialog.open}
+        onClose={() => setDeleteConfirmDialog({ open: false, source: null })}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          backgroundColor: '#d32f2f', 
+          color: 'white',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          fontWeight: 600
+        }}>
+          ⚠️ Delete Proposal Confirmation
+        </DialogTitle>
+        <DialogContent sx={{ mt: 2 }}>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            <Typography variant="body1" fontWeight="bold">
+              Are you sure you want to DELETE this proposal?
+            </Typography>
+          </Alert>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            This action will:
+          </Typography>
+          <Box component="ul" sx={{ pl: 2, mb: 2 }}>
+            <li><Typography variant="body2">Permanently remove the proposal from the database</Typography></li>
+            <li><Typography variant="body2">Remove it from the All Proposals list</Typography></li>
+            <li><Typography variant="body2">Delete all associated budget entries (Income, MOOE, Capital Outlay, Personnel Services)</Typography></li>
+          </Box>
+          <Alert severity="error" sx={{ mt: 2 }}>
+            <Typography variant="body2" fontWeight="bold">
+              This action cannot be undone!
+            </Typography>
+          </Alert>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, gap: 1 }}>
+          <Button 
+            onClick={() => setDeleteConfirmDialog({ open: false, source: null })}
+            variant="outlined"
+            sx={{ minWidth: 100 }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              deleteProposalMutation.mutate(currentProposalId);
+              setDeleteConfirmDialog({ open: false, source: null });
+              if (deleteConfirmDialog.source === 'dialog') {
+                setCreateDialogOpen(false);
+              }
+            }}
+            variant="contained"
+            color="error"
+            disabled={deleteProposalMutation.isLoading}
+            sx={{ minWidth: 150 }}
+          >
+            {deleteProposalMutation.isLoading ? (
+              <><CircularProgress size={20} sx={{ mr: 1, color: 'white' }} /> Deleting...</>
+            ) : (
+              'Yes, Delete Proposal'
+            )}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Collapsible Budget Summary */}
       {import.meta.env.VITE_HIDE_BUDGET_SUMMARY !== 'true' && (
