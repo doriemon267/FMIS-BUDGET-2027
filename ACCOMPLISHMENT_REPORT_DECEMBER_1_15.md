@@ -3,6 +3,45 @@
 Period: 2025-12-01 — 2025-12-15
 Prepared by: Development Team
 
+## Tasks Completed
+
+• Frontend Development: Implemented UI fixes and new UX features across core apps and proposal screens. Highlights:
+  - Calendar & floating apps: dark-theme fixes, month selector, dropdown z-index fixes (commit 343932c, 7775f18).
+  - App tray & productivity apps: added comprehensive app tray features and 8 new productivity apps (ffe0988, 1527b10).
+  - Proposal UX: fixed Create Proposal button state, Proposal Details dialog (editable fields, submit action, duplicate attachments) and real-time table displays (commits 3ce9568, 0c44643, 1c167c0).
+  - Budgetary Support UI: remove debug banners, normalized IncomeTable fetches and region alias mapping; updated displays to use backend-calculated values (c0d3cb0, f24a556, 8243f9f).
+
+• Backend Development: Fixed calculations, added endpoints, and improved reliability:
+  - Projected subsidy & charged-to-income fixes: prevented double-counting, used subsidyAmount correctly, added comprehensive logging, and added cache invalidation/recalc triggers (commits 4295b73, 8a6e6b7, 7a54531, 4bf0af1).
+  - Added/updated endpoints and utilities for Budgetary Support and Proposal totals (4bf0af1, 548f9c0).
+  - Compensation settings and projected income calculation fixes (f0690ca, a9d51bd).
+
+• Security & Access Control: Hardened sensitive areas and secret handling:
+  - SUPER_ADMIN role detection & hierarchical access improvements (f23e4de, 47d7c08).
+  - MSSQL connection string encryption (AES-256-CBC) implemented (dd9c49c).
+  - Removed plaintext `MAIL_PASSWORD` from tracked files, added secrets guidance and production startup validation to fail fast when critical mail env vars are missing (f7dc639).
+
+• System Fixes & Enhancements:
+  - Stabilized proposal totals, fixed budgetOfficerEdit flows by linking line items to `proposalId` and forcing recalculation where needed (607d347, related fixes).
+  - Fixed MOOE data persistence and input disappearance issues (4edb653).
+  - Housekeeping: removed test files and cleaned up temporary artifacts (a04ce65, 132f3b9).
+
+---
+
+## Action items / Notes
+
+- Rotate the Gmail app password that was previously committed and set the new secret via your environment/CI secrets manager; the tracked secret was removed on 2025-12-15.
+- Add regression tests for projected subsidy and charged-to-income scenarios to avoid regressions.
+- Verify all deployment/staging environments have required secrets and DB URIs set (MAIL_*, JWT_SECRET_KEY, MONGODB_*).
+
+---
+
+If you prefer a slightly different phrasing or want an email-ready summary (short paragraph + key bullet points) or a short slide deck, tell me which format and I will prepare it. ✅
+# Accomplishment Report — December 1 to December 15, 2025
+
+Period: 2025-12-01 — 2025-12-15
+Prepared by: Development Team
+
 ## Executive summary ✅
 Between December 1 and December 15, the team completed a focused set of fixes and enhancements across budgetary support, subsidy calculations, proposal workflows, core UI improvements, and several infra/security hardening tasks. The work prevented double-counting in subsidy calculations, tightened charged-to-income logic, improved the Budgetary Support display and calculations, implemented new features such as Tier Comparison, and applied several UI and UX improvements (app tray, calendar, chat). A sensitive secret (MAIL_PASSWORD) was removed from tracked files and guidance added for secure handling.
 
