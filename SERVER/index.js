@@ -289,6 +289,23 @@ if (
     "[Server] ⚠️ No MongoDB URI found in .env (MONGODB_URI or MONGODB_BUDGET_URL or MONGODB_MAIN_URL). The server will likely fail to connect."
   );
 }
+
+// In production, ensure critical secrets like MAIL_PASSWORD are present. Fail-fast to avoid
+// running with missing secrets and noisy errors later.
+if (process.env.NODE_ENV === "production") {
+  const missingMail =
+    !process.env.MAIL_HOST ||
+    !process.env.MAIL_PORT ||
+    !process.env.MAIL_USERNAME ||
+    !process.env.MAIL_PASSWORD;
+  if (missingMail) {
+    console.error(
+      "[Server] ✗ Critical environment variables missing for email (MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD).\nPlease set these using environment/secret management and rotate any exposed credentials. Exiting."
+    );
+    // Exit with non-zero code so orchestration (systemd, containers, CI) notices the failure.
+    process.exit(1);
+  }
+}
 // Attach workflowRef middleware early so body gets populated before routers
 const attachWorkflowRef = require("./middleware/attachWorkflowRef");
 const server = http.createServer(app);
