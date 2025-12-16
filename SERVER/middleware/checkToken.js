@@ -48,15 +48,20 @@ module.exports = async (req, res, next) => {
       return next();
     }
 
-    // Extract token from Authorization header
+    // Extract token from Authorization header or auth cookie
+    let jwtToken = null;
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      console.log(`❌ No auth header for ${req.path}`);
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      jwtToken = authHeader.split(' ')[1];
+    } else if (req.cookies && req.cookies.authToken) {
+      jwtToken = req.cookies.authToken;
+    }
+
+    if (!jwtToken) {
+      console.log(`❌ No auth token for ${req.path}`);
       return res.status(403).json({ error: "Access denied." });
     }
-    const jwtToken = authHeader.split(" ")[1]; // Extract token from "Bearer <token>"
-    
-    console.log(`🔑 Token received for ${req.path}:`, jwtToken ? 'present' : 'missing');
+    console.log(`🔑 Token received for ${req.path}:`, 'present');
     
     // Verify token
     const payload = jwt.verify(jwtToken, process.env.JWT_SECRET_KEY);

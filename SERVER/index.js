@@ -107,6 +107,8 @@ const path = require("path");
 const fs = require("fs");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
+const helmet = require('helmet');
+const csurf = require('csurf');
 const http = require("http");
 const socketIo = require("socket.io");
 const jwt = require("jsonwebtoken");
@@ -378,12 +380,21 @@ io.use(async (socket, next) => {
       socket.handshake.headers &&
       (socket.handshake.headers.authorization ||
         socket.handshake.headers.Authorization);
-    const token =
+    let token =
       tokenFromAuth ||
       tokenFromQuery ||
       (authHeader && authHeader.startsWith("Bearer ")
         ? authHeader.split(" ")[1]
         : null);
+
+    // Fallback: check auth cookie in handshake headers (authToken)
+    if (!token && socket.handshake.headers && socket.handshake.headers.cookie) {
+      const cookieStr = socket.handshake.headers.cookie;
+      const match = cookieStr.match(/(?:^|; )authToken=([^;]+)/);
+      if (match && match[1]) {
+        token = decodeURIComponent(match[1]);
+      }
+    }
     if (debugMode || process.env.ALLOW_MOCK_AUTH === "true") {
       // console.debug('[SocketAuth] tokenFromAuthPresent:', !!tokenFromAuth, 'authHeaderPresent:', !!authHeader, 'tokenPresent:', !!token);
       if (
@@ -512,12 +523,61 @@ app.use(
       // list more allowed origins
     ],
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    // Include common dev headers used by local development and debugging
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-CSRF-Token",
+      "X-Dev-User-Id",
+      "X-Dev-Roles",
+      "X-Requested-With",
+      "X-User-Object",
+    ],
   })
 );
 // Increase payload limits for export functionality
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(cookieParser());
+// Security headers
+app.use(helmet());
+
+// CSRF protection for state-changing requests. For SPAs we expose a
+// /csrf-token endpoint so the client can fetch the token and include it in
+// the X-CSRF-Token header for POST/PUT/DELETE requests.
+const _csrfProtection = csurf({
+  cookie: {
+    httpOnly: false, // allow client JS to read the generated token if needed
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
+  },
+});
+
+// Exempt login and other preflight/public endpoints from CSRF for now to avoid
+// breaking non-updated clients. Encourage clients to fetch /csrf-token and include
+// X-CSRF-Token for POST/PUT/DELETE requests.
+app.use((req, res, next) => {
+  const exemptPaths = ['/login', '/api/webhook', '/health'];
+  if (exemptPaths.includes(req.path)) return next();
+  return _csrfProtection(req, res, next);
+});
+
+app.get('/csrf-token', (req, res) => {
+  try {
+    res.json({ csrfToken: req.csrfToken() });
+  } catch (err) {
+    res.status(500).json({ error: 'Unable to generate CSRF token' });
+  }
+});
+
+// Handle CSRF errors uniformly
+app.use((err, req, res, next) => {
+  if (err && err.code === 'EBADCSRFTOKEN') {
+    return res.status(403).json({ message: 'Invalid CSRF token' });
+  }
+  return next(err);
+});
 app.get("/", (req, res) => res.json({ message: "server is UP!" }));
 
 // Temporary public endpoint for compensation settings (for management page)

@@ -64,6 +64,13 @@ else
     npm install express-validator --save
 fi
 
+# Check if csurf is installed
+if npm list csurf > /dev/null 2>&1; then
+    print_status "csurf already installed"
+else
+    npm install csurf --save
+fi
+
 print_info "2. Checking environment configuration..."
 
 # Check if .env.example exists

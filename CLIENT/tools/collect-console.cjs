@@ -28,7 +28,6 @@ const { chromium } = require('playwright');
           ProfilePicture: '',
         };
         localStorage.setItem('currentUser', JSON.stringify(user));
-        localStorage.setItem('token', 'dev-token');
         localStorage.setItem('activeRegion', JSON.stringify({ id: '1', name: 'Default Region' }));
       } catch (e) { }
     });

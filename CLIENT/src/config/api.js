@@ -1,20 +1,6 @@
 import axios from "axios";
 import env from "../utils/env";
-import CryptoJS from "crypto-js"; // Import CryptoJS
 import { getStoredWorkflowRef } from "../hooks/useWorkflowRef";
-
-// Function to get the stored token (decrypt it first)
-const getToken = () => {
-  const encryptedToken = localStorage.getItem("token");
-  if (!encryptedToken) return null;
-  try {
-    const bytes = CryptoJS.AES.decrypt(encryptedToken, env("SECRET_KEY"));
-    return bytes.toString(CryptoJS.enc.Utf8);
-  } catch (error) {
-    console.error("Error decrypting token:", error);
-    return null;
-  }
-};
 
 // Increase default timeout and allow override via env
 const REQUEST_TIMEOUT = Number(env("REQUEST_TIMEOUT_MS")) || 30000; // default 30s
@@ -25,12 +11,33 @@ const api = axios.create({
   timeout: REQUEST_TIMEOUT,
 });
 
+// In-memory cache for CSRF token fetched from the server
+let _csrfToken = null;
+const fetchCsrfToken = async () => {
+  if (_csrfToken) return _csrfToken;
+  try {
+    const resp = await axios.get(`${env("SERVER_URL")}/csrf-token`, { withCredentials: true });
+    _csrfToken = resp.data && resp.data.csrfToken;
+    return _csrfToken;
+  } catch (err) {
+    // If CSRF endpoint is not available or request fails, proceed without token
+    return null;
+  }
+};
+
 // Attach token to requests
 api.interceptors.request.use(
-  (config) => {
-    const token = getToken();
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+  async (config) => {
+    // Authentication now uses httpOnly cookies (authToken) set by the auth server.
+    // Do NOT attach tokens from localStorage; this prevents JS-accessible storage of tokens.
+
+    // Ensure X-CSRF-Token is present for state-changing requests
+    const method = (config.method || 'get').toUpperCase();
+    if (["POST", "PUT", "DELETE", "PATCH"].includes(method)) {
+      const token = await fetchCsrfToken();
+      if (token && !config.headers['X-CSRF-Token']) {
+        config.headers['X-CSRF-Token'] = token;
+      }
     }
 
     const workflowRef = getStoredWorkflowRef();
@@ -51,7 +58,7 @@ api.interceptors.request.use(
         // Prefer Username (often holds the external employee/user number used for assignments)
         const devUserId = (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username) || currentUser?.userId || currentUser?.id || currentUser?.userCode || currentUser?.UserCode || currentUser?.Id;
         if (devUserId) {
-          config.headers['X-Dev-User-Id'] = String(devUserId);
+         config.headers['X-Dev-User-Id'] = String(devUserId);
         }
         if (currentUser?.Roles) {
           const rolesArr = Array.isArray(currentUser.Roles) ? currentUser.Roles : [currentUser.Roles];

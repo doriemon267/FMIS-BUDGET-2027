@@ -36,7 +36,7 @@ Write-Host "================================="
 # 1. Check and install security dependencies
 Write-Info "1. Checking security dependencies..."
 
-$requiredPackages = @("helmet", "express-rate-limit", "express-validator", "express-slow-down")
+$requiredPackages = @("helmet", "express-rate-limit", "express-validator", "express-slow-down", "csurf")
 
 foreach ($package in $requiredPackages) {
     $installed = npm list $package 2>$null

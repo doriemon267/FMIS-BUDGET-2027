@@ -1,6 +1,6 @@
 // src/components/apps/ChatApp.jsx
 import { useState, useRef, useEffect } from "react";
-import { isTokenExpired } from '../../../../utils/jwt';
+// Session validity handled via server-set httpOnly cookie
 import { idMatches as helperIdMatches, getOnlineMapMatchKey as helperGetOnlineMapMatchKey, isOnlineForItem as helperIsOnlineForItem } from '../../../utils/chatHelpers';
 import { dispatchChatUnread } from '../../../../utils/eventDispatcher';
 import {
@@ -31,7 +31,6 @@ import io from 'socket.io-client';
 import api from '../../../../config/api';
 import env from '../../../../utils/env';
 import { useUser } from '../../../../context/UserContext';
-import CryptoJS from 'crypto-js';
 import toast from 'react-hot-toast';
 
 // Placeholder demo data removed to avoid showing test users in production
@@ -527,19 +526,11 @@ export default function ChatApp() {
     }
   }
   useEffect(() => {
-    // Helper to get token from localStorage
-    const getToken = () => {
-      const enc = localStorage.getItem('token');
-      if (!enc) return null;
-      try { const bytes = CryptoJS.AES.decrypt(enc, env('SECRET_KEY')); return bytes.toString(CryptoJS.enc.Utf8); } catch (e) { return null; }
-    };
     let devUid = null;
     try { const cu = JSON.parse(localStorage.getItem('currentUser') || 'null'); if (cu) devUid = (Array.isArray(cu?.Username) ? cu.Username[0] : cu?.Username) || cu?.Id || cu?.id || cu?.userId; } catch(e) { devUid = null; }
-    const token = getToken();
-    // token already fetched above
-    if (!token && !devUid && !currentUser) {
-      // No auth info available; skip connecting to avoid connect errors
-      console.debug('[ChatApp] no token or devUserId available yet; deferring socket/connect and loadConversations until user data available.');
+    // If we have neither a dev UID (dev mode) nor a logged-in user (session via cookie), defer
+    if (!devUid && !currentUser) {
+      console.debug('[ChatApp] no devUserId or currentUser available yet; deferring socket/connect and loadConversations until user data available.');
       return;
     }
     loadConversations();
@@ -550,22 +541,14 @@ export default function ChatApp() {
     if (currentUserStr) {
       try { const cu = JSON.parse(currentUserStr); devUserId = (Array.isArray(cu?.Username) ? cu.Username[0] : cu?.Username) || cu?.Id || cu?.id || cu?.userId; } catch (e) { devUserId = null; }
     }
-    // Determine whether to attempt a socket connection. Only connect when we have a valid JWT token or a devUserId (dev mode).
+    // Determine whether to attempt a socket connection. Use devUserId in dev mode; otherwise server will authenticate via httpOnly cookie.
     const authObj = {};
-    const validToken = token && !isTokenExpired(token);
-    if (validToken) authObj.token = token;
     if (devUserId) authObj.devUserId = String(devUserId);
-    // include resolved current user id (if any) to help server logging and routing
     if (currentUser) {
       const cuid = (currentUser?.Id || currentUser?.id || currentUser?.userId || (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username));
       if (cuid) authObj.userId = String(cuid);
     }
-    // If we have neither a valid token nor a dev user id, or if token exists but currentUser not loaded, do not create the connection.
-    if (!authObj.devUserId && (!authObj.token || !currentUser)) {
-      console.debug('[ChatApp] Not creating socket: no valid token or dev user id present');
-      return;
-    }
-    const conn = io(serverUrl, { path: '/socket.io', transports: ['polling', 'websocket'], withCredentials: true, auth: authObj, query: (token ? { token } : {}), transportOptions: { polling: { extraHeaders: token ? { Authorization: `Bearer ${token}` } : {} } }, reconnectionAttempts: 3 });
+    const conn = io(serverUrl, { path: '/socket.io', transports: ['polling', 'websocket'], withCredentials: true, auth: authObj, reconnectionAttempts: 3 });
     if (devUserId) console.debug('[ChatApp] Passing devUserId to socket auth (if ALLOW_MOCK_AUTH enabled)');
     conn.on('connect', () => {
       const uid = (currentUser?.Id || currentUser?.id || currentUser?.userId || (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username) || null);

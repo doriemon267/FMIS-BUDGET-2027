@@ -4,7 +4,6 @@ import { authApi } from "../config/api";
 import api from "../config/api";
 import Loading from "../global/components/Loading";
 import env from "../utils/env";
-import CryptoJS from "crypto-js"; // Import CryptoJS for encryption
 import io from "socket.io-client"; // Import Socket.io client
 
 const UserContext = createContext({
@@ -22,35 +21,12 @@ const UserProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const nav = useNavigate();
 
-  // Function to encrypt and store token
-  const storeToken = (token) => {
-    const encryptedToken = CryptoJS.AES.encrypt(
-      token,
-      env("SECRET_KEY")
-    ).toString();
-    localStorage.setItem("token", encryptedToken);
-  };
+  // Authentication now relies on httpOnly cookies set by the auth server.
 
-  // Function to retrieve and decrypt token
-  const getToken = () => {
-    const encryptedToken = localStorage.getItem("token");
-    if (!encryptedToken) return null;
-    try {
-      const bytes = CryptoJS.AES.decrypt(encryptedToken, env("SECRET_KEY"));
-      return bytes.toString(CryptoJS.enc.Utf8);
-    } catch (error) {
-      console.error("Error decrypting token:", error);
-      return null;
-    }
-  };
-
-  // Fetch user and store token
+  // Fetch user only (token is stored in httpOnly cookie on the server)
   const handleSetUserInitialization = async () => {
     const res = await authApi.get("/get-user");
     setCurrentUser(res.data.user);
-    if (res.data.jwtToken) {
-      storeToken(res.data.jwtToken);
-    }
   };
 
   const handleLogout = async () => {
@@ -68,7 +44,6 @@ const UserProvider = ({ children }) => {
 
     await authApi.get("/logout");
     setCurrentUser(null);
-    localStorage.removeItem("token"); // Remove token on logout
     localStorage.removeItem("currentUser"); // Remove user data for RegionContext
     localStorage.removeItem("activeRegion"); // Clear active region
     location.href = env("AUTH_CLIENT_URL") + "/login";
@@ -274,7 +249,7 @@ const UserProvider = ({ children }) => {
     const fetchUser = async () => {
       try {
         const res = await authApi.get("/get-user");
-        if (res.data.user) {
+          if (res.data.user) {
           let user = res.data.user;
           
           // Debug: Log the authentication user ID
@@ -342,22 +317,18 @@ const UserProvider = ({ children }) => {
           }
           
           setCurrentUser(user);
-          
+
           // Store user in localStorage for RegionContext
           localStorage.setItem('currentUser', JSON.stringify(user));
-          
-          // Initialize WebSocket connection for real-time updates
+
+          // Initialize WebSocket connection for real-time updates (server uses auth cookie)
           // initializeWebSocket(user);
-          
-          if (res.data.jwtToken) {
-            storeToken(res.data.jwtToken);
-          }
         } else {
-          localStorage.removeItem("token");
+          localStorage.removeItem("currentUser");
           location.href = env("AUTH_CLIENT_URL") + "/login";
         }
       } catch (error) {
-        localStorage.removeItem("token");
+        localStorage.removeItem("currentUser");
         console.error("Error fetching user:", error);
         location.href = env("AUTH_CLIENT_URL") + "/login";
       } finally {
@@ -401,7 +372,7 @@ const UserProvider = ({ children }) => {
     refetchUserProfile,
     isLoading,
     loading: isLoading || isRefetching, // Provide both for compatibility
-    jwtToken: getToken(),
+    // jwtToken removed: authentication uses httpOnly cookies
     // Expose workflow helpers
     workflowRoles,
     assignmentLevel,

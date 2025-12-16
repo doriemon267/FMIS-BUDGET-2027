@@ -42,7 +42,7 @@ import {
   Info as InfoIcon,
   Warning as WarningIcon
 } from '@mui/icons-material';
-import { isTokenExpired } from '../utils/jwt';
+// Session validity determined by server-side session cookie; no client-side JWT checks
 
 const ACCESS_LEVELS = [
   { value: 'RESPONSIBILITY_CENTER', label: 'Responsibility Center Level', icon: <BusinessIcon />, color: '#2196F3' },
@@ -107,7 +107,7 @@ const USER_ROLES = [
 // SUPER_ADMIN role is now displayed as "ADMIN" in the UI
 
 const HierarchicalUserAssignmentPage = () => {
-  const { currentUser, jwtToken, refetchUserProfile } = useUser();
+  const { currentUser, refetchUserProfile } = useUser();
   const queryClient = useQueryClient();
 
   // Pagination state
@@ -168,7 +168,7 @@ const HierarchicalUserAssignmentPage = () => {
     queryKey: ['hierarchical-organization-structure'],
     queryFn: async () => {
       try {
-        if (isTokenExpired(jwtToken)) {
+        if (!currentUser) {
           throw new Error('Session expired. Please log in again.');
         }
         const res = await api.get('/api/hierarchical-rbac/organization-structure?structure=new');
@@ -226,7 +226,7 @@ const HierarchicalUserAssignmentPage = () => {
         return { availableUnits: { regions: [], departments: [], departmentsWithDivisions: [], divisions: [] }, mappings: [] };
       }
     },
-    enabled: !!currentUser && !!jwtToken,
+    enabled: !!currentUser,
     retry: (failureCount, error) => error.message.includes('network') && failureCount < 3,
     staleTime: 30 * 60 * 1000, // 30 minutes
   });
@@ -236,7 +236,7 @@ const HierarchicalUserAssignmentPage = () => {
     queryKey: ['hierarchical-assignments'],
     queryFn: async () => {
       try {
-        if (isTokenExpired(jwtToken)) {
+        if (!currentUser) {
           throw new Error('Session expired. Please log in again.');
         }
         const deriveUserId = () => currentUser?.Username?.[0] || currentUser?.Id || currentUser?.id || currentUser?.userId;
@@ -284,7 +284,7 @@ const HierarchicalUserAssignmentPage = () => {
         return [];
       }
     },
-    enabled: !!currentUser && !!jwtToken,
+    enabled: !!currentUser,
     retry: (failureCount, error) => error.message.includes('network') && failureCount < 3,
   });
 
@@ -307,7 +307,7 @@ const HierarchicalUserAssignmentPage = () => {
       }
 
       try {
-        if (isTokenExpired(jwtToken)) {
+        if (!currentUser) {
           throw new Error('Session expired');
         }
 
@@ -436,14 +436,12 @@ const HierarchicalUserAssignmentPage = () => {
   // Mutation for creating/updating assignments
   const createOrUpdateMutation = useMutation({
     mutationFn: async (data) => {
-      if (isTokenExpired(jwtToken)) {
+      if (!currentUser) {
         throw new Error('Session expired. Please log in again.');
       }
 
-      // Use hierarchical assignments endpoint (focus on hierarchical system)
-      const res = await api.post('/api/hierarchical-rbac/assignments', data, {
-        headers: { Authorization: `Bearer ${jwtToken}` }
-      });
+      // Use hierarchical assignments endpoint (auth via httpOnly cookie)
+      const res = await api.post('/api/hierarchical-rbac/assignments', data);
       return res.data;
     },
     onSuccess: (data) => {
@@ -492,12 +490,10 @@ const HierarchicalUserAssignmentPage = () => {
   // Mutation for deleting assignments
   const deleteMutation = useMutation({
     mutationFn: async (userId) => {
-      if (isTokenExpired(jwtToken)) {
+      if (!currentUser) {
         throw new Error('Session expired. Please log in again.');
       }
-      return api.delete(`/api/hierarchical-rbac/assignments/${userId}`, {
-        headers: { Authorization: `Bearer ${jwtToken}` }
-      });
+      return api.delete(`/api/hierarchical-rbac/assignments/${userId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['hierarchical-assignments']);
@@ -835,7 +831,7 @@ const HierarchicalUserAssignmentPage = () => {
                         queryKey: ['user-lookup', value],
                         queryFn: async () => {
                           try {
-                            if (isTokenExpired(jwtToken)) {
+                            if (!currentUser) {
                               throw new Error('Session expired');
                             }
                             const res = await api.get(`/api/hierarchical-rbac/user-lookup/${value}`);
