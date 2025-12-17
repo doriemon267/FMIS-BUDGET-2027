@@ -124,6 +124,7 @@ module.exports = async (req, res, next) => {
         // FALLBACK: Try to use accessToken to fetch user from external API
         if (payload.accessToken && process.env.ACCOUNT_USER_API_URL) {
           try {
+            
             const userRes = await fetch(process.env.ACCOUNT_USER_API_URL, {
               headers: { Authorization: `Bearer ${payload.accessToken}` },
             });

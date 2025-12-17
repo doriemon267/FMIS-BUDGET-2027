@@ -109,15 +109,15 @@ const CAPITAL_OUTLAY_VIEW_PREFERENCE_KEY = "capitalOutlayViewPreference";
 const StyledTab = styled((props) => <Tab {...props} />)(({ theme }) => ({
   textTransform: "none",
   minWidth: 0,
-  padding: '12px 16px',
+  padding: "12px 16px",
   [theme.breakpoints.up("sm")]: {
     minWidth: 0,
   },
   fontWeight: theme.typography.fontWeightRegular,
   marginRight: theme.spacing(1),
   color: "rgba(0, 0, 0, 0.7)",
-  borderRadius: '8px 8px 0 0',
-  transition: 'all 0.3s ease',
+  borderRadius: "8px 8px 0 0",
+  transition: "all 0.3s ease",
   "&:hover": {
     backgroundColor: "rgba(55, 94, 56, 0.08)",
     color: theme.palette.primary.main,
@@ -134,7 +134,7 @@ const StyledTab = styled((props) => <Tab {...props} />)(({ theme }) => ({
   "& .MuiSvgIcon-root, & svg": {
     marginRight: theme.spacing(1),
     fontSize: "1.2rem",
-    transition: 'transform 0.3s ease',
+    transition: "transform 0.3s ease",
   },
 }));
 
@@ -149,7 +149,7 @@ const ProposalCustomPage = ({
   const { activeRegion } = useRegion();
   const { readOnly, canCreate, canDelete } = useUserRestrictions();
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const [regionFilter, setRegionFilter] = useState("");
   const [personnelData, setPersonnelData] = useState([]);
   const [mooeData, setMooeData] = useState([]);
@@ -182,6 +182,16 @@ const ProposalCustomPage = ({
   const [isCreateDialogOpen, setCreateDialogOpen] = useState(false);
   const [currentProposalId, setCurrentProposalId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [privacyNoticeAccepted, setPrivacyNoticeAccepted] = useState(false);
+
+  // Helper functions for role checking
+  const userRoles = currentUser?.Roles || [];
+  const isSuperAdmin = userRoles.some((r) =>
+    ["SUPER_ADMIN", "SUPER ADMIN"].includes(r?.toUpperCase?.() || r)
+  );
+  const isBudgetPreparer = userRoles.some((r) =>
+    ["BUDGET_PREPARER", "BUDGET PREPARER"].includes(r?.toUpperCase?.() || r)
+  );
 
   const createProposalMutation = useMutation({
     mutationFn: (newProposal) => {
@@ -196,12 +206,13 @@ const ProposalCustomPage = ({
       setCurrentProposalId(proposalId);
       try {
         if (proposalId) {
-          sessionStorage.setItem('activeWorkflowRef', proposalId);
-          localStorage.setItem('activeWorkflowRef', proposalId);
+          sessionStorage.setItem("activeWorkflowRef", proposalId);
+          localStorage.setItem("activeWorkflowRef", proposalId);
         }
       } catch (_) {}
       toast.success("Proposal created successfully!");
       setCreateDialogOpen(false);
+      setPrivacyNoticeAccepted(false);
       setNewProposalData({
         title: "",
         description: "",
@@ -212,7 +223,9 @@ const ProposalCustomPage = ({
     },
     onError: (error) => {
       toast.error(
-        `Error creating proposal: ${error.response?.data?.message || error.message}`
+        `Error creating proposal: ${
+          error.response?.data?.message || error.message
+        }`
       );
     },
   });
@@ -226,25 +239,27 @@ const ProposalCustomPage = ({
       queryClient.invalidateQueries({ queryKey: ["proposals"] });
       queryClient.invalidateQueries({ queryKey: ["allProposals"] });
       setCurrentProposalId(null);
-      sessionStorage.removeItem('activeWorkflowRef');
-      localStorage.removeItem('activeWorkflowRef');
+      sessionStorage.removeItem("activeWorkflowRef");
+      localStorage.removeItem("activeWorkflowRef");
       toast.success("Proposal deleted and unlinked successfully!");
     },
     onError: (error) => {
       toast.error(
-        `Error deleting proposal: ${error.response?.data?.message || error.message}`
+        `Error deleting proposal: ${
+          error.response?.data?.message || error.message
+        }`
       );
     },
   });
 
   // Normalize modelType coming from active settings to the enum accepted by backend
   const normalizeModelType = (value) => {
-    if (!value) return 'Initial';
+    if (!value) return "Initial";
     const v = String(value).trim().toUpperCase();
-    if (v.includes('NEP')) return 'NEP';
-    if (v.includes('GAA')) return 'GAA';
+    if (v.includes("NEP")) return "NEP";
+    if (v.includes("GAA")) return "GAA";
     // Default bucket for anything like "INITIAL", "BUDGET: INITIAL", etc.
-    return 'Initial';
+    return "Initial";
   };
 
   const handleCreateProposal = () => {
@@ -260,23 +275,32 @@ const ProposalCustomPage = ({
       return;
     }
     // Prefer sending region NAME to satisfy legacy/middleware validators
-    const regionPayload = typeof activeRegion === 'object'
-      ? (activeRegion.name || activeRegion.regionName || activeRegion.Region || 'CENTRAL OFFICE')
-      : (activeRegion || 'CENTRAL OFFICE');
+    const regionPayload =
+      typeof activeRegion === "object"
+        ? activeRegion.name ||
+          activeRegion.regionName ||
+          activeRegion.Region ||
+          "CENTRAL OFFICE"
+        : activeRegion || "CENTRAL OFFICE";
 
-    const modelTypeNormalized = normalizeModelType(activeBudgetType || modelType || 'Initial');
+    const modelTypeNormalized = normalizeModelType(
+      activeBudgetType || modelType || "Initial"
+    );
 
     createProposalMutation.mutate({
       title,
       description,
-      projectedCorporateIncome: (Number(projectedCorporateIncome) || 0) + (Number(chargedToIncomeAmount) || 0),
-      projectedSubsidy: (Number(projectedSubsidy) || 0) + (Number(nonChargedPersonnelServices) || 0),
+      projectedCorporateIncome:
+        (Number(projectedCorporateIncome) || 0) +
+        (Number(chargedToIncomeAmount) || 0),
+      projectedSubsidy:
+        (Number(projectedSubsidy) || 0) +
+        (Number(nonChargedPersonnelServices) || 0),
       modelType: modelTypeNormalized,
       fiscalYear: Number(activeFiscalYear) || new Date().getFullYear(),
       region: regionPayload,
     });
   };
-
 
   // Enhancement states
   const [bulkSelection, setBulkSelection] = useState({
@@ -293,10 +317,10 @@ const ProposalCustomPage = ({
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [speedDialOpen, setSpeedDialOpen] = useState(false);
-  
+
   // Capital Outlay view toggle (true = new DataGrid, false = old table)
   const [useDataGridView, setUseDataGridView] = useState(false);
-  
+
   // Delete confirmation dialog state
   const [deleteConfirmDialog, setDeleteConfirmDialog] = useState({
     open: false,
@@ -330,7 +354,8 @@ const ProposalCustomPage = ({
   const [summaryExpanded, setSummaryExpanded] = useState(false);
   const [groupedItems, setGroupedItems] = useState({});
   const [chargedToIncomeAmount, setChargedToIncomeAmount] = useState(0);
-  const [nonChargedPersonnelServices, setNonChargedPersonnelServices] = useState(0);
+  const [nonChargedPersonnelServices, setNonChargedPersonnelServices] =
+    useState(0);
 
   // Enhanced UX state
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
@@ -343,27 +368,36 @@ const ProposalCustomPage = ({
   // ADDED: Restore activeWorkflowRef from storage on mount to preserve proposal ID across page refreshes
   // Also verify that the stored proposal still exists in the database
   useEffect(() => {
-    const storedWorkflowRef = sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef');
+    const storedWorkflowRef =
+      sessionStorage.getItem("activeWorkflowRef") ||
+      localStorage.getItem("activeWorkflowRef");
     if (storedWorkflowRef && !currentProposalId) {
       // Verify the proposal still exists before setting it
       const verifyProposal = async () => {
         try {
-          const response = await api.get(`/api/allproposal/proposals/${storedWorkflowRef}`);
+          const response = await api.get(
+            `/api/allproposal/proposals/${storedWorkflowRef}`
+          );
           // Backend returns { success: true, data: proposal } - check for data property
           if (response.data?.success && response.data?.data) {
             setCurrentProposalId(storedWorkflowRef);
           } else {
             // Proposal not found - clear storage
-            console.log('[ProposalCustomPage] Stored proposal not found, clearing reference');
-            sessionStorage.removeItem('activeWorkflowRef');
-            localStorage.removeItem('activeWorkflowRef');
+            console.log(
+              "[ProposalCustomPage] Stored proposal not found, clearing reference"
+            );
+            sessionStorage.removeItem("activeWorkflowRef");
+            localStorage.removeItem("activeWorkflowRef");
             setCurrentProposalId(null);
           }
         } catch (error) {
           // Error fetching proposal (likely 404) - clear storage
-          console.log('[ProposalCustomPage] Error verifying stored proposal, clearing reference:', error.message);
-          sessionStorage.removeItem('activeWorkflowRef');
-          localStorage.removeItem('activeWorkflowRef');
+          console.log(
+            "[ProposalCustomPage] Error verifying stored proposal, clearing reference:",
+            error.message
+          );
+          sessionStorage.removeItem("activeWorkflowRef");
+          localStorage.removeItem("activeWorkflowRef");
           setCurrentProposalId(null);
         }
       };
@@ -384,7 +418,7 @@ const ProposalCustomPage = ({
   // Auto-sync modelType with active settings budget type
   useEffect(() => {
     if (activeBudgetType) {
-      setNewProposalData(prev => ({ ...prev, modelType: activeBudgetType }));
+      setNewProposalData((prev) => ({ ...prev, modelType: activeBudgetType }));
     }
   }, [activeBudgetType]);
 
@@ -586,7 +620,13 @@ const ProposalCustomPage = ({
       Array.isArray(budgetarySupportData) ? budgetarySupportData.length : 0,
     ];
     return counts.reduce((a, b) => a + b, 0) > 0;
-  }, [personnelData, mooeData, capitalOutlayData, incomeData, budgetarySupportData]);
+  }, [
+    personnelData,
+    mooeData,
+    capitalOutlayData,
+    incomeData,
+    budgetarySupportData,
+  ]);
 
   // Lock only when there ARE proposals for this FY and none of them are editable (i.e., not Draft/Returned/Not Submitted)
   // If there are NO proposals for the selected FY, keep it unlocked so users can start creating.
@@ -675,7 +715,8 @@ const ProposalCustomPage = ({
   // Create a callback function to receive the grand total from IncomeTable
   const handleIncomeGrandTotalUpdate = useCallback(
     (total) => {
-      const regionName = activeRegion?.name || activeRegion?.regionName || 'Unknown';
+      const regionName =
+        activeRegion?.name || activeRegion?.regionName || "Unknown";
       setIncomeGrandTotal(total);
 
       // Calculate total from MOOE and Capital Outlay
@@ -689,7 +730,9 @@ const ProposalCustomPage = ({
       );
       const combinedTotal = mooeIncomeTotal + capitalOutlayIncomeTotal;
       // Set disable flag if totals match or if user is in read-only mode
-      setDisableIncomeInputs(Math.abs(total - combinedTotal) < 0.01 || readOnly); // Using small epsilon for float comparison
+      setDisableIncomeInputs(
+        Math.abs(total - combinedTotal) < 0.01 || readOnly
+      ); // Using small epsilon for float comparison
     },
     [mooeData, capitalOutlayData, activeRegion, readOnly]
   );
@@ -918,13 +961,13 @@ const ProposalCustomPage = ({
     queryFn: async () => {
       const region = activeRegion?.name || activeRegion?.regionName;
       const fiscalYear = selectedFiscalYear || activeFiscalYear;
-      const isFullAccess = currentUser?.hierarchicalAccess?.scope === 'FULL';
-      
+      const isFullAccess = currentUser?.hierarchicalAccess?.scope === "FULL";
+
       // For FULL access users, don't include region parameter to get all regions
-      const url = isFullAccess 
+      const url = isFullAccess
         ? `/getpersonnels?fiscalYear=${fiscalYear}`
         : `/getpersonnels?region=${region}&fiscalYear=${fiscalYear}`;
-        
+
       const response = await api.get(url);
       // console.log(
       //   `Fetched personnel data for ${isFullAccess ? 'all regions' : 'region: ' + region}, fiscal year: ${fiscalYear}`
@@ -951,13 +994,13 @@ const ProposalCustomPage = ({
     queryFn: async () => {
       const region = activeRegion?.name || activeRegion?.regionName;
       const fiscalYear = selectedFiscalYear || activeFiscalYear;
-      const isFullAccess = currentUser?.hierarchicalAccess?.scope === 'FULL';
-      
+      const isFullAccess = currentUser?.hierarchicalAccess?.scope === "FULL";
+
       // For FULL access users, don't include region parameter to get all regions
-      const url = isFullAccess 
+      const url = isFullAccess
         ? `/mooe-list?fiscalYear=${fiscalYear}`
         : `/mooe-list?region=${region}&fiscalYear=${fiscalYear}`;
-        
+
       const response = await api.get(url);
       // console.log(
       //   `Fetched MOOE data for region: ${region}, fiscal year: ${fiscalYear}`
@@ -1013,13 +1056,13 @@ const ProposalCustomPage = ({
       // Use the same endpoint as CapitalOutlayTable for consistency
       const region = activeRegion?.name || activeRegion?.regionName;
       const fiscalYear = selectedFiscalYear || activeFiscalYear;
-      const isFullAccess = currentUser?.hierarchicalAccess?.scope === 'FULL';
-      
+      const isFullAccess = currentUser?.hierarchicalAccess?.scope === "FULL";
+
       // For FULL access users, don't include region parameter to get all regions
-      const url = isFullAccess 
+      const url = isFullAccess
         ? `/capital-outlays?fiscalYear=${fiscalYear}`
         : `/capital-outlays?region=${region}&fiscalYear=${fiscalYear}`;
-        
+
       const response = await api.get(url);
       // console.log(
       //   `Fetched Capital Outlay data for region: ${region}, fiscal year: ${fiscalYear}`
@@ -1046,13 +1089,11 @@ const ProposalCustomPage = ({
     queryFn: async () => {
       const region = activeRegion?.name || activeRegion?.regionName;
       const fiscalYear = selectedFiscalYear || activeFiscalYear;
-      const isFullAccess = currentUser?.hierarchicalAccess?.scope === 'FULL';
-      
+      const isFullAccess = currentUser?.hierarchicalAccess?.scope === "FULL";
+
       // For FULL access users, don't include region parameter to get all regions
-      const params = isFullAccess 
-        ? { fiscalYear }
-        : { fiscalYear, region };
-        
+      const params = isFullAccess ? { fiscalYear } : { fiscalYear, region };
+
       const response = await api.get("/income", { params });
       // console.log(
       //   `Fetched Income data for region: ${region}, fiscal year: ${fiscalYear}`
@@ -1080,13 +1121,13 @@ const ProposalCustomPage = ({
       queryFn: async () => {
         const region = activeRegion?.name || activeRegion?.regionName;
         const fiscalYear = selectedFiscalYear || activeFiscalYear;
-        const isFullAccess = currentUser?.hierarchicalAccess?.scope === 'FULL';
-        
+        const isFullAccess = currentUser?.hierarchicalAccess?.scope === "FULL";
+
         // For FULL access users, don't include region parameter to get all regions
-        const params = isFullAccess 
+        const params = isFullAccess
           ? { fiscalYear, budgetType: activeBudgetType }
           : { fiscalYear, budgetType: activeBudgetType, region };
-          
+
         const response = await api.get("/budgetary-support", { params });
         // console.log("Budgetary support response:", response.data);
         return response.data.map((item) => ({
@@ -1109,7 +1150,7 @@ const ProposalCustomPage = ({
 
   const { data: chargedToIncomeQueryData = 0 } = useQuery({
     queryKey: [
-      'chargedToIncomeAmount',
+      "chargedToIncomeAmount",
       selectedFiscalYear || activeFiscalYear,
       activeBudgetType,
     ],
@@ -1120,22 +1161,24 @@ const ProposalCustomPage = ({
         budgetType: activeBudgetType,
         chargedToIncomeEligible: true,
         limit: 1000,
-        page: 1
+        page: 1,
       };
-      
+
       try {
-        const response = await api.get('/personnelServices', { params: baseParams });
+        const response = await api.get("/personnelServices", {
+          params: baseParams,
+        });
         const data = response.data?.personnelServices || [];
-        
+
         if (!Array.isArray(data)) return 0;
-        
+
         const total = data.reduce((sum, p) => {
-          return sum + (Number(p.chargedToIncomeAmount || 0));
+          return sum + Number(p.chargedToIncomeAmount || 0);
         }, 0);
-        
+
         return total;
       } catch (error) {
-        console.error('Error fetching charged to income data:', error);
+        console.error("Error fetching charged to income data:", error);
         return 0;
       }
     },
@@ -1151,7 +1194,8 @@ const ProposalCustomPage = ({
     if (incomeQueryData) setIncomeData(incomeQueryData);
     if (budgetarySupportQueryData)
       setBudgetarySupportData(budgetarySupportQueryData);
-    if (chargedToIncomeQueryData) setChargedToIncomeAmount(chargedToIncomeQueryData);
+    if (chargedToIncomeQueryData)
+      setChargedToIncomeAmount(chargedToIncomeQueryData);
   }, [
     personnelQueryData,
     mooeQueryData,
@@ -1243,7 +1287,8 @@ const ProposalCustomPage = ({
       if (error.response?.status === 403) {
         setSnackbar({
           open: true,
-          message: "You don't have permission to submit proposals. Please contact your administrator to assign proper permissions.",
+          message:
+            "You don't have permission to submit proposals. Please contact your administrator to assign proper permissions.",
           severity: "error",
         });
         return;
@@ -1257,7 +1302,10 @@ const ProposalCustomPage = ({
       : currentUser?.Region || currentUser?.region;
 
     if (!userRegion) {
-      console.error("Region information is missing", { activeRegion, currentUserRegion: currentUser?.Region });
+      console.error("Region information is missing", {
+        activeRegion,
+        currentUserRegion: currentUser?.Region,
+      });
       setSnackbar({
         open: true,
         message:
@@ -1270,7 +1318,16 @@ const ProposalCustomPage = ({
     if (budgetDeficit && budgetDeficit.hasDeficit) {
       setSnackbar({
         open: true,
-        message: `Cannot submit: Budget has a deficit of ₱${budgetDeficit.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Total Sources (₱${budgetDeficit.totalSources.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) must equal or exceed Total Uses (₱${budgetDeficit.totalUses.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}).`,
+        message: `Cannot submit: Budget has a deficit of ₱${budgetDeficit.amount.toLocaleString(
+          undefined,
+          { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+        )}. Total Sources (₱${budgetDeficit.totalSources.toLocaleString(
+          undefined,
+          { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+        )}) must equal or exceed Total Uses (₱${budgetDeficit.totalUses.toLocaleString(
+          undefined,
+          { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+        )}).`,
         severity: "error",
       });
       return;
@@ -1307,7 +1364,7 @@ const ProposalCustomPage = ({
     const budgetarySupportIds = budgetarySupportData
       .filter((p) => isEligibleForSubmission(p.status))
       .map((p) => p._id);
-    
+
     if (
       personnelIds.length === 0 &&
       mooeIds.length === 0 &&
@@ -1356,20 +1413,24 @@ const ProposalCustomPage = ({
         "Error updating proposal status:",
         error.response?.data || error.message
       );
-      
+
       // Handle permission errors specifically
       if (error.response?.status === 403) {
         const errorData = error.response.data;
-        if (errorData.code === 'INSUFFICIENT_PERMISSIONS' && errorData.required === 'canEditOwnProposals') {
+        if (
+          errorData.code === "INSUFFICIENT_PERMISSIONS" &&
+          errorData.required === "canEditOwnProposals"
+        ) {
           setSnackbar({
             open: true,
-            message: "You don't have permission to submit proposals. Please contact your administrator to grant 'canEditOwnProposals' permission.",
+            message:
+              "You don't have permission to submit proposals. Please contact your administrator to grant 'canEditOwnProposals' permission.",
             severity: "error",
           });
           return;
         }
       }
-      
+
       setSnackbar({
         open: true,
         message:
@@ -1531,7 +1592,10 @@ const ProposalCustomPage = ({
       : currentUser?.Region || currentUser?.region;
 
     if (!userRegion) {
-      console.error("Region information is missing", { activeRegion, currentUserRegion: currentUser?.Region });
+      console.error("Region information is missing", {
+        activeRegion,
+        currentUserRegion: currentUser?.Region,
+      });
       setSnackbar({
         open: true,
         message:
@@ -1628,7 +1692,10 @@ const ProposalCustomPage = ({
     if (budgetDeficit && budgetDeficit.hasDeficit) {
       setSnackbar({
         open: true,
-        message: `Cannot submit: Budget has a deficit of ₱${budgetDeficit.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Total Sources must equal or exceed Total Uses.`,
+        message: `Cannot submit: Budget has a deficit of ₱${budgetDeficit.amount.toLocaleString(
+          undefined,
+          { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+        )}. Total Sources must equal or exceed Total Uses.`,
         severity: "error",
       });
       return;
@@ -1747,11 +1814,11 @@ const ProposalCustomPage = ({
     if (activeRegion) {
       const regionName = activeRegion.name || activeRegion.regionName;
       setRegionFilter(regionName);
-      
+
       // Force refresh income data when region changes
       queryClient.invalidateQueries(["income-items"]);
       queryClient.invalidateQueries(["income-categories"]);
-      
+
       // Reset income grand total to trigger recalculation
       setIncomeGrandTotal(0);
     } else {
@@ -1895,101 +1962,145 @@ const ProposalCustomPage = ({
   ]);
 
   // Enhancement Functions (defined after all hooks to ensure proper dependency access)
-  
+
   // Bulk Selection Functions
   const handleBulkSelect = useCallback((type, ids) => {
-    setBulkSelection(prev => ({
+    setBulkSelection((prev) => ({
       ...prev,
-      [type]: ids
+      [type]: ids,
     }));
     setShowBulkActions(ids.length > 0);
   }, []);
 
-  const handleSelectAll = useCallback((type) => {
-    let data = [];
-    switch (type) {
-      case 'personnel': data = personnelData || []; break;
-      case 'mooe': data = mooeData || []; break;
-      case 'capitalOutlay': data = capitalOutlayData || []; break;
-      case 'income': data = incomeData || []; break;
-      case 'budgetarySupport': data = budgetarySupportData || []; break;
-    }
-    const eligibleIds = data.filter(item => isEligibleForSubmission(item.status || 'Not Submitted')).map(item => item._id);
-    handleBulkSelect(type, eligibleIds);
-  }, [personnelData, mooeData, capitalOutlayData, incomeData, budgetarySupportData, handleBulkSelect, isEligibleForSubmission]);
+  const handleSelectAll = useCallback(
+    (type) => {
+      let data = [];
+      switch (type) {
+        case "personnel":
+          data = personnelData || [];
+          break;
+        case "mooe":
+          data = mooeData || [];
+          break;
+        case "capitalOutlay":
+          data = capitalOutlayData || [];
+          break;
+        case "income":
+          data = incomeData || [];
+          break;
+        case "budgetarySupport":
+          data = budgetarySupportData || [];
+          break;
+      }
+      const eligibleIds = data
+        .filter((item) =>
+          isEligibleForSubmission(item.status || "Not Submitted")
+        )
+        .map((item) => item._id);
+      handleBulkSelect(type, eligibleIds);
+    },
+    [
+      personnelData,
+      mooeData,
+      capitalOutlayData,
+      incomeData,
+      budgetarySupportData,
+      handleBulkSelect,
+      isEligibleForSubmission,
+    ]
+  );
 
-  const handleDeselectAll = useCallback((type) => {
-    handleBulkSelect(type, []);
-  }, [handleBulkSelect]);
+  const handleDeselectAll = useCallback(
+    (type) => {
+      handleBulkSelect(type, []);
+    },
+    [handleBulkSelect]
+  );
 
   // Bulk Actions
-  const handleBulkStatusChange = useCallback(async (newStatus) => {
-    setLoading(true);
-    try {
-      const allSelectedIds = [
-        ...bulkSelection.personnel,
-        ...bulkSelection.mooe,
-        ...bulkSelection.capitalOutlay,
-        ...bulkSelection.income,
-        ...bulkSelection.budgetarySupport
-      ];
+  const handleBulkStatusChange = useCallback(
+    async (newStatus) => {
+      setLoading(true);
+      try {
+        const allSelectedIds = [
+          ...bulkSelection.personnel,
+          ...bulkSelection.mooe,
+          ...bulkSelection.capitalOutlay,
+          ...bulkSelection.income,
+          ...bulkSelection.budgetarySupport,
+        ];
 
-      const payload = {
-        personnelIds: bulkSelection.personnel,
-        mooeIds: bulkSelection.mooe,
-        capitalOutlayIds: bulkSelection.capitalOutlay,
-        incomeIds: bulkSelection.income,
-        budgetarySupportIds: bulkSelection.budgetarySupport,
-        fiscalYear: activeFiscalYear,
-        budgetType: activeBudgetType,
-        processBy: `${currentUser.FirstName} ${currentUser.LastName}`,
-        region: activeRegion?.name || activeRegion?.regionName,
-        userId: currentUser._id,
-      };
+        const payload = {
+          personnelIds: bulkSelection.personnel,
+          mooeIds: bulkSelection.mooe,
+          capitalOutlayIds: bulkSelection.capitalOutlay,
+          incomeIds: bulkSelection.income,
+          budgetarySupportIds: bulkSelection.budgetarySupport,
+          fiscalYear: activeFiscalYear,
+          budgetType: activeBudgetType,
+          processBy: `${currentUser.FirstName} ${currentUser.LastName}`,
+          region: activeRegion?.name || activeRegion?.regionName,
+          userId: currentUser._id,
+        };
 
-      if (newStatus === 'Submitted') {
-        await api.post("/updateProposalStatus", payload);
-      } else if (newStatus === 'Draft') {
-        await api.post("/saveAsDraft", payload);
+        if (newStatus === "Submitted") {
+          await api.post("/updateProposalStatus", payload);
+        } else if (newStatus === "Draft") {
+          await api.post("/saveAsDraft", payload);
+        }
+
+        // Log activity
+        const activityEntry = {
+          timestamp: new Date(),
+          action: `Bulk ${newStatus}`,
+          itemCount: allSelectedIds.length,
+          user: `${currentUser.FirstName} ${currentUser.LastName}`,
+          details: `${newStatus} ${allSelectedIds.length} proposals`,
+        };
+        setActivityLog((prev) => [activityEntry, ...prev.slice(0, 49)]); // Keep last 50 activities
+
+        await fetchAllData();
+        setBulkSelection({
+          personnel: [],
+          mooe: [],
+          capitalOutlay: [],
+          income: [],
+          budgetarySupport: [],
+        });
+        setShowBulkActions(false);
+        setBulkActionsAnchor(null);
+
+        setSnackbar({
+          open: true,
+          message: `Successfully updated ${allSelectedIds.length} proposals to ${newStatus}`,
+          severity: "success",
+        });
+      } catch (error) {
+        console.error("Bulk action error:", error);
+        setSnackbar({
+          open: true,
+          message: "Failed to update selected proposals",
+          severity: "error",
+        });
+      } finally {
+        setLoading(false);
       }
-
-      // Log activity
-      const activityEntry = {
-        timestamp: new Date(),
-        action: `Bulk ${newStatus}`,
-        itemCount: allSelectedIds.length,
-        user: `${currentUser.FirstName} ${currentUser.LastName}`,
-        details: `${newStatus} ${allSelectedIds.length} proposals`
-      };
-      setActivityLog(prev => [activityEntry, ...prev.slice(0, 49)]); // Keep last 50 activities
-
-      await fetchAllData();
-      setBulkSelection({ personnel: [], mooe: [], capitalOutlay: [], income: [], budgetarySupport: [] });
-      setShowBulkActions(false);
-      setBulkActionsAnchor(null);
-
-      setSnackbar({
-        open: true,
-        message: `Successfully updated ${allSelectedIds.length} proposals to ${newStatus}`,
-        severity: "success",
-      });
-    } catch (error) {
-      console.error("Bulk action error:", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to update selected proposals",
-        severity: "error",
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [bulkSelection, activeFiscalYear, activeBudgetType, currentUser, activeRegion, fetchAllData]);
+    },
+    [
+      bulkSelection,
+      activeFiscalYear,
+      activeBudgetType,
+      currentUser,
+      activeRegion,
+      fetchAllData,
+    ]
+  );
 
   // Export Functions
   const generatePDFReport = useCallback(async () => {
     try {
       setLoading(true);
-      
+
       // Send only essential parameters, let server fetch data
       const exportParams = {
         fiscalYear: selectedFiscalYear || activeFiscalYear,
@@ -2001,7 +2112,7 @@ const ProposalCustomPage = ({
           mooe: mooeData?.length || 0,
           capitalOutlay: capitalOutlayData?.length || 0,
           income: incomeData?.length || 0,
-          budgetarySupport: budgetarySupportData?.length || 0
+          budgetarySupport: budgetarySupportData?.length || 0,
         },
         budgetSummary: {
           grandTotal: budgetSummary?.grandTotal || 0,
@@ -2010,20 +2121,26 @@ const ProposalCustomPage = ({
           capitalOutlayTotal: budgetSummary?.capitalOutlayTotal || 0,
           budgetarySupportTotal: budgetSummary?.budgetarySupportTotal || 0,
           incomeTotal: budgetSummary?.incomeTotal || 0,
-          isIncomeBalanced: budgetSummary?.isIncomeBalanced || false
-        }
+          isIncomeBalanced: budgetSummary?.isIncomeBalanced || false,
+        },
       };
 
-      const response = await api.post('/api/export/budget-summary-pdf', exportParams, {
-        responseType: 'blob',
-        timeout: 30000 // 30 second timeout
-      });
+      const response = await api.post(
+        "/api/export/budget-summary-pdf",
+        exportParams,
+        {
+          responseType: "blob",
+          timeout: 30000, // 30 second timeout
+        }
+      );
 
-      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const blob = new Blob([response.data], { type: "application/pdf" });
       const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = url;
-      link.download = `Budget_Summary_${selectedFiscalYear || activeFiscalYear}_${activeRegion?.name || 'Region'}.pdf`;
+      link.download = `Budget_Summary_${
+        selectedFiscalYear || activeFiscalYear
+      }_${activeRegion?.name || "Region"}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -2032,11 +2149,13 @@ const ProposalCustomPage = ({
       // Log activity
       const activityEntry = {
         timestamp: new Date(),
-        action: 'Export PDF',
+        action: "Export PDF",
         user: `${currentUser.FirstName} ${currentUser.LastName}`,
-        details: `Exported budget summary as PDF for FY ${selectedFiscalYear || activeFiscalYear}`
+        details: `Exported budget summary as PDF for FY ${
+          selectedFiscalYear || activeFiscalYear
+        }`,
       };
-      setActivityLog(prev => [activityEntry, ...prev.slice(0, 49)]);
+      setActivityLog((prev) => [activityEntry, ...prev.slice(0, 49)]);
 
       setSnackbar({
         open: true,
@@ -2054,12 +2173,24 @@ const ProposalCustomPage = ({
       setLoading(false);
       setExportMenuAnchor(null);
     }
-  }, [selectedFiscalYear, activeFiscalYear, activeBudgetType, activeRegion, personnelData, mooeData, capitalOutlayData, incomeData, budgetarySupportData, budgetSummary, currentUser]);
+  }, [
+    selectedFiscalYear,
+    activeFiscalYear,
+    activeBudgetType,
+    activeRegion,
+    personnelData,
+    mooeData,
+    capitalOutlayData,
+    incomeData,
+    budgetarySupportData,
+    budgetSummary,
+    currentUser,
+  ]);
 
   const generateExcelReport = useCallback(async () => {
     try {
       setLoading(true);
-      
+
       // Send only essential parameters, let server fetch data
       const exportParams = {
         fiscalYear: selectedFiscalYear || activeFiscalYear,
@@ -2071,7 +2202,7 @@ const ProposalCustomPage = ({
           mooe: mooeData?.length || 0,
           capitalOutlay: capitalOutlayData?.length || 0,
           income: incomeData?.length || 0,
-          budgetarySupport: budgetarySupportData?.length || 0
+          budgetarySupport: budgetarySupportData?.length || 0,
         },
         budgetSummary: {
           grandTotal: budgetSummary?.grandTotal || 0,
@@ -2080,20 +2211,28 @@ const ProposalCustomPage = ({
           capitalOutlayTotal: budgetSummary?.capitalOutlayTotal || 0,
           budgetarySupportTotal: budgetSummary?.budgetarySupportTotal || 0,
           incomeTotal: budgetSummary?.incomeTotal || 0,
-          isIncomeBalanced: budgetSummary?.isIncomeBalanced || false
-        }
+          isIncomeBalanced: budgetSummary?.isIncomeBalanced || false,
+        },
       };
 
-      const response = await api.post('/api/export/budget-summary-excel', exportParams, {
-        responseType: 'blob',
-        timeout: 30000 // 30 second timeout
-      });
+      const response = await api.post(
+        "/api/export/budget-summary-excel",
+        exportParams,
+        {
+          responseType: "blob",
+          timeout: 30000, // 30 second timeout
+        }
+      );
 
-      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const blob = new Blob([response.data], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
       const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = url;
-      link.download = `Budget_Summary_${selectedFiscalYear || activeFiscalYear}_${activeRegion?.name || 'Region'}.xlsx`;
+      link.download = `Budget_Summary_${
+        selectedFiscalYear || activeFiscalYear
+      }_${activeRegion?.name || "Region"}.xlsx`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -2102,11 +2241,13 @@ const ProposalCustomPage = ({
       // Log activity
       const activityEntry = {
         timestamp: new Date(),
-        action: 'Export Excel',
+        action: "Export Excel",
         user: `${currentUser.FirstName} ${currentUser.LastName}`,
-        details: `Exported budget summary as Excel for FY ${selectedFiscalYear || activeFiscalYear}`
+        details: `Exported budget summary as Excel for FY ${
+          selectedFiscalYear || activeFiscalYear
+        }`,
       };
-      setActivityLog(prev => [activityEntry, ...prev.slice(0, 49)]);
+      setActivityLog((prev) => [activityEntry, ...prev.slice(0, 49)]);
 
       setSnackbar({
         open: true,
@@ -2124,11 +2265,23 @@ const ProposalCustomPage = ({
       setLoading(false);
       setExportMenuAnchor(null);
     }
-  }, [selectedFiscalYear, activeFiscalYear, activeBudgetType, activeRegion, personnelData, mooeData, capitalOutlayData, incomeData, budgetarySupportData, budgetSummary, currentUser]);
+  }, [
+    selectedFiscalYear,
+    activeFiscalYear,
+    activeBudgetType,
+    activeRegion,
+    personnelData,
+    mooeData,
+    capitalOutlayData,
+    incomeData,
+    budgetarySupportData,
+    budgetSummary,
+    currentUser,
+  ]);
 
   // Mobile Tab Component
   const MobileTabNavigation = () => (
-    <Box sx={{ display: { xs: 'block', md: 'none' } }}>
+    <Box sx={{ display: { xs: "block", md: "none" } }}>
       <Tabs
         value={activeTab}
         onChange={(e, newValue) => setActiveTab(newValue)}
@@ -2136,22 +2289,50 @@ const ProposalCustomPage = ({
         scrollButtons="auto"
         sx={{
           borderBottom: 1,
-          borderColor: 'divider',
-          '& .MuiTab-root': {
-            minWidth: 'auto',
-            fontSize: '0.75rem',
-            px: 1
-          }
+          borderColor: "divider",
+          "& .MuiTab-root": {
+            minWidth: "auto",
+            fontSize: "0.75rem",
+            px: 1,
+          },
         }}
       >
-        <Tab label="Income" value="Income" icon={<FaMoneyCheckAlt size={16} />} />
-        <Tab label="PS-Perm" value="PSPermanent" icon={<IoPersonCircleOutline size={16} />} />
-        <Tab label="PS-Casual" value="PSCasual" icon={<IoPersonCircleOutline size={16} />} />
-        <Tab label="PS-Charged" value="PSChargedToIncome" icon={<IoPersonCircleOutline size={16} />} />
-        <Tab label="COS/JO" value="COS/JO" icon={<FaFileContract size={16} />} />
+        <Tab
+          label="Income"
+          value="Income"
+          icon={<FaMoneyCheckAlt size={16} />}
+        />
+        <Tab
+          label="PS-Perm"
+          value="PSPermanent"
+          icon={<IoPersonCircleOutline size={16} />}
+        />
+        <Tab
+          label="PS-Casual"
+          value="PSCasual"
+          icon={<IoPersonCircleOutline size={16} />}
+        />
+        <Tab
+          label="PS-Charged"
+          value="PSChargedToIncome"
+          icon={<IoPersonCircleOutline size={16} />}
+        />
+        <Tab
+          label="COS/JO"
+          value="COS/JO"
+          icon={<FaFileContract size={16} />}
+        />
         <Tab label="MOOE" value="MOOE" icon={<GrHostMaintenance size={16} />} />
-        <Tab label="Capital" value="Capital Outlay" icon={<FaMoneyBill size={16} />} />
-        <Tab label="Budget" value="Budgetary Support" icon={<FaProjectDiagram size={16} />} />
+        <Tab
+          label="Capital"
+          value="Capital Outlay"
+          icon={<FaMoneyBill size={16} />}
+        />
+        <Tab
+          label="Budget"
+          value="Budgetary Support"
+          icon={<FaProjectDiagram size={16} />}
+        />
       </Tabs>
     </Box>
   );
@@ -2164,12 +2345,12 @@ const ProposalCustomPage = ({
       maxWidth="md"
       fullWidth
     >
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
         <HistoryIcon />
         Activity Log
       </DialogTitle>
       <DialogContent>
-        <List sx={{ maxHeight: 400, overflow: 'auto' }}>
+        <List sx={{ maxHeight: 400, overflow: "auto" }}>
           {activityLog.length === 0 ? (
             <ListItem>
               <ListItemText primary="No activities recorded yet" />
@@ -2179,9 +2360,13 @@ const ProposalCustomPage = ({
               <React.Fragment key={index}>
                 <ListItem>
                   <ListItemIcon>
-                    {activity.action.includes('Export') ? <GetAppIcon /> :
-                     activity.action.includes('Bulk') ? <SelectAllIcon /> :
-                     <EditIcon />}
+                    {activity.action.includes("Export") ? (
+                      <GetAppIcon />
+                    ) : activity.action.includes("Bulk") ? (
+                      <SelectAllIcon />
+                    ) : (
+                      <EditIcon />
+                    )}
                   </ListItemIcon>
                   <ListItemText
                     primary={activity.action}
@@ -2191,7 +2376,8 @@ const ProposalCustomPage = ({
                           {activity.details}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                          by {activity.user} • {activity.timestamp.toLocaleString()}
+                          by {activity.user} •{" "}
+                          {activity.timestamp.toLocaleString()}
                         </Typography>
                       </Box>
                     }
@@ -2231,7 +2417,8 @@ const ProposalCustomPage = ({
       // Fetch all available fiscal years (in a separate try/catch to avoid one failure affecting the other)
       try {
         const fiscalYearsResponse = await api.get("/settings/fiscal-years");
-        const yearsData = fiscalYearsResponse.data?.data || fiscalYearsResponse.data || [];
+        const yearsData =
+          fiscalYearsResponse.data?.data || fiscalYearsResponse.data || [];
         if (Array.isArray(yearsData)) {
           // Make sure we have at least the active fiscal year in the list
           setAvailableFiscalYears(yearsData);
@@ -2570,29 +2757,38 @@ const ProposalCustomPage = ({
   };
 
   return (
-    <Box sx={{ p: 0, bgcolor: 'white', minHeight: '100vh' }}>
+    <Box sx={{ p: 0, bgcolor: "white", minHeight: "100vh" }}>
       {/* Modern Header Section */}
-      <Paper 
+      <Paper
         elevation={0}
-        sx={{ 
+        sx={{
           p: 2.5,
           borderRadius: 0,
-          background: '#375e38',
-          color: 'white',
-          boxShadow: 'none',
-          transition: 'all 0.3s ease',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
+          background: "#375e38",
+          color: "white",
+          boxShadow: "none",
+          transition: "all 0.3s ease",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
           gap: 3,
-          flexWrap: 'wrap'
+          flexWrap: "wrap",
         }}
       >
         <Box>
-          <Typography variant="h5" component="h1" gutterBottom sx={{ fontWeight: "bold", fontSize: '1.8rem' }}>
+          <Typography
+            variant="h5"
+            component="h1"
+            gutterBottom
+            sx={{ fontWeight: "bold", fontSize: "1.8rem" }}
+          >
             {title}
           </Typography>
-          <Typography variant="body1" component="h2" sx={{ opacity: 0.9, fontSize: '0.9rem' }}>
+          <Typography
+            variant="body1"
+            component="h2"
+            sx={{ opacity: 0.9, fontSize: "0.9rem" }}
+          >
             {description || "Submit and manage your budget proposals"}
           </Typography>
         </Box>
@@ -2604,35 +2800,35 @@ const ProposalCustomPage = ({
           variant="outlined"
           sx={{
             width: 250,
-            '& .MuiOutlinedInput-root': {
-              color: '#333',
-              backgroundColor: 'white',
-              borderRadius: '6px',
-              '& fieldset': {
-                borderColor: '#e0e0e0',
+            "& .MuiOutlinedInput-root": {
+              color: "#333",
+              backgroundColor: "white",
+              borderRadius: "6px",
+              "& fieldset": {
+                borderColor: "#e0e0e0",
               },
-              '&:hover fieldset': {
-                borderColor: '#e0e0e0',
+              "&:hover fieldset": {
+                borderColor: "#e0e0e0",
               },
-              '&.Mui-focused fieldset': {
-                borderColor: '#2d5016',
-                borderWidth: '2px'
+              "&.Mui-focused fieldset": {
+                borderColor: "#2d5016",
+                borderWidth: "2px",
               },
             },
-            '& .MuiOutlinedInput-input': {
-              '&::placeholder': {
+            "& .MuiOutlinedInput-input": {
+              "&::placeholder": {
                 opacity: 0.6,
-                color: '#999',
+                color: "#999",
               },
             },
-            '& .MuiSvgIcon-root': {
-              color: '#999',
-            }
+            "& .MuiSvgIcon-root": {
+              color: "#999",
+            },
           }}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
-                <SearchIcon sx={{ opacity: 0.6, fontSize: '1.2rem' }} />
+                <SearchIcon sx={{ opacity: 0.6, fontSize: "1.2rem" }} />
               </InputAdornment>
             ),
           }}
@@ -2640,146 +2836,248 @@ const ProposalCustomPage = ({
       </Paper>
 
       <StyledBox>
-      {/* Create Proposal Dialog */}
-      <Dialog
-        open={isCreateDialogOpen}
-        onClose={() => setCreateDialogOpen(false)}
-      >
-        <DialogTitle>Create New Budget Proposal</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Title"
-            type="text"
-            fullWidth
-            variant="standard"
-            value={newProposalData.title}
-            onChange={(e) =>
-              setNewProposalData({ ...newProposalData, title: e.target.value })
-            }
-          />
-          <TextField
-            margin="dense"
-            label="Description"
-            type="text"
-            fullWidth
-            multiline
-            rows={4}
-            variant="standard"
-            value={newProposalData.description}
-            onChange={(e) =>
-              setNewProposalData({
-                ...newProposalData,
-                description: e.target.value,
-              })
-            }
-          />
-          <TextField
-            margin="dense"
-            label="Projected Corporate Income (optional)"
-            type="number"
-            fullWidth
-            variant="standard"
-            value={newProposalData.projectedCorporateIncome}
-            onChange={(e) =>
-              setNewProposalData({
-                ...newProposalData,
-                projectedCorporateIncome: e.target.value,
-              })
-            }
-            placeholder="0.00"
-            helperText="Optional: high-level estimate only. You can leave this blank; totals will be computed from line items."
-            inputProps={{ step: '0.01', min: '0' }}
-          />
-          <TextField
-            margin="dense"
-            label="Projected Subsidy (optional)"
-            type="number"
-            fullWidth
-            variant="standard"
-            value={newProposalData.projectedSubsidy}
-            onChange={(e) =>
-              setNewProposalData({
-                ...newProposalData,
-                projectedSubsidy: e.target.value,
-              })
-            }
-            placeholder="0.00"
-            helperText="Optional: estimate of subsidy. You can leave this blank; you may encode details later."
-            inputProps={{ step: '0.01', min: '0' }}
-          />
-          <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            <Chip icon={<CalendarTodayIcon />} label={`Fiscal Year: ${activeFiscalYear || 'N/A'}`} color="primary" size="small" />
-            <Chip icon={<AccountBalanceIcon />} label={`Budget Type: ${activeBudgetType || newProposalData.modelType || 'Initial'}`} color="primary" size="small" />
-          </Box>
-        </DialogContent>
-        <DialogActions sx={{ flexDirection: 'column', alignItems: 'stretch', gap: 1, p: 2 }}>
-          {/* Debug: Show what's missing */}
-          {(!newProposalData.title || !activeFiscalYear || !activeRegion) && (
-            <Box sx={{ fontSize: '12px', color: 'error.main', textAlign: 'center' }}>
-              Missing: {!newProposalData.title && 'Title, '}{!activeFiscalYear && 'Fiscal Year, '}{!activeRegion && 'Region'}
+        {/* Create Proposal Dialog */}
+        <Dialog
+          open={isCreateDialogOpen}
+          onClose={() => {
+            setCreateDialogOpen(false);
+            setPrivacyNoticeAccepted(false);
+          }}
+        >
+          <DialogTitle>Create New Budget Proposal</DialogTitle>
+          <DialogContent>
+            <TextField
+              autoFocus
+              margin="dense"
+              label="Title"
+              type="text"
+              fullWidth
+              variant="standard"
+              value={newProposalData.title}
+              onChange={(e) =>
+                setNewProposalData({
+                  ...newProposalData,
+                  title: e.target.value,
+                })
+              }
+            />
+            <TextField
+              margin="dense"
+              label="Description"
+              type="text"
+              fullWidth
+              multiline
+              rows={4}
+              variant="standard"
+              value={newProposalData.description}
+              onChange={(e) =>
+                setNewProposalData({
+                  ...newProposalData,
+                  description: e.target.value,
+                })
+              }
+            />
+            <TextField
+              margin="dense"
+              label="Projected Corporate Income (optional)"
+              type="number"
+              fullWidth
+              variant="standard"
+              value={newProposalData.projectedCorporateIncome}
+              onChange={(e) =>
+                setNewProposalData({
+                  ...newProposalData,
+                  projectedCorporateIncome: e.target.value,
+                })
+              }
+              placeholder="0.00"
+              helperText="Optional: high-level estimate only. You can leave this blank; totals will be computed from line items."
+              inputProps={{ step: "0.01", min: "0" }}
+            />
+            <TextField
+              margin="dense"
+              label="Projected Subsidy (optional)"
+              type="number"
+              fullWidth
+              variant="standard"
+              value={newProposalData.projectedSubsidy}
+              onChange={(e) =>
+                setNewProposalData({
+                  ...newProposalData,
+                  projectedSubsidy: e.target.value,
+                })
+              }
+              placeholder="0.00"
+              helperText="Optional: estimate of subsidy. You can leave this blank; you may encode details later."
+              inputProps={{ step: "0.01", min: "0" }}
+            />
+            <Box sx={{ mt: 2, display: "flex", gap: 1, flexWrap: "wrap" }}>
+              <Chip
+                icon={<CalendarTodayIcon />}
+                label={`Fiscal Year: ${activeFiscalYear || "N/A"}`}
+                color="primary"
+                size="small"
+              />
+              <Chip
+                icon={<AccountBalanceIcon />}
+                label={`Budget Type: ${
+                  activeBudgetType || newProposalData.modelType || "Initial"
+                }`}
+                color="primary"
+                size="small"
+              />
             </Box>
-          )}
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-            <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
-            {currentProposalId && (
-              <Button
-                color="error"
-                variant="outlined"
-                disabled={deleteProposalMutation.isLoading}
-                onClick={() => {
-                  setDeleteConfirmDialog({ open: true, source: 'dialog' });
+
+            {/* Privacy Notice / Certification */}
+            <Box
+              sx={{
+                mt: 3,
+                p: 2,
+                backgroundColor: "#f5f5f5",
+                borderRadius: 2,
+                border: "1px solid #e0e0e0",
+              }}
+            >
+              <Typography
+                variant="subtitle2"
+                sx={{ fontWeight: 600, mb: 1, color: "#1976d2" }}
+              >
+                PRIVACY NOTICE / CERTIFICATION
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={privacyNoticeAccepted}
+                    onChange={(e) => setPrivacyNoticeAccepted(e.target.checked)}
+                    color="primary"
+                  />
+                }
+                label={
+                  <Typography
+                    variant="body2"
+                    sx={{ textAlign: "justify", lineHeight: 1.6 }}
+                  >
+                    I certify that the attached or uploaded digital document is
+                    a true and faithful copy of the original, and that all
+                    information provided through the Online Submission of Budget
+                    Proposal Information System (OSBPIS) is complete, true, and
+                    correct to the best of my knowledge. I confirm that the
+                    document has not been altered in any way. I understand that
+                    any false certification, misrepresentation, or falsification
+                    may subject me to administrative, civil, and/or criminal
+                    liability under applicable laws. I further acknowledge that,
+                    upon certification, my electronic signature will be
+                    automatically affixed to this submission as proof of this
+                    certification within the system.
+                  </Typography>
+                }
+                sx={{ alignItems: "flex-start", mt: 1 }}
+              />
+            </Box>
+          </DialogContent>
+          <DialogActions
+            sx={{
+              flexDirection: "column",
+              alignItems: "stretch",
+              gap: 1,
+              p: 2,
+            }}
+          >
+            {/* Debug: Show what's missing */}
+            {(!newProposalData.title ||
+              !activeFiscalYear ||
+              !activeRegion ||
+              !privacyNoticeAccepted) && (
+              <Box
+                sx={{
+                  fontSize: "12px",
+                  color: "error.main",
+                  textAlign: "center",
                 }}
               >
-                {deleteProposalMutation.isLoading ? 'Deleting...' : 'Delete & Create New'}
-              </Button>
+                Missing: {!newProposalData.title && "Title, "}
+                {!activeFiscalYear && "Fiscal Year, "}
+                {!activeRegion && "Region"}
+                {!privacyNoticeAccepted && ", Privacy Notice Acceptance"}
+              </Box>
             )}
-            <Button
-              onClick={handleCreateProposal}
-              variant="contained"
-              color="primary"
-              disabled={createProposalMutation.isLoading || !newProposalData.title || !activeFiscalYear || !activeRegion}
-            >
-              {createProposalMutation.isLoading ? <CircularProgress size={24} /> : 'Create'}
-            </Button>
-          </Box>
-        </DialogActions>
-      </Dialog>
+            <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}>
+              <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
+              {currentProposalId && (
+                <Button
+                  color="error"
+                  variant="outlined"
+                  disabled={deleteProposalMutation.isLoading}
+                  onClick={() => {
+                    setDeleteConfirmDialog({ open: true, source: "dialog" });
+                  }}
+                >
+                  {deleteProposalMutation.isLoading
+                    ? "Deleting..."
+                    : "Delete & Create New"}
+                </Button>
+              )}
+              <Button
+                onClick={handleCreateProposal}
+                variant="contained"
+                color="primary"
+                disabled={
+                  createProposalMutation.isLoading ||
+                  !newProposalData.title ||
+                  !activeFiscalYear ||
+                  !activeRegion ||
+                  !privacyNoticeAccepted
+                }
+              >
+                {createProposalMutation.isLoading ? (
+                  <CircularProgress size={24} />
+                ) : (
+                  "Create"
+                )}
+              </Button>
+            </Box>
+          </DialogActions>
+        </Dialog>
 
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          mb: 3,
-          flexWrap: "wrap",
-          gap: 2,
-          p: 2.5,
-          background: "linear-gradient(135deg, #f5f5f5 0%, #ffffff 100%)",
-          borderRadius: 2,
-          border: "1px solid #e0e0e0",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-        }}
-      >
-        <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", alignItems: "center" }}>
-          <Chip
-            icon={<CalendarTodayIcon />}
-            label={`Active FY: ${activeFiscalYear || "N/A"}`}
-            color="primary"
-            variant="filled"
-            size="small"
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            mb: 3,
+            flexWrap: "wrap",
+            gap: 2,
+            p: 2.5,
+            background: "linear-gradient(135deg, #f5f5f5 0%, #ffffff 100%)",
+            borderRadius: 2,
+            border: "1px solid #e0e0e0",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+          }}
+        >
+          <Box
             sx={{
-              backgroundColor: "#1976d2",
-              fontWeight: 600,
-              letterSpacing: "0.3px",
-              "& .MuiChip-icon": {
-                color: "white !important",
-              },
+              display: "flex",
+              gap: 1.5,
+              flexWrap: "wrap",
+              alignItems: "center",
             }}
-          />
-          {selectedFiscalYear &&
-            selectedFiscalYear !== activeFiscalYear && (
+          >
+            <Chip
+              icon={<CalendarTodayIcon />}
+              label={`Active FY: ${activeFiscalYear || "N/A"}`}
+              color="primary"
+              variant="filled"
+              size="small"
+              sx={{
+                backgroundColor: "#1976d2",
+                fontWeight: 600,
+                letterSpacing: "0.3px",
+                "& .MuiChip-icon": {
+                  color: "white !important",
+                },
+              }}
+            />
+            {selectedFiscalYear && selectedFiscalYear !== activeFiscalYear && (
               <Chip
                 icon={<CalendarTodayIcon />}
                 label={`Selected FY: ${selectedFiscalYear}`}
@@ -2795,876 +3093,986 @@ const ProposalCustomPage = ({
                 }}
               />
             )}
-          <Chip
-            icon={<AccountBalanceIcon />}
-            label={`Budget: ${activeBudgetType || "N/A"}`}
-            color="primary"
-            variant="filled"
-            size="small"
-            sx={{
-              backgroundColor: "#2d5016",
-              fontWeight: 600,
-              letterSpacing: "0.3px",
-              "& .MuiChip-icon": {
-                color: "white !important",
-              },
-            }}
-          />
-          {!currentProposalId && (
-            <Button
-              variant="contained"
+            <Chip
+              icon={<AccountBalanceIcon />}
+              label={`Budget: ${activeBudgetType || "N/A"}`}
+              color="primary"
+              variant="filled"
               size="small"
-              onClick={() => setCreateDialogOpen(true)}
-              disabled={createProposalMutation.isLoading}
-              startIcon={createProposalMutation.isLoading ? <CircularProgress size={16} /> : null}
               sx={{
-                ml: 1,
-                backgroundColor: "#4CAF50",
+                backgroundColor: "#2d5016",
                 fontWeight: 600,
-                letterSpacing: "0.5px",
-                borderRadius: "6px",
-                padding: "6px 16px",
-                textTransform: "capitalize",
-                boxShadow: "0 2px 6px rgba(76, 175, 80, 0.3)",
-                transition: "all 0.3s cubic-bezier(0.3, 0, 0.7, 1)",
-                "&:hover": {
-                  backgroundColor: "#45a049",
-                  boxShadow: "0 4px 12px rgba(76, 175, 80, 0.4)",
-                  transform: "translateY(-2px)",
-                },
-                "&:active": {
-                  transform: "translateY(0px)",
+                letterSpacing: "0.3px",
+                "& .MuiChip-icon": {
+                  color: "white !important",
                 },
               }}
-            >
-              {createProposalMutation.isLoading ? 'Creating...' : '+ Create Proposal'}
-            </Button>
-          )}
-          {currentProposalId && (
-            <Tooltip title={`Linked Proposal ID: ${currentProposalId} - Click to DELETE and unlink this proposal`}> 
-              <Chip
-                icon={<CheckCircleIcon />}
-                label={deleteProposalMutation.isLoading ? "Deleting..." : "Proposal Linked"}
-                onDelete={() => {
-                  setDeleteConfirmDialog({ open: true, source: 'chip' });
-                }}
-                disabled={deleteProposalMutation.isLoading}
+            />
+            {!currentProposalId && (
+              <Button
+                variant="contained"
+                size="small"
+                onClick={() => setCreateDialogOpen(true)}
+                disabled={createProposalMutation.isLoading}
+                startIcon={
+                  createProposalMutation.isLoading ? (
+                    <CircularProgress size={16} />
+                  ) : null
+                }
                 sx={{
+                  ml: 1,
                   backgroundColor: "#4CAF50",
-                  color: "white",
                   fontWeight: 600,
-                  letterSpacing: "0.3px",
-                  cursor: "pointer",
-                  "& .MuiChip-icon": {
-                    color: "white !important",
+                  letterSpacing: "0.5px",
+                  borderRadius: "6px",
+                  padding: "6px 16px",
+                  textTransform: "capitalize",
+                  boxShadow: "0 2px 6px rgba(76, 175, 80, 0.3)",
+                  transition: "all 0.3s cubic-bezier(0.3, 0, 0.7, 1)",
+                  "&:hover": {
+                    backgroundColor: "#45a049",
+                    boxShadow: "0 4px 12px rgba(76, 175, 80, 0.4)",
+                    transform: "translateY(-2px)",
                   },
-                  "& .MuiChip-deleteIcon": {
-                    color: "white !important",
-                    "&:hover": {
-                      color: "#f0f0f0 !important",
-                    }
-                  }
+                  "&:active": {
+                    transform: "translateY(0px)",
+                  },
                 }}
-              />
-            </Tooltip>
-          )}
-        </Box>
-        <AutoSaveIndicator />
-      </Box>
-
-      {/* Delete Proposal Confirmation Dialog */}
-      <Dialog
-        open={deleteConfirmDialog.open}
-        onClose={() => setDeleteConfirmDialog({ open: false, source: null })}
-        maxWidth="sm"
-        fullWidth
-        PaperProps={{
-          sx: {
-            borderRadius: 2,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
-          }
-        }}
-      >
-        <DialogTitle sx={{ 
-          backgroundColor: '#d32f2f', 
-          color: 'white',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          fontWeight: 600
-        }}>
-          ⚠️ Delete Proposal Confirmation
-        </DialogTitle>
-        <DialogContent sx={{ mt: 2 }}>
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            <Typography variant="body1" fontWeight="bold">
-              Are you sure you want to DELETE this proposal?
-            </Typography>
-          </Alert>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            This action will:
-          </Typography>
-          <Box component="ul" sx={{ pl: 2, mb: 2 }}>
-            <li><Typography variant="body2">Permanently remove the proposal from the database</Typography></li>
-            <li><Typography variant="body2">Remove it from the All Proposals list</Typography></li>
-            <li><Typography variant="body2">Delete all associated budget entries (Income, MOOE, Capital Outlay, Personnel Services)</Typography></li>
-          </Box>
-          <Alert severity="error" sx={{ mt: 2 }}>
-            <Typography variant="body2" fontWeight="bold">
-              This action cannot be undone!
-            </Typography>
-          </Alert>
-        </DialogContent>
-        <DialogActions sx={{ p: 2, gap: 1 }}>
-          <Button 
-            onClick={() => setDeleteConfirmDialog({ open: false, source: null })}
-            variant="outlined"
-            sx={{ minWidth: 100 }}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={() => {
-              deleteProposalMutation.mutate(currentProposalId);
-              setDeleteConfirmDialog({ open: false, source: null });
-              if (deleteConfirmDialog.source === 'dialog') {
-                setCreateDialogOpen(false);
-              }
-            }}
-            variant="contained"
-            color="error"
-            disabled={deleteProposalMutation.isLoading}
-            sx={{ minWidth: 150 }}
-          >
-            {deleteProposalMutation.isLoading ? (
-              <><CircularProgress size={20} sx={{ mr: 1, color: 'white' }} /> Deleting...</>
-            ) : (
-              'Yes, Delete Proposal'
+              >
+                {createProposalMutation.isLoading
+                  ? "Creating..."
+                  : "+ Create Proposal"}
+              </Button>
             )}
-          </Button>
-        </DialogActions>
-      </Dialog>
+            {/* Show Proposal Linked chip only for Super Admin, hide for Budget Preparer */}
+            {currentProposalId && isSuperAdmin && (
+              <Tooltip
+                title={`Linked Proposal ID: ${currentProposalId} - Click to DELETE and unlink this proposal`}
+              >
+                <Chip
+                  icon={<CheckCircleIcon />}
+                  label={
+                    deleteProposalMutation.isLoading
+                      ? "Deleting..."
+                      : "Proposal Linked"
+                  }
+                  onDelete={() => {
+                    setDeleteConfirmDialog({ open: true, source: "chip" });
+                  }}
+                  disabled={deleteProposalMutation.isLoading}
+                  sx={{
+                    backgroundColor: "#4CAF50",
+                    color: "white",
+                    fontWeight: 600,
+                    letterSpacing: "0.3px",
+                    cursor: "pointer",
+                    "& .MuiChip-icon": {
+                      color: "white !important",
+                    },
+                    "& .MuiChip-deleteIcon": {
+                      color: "white !important",
+                      "&:hover": {
+                        color: "#f0f0f0 !important",
+                      },
+                    },
+                  }}
+                />
+              </Tooltip>
+            )}
+          </Box>
+          <AutoSaveIndicator />
+        </Box>
 
-      {/* Collapsible Budget Summary */}
-      {import.meta.env.VITE_HIDE_BUDGET_SUMMARY !== 'true' && (
-      <Accordion
-        expanded={summaryExpanded}
-        onChange={() => setSummaryExpanded(!summaryExpanded)}
-        sx={{
-          mb: 2,
-          background: "linear-gradient(135deg, #fafafa 0%, #ffffff 100%)",
-          border: "1px solid #e0e0e0",
-          borderRadius: 2,
-          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-          transition: "all 0.3s cubic-bezier(0.3, 0, 0.7, 1)",
-          "&:hover": {
-            boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-          },
-          "&:before": { display: "none" },
-        }}
-      >
-        <AccordionSummary
-          expandIcon={<ExpandMore />}
-          sx={{
-            minHeight: "45px",
-            background: "linear-gradient(135deg, #f5f5f5 0%, #ffffff 100%)",
-            "& .MuiAccordionSummary-content": {
-              margin: "8px 0",
-              alignItems: "center",
-            },
-            "&:hover": {
-              backgroundColor: "rgba(76, 175, 80, 0.04)",
+        {/* Delete Proposal Confirmation Dialog */}
+        <Dialog
+          open={deleteConfirmDialog.open}
+          onClose={() => setDeleteConfirmDialog({ open: false, source: null })}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 2,
+              boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
             },
           }}
         >
-          <Box
+          <DialogTitle
             sx={{
+              backgroundColor: "#d32f2f",
+              color: "white",
               display: "flex",
-              justifyContent: "space-between",
               alignItems: "center",
-              width: "100%",
-              mr: 2,
+              gap: 1,
+              fontWeight: 600,
             }}
           >
-            <Typography
-              variant="body2"
-              sx={{ fontWeight: "bold", fontSize: "0.9rem" }}
-            >
-              📊 Budget Summary
+            ⚠️ Delete Proposal Confirmation
+          </DialogTitle>
+          <DialogContent sx={{ mt: 2 }}>
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              <Typography variant="body1" fontWeight="bold">
+                Are you sure you want to DELETE this proposal?
+              </Typography>
+            </Alert>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              This action will:
             </Typography>
-            <Chip
-              label={formatCurrency(calculateTotalBudget.grandTotal)}
-              color="primary"
-              size="small"
-              sx={{ fontSize: "0.7rem", height: "20px" }}
-            />
-          </Box>
-        </AccordionSummary>
-        <AccordionDetails sx={{ pt: 0, pb: 1.5, px: 1.5 }}>
-          {/* Budget Overview Row */}
-          <Box sx={{ mb: 1.5 }}>
-            <Typography
-              variant="body2"
-              sx={{ fontWeight: "bold", fontSize: "0.9rem", mb: 1 }}
-            >
-              💰 Budget Overview
-            </Typography>
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, 1fr)",
-                gap: 0.5,
-              }}
-            >
-              <Box
-                sx={{
-                  textAlign: "center",
-                  p: 1,
-                  background: "linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)",
-                  borderRadius: 1,
-                  boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
-                  border: "1px solid rgba(76, 175, 80, 0.2)",
-                  transition: "all 0.3s cubic-bezier(0.3, 0, 0.7, 1)",
-                  "&:hover": {
-                    boxShadow: "0 4px 8px rgba(76, 175, 80, 0.15)",
-                    transform: "translateY(-2px)",
-                  },
-                }}
-              >
-                <Typography variant="caption" sx={{ fontSize: "0.7rem", fontWeight: 600 }}>
-                  Personnel Services
+            <Box component="ul" sx={{ pl: 2, mb: 2 }}>
+              <li>
+                <Typography variant="body2">
+                  Permanently remove the proposal from the database
                 </Typography>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    display: "block",
-                    fontWeight: "bold",
-                    fontSize: "0.8rem",
-                    color: "#1b5e20",
-                    mt: 0.5,
-                  }}
-                >
-                  {formatCurrency(calculateTotalBudget.personnelTotal)}
+              </li>
+              <li>
+                <Typography variant="body2">
+                  Remove it from the All Proposals list
                 </Typography>
-              </Box>
-              <Box
-                sx={{
-                  textAlign: "center",
-                  p: 1,
-                  background: "linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)",
-                  borderRadius: 1,
-                  boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
-                  border: "1px solid rgba(25, 118, 210, 0.2)",
-                  transition: "all 0.3s cubic-bezier(0.3, 0, 0.7, 1)",
-                  "&:hover": {
-                    boxShadow: "0 4px 8px rgba(25, 118, 210, 0.15)",
-                    transform: "translateY(-2px)",
-                  },
-                }}
-              >
-                <Typography variant="caption" sx={{ fontSize: "0.7rem", fontWeight: 600 }}>
-                  MOOE (Regular + IAs O&M)
+              </li>
+              <li>
+                <Typography variant="body2">
+                  Delete all associated budget entries (Income, MOOE, Capital
+                  Outlay, Personnel Services)
                 </Typography>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    display: "block",
-                    fontWeight: "bold",
-                    fontSize: "0.8rem",
-                    color: "#0d47a1",
-                    mt: 0.5,
-                  }}
-                >
-                  {formatCurrency(calculateTotalBudget.mooeTotal)}
-                </Typography>
-              </Box>
-              <Box
-                sx={{
-                  textAlign: "center",
-                  p: 1,
-                  background: "linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)",
-                  borderRadius: 1,
-                  boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
-                  border: "1px solid rgba(255, 152, 0, 0.2)",
-                  transition: "all 0.3s cubic-bezier(0.3, 0, 0.7, 1)",
-                  "&:hover": {
-                    boxShadow: "0 4px 8px rgba(255, 152, 0, 0.15)",
-                    transform: "translateY(-2px)",
-                  },
-                }}
-              >
-                <Typography variant="caption" sx={{ fontSize: "0.7rem", fontWeight: 600 }}>
-                  Capital Outlay
-                </Typography>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    display: "block",
-                    fontWeight: "bold",
-                    fontSize: "0.8rem",
-                    color: "#e65100",
-                    mt: 0.5,
-                  }}
-                >
-                  {formatCurrency(calculateTotalBudget.capitalOutlayTotal)}
-                </Typography>
-              </Box>
+              </li>
             </Box>
-          </Box>
-
-          {/* Income Summary Row */}
-          <Box sx={{ mb: 1.5 }}>
-            <Box
-              sx={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                mb: 1,
-              }}
-            >
-              <Typography
-                variant="body2"
-                sx={{ fontWeight: "bold", fontSize: "0.9rem" }}
-              >
-                📊 Expenses Under Corporate Income
+            <Alert severity="error" sx={{ mt: 2 }}>
+              <Typography variant="body2" fontWeight="bold">
+                This action cannot be undone!
               </Typography>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                <CompareArrowsIcon
-                  color={budgetSummary.isIncomeBalanced ? "success" : "error"}
-                  sx={{ fontSize: "16px" }}
-                />
-                <Typography
-                  variant="caption"
-                  color={
-                    budgetSummary.isIncomeBalanced
-                      ? "success.main"
-                      : "error.main"
-                  }
-                  sx={{ fontWeight: "bold", fontSize: "0.7rem" }}
-                >
-                  {budgetSummary.isIncomeBalanced ? "Balanced" : "Unbalanced"}
-                </Typography>
-              </Box>
-            </Box>
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: "repeat(4, 1fr)",
-                gap: 0.5,
-              }}
+            </Alert>
+          </DialogContent>
+          <DialogActions sx={{ p: 2, gap: 1 }}>
+            <Button
+              onClick={() =>
+                setDeleteConfirmDialog({ open: false, source: null })
+              }
+              variant="outlined"
+              sx={{ minWidth: 100 }}
             >
-              <Box
-                sx={{
-                  textAlign: "center",
-                  p: 0.5,
-                  backgroundColor: "rgba(255, 255, 255, 0.8)",
-                  borderRadius: 0.5,
-                }}
-              >
-                <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
-                  MOOE (Regular + IAs O&M)
-                </Typography>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    display: "block",
-                    fontWeight: "bold",
-                    fontSize: "0.8rem",
-                  }}
-                >
-                  {formatCurrency(budgetSummary.mooeIncomeTotal)}
-                </Typography>
-              </Box>
-              <Box
-                sx={{
-                  textAlign: "center",
-                  p: 0.5,
-                  backgroundColor: "rgba(255, 255, 255, 0.8)",
-                  borderRadius: 0.5,
-                }}
-              >
-                <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
-                  Capital Outlay
-                </Typography>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    display: "block",
-                    fontWeight: "bold",
-                    fontSize: "0.8rem",
-                  }}
-                >
-                  {formatCurrency(budgetSummary.capitalOutlayIncomeTotal)}
-                </Typography>
-              </Box>
-              <Box
-                sx={{
-                  textAlign: "center",
-                  p: 0.5,
-                  backgroundColor: "rgba(255, 255, 255, 0.8)",
-                  borderRadius: 0.5,
-                }}
-              >
-                <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
-                  Total
-                </Typography>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    display: "block",
-                    fontWeight: "bold",
-                    fontSize: "0.8rem",
-                  }}
-                >
-                  {formatCurrency(budgetSummary.combinedIncomeTotal)}
-                </Typography>
-              </Box>
-              <Box
-                sx={{
-                  textAlign: "center",
-                  p: 0.5,
-                  backgroundColor: budgetSummary.isIncomeBalanced
-                    ? "#4caf50"
-                    : "#f44336",
-                  color: "white",
-                  borderRadius: 0.5,
-                }}
-              >
-                <Typography
-                  variant="caption"
-                  sx={{ fontSize: "0.7rem", color: "white" }}
-                >
-                  Corporate Income
-                </Typography>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    display: "block",
-                    fontWeight: "bold",
-                    fontSize: "0.8rem",
-                    color: "white",
-                  }}
-                >
-                  {formatCurrency(budgetSummary.incomeTotal)}
-                </Typography>
-              </Box>
-            </Box>
-            {!budgetSummary.isIncomeBalanced && (
-              <Typography
-                variant="caption"
-                color="error.main"
-                sx={{
-                  display: "block",
-                  textAlign: "center",
-                  mt: 0.5,
-                  fontWeight: "bold",
-                  fontSize: "0.7rem",
-                }}
-              >
-                Diff: ₱
-                {Math.abs(
-                  (budgetSummary.incomeTotal || 0) -
-                    (budgetSummary.combinedIncomeTotal || 0)
-                ).toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </Typography>
-            )}
-          </Box>
-
-          {/* Subsidy Summary Row */}
-          <Box>
-            <Box
-              sx={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                mb: 1,
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                deleteProposalMutation.mutate(currentProposalId);
+                setDeleteConfirmDialog({ open: false, source: null });
+                if (deleteConfirmDialog.source === "dialog") {
+                  setCreateDialogOpen(false);
+                }
               }}
+              variant="contained"
+              color="error"
+              disabled={deleteProposalMutation.isLoading}
+              sx={{ minWidth: 150 }}
             >
-              <Typography
-                variant="body2"
-                sx={{ fontWeight: "bold", fontSize: "0.9rem" }}
-              >
-                🏛️ Budgetary Support Summary
-              </Typography>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                <CompareArrowsIcon
-                  color={
-                    budgetSummary.isSubsidyBalanced ? "success" : "error"
-                  }
-                  sx={{ fontSize: "16px" }}
-                />
-                <Typography
-                  variant="caption"
-                  color={
-                    budgetSummary.isSubsidyBalanced
-                      ? "success.main"
-                      : "error.main"
-                  }
-                  sx={{ fontWeight: "bold", fontSize: "0.7rem" }}
-                >
-                  {budgetSummary.isSubsidyBalanced
-                    ? "Balanced"
-                    : "Unbalanced"}
-                </Typography>
-              </Box>
-            </Box>
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, 1fr)",
-                gap: 0.5,
-              }}
-            >
-              <Box
-                sx={{
-                  textAlign: "center",
-                  p: 0.5,
-                  backgroundColor: "rgba(255, 255, 255, 0.8)",
-                  borderRadius: 0.5,
-                }}
-              >
-                <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
-                  MOOE Subsidy (Regular + IAs O&M)
-                </Typography>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    display: "block",
-                    fontWeight: "bold",
-                    fontSize: "0.8rem",
-                  }}
-                >
-                  {formatCurrency(budgetSummary.mooeSubsidyTotal || 0)}
-                </Typography>
-              </Box>
-              <Box
-                sx={{
-                  textAlign: "center",
-                  p: 0.5,
-                  backgroundColor: "rgba(255, 255, 255, 0.8)",
-                  borderRadius: 0.5,
-                }}
-              >
-                <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
-                  Capital Subsidy
-                </Typography>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    display: "block",
-                    fontWeight: "bold",
-                    fontSize: "0.8rem",
-                  }}
-                >
-                  {formatCurrency(
-                    budgetSummary.capitalOutlaySubsidyTotal || 0
-                  )}
-                </Typography>
-              </Box>
-              <Box
-                sx={{
-                  textAlign: "center",
-                  p: 0.5,
-                  backgroundColor: budgetSummary.isSubsidyBalanced
-                    ? "#4caf50"
-                    : "#f44336",
-                  color: "white",
-                  borderRadius: 0.5,
-                }}
-              >
-                <Typography
-                  variant="caption"
-                  sx={{ fontSize: "0.7rem", color: "white" }}
-                >
-                  Budgetary
-                </Typography>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    display: "block",
-                    fontWeight: "bold",
-                    fontSize: "0.8rem",
-                    color: "white",
-                  }}
-                >
-                  {formatCurrency(
-                    calculateTotalBudget.budgetarySupportTotal || 0
-                  )}
-                </Typography>
-              </Box>
-            </Box>
-            {!budgetSummary.isSubsidyBalanced && (
-              <Typography
-                variant="caption"
-                color="error.main"
-                sx={{
-                  display: "block",
-                  textAlign: "center",
-                  mt: 0.5,
-                  fontWeight: "bold",
-                  fontSize: "0.7rem",
-                }}
-              >
-                Diff: ₱
-                {Math.abs(
-                  (budgetSummary.mooeSubsidyTotal || 0) +
-                    (budgetSummary.capitalOutlaySubsidyTotal || 0) -
-                    (calculateTotalBudget.budgetarySupportTotal || 0)
-                ).toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </Typography>
-            )}
-          </Box>
-        </AccordionDetails>
-      </Accordion>
-      )}
-
-      {/* Main Content Container */}
-      <Box sx={{ mx: 2, mt: 1.5, mb: 3 }}>
-        {/* Mobile Navigation */}
-        <MobileTabNavigation />
-
-        {/* Desktop Tab Navigation */}
-        <Paper sx={{ 
-          boxShadow: 'none',
-          borderRadius: '0px',
-          overflow: 'hidden',
-          border: 'none',
-          transition: 'all 0.2s ease',
-          bgcolor: '#375e38',
-          display: { xs: 'none', md: 'block' }
-        }}>
-          {/* Tabs Header with Green Background */}
-          <Box sx={{ 
-            background: '#375e38',
-            color: 'white',
-            px: 1,
-            py: 1,
-            display: 'flex',
-            gap: 0,
-            alignItems: 'stretch',
-            borderTop: '1px solid rgba(255,255,255,0.15)'
-          }}>
-            {[
-              { label: 'INCOME', value: 'Income' },
-              { label: 'PS - Permanent', value: 'PSPermanent' },
-              { label: 'PS - Casual', value: 'PSCasual' },
-              { label: 'PS - Charged to Income', value: 'PSChargedToIncome' },
-              { label: 'COS/JO', value: 'COS/JO' },
-              { label: 'MOOE', value: 'MOOE' },
-              { label: 'CAPITAL OUTLAY', value: 'Capital Outlay' },
-              { label: 'BSGC', value: 'Budgetary Support' }
-            ].map((tab, index, arr) => {
-              const isActive = activeTab === tab.value;
-              return (
-                <Box
-                  key={index}
-                  onClick={() => setActiveTab(tab.value)}
-                  sx={{
-                    flex: 1,
-                    bgcolor: isActive ? '#2b4a2c' : 'transparent',
-                    color: 'white',
-                    textTransform: 'uppercase',
-                    fontSize: '0.8rem',
-                    fontWeight: 800,
-                    letterSpacing: '0.8px',
-                    p: 1.25,
-                    borderRight: index < arr.length - 1 ? '1px solid rgba(255,255,255,0.25)' : 'none',
-                    transition: 'all 0.2s ease',
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                    '&:hover': {
-                      bgcolor: isActive ? '#2b4a2c' : 'rgba(255,255,255,0.08)'
-                    }
-                  }}
-                >
-                  {tab.label}
-                </Box>
-              );
-            })}
-          </Box>
-        </Paper>
-
-        {/* Tab Content Rendering */}
-        <Box sx={{ mt: 3, mb: 3, width: '100%' }}>
-          {activeTab === "Income" && (
-            <IncomeTable
-              proposalId={currentProposalId || sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef') || (dataListName !== "tests" ? dataListName : undefined)}
-              region={activeRegion}
-              fiscalYear={selectedFiscalYear}
-              onGrandTotalUpdate={(grandTotal) => {
-                setIncomeGrandTotal(grandTotal || 0);
-              }}
-              onGroupedItemsUpdate={(items) => {
-                setGroupedItems(items || {});
-              }}
-            />
-          )}
-
-          {activeTab === "PSPermanent" && (
-            <PSPermanentServiceTable
-              dataListName={dataListName}
-              schema={schema}
-              region={activeRegion}
-              fiscalYear={selectedFiscalYear}
-              proposalId={currentProposalId || sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef') || (dataListName !== "tests" ? dataListName : undefined)}
-            />
-          )}
-
-          {activeTab === "PSCasual" && (
-            <PSCasualServiceTable
-              dataListName={dataListName}
-              schema={schema}
-              region={activeRegion}
-              fiscalYear={selectedFiscalYear}
-              proposalId={currentProposalId || sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef') || (dataListName !== "tests" ? dataListName : undefined)}
-            />
-          )}
-
-          {activeTab === "PSChargedToIncome" && (
-            <PSChargedToIncomeTable
-              dataListName={dataListName}
-              schema={schema}
-              region={activeRegion}
-              fiscalYear={selectedFiscalYear}
-              proposalId={currentProposalId || sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef') || (dataListName !== "tests" ? dataListName : undefined)}
-            />
-          )}
-
-          {activeTab === "COS/JO" && (
-            <PSCOSCustomPageTable
-              dataListName={dataListName}
-              schema={schema}
-              region={activeRegion}
-              fiscalYear={selectedFiscalYear}
-              proposalId={currentProposalId || sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef') || (dataListName !== "tests" ? dataListName : undefined)}
-            />
-          )}
-
-          {activeTab === "MOOE" && (
-            <Mooe
-              dataListName={dataListName}
-              schema={schema}
-              region={activeRegion}
-              fiscalYear={selectedFiscalYear}
-              proposalId={currentProposalId || sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef') || (dataListName !== "tests" ? dataListName : undefined)}
-            />
-          )}
-
-          {activeTab === "Capital Outlay" && (
-            useDataGridView ? (
-              <CapitalOutlayDataGrid
-                dataListName={dataListName}
-                schema={schema}
-                region={activeRegion}
-                fiscalYear={selectedFiscalYear}
-                proposalId={currentProposalId || sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef') || (dataListName !== "tests" ? dataListName : undefined)}
-              />
-            ) : (
-              <CapitalOutlayTable
-                dataListName={dataListName}
-                schema={schema}
-                region={activeRegion}
-                fiscalYear={selectedFiscalYear}
-                proposalId={currentProposalId || sessionStorage.getItem('activeWorkflowRef') || localStorage.getItem('activeWorkflowRef') || (dataListName !== "tests" ? dataListName : undefined)}
-              />
-            )
-          )}
-
-          {activeTab === "Budgetary Support" && (
-            <>
-              {!activeBudgetType || !selectedFiscalYear ? (
-                <Box sx={{ p: 3, textAlign: 'center', backgroundColor: '#f5f5f5', borderRadius: 1 }}>
-                  <CircularProgress sx={{ mb: 2 }} />
-                  <Typography variant="body2" color="textSecondary">
-                    Loading Budgetary Support data...
-                  </Typography>
-                  <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-                    Fiscal Year: {selectedFiscalYear || 'Loading...'}
-                  </Typography>
-                  <Typography variant="caption" display="block">
-                    Budget Type: {activeBudgetType || 'Loading...'}
-                  </Typography>
-                </Box>
+              {deleteProposalMutation.isLoading ? (
+                <>
+                  <CircularProgress size={20} sx={{ mr: 1, color: "white" }} />{" "}
+                  Deleting...
+                </>
               ) : (
-                <BudgetarySupportTable
-                  proposalId={currentProposalId}
-                  fiscalYear={selectedFiscalYear || activeFiscalYear}
-                  budgetType={activeBudgetType}
-                  incomeGrandTotal={incomeGrandTotal}
-                  groupedItems={groupedItems}
-                  onChargedToIncomeChange={setChargedToIncomeAmount}
-                  onNonChargedPersonnelServicesChange={setNonChargedPersonnelServices}
-                  onBudgetDeficitChange={setBudgetDeficit}
-                />
+                "Yes, Delete Proposal"
               )}
-            </>
-          )}
-        </Box>
+            </Button>
+          </DialogActions>
+        </Dialog>
 
-        {/* Enhanced Button Group with Export and Bulk Actions */}
-        <div className="button-group">
-          {/* Bulk Actions Button */}
-          {showBulkActions && (
+        {/* Collapsible Budget Summary */}
+        {import.meta.env.VITE_HIDE_BUDGET_SUMMARY !== "true" && (
+          <Accordion
+            expanded={summaryExpanded}
+            onChange={() => setSummaryExpanded(!summaryExpanded)}
+            sx={{
+              mb: 2,
+              background: "linear-gradient(135deg, #fafafa 0%, #ffffff 100%)",
+              border: "1px solid #e0e0e0",
+              borderRadius: 2,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+              transition: "all 0.3s cubic-bezier(0.3, 0, 0.7, 1)",
+              "&:hover": {
+                boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
+              },
+              "&:before": { display: "none" },
+            }}
+          >
+            <AccordionSummary
+              expandIcon={<ExpandMore />}
+              sx={{
+                minHeight: "45px",
+                background: "linear-gradient(135deg, #f5f5f5 0%, #ffffff 100%)",
+                "& .MuiAccordionSummary-content": {
+                  margin: "8px 0",
+                  alignItems: "center",
+                },
+                "&:hover": {
+                  backgroundColor: "rgba(76, 175, 80, 0.04)",
+                },
+              }}
+            >
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  width: "100%",
+                  mr: 2,
+                }}
+              >
+                <Typography
+                  variant="body2"
+                  sx={{ fontWeight: "bold", fontSize: "0.9rem" }}
+                >
+                  📊 Budget Summary
+                </Typography>
+                <Chip
+                  label={formatCurrency(calculateTotalBudget.grandTotal)}
+                  color="primary"
+                  size="small"
+                  sx={{ fontSize: "0.7rem", height: "20px" }}
+                />
+              </Box>
+            </AccordionSummary>
+            <AccordionDetails sx={{ pt: 0, pb: 1.5, px: 1.5 }}>
+              {/* Budget Overview Row */}
+              <Box sx={{ mb: 1.5 }}>
+                <Typography
+                  variant="body2"
+                  sx={{ fontWeight: "bold", fontSize: "0.9rem", mb: 1 }}
+                >
+                  💰 Budget Overview
+                </Typography>
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, 1fr)",
+                    gap: 0.5,
+                  }}
+                >
+                  <Box
+                    sx={{
+                      textAlign: "center",
+                      p: 1,
+                      background:
+                        "linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)",
+                      borderRadius: 1,
+                      boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+                      border: "1px solid rgba(76, 175, 80, 0.2)",
+                      transition: "all 0.3s cubic-bezier(0.3, 0, 0.7, 1)",
+                      "&:hover": {
+                        boxShadow: "0 4px 8px rgba(76, 175, 80, 0.15)",
+                        transform: "translateY(-2px)",
+                      },
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      sx={{ fontSize: "0.7rem", fontWeight: 600 }}
+                    >
+                      Personnel Services
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        display: "block",
+                        fontWeight: "bold",
+                        fontSize: "0.8rem",
+                        color: "#1b5e20",
+                        mt: 0.5,
+                      }}
+                    >
+                      {formatCurrency(calculateTotalBudget.personnelTotal)}
+                    </Typography>
+                  </Box>
+                  <Box
+                    sx={{
+                      textAlign: "center",
+                      p: 1,
+                      background:
+                        "linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)",
+                      borderRadius: 1,
+                      boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+                      border: "1px solid rgba(25, 118, 210, 0.2)",
+                      transition: "all 0.3s cubic-bezier(0.3, 0, 0.7, 1)",
+                      "&:hover": {
+                        boxShadow: "0 4px 8px rgba(25, 118, 210, 0.15)",
+                        transform: "translateY(-2px)",
+                      },
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      sx={{ fontSize: "0.7rem", fontWeight: 600 }}
+                    >
+                      MOOE (Regular + IAs O&M)
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        display: "block",
+                        fontWeight: "bold",
+                        fontSize: "0.8rem",
+                        color: "#0d47a1",
+                        mt: 0.5,
+                      }}
+                    >
+                      {formatCurrency(calculateTotalBudget.mooeTotal)}
+                    </Typography>
+                  </Box>
+                  <Box
+                    sx={{
+                      textAlign: "center",
+                      p: 1,
+                      background:
+                        "linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)",
+                      borderRadius: 1,
+                      boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+                      border: "1px solid rgba(255, 152, 0, 0.2)",
+                      transition: "all 0.3s cubic-bezier(0.3, 0, 0.7, 1)",
+                      "&:hover": {
+                        boxShadow: "0 4px 8px rgba(255, 152, 0, 0.15)",
+                        transform: "translateY(-2px)",
+                      },
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      sx={{ fontSize: "0.7rem", fontWeight: 600 }}
+                    >
+                      Capital Outlay
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        display: "block",
+                        fontWeight: "bold",
+                        fontSize: "0.8rem",
+                        color: "#e65100",
+                        mt: 0.5,
+                      }}
+                    >
+                      {formatCurrency(calculateTotalBudget.capitalOutlayTotal)}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Box>
+
+              {/* Income Summary Row */}
+              <Box sx={{ mb: 1.5 }}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    mb: 1,
+                  }}
+                >
+                  <Typography
+                    variant="body2"
+                    sx={{ fontWeight: "bold", fontSize: "0.9rem" }}
+                  >
+                    📊 Expenses Under Corporate Income
+                  </Typography>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                    <CompareArrowsIcon
+                      color={
+                        budgetSummary.isIncomeBalanced ? "success" : "error"
+                      }
+                      sx={{ fontSize: "16px" }}
+                    />
+                    <Typography
+                      variant="caption"
+                      color={
+                        budgetSummary.isIncomeBalanced
+                          ? "success.main"
+                          : "error.main"
+                      }
+                      sx={{ fontWeight: "bold", fontSize: "0.7rem" }}
+                    >
+                      {budgetSummary.isIncomeBalanced
+                        ? "Balanced"
+                        : "Unbalanced"}
+                    </Typography>
+                  </Box>
+                </Box>
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(4, 1fr)",
+                    gap: 0.5,
+                  }}
+                >
+                  <Box
+                    sx={{
+                      textAlign: "center",
+                      p: 0.5,
+                      backgroundColor: "rgba(255, 255, 255, 0.8)",
+                      borderRadius: 0.5,
+                    }}
+                  >
+                    <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
+                      MOOE (Regular + IAs O&M)
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        display: "block",
+                        fontWeight: "bold",
+                        fontSize: "0.8rem",
+                      }}
+                    >
+                      {formatCurrency(budgetSummary.mooeIncomeTotal)}
+                    </Typography>
+                  </Box>
+                  <Box
+                    sx={{
+                      textAlign: "center",
+                      p: 0.5,
+                      backgroundColor: "rgba(255, 255, 255, 0.8)",
+                      borderRadius: 0.5,
+                    }}
+                  >
+                    <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
+                      Capital Outlay
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        display: "block",
+                        fontWeight: "bold",
+                        fontSize: "0.8rem",
+                      }}
+                    >
+                      {formatCurrency(budgetSummary.capitalOutlayIncomeTotal)}
+                    </Typography>
+                  </Box>
+                  <Box
+                    sx={{
+                      textAlign: "center",
+                      p: 0.5,
+                      backgroundColor: "rgba(255, 255, 255, 0.8)",
+                      borderRadius: 0.5,
+                    }}
+                  >
+                    <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
+                      Total
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        display: "block",
+                        fontWeight: "bold",
+                        fontSize: "0.8rem",
+                      }}
+                    >
+                      {formatCurrency(budgetSummary.combinedIncomeTotal)}
+                    </Typography>
+                  </Box>
+                  <Box
+                    sx={{
+                      textAlign: "center",
+                      p: 0.5,
+                      backgroundColor: budgetSummary.isIncomeBalanced
+                        ? "#4caf50"
+                        : "#f44336",
+                      color: "white",
+                      borderRadius: 0.5,
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      sx={{ fontSize: "0.7rem", color: "white" }}
+                    >
+                      Corporate Income
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        display: "block",
+                        fontWeight: "bold",
+                        fontSize: "0.8rem",
+                        color: "white",
+                      }}
+                    >
+                      {formatCurrency(budgetSummary.incomeTotal)}
+                    </Typography>
+                  </Box>
+                </Box>
+                {!budgetSummary.isIncomeBalanced && (
+                  <Typography
+                    variant="caption"
+                    color="error.main"
+                    sx={{
+                      display: "block",
+                      textAlign: "center",
+                      mt: 0.5,
+                      fontWeight: "bold",
+                      fontSize: "0.7rem",
+                    }}
+                  >
+                    Diff: ₱
+                    {Math.abs(
+                      (budgetSummary.incomeTotal || 0) -
+                        (budgetSummary.combinedIncomeTotal || 0)
+                    ).toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </Typography>
+                )}
+              </Box>
+
+              {/* Subsidy Summary Row */}
+              <Box>
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    mb: 1,
+                  }}
+                >
+                  <Typography
+                    variant="body2"
+                    sx={{ fontWeight: "bold", fontSize: "0.9rem" }}
+                  >
+                    🏛️ Budgetary Support Summary
+                  </Typography>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                    <CompareArrowsIcon
+                      color={
+                        budgetSummary.isSubsidyBalanced ? "success" : "error"
+                      }
+                      sx={{ fontSize: "16px" }}
+                    />
+                    <Typography
+                      variant="caption"
+                      color={
+                        budgetSummary.isSubsidyBalanced
+                          ? "success.main"
+                          : "error.main"
+                      }
+                      sx={{ fontWeight: "bold", fontSize: "0.7rem" }}
+                    >
+                      {budgetSummary.isSubsidyBalanced
+                        ? "Balanced"
+                        : "Unbalanced"}
+                    </Typography>
+                  </Box>
+                </Box>
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, 1fr)",
+                    gap: 0.5,
+                  }}
+                >
+                  <Box
+                    sx={{
+                      textAlign: "center",
+                      p: 0.5,
+                      backgroundColor: "rgba(255, 255, 255, 0.8)",
+                      borderRadius: 0.5,
+                    }}
+                  >
+                    <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
+                      MOOE Subsidy (Regular + IAs O&M)
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        display: "block",
+                        fontWeight: "bold",
+                        fontSize: "0.8rem",
+                      }}
+                    >
+                      {formatCurrency(budgetSummary.mooeSubsidyTotal || 0)}
+                    </Typography>
+                  </Box>
+                  <Box
+                    sx={{
+                      textAlign: "center",
+                      p: 0.5,
+                      backgroundColor: "rgba(255, 255, 255, 0.8)",
+                      borderRadius: 0.5,
+                    }}
+                  >
+                    <Typography variant="caption" sx={{ fontSize: "0.7rem" }}>
+                      Capital Subsidy
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        display: "block",
+                        fontWeight: "bold",
+                        fontSize: "0.8rem",
+                      }}
+                    >
+                      {formatCurrency(
+                        budgetSummary.capitalOutlaySubsidyTotal || 0
+                      )}
+                    </Typography>
+                  </Box>
+                  <Box
+                    sx={{
+                      textAlign: "center",
+                      p: 0.5,
+                      backgroundColor: budgetSummary.isSubsidyBalanced
+                        ? "#4caf50"
+                        : "#f44336",
+                      color: "white",
+                      borderRadius: 0.5,
+                    }}
+                  >
+                    <Typography
+                      variant="caption"
+                      sx={{ fontSize: "0.7rem", color: "white" }}
+                    >
+                      Budgetary
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        display: "block",
+                        fontWeight: "bold",
+                        fontSize: "0.8rem",
+                        color: "white",
+                      }}
+                    >
+                      {formatCurrency(
+                        calculateTotalBudget.budgetarySupportTotal || 0
+                      )}
+                    </Typography>
+                  </Box>
+                </Box>
+                {!budgetSummary.isSubsidyBalanced && (
+                  <Typography
+                    variant="caption"
+                    color="error.main"
+                    sx={{
+                      display: "block",
+                      textAlign: "center",
+                      mt: 0.5,
+                      fontWeight: "bold",
+                      fontSize: "0.7rem",
+                    }}
+                  >
+                    Diff: ₱
+                    {Math.abs(
+                      (budgetSummary.mooeSubsidyTotal || 0) +
+                        (budgetSummary.capitalOutlaySubsidyTotal || 0) -
+                        (calculateTotalBudget.budgetarySupportTotal || 0)
+                    ).toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </Typography>
+                )}
+              </Box>
+            </AccordionDetails>
+          </Accordion>
+        )}
+
+        {/* Main Content Container */}
+        <Box sx={{ mx: 2, mt: 1.5, mb: 3 }}>
+          {/* Mobile Navigation */}
+          <MobileTabNavigation />
+
+          {/* Desktop Tab Navigation */}
+          <Paper
+            sx={{
+              boxShadow: "none",
+              borderRadius: "0px",
+              overflow: "hidden",
+              border: "none",
+              transition: "all 0.2s ease",
+              bgcolor: "#375e38",
+              display: { xs: "none", md: "block" },
+            }}
+          >
+            {/* Tabs Header with Green Background */}
+            <Box
+              sx={{
+                background: "#375e38",
+                color: "white",
+                px: 1,
+                py: 1,
+                display: "flex",
+                gap: 0,
+                alignItems: "stretch",
+                borderTop: "1px solid rgba(255,255,255,0.15)",
+              }}
+            >
+              {[
+                { label: "INCOME", value: "Income" },
+                { label: "PS - Permanent", value: "PSPermanent" },
+                { label: "PS - Casual", value: "PSCasual" },
+                { label: "PS - Charged to Income", value: "PSChargedToIncome" },
+                { label: "COS/JO", value: "COS/JO" },
+                { label: "MOOE", value: "MOOE" },
+                { label: "CAPITAL OUTLAY", value: "Capital Outlay" },
+                { label: "BSGC", value: "Budgetary Support" },
+              ].map((tab, index, arr) => {
+                const isActive = activeTab === tab.value;
+                return (
+                  <Box
+                    key={index}
+                    onClick={() => setActiveTab(tab.value)}
+                    sx={{
+                      flex: 1,
+                      bgcolor: isActive ? "#2b4a2c" : "transparent",
+                      color: "white",
+                      textTransform: "uppercase",
+                      fontSize: "0.8rem",
+                      fontWeight: 800,
+                      letterSpacing: "0.8px",
+                      p: 1.25,
+                      borderRight:
+                        index < arr.length - 1
+                          ? "1px solid rgba(255,255,255,0.25)"
+                          : "none",
+                      transition: "all 0.2s ease",
+                      cursor: "pointer",
+                      textAlign: "center",
+                      "&:hover": {
+                        bgcolor: isActive
+                          ? "#2b4a2c"
+                          : "rgba(255,255,255,0.08)",
+                      },
+                    }}
+                  >
+                    {tab.label}
+                  </Box>
+                );
+              })}
+            </Box>
+          </Paper>
+
+          {/* Tab Content Rendering */}
+          <Box sx={{ mt: 3, mb: 3, width: "100%" }}>
+            {activeTab === "Income" && (
+              <IncomeTable
+                proposalId={
+                  currentProposalId ||
+                  sessionStorage.getItem("activeWorkflowRef") ||
+                  localStorage.getItem("activeWorkflowRef") ||
+                  (dataListName !== "tests" ? dataListName : undefined)
+                }
+                region={activeRegion}
+                fiscalYear={selectedFiscalYear}
+                onGrandTotalUpdate={(grandTotal) => {
+                  setIncomeGrandTotal(grandTotal || 0);
+                }}
+                onGroupedItemsUpdate={(items) => {
+                  setGroupedItems(items || {});
+                }}
+              />
+            )}
+
+            {activeTab === "PSPermanent" && (
+              <PSPermanentServiceTable
+                dataListName={dataListName}
+                schema={schema}
+                region={activeRegion}
+                fiscalYear={selectedFiscalYear}
+                proposalId={
+                  currentProposalId ||
+                  sessionStorage.getItem("activeWorkflowRef") ||
+                  localStorage.getItem("activeWorkflowRef") ||
+                  (dataListName !== "tests" ? dataListName : undefined)
+                }
+              />
+            )}
+
+            {activeTab === "PSCasual" && (
+              <PSCasualServiceTable
+                dataListName={dataListName}
+                schema={schema}
+                region={activeRegion}
+                fiscalYear={selectedFiscalYear}
+                proposalId={
+                  currentProposalId ||
+                  sessionStorage.getItem("activeWorkflowRef") ||
+                  localStorage.getItem("activeWorkflowRef") ||
+                  (dataListName !== "tests" ? dataListName : undefined)
+                }
+              />
+            )}
+
+            {activeTab === "PSChargedToIncome" && (
+              <PSChargedToIncomeTable
+                dataListName={dataListName}
+                schema={schema}
+                region={activeRegion}
+                fiscalYear={selectedFiscalYear}
+                proposalId={
+                  currentProposalId ||
+                  sessionStorage.getItem("activeWorkflowRef") ||
+                  localStorage.getItem("activeWorkflowRef") ||
+                  (dataListName !== "tests" ? dataListName : undefined)
+                }
+              />
+            )}
+
+            {activeTab === "COS/JO" && (
+              <PSCOSCustomPageTable
+                dataListName={dataListName}
+                schema={schema}
+                region={activeRegion}
+                fiscalYear={selectedFiscalYear}
+                proposalId={
+                  currentProposalId ||
+                  sessionStorage.getItem("activeWorkflowRef") ||
+                  localStorage.getItem("activeWorkflowRef") ||
+                  (dataListName !== "tests" ? dataListName : undefined)
+                }
+              />
+            )}
+
+            {activeTab === "MOOE" && (
+              <Mooe
+                dataListName={dataListName}
+                schema={schema}
+                region={activeRegion}
+                fiscalYear={selectedFiscalYear}
+                proposalId={
+                  currentProposalId ||
+                  sessionStorage.getItem("activeWorkflowRef") ||
+                  localStorage.getItem("activeWorkflowRef") ||
+                  (dataListName !== "tests" ? dataListName : undefined)
+                }
+              />
+            )}
+
+            {activeTab === "Capital Outlay" &&
+              (useDataGridView ? (
+                <CapitalOutlayDataGrid
+                  dataListName={dataListName}
+                  schema={schema}
+                  region={activeRegion}
+                  fiscalYear={selectedFiscalYear}
+                  proposalId={
+                    currentProposalId ||
+                    sessionStorage.getItem("activeWorkflowRef") ||
+                    localStorage.getItem("activeWorkflowRef") ||
+                    (dataListName !== "tests" ? dataListName : undefined)
+                  }
+                />
+              ) : (
+                <CapitalOutlayTable
+                  dataListName={dataListName}
+                  schema={schema}
+                  region={activeRegion}
+                  fiscalYear={selectedFiscalYear}
+                  proposalId={
+                    currentProposalId ||
+                    sessionStorage.getItem("activeWorkflowRef") ||
+                    localStorage.getItem("activeWorkflowRef") ||
+                    (dataListName !== "tests" ? dataListName : undefined)
+                  }
+                />
+              ))}
+
+            {activeTab === "Budgetary Support" && (
+              <>
+                {!activeBudgetType || !selectedFiscalYear ? (
+                  <Box
+                    sx={{
+                      p: 3,
+                      textAlign: "center",
+                      backgroundColor: "#f5f5f5",
+                      borderRadius: 1,
+                    }}
+                  >
+                    <CircularProgress sx={{ mb: 2 }} />
+                    <Typography variant="body2" color="textSecondary">
+                      Loading Budgetary Support data...
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      display="block"
+                      sx={{ mt: 1 }}
+                    >
+                      Fiscal Year: {selectedFiscalYear || "Loading..."}
+                    </Typography>
+                    <Typography variant="caption" display="block">
+                      Budget Type: {activeBudgetType || "Loading..."}
+                    </Typography>
+                  </Box>
+                ) : (
+                  <BudgetarySupportTable
+                    proposalId={currentProposalId}
+                    fiscalYear={selectedFiscalYear || activeFiscalYear}
+                    budgetType={activeBudgetType}
+                    incomeGrandTotal={incomeGrandTotal}
+                    groupedItems={groupedItems}
+                    onChargedToIncomeChange={setChargedToIncomeAmount}
+                    onNonChargedPersonnelServicesChange={
+                      setNonChargedPersonnelServices
+                    }
+                    onBudgetDeficitChange={setBudgetDeficit}
+                  />
+                )}
+              </>
+            )}
+          </Box>
+
+          {/* Enhanced Button Group with Export and Bulk Actions */}
+          <div className="button-group">
+            {/* Bulk Actions Button */}
+            {showBulkActions && (
+              <Button
+                variant="outlined"
+                color="primary"
+                onClick={(e) => setBulkActionsAnchor(e.currentTarget)}
+                startIcon={<SelectAllIcon />}
+                sx={{ mr: 1 }}
+              >
+                Bulk Actions (
+                {bulkSelection.personnel.length +
+                  bulkSelection.mooe.length +
+                  bulkSelection.capitalOutlay.length +
+                  bulkSelection.income.length +
+                  bulkSelection.budgetarySupport.length}
+                )
+              </Button>
+            )}
+
+            {/* Export Button */}
             <Button
               variant="outlined"
-              color="primary"
-              onClick={(e) => setBulkActionsAnchor(e.currentTarget)}
-              startIcon={<SelectAllIcon />}
-              sx={{ mr: 1 }}
+              color="secondary"
+              onClick={(e) => setExportMenuAnchor(e.currentTarget)}
+              startIcon={<GetAppIcon />}
+              sx={{ mr: 1, display: { xs: "none", sm: "inline-flex" } }}
             >
-              Bulk Actions ({
-                bulkSelection.personnel.length + 
-                bulkSelection.mooe.length + 
-                bulkSelection.capitalOutlay.length + 
-                bulkSelection.income.length + 
-                bulkSelection.budgetarySupport.length
-              })
+              Export
             </Button>
-          )}
 
-          {/* Export Button */}
-          <Button
-            variant="outlined"
-            color="secondary"
-            onClick={(e) => setExportMenuAnchor(e.currentTarget)}
-            startIcon={<GetAppIcon />}
-            sx={{ mr: 1, display: { xs: 'none', sm: 'inline-flex' } }}
-          >
-            Export
-          </Button>
+            {/* Activity Log Button */}
+            <Button
+              variant="outlined"
+              onClick={() => setShowActivityLog(true)}
+              startIcon={<HistoryIcon />}
+              sx={{ mr: 1, display: { xs: "none", sm: "inline-flex" } }}
+            >
+              Activity
+            </Button>
 
-          {/* Activity Log Button */}
-          <Button
-            variant="outlined"
-            onClick={() => setShowActivityLog(true)}
-            startIcon={<HistoryIcon />}
-            sx={{ mr: 1, display: { xs: 'none', sm: 'inline-flex' } }}
-          >
-            Activity
-          </Button>
-
-          {/* TEMP: Hide Submit All Proposals and Save as Draft buttons */}
-          {(canCreate || canEditOwn) && (
-            <>
-              <Tooltip
-                title={
-                  readOnly
-                    ? "Account is in read-only mode"
-                    : !canEditOwn
-                    ? "You don't have permission to submit proposals. Please contact your administrator."
-                    : !budgetSummary.isIncomeBalanced
-                    ? "Combined Income Total must equal Corporate Income before submission"
-                    : ""
-                }
-              >
-                <span style={{ display: "inline-block" }}>
-                  {/* <Button
+            {/* TEMP: Hide Submit All Proposals and Save as Draft buttons */}
+            {(canCreate || canEditOwn) && (
+              <>
+                <Tooltip
+                  title={
+                    readOnly
+                      ? "Account is in read-only mode"
+                      : !canEditOwn
+                      ? "You don't have permission to submit proposals. Please contact your administrator."
+                      : !budgetSummary.isIncomeBalanced
+                      ? "Combined Income Total must equal Corporate Income before submission"
+                      : ""
+                  }
+                >
+                  <span style={{ display: "inline-block" }}>
+                    {/* <Button
                     variant="contained"
                     color="primary"
                     onClick={handleOpenDialog}
@@ -3688,24 +4096,24 @@ const ProposalCustomPage = ({
                   >
                     Submit All Proposals
                   </Button> */}
-                </span>
-              </Tooltip>
-              <Tooltip
-                title={
-                  readOnly
-                    ? "Account is in read-only mode"
-                    : Object.keys(validationErrors).length > 0
-                    ? "Please fix validation errors before saving"
-                    : !anyNotSubmitted
-                    ? "No eligible proposals to save as draft. All proposals may already be submitted or there are no proposals to save."
-                    : isSubmitting
-                    ? "Currently processing. Please wait..."
-                    : "Save all eligible proposals as draft"
-                }
-                arrow
-              >
-                <span style={{ display: "inline-block" }}>
-                  {/* <Button
+                  </span>
+                </Tooltip>
+                <Tooltip
+                  title={
+                    readOnly
+                      ? "Account is in read-only mode"
+                      : Object.keys(validationErrors).length > 0
+                      ? "Please fix validation errors before saving"
+                      : !anyNotSubmitted
+                      ? "No eligible proposals to save as draft. All proposals may already be submitted or there are no proposals to save."
+                      : isSubmitting
+                      ? "Currently processing. Please wait..."
+                      : "Save all eligible proposals as draft"
+                  }
+                  arrow
+                >
+                  <span style={{ display: "inline-block" }}>
+                    {/* <Button
                     variant="outlined"
                     color="success"
                     onClick={() => handleSaveAsDraft()}
@@ -3743,103 +4151,139 @@ const ProposalCustomPage = ({
                   >
                     {saveStatus === "saving" ? "Saving..." : "Save as Draft"}
                   </Button> */}
-                </span>
-              </Tooltip>
-            </>
-          )}
-        </div>
-      </Box>
+                  </span>
+                </Tooltip>
+              </>
+            )}
+          </div>
+        </Box>
 
-      {/* Mobile Speed Dial for Actions */}
-      {isMobile && (
-        <SpeedDial
-          ariaLabel="Mobile Actions"
-          sx={{ position: 'fixed', bottom: 16, right: 16, display: { xs: 'block', md: 'none' } }}
-          icon={<SpeedDialIcon />}
-          open={speedDialOpen}
-          onClose={() => setSpeedDialOpen(false)}
-          onOpen={() => setSpeedDialOpen(true)}
-        >
-          <SpeedDialAction
-            icon={<GetAppIcon />}
-            tooltipTitle="Export"
-            onClick={(e) => setExportMenuAnchor(e.currentTarget)}
-          />
-          <SpeedDialAction
-            icon={<HistoryIcon />}
-            tooltipTitle="Activity Log"
-            onClick={() => setShowActivityLog(true)}
-          />
-          {showBulkActions && (
+        {/* Mobile Speed Dial for Actions */}
+        {isMobile && (
+          <SpeedDial
+            ariaLabel="Mobile Actions"
+            sx={{
+              position: "fixed",
+              bottom: 16,
+              right: 16,
+              display: { xs: "block", md: "none" },
+            }}
+            icon={<SpeedDialIcon />}
+            open={speedDialOpen}
+            onClose={() => setSpeedDialOpen(false)}
+            onOpen={() => setSpeedDialOpen(true)}
+          >
             <SpeedDialAction
-              icon={<SelectAllIcon />}
-              tooltipTitle="Bulk Actions"
-              onClick={(e) => setBulkActionsAnchor(e.currentTarget)}
+              icon={<GetAppIcon />}
+              tooltipTitle="Export"
+              onClick={(e) => setExportMenuAnchor(e.currentTarget)}
             />
-          )}
-        </SpeedDial>
-      )}
+            <SpeedDialAction
+              icon={<HistoryIcon />}
+              tooltipTitle="Activity Log"
+              onClick={() => setShowActivityLog(true)}
+            />
+            {showBulkActions && (
+              <SpeedDialAction
+                icon={<SelectAllIcon />}
+                tooltipTitle="Bulk Actions"
+                onClick={(e) => setBulkActionsAnchor(e.currentTarget)}
+              />
+            )}
+          </SpeedDial>
+        )}
 
-      {/* Bulk Actions Menu */}
-      <Menu
-        anchorEl={bulkActionsAnchor}
-        open={Boolean(bulkActionsAnchor)}
-        onClose={() => setBulkActionsAnchor(null)}
-      >
-        <MenuItem onClick={() => handleBulkStatusChange('Draft')}>
-          <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Save Selected as Draft</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={() => handleBulkStatusChange('Submitted')}>
-          <ListItemIcon><CheckCircleIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Submit Selected</ListItemText>
-        </MenuItem>
-        <Divider />
-        <MenuItem onClick={() => {
-          const currentType = activeTab === 'PSPermanent' || activeTab === 'PSCasual' || activeTab === 'PSChargedToIncome' || activeTab === 'COS/JO' ? 'personnel' : 
-                             activeTab === 'MOOE' ? 'mooe' :
-                             activeTab === 'Capital Outlay' ? 'capitalOutlay' :
-                             activeTab === 'Income' ? 'income' : 'budgetarySupport';
-          handleSelectAll(currentType);
-          setBulkActionsAnchor(null);
-        }}>
-          <ListItemIcon><SelectAllIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Select All in Tab</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={() => {
-          setBulkSelection({ personnel: [], mooe: [], capitalOutlay: [], income: [], budgetarySupport: [] });
-          setShowBulkActions(false);
-          setBulkActionsAnchor(null);
-        }}>
-          <ListItemIcon><DeselectIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Deselect All</ListItemText>
-        </MenuItem>
-      </Menu>
+        {/* Bulk Actions Menu */}
+        <Menu
+          anchorEl={bulkActionsAnchor}
+          open={Boolean(bulkActionsAnchor)}
+          onClose={() => setBulkActionsAnchor(null)}
+        >
+          <MenuItem onClick={() => handleBulkStatusChange("Draft")}>
+            <ListItemIcon>
+              <EditIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Save Selected as Draft</ListItemText>
+          </MenuItem>
+          <MenuItem onClick={() => handleBulkStatusChange("Submitted")}>
+            <ListItemIcon>
+              <CheckCircleIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Submit Selected</ListItemText>
+          </MenuItem>
+          <Divider />
+          <MenuItem
+            onClick={() => {
+              const currentType =
+                activeTab === "PSPermanent" ||
+                activeTab === "PSCasual" ||
+                activeTab === "PSChargedToIncome" ||
+                activeTab === "COS/JO"
+                  ? "personnel"
+                  : activeTab === "MOOE"
+                  ? "mooe"
+                  : activeTab === "Capital Outlay"
+                  ? "capitalOutlay"
+                  : activeTab === "Income"
+                  ? "income"
+                  : "budgetarySupport";
+              handleSelectAll(currentType);
+              setBulkActionsAnchor(null);
+            }}
+          >
+            <ListItemIcon>
+              <SelectAllIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Select All in Tab</ListItemText>
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              setBulkSelection({
+                personnel: [],
+                mooe: [],
+                capitalOutlay: [],
+                income: [],
+                budgetarySupport: [],
+              });
+              setShowBulkActions(false);
+              setBulkActionsAnchor(null);
+            }}
+          >
+            <ListItemIcon>
+              <DeselectIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Deselect All</ListItemText>
+          </MenuItem>
+        </Menu>
 
-      {/* Export Menu */}
-      <Menu
-        anchorEl={exportMenuAnchor}
-        open={Boolean(exportMenuAnchor)}
-        onClose={() => setExportMenuAnchor(null)}
-      >
-        <MenuItem onClick={generatePDFReport}>
-          <ListItemIcon><PictureAsPdfIcon /></ListItemIcon>
-          <ListItemText primary="Export as PDF" />
-        </MenuItem>
-        <MenuItem onClick={generateExcelReport}>
-          <ListItemIcon><GetAppIcon /></ListItemIcon>
-          <ListItemText primary="Export as Excel" />
-        </MenuItem>
-      </Menu>
+        {/* Export Menu */}
+        <Menu
+          anchorEl={exportMenuAnchor}
+          open={Boolean(exportMenuAnchor)}
+          onClose={() => setExportMenuAnchor(null)}
+        >
+          <MenuItem onClick={generatePDFReport}>
+            <ListItemIcon>
+              <PictureAsPdfIcon />
+            </ListItemIcon>
+            <ListItemText primary="Export as PDF" />
+          </MenuItem>
+          <MenuItem onClick={generateExcelReport}>
+            <ListItemIcon>
+              <GetAppIcon />
+            </ListItemIcon>
+            <ListItemText primary="Export as Excel" />
+          </MenuItem>
+        </Menu>
 
-      <CustomSnackbar
-        open={snackbar.open}
-        message={snackbar.message}
-        severity={snackbar.severity}
-        onClose={handleSnackbarClose}
-      />
+        <CustomSnackbar
+          open={snackbar.open}
+          message={snackbar.message}
+          severity={snackbar.severity}
+          onClose={handleSnackbarClose}
+        />
 
-      {/* Debug Info (visible only for troubleshooting):
+        {/* Debug Info (visible only for troubleshooting):
       <Box sx={{ mt: 4, p: 2, background: '#f9fbe7', border: '1px dashed #bdb76b', borderRadius: 2 }}>
         <Typography variant="caption" color="#888" fontWeight="bold">
           Debug Info (visible only for troubleshooting):

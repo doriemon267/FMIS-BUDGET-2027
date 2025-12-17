@@ -165,16 +165,19 @@ const CustomTable = ({
       });
 
       if (userAccessLevel === 'DIVISION' && userDivision) {
-        // Division level: Only send division parameter, no region override
+        // Division level: restrict by division and also include the active region
+        // (the server currently requires a region parameter for security)
         queryParams.Division = userDivision;
-        console.log(`Division level user - restricting to division: ${userDivision}`);
+        queryParams.region = regionName;
+        console.log(`Division level user - restricting to division: ${userDivision} and region: ${regionName}`);
       } else if (userAccessLevel === 'DEPARTMENT' && userDepartment) {
-        // Department level: Only send department parameter, no region override
+        // Department level: restrict by department and include division + active region
         queryParams.Department = userDepartment;
         if (userDivision) {
           queryParams.Division = userDivision;
         }
-        console.log(`Department level user - restricting to department: ${userDepartment}`);
+        queryParams.region = regionName;
+        console.log(`Department level user - restricting to department: ${userDepartment}, division: ${userDivision} and region: ${regionName}`);
       } else if (userAccessLevel === 'REGION' && userRegion) {
         // Region level: Can specify region (within their assigned regions)
         queryParams.region = userRegion;

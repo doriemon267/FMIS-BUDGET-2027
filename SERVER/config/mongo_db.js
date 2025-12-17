@@ -1,7 +1,8 @@
 const mongoose = require('mongoose')
 
 // Create connection for main database
-const mainConnection = mongoose.createConnection(process.env.MONGODB_MAIN_URL, {
+const mainConnection = mongoose.createConnection(process.env.MONGODB_MAIN_URL,
+     {
   // options if needed
 });
 

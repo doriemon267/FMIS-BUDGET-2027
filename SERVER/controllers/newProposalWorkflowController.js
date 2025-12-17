@@ -1867,29 +1867,114 @@ exports.deleteProposal = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
+    const userRole = getUserRole(req);
 
     const proposal = await NewProposalWorkflow.findById(id);
     if (!proposal) {
-      return res.status(404).json({
-        success: false,
-        message: 'Proposal not found'
-      });
+      return res.status(404).json({ success: false, message: 'Proposal not found' });
     }
 
-    // Only allow deletion if user is the creator and status is DRAFT
-    if (proposal.createdBy !== userId || proposal.status !== 'DRAFT') {
-      return res.status(403).json({
-        success: false,
-        message: 'You can only delete your own draft proposals'
-      });
+    // Allow SUPER ADMIN to delete any proposal (for maintenance/testing).
+    // Other users can only delete their own DRAFT proposals.
+    if (userRole !== 'SUPER ADMIN') {
+      if (proposal.createdBy !== userId || proposal.status !== 'DRAFT') {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only delete your own draft proposals'
+        });
+      }
     }
 
-    await NewProposalWorkflow.findByIdAndDelete(id);
+    // Delete proposal and all related records that reference this workflowRef or proposalId
+    let session = null;
+    let usedTransaction = false;
+    const deletionResults = {};
+    try {
+      // Attempt to start a transaction; if the server is a standalone MongoDB
+      // instance this will throw (error code 20). In that case we fall back
+      // to performing non-transactional deletions for compatibility.
+      try {
+        session = await mongoose.startSession();
+        session.startTransaction();
+        usedTransaction = true;
+      } catch (txErr) {
+        console.warn('Transactions are not available on this MongoDB deployment. Falling back to non-transactional delete. Error:', txErr && txErr.message ? txErr.message : txErr);
+        if (session) {
+          try { session.endSession(); } catch (e) {}
+          session = null;
+        }
+        usedTransaction = false;
+      }
 
-    res.json({
-      success: true,
-      message: 'Proposal deleted successfully'
-    });
+      const BRDConsolidation = require('../models/BRDConsolidation');
+      const BudgetOfficerEdit = require('../models/BudgetOfficerEdit');
+
+      // Helper to delete with or without session
+      const runDelete = async (Model, filter) => {
+        if (usedTransaction && session) return Model.deleteMany(filter, { session });
+        return Model.deleteMany(filter);
+      };
+
+      const modelsToClean = [
+        PersonnelServices,
+        MooeProposal,
+        CapitalOutlay,
+        Income,
+        ProposalEditLog,
+        BRDConsolidation,
+        BudgetOfficerEdit,
+      ];
+
+      for (const M of modelsToClean) {
+        let result;
+        try {
+          result = await runDelete(M, { $or: [{ workflowRef: id }, { proposalId: id }] });
+        } catch (deleteErr) {
+          // If a transaction-related error occurs (e.g., code 20), fall back to non-transactional deletion
+          if (deleteErr && (deleteErr.code === 20 || (deleteErr.errorResponse && deleteErr.errorResponse.code === 20))) {
+            console.warn('Transaction error detected during delete. Falling back to non-transactional deletes for model', M.modelName || (M.collection && M.collection.name), 'error:', deleteErr.message || deleteErr);
+            usedTransaction = false;
+            if (session) {
+              try { session.endSession(); } catch (e) {}
+              session = null;
+            }
+            // Retry without transaction/session
+            result = await M.deleteMany({ $or: [{ workflowRef: id }, { proposalId: id }] });
+          } else {
+            throw deleteErr; // rethrow other errors
+          }
+        }
+        deletionResults[M.modelName || (M.collection && M.collection.name) || 'unknown'] = result.deletedCount;
+      }
+
+      const legacyProposalDelete = await runDelete(Proposal, { $or: [{ workflowRef: id }, { proposalId: id }] });
+      deletionResults.Proposal = legacyProposalDelete.deletedCount;
+
+      const notifRes = await runDelete(Notification, { $or: [{ relatedEntityId: String(id) }, { 'metadata.proposalId': String(id) }] });
+      deletionResults.Notification = notifRes.deletedCount;
+
+      // Delete the workflow itself
+      if (usedTransaction && session) {
+        await NewProposalWorkflow.findByIdAndDelete(id, { session });
+        await session.commitTransaction();
+        session.endSession();
+      } else {
+        await NewProposalWorkflow.findByIdAndDelete(id);
+      }
+
+      return res.json({ success: true, message: 'Proposal and related records deleted successfully', transactionUsed: usedTransaction, details: deletionResults });
+    } catch (innerErr) {
+      try {
+        if (usedTransaction && session) {
+          await session.abortTransaction();
+          session.endSession();
+        }
+      } catch (abortErr) {
+        console.warn('Failed to abort transaction after error:', abortErr && abortErr.message ? abortErr.message : abortErr);
+      }
+      console.error('Error during cascading delete:', innerErr);
+      return res.status(500).json({ success: false, message: 'Failed to delete proposal and related records', error: innerErr.message });
+    }
   } catch (error) {
     console.error('Error deleting proposal:', error);
     res.status(500).json({
