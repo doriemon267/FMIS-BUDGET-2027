@@ -78,6 +78,15 @@ SERVER/scripts/test*
 SERVER/test-scripts/
 CLIENT/src/components/test/
 
+# Server folders that should not be tracked
+SERVER/tests/
+SERVER/test-scripts/
+SERVER/security-scripts/
+SERVER/scripts/
+# common misspelling / archival folders
+SERVER/archieve/
+SERVER/archive/
+
 # Build artifacts
 *.tgz
 *.tar.gz
