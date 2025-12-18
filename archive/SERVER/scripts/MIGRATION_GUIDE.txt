@@ -1,0 +1,48 @@
+================================================================================
+USER ROLE MIGRATION GUIDE
+================================================================================
+
+PURPOSE:
+--------
+Migrate legacy user roles to standardized workflow roles for the budget 
+proposal system.
+
+STANDARD WORKFLOW ROLES:
+------------------------
+1. divisionCreator    - BUDGET PREPARER (Division level creators)
+2. departmentCreator  - BUDGET COORDINATOR (Department/Region level creators)
+3. departmentVerifier - BUDGET OFFICER (Department/Region level verifiers)
+4. budgetManager      - BUDGET MANAGER (Budget Office final approvers)
+
+WORKFLOW:
+---------
+BUDGET PREPARER → BUDGET OFFICER → BUDGET MANAGER
+BUDGET COORDINATOR → BUDGET OFFICER → BUDGET MANAGER
+
+With flexibility:
+BUDGET PREPARER/COORDINATOR can bypass OFFICER and submit directly to MANAGER
+
+HOW TO RUN:
+-----------
+1. Backup your database first!
+   mongodump --uri="mongodb://localhost:27017/fmis-budget" --out=./backup
+
+2. Run the migration script:
+   cd SERVER
+   node scripts/migrateUserRoles.js
+
+3. Check the output for any errors
+
+WHAT IT DOES:
+-------------
+- Converts divisionApprover → divisionCreator
+- Converts officeApprover → departmentVerifier
+- Converts regionApprover → departmentVerifier
+- And other legacy role mappings...
+
+ROLLBACK:
+---------
+If needed, restore from backup:
+mongorestore --uri="mongodb://localhost:27017/fmis-budget" ./backup/fmis-budget
+
+================================================================================
