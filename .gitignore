@@ -70,6 +70,14 @@ __tests__/
 *.spec.*
 *.test.*
 
+# Temporary test files and scripts (not part of runtime)
+TEMP_FILES/
+SCRIPTS/test*
+SCRIPTS/*test*
+SERVER/scripts/test*
+SERVER/test-scripts/
+CLIENT/src/components/test/
+
 # Build artifacts
 *.tgz
 *.tar.gz
