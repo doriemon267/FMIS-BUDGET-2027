@@ -58,10 +58,22 @@ coverage/
 *.pdf
 *.xlsx
 
+# Markdown files (exclude from tracking)
+*.md
+
+# Test directories and files
+test/
+tests/
+__tests__/
+**/test/
+**/tests/
+*.spec.*
+*.test.*
+
 # Build artifacts
 *.tgz
 *.tar.gz
 
-# Other
-.qodo
-.zencoder
+# other
+*.py
+*.ps1
