@@ -172,12 +172,12 @@ exports.getMOOEData = async (req, res) => {
       
       // If no results with strict filter, try broader query to diagnose
       if (mooeProposals.length === 0) {
-        console.warn('[getMOOEData] No MOOE data with strict filter, trying fallback query...');
+        // console.warn('[getMOOEData] No MOOE data with strict filter, trying fallback query...');
         const fallbackMooe = await MooeProposal.find({
           fiscalYear: activeFiscalYear,
           ...(region ? { region } : {})
         }).lean();
-        console.warn('[getMOOEData] Fallback query found:', fallbackMooe.length, 'entries');
+        // console.warn('[getMOOEData] Fallback query found:', fallbackMooe.length, 'entries');
         if (fallbackMooe.length > 0) {
           console.warn('[getMOOEData] First fallback entry:', {
             uacsCode: fallbackMooe[0].uacsCode,

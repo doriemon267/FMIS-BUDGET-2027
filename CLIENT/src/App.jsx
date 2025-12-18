@@ -27,7 +27,7 @@ import NotAuthorized from "./pages/NotAuthorizedPage";
 import ProposalSummaryPage from "./pages/ProposalSummaryPage";
 import FiscalYearSettingsPage from "./pages/FiscalYearSettingsPage";
 import CompensationManagementPage from "./pages/CompensationManagementPage";
-import UploaderPage from "./pages/TestPage";
+//import UploaderPage from "./pages/TestPage";
 import MealAllowancePage from "./pages/MealAllowancePage";
 import MedicalAllowancePage from "./pages/MedicalAllowancePage";
 import ChildrenAllowancePage from "./pages/ChildrenAllowancePage";
@@ -296,7 +296,7 @@ const App = () => {
             </ProtectedRoute>
           }
         />
-        <Route path="/uploader" element={<UploaderPage />} />
+        {/* <Route path="/uploader" element={<UploaderPage />} /> */}
         <Route path="/mealallowance" element={<EmployeeBenefitsPage />} />
         <Route path="/medicalAllowance" element={<EmployeeBenefitsPage />} />
         <Route path="/childrenAllowance" element={<EmployeeBenefitsPage />} />
