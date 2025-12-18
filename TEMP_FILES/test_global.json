@@ -1,7 +1,0 @@
-{
-  "incomeCategoryName": "Global Test Category",
-  "incomeSubcategoryName": ["Global Subcategory"],
-  "description": "This is a global category",
-  "isGlobal": true,
-  "regions": []
-}

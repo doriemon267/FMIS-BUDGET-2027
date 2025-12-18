@@ -1,7 +1,0 @@
-{
-  "incomeCategoryName": "Test Category",
-  "incomeSubcategoryName": ["Subcategory 2"],
-  "description": "Test description for region 2",
-  "isGlobal": false,
-  "regions": ["Region 2"]
-}

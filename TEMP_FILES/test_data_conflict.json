@@ -1,7 +1,0 @@
-{
-  "incomeCategoryName": "Test Category",
-  "incomeSubcategoryName": ["Subcategory 3"],
-  "description": "This should fail - same region",
-  "isGlobal": false,
-  "regions": ["Region 1"]
-}
