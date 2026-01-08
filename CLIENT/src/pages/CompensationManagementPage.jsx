@@ -64,7 +64,7 @@ const CompensationManagementPage = () => {
         const response = await api.get("/compensation");
         // Handle multiple response formats from backend
         let data = response.data?.compensationSettings || response.data?.data || response.data || [];
-        console.log("Compensation data fetched:", data);
+        // console.log("Compensation data fetched:", data);
         
         // Ensure linkedFiscalYears and linkedBudgetTypes exist for all records
         if (Array.isArray(data)) {

@@ -20,7 +20,7 @@ const FloatingAppWindow = ({
   const focusRef = useRef(null);
   const [mounted, setMounted] = useState(false);
   useEffect(() => { const id = setTimeout(() => setMounted(true), 50); return () => { clearTimeout(id); setMounted(false); }; }, []);
-  console.log('[FloatingAppWindow] render content for', title, defaultPosition, 'zIndex', zIndex);
+  // console.log('[FloatingAppWindow] render content for', title, defaultPosition, 'zIndex', zIndex);
   const content = (
     <Draggable
       handle=".window-handle"

@@ -62,7 +62,7 @@ const RataPage = () => {
     },
   });
 
-  console.log("Fetched RATA data:", rataData); // Debug log for fetched data
+  // console.log("Fetched RATA data:", rataData); // Debug log for fetched data
 
   const handleAddNew = () => {
     setSelectedData(null);

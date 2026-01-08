@@ -26,27 +26,49 @@ const CalculatorApp = () => {
 
   // New enhancements
   const [scientificMode, setScientificMode] = useState(() => {
-    try { return localStorage.getItem("calcScientificMode") === "true"; } catch { return false; }
+    try {
+      // Prefer sessionStorage for ephemeral calculator state
+      const s = sessionStorage.getItem('calcScientificMode');
+      if (s !== null) return s === 'true';
+      const legacy = localStorage.getItem('calcScientificMode');
+      if (legacy !== null) {
+        try { sessionStorage.setItem('calcScientificMode', legacy); } catch (e) {}
+        try { localStorage.removeItem('calcScientificMode'); } catch (e) {}
+        return legacy === 'true';
+      }
+      return false;
+    } catch { return false; }
   });
   const [theme, setTheme] = useState(() => {
-    try { return localStorage.getItem("calcTheme") || "dark"; } catch { return "dark"; }
+    try {
+      const s = sessionStorage.getItem('calcTheme');
+      if (s) return s;
+      const legacy = localStorage.getItem('calcTheme');
+      if (legacy) {
+        try { sessionStorage.setItem('calcTheme', legacy); } catch (e) {}
+        try { localStorage.removeItem('calcTheme'); } catch (e) {}
+        return legacy;
+      }
+      return 'dark';
+    } catch { return 'dark'; }
   });
   const [calculationHistory, setCalculationHistory] = useState(() => {
-    try { const h = localStorage.getItem(HISTORY_KEY); return h ? JSON.parse(h) : []; } catch { return []; }
+    try { const h = sessionStorage.getItem(HISTORY_KEY) || localStorage.getItem(HISTORY_KEY); if (h && !sessionStorage.getItem(HISTORY_KEY)) { try { sessionStorage.setItem(HISTORY_KEY, h); } catch (e) {} try { localStorage.removeItem(HISTORY_KEY); } catch (e) {} } return h ? JSON.parse(h) : []; } catch { return []; }
   });
   const [showHistory, setShowHistory] = useState(false);
 
   // Save preferences
   useEffect(() => {
-    try { localStorage.setItem("calcScientificMode", scientificMode); } catch { }
-    try { localStorage.setItem("calcTheme", theme); } catch { }
-    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(calculationHistory.slice(0, 50))); } catch { }
+    try { sessionStorage.setItem('calcScientificMode', String(scientificMode)); } catch { }
+    try { sessionStorage.setItem('calcTheme', theme); } catch { }
+    try { sessionStorage.setItem(HISTORY_KEY, JSON.stringify(calculationHistory.slice(0, 50))); } catch { }
   }, [scientificMode, theme, calculationHistory]);
 
   /* ---------- LOAD (with 2-day expiry) ---------- */
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      // Prefer sessionStorage for persisted calculator state; migrate from localStorage if necessary
+      const raw = sessionStorage.getItem(STORAGE_KEY) || localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
 
       const { timestamp, state } = JSON.parse(raw);
@@ -55,7 +77,8 @@ const CalculatorApp = () => {
       const maxAgeMs = EXPIRY_DAYS * 24 * 60 * 60 * 1000;
 
       if (ageMs > maxAgeMs) {
-        localStorage.removeItem(STORAGE_KEY); // expired
+        try { sessionStorage.removeItem(STORAGE_KEY); } catch (e) {}
+        try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
         return;
       }
 
@@ -77,7 +100,8 @@ const CalculatorApp = () => {
         state: { display, prev, op, shouldReset, history },
       };
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
       } catch (e) {
         console.error("Failed to save calculator state:", e);
       }

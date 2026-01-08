@@ -115,7 +115,7 @@ const LoyaltyPayDialog = ({ row, endpoint, dataListName, schema, onDialogClose }
         return;
       }
       
-      console.log("Fetching eligible employees for region:", activeRegion.name || activeRegion.Region);
+      // console.log("Fetching eligible employees for region:", activeRegion.name || activeRegion.Region);
       
       // Use the correct endpoint from your EmployeeList_router.js with region and fiscal year filter
       const res = await api.get("/employees/loyalty-pay", {
@@ -125,7 +125,7 @@ const LoyaltyPayDialog = ({ row, endpoint, dataListName, schema, onDialogClose }
         }
       });
       
-      console.log("Fetched employees:", res.data.length);
+      // console.log("Fetched employees:", res.data.length);
       setEmployees(res.data);
       
       if (res.data.length === 0) {

@@ -135,19 +135,19 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
 
   // Debug watchedValues.StatusOfAppointment
   useEffect(() => {
-    console.log("🔍 watchedValues.StatusOfAppointment:", watchedValues.StatusOfAppointment);
-    console.log("🔍 watchedValues.StatusOfAppointment type:", typeof watchedValues.StatusOfAppointment);
-    console.log("🔍 watchedValues.StatusOfAppointment upper:", watchedValues.StatusOfAppointment?.toString().toUpperCase());
+    // console.log("🔍 watchedValues.StatusOfAppointment:", watchedValues.StatusOfAppointment);
+    // console.log("🔍 watchedValues.StatusOfAppointment type:", typeof watchedValues.StatusOfAppointment);
+    // console.log("🔍 watchedValues.StatusOfAppointment upper:", watchedValues.StatusOfAppointment?.toString().toUpperCase());
   }, [watchedValues.StatusOfAppointment]);
 
   // Debug activeStep changes
   useEffect(() => {
-    console.log("🔄 activeStep changed to:", activeStep);
+    // console.log("🔄 activeStep changed to:", activeStep);
   }, [activeStep]);
 
   // Debug user context
   useEffect(() => {
-    console.log("👤 Current user in EmployeeEditDialog:", currentUser);
+    // console.log("👤 Current user in EmployeeEditDialog:", currentUser);
   }, [currentUser]);
 
   // Fetch position options
@@ -155,7 +155,7 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
     const fetchPositions = async () => {
       try {
         const response = await api.get("/positions");
-        console.log("📋 Fetched positions for dropdown:", response.data);
+        // console.log("📋 Fetched positions for dropdown:", response.data);
         setPositionOptions(response.data.positions || []);
       } catch (error) {
         console.error("Error fetching positions:", error);
@@ -172,14 +172,14 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
   useEffect(() => {
     const fetchActiveSettings = async () => {
       try {
-        console.log("🔄 Fetching active settings...");
+        // console.log("🔄 Fetching active settings...");
         const response = await api.get("/settings/active");
-        console.log("⚙️ Fetched active settings:", response.data);
+        // console.log("⚙️ Fetched active settings:", response.data);
         if (response.data && response.data.fiscalYear) {
           setActiveSettings(response.data);
-          console.log("✅ Active fiscal year set:", response.data.fiscalYear);
+          // console.log("✅ Active fiscal year set:", response.data.fiscalYear);
         } else {
-          console.log("❌ No fiscal year in response:", response.data);
+          // console.log("❌ No fiscal year in response:", response.data);
           setActiveSettings(null);
         }
       } catch (error) {
@@ -505,19 +505,19 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
   // Initialize salary data when dialog opens with existing employee data
   useEffect(() => {
     const initializeSalaryData = async () => {
-      console.log("🔄 Initializing salary data - isOpen:", isOpen, "row:", row);
-      console.log("🔄 Row SG:", row?.SG, "StatusOfAppointment:", row?.StatusOfAppointment);
+      // console.log("🔄 Initializing salary data - isOpen:", isOpen, "row:", row);
+      // console.log("🔄 Row SG:", row?.SG, "StatusOfAppointment:", row?.StatusOfAppointment);
 
       if (isOpen && row?.SG && row.StatusOfAppointment?.toString().toUpperCase() !== 'COS') {
         try {
-          console.log("🔄 Fetching salary data for SG:", row.SG);
+          // console.log("🔄 Fetching salary data for SG:", row.SG);
           const response = await api.get(`salary-grades?salary_grade=${row.SG}`);
           const salaryGrades = response.data.grades?.[0];
 
           if (salaryGrades) {
-            console.log("✅ Salary data loaded:", salaryGrades);
+            // console.log("✅ Salary data loaded:", salaryGrades);
             const steps = salaryGrades.steps.map((aw) => aw + "");
-            console.log("✅ Setting stepOptions:", steps);
+            // console.log("✅ Setting stepOptions:", steps);
             setStepOptions(steps);
             setSalaryData(salaryGrades);
 
@@ -528,7 +528,7 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
             const correctRate = salaryGrades.rates[row.Step || steps[0]];
             setValue("Rate", correctRate || "");
           } else {
-            console.log("❌ No salary data found for SG:", row.SG);
+            // console.log("❌ No salary data found for SG:", row.SG);
             setStepOptions(["1", "2", "3", "4", "5", "6", "7", "8"]);
             setSalaryData(null);
           }
@@ -539,7 +539,7 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
         }
       } else if (isOpen && row?.StatusOfAppointment?.toString().toUpperCase() !== 'COS') {
         // If no SG but it's not COS, set default step options
-        console.log("🔄 Setting default step options for non-COS employee");
+        // console.log("🔄 Setting default step options for non-COS employee");
         setStepOptions(["1", "2", "3", "4", "5", "6", "7", "8"]);
       }
     };
@@ -552,7 +552,7 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
   // Handle row data changes (in case row is loaded asynchronously)
   useEffect(() => {
     if (row && isOpen) {
-      console.log("🔄 Row data changed, updating form values:", row);
+      // console.log("🔄 Row data changed, updating form values:", row);
       // Update form values when row data becomes available
       setValue("EmployeeID", row.EmployeeID || "");
       setValue("EmployeeFullName", row.EmployeeFullName || "");
@@ -593,12 +593,12 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
 
   const handleConfirmSave = async () => {
     const data = formDataToSave;
-    console.log("💾 handleConfirmSave called - this should ONLY happen when user clicks Update Employee button");
-    console.log("🎯 Current activeStep:", activeStep);
-    console.log("📋 Expected final step:", steps.length - 1);
-    console.log("⚠️  If activeStep is not 3 (Review), this is a BUG!");
-    console.log("💾 Updating employee with data:", data);
-    console.log("🎂 DateOfBirth in data:", data.DateOfBirth);
+    // console.log("💾 handleConfirmSave called - this should ONLY happen when user clicks Update Employee button");
+    // console.log("🎯 Current activeStep:", activeStep);
+    // console.log("📋 Expected final step:", steps.length - 1);
+    // console.log("⚠️  If activeStep is not 3 (Review), this is a BUG!");
+    // console.log("💾 Updating employee with data:", data);
+    // console.log("🎂 DateOfBirth in data:", data.DateOfBirth);
 
     // Add processBy field with current user information
     const processBy = currentUser?.FirstName && currentUser?.LastName
@@ -641,15 +641,15 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
         },
       });
       
-      console.log("✅ Employee updated successfully, refreshing table...");
+      // console.log("✅ Employee updated successfully, refreshing table...");
       
       // Call onDataChange callback to refresh parent component (stats, etc)
       if (onDataChange) {
         onDataChange();
-        console.log("📊 Parent component notified to refresh stats");
+        // console.log("📊 Parent component notified to refresh stats");
       }
       
-      console.log("🔄 Data refreshed successfully");
+      // console.log("🔄 Data refreshed successfully");
       handleClose();
       
     } catch (error) {
@@ -672,31 +672,31 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
   };
 
   const handleNext = async () => {
-    console.log("🚀 handleNext called, activeStep:", activeStep);
-    console.log("📋 Current steps.length:", steps.length);
-    console.log("🎯 Will this be the last step?", activeStep >= steps.length - 1);
+    // console.log("🚀 handleNext called, activeStep:", activeStep);
+    // console.log("📋 Current steps.length:", steps.length);
+    // console.log("🎯 Will this be the last step?", activeStep >= steps.length - 1);
     
     const fieldsForStep = getFieldsForStep(activeStep);
-    console.log("📝 Fields to validate:", fieldsForStep);
+    // console.log("📝 Fields to validate:", fieldsForStep);
 
     try {
       const isStepValid = await trigger(fieldsForStep);
-      console.log("✅ Validation result:", isStepValid);
+      // console.log("✅ Validation result:", isStepValid);
 
       if (isStepValid) {
         const nextStep = activeStep + 1;
-        console.log("🔄 Moving to step:", nextStep);
+        // console.log("🔄 Moving to step:", nextStep);
         setActiveStep(nextStep);
         
         // Add debugging for potential auto-submission
         if (nextStep >= steps.length) {
-          console.log("⚠️  Reached or exceeded max steps - this should not auto-submit");
+          // console.log("⚠️  Reached or exceeded max steps - this should not auto-submit");
         }
       } else {
-        console.log("❌ Validation failed, staying on current step");
+        // console.log("❌ Validation failed, staying on current step");
         fieldsForStep.forEach((field) => {
           if (errors[field]) {
-            console.log(`❌ Field ${field} has error:`, errors[field].message);
+            // console.log(`❌ Field ${field} has error:`, errors[field].message);
           }
         });
       }
@@ -710,10 +710,10 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
   };
 
   const handleOpen = () => {
-    console.log("🚪 Opening edit dialog with row data:", row);
-    console.log("🚪 Row Step value:", row?.Step);
-    console.log("🚪 Row JG value:", row?.JG);
-    console.log("🚪 Row SG value:", row?.SG);
+    // console.log("🚪 Opening edit dialog with row data:", row);
+    // console.log("🚪 Row Step value:", row?.Step);
+    // console.log("🚪 Row JG value:", row?.JG);
+    // console.log("🚪 Row SG value:", row?.SG);
     setIsOpen(true);
   };
 
@@ -851,12 +851,12 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
           <form onSubmit={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            console.log("🚫 Form submission prevented! This should not trigger handleSave");
+            // console.log("🚫 Form submission prevented! This should not trigger handleSave");
             return false;
           }} onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
-              console.log("🚫 Enter key submission prevented!");
+              // console.log("🚫 Enter key submission prevented!");
               return false;
             }
           }}>

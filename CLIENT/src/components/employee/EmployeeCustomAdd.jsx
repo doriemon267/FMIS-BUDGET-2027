@@ -494,13 +494,13 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
     formData.append("processBy", processBy);
 
     // Debug logging
-    console.log("Upload debug:", {
-      hasFile: !!selectedFile,
-      fileName: selectedFile?.name,
-      activeRegion: activeRegionValue,
-      activeRegionObject: activeRegion,
-      processBy
-    });
+    // console.log("Upload debug:", {
+      // hasFile: !!selectedFile,
+      // fileName: selectedFile?.name,
+      // activeRegion: activeRegionValue,
+      // activeRegionObject: activeRegion,
+      // processBy
+    // });
 
     setUploadError(null);
     setLoading(true);
@@ -2079,11 +2079,11 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
 
                     try {
                       const regionName = activeRegion.name || activeRegion.regionName;
-                      console.log('Attempting to download template for region:', regionName);
-                      console.log('Active region object:', activeRegion);
-                      console.log('User access level:', userAccessLevel);
-                      console.log('User department:', userDepartment);
-                      console.log('User division:', userDivision);
+                      // console.log('Attempting to download template for region:', regionName);
+                      // console.log('Active region object:', activeRegion);
+                      // console.log('User access level:', userAccessLevel);
+                      // console.log('User department:', userDepartment);
+                      // console.log('User division:', userDivision);
 
                       // Prepare hierarchical access parameters
                       const params = {
@@ -2121,14 +2121,14 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                         }
                       }
 
-                      console.log('Template download params:', params);
+                      // console.log('Template download params:', params);
 
                       const response = await api.get("/api/excel-upload/template", {
                         params,
                         responseType: 'blob'
                       });
 
-                      console.log('Template download response received');
+                      // console.log('Template download response received');
 
                       // Create download link
                       const url = window.URL.createObjectURL(new Blob([response.data]));

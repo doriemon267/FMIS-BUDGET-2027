@@ -178,8 +178,8 @@ const CapitalOutlayDetailsModal = ({
     const MINIMUM_AMOUNT = 50000; // ₱50,000 minimum requirement
 
     details.forEach((detail, index) => {
-      console.log(`--- Validating detail ${index} ---`);
-      console.log("Raw detail:", detail);
+      // console.log(`--- Validating detail ${index} ---`);
+      // console.log("Raw detail:", detail);
       
       // Validate particulars
       if (!detail.particulars || detail.particulars.trim() === "") {
@@ -190,7 +190,7 @@ const CapitalOutlayDetailsModal = ({
       // Validate amounts (must be non-negative)
       const incomeAmount = parseFloat(detail.income_amount) || 0;
       const subsidyAmount = parseFloat(detail.subsidy_amount) || 0;
-      console.log(`Parsed amounts - Income: ${incomeAmount}, Subsidy: ${subsidyAmount}`);
+      // console.log(`Parsed amounts - Income: ${incomeAmount}, Subsidy: ${subsidyAmount}`);
 
       if (incomeAmount < 0) {
         newErrors[`income_amount_${index}`] = "Income amount cannot be negative";
@@ -222,18 +222,18 @@ const CapitalOutlayDetailsModal = ({
     });
 
     setErrors(newErrors);
-    console.log("=== VALIDATION COMPLETE ===");
-    console.log("New errors found:", newErrors);
-    console.log("Is valid:", isValid);
-    console.log("Error count:", Object.keys(newErrors).length);
+    // console.log("=== VALIDATION COMPLETE ===");
+    // console.log("New errors found:", newErrors);
+    // console.log("Is valid:", isValid);
+    // console.log("Error count:", Object.keys(newErrors).length);
     return isValid;
   };
 
   const handleSave = async () => {
-    console.log("=== HANDLE SAVE CLICKED ===");
-    console.log("Details:", details);
-    console.log("Temporary Item:", temporaryItem);
-    console.log("Capital Outlay ID:", capitalOutlayId);
+    // console.log("=== HANDLE SAVE CLICKED ===");
+    // console.log("Details:", details);
+    // console.log("Temporary Item:", temporaryItem);
+    // console.log("Capital Outlay ID:", capitalOutlayId);
 
     if (editingDisabled) {
       toast.error(editingDisabledReason || "Capital outlay editing is currently disabled.");
@@ -241,11 +241,11 @@ const CapitalOutlayDetailsModal = ({
     }
     
     const validationResult = validateDetails();
-    console.log("Validation result:", validationResult);
-    console.log("OLD validation errors (from state - may be outdated):", errors);
+    // console.log("Validation result:", validationResult);
+    // console.log("OLD validation errors (from state - may be outdated):", errors);
     
     if (!validationResult) {
-      console.log("Validation failed, showing error toast");
+      // console.log("Validation failed, showing error toast");
       toast.error("Please fix the validation errors before saving");
       return;
     }
@@ -256,13 +256,13 @@ const CapitalOutlayDetailsModal = ({
 
     // UACS validation removed - not applicable for this database
     // All chart_of_accounts codes start with "1-", not "5-"
-    console.log("UACS code check skipped - accepting all codes from chart_of_accounts");
-    console.log("All validations passed, starting save process");
+    // console.log("UACS code check skipped - accepting all codes from chart_of_accounts");
+    // console.log("All validations passed, starting save process");
     setSaving(true);
     try {
       // Debug logging
-      console.log("Current user:", currentUser);
-      console.log("Details to save:", details);
+      // console.log("Current user:", currentUser);
+      // console.log("Details to save:", details);
       
       if (!currentUser) {
         toast.error("User session expired. Please refresh and try again.");
@@ -271,7 +271,7 @@ const CapitalOutlayDetailsModal = ({
       }
 
       const processBy = `${currentUser.FirstName} ${currentUser.LastName}`;
-      console.log("Process by:", processBy);
+      // console.log("Process by:", processBy);
       
       // If this is a temporary item, we need to create the capital outlay first
       if (temporaryItem && temporaryItem.isTemporary) {
@@ -347,7 +347,7 @@ const CapitalOutlayDetailsModal = ({
           proposalId: workflowRef,
         };
         
-        console.log("Sending details payload for new item:", detailsPayload);
+        // console.log("Sending details payload for new item:", detailsPayload);
         const detailsResponse = await api.post(`/api/capital-outlay/${newCapitalOutlayId}/details`, detailsPayload, { headers: headerConfig() });
 
         if (detailsResponse.data.success) {
@@ -407,8 +407,8 @@ const CapitalOutlayDetailsModal = ({
           proposalId: workflowRef,
         };
         
-        console.log("Sending details payload for existing item:", detailsPayload);
-        console.log("Capital outlay ID:", capitalOutlayId);
+        // console.log("Sending details payload for existing item:", detailsPayload);
+        // console.log("Capital outlay ID:", capitalOutlayId);
         const response = await api.post(`/api/capital-outlay/${capitalOutlayId}/details`, detailsPayload, { headers: headerConfig() });
 
         if (response.data.success) {
@@ -706,7 +706,7 @@ const CapitalOutlayDetailsModal = ({
         </Button>
         <Button
           onClick={() => {
-            console.log("Save button clicked! Disabled:", saving || loading);
+            // console.log("Save button clicked! Disabled:", saving || loading);
             handleSave();
           }}
           variant="contained"

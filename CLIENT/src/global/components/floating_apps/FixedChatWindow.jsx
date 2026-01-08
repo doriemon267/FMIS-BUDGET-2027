@@ -312,6 +312,28 @@ const FixedChatWindow = ({ children, onClose, onMinimize, minimized = false, zIn
     } catch (e) { /* ignore */ }
   }, [minimized]);
 
+  const portalContainerId = 'fmis-chat-portal';
+  // ensure portal container exists - MUST be before any conditional return to follow React hooks rules
+  useEffect(() => {
+    try {
+      let c = document.getElementById(portalContainerId);
+      if (!c) {
+        c = document.createElement('div');
+        c.id = portalContainerId;
+        c.setAttribute('data-fmis-portal', 'chat');
+        document.body.appendChild(c);
+      }
+    } catch (e) { /* ignore */ }
+  }, []);
+
+  const showBackdrop = !minimized && (isSmall || !isPinned) && dimOnOpen;
+  // Debug log: show states for troubleshooting dim issues - MUST be before any conditional return to follow React hooks rules
+  useEffect(() => {
+    try {
+      console.debug('[FixedChatWindow] render: isSmall=', isSmall, 'isPinned=', isPinned, 'minimized=', minimized, 'showBackdrop=', showBackdrop);
+    } catch (e) {}
+  }, [isSmall, isPinned, minimized, showBackdrop]);
+
   if (minimized) {
     return (
       <Fade in timeout={220}>
@@ -331,27 +353,6 @@ const FixedChatWindow = ({ children, onClose, onMinimize, minimized = false, zIn
       </Fade>
     );
   }
-  const portalContainerId = 'fmis-chat-portal';
-  // ensure portal container exists
-  useEffect(() => {
-    try {
-      let c = document.getElementById(portalContainerId);
-      if (!c) {
-        c = document.createElement('div');
-        c.id = portalContainerId;
-        c.setAttribute('data-fmis-portal', 'chat');
-        document.body.appendChild(c);
-      }
-    } catch (e) { /* ignore */ }
-  }, []);
-
-  const showBackdrop = !minimized && (isSmall || !isPinned) && dimOnOpen;
-  // Debug log: show states for troubleshooting dim issues
-  useEffect(() => {
-    try {
-      console.debug('[FixedChatWindow] render: isSmall=', isSmall, 'isPinned=', isPinned, 'minimized=', minimized, 'showBackdrop=', showBackdrop);
-    } catch (e) {}
-  }, [isSmall, isPinned, minimized, showBackdrop]);
 
   const inner = (
     <Fade in timeout={260}>

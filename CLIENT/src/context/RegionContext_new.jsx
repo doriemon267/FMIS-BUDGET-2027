@@ -2,6 +2,7 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 import api from '../config/api';
 import { toast } from 'react-toastify';
 import { REGIONS } from '../constants/regions';
+import { useUser } from './UserContext';
 
 // Create the context
 const RegionContext = createContext();
@@ -14,24 +15,13 @@ export const RegionProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Listen for currentUser changes from UserContext
+  // Listen for currentUser changes from UserContext (in-memory, do not read localStorage)
+  const { currentUser: ctxUser } = useUser();
   useEffect(() => {
-    // Try to get user from UserContext
-    const getUserFromContext = () => {
-      try {
-        // This is a workaround to access UserContext data
-        const userContext = JSON.parse(localStorage.getItem('currentUser') || 'null');
-        return userContext;
-      } catch {
-        return null;
-      }
-    };
-
-    const user = getUserFromContext();
-    if (user && user !== currentUser) {
-      setCurrentUserState(user);
+    if (ctxUser !== currentUser) {
+      setCurrentUserState(ctxUser);
     }
-  }, []);
+  }, [ctxUser]);
 
   // Fetch user's assigned regions when user changes
   useEffect(() => {

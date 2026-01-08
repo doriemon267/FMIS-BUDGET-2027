@@ -88,14 +88,14 @@ const CustomTable = ({
       const userRegion = currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
 
       // Debug hierarchical access information
-      console.log('🔍 Hierarchical Access Info:', {
-        userAccessLevel,
-        userDivision,
-        userDepartment,
-        userRegion,
-        hierarchicalAccess: currentUser?.hierarchicalAccess,
-        currentUser: currentUser ? 'User exists' : 'No user'
-      });
+      // console.log('🔍 Hierarchical Access Info:', {
+        // userAccessLevel,
+        // userDivision,
+        // userDepartment,
+        // userRegion,
+        // hierarchicalAccess: currentUser?.hierarchicalAccess,
+        // currentUser: currentUser ? 'User exists' : 'No user'
+      // });
 
   const resolveProcessByFilter = (user) => {
     if (!user) return null;
@@ -156,20 +156,20 @@ const CustomTable = ({
       // Add hierarchical access parameters based on user access level
       // IMPORTANT: For Division/Department level users, DO NOT send region parameter
       // The backend will enforce hierarchical restrictions automatically
-      console.log('🔍 User Access Debug:', {
-        userAccessLevel,
-        userDivision,
-        userDepartment,
-        userRegion,
-        currentUserHierarchicalAccess: currentUser?.hierarchicalAccess
-      });
+      // console.log('🔍 User Access Debug:', {
+        // userAccessLevel,
+        // userDivision,
+        // userDepartment,
+        // userRegion,
+        // currentUserHierarchicalAccess: currentUser?.hierarchicalAccess
+      // });
 
       if (userAccessLevel === 'DIVISION' && userDivision) {
         // Division level: restrict by division and also include the active region
         // (the server currently requires a region parameter for security)
         queryParams.Division = userDivision;
         queryParams.region = regionName;
-        console.log(`Division level user - restricting to division: ${userDivision} and region: ${regionName}`);
+        // console.log(`Division level user - restricting to division: ${userDivision} and region: ${regionName}`);
       } else if (userAccessLevel === 'DEPARTMENT' && userDepartment) {
         // Department level: restrict by department and include division + active region
         queryParams.Department = userDepartment;
@@ -177,19 +177,19 @@ const CustomTable = ({
           queryParams.Division = userDivision;
         }
         queryParams.region = regionName;
-        console.log(`Department level user - restricting to department: ${userDepartment}, division: ${userDivision} and region: ${regionName}`);
+        // console.log(`Department level user - restricting to department: ${userDepartment}, division: ${userDivision} and region: ${regionName}`);
       } else if (userAccessLevel === 'REGION' && userRegion) {
         // Region level: Can specify region (within their assigned regions)
         queryParams.region = userRegion;
-        console.log(`Region level user - using region: ${userRegion}`);
+        // console.log(`Region level user - using region: ${userRegion}`);
       } else {
         // Fallback: Only send region if we have hierarchical access info
         // For users without proper hierarchical setup, don't send region to avoid conflicts
         if (currentUser?.hierarchicalAccess?.scope) {
           queryParams.region = regionName;
-          console.log(`Fallback - using active region: ${regionName}`);
+          // console.log(`Fallback - using active region: ${regionName}`);
         } else {
-          console.log('No hierarchical access info - not sending region parameter');
+          // console.log('No hierarchical access info - not sending region parameter');
         }
       }
 
@@ -285,14 +285,14 @@ const CustomTable = ({
       setTotalRecords(response.data.totalRecords || 0);
       
       // Debug pagination data
-      console.log('📊 Pagination Debug:', {
-        totalRecords: response.data.totalRecords,
-        totalPages: response.data.totalPages,
-        currentPage: response.data.currentPage,
-        employeesCount: verifiedEmployees.length,
-        page,
-        rowsPerPage
-      });
+      // console.log('📊 Pagination Debug:', {
+        // totalRecords: response.data.totalRecords,
+        // totalPages: response.data.totalPages,
+        // currentPage: response.data.currentPage,
+        // employeesCount: verifiedEmployees.length,
+        // page,
+        // rowsPerPage
+      // });
       if (verifiedEmployees.length < response.data.employees.length) {
         const filteredCount = response.data.employees.length - verifiedEmployees.length;
         console.warn(`Filtered out ${filteredCount} employees due to hierarchical access restrictions`);
@@ -406,7 +406,7 @@ const CustomTable = ({
   };
 
   const handleChangePage = (event, newPage) => {
-    console.log('📄 Page change:', { from: page, to: newPage, totalRecords, rowsPerPage });
+    // console.log('📄 Page change:', { from: page, to: newPage, totalRecords, rowsPerPage });
     setPage(newPage);
     setSelectedRows([]);
     // Optional: Add loading state for page changes
@@ -415,7 +415,7 @@ const CustomTable = ({
 
   const handleChangeRowsPerPage = (event) => {
     const newRowsPerPage = parseInt(event.target.value, 10);
-    console.log('📏 Rows per page change:', { from: rowsPerPage, to: newRowsPerPage });
+    // console.log('📏 Rows per page change:', { from: rowsPerPage, to: newRowsPerPage });
 
     // Handle "All" option
     const actualRowsPerPage = newRowsPerPage === -1 ? totalRecords : newRowsPerPage;

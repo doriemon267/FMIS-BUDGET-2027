@@ -38,7 +38,7 @@ export const WorkflowNotificationProvider = ({ children }) => {
       try {
         const response = await api.get('/api/notifications');
         const data = response.data?.data || [];
-        console.log('[WorkflowNotificationContext] Fetched', data.length, 'notifications');
+        // console.log('[WorkflowNotificationContext] Fetched', data.length, 'notifications');
         return data;
       } catch (err) {
         console.error('[WorkflowNotificationContext] Fetch error:', err);

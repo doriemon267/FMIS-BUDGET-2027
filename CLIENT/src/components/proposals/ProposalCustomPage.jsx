@@ -383,19 +383,19 @@ const ProposalCustomPage = ({
             setCurrentProposalId(storedWorkflowRef);
           } else {
             // Proposal not found - clear storage
-            console.log(
-              "[ProposalCustomPage] Stored proposal not found, clearing reference"
-            );
+            // console.log(
+              // "[ProposalCustomPage] Stored proposal not found, clearing reference"
+            // );
             sessionStorage.removeItem("activeWorkflowRef");
             localStorage.removeItem("activeWorkflowRef");
             setCurrentProposalId(null);
           }
         } catch (error) {
           // Error fetching proposal (likely 404) - clear storage
-          console.log(
-            "[ProposalCustomPage] Error verifying stored proposal, clearing reference:",
-            error.message
-          );
+          // console.log(
+            // "[ProposalCustomPage] Error verifying stored proposal, clearing reference:",
+            // error.message
+          // );
           sessionStorage.removeItem("activeWorkflowRef");
           localStorage.removeItem("activeWorkflowRef");
           setCurrentProposalId(null);

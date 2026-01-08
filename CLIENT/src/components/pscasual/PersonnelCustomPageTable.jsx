@@ -394,12 +394,12 @@ const PSCasualCustomPageTable = ({
                 // Find the personnel record to get the salary amount
                 const personnel = filteredRows.find(r => r._id === id);
                 const salaryAmount = personnel?.Total || personnel?.total || personnel?.amount || personnel?.annualSalary || 0;
-                console.log("DEBUG: Marking personnel as charged-to-income:", {
-                  id,
-                  name: personnel?.employeeFullName,
-                  Total: personnel?.Total,
-                  salaryAmount
-                });
+                // console.log("DEBUG: Marking personnel as charged-to-income:", {
+                  // id,
+                  // name: personnel?.employeeFullName,
+                  // Total: personnel?.Total,
+                  // salaryAmount
+                // });
                 return { _id: id, chargedToIncomeAmount: salaryAmount };
               }),
               chargedToIncomeEligible: true,
@@ -411,7 +411,7 @@ const PSCasualCustomPageTable = ({
               defaultAmount: 0,
             };
 
-      console.log("DEBUG: Full payload being sent:", JSON.stringify(payload, null, 2));
+      // console.log("DEBUG: Full payload being sent:", JSON.stringify(payload, null, 2));
       const response = await updatePersonnelChargedToIncome(payload);
       
       // Check if there were any skipped items

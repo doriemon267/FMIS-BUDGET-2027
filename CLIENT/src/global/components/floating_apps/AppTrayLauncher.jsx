@@ -29,7 +29,17 @@ const AppTrayLauncher = () => {
 
   const [openApps, setOpenApps] = useState(() => {
     try {
-      const raw = localStorage.getItem("fmis_open_apps_v1");
+      // Prefer sessionStorage for ephemeral UI state (per-tab/window)
+      let raw = sessionStorage.getItem("fmis_open_apps_v1");
+      // Migrate from localStorage if sessionStorage is empty
+      if (!raw) {
+        const legacy = localStorage.getItem("fmis_open_apps_v1");
+        if (legacy) {
+          raw = legacy;
+          try { sessionStorage.setItem("fmis_open_apps_v1", legacy); } catch (e) {}
+          try { localStorage.removeItem("fmis_open_apps_v1"); } catch (e) {}
+        }
+      }
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       return Array.isArray(parsed)
@@ -100,7 +110,8 @@ const AppTrayLauncher = () => {
     console.debug("[AppTrayLauncher] openApps changed:", openApps.map((a) => a.id));
     try {
       const toSave = openApps.map(({ id, defaultPosition, minimized, key }) => ({ id, defaultPosition, minimized, key }));
-      localStorage.setItem("fmis_open_apps_v1", JSON.stringify(toSave));
+      // Persist in sessionStorage so state is per-tab and cleared on full browser close
+      try { sessionStorage.setItem("fmis_open_apps_v1", JSON.stringify(toSave)); } catch (e) { console.warn('[AppTrayLauncher] failed to persist open apps', e); }
     } catch (e) {
       console.warn("[AppTrayLauncher] failed to persist open apps", e);
     }

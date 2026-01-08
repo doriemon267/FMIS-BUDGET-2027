@@ -1,4 +1,4 @@
-﻿import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import CustomPage from "../../src/components/myproposal/ProposalCustomPage";
 import TextSearchable from "../global/components/TextSearchable";
 import {
@@ -30,12 +30,12 @@ const AllProposalsPage = () => {
 
   // Function to refresh the table data
   const refreshData = () => {
-    console.log('🔄 RefreshData called - attempting to refetch proposals');
+    // console.log('🔄 RefreshData called - attempting to refetch proposals');
     if (tableRef.current) {
-      console.log('✅ Table ref exists, calling refetch()');
+      // console.log('✅ Table ref exists, calling refetch()');
       tableRef.current.refetch();
     } else {
-      console.log('❌ Table ref is null - cannot refetch');
+      // console.log('❌ Table ref is null - cannot refetch');
     }
   };
 

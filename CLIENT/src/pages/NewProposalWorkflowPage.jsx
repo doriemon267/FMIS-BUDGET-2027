@@ -1385,21 +1385,21 @@ const NewProposalWorkflowPage = () => {
         "Returned",
       ];
       
-      console.log('✅ User is BUDGET PREPARER. Status check:', {
-        currentStatus,
-        isDraft: draftStatusVariants.includes(currentStatus),
-        variants: draftStatusVariants
-      });
+      // console.log('✅ User is BUDGET PREPARER. Status check:', {
+        // currentStatus,
+        // isDraft: draftStatusVariants.includes(currentStatus),
+        // variants: draftStatusVariants
+      // });
       
       if (draftStatusVariants.includes(currentStatus)) {
         // If the current user is a PREPARER assigned at OFFICE level, show Submit to Approver label
         const assignmentLevel = currentUser?.hierarchicalAccess?.assignmentLevel || currentUser?.assignmentLevel;
         const isOfficePreparer = assignmentLevel && String(assignmentLevel).toUpperCase() === 'OFFICE';
-        console.log('📤 Adding Submit action:', {
-          label: isOfficePreparer ? "Submit to Approver" : "Submit to Budget Reviewer",
-          assignmentLevel,
-          isOfficePreparer
-        });
+        // console.log('📤 Adding Submit action:', {
+          // label: isOfficePreparer ? "Submit to Approver" : "Submit to Budget Reviewer",
+          // assignmentLevel,
+          // isOfficePreparer
+        // });
         actions.push({
           label: isOfficePreparer ? "Submit to Approver" : "Submit to Budget Reviewer",
           value: isOfficePreparer ? "submit-to-approver" : "submit-to-reviewer",
@@ -1577,14 +1577,14 @@ const NewProposalWorkflowPage = () => {
 
     // Debug logging for filter issues
     if (filterStatus !== "all" && !matchesFilter && proposal) {
-      console.log(`Filter debug - filterStatus: ${filterStatus}, filterDbStatus: ${filterDbStatus}, proposal.status: ${proposal.status}`);
+      // console.log(`Filter debug - filterStatus: ${filterStatus}, filterDbStatus: ${filterDbStatus}, proposal.status: ${proposal.status}`);
     }
 
     return matchesSearch && matchesFilter;
   });
 
   useEffect(() => {
-    console.log("Capital Outlay Data:", proposalDetails?.capitalOutlay);
+    // console.log("Capital Outlay Data:", proposalDetails?.capitalOutlay);
   }, [proposalDetails]);
   // Render proposal status chip
   const renderStatusChip = (status) => {

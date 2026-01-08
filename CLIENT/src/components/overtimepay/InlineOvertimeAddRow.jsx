@@ -160,9 +160,9 @@ const InlineOvertimeAddRow = ({ refreshData, employeeOptions }) => {
 
   const mutation = useMutation({
     mutationFn: async (data) => {
-      console.log('🚀 About to send request with data:', JSON.stringify(data, null, 2));
+      // console.log('🚀 About to send request with data:', JSON.stringify(data, null, 2));
       const response = await api.post("/overtime-pay", data);
-      console.log('✅ Response received:', response.data);
+      // console.log('✅ Response received:', response.data);
       return response;
     },
     onSuccess: () => {
@@ -196,13 +196,13 @@ const InlineOvertimeAddRow = ({ refreshData, employeeOptions }) => {
     }
     
     // Debug log
-    console.log('Selected Employee Data:', {
-      employeeFullName: selectedEmployee.employeeFullName,
-      monthlySalary: selectedEmployee.monthlySalary,
-      annualSalary: selectedEmployee.annualSalary,
-      calculatedMonthlySalary: monthlySalary,
-      allFields: selectedEmployee
-    });
+    // console.log('Selected Employee Data:', {
+      // employeeFullName: selectedEmployee.employeeFullName,
+      // monthlySalary: selectedEmployee.monthlySalary,
+      // annualSalary: selectedEmployee.annualSalary,
+      // calculatedMonthlySalary: monthlySalary,
+      // allFields: selectedEmployee
+    // });
     
     // Validate monthly salary
     if (!monthlySalary || isNaN(monthlySalary) || monthlySalary <= 0) {
@@ -229,14 +229,14 @@ const InlineOvertimeAddRow = ({ refreshData, employeeOptions }) => {
       division: hierarchical.accessibleDivisions?.[0] || currentUser?.divisionName || null,
     };
     
-    console.log('Payload being sent - Full details:');
-    console.log('  employeeFullName:', payload.employeeFullName);
-    console.log('  monthlySalary:', payload.monthlySalary);
-    console.log('  weekdayHours:', payload.weekdayHours);
-    console.log('  weekendHours:', payload.weekendHours);
-    console.log('  fiscalYear:', payload.fiscalYear);
-    console.log('  budgetType:', payload.budgetType);
-    console.log('  Full payload:', JSON.stringify(payload));
+    // console.log('Payload being sent - Full details:');
+    // console.log('  employeeFullName:', payload.employeeFullName);
+    // console.log('  monthlySalary:', payload.monthlySalary);
+    // console.log('  weekdayHours:', payload.weekdayHours);
+    // console.log('  weekendHours:', payload.weekendHours);
+    // console.log('  fiscalYear:', payload.fiscalYear);
+    // console.log('  budgetType:', payload.budgetType);
+    // console.log('  Full payload:', JSON.stringify(payload));
     mutation.mutate(payload);
   };
 

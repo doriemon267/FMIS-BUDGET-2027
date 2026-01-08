@@ -240,10 +240,10 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
         let items = [];
         if (proposalId) {
           const params = { fiscalYear, budgetType, proposalId, region: regionFilter };
-          console.log('[IncomeTable] /income/getByParams with:', params);
+          // console.log('[IncomeTable] /income/getByParams with:', params);
           const respByProposal = await api.get('/income/getByParams', { params });
           items = Array.isArray(respByProposal.data) ? respByProposal.data : [];
-          console.log('[IncomeTable] /income/getByParams returned:', items.length);
+          // console.log('[IncomeTable] /income/getByParams returned:', items.length);
         }
 
         // If proposal-linked query empty, fall back to FY/Budget/Region list
@@ -252,12 +252,12 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
             params: { fiscalYear, budgetType, region: regionFilter }
           });
           items = Array.isArray(response.data) ? response.data : [];
-          console.log('[IncomeTable] /income fallback returned:', items.length);
+          // console.log('[IncomeTable] /income fallback returned:', items.length);
         }
 
         const filteredItems = items.filter(item => checkRegionMatch(item));
-        console.log('[IncomeTable] Scope:', { fiscalYear, budgetType, region: regionFilter });
-        console.log('[IncomeTable] After region filter:', filteredItems.length);
+        // console.log('[IncomeTable] Scope:', { fiscalYear, budgetType, region: regionFilter });
+        // console.log('[IncomeTable] After region filter:', filteredItems.length);
 
         // Fallback: if region filter yields zero but there are items, return unfiltered items
         if (filteredItems.length === 0 && items.length > 0) {
@@ -496,11 +496,11 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
 
   const groupedItems = useMemo(() => {
     // Scope debug: show active filters
-    console.log('[IncomeTable] Scope params:', {
-      fiscalYear,
-      budgetType,
-      regionFilter
-    });
+    // console.log('[IncomeTable] Scope params:', {
+    //   fiscalYear,
+    //   budgetType,
+    //   regionFilter
+    // });
     const categoryMap = new Map();
     incomeCategories.forEach(category => {
       if (!category?.incomeCategoryName || category.incomeCategoryName.toLowerCase() === 'test') return;
@@ -556,16 +556,16 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
     });
 
     const postCount = Array.from(categoryMap.values()).reduce((acc, cat) => acc + (Array.isArray(cat.items) ? cat.items.length : 0), 0);
-    console.log('[IncomeTable] Region filter counts:', { before: preCount, after: postCount });
+    // console.log('[IncomeTable] Region filter counts:', { before: preCount, after: postCount });
     if (postCount > 0) {
       const firstCat = Array.from(categoryMap.keys())[0];
       const sampleItem = firstCat ? categoryMap.get(firstCat)?.items?.[0] : null;
       if (sampleItem) {
-        console.log('[IncomeTable] Sample matched item:', {
-          amount: sampleItem.amount,
-          category: typeof sampleItem.incomecategory === 'object' ? (sampleItem.incomecategory.name || sampleItem.incomecategory.incomeCategoryName) : sampleItem.incomecategory,
-          region: sampleItem.region || sampleItem.Region || sampleItem.meta?.region
-        });
+        // console.log('[IncomeTable] Sample matched item:', {
+        //   amount: sampleItem.amount,
+        //   category: typeof sampleItem.incomecategory === 'object' ? (sampleItem.incomecategory.name || sampleItem.incomecategory.incomeCategoryName) : sampleItem.incomecategory,
+        //   region: sampleItem.region || sampleItem.Region || sampleItem.meta?.region
+        // });
       }
     }
 

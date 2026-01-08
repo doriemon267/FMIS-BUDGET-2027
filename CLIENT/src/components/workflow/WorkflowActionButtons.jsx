@@ -89,23 +89,23 @@ export const OfficeVerifyButton = ({ row, refreshData, disabled }) => {
   const handleVerify = async () => {
     setLoading(true);
     try {
-      console.log('🔧 Starting verification for:', {
-        rowId: row._id,
-        status: row.status,
-        workflowLevel: row.workflowLevel,
-        fullRow: row
-      });
+      // console.log('🔧 Starting verification for:', {
+        // rowId: row._id,
+        // status: row.status,
+        // workflowLevel: row.workflowLevel,
+        // fullRow: row
+      // });
 
       const modelType = determineModelType(row);
-      console.log('🔧 Model type determined:', modelType);
+      // console.log('🔧 Model type determined:', modelType);
 
       // Detailed model type analysis
-      console.log('🔧 Model detection analysis:', {
-        hasSalaryGrade: !!row.salaryGrade,
-        hasUacsCode: !!row.uacsCode,
-        hasProjectTitle: !!row.projectTitle,
-        detectedType: modelType
-      });
+      // console.log('🔧 Model detection analysis:', {
+        // hasSalaryGrade: !!row.salaryGrade,
+        // hasUacsCode: !!row.uacsCode,
+        // hasProjectTitle: !!row.projectTitle,
+        // detectedType: modelType
+      // });
 
       const response = await api.post('/api/status-workflow/verify-by-office', {
         modelType,
@@ -113,11 +113,11 @@ export const OfficeVerifyButton = ({ row, refreshData, disabled }) => {
         action: 'verify'
       });
 
-      console.log('✅ Verification successful:', response.data);
+      // console.log('✅ Verification successful:', response.data);
 
       if (response.data.modifiedCount > 0) {
         const message = `✅ Successfully verified ${response.data.modifiedCount} proposal(s)! Status updated to: Forwarded to Officer`;
-        console.log('✅', message);
+        // console.log('✅', message);
 
         // Show global clickable notification to open All Proposals
         try {
@@ -139,12 +139,12 @@ export const OfficeVerifyButton = ({ row, refreshData, disabled }) => {
       if (refreshData) {
         // Immediate refresh
         refreshData();
-        console.log('🔄 Data refresh triggered immediately');
+        // console.log('🔄 Data refresh triggered immediately');
 
         // Also do a delayed refresh to ensure data is updated
         setTimeout(() => {
           refreshData();
-          console.log('🔄 Secondary data refresh triggered');
+          // console.log('🔄 Secondary data refresh triggered');
         }, 1000);
 
         // If data still doesn't refresh after 3 seconds, suggest page reload

@@ -58,7 +58,7 @@ const CreateCategoryGroupDialog = ({ open, onClose, onSuccess, editingGroup = nu
     queryFn: async () => {
       const response = await api.get("/settings/fiscal-years");
       const result = response.data.data || response.data || [];
-      console.log("Fetched fiscal years:", result);
+      // console.log("Fetched fiscal years:", result);
       return result;
     },
     enabled: open,
@@ -68,16 +68,16 @@ const CreateCategoryGroupDialog = ({ open, onClose, onSuccess, editingGroup = nu
   const createGroup = useMutation({
     mutationFn: async (data) => {
       const fiscalYearIds = selectedFiscalYears.map(fy => fy._id);
-      console.log("Creating group with fiscalYears:", fiscalYearIds);
+      // console.log("Creating group with fiscalYears:", fiscalYearIds);
       const response = await api.post("/income-category-groups", {
         ...data,
         fiscalYears: fiscalYearIds,
       });
-      console.log("Create group response:", response.data);
+      // console.log("Create group response:", response.data);
       return response.data;
     },
     onSuccess: (response) => {
-      console.log("Group created successfully:", response);
+      // console.log("Group created successfully:", response);
       queryClient.invalidateQueries({ queryKey: ["groupedCategories"] });
       toast.success("Category group created successfully");
       handleClose();
@@ -93,7 +93,7 @@ const CreateCategoryGroupDialog = ({ open, onClose, onSuccess, editingGroup = nu
   const updateGroup = useMutation({
     mutationFn: async (data) => {
       const fiscalYearIds = selectedFiscalYears.map(fy => fy._id);
-      console.log("Updating group with fiscalYears:", fiscalYearIds);
+      // console.log("Updating group with fiscalYears:", fiscalYearIds);
       const response = await api.put(
         `/income-category-groups/${editingGroup._id}`,
         {
@@ -101,11 +101,11 @@ const CreateCategoryGroupDialog = ({ open, onClose, onSuccess, editingGroup = nu
           fiscalYears: fiscalYearIds,
         }
       );
-      console.log("Update group response:", response.data);
+      // console.log("Update group response:", response.data);
       return response.data;
     },
     onSuccess: (response) => {
-      console.log("Group updated successfully:", response);
+      // console.log("Group updated successfully:", response);
       queryClient.invalidateQueries({ queryKey: ["groupedCategories"] });
       toast.success("Category group updated successfully");
       handleClose();
@@ -145,7 +145,7 @@ const CreateCategoryGroupDialog = ({ open, onClose, onSuccess, editingGroup = nu
       const updated = isSelected 
         ? prev.filter((item) => item._id !== fy._id)
         : [...prev, fy];
-      console.log("Toggled fiscal year, selected now:", updated);
+      // console.log("Toggled fiscal year, selected now:", updated);
       return updated;
     });
   };

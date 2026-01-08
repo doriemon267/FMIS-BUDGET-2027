@@ -214,12 +214,12 @@ const PermanentCustomTable = ({
 
   // Row selection handlers - Select ALL records, not just visible ones
   const handleSelectAllClick = async (event) => {
-    console.log('[SelectAll] Checkbox clicked, checked:', event.target.checked);
+    // console.log('[SelectAll] Checkbox clicked, checked:', event.target.checked);
     
     if (event.target.checked) {
       try {
         // Fetch all permanent personnel records (with full data)
-        console.log('[SelectAll] Fetching all records...');
+        // console.log('[SelectAll] Fetching all records...');
         const response = await api.get(apiPath, {
           params: {
             statusOfAppointment: "PERMANENT",
@@ -243,7 +243,7 @@ const PermanentCustomTable = ({
         }
         
         const allIds = allRecords.map(row => row._id);
-        console.log('[SelectAll] Selected ' + allIds.length + ' total records');
+        // console.log('[SelectAll] Selected ' + allIds.length + ' total records');
         
         // CRITICAL: Also update the internal tableData so that when marking as charged-to-income,
         // the backend can properly resolve chargedToIncomeAmount from record.Total
@@ -252,7 +252,7 @@ const PermanentCustomTable = ({
           onRowSelectionChange(allIds);
           // Also update table data context if available
           if (setFilteredRows) {
-            console.log('[SelectAll] Updating filtered rows with all fetched records for amount resolution');
+            // console.log('[SelectAll] Updating filtered rows with all fetched records for amount resolution');
             setFilteredRows(allRecords);
           }
         }
@@ -260,13 +260,13 @@ const PermanentCustomTable = ({
         console.error("[SelectAll] Error fetching all records:", error);
         // Fallback to visible data
         const newSelected = tableData.map((row) => row._id);
-        console.log('[SelectAll] Fallback: selected ' + newSelected.length + ' visible records');
+        // console.log('[SelectAll] Fallback: selected ' + newSelected.length + ' visible records');
         if (onRowSelectionChange) {
           onRowSelectionChange(newSelected);
         }
       }
     } else {
-      console.log('[SelectAll] Deselecting all');
+      // console.log('[SelectAll] Deselecting all');
       if (onRowSelectionChange) {
         onRowSelectionChange([]);
       }

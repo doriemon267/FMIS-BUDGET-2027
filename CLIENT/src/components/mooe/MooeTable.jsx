@@ -1172,12 +1172,12 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
     }
 
     // Save all MOOE data including IAs O&M Cost entries
-    console.log('📤 MOOE SAVE DEBUG:', {
-      entriesCount: payload.entries.length,
-      firstEntry: payload.entries[0],
-      draftInputsState: Object.keys(draftInputs).length,
-      proposalId: payload.proposalId
-    });
+    // console.log('📤 MOOE SAVE DEBUG:', {
+      // entriesCount: payload.entries.length,
+      // firstEntry: payload.entries[0],
+      // draftInputsState: Object.keys(draftInputs).length,
+      // proposalId: payload.proposalId
+    // });
     
     saveMutation.mutate(payload, {
       onSuccess: () => {

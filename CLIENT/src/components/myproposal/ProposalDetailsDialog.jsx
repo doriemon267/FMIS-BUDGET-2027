@@ -19,6 +19,7 @@ import {
 } from '@mui/material';
 import { prettyRole } from '../../utils/role-utils';
 import { getUserInfo } from '../../utils/auth';
+import { useUser } from '../../context/UserContext';
 import api from '../../config/api';
 import { getProposalForEdit, getComparisonData } from '../../services/budgetOfficerEditService';
 import BudgetOfficerEditView from './BudgetOfficerEditView';
@@ -70,13 +71,15 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     const a = (userInfo?.workflowRoles || []).map((role) => String(role || '').toLowerCase());
     const b = (userInfo?.workflowRoles || []).map((role) => String(role || '').toLowerCase());
     const result = Array.from(new Set([...(a || []), ...(b || [])]));
-    console.log('🔍 normalizedWorkflowRoles computed:', {
-      fromWorkflowRoles: a,
-      fromHierarchical: b,
-      combined: result
-    });
+    // console.log('🔍 normalizedWorkflowRoles computed:', {
+      // fromWorkflowRoles: a,
+      // fromHierarchical: b,
+      // combined: result
+    // });
     return result;
   }, [userInfo]);
+
+  const { currentUser } = useUser();
 
   const normalizedPrimaryRoles = useMemo(() => {
     const collected = [];
@@ -129,13 +132,13 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
       role.includes('APPROVER')
     );
     const result = hasWorkflowRole || hasPrimaryRole;
-    console.log('🔍 isDivisionApprover check:', {
-      hasWorkflowRole,
-      hasPrimaryRole,
-      normalizedWorkflowRoles,
-      normalizedPrimaryRoles,
-      result
-    });
+    // console.log('🔍 isDivisionApprover check:', {
+      // hasWorkflowRole,
+      // hasPrimaryRole,
+      // normalizedWorkflowRoles,
+      // normalizedPrimaryRoles,
+      // result
+    // });
     return result;
   }, [userInfo, normalizedWorkflowRoles, normalizedPrimaryRoles]);
 
@@ -152,9 +155,9 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     );
     const result = hasWorkflowRole || hasPrimaryRole;
     if (result) {
-      console.log('✅ isReviewer: TRUE', { hasWorkflowRole, hasPrimaryRole, normalizedWorkflowRoles, normalizedPrimaryRoles });
+      // console.log('✅ isReviewer: TRUE', { hasWorkflowRole, hasPrimaryRole, normalizedWorkflowRoles, normalizedPrimaryRoles });
     } else {
-      console.log('ℹ️ isReviewer: FALSE', { hasWorkflowRole, hasPrimaryRole, normalizedWorkflowRoles, normalizedPrimaryRoles });
+      // console.log('ℹ️ isReviewer: FALSE', { hasWorkflowRole, hasPrimaryRole, normalizedWorkflowRoles, normalizedPrimaryRoles });
     }
     return result;
   }, [userInfo, normalizedWorkflowRoles, normalizedPrimaryRoles]);
@@ -241,18 +244,10 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
       userInfo?.userRole
     ].filter(Boolean).map(role => String(role).toUpperCase());
     
-    // Also check localStorage currentUser roles (for dev headers)
-    try {
-      const currentUserStr = localStorage.getItem('currentUser');
-      if (currentUserStr) {
-        const currentUser = JSON.parse(currentUserStr);
-        if (currentUser?.Roles) {
-          const localRoles = Array.isArray(currentUser.Roles) ? currentUser.Roles : [currentUser.Roles];
-          allRoles.push(...localRoles.map(role => String(role).toUpperCase()));
-        }
-      }
-    } catch (e) {
-      // Ignore localStorage errors
+    // Also include roles from the in-memory `currentUser` (do not read localStorage)
+    if (currentUser?.Roles) {
+      const localRoles = Array.isArray(currentUser.Roles) ? currentUser.Roles : [currentUser.Roles];
+      allRoles.push(...localRoles.map(role => String(role).toUpperCase()));
     }
     
     return allRoles.includes('BUDGET PLANNING ANALYST') || 
@@ -307,15 +302,15 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     const fetchUserInfo = async () => {
       try {
         const info = await getUserInfo();
-        console.log('📋 ProposalDetailsDialog - User Info Fetched:', {
-          fullUserInfo: info,
-          workflowRoles: info?.workflowRoles,
-          roles: info?.roles,
-          Roles: info?.Roles,
-          role: info?.role,
-          assignmentLevel: info?.assignmentLevel,
-          hierarchicalAccess: info
-        });
+        // console.log('📋 ProposalDetailsDialog - User Info Fetched:', {
+          // fullUserInfo: info,
+          // workflowRoles: info?.workflowRoles,
+          // roles: info?.roles,
+          // Roles: info?.Roles,
+          // role: info?.role,
+          // assignmentLevel: info?.assignmentLevel,
+          // hierarchicalAccess: info
+        // });
         setUserInfo(info);
       } catch (error) {
         console.error('Failed to get user info:', error);
@@ -328,25 +323,25 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     if (!proposalKey || !userInfo) return;
 
     // Debug logging for role detection
-    console.log('🔍 ProposalDetailsDialog Role Detection:', {
-      isBudgetReviewer: isDivisionApprover,
-      isBudgetOfficer,
-      isPreparer,
-      isReviewer,
-      isManagerLevel,
-      isApprover,
-      normalizedPrimaryRoles,
-      normalizedAssignmentLevel,
-      normalizedWorkflowRoles,
-      userInfo,
-      forceRefresh
-    });
+    // console.log('🔍 ProposalDetailsDialog Role Detection:', {
+      // isBudgetReviewer: isDivisionApprover,
+      // isBudgetOfficer,
+      // isPreparer,
+      // isReviewer,
+      // isManagerLevel,
+      // isApprover,
+      // normalizedPrimaryRoles,
+      // normalizedAssignmentLevel,
+      // normalizedWorkflowRoles,
+      // userInfo,
+      // forceRefresh
+    // });
 
     const cache = cacheRef.current;
     
     // CRITICAL FIX: If forceRefresh is true, immediately invalidate cache BEFORE anything else
     if (forceRefresh) {
-      console.log('🔄 Force refresh requested - CLEARING all cache for proposal:', proposalKey);
+      // console.log('🔄 Force refresh requested - CLEARING all cache for proposal:', proposalKey);
       // Clear all cached data completely
       cache.clear();
       // Also explicitly set state to null to force re-render
@@ -377,7 +372,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
   const requiresReadOnlyData = isReadOnlyMode;
 
     if (!isBudgetOfficer && !isPreparer && !isDivisionApprover && !effectiveBudgetReviewer && !isManagerLevel && !isApprover && !isBudgetPlanningAnalystRole && !requiresReadOnlyData) {
-      console.log('❌ No permission to view proposal details');
+      // console.log('❌ No permission to view proposal details');
       setLoading(false);
       setRefreshing(false);
       return;
@@ -406,22 +401,22 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
       // APPROVER, PREPARER, and REVIEWER fetch raw proposal data
       // BUDGET PLANNING ANALYST should fetch via getProposalForEdit to include approver edits/comparisons
       if (isBudgetPlanningAnalystRole) {
-        console.log('🔎 Fetching proposal FOR EDIT for ANALYST (includes approver edits if any)', { proposalId: proposalKey });
+        // console.log('🔎 Fetching proposal FOR EDIT for ANALYST (includes approver edits if any)', { proposalId: proposalKey });
         requests.push(
           (async () => {
             try {
               const response = await getProposalForEdit(proposalKey, { signal: controller.signal });
               const data = response?.data || response;
-              console.log('✅ Analyst proposal-for-edit loaded:', {
-                hasExistingEdit: data?.hasExistingEdit,
-                editStatus: data?.editStatus,
-                counts: {
-                  income: data?.income?.length,
-                  personnelServices: data?.personnelServices?.length,
-                  mooe: data?.mooe?.length,
-                  capitalOutlay: data?.capitalOutlay?.length
-                }
-              });
+              // console.log('✅ Analyst proposal-for-edit loaded:', {
+                // hasExistingEdit: data?.hasExistingEdit,
+                // editStatus: data?.editStatus,
+                // counts: {
+                  // income: data?.income?.length,
+                  // personnelServices: data?.personnelServices?.length,
+                  // mooe: data?.mooe?.length,
+                  // capitalOutlay: data?.capitalOutlay?.length
+                // }
+              // });
               setProposalData(data);
               cacheUpdate.proposalData = data;
             } catch (err) {
@@ -453,14 +448,14 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
           })()
         );
       } else if (isDivisionApprover || isPreparer || effectiveBudgetReviewer) {
-        console.log('✅✅✅ BUDGET REVIEWER DATA FETCH TRIGGERED', {
-          isDivisionApprover,
-          isPreparer,
-          isBudgetReviewerRole,
-          effectiveBudgetReviewer,
-          proposalId: proposalKey,
-          timestamp: new Date().toISOString()
-        });
+        // console.log('✅✅✅ BUDGET REVIEWER DATA FETCH TRIGGERED', {
+          // isDivisionApprover,
+          // isPreparer,
+          // isBudgetReviewerRole,
+          // effectiveBudgetReviewer,
+          // proposalId: proposalKey,
+          // timestamp: new Date().toISOString()
+        // });
         requests.push(
           (async () => {
             try {
@@ -473,7 +468,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                 region: proposal?.region,
                 // Status removed: Line items retain original status when proposal status changes
               };
-              console.log('📋 Fetching with params (status excluded for reviewer):', params);
+              // console.log('📋 Fetching with params (status excluded for reviewer):', params);
               const [incomeResp, psResp, mooeResp, coResp] = await Promise.all([
                 api.get('/income/getByParams', { params, signal: controller.signal }),
                 api.get('/getpersonnels/byParams', { params, signal: controller.signal }),
@@ -487,18 +482,18 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                 mooe: normalize(mooeResp),
                 capitalOutlay: normalize(coResp)
               };
-              console.log('✅ Raw proposal data fetched successfully:', {
-                incomeCount: rawData.income?.length || 0,
-                psCount: rawData.personnelServices?.length || 0,
-                mooeCount: rawData.mooe?.length || 0,
-                coCount: rawData.capitalOutlay?.length || 0,
-                isBudgetReviewerRole,
-                rawData
-              });
-              console.log('🔥🔥🔥 SETTING proposalData for BUDGET REVIEWER:', {
-                hasData: !!rawData,
-                timestamp: new Date().toISOString()
-              });
+              // console.log('✅ Raw proposal data fetched successfully:', {
+                // incomeCount: rawData.income?.length || 0,
+                // psCount: rawData.personnelServices?.length || 0,
+                // mooeCount: rawData.mooe?.length || 0,
+                // coCount: rawData.capitalOutlay?.length || 0,
+                // isBudgetReviewerRole,
+                // rawData
+              // });
+              // console.log('🔥🔥🔥 SETTING proposalData for BUDGET REVIEWER:', {
+                // hasData: !!rawData,
+                // timestamp: new Date().toISOString()
+              // });
               setProposalData(rawData);
               cacheUpdate.proposalData = rawData;
             } catch (err) {
@@ -508,11 +503,11 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
           })()
         );
       } else if (isBudgetOfficer || isManagerLevel || requiresReadOnlyData) {
-        console.log('📝 Fetching Budget Officer Edit data for BUDGET_OFFICER/MANAGER', {
-          isBudgetOfficer,
-          isManagerLevel,
-          requiresReadOnlyData
-        });
+        // console.log('📝 Fetching Budget Officer Edit data for BUDGET_OFFICER/MANAGER', {
+          // isBudgetOfficer,
+          // isManagerLevel,
+          // requiresReadOnlyData
+        // });
         requests.push(
           (async () => {
             try {
@@ -591,7 +586,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
             .catch((err) => {
               // Silently handle 404 errors (no edits found yet)
               if (err?.response?.status === 404) {
-                console.log('ℹ️ No comparison data available yet (no edits found)');
+                // console.log('ℹ️ No comparison data available yet (no edits found)');
                 setComparisonData(null);
                 cacheUpdate.comparisonData = null;
               } else {
@@ -652,13 +647,13 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
     
     // Clear the cache for this proposal to ensure fresh data on next open
     if (proposalKey && cacheRef.current) {
-      console.log('🔄 ProposalDetailsDialog - Clearing cache for proposal:', proposalKey);
+      // console.log('🔄 ProposalDetailsDialog - Clearing cache for proposal:', proposalKey);
       cacheRef.current.delete(proposalKey);
     }
     
     // Trigger parent refresh if provided (e.g., to reload table after edits)
     if (onRefresh && typeof onRefresh === 'function') {
-      console.log('🔄 ProposalDetailsDialog - Calling onRefresh after close');
+      // console.log('🔄 ProposalDetailsDialog - Calling onRefresh after close');
       onRefresh();
     }
     
@@ -926,24 +921,24 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
   
   // Debug: Log shouldShowReadOnlyTables calculation for Budget Reviewer
   if (isBudgetReviewerRole) {
-    console.log('📊 shouldShowReadOnlyTables CALCULATION:', {
-      condition1_notReadOnly: !isReadOnlyMode,
-      condition2_hasProposalData: !!proposalData,
-      condition3_notOfficerReadOnly: !officerReadOnlyTables,
-      condition4A_approver: (!approverCanEditNow && isApprover) && !hasComparisonData,
-      condition4B_reviewer: effectiveBudgetReviewer && !canRenderEditView,
-      FINAL_shouldShowReadOnlyTables: shouldShowReadOnlyTables,
-      '---': '---',
-      effectiveBudgetReviewer,
-      isBudgetReviewerRole,
-      canRenderEditView,
-      reviewerCanEditNow,
-      isReadOnlyMode,
-      proposalData: proposalData ? `{income: ${proposalData.income?.length}, ps: ${proposalData.personnelServices?.length}, mooe: ${proposalData.mooe?.length}, co: ${proposalData.capitalOutlay?.length}}` : 'NULL',
-      officerReadOnlyTables,
-      proposal_status: proposal?.status,
-      proposal_workflowLevel: proposal?.workflowLevel
-    });
+    // console.log('📊 shouldShowReadOnlyTables CALCULATION:', {
+      // condition1_notReadOnly: !isReadOnlyMode,
+      // condition2_hasProposalData: !!proposalData,
+      // condition3_notOfficerReadOnly: !officerReadOnlyTables,
+      // condition4A_approver: (!approverCanEditNow && isApprover) && !hasComparisonData,
+      // condition4B_reviewer: effectiveBudgetReviewer && !canRenderEditView,
+      // FINAL_shouldShowReadOnlyTables: shouldShowReadOnlyTables,
+      // '---': '---',
+      // effectiveBudgetReviewer,
+      // isBudgetReviewerRole,
+      // canRenderEditView,
+      // reviewerCanEditNow,
+      // isReadOnlyMode,
+      // proposalData: proposalData ? `{income: ${proposalData.income?.length}, ps: ${proposalData.personnelServices?.length}, mooe: ${proposalData.mooe?.length}, co: ${proposalData.capitalOutlay?.length}}` : 'NULL',
+      // officerReadOnlyTables,
+      // proposal_status: proposal?.status,
+      // proposal_workflowLevel: proposal?.workflowLevel
+    // });
   }
 
   return (
@@ -1231,17 +1226,17 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                     try {
                       const updatedProposal = await api.get(`/proposals/${proposalKey}`);
                       if (updatedProposal?.data) {
-                        console.log('✅ Updated proposal fetched:', { 
-                          oldStatus: displayedProposal?.status, 
-                          newStatus: updatedProposal.data.status 
-                        });
+                        // console.log('✅ Updated proposal fetched:', { 
+                          // oldStatus: displayedProposal?.status, 
+                          // newStatus: updatedProposal.data.status 
+                        // });
                         setDisplayedProposal(updatedProposal.data);
                         
                         // Check if status actually changed
                         const statusChanged = updatedProposal.data.status !== displayedProposal?.status;
                         
                         if (statusChanged) {
-                          console.log('📤 Status changed - this was a SUBMIT operation, closing dialog');
+                          // console.log('📤 Status changed - this was a SUBMIT operation, closing dialog');
                           // Refresh all data after submission since status changed
                           loadData(true);
                           
@@ -1250,19 +1245,19 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                             handleClose();
                           }, 1500);
                         } else {
-                          console.log('💾 DRAFT saved - fetching fresh data to verify edits persisted');
+                          // console.log('💾 DRAFT saved - fetching fresh data to verify edits persisted');
                           // 🔧 FIX: After draft save, FORCE refresh to fetch fresh data including draft edits
                           // This ensures proposalData is updated with hasExistingEdit=true and editedData
                           const cacheSize = cacheRef.current.size;
                           cacheRef.current.clear();
-                          console.log('🗑️ Cache cleared - removed', cacheSize, 'items');
-                          console.log('📊 Cache size after clear:', cacheRef.current.size);
+                          // console.log('🗑️ Cache cleared - removed', cacheSize, 'items');
+                          // console.log('📊 Cache size after clear:', cacheRef.current.size);
                           
                           // Force a data refresh to load the newly saved draft edits
                           // The delay ensures the backend has processed the save
                           setTimeout(() => {
-                            console.log('⏳ Calling loadData(true) after 500ms delay');
-                            console.log('📊 Cache size before loadData:', cacheRef.current.size);
+                            // console.log('⏳ Calling loadData(true) after 500ms delay');
+                            // console.log('📊 Cache size before loadData:', cacheRef.current.size);
                             loadData(true);
                           }, 500);
                           
@@ -1296,16 +1291,16 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                       : isManagerLevel
                       ? 'manager'
                       : 'officer';
-                    console.log('🎭 Variant determination:', {
-                      isManagerLevel,
-                      isDivisionApprover,
-                      isReviewer,
-                      effectiveBudgetReviewer,
-                      isBudgetPlanningAnalystRole,
-                      isBudgetOfficer,
-                      isPreparer,
-                      variant
-                    });
+                    // console.log('🎭 Variant determination:', {
+                      // isManagerLevel,
+                      // isDivisionApprover,
+                      // isReviewer,
+                      // effectiveBudgetReviewer,
+                      // isBudgetPlanningAnalystRole,
+                      // isBudgetOfficer,
+                      // isPreparer,
+                      // variant
+                    // });
                     return variant;
                   })()}
                   allowSubmit={!managerCanEditNow && !isViewOnlyAfterSubmission}
@@ -1380,7 +1375,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                   proposal_status: proposal?.status,
                   loading
                 };
-                console.log('🔍 BUDGET REVIEWER CONDITION STATE:', state);
+                // console.log('🔍 BUDGET REVIEWER CONDITION STATE:', state);
                 
                 // Determine which path will render
                 let renderPath = 'NONE';
@@ -1389,7 +1384,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                 else if (shouldShowReadOnlyTables) renderPath = 'READ-ONLY TABLES (shouldShowReadOnlyTables at line 1104)';
                 else renderPath = '❌ NO RENDER PATH AVAILABLE ❌';
                 
-                console.log('📍 BUDGET REVIEWER RENDER PATH:', renderPath);
+                // console.log('📍 BUDGET REVIEWER RENDER PATH:', renderPath);
                 
                 return null;
               })()
@@ -1506,12 +1501,12 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
             {/* ✅ READ-ONLY VIEW FOR BUDGET REVIEWER: Show detailed records when reviewer cannot edit */}
             {(() => {
               const show = shouldShowReadOnlyTables && isBudgetReviewerRole && proposalData;
-              console.log('🔍 REVIEWER RENDER CHECK:', {
-                shouldShowReadOnlyTables,
-                isBudgetReviewerRole,
-                hasProposalData: !!proposalData,
-                finalShow: show
-              });
+              // console.log('🔍 REVIEWER RENDER CHECK:', {
+                // shouldShowReadOnlyTables,
+                // isBudgetReviewerRole,
+                // hasProposalData: !!proposalData,
+                // finalShow: show
+              // });
               if (show) console.log('✅ Rendering BUDGET REVIEWER read-only tables view');
               return show && (
                 <>
@@ -1585,7 +1580,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                 }}
                 onClick={() => {
                   // Open confirmation dialog for finalization
-                  console.log('💚 Prominent Finalize button clicked');
+                  // console.log('💚 Prominent Finalize button clicked');
                   if (workflowActionsRef.current) {
                     // Trigger the finalize action - the WorkflowActions component will handle the dialog
                     // by directly calling its handleActionClick method via ref
@@ -1634,19 +1629,19 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                             : null
               }
               onRefresh={(updatedProposal, forceFlag, triggeredAction) => {
-                console.log('🔄 onRefresh callback triggered:', {
-                  hasUpdatedProposal: !!updatedProposal,
-                  forceFlag,
-                  status: updatedProposal?.status,
-                  triggeredAction
-                });
+                // console.log('🔄 onRefresh callback triggered:', {
+                  // hasUpdatedProposal: !!updatedProposal,
+                  // forceFlag,
+                  // status: updatedProposal?.status,
+                  // triggeredAction
+                // });
                 
                 // IMMEDIATE UPDATE: If we have the updated proposal, show it immediately
                 if (updatedProposal) {
-                  console.log('✅ Immediately updating UI with fresh proposal data:', {
-                    oldStatus: displayedProposal?.status,
-                    newStatus: updatedProposal.status
-                  });
+                  // console.log('✅ Immediately updating UI with fresh proposal data:', {
+                    // oldStatus: displayedProposal?.status,
+                    // newStatus: updatedProposal.status
+                  // });
                   // Update BOTH displayedProposal (for status badge) AND proposalData (for tables)
                   setDisplayedProposal(updatedProposal);
                   setProposalData(updatedProposal);
@@ -1661,7 +1656,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
                 const statusTag = String(updatedProposal?.status || '').toLowerCase();
                 const shouldAutoClose = actionTag.includes('return') || statusTag.includes('return');
                 if (shouldAutoClose) {
-                  console.log('🟡 Auto-closing dialog after return action');
+                  // console.log('🟡 Auto-closing dialog after return action');
                   setTimeout(() => {
                     handleClose();
                   }, 1200);

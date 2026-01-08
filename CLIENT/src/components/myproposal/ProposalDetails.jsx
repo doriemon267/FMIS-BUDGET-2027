@@ -80,15 +80,15 @@ const ProposalDetails = ({ proposal }) => {
   // Fetch detailed data
   useEffect(() => {
     const fetchDetailedData = async () => {
-      console.log("🔍 [ProposalDetails] Starting fetch with safeProposal:", {
-        _id: safeProposal._id,
-        fiscalYear: safeProposal.fiscalYear,
-        budgetType: safeProposal.budgetType,
-        processBy: safeProposal.processBy,
-        region: safeProposal.region,
-        cobExpenditures: safeProposal.cobExpenditures,
-        status: safeProposal.status
-      });
+      // console.log("🔍 [ProposalDetails] Starting fetch with safeProposal:", {
+        // _id: safeProposal._id,
+        // fiscalYear: safeProposal.fiscalYear,
+        // budgetType: safeProposal.budgetType,
+        // processBy: safeProposal.processBy,
+        // region: safeProposal.region,
+        // cobExpenditures: safeProposal.cobExpenditures,
+        // status: safeProposal.status
+      // });
 
       if (!safeProposal._id) {
         console.error("❌ [ProposalDetails] CRITICAL: No proposal ID available!", {
@@ -105,7 +105,7 @@ const ProposalDetails = ({ proposal }) => {
       try {
         // If cobExpenditures is missing, try to fetch the complete proposal first
         if (!safeProposal.cobExpenditures || safeProposal.cobExpenditures === "Unknown") {
-          console.log("📡 [ProposalDetails] Missing cobExpenditures, fetching complete proposal...");
+          // console.log("📡 [ProposalDetails] Missing cobExpenditures, fetching complete proposal...");
           try {
             const proposalResponse = await api.get(`/proposals/details`, {
               params: {
@@ -117,9 +117,9 @@ const ProposalDetails = ({ proposal }) => {
             });
             
             currentProposal = proposalResponse.data;
-            console.log("✅ [ProposalDetails] Fetched complete proposal:", {
-              cobExpenditures: currentProposal.cobExpenditures
-            });
+            // console.log("✅ [ProposalDetails] Fetched complete proposal:", {
+              // cobExpenditures: currentProposal.cobExpenditures
+            // });
 
             if (!currentProposal.cobExpenditures) {
               console.error("❌ [ProposalDetails] Complete proposal still missing expenditure type");
@@ -144,17 +144,17 @@ const ProposalDetails = ({ proposal }) => {
           status: currentProposal.status
         };
 
-        console.log("🔎 [ProposalDetails] Query params for line items:", params);
-        console.log("📋 [ProposalDetails] cobExpenditures value:", {
-          value: currentProposal.cobExpenditures,
-          type: typeof currentProposal.cobExpenditures,
-          isString: typeof currentProposal.cobExpenditures === 'string',
-          includes_Personnel: currentProposal.cobExpenditures?.includes("Personnel")
-        });
+        // console.log("🔎 [ProposalDetails] Query params for line items:", params);
+        // console.log("📋 [ProposalDetails] cobExpenditures value:", {
+          // value: currentProposal.cobExpenditures,
+          // type: typeof currentProposal.cobExpenditures,
+          // isString: typeof currentProposal.cobExpenditures === 'string',
+          // includes_Personnel: currentProposal.cobExpenditures?.includes("Personnel")
+        // });
         
         // Determine which endpoint to call based on expenditure type
         if (currentProposal.cobExpenditures && currentProposal.cobExpenditures.includes("Personnel")) {
-          console.log("👥 [ProposalDetails] Fetching Personnel data...");
+          // console.log("👥 [ProposalDetails] Fetching Personnel data...");
           // Try each endpoint in sequence until one works
           const endpoints = [
             "/getpersonnels/byParams",
@@ -166,9 +166,9 @@ const ProposalDetails = ({ proposal }) => {
           
           for (const endpoint of endpoints) {
             try {
-              console.log(`📤 [ProposalDetails] Trying endpoint: ${endpoint}`);
+              // console.log(`📤 [ProposalDetails] Trying endpoint: ${endpoint}`);
               const response = await api.get(endpoint, { params });
-              console.log(`✅ [ProposalDetails] Success with ${endpoint}, received ${response.data?.length || 0} records`);
+              // console.log(`✅ [ProposalDetails] Success with ${endpoint}, received ${response.data?.length || 0} records`);
               setDetailedData(response.data);
               success = true;
               break;
@@ -187,13 +187,13 @@ const ProposalDetails = ({ proposal }) => {
             throw lastError || new Error("All personnel endpoints failed");
           }
         } else if (currentProposal.cobExpenditures === "MOOE") {
-          console.log("💰 [ProposalDetails] Fetching MOOE data...");
+          // console.log("💰 [ProposalDetails] Fetching MOOE data...");
           try {
             const response = await api.get("/mooe/getByParams", { params });
-            console.log(`✅ [ProposalDetails] MOOE data received:`, {
-              records_count: response.data?.length || 0,
-              data: response.data
-            });
+            // console.log(`✅ [ProposalDetails] MOOE data received:`, {
+              // records_count: response.data?.length || 0,
+              // data: response.data
+            // });
             setDetailedData(response.data);
           } catch (err) {
             console.error("❌ [ProposalDetails] MOOE fetch failed:", {
@@ -204,13 +204,13 @@ const ProposalDetails = ({ proposal }) => {
             throw err;
           }
         } else if (currentProposal.cobExpenditures === "Capital Outlay") {
-          console.log("🏗️ [ProposalDetails] Fetching Capital Outlay data...");
+          // console.log("🏗️ [ProposalDetails] Fetching Capital Outlay data...");
           try {
             const response = await api.get("/capital-outlay/getByParams", { params });
-            console.log(`✅ [ProposalDetails] Capital Outlay data received:`, {
-              records_count: response.data?.length || 0,
-              data: response.data
-            });
+            // console.log(`✅ [ProposalDetails] Capital Outlay data received:`, {
+              // records_count: response.data?.length || 0,
+              // data: response.data
+            // });
             setDetailedData(response.data);
           } catch (err) {
             console.error("❌ [ProposalDetails] Capital Outlay fetch failed:", {
@@ -221,13 +221,13 @@ const ProposalDetails = ({ proposal }) => {
             throw err;
           }
         } else if (currentProposal.cobExpenditures === "Income") {
-          console.log("💵 [ProposalDetails] Fetching Income data...");
+          // console.log("💵 [ProposalDetails] Fetching Income data...");
           try {
             const response = await api.get("/income/getByParams", { params });
-            console.log(`✅ [ProposalDetails] Income data received:`, {
-              records_count: response.data?.length || 0,
-              data: response.data
-            });
+            // console.log(`✅ [ProposalDetails] Income data received:`, {
+              // records_count: response.data?.length || 0,
+              // data: response.data
+            // });
             setDetailedData(response.data);
           } catch (err) {
             console.error("❌ [ProposalDetails] Income fetch failed:", {
@@ -255,11 +255,11 @@ const ProposalDetails = ({ proposal }) => {
         setError(`Failed to load detailed information: ${err.message}`);
       } finally {
         setLoading(false);
-        console.log("✅ [ProposalDetails] useEffect finished. Current state:", {
-          detailedData_length: detailedData?.length || 'undefined',
-          loading: false,
-          error: error || 'none'
-        });
+        // console.log("✅ [ProposalDetails] useEffect finished. Current state:", {
+          // detailedData_length: detailedData?.length || 'undefined',
+          // loading: false,
+          // error: error || 'none'
+        // });
       }
     };
     

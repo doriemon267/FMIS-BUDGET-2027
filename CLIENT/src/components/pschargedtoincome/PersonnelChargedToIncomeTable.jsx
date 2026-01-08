@@ -65,12 +65,12 @@ const PersonnelChargedToIncomeTable = ({
 
   // DEBUG: Log what we're receiving
   useEffect(() => {
-    console.log("DEBUG PersonnelChargedToIncomeTable:", {
-      dataListName,
-      schemaKeys: Object.keys(schema).length,
-      title,
-      apiPath,
-    });
+    // console.log("DEBUG PersonnelChargedToIncomeTable:", {
+    //   dataListName,
+    //   schemaKeys: Object.keys(schema).length,
+    //   title,
+    //   apiPath,
+    // });
   }, [dataListName, schema, title, apiPath]);
 
   // Initialize column visibility
@@ -111,10 +111,10 @@ const PersonnelChargedToIncomeTable = ({
       }
       
       Object.keys(params).forEach(k => params[k] === undefined && delete params[k]);
-      console.log("DEBUG: Fetching charged to income with params:", { dataListName, params });
+      // console.log("DEBUG: Fetching charged to income with params:", { dataListName, params });
       const res = await api.get(apiPath, { params });
-      console.log("DEBUG: Full API response:", res.data);
-      console.log("DEBUG: Received data from API:", { totalRecords: res.data?.total, dataLength: res.data?.data?.length, keys: Object.keys(res.data || {}) });
+      // console.log("DEBUG: Full API response:", res.data);
+      // console.log("DEBUG: Received data from API:", { totalRecords: res.data?.total, dataLength: res.data?.data?.length, keys: Object.keys(res.data || {}) });
       return res.data;
     },
     staleTime: 10000,
@@ -127,7 +127,7 @@ const PersonnelChargedToIncomeTable = ({
       // 1. { data: [...], total: X } - standard structure
       // 2. { personnelServices: [...], totalRecords: X, totalPages: X, currentPage: X } - API structure
       const personnel = data.data || data.personnelServices || [];
-      console.log("DEBUG: Setting filteredRows with", personnel.length, "records");
+      // console.log("DEBUG: Setting filteredRows with", personnel.length, "records");
       setFilteredRows(personnel);
     }
   }, [data]);

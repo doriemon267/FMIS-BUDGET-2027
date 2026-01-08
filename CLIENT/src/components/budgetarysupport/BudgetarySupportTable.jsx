@@ -232,7 +232,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
   const hasValidParams = !!fiscalYear && !!budgetType;
   
   useEffect(() => {
-    console.log('DEBUG BudgetarySupportTable params:', { fiscalYear, budgetType, hasValidParams });
+    // console.log('DEBUG BudgetarySupportTable params:', { fiscalYear, budgetType, hasValidParams });
   }, [fiscalYear, budgetType, hasValidParams]);
   
   // Debug props removed for cleaner console
@@ -513,12 +513,12 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
     queryFn: async () => {
       try {
         if (proposalId) {
-          console.log('[BudgetarySupportTable] Fetching proposal totals by workflowRefId:', proposalId);
+          // console.log('[BudgetarySupportTable] Fetching proposal totals by workflowRefId:', proposalId);
           const response = await api.get(`/api/allproposal/proposals/${proposalId}/totals`);
-          console.log('[BudgetarySupportTable] Proposal totals fetched:', {
-            projectedSubsidy: response.data?.data?.projectedSubsidy,
-            projectedCorporateIncome: response.data?.data?.projectedCorporateIncome
-          });
+          // console.log('[BudgetarySupportTable] Proposal totals fetched:', {
+            // projectedSubsidy: response.data?.data?.projectedSubsidy,
+            // projectedCorporateIncome: response.data?.data?.projectedCorporateIncome
+          // });
           return response.data?.data;
         }
         
@@ -550,16 +550,16 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
           page: 1
         };
 
-        console.log('📡 Fetching chargedToIncomeData with params:', baseParams);
+        // console.log('📡 Fetching chargedToIncomeData with params:', baseParams);
         const response = await api.get('/personnelServices', { params: baseParams });
-        console.log('📡 ChargedToIncomeData full response:', response.data);
-        console.log('📡 Response keys:', Object.keys(response.data || {}));
+        // console.log('📡 ChargedToIncomeData full response:', response.data);
+        // console.log('📡 Response keys:', Object.keys(response.data || {}));
         
         const personnel = response.data?.personnelServices || response.data?.data || [];
-        console.log('📡 ChargedToIncomeData personnel array:', {
-          count: Array.isArray(personnel) ? personnel.length : 'not-array',
-          data: personnel
-        });
+        // console.log('📡 ChargedToIncomeData personnel array:', {
+          // count: Array.isArray(personnel) ? personnel.length : 'not-array',
+          // data: personnel
+        // });
         return personnel;
       } catch (error) {
         console.error('❌ Error fetching charged-to-income personnel:', error.response?.data || error.message);
@@ -685,16 +685,16 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
         budgetType,
         region: regionName || undefined
       };
-      console.log('[BudgetarySupportTable] Fallback /income params:', params);
+      // console.log('[BudgetarySupportTable] Fallback /income params:', params);
       const response = await api.get('/income', { params });
       const items = response.data || [];
-      console.log('[BudgetarySupportTable] Fallback /income returned:', Array.isArray(items) ? items.length : 'not-array');
+      // console.log('[BudgetarySupportTable] Fallback /income returned:', Array.isArray(items) ? items.length : 'not-array');
       if (Array.isArray(items) && items.length > 0) {
-        console.log('[BudgetarySupportTable] Sample income item:', {
-          amount: items[0]?.amount,
-          category: items[0]?.incomecategory?.incomeCategoryName || items[0]?.incomecategory?.name || items[0]?.category,
-          region: items[0]?.region || items[0]?.Region
-        });
+        // console.log('[BudgetarySupportTable] Sample income item:', {
+          // amount: items[0]?.amount,
+          // category: items[0]?.incomecategory?.incomeCategoryName || items[0]?.incomecategory?.name || items[0]?.category,
+          // region: items[0]?.region || items[0]?.Region
+        // });
       }
       return items;
     },
@@ -705,10 +705,10 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
   const localIncomeStats = useMemo(() => {
     const items = (incomeData && incomeData.length > 0) ? incomeData : (incomeDataByFY || []);
     // Debug counts for income items used to compute corporate subtotal
-    console.log('[BudgetarySupportTable] Corporate Income subtotal source counts:', {
-      proposalItems: Array.isArray(incomeData) ? incomeData.length : 0,
-      fyRegionItems: Array.isArray(incomeDataByFY) ? incomeDataByFY.length : 0
-    });
+    // console.log('[BudgetarySupportTable] Corporate Income subtotal source counts:', {
+      // proposalItems: Array.isArray(incomeData) ? incomeData.length : 0,
+      // fyRegionItems: Array.isArray(incomeDataByFY) ? incomeDataByFY.length : 0
+    // });
     const grouped = {
       'Irrigation Service Fees': { subtotal: 0 },
       'Rent Income': { subtotal: 0 },
@@ -756,11 +756,11 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
     ? incomeGrandTotal
     : (propsTotal > 0 ? propsTotal : localIncomeStats.total);
 
-  console.log('[BudgetarySupportTable] Effective corporate income totals:', {
-    propsTotal,
-    localTotal: localIncomeStats.total,
-    using: (Object.keys(groupedItems).length > 0 && propsTotal > 0) ? 'props' : 'local'
-  });
+  // console.log('[BudgetarySupportTable] Effective corporate income totals:', {
+    // propsTotal,
+    // localTotal: localIncomeStats.total,
+    // using: (Object.keys(groupedItems).length > 0 && propsTotal > 0) ? 'props' : 'local'
+  // });
 
   // Helper function to get corporate income from actual data sources
   const getCorporateIncomeFromBreakdown = useCallback((category) => {
@@ -773,7 +773,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
           : mooeData;
 
         totalIncome = filteredMooe.reduce((sum, item) => sum + toNumber(item?.income), 0);
-        console.log(`🔍 MOOE: Found ${mooeData.length} records, ${filteredMooe.length} after filter, total income: ₱${totalIncome.toLocaleString()}`);
+        // console.log(`🔍 MOOE: Found ${mooeData.length} records, ${filteredMooe.length} after filter, total income: ₱${totalIncome.toLocaleString()}`);
       } else if (mooeData && mooeData.formattedData && Array.isArray(mooeData.formattedData)) {
         const filteredRows = mooeData.formattedData
           .map((row) => {
@@ -792,9 +792,9 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
             sum + (row.children || []).reduce((childSum, child) => childSum + toNumber(child?.income), 0),
           0
         );
-        console.log(`🔍 MOOE (nested): Found formatted data, ${filteredRows.length} rows after filter, total income: ₱${totalIncome.toLocaleString()}`);
+        // console.log(`🔍 MOOE (nested): Found formatted data, ${filteredRows.length} rows after filter, total income: ₱${totalIncome.toLocaleString()}`);
       } else {
-        console.log(`⚠️ MOOE: No valid data structure found`, { mooeData });
+        // console.log(`⚠️ MOOE: No valid data structure found`, { mooeData });
       }
 
       if (totalIncome === 0 && calculatedBudgetarySupport?.breakdown) {
@@ -821,17 +821,17 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
 
         totalIncome = regionFilteredData.reduce((sum, item) => sum + toNumber(item?.income), 0);
 
-        console.log(
-          `🔍 CAPITAL OUTLAY: Found ${allItems.length} total items, ${regionFilteredData.length} after region filter, total income: ₱${totalIncome.toLocaleString()}`
-        );
+        // console.log(
+          // `🔍 CAPITAL OUTLAY: Found ${allItems.length} total items, ${regionFilteredData.length} after region filter, total income: ₱${totalIncome.toLocaleString()}`
+        // );
         if (allItems.length > 0) {
-          console.log(
-            `🔍 CAPITAL OUTLAY: Sample items:`,
-            allItems.slice(0, 2).map((item) => ({ region: item.region, income: item.income }))
-          );
+          // console.log(
+            // `🔍 CAPITAL OUTLAY: Sample items:`,
+            // allItems.slice(0, 2).map((item) => ({ region: item.region, income: item.income }))
+          // );
         }
       } else {
-        console.log(`⚠️ CAPITAL OUTLAY: No valid data structure found`, { capitalOutlayData });
+        // console.log(`⚠️ CAPITAL OUTLAY: No valid data structure found`, { capitalOutlayData });
       }
 
       if (totalIncome === 0 && calculatedBudgetarySupport?.breakdown) {
@@ -851,7 +851,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
       }
     }
 
-    console.log(`✅ ${category}: Returning total income: ₱${totalIncome.toLocaleString()}`);
+    // console.log(`✅ ${category}: Returning total income: ₱${totalIncome.toLocaleString()}`);
     return totalIncome;
   }, [calculatedBudgetarySupport, capitalOutlayData, mooeData, matchesAssignmentScope, hasAssignmentFilters]);
   const useOfFundsBreakdown = useMemo(() => {
@@ -937,28 +937,28 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
     let chargedToIncomeAmount = 0;
     let chargedToIncomeSubsidy = 0;
     if (chargedToIncomeData && Array.isArray(chargedToIncomeData)) {
-      console.log('DEBUG useOfFundsBreakdown - chargedToIncomeData found:', {
-        count: chargedToIncomeData.length,
-        sample: chargedToIncomeData[0],
-        sampleKeys: chargedToIncomeData[0] ? Object.keys(chargedToIncomeData[0]) : []
-      });
+      // console.log('DEBUG useOfFundsBreakdown - chargedToIncomeData found:', {
+        // count: chargedToIncomeData.length,
+        // sample: chargedToIncomeData[0],
+        // sampleKeys: chargedToIncomeData[0] ? Object.keys(chargedToIncomeData[0]) : []
+      // });
       
       const filteredChargedToIncome = hasAssignmentFilters
         ? chargedToIncomeData.filter((p) => matchesAssignmentScope(p))
         : chargedToIncomeData;
       
-      console.log('DEBUG useOfFundsBreakdown - filtered data:', {
-        originalCount: chargedToIncomeData.length,
-        filteredCount: filteredChargedToIncome.length
-      });
+      // console.log('DEBUG useOfFundsBreakdown - filtered data:', {
+        // originalCount: chargedToIncomeData.length,
+        // filteredCount: filteredChargedToIncome.length
+      // });
       
       chargedToIncomeAmount = filteredChargedToIncome.reduce((sum, p) => {
         const amount = toNumber(p.chargedToIncomeAmount || 0);
         if (amount > 0) {
-          console.log('DEBUG - Found chargedToIncomeAmount:', {
-            employeeName: p.employeeFullName,
-            amount: amount
-          });
+          // console.log('DEBUG - Found chargedToIncomeAmount:', {
+            // employeeName: p.employeeFullName,
+            // amount: amount
+          // });
         }
         return sum + amount;
       }, 0);
@@ -967,21 +967,21 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
         return sum + toNumber(p.chargedToIncomeSubsidyAmount || 0);  // Use chargedToIncomeSubsidyAmount, NOT subsidyAmount
       }, 0);
     } else {
-      console.log('DEBUG useOfFundsBreakdown - chargedToIncomeData missing or not array:', {
-        isArray: Array.isArray(chargedToIncomeData),
-        isNull: chargedToIncomeData === null,
-        isUndefined: chargedToIncomeData === undefined,
-        type: typeof chargedToIncomeData
-      });
+      // console.log('DEBUG useOfFundsBreakdown - chargedToIncomeData missing or not array:', {
+        // isArray: Array.isArray(chargedToIncomeData),
+        // isNull: chargedToIncomeData === null,
+        // isUndefined: chargedToIncomeData === undefined,
+        // type: typeof chargedToIncomeData
+      // });
     }
     
     // DEBUG: Log charged-to-income calculations
-    console.log('DEBUG BudgetarySupportTable - Charged to Income Totals:', {
-      count: chargedToIncomeData?.length || 0,
-      amount: chargedToIncomeAmount,
-      subsidy: chargedToIncomeSubsidy,
-      willRender: chargedToIncomeAmount > 0
-    });
+    // console.log('DEBUG BudgetarySupportTable - Charged to Income Totals:', {
+      // count: chargedToIncomeData?.length || 0,
+      // amount: chargedToIncomeAmount,
+      // subsidy: chargedToIncomeSubsidy,
+      // willRender: chargedToIncomeAmount > 0
+    // });
     
     return {
       corporateIncome,

@@ -227,12 +227,12 @@ const PSPCustomPageTable = ({
                 // Find the personnel record to get the salary amount
                 const personnel = filteredRows.find(r => r._id === id);
                 const salaryAmount = personnel?.Total || personnel?.total || personnel?.amount || 0;
-                console.log("DEBUG: Marking permanent personnel as charged-to-income:", {
-                  id,
-                  name: personnel?.employeeFullName,
-                  Total: personnel?.Total,
-                  salaryAmount
-                });
+                // console.log("DEBUG: Marking permanent personnel as charged-to-income:", {
+                  // id,
+                  // name: personnel?.employeeFullName,
+                  // Total: personnel?.Total,
+                  // salaryAmount
+                // });
                 return { _id: id, chargedToIncomeAmount: salaryAmount };
               }),
               chargedToIncomeEligible: true,
@@ -244,7 +244,7 @@ const PSPCustomPageTable = ({
               defaultAmount: 0,
             };
 
-      console.log("DEBUG: Full payload being sent:", JSON.stringify(payload, null, 2));
+      // console.log("DEBUG: Full payload being sent:", JSON.stringify(payload, null, 2));
       const response = await updatePersonnelChargedToIncome(payload);
       
       // Check if there were any skipped items
@@ -973,9 +973,9 @@ const PSPCustomPageTable = ({
           const exportData = await handleExportAllData();
           // console.log('Fetched export data:', exportData?.length, 'records'); // Debug log
           if (exportData && exportData.length > 0) {
-            // Trigger the export directly using ExcelJS
-            // Import and use ExcelJS directly
-            import('exceljs').then(async (ExcelJS) => {
+            try {
+              // Trigger the export directly using ExcelJS
+              const ExcelJS = await import('exceljs');
               const { saveAs } = await import('file-saver');
 
               const workbook = new ExcelJS.Workbook();
@@ -1072,10 +1072,10 @@ const PSPCustomPageTable = ({
               saveAs(new Blob([buffer]), `Permanent_Personnel_${timestamp}.xlsx`);
 
               toast.success("Excel file exported successfully!");
-            }).catch(error => {
+            } catch (error) {
               console.error('Export error:', error);
               toast.error("Failed to export Excel file");
-            });
+            }
           } else {
             toast.warning("No data available to export");
           }

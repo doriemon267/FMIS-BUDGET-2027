@@ -32,7 +32,7 @@ export function ViewMenuItem({ row, parentClose, refreshData }) {
 
   const handleView = () => {
     if (row?._id) {
-      console.log('🔗 ViewMenuItem: Navigating to FULL PAGE proposal details:', row._id);
+      // console.log('🔗 ViewMenuItem: Navigating to FULL PAGE proposal details:', row._id);
       // Navigate with proposal data passed through state
       navigate(`/proposal-details/${row._id}`, { 
         state: { proposal: row }

@@ -41,13 +41,23 @@ export const getUserActivityLogs = async (userId, options = {}) => {
  */
 export const getMyActivityLogs = async (options = {}) => {
   const { signal, ...queryParams } = options || {};
-  // Get current user ID from localStorage or context
-  const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-  const userId = userData._id;
-
-  if (!userId) {
-    throw new Error('User ID not found');
+  // Prefer an explicit userId if caller provided one
+  if (options.userId) {
+    const uid = options.userId;
+    delete queryParams.userId;
+    return getUserActivityLogs(uid, { signal, ...queryParams });
   }
 
-  return getUserActivityLogs(userId, { signal, ...queryParams });
+  // Otherwise, fetch the authenticated user from the auth server (uses httpOnly cookie)
+  try {
+    const { authApi } = await import('../config/api');
+    const res = await authApi.get('/get-user');
+    const user = res?.data?.user;
+    const userId = user?.id || user?.userId || user?.Id || null;
+    if (!userId) throw new Error('Authenticated user not available');
+    return getUserActivityLogs(userId, { signal, ...queryParams });
+  } catch (err) {
+    console.error('getMyActivityLogs: unable to determine current user', err?.message || err);
+    throw err;
+  }
 };

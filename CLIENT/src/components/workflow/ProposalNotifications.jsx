@@ -42,7 +42,7 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
 
   // On mount, clear React Query cache for notifications to ensure fresh data
   useEffect(() => {
-    console.log('[ProposalNotifications] Component mounted - invalidating React Query cache');
+    // console.log('[ProposalNotifications] Component mounted - invalidating React Query cache');
     queryClient.invalidateQueries({ queryKey: ['serverNotifications'] });
   }, [queryClient]);
 
@@ -61,18 +61,18 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
         
         // DEBUG: Log what we received from API
         if (newNotifications.length > 0) {
-          console.log('[ProposalNotifications] Received from API:', {
-            count: newNotifications.length,
-            first: {
-              _id: String(newNotifications[0]._id),
-              title: newNotifications[0].title,
-              message: String(newNotifications[0].message).substring(0, 100),
-              messageType: typeof newNotifications[0].message,
-              messageLength: String(newNotifications[0].message).length,
-              relatedEntityId: newNotifications[0].relatedEntityId,
-              metadata: newNotifications[0].metadata
-            }
-          });
+          // console.log('[ProposalNotifications] Received from API:', {
+            // count: newNotifications.length,
+            // first: {
+              // _id: String(newNotifications[0]._id),
+              // title: newNotifications[0].title,
+              // message: String(newNotifications[0].message).substring(0, 100),
+              // messageType: typeof newNotifications[0].message,
+              // messageLength: String(newNotifications[0].message).length,
+              // relatedEntityId: newNotifications[0].relatedEntityId,
+              // metadata: newNotifications[0].metadata
+            // }
+          // });
         }
         
         // Check for new notifications to trigger Windows notification
@@ -438,13 +438,13 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
                         
                         if (notification.message) {
                           const msgStr = String(notification.message).trim();
-                          console.log('[Dropdown Display]', {
-                            title: notification.title,
-                            messageRaw: msgStr.substring(0, 80),
-                            messageLength: msgStr.length,
-                            isObjectID: /^[a-f0-9]{24}$/i.test(msgStr),
-                            checksPassed: msgStr && !/^[a-f0-9]{24}$/i.test(msgStr) && msgStr.length > 20
-                          });
+                          // console.log('[Dropdown Display]', {
+                            // title: notification.title,
+                            // messageRaw: msgStr.substring(0, 80),
+                            // messageLength: msgStr.length,
+                            // isObjectID: /^[a-f0-9]{24}$/i.test(msgStr),
+                            // checksPassed: msgStr && !/^[a-f0-9]{24}$/i.test(msgStr) && msgStr.length > 20
+                          // });
                           if (msgStr && !/^[a-f0-9]{24}$/i.test(msgStr) && msgStr.length > 20) {
                             displayMsg = msgStr;
                           }
@@ -452,15 +452,15 @@ const ProposalNotifications = ({ showPersistentList = false }) => {
                         
                         if (!displayMsg && notification.metadata?.proposalTitle) {
                           displayMsg = String(notification.metadata.proposalTitle).trim();
-                          console.log('[Dropdown] Fell back to proposalTitle:', displayMsg);
+                          // console.log('[Dropdown] Fell back to proposalTitle:', displayMsg);
                         }
                         
                         if (!displayMsg && notification.title) {
                           displayMsg = String(notification.title).trim();
-                          console.log('[Dropdown] Fell back to title:', displayMsg);
+                          // console.log('[Dropdown] Fell back to title:', displayMsg);
                         }
                         
-                        console.log('[Dropdown] Final display:', displayMsg.substring(0, 60));
+                        // console.log('[Dropdown] Final display:', displayMsg.substring(0, 60));
                         return displayMsg || 'Notification';
                       })()}
                     </Typography>

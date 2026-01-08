@@ -195,9 +195,9 @@ const IncomeManagementPage = () => {
     setSelectedCategory(matchedCategory);
 
     // Debug: log selected category and all subcategories
-    console.log('Editing category:', category);
-    console.log('Matched category:', matchedCategory);
-    console.log('All subcategories:', allSubcategories);
+    // console.log('Editing category:', category);
+    // console.log('Matched category:', matchedCategory);
+    // console.log('All subcategories:', allSubcategories);
 
     // Extract subcategories from the category being edited
     let subcategories = [];
@@ -211,7 +211,7 @@ const IncomeManagementPage = () => {
       subcategories = category.incomeSubcategoryName.split(',').map(s => s.trim()).filter(s => s);
     }
 
-    console.log('Extracted subcategories:', subcategories);
+    // console.log('Extracted subcategories:', subcategories);
 
     setCategoryForm({
       incomeCategoryName: category.incomeCategoryName || '',

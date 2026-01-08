@@ -48,7 +48,7 @@ const ACCESS_LEVELS = [
   { value: 'RESPONSIBILITY_CENTER', label: 'Responsibility Center Level', icon: <BusinessIcon />, color: '#2196F3' },
   { value: 'OFFICE', label: 'Office Level', icon: <DomainIcon />, color: '#FF9800' },
   { value: 'FULL', label: 'Budget Revenue Division Level', icon: <HierarchyIcon />, color: '#9C27B0' },
-  { value: 'OWN_ONLY', label: 'Own Records Only', icon: <PersonIcon />, color: '#757575' }
+  // { value: 'OWN_ONLY', label: 'Own Records Only', icon: <PersonIcon />, color: '#757575' }
 ];
 
 // New unified workflow roles (September 2025)
@@ -178,7 +178,7 @@ const HierarchicalUserAssignmentPage = () => {
         const departmentsCount = data?.availableUnits?.responsibilityCenters?.length || 0;
 
         if (regionsCount === 0 || departmentsCount === 0) {
-          console.log('New structure not available, falling back to old structure');
+          // console.log('New structure not available, falling back to old structure');
           // Try old structure as fallback
           try {
             const fallbackRes = await api.get('/api/hierarchical-rbac/organization-structure?structure=old');
@@ -202,7 +202,7 @@ const HierarchicalUserAssignmentPage = () => {
 
             return normalized;
           } catch (fallbackError) {
-            console.log('Fallback to old structure also failed:', fallbackError.message);
+            // console.log('Fallback to old structure also failed:', fallbackError.message);
             // Return empty structure
             return {
               availableUnits: {
@@ -260,7 +260,7 @@ const HierarchicalUserAssignmentPage = () => {
             const res = await api.get('/api/hierarchical-rbac/assignments');
             return res.data?.assignments || res.data || [];
           } catch (err) {
-            console.log('Hierarchical assignments endpoint failed:', err.message);
+            // console.log('Hierarchical assignments endpoint failed:', err.message);
             return [];
           }
         }
@@ -276,7 +276,7 @@ const HierarchicalUserAssignmentPage = () => {
           const res = await api.get(`/api/hierarchical-rbac/assignments/${userId}`);
           return res.data?.assignment ? [res.data.assignment] : res.data ? [res.data] : [];
         } catch (err) {
-          console.log('Hierarchical assignments endpoint failed for user:', err.message);
+          // console.log('Hierarchical assignments endpoint failed for user:', err.message);
           return [];
         }
       } catch (error) {
@@ -727,9 +727,9 @@ const HierarchicalUserAssignmentPage = () => {
     }
 
     // For OWN_ONLY access
-    if (normalizeAssignmentLevel(assignment.assignmentLevel) === 'OWN_ONLY') {
-      return 'Own Records Only';
-    }
+    // if (normalizeAssignmentLevel(assignment.assignmentLevel) === 'OWN_ONLY') {
+    //   return 'Own Records Only';
+    // }
 
     // Try to find office name by ID
     if (assignment.departmentId || assignment.officeId) {
@@ -1916,16 +1916,16 @@ const HierarchicalUserAssignmentPage = () => {
                                   
                                   setFormData(formFields);
                                   
-                                  console.log('📝 Edit form populated:', {
-                                    userId: formFields.userId,
-                                    userRole: formFields.userRole,
+                                  // console.log('📝 Edit form populated:', {
+                                    // userId: formFields.userId,
+                                    // userRole: formFields.userRole,
                                     // actualUserRole,
-                                    assignmentLevel: formFields.assignmentLevel,
-                                    officeId: formFields.officeId,
-                                    responsibilityCenter: formFields.responsibilityCenterName,
-                                    isNIAWide: formFields.isNIAWide,
-                                    assignedRegions: formFields.assignedRegions
-                                  });
+                                    // assignmentLevel: formFields.assignmentLevel,
+                                    // officeId: formFields.officeId,
+                                    // responsibilityCenter: formFields.responsibilityCenterName,
+                                    // isNIAWide: formFields.isNIAWide,
+                                    // assignedRegions: formFields.assignedRegions
+                                  // });
                                 }}
                               >
                                 <EditIcon />

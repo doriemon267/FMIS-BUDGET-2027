@@ -390,11 +390,11 @@ const CasualCustomTable = ({
   const handleSelectAllClick = async (event) => {
     if (!hasRowSelection) return;
     
-    console.log('[SelectAll-Casual] Checkbox clicked, checked:', event.target.checked);
+    // console.log('[SelectAll-Casual] Checkbox clicked, checked:', event.target.checked);
     
     if (event.target.checked) {
       try {
-        console.log('[SelectAll-Casual] Fetching all records...');
+        // console.log('[SelectAll-Casual] Fetching all records...');
         const response = await api.get(apiPath, {
           params: {
             statusOfAppointment: "CASUAL",
@@ -419,7 +419,7 @@ const CasualCustomTable = ({
         }
         
         const uniqueIds = Array.from(new Set(allIds));
-        console.log('[SelectAll-Casual] Selected ' + uniqueIds.length + ' total records');
+        // console.log('[SelectAll-Casual] Selected ' + uniqueIds.length + ' total records');
         onRowSelectionChange(uniqueIds);
         return;
       } catch (error) {
@@ -427,10 +427,10 @@ const CasualCustomTable = ({
       }
 
       const fallbackIds = tableData.map((row) => row._id);
-      console.log('[SelectAll-Casual] Fallback: selected ' + fallbackIds.length + ' visible records');
+      // console.log('[SelectAll-Casual] Fallback: selected ' + fallbackIds.length + ' visible records');
       onRowSelectionChange(fallbackIds);
     } else {
-      console.log('[SelectAll-Casual] Deselecting all');
+      // console.log('[SelectAll-Casual] Deselecting all');
       onRowSelectionChange([]);
     }
   };

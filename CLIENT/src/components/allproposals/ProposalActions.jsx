@@ -44,7 +44,7 @@ export const ViewButton = ({ row, refreshData }) => {
 
   const handleView = (rowToView = row) => {
     if (rowToView?._id) {
-      console.log('🔗 ViewButton: Navigating to FULL PAGE proposal details:', rowToView._id);
+      // console.log('🔗 ViewButton: Navigating to FULL PAGE proposal details:', rowToView._id);
       // Navigate with proposal data passed through state
       navigate(`/proposal-details/${rowToView._id}`, { 
         state: { proposal: rowToView }
@@ -56,9 +56,9 @@ export const ViewButton = ({ row, refreshData }) => {
   useEffect(() => {
     const handler = (e) => {
       const incoming = e?.detail?.row;
-      console.log('📢 open-proposal-view event received:', incoming?._id);
+      // console.log('📢 open-proposal-view event received:', incoming?._id);
       if (incoming?._id && row?._id && String(incoming._id) === String(row._id)) {
-        console.log('✅ Matching row found, triggering full page navigation...');
+        // console.log('✅ Matching row found, triggering full page navigation...');
         handleView(incoming);
       }
     };
@@ -125,21 +125,21 @@ export const ApproveButton = ({ row, refreshData }) => {
   const { currentUser } = useUser();
   
   // Debug logging for user data
-  console.log('👤 ApproveButton User Debug:', {
+  /* console.log('👤 ApproveButton User Debug:', {
     currentUser: currentUser,
     hierarchicalAccess: currentUser?.hierarchicalAccess,
     scope: currentUser?.hierarchicalAccess?.scope,
     workflowRoles: currentUser?.hierarchicalAccess?.workflowRoles,
     rolePermissions: currentUser?.hierarchicalAccess?.rolePermissions,
     hierarchicalFlags: currentUser?.hierarchicalFlags
-  });
+  }); */
   
   // Debug logging for row data
-  console.log('📋 ApproveButton Row Debug:', {
+  /* console.log('📋 ApproveButton Row Debug:', {
     rowId: row._id,
     rowStatus: row.status,
     fullRow: row
-  });
+  }); */
   const handleOpen = async () => {
     setOpen(true);
     // Prefetch affected record count
@@ -170,19 +170,19 @@ export const ApproveButton = ({ row, refreshData }) => {
   );
   
   // Debug logging
-  console.log('🔍 ApproveButton Debug:', {
-    scope,
-    roles,
-    rowStatus: row.status,
-    canApprove,
-    departmentCondition: scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && row.status === 'Division Submitted',
-    officeFinalCondition: (scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier') && canApprovePermission && row.status === 'Forwarded to Officer',
-    officeVerificationCondition: (scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier') && canApprovePermission && 
-                               ['Forwarded to Officer'].includes(row.status),
-    hasDepartmentConsolidator: roles.includes('departmentConsolidator'),
-    hasOfficeFinalVerifier: roles.includes('officeFinalVerifier'),
-    canApprovePermission
-  });
+  // console.log('🔍 ApproveButton Debug:', {
+    // scope,
+    // roles,
+    // rowStatus: row.status,
+    // canApprove,
+    // departmentCondition: scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && row.status === 'Division Submitted',
+    // officeFinalCondition: (scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier') && canApprovePermission && row.status === 'Forwarded to Officer',
+    // officeVerificationCondition: (scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier') && canApprovePermission && 
+                               // ['Forwarded to Officer'].includes(row.status),
+    // hasDepartmentConsolidator: roles.includes('departmentConsolidator'),
+    // hasOfficeFinalVerifier: roles.includes('officeFinalVerifier'),
+    // canApprovePermission
+  // });
   
   if (!canApprove) return null;
 
@@ -378,21 +378,21 @@ export const ReturnButton = ({ row, refreshData }) => {
   const { currentUser } = useUser();
   
   // Debug logging for user data
-  console.log('👤 ReturnButton User Debug:', {
-    currentUser: currentUser,
-    hierarchicalAccess: currentUser?.hierarchicalAccess,
-    scope: currentUser?.hierarchicalAccess?.scope,
-    workflowRoles: currentUser?.hierarchicalAccess?.workflowRoles,
-    rolePermissions: currentUser?.hierarchicalAccess?.rolePermissions,
-    hierarchicalFlags: currentUser?.hierarchicalFlags
-  });
+  // console.log('👤 ReturnButton User Debug:', {
+    // currentUser: currentUser,
+    // hierarchicalAccess: currentUser?.hierarchicalAccess,
+    // scope: currentUser?.hierarchicalAccess?.scope,
+    // workflowRoles: currentUser?.hierarchicalAccess?.workflowRoles,
+    // rolePermissions: currentUser?.hierarchicalAccess?.rolePermissions,
+    // hierarchicalFlags: currentUser?.hierarchicalFlags
+  // });
   
   // Debug logging for row data
-  console.log('📋 ReturnButton Row Debug:', {
-    rowId: row._id,
-    rowStatus: row.status,
-    fullRow: row
-  });
+  // console.log('📋 ReturnButton Row Debug:', {
+    // rowId: row._id,
+    // rowStatus: row.status,
+    // fullRow: row
+  // });
 
   const scope = currentUser?.hierarchicalAccess?.scope;
   const roles = currentUser?.hierarchicalAccess?.workflowRoles || [];
@@ -406,19 +406,19 @@ export const ReturnButton = ({ row, refreshData }) => {
   );
   
   // Debug logging
-  console.log('🔍 ReturnButton Debug:', {
-    scope,
-    roles,
-    rowStatus: row.status,
-    canReturn,
-    departmentCondition: scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && ['Division Submitted'].includes(row.status),
-    officeCondition: ((scope === 'OFFICE' && roles.includes('officeConsolidator')) ||
-                     ((scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier'))) &&
-                    ['Forwarded to Officer', 'Officer Approved'].includes(row.status),
-    hasDepartmentConsolidator: roles.includes('departmentConsolidator'),
-    hasOfficeConsolidator: roles.includes('officeConsolidator'),
-    hasOfficeFinalVerifier: roles.includes('officeFinalVerifier')
-  });
+  // console.log('🔍 ReturnButton Debug:', {
+    // scope,
+    // roles,
+    // rowStatus: row.status,
+    // canReturn,
+    // departmentCondition: scope === 'DEPARTMENT' && roles.includes('departmentConsolidator') && ['Division Submitted'].includes(row.status),
+    // officeCondition: ((scope === 'OFFICE' && roles.includes('officeConsolidator')) ||
+                     // ((scope === 'OFFICE' || scope === 'FULL') && roles.includes('officeFinalVerifier'))) &&
+                    // ['Forwarded to Officer', 'Officer Approved'].includes(row.status),
+    // hasDepartmentConsolidator: roles.includes('departmentConsolidator'),
+    // hasOfficeConsolidator: roles.includes('officeConsolidator'),
+    // hasOfficeFinalVerifier: roles.includes('officeFinalVerifier')
+  // });
 
   if (!canReturn) return null;
 

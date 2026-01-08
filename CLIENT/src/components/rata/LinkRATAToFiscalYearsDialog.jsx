@@ -86,12 +86,12 @@ const LinkRATAToFiscalYearsDialog = ({
   const fetchCurrentLinks = async () => {
     try {
       const response = await api.get(`/ratas/${rataId}/linked-fiscal-years`);
-      console.log('🔗 [LinkRATADialog] Linked Fiscal Years Response:', response.data?.linkedFiscalYears);
+      // console.log('🔗 [LinkRATADialog] Linked Fiscal Years Response:', response.data?.linkedFiscalYears);
       const linkedIds = response.data?.linkedFiscalYears?.map(l => {
         // Ensure we're getting the string ID regardless of format
         return typeof l.settingsId === 'object' ? l.settingsId._id : l.settingsId;
       }) || [];
-      console.log('🔗 [LinkRATADialog] Extracted Linked IDs:', linkedIds);
+      // console.log('🔗 [LinkRATADialog] Extracted Linked IDs:', linkedIds);
       setCurrentlyLinked(linkedIds);
       setSelectedFiscalYears(linkedIds);
     } catch (error) {
@@ -148,7 +148,7 @@ const LinkRATAToFiscalYearsDialog = ({
       const updated = prev.some(id => String(id) === idString)
         ? prev.filter(id => String(id) !== idString)
         : [...prev, fiscalYearId];
-      console.log('🔗 [LinkRATADialog] Selected Fiscal Years:', updated);
+      // console.log('🔗 [LinkRATADialog] Selected Fiscal Years:', updated);
       return updated;
     });
   };

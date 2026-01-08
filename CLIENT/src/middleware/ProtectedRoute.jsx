@@ -40,7 +40,7 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
   const hasRequiredPermissions = requiredPermissions.length === 0 ||
     requiredPermissions.every(permission => {
       const allowed = hasPermission(currentUser, permission);
-      console.log(`${allowed ? '✅' : '❌'} Permission ${permission}: ${allowed ? 'ALLOWED' : 'DENIED'}`);
+      // console.log(`${allowed ? '✅' : '❌'} Permission ${permission}: ${allowed ? 'ALLOWED' : 'DENIED'}`);
       return allowed;
     });
 
@@ -53,13 +53,13 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
   // Special handling for FULL access users - ensure they have regionCreator role
   let effectiveWorkflowRoles = [...userWorkflowRoles];
   if (hierarchicalAccess?.scope === 'FULL' && !effectiveWorkflowRoles.includes('regionCreator')) {
-    console.log('🔧 Adding regionCreator role for FULL access user');
+    // console.log('🔧 Adding regionCreator role for FULL access user');
     effectiveWorkflowRoles.push('regionCreator');
   }
 
   // Ensure BRD-level (Budget and Revenue Division) users have access to global pages like Employee List
   if ((hierarchicalAccess?.scope === 'BUDGET_AND_REVENUE_DIVISION' || hierarchicalAccess?.assignmentLevel === 'BUDGET_AND_REVENUE_DIVISION') && !effectiveWorkflowRoles.includes('superAdmin')) {
-    console.log('🔧 Adding superAdmin workflow role for BRD access user');
+    // console.log('🔧 Adding superAdmin workflow role for BRD access user');
     effectiveWorkflowRoles.push('superAdmin');
   }
 
@@ -72,13 +72,13 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
   
   // If user is SUPER ADMIN, treat them as having superAdmin workflow role
   if (isBudgetAdmin && !effectiveWorkflowRoles.includes('superAdmin')) {
-    console.log('🔧 Adding superAdmin workflow role for SUPER ADMIN');
+    // console.log('🔧 Adding superAdmin workflow role for SUPER ADMIN');
     effectiveWorkflowRoles.push('superAdmin');
   }
   
   // If user is Budget Staff (PLANNING_ANALYST, MANAGER, OFFICER), add appropriate workflow roles
   if (isBudgetStaff) {
-    console.log('🔧 Adding workflow roles for Budget Staff');
+    // console.log('🔧 Adding workflow roles for Budget Staff');
     // Add superAdmin role for Budget Staff to access reports and employee pages
     if (!effectiveWorkflowRoles.includes('superAdmin')) {
       effectiveWorkflowRoles.push('superAdmin');
@@ -96,14 +96,14 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
   userJobRoles.forEach(jobRole => {
     const workflowRole = workflowRolesFromJobRoles[jobRole];
     if (workflowRole && !effectiveWorkflowRoles.includes(workflowRole)) {
-      console.log(`🔧 Adding workflow role ${workflowRole} from job role ${jobRole}`);
+      // console.log(`🔧 Adding workflow role ${workflowRole} from job role ${jobRole}`);
       effectiveWorkflowRoles.push(workflowRole);
     }
   });
   
   // If user is OVERALL BUDGET APPROVER, also add superAdmin role for access to reports, settings, etc.
   if (userJobRoles.includes('OVERALL BUDGET APPROVER') && !effectiveWorkflowRoles.includes('superAdmin')) {
-    console.log('🔧 Adding superAdmin workflow role for OVERALL BUDGET APPROVER');
+    // console.log('🔧 Adding superAdmin workflow role for OVERALL BUDGET APPROVER');
     effectiveWorkflowRoles.push('superAdmin');
   }
 
@@ -114,16 +114,16 @@ const ProtectedRoute = ({ requiredPermissions = [], requiredWorkflowRoles = [], 
   const hasRequiredWorkflowRoles = requiredWorkflowRoles.length === 0 ||
     requiredWorkflowRoles.some(role => effectiveWorkflowRoles.includes(role));
 
-  console.log('🔍 Workflow Roles Check:', {
-    requiredWorkflowRoles,
-    excludeRoles,
-    hasExcludedRoles,
-    userWorkflowRoles,
-    effectiveWorkflowRoles,
-    hasRequiredWorkflowRoles,
-    missingRoles: requiredWorkflowRoles.filter(role => !effectiveWorkflowRoles.includes(role)),
-    isFullAccess: hierarchicalAccess?.scope === 'FULL'
-  });
+  // console.log('🔍 Workflow Roles Check:', {
+    // requiredWorkflowRoles,
+    // excludeRoles,
+    // hasExcludedRoles,
+    // userWorkflowRoles,
+    // effectiveWorkflowRoles,
+    // hasRequiredWorkflowRoles,
+    // missingRoles: requiredWorkflowRoles.filter(role => !effectiveWorkflowRoles.includes(role)),
+    // isFullAccess: hierarchicalAccess?.scope === 'FULL'
+  // });
 
   // User must have both required permissions AND required workflow roles, and no excluded roles
   if (!hasRequiredPermissions || !hasRequiredWorkflowRoles || hasExcludedRoles) {

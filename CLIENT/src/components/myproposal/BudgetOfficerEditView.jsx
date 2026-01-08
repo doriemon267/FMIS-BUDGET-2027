@@ -101,31 +101,31 @@ const BudgetOfficerEditView = forwardRef(({
 
   useEffect(() => {
     if (proposalData) {
-      console.log('🔄 BudgetOfficerEditView - proposalData received:', {
-        hasProposalData: !!proposalData,
-        hasExistingEdit: proposalData.hasExistingEdit,
-        hasEditedData: !!proposalData.editedData,
-        incomeCount: proposalData.income?.length,
-        personnelCount: proposalData.personnelServices?.length,
-        mooeCount: proposalData.mooe?.length,
-        capitalOutlayCount: proposalData.capitalOutlay?.length,
-        editedIncomeCount: proposalData.editedData?.income?.length,
-        editedPersonnelCount: proposalData.editedData?.personnelServices?.length,
-        editedMooeCount: proposalData.editedData?.mooe?.length,
-        editedCapitalOutlayCount: proposalData.editedData?.capitalOutlay?.length,
-        editComments: proposalData.editComments,
-        editStatus: proposalData.editStatus
-      });
+      // console.log('🔄 BudgetOfficerEditView - proposalData received:', {
+        // hasProposalData: !!proposalData,
+        // hasExistingEdit: proposalData.hasExistingEdit,
+        // hasEditedData: !!proposalData.editedData,
+        // incomeCount: proposalData.income?.length,
+        // personnelCount: proposalData.personnelServices?.length,
+        // mooeCount: proposalData.mooe?.length,
+        // capitalOutlayCount: proposalData.capitalOutlay?.length,
+        // editedIncomeCount: proposalData.editedData?.income?.length,
+        // editedPersonnelCount: proposalData.editedData?.personnelServices?.length,
+        // editedMooeCount: proposalData.editedData?.mooe?.length,
+        // editedCapitalOutlayCount: proposalData.editedData?.capitalOutlay?.length,
+        // editComments: proposalData.editComments,
+        // editStatus: proposalData.editStatus
+      // });
       
       // If there's existing edited data, use it but merge with fresh data to get categoryName and details
       if (proposalData.hasExistingEdit && proposalData.editedData) {
-        console.log('✅ Using EDITED data because hasExistingEdit=true and editedData exists');
-        console.log('📋 EDITED DATA DETAILS:', {
-          editedIncome: proposalData.editedData.income?.map(i => ({ id: i._id, amount: i.amount })),
-          editedPersonnel: proposalData.editedData.personnelServices?.map(p => ({ id: p._id, Total: p.Total })),
-          editedMOOE: proposalData.editedData.mooe?.map(m => ({ id: m._id, amount: m.amount })),
-          editedCapitalOutlay: proposalData.editedData.capitalOutlay?.map(c => ({ id: c._id, cost: c.cost }))
-        });
+        // console.log('✅ Using EDITED data because hasExistingEdit=true and editedData exists');
+        // console.log('📋 EDITED DATA DETAILS:', {
+          // editedIncome: proposalData.editedData.income?.map(i => ({ id: i._id, amount: i.amount })),
+          // editedPersonnel: proposalData.editedData.personnelServices?.map(p => ({ id: p._id, Total: p.Total })),
+          // editedMOOE: proposalData.editedData.mooe?.map(m => ({ id: m._id, amount: m.amount })),
+          // editedCapitalOutlay: proposalData.editedData.capitalOutlay?.map(c => ({ id: c._id, cost: c.cost }))
+        // });
         
         // Merge edited data with fresh data for Capital Outlay
         const mergedCapitalOutlay = (proposalData.editedData.capitalOutlay || []).map(editedItem => {
@@ -151,12 +151,12 @@ const BudgetOfficerEditView = forwardRef(({
           return merged;
         });
         
-        console.log('📊 Setting state with edited data:', {
-          incomeRows: proposalData.editedData.income?.length,
-          personnelRows: proposalData.editedData.personnelServices?.length,
-          mooeRows: proposalData.editedData.mooe?.length,
-          capitalOutlayRows: mergedCapitalOutlay.length
-        });
+        // console.log('📊 Setting state with edited data:', {
+          // incomeRows: proposalData.editedData.income?.length,
+          // personnelRows: proposalData.editedData.personnelServices?.length,
+          // mooeRows: proposalData.editedData.mooe?.length,
+          // capitalOutlayRows: mergedCapitalOutlay.length
+        // });
         
         // Split personnel data into regular and charged to income
         const allPersonnel = proposalData.editedData.personnelServices || [];
@@ -171,19 +171,19 @@ const BudgetOfficerEditView = forwardRef(({
         setComments(proposalData.editComments || ''); // Load existing comments
       } else {
         // No existing edit, use fresh data
-        console.log('ℹ️ Using FRESH data - no existing edits (hasExistingEdit=' + proposalData.hasExistingEdit + ')');
-        console.log('📊 Setting state with fresh data:', {
-          incomeRows: proposalData.income?.length,
-          personnelRows: proposalData.personnelServices?.length,
-          mooeRows: proposalData.mooe?.length,
-          capitalOutlayRows: proposalData.capitalOutlay?.length
-        });
-        console.log('📋 FRESH DATA (first item from each):', {
-          firstIncome: proposalData.income?.[0],
-          firstPersonnel: proposalData.personnelServices?.[0],
-          firstMOOE: proposalData.mooe?.[0],
-          firstCapitalOutlay: proposalData.capitalOutlay?.[0]
-        });
+        // console.log('ℹ️ Using FRESH data - no existing edits (hasExistingEdit=' + proposalData.hasExistingEdit + ')');
+        // console.log('📊 Setting state with fresh data:', {
+          // incomeRows: proposalData.income?.length,
+          // personnelRows: proposalData.personnelServices?.length,
+          // mooeRows: proposalData.mooe?.length,
+          // capitalOutlayRows: proposalData.capitalOutlay?.length
+        // });
+        // console.log('📋 FRESH DATA (first item from each):', {
+          // firstIncome: proposalData.income?.[0],
+          // firstPersonnel: proposalData.personnelServices?.[0],
+          // firstMOOE: proposalData.mooe?.[0],
+          // firstCapitalOutlay: proposalData.capitalOutlay?.[0]
+        // });
         
         // Split personnel data into regular and charged to income
         const allPersonnel = proposalData.personnelServices || [];
@@ -220,16 +220,16 @@ const BudgetOfficerEditView = forwardRef(({
       const capitalTotal = calculateModuleTotal(capitalOutlayData, 'cost');
       const incomeTotal = calculateModuleTotal(incomeData, 'amount');
 
-      console.log('🔍 CLIENT-SIDE VALIDATION STARTED:', {
-        personnelTotal,
-        mooeTotal,
-        capitalTotal,
-        incomeTotal,
-        personnelCount: personnelData.length,
-        mooeCount: mooeData.length,
-        capitalCount: capitalOutlayData.length,
-        incomeCount: incomeData.length
-      });
+      // console.log('🔍 CLIENT-SIDE VALIDATION STARTED:', {
+        // personnelTotal,
+        // mooeTotal,
+        // capitalTotal,
+        // incomeTotal,
+        // personnelCount: personnelData.length,
+        // mooeCount: mooeData.length,
+        // capitalCount: capitalOutlayData.length,
+        // incomeCount: incomeData.length
+      // });
 
       // Determine if regional or central office
       const regionName = (proposal.region || '').toUpperCase();
@@ -240,21 +240,21 @@ const BudgetOfficerEditView = forwardRef(({
       // All modules must have positive amounts (STRICTLY GREATER THAN 0)
       if (personnelTotal <= 0) {
         missingModules.push(`Personnel Services (Total: ${personnelTotal})`);
-        console.log('❌ VALIDATION FAILED: Personnel Services total is:', personnelTotal);
+        // console.log('❌ VALIDATION FAILED: Personnel Services total is:', personnelTotal);
       }
       if (mooeTotal <= 0) {
         missingModules.push(`MOOE (Total: ${mooeTotal})`);
-        console.log('❌ VALIDATION FAILED: MOOE total is:', mooeTotal);
+        // console.log('❌ VALIDATION FAILED: MOOE total is:', mooeTotal);
       }
       if (capitalTotal <= 0) {
         missingModules.push(`Capital Outlay (Total: ${capitalTotal})`);
-        console.log('❌ VALIDATION FAILED: Capital Outlay total is:', capitalTotal);
+        // console.log('❌ VALIDATION FAILED: Capital Outlay total is:', capitalTotal);
       }
       
       // Income is required for regional proposals only
       if (!isCentralOffice && incomeTotal <= 0) {
         missingModules.push(`Income (Total: ${incomeTotal})`);
-        console.log('❌ VALIDATION FAILED: Income total is:', incomeTotal, '(Regional Proposal)');
+        // console.log('❌ VALIDATION FAILED: Income total is:', incomeTotal, '(Regional Proposal)');
       }
 
       if (missingModules.length > 0) {
@@ -276,11 +276,11 @@ const BudgetOfficerEditView = forwardRef(({
         ];
         
         toast.error(summaryLines.join('\n'));
-        console.log('🛑 SUBMISSION BLOCKED BY CLIENT VALIDATION');
+        // console.log('🛑 SUBMISSION BLOCKED BY CLIENT VALIDATION');
         return false;
       }
 
-      console.log('✅ CLIENT-SIDE VALIDATION PASSED');
+      // console.log('✅ CLIENT-SIDE VALIDATION PASSED');
       return true;
     } catch (error) {
       console.error('⚠️ ERROR IN VALIDATION LOGIC:', error);

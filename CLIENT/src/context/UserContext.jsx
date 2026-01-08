@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { authApi } from "../config/api";
-import api from "../config/api";
+import api, { setDevUser } from "../config/api";
 import Loading from "../global/components/Loading";
 import env from "../utils/env";
 import io from "socket.io-client"; // Import Socket.io client
@@ -44,7 +44,14 @@ const UserProvider = ({ children }) => {
 
     await authApi.get("/logout");
     setCurrentUser(null);
-    localStorage.removeItem("currentUser"); // Remove user data for RegionContext
+      try { setDevUser(null); } catch (e) {}
+      // Clear all storage keys for this origin so signing out removes any residual state
+      try {
+        sessionStorage.clear();
+      } catch (e) {}
+      try {
+        localStorage.clear();
+      } catch (e) {}
     localStorage.removeItem("activeRegion"); // Clear active region
     location.href = env("AUTH_CLIENT_URL") + "/login";
   };
@@ -56,7 +63,8 @@ const UserProvider = ({ children }) => {
     setIsRefetching(true);
     try {
       const devHeaders = {};
-      const cu = currentUser || JSON.parse(localStorage.getItem('currentUser') || 'null');
+      // Use in-memory currentUser only
+      const cu = currentUser;
       const devUserId = (Array.isArray(cu?.Username) ? cu.Username[0] : cu?.Username) || cu?.Id || cu?.id || cu?.userId;
       if (devUserId) devHeaders['X-Dev-User-Id'] = String(devUserId);
       if (cu?.Roles) devHeaders['X-Dev-Roles'] = (Array.isArray(cu.Roles) ? cu.Roles : [cu.Roles]).join(',');
@@ -75,16 +83,16 @@ const UserProvider = ({ children }) => {
 
           // If user has FULL access but no workflow roles, auto-assign them
           if (accessInfo?.scope === 'FULL' && (!userWorkflowRoles || userWorkflowRoles.length === 0)) {
-            console.log('🔧 Auto-assigning workflow roles for FULL access user');
+            // console.log('🔧 Auto-assigning workflow roles for FULL access user');
             userWorkflowRoles = ['responsibilityCenterCreator', 'responsibilityCenterApprover', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'responsibilityCenterFinalVerifier', 'officeFinalVerifier'];
           }
         }
       } catch (assignmentError) {
-        console.log('Could not load user assignment for workflow roles:', assignmentError.message);
+        // console.log('Could not load user assignment for workflow roles:', assignmentError.message);
 
         // If we can't load assignment but user has FULL access, auto-assign workflow roles
         if (accessInfo?.scope === 'FULL') {
-          console.log('🔧 Auto-assigning workflow roles for FULL access user (fallback)');
+          // console.log('🔧 Auto-assigning workflow roles for FULL access user (fallback)');
           userWorkflowRoles = ['responsibilityCenterCreator', 'responsibilityCenterApprover', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'responsibilityCenterFinalVerifier', 'officeFinalVerifier'];
         }
       }
@@ -108,7 +116,7 @@ const UserProvider = ({ children }) => {
           regions: normalizedRegions,
         };
         setCurrentUser(updatedUser);
-        localStorage.setItem("currentUser", JSON.stringify(updatedUser));
+        try { setDevUser(updatedUser); } catch (e) {}
 
         // Consider it a success if user has FULL scope or any accessible unit
         const hasAnyAccess =
@@ -144,17 +152,17 @@ const UserProvider = ({ children }) => {
             if (user?.Roles) devHeaders['X-Dev-Roles'] = (Array.isArray(user.Roles) ? user.Roles : [user.Roles]).join(',');
 
             // 🔍 DEBUG: Log what's being sent to backend
-            console.log('🔍 Frontend Debug - Dev Headers being sent:', {
-              'X-Dev-User-Id': devHeaders['X-Dev-User-Id'],
-              'X-Dev-Roles': devHeaders['X-Dev-Roles'],
-              userObject: {
-                Id: user?.Id,
-                id: user?.id,
-                userId: user?.userId,
-                Username: user?.Username,
-                Roles: user?.Roles
-              }
-            });
+            // console.log('🔍 Frontend Debug - Dev Headers being sent:', {
+            //   'X-Dev-User-Id': devHeaders['X-Dev-User-Id'],
+            //   'X-Dev-Roles': devHeaders['X-Dev-Roles'],
+            //   userObject: {
+            //     Id: user?.Id,
+            //     id: user?.id,
+            //     userId: user?.userId,
+            //     Username: user?.Username,
+            //     Roles: user?.Roles
+            //   }
+            // });
 
             const haRes = await api.get("/api/hierarchical-rbac/my-access", { headers: devHeaders });
             const accessInfo = haRes?.data?.accessInfo;
@@ -164,14 +172,14 @@ const UserProvider = ({ children }) => {
             try {
               const userId = (Array.isArray(user?.Username) ? user.Username[0] : user?.Username) || user?.Id || user?.id || user?.userId;
               if (userId) {
-                console.log('🔍 Fetching assignments for userId:', userId);
+                // console.log('🔍 Fetching assignments for userId:', userId);
                 const assignmentRes = await api.get(`/api/hierarchical-rbac/assignments/${userId}`, { headers: devHeaders });
                 if (assignmentRes?.data?.assignment?.workflowRoles) {
                   userWorkflowRoles = assignmentRes.data.assignment.workflowRoles;
                 }
               }
             } catch (assignmentError) {
-              console.log('❌ Could not load user assignment for workflow roles:', assignmentError.response?.status, assignmentError.response?.data || assignmentError.message);
+              // console.log('❌ Could not load user assignment for workflow roles:', assignmentError.response?.status, assignmentError.response?.data || assignmentError.message);
             }
 
             if (accessInfo) {
@@ -198,18 +206,16 @@ const UserProvider = ({ children }) => {
           }
           
           setCurrentUser(user);
-
-          // Store user in localStorage for RegionContext
-          localStorage.setItem('currentUser', JSON.stringify(user));
+          try { setDevUser(user); } catch (e) {}
 
           // Initialize WebSocket connection for real-time updates (server uses auth cookie)
           // initializeWebSocket(user);
         } else {
-          localStorage.removeItem("currentUser");
+          try { setDevUser(null); } catch (e) {}
           location.href = env("AUTH_CLIENT_URL") + "/login";
         }
       } catch (error) {
-        localStorage.removeItem("currentUser");
+        try { setDevUser(null); } catch (e) {}
         console.error("Error fetching user:", error);
         location.href = env("AUTH_CLIENT_URL") + "/login";
       } finally {
@@ -223,7 +229,7 @@ const UserProvider = ({ children }) => {
   useEffect(() => {
     return () => {
       if (socket) {
-        console.log('🧹 Cleaning up WebSocket connection');
+        // console.log('🧹 Cleaning up WebSocket connection');
         socket.disconnect();
       }
     };

@@ -127,13 +127,13 @@ const ProposalDetailsWithTables = ({ open, onClose, proposal, userInfo }) => {
   const fetchPersonnelServices = async () => {
     try {
       setTabLoading(prev => ({ ...prev, 0: true }));
-      console.log('📍 Fetching Personnel Services for proposal:', { fiscalYear: proposal.fiscalYear, region: proposal.region, budgetType: proposal.budgetType });
+      // console.log('📍 Fetching Personnel Services for proposal:', { fiscalYear: proposal.fiscalYear, region: proposal.region, budgetType: proposal.budgetType });
       const response = await api.get(`/api/personnel/getByParams?fiscalYear=${proposal.fiscalYear}&region=${proposal.region}&budgetType=${proposal.budgetType}`);
-      console.log('✅ Personnel Services response:', response.data);
-      console.log('📊 First personnel record sample:', response.data?.[0]);
+      // console.log('✅ Personnel Services response:', response.data);
+      // console.log('📊 First personnel record sample:', response.data?.[0]);
       // Log all field names from first record for debugging
       if (response.data?.[0]) {
-        console.log('🔍 Available fields in first record:', Object.keys(response.data[0]));
+        // console.log('🔍 Available fields in first record:', Object.keys(response.data[0]));
       }
       setPersonnelData(response.data || []);
     } catch (error) {
@@ -147,9 +147,9 @@ const ProposalDetailsWithTables = ({ open, onClose, proposal, userInfo }) => {
   const fetchCapitalOutlayData = async () => {
     try {
       setTabLoading(prev => ({ ...prev, 2: true }));
-      console.log('📍 Fetching Capital Outlay data for proposal:', { fiscalYear: proposal.fiscalYear, region: proposal.region, budgetType: proposal.budgetType });
+      // console.log('📍 Fetching Capital Outlay data for proposal:', { fiscalYear: proposal.fiscalYear, region: proposal.region, budgetType: proposal.budgetType });
       const response = await api.get(`/capital-outlay/getByParams?fiscalYear=${proposal.fiscalYear}&region=${proposal.region}&budgetType=${proposal.budgetType}`);
-      console.log('✅ Capital Outlay response:', response.data);
+      // console.log('✅ Capital Outlay response:', response.data);
       
       // Try to resolve category names if they're just IDs
       let resolved = response.data || [];
@@ -168,7 +168,7 @@ const ProposalDetailsWithTables = ({ open, onClose, proposal, userInfo }) => {
           ...item,
           categoryName: categoryMap[item.category] || item.categoryName || item.category || 'N/A'
         }));
-        console.log('✅ Categories resolved:', resolved.map(r => ({ id: r.category, name: r.categoryName })));
+        // console.log('✅ Categories resolved:', resolved.map(r => ({ id: r.category, name: r.categoryName })));
       } catch (err) {
         console.warn('⚠️ Could not fetch categories for resolution, using raw data:', err.message);
       }
@@ -185,9 +185,9 @@ const ProposalDetailsWithTables = ({ open, onClose, proposal, userInfo }) => {
   const fetchMooeData = async () => {
     try {
       setTabLoading(prev => ({ ...prev, 1: true }));
-      console.log('📍 Fetching MOOE data for proposal:', { fiscalYear: proposal.fiscalYear, region: proposal.region, budgetType: proposal.budgetType });
+      // console.log('📍 Fetching MOOE data for proposal:', { fiscalYear: proposal.fiscalYear, region: proposal.region, budgetType: proposal.budgetType });
       const response = await api.get(`/mooe/getByParams?fiscalYear=${proposal.fiscalYear}&region=${proposal.region}&budgetType=${proposal.budgetType}`);
-      console.log('✅ MOOE response:', response.data);
+      // console.log('✅ MOOE response:', response.data);
       setMooeData(response.data || []);
     } catch (error) {
       console.error('❌ Error fetching MOOE data:', error);
@@ -200,9 +200,9 @@ const ProposalDetailsWithTables = ({ open, onClose, proposal, userInfo }) => {
   const fetchIncomeData = async () => {
     try {
       setTabLoading(prev => ({ ...prev, 3: true }));
-      console.log('📍 Fetching Income data for proposal:', { fiscalYear: proposal.fiscalYear, region: proposal.region, budgetType: proposal.budgetType });
+      // console.log('📍 Fetching Income data for proposal:', { fiscalYear: proposal.fiscalYear, region: proposal.region, budgetType: proposal.budgetType });
       const response = await api.get(`/income/getByParams?fiscalYear=${proposal.fiscalYear}&region=${proposal.region}&budgetType=${proposal.budgetType}`);
-      console.log('✅ Income response:', response.data);
+      // console.log('✅ Income response:', response.data);
       setIncomeData(response.data || []);
     } catch (error) {
       console.error('❌ Error fetching income data:', error);

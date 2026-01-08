@@ -66,7 +66,7 @@ const WorkflowNotifications = () => {
         setNotifications(newNotifs);
         
         // Log for debugging
-        console.log('[WorkflowNotifications] Fetched', newNotifs.length, 'notifications');
+        // console.log('[WorkflowNotifications] Fetched', newNotifs.length, 'notifications');
       }
     } catch (error) {
       console.error('[WorkflowNotifications] Error fetching:', error);

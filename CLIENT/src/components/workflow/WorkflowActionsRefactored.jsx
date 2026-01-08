@@ -395,7 +395,7 @@ const WorkflowActionsRefactored = ({
     setHistoryLoading(true);
     try {
       const response = await api.get(`/api/workflow/history/${proposalId}`);
-      console.log('📋 History fetched:', response.data);
+      // console.log('📋 History fetched:', response.data);
       setHistory(response.data.history || []);
       setHistoryOpen(true);
     } catch (err) {
@@ -434,7 +434,7 @@ const WorkflowActionsRefactored = ({
           startIcon={<DetailsIcon />}
           onClick={() => {
             if (proposal?._id) {
-              console.log('🔗 DETAILS button: Navigating to full page proposal details:', proposal._id);
+              // console.log('🔗 DETAILS button: Navigating to full page proposal details:', proposal._id);
               navigate(`/proposal-details/${proposal._id}`, { 
                 state: { proposal }
               });

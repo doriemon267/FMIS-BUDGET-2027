@@ -102,12 +102,12 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
   }, [proposalId, fetchHistory]);
 
   // Top-level render log to confirm component renders
-  console.log('WorkflowActions Render:', {
-    proposalId: proposal?._id,
-    status: proposal?.status,
-    userLevelRaw: (userInfo?.assignmentLevel || userInfo?.accessScope || userInfo?.scope || '').toUpperCase(),
-    roles: userInfo?.workflowRoles || []
-  });
+  // console.log('WorkflowActions Render:', {
+    // proposalId: proposal?._id,
+    // status: proposal?.status,
+    // userLevelRaw: (userInfo?.assignmentLevel || userInfo?.accessScope || userInfo?.scope || '').toUpperCase(),
+    // roles: userInfo?.workflowRoles || []
+  // });
 
   const normalizeRoleValue = useCallback((roleValue) => {
     if (!roleValue || typeof roleValue !== 'string') return '';
@@ -184,7 +184,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
     
     // Debug log for mapping issues
     if (roleValue && ['FULL', 'REGIONAL_FINAL_VERIFIER', 'REGION_FINAL_VERIFIER', 'PREPARER', 'REVIEWER', 'APPROVER'].includes(camelCaseNormalized)) {
-      console.log(`🔄 Role Mapping: "${roleValue}" → normalized: "${camelCaseNormalized}" → final: "${result}"`);
+      // console.log(`🔄 Role Mapping: "${roleValue}" → normalized: "${camelCaseNormalized}" → final: "${result}"`);
     }
     
     return result;
@@ -345,33 +345,33 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       isSuperAdmin = restrictRole === 'SUPER ADMIN' ? isSuperAdmin : false;
     }
 
-    console.log('🔍 WorkflowActions Debug:', {
-      status,
-      normalizedStatus,
-      rawRoleSources,
-      rawRoles,
-      roleMapping,
-      normalizedRoles,
-      isPreparer,
-      isBudgetReviewer,
-      isReviewerStage,
-      isBudgetReviewerEffective,
-      isApprover,
-      isBudgetPlanningAnalyst,
-      isBudgetOfficer,
-      isOverallApprover,
-      isSuperAdmin,
-      isPreparerOnly,
-      shouldBlockManagerActions,
-      shouldBlockOfficerActions,
-      proposalId: proposal?._id,
-      userInfo: {
-        roles: userInfo?.roles,
-        Roles: userInfo?.Roles,
-        role: userInfo?.role
-      },
-      restrictRole
-    });
+    // console.log('🔍 WorkflowActions Debug:', {
+      // status,
+      // normalizedStatus,
+      // rawRoleSources,
+      // rawRoles,
+      // roleMapping,
+      // normalizedRoles,
+      // isPreparer,
+      // isBudgetReviewer,
+      // isReviewerStage,
+      // isBudgetReviewerEffective,
+      // isApprover,
+      // isBudgetPlanningAnalyst,
+      // isBudgetOfficer,
+      // isOverallApprover,
+      // isSuperAdmin,
+      // isPreparerOnly,
+      // shouldBlockManagerActions,
+      // shouldBlockOfficerActions,
+      // proposalId: proposal?._id,
+      // userInfo: {
+        // roles: userInfo?.roles,
+        // Roles: userInfo?.Roles,
+        // role: userInfo?.role
+      // },
+      // restrictRole
+    // });
 
   // PREPARER Actions (Draft control & submission)
     if (isPreparer) {
@@ -626,7 +626,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
       console.warn('🚫 BLOCKED: Officer actions blocked for BUDGET_PLANNING_ANALYST user (role hierarchy protection active)');
     }
 
-    console.log('🎯 Available Actions:', actions.length, actions.map(a => a.label));
+    // console.log('🎯 Available Actions:', actions.length, actions.map(a => a.label));
 
     return actions;
   };
@@ -1004,23 +1004,23 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
         debugPayload[noteField] = noteValue?.trim() || `Workflow action performed on ${new Date().toLocaleString()}`;
       }
 
-      console.log('Workflow API Call Debug:', {
-        endpoint,
-        requestData: debugPayload,
-        proposal: {
-          _id: proposal._id,
-          modelType: proposal.modelType,
-          status: proposal.status,
-          originalLevel: proposal.originalLevel
-        }
-      });
+      // console.log('Workflow API Call Debug:', {
+        // endpoint,
+        // requestData: debugPayload,
+        // proposal: {
+          // _id: proposal._id,
+          // modelType: proposal.modelType,
+          // status: proposal.status,
+          // originalLevel: proposal.originalLevel
+        // }
+      // });
 
-      console.log('🔍 WORKFLOW API RESPONSE DEBUG:');
-      console.log('Full Response:', response);
-      console.log('Response Data:', response.data);
-      console.log('Response Status:', response.status);
-      console.log('Response Success Field:', response.data.success);
-      console.log('Response Message:', response.data.message);
+      // console.log('🔍 WORKFLOW API RESPONSE DEBUG:');
+      // console.log('Full Response:', response);
+      // console.log('Response Data:', response.data);
+      // console.log('Response Status:', response.status);
+      // console.log('Response Success Field:', response.data.success);
+      // console.log('Response Message:', response.data.message);
 
       // Check for success - be flexible with response format
       // Success if: explicit success=true, or message says "successfully", or status is 200/201
@@ -1032,22 +1032,22 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
                        (response.data.message && 
                         response.data.message.toLowerCase().includes('successfully'));
 
-      console.log('🎯 SUCCESS CHECK RESULT:', isSuccess);
-      console.log('🎯 SUCCESS DETAILS:', {
-        success_field: response.data.success,
-        status_code: response.status,
-        message: response.data.message,
-        has_proposal: !!response.data.proposal
-      });
+      // console.log('🎯 SUCCESS CHECK RESULT:', isSuccess);
+      // console.log('🎯 SUCCESS DETAILS:', {
+        // success_field: response.data.success,
+        // status_code: response.status,
+        // message: response.data.message,
+        // has_proposal: !!response.data.proposal
+      // });
 
       if (isSuccess) {
-        console.log('✅ WORKFLOW ACTION SUCCESSFUL - Starting updates...');
+        // console.log('✅ WORKFLOW ACTION SUCCESSFUL - Starting updates...');
         
         // Show success toast FIRST
         toast.success(successMessage);
         
         // Fetch history in background (don't block on errors)
-        console.log('🔄 Fetching workflow history...');
+        // console.log('🔄 Fetching workflow history...');
         fetchHistory({ force: true }).catch((histErr) => {
           console.warn('⚠️ Failed to fetch history (non-blocking):', histErr.message);
         });
@@ -1064,23 +1064,23 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
         }
         
         // Immediate refresh to show updated status in real-time
-        console.log('✅ Workflow action successful, triggering immediate refresh...');
-        console.log('📦 Response contains updated proposal:', response.data.proposal ? 'YES' : 'NO');
+        // console.log('✅ Workflow action successful, triggering immediate refresh...');
+        // console.log('📦 Response contains updated proposal:', response.data.proposal ? 'YES' : 'NO');
         
         // CRITICAL: Always pass true as second parameter to force cache invalidation
         try {
           if (response.data.proposal) {
-            console.log('📤 Passing updated proposal to onRefresh callback with FORCE flag:', {
-              status: response.data.proposal.status,
-              workflowLevel: response.data.proposal.workflowLevel
-            });
+            // console.log('📤 Passing updated proposal to onRefresh callback with FORCE flag:', {
+              // status: response.data.proposal.status,
+              // workflowLevel: response.data.proposal.workflowLevel
+            // });
             // Pass true to force refresh and ignore cache
             onRefresh(response.data.proposal, true, action); // Pass updated proposal AND force flag for instant update
           } else {
-            console.log('📤 No proposal in response, calling onRefresh with force=true');
+            // console.log('📤 No proposal in response, calling onRefresh with force=true');
             onRefresh(null, true, action); // Fallback to force re-fetch without cache
           }
-          console.log('✅ onRefresh callback completed successfully');
+          // console.log('✅ onRefresh callback completed successfully');
         } catch (refreshErr) {
           console.error('❌ Error in onRefresh callback:', refreshErr);
           // Don't throw - just log it, we already showed the success toast
@@ -1225,7 +1225,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
   // Expose triggerFinalizeAction method to parent via ref
   useImperativeHandle(ref, () => ({
     triggerFinalizeAction: () => {
-      console.log('🔧 Triggering finalize action from parent');
+      // console.log('🔧 Triggering finalize action from parent');
       // Call the finalize action with empty comment - user will be prompted in dialog
       handleActionClick('manager-approve', 'Finalize', true, false);
     }

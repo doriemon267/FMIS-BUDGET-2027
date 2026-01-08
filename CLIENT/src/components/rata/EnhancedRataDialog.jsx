@@ -152,7 +152,7 @@ const EnhancedRataDialog = ({ open, onClose, editData = null }) => {
         ...data,
         RATA: (parseFloat(data.RA) || 0) + (parseFloat(data.TA) || 0)
       };
-      console.log("Payload sent to backend:", data);
+      // console.log("Payload sent to backend:", data);
       const url = isEditing ? `/ratas/${editData._id}` : "/ratas";
       const method = isEditing ? api.put : api.post;
       const response = await method(url, payload);

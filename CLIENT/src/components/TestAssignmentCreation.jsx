@@ -53,7 +53,7 @@ const TestAssignmentCreation = () => {
         }
       };
 
-      console.log('Creating assignment with payload:', payload);
+      // console.log('Creating assignment with payload:', payload);
 
       const response = await api.post('/api/hierarchical-rbac/assignments', payload);
       setResult(response.data);
@@ -61,7 +61,7 @@ const TestAssignmentCreation = () => {
       // Refresh user profile to get updated access
       await refetchUserProfile();
 
-      console.log('Assignment created successfully:', response.data);
+      // console.log('Assignment created successfully:', response.data);
     } catch (err) {
       console.error('Error creating assignment:', err);
       setError(err.response?.data?.message || err.message);
