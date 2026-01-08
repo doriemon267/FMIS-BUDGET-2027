@@ -97,3 +97,6 @@ SERVER/archive/
 
 # Local archives
 SERVER/mssql.7z
+
+# Local runtime artifacts (do not commit)
+SERVER/SERVER/

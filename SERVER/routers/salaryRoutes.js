@@ -1,6 +1,6 @@
 const express = require('express');
 const salaryRouter = express.Router();
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 const salaryController = require('../controllers/salaryController');
 
 // Apply authentication to all salary routes

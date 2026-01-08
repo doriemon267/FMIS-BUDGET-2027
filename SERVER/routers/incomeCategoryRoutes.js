@@ -12,7 +12,7 @@ const {
     copyCategory,
   } = require("../controllers/IncomeCategoryController");
   const Router = require("express").Router;
-  const checkToken = require('../middleware/checkToken');
+  const checkToken = require('../middleware/check_token');
   const incomeCategoryRouter = Router();
   // Apply authentication middleware to all routes in this router
   incomeCategoryRouter.use(checkToken);

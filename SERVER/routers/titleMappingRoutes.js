@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 const {
   getAllTitleMappings,
   getCapitalOutlayTitleMappings,
@@ -29,4 +29,4 @@ router.post("/title-mappings", createTitleMapping);
 router.put("/title-mappings/:id", updateTitleMapping);
 // Delete a title mapping
 router.delete("/title-mappings/:id", deleteTitleMapping);
-module.exports = router;
+module.exports = router;

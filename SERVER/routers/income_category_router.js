@@ -11,7 +11,7 @@ const {
     getAllCategoriesFiltered,
   } = require("../controllers/IncomeCategoryController");
   const Router = require("express").Router;
-  const checkToken = require('../middleware/checkToken');
+  const checkToken = require('../middleware/check_token');
   const incomeCategoryRouter = Router();
   // Apply authentication middleware to all routes in this router
   incomeCategoryRouter.use(checkToken);
@@ -32,4 +32,4 @@ const {
   incomeCategoryRouter.put("/income-categories/:id", updateCategory);
   // Delete category
   incomeCategoryRouter.delete("/income-categories/:id", deleteCategory);
-  module.exports = incomeCategoryRouter;
+  module.exports = incomeCategoryRouter;

@@ -23,7 +23,7 @@ const {
   recalculateProposalTotals
 } = require("../controllers/proposalController");
 const Router = require("express").Router;
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 const {
   loadHierarchicalAssignment,
   requirePermission,

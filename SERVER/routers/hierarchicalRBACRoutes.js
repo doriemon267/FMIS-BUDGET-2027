@@ -882,8 +882,8 @@ router.get(
           consolidationFlow: {
             'RESPONSIBILITY_CENTER': 'Proposals consolidate to Office level',
             'OFFICE': 'Proposals remain at Office level',
-            'FULL': 'Can access all organizational levels',
-            'OWN_ONLY': 'Access limited to own records only'
+            'FULL': 'Can access all organizational levels'
+            // 'OWN_ONLY': 'Access limited to own records only'
           },
           availableUnits: {
             offices: formattedOffices,
@@ -986,8 +986,8 @@ router.get(
           'DIVISION': 'Proposals consolidate to Department level',
           'DEPARTMENT': 'Proposals consolidate to Region level',
           'REGION': 'Proposals remain at Region level',
-          'FULL': 'Can access all organizational levels',
-          'OWN_ONLY': 'Access limited to own records only'
+          'FULL': 'Can access all organizational levels'
+          // 'OWN_ONLY': 'Access limited to own records only'
         },
         availableUnits: {
           regions: formattedRegions,

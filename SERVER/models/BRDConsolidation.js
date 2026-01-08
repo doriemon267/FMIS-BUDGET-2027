@@ -114,9 +114,7 @@ const brdConsolidationSchema = new mongoose.Schema({
 // Indexes for efficient querying
 brdConsolidationSchema.index({ region: 1, division: 1 });
 brdConsolidationSchema.index({ region: 1, department: 1 });
-brdConsolidationSchema.index({ consolidationPath: 1 });
 brdConsolidationSchema.index({ fiscalYear: 1, region: 1 });
-brdConsolidationSchema.index({ proposalId: 1 });
 brdConsolidationSchema.index({ isCentralOffice: 1 });
 brdConsolidationSchema.index({ status: 1 });
 

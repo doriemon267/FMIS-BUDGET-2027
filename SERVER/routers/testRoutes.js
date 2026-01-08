@@ -5,7 +5,7 @@ const {
   deleteTest,
 } = require("../controllers/test_controller");
 const Router = require("express").Router;
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 const testRouter = Router();
 // Apply authentication middleware to all routes in this router
 testRouter.use(checkToken);
@@ -17,4 +17,4 @@ testRouter.post("/tests", addTest);
 testRouter.put("/tests/:id", editTest);
 // Delete a test
 testRouter.delete("/tests/:id", deleteTest);
-module.exports = testRouter;
+module.exports = testRouter;

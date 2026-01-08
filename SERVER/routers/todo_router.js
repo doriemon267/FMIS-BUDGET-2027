@@ -7,7 +7,7 @@ const {
   clearCompleted,
 } = require("../controllers/todo_controller");
 const Router = require("express").Router;
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 
 const todoRouter = Router();
 

@@ -1,6 +1,6 @@
 const { getIAsOMCost, saveIAsOMCost } = require("../controllers/iasOMCost.controller");
 const Router = require("express").Router;
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 const { strictHierarchicalControl, hierarchicalAccessControl } = require('../middleware/hierarchicalAccessControl');
 const iasOMCostRouter = Router();
 // Apply authentication to all IAs O&M Cost routes

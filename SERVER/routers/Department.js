@@ -1,6 +1,6 @@
 const { getAllDepartment, getDepartmentById } = require('../controllers/DepartmentController');
 const Router = require("express").Router;
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 const departmentRouter = Router();
 // Apply authentication middleware to all routes in this router
 departmentRouter.use(checkToken);

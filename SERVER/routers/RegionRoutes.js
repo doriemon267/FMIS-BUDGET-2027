@@ -1,23 +1,16 @@
-const {
-  getAllRegions,
-  getRegionById,
-  createRegion,
-  updateRegion,
-  deleteRegion,
-} = require("../controllers/regionController");
-const Router = require("express").Router;
-const checkToken = require('../middleware/checkToken');
-const regionRouter = Router();
-// Apply authentication middleware to all routes in this router
-regionRouter.use(checkToken);
+const express = require('express');
+const router = express.Router();
+const regionController = require('../controllers/RegionController');
 // Get all regions
-regionRouter.get("/regions", getAllRegions);
+router.get('/', regionController.getAllRegions);
+// Get region information (equivalences and special regions)
+router.get('/info/mappings', regionController.getRegionInfo);
 // Get a region by ID
-regionRouter.get("/regions/:id", getRegionById);
-// Add a new region
-regionRouter.post("/postregions", createRegion);
-// Edit an existing region
-regionRouter.put("/regions/:id", updateRegion);
+router.get('/:id', regionController.getRegionById);
+// Create a new region
+router.post('/', regionController.createRegion);
+// Update a region
+router.put('/:id', regionController.updateRegion);
 // Delete a region
-regionRouter.delete("/regions/:id", deleteRegion);
-module.exports = regionRouter;
+router.delete('/:id', regionController.deleteRegion);
+module.exports = router;

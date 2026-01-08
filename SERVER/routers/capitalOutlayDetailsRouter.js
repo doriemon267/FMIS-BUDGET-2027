@@ -6,7 +6,7 @@ const {
   deleteCapitalOutlayDetail,
   getCapitalOutlayDetailsSummary,
 } = require("../controllers/capitalOutlayDetailsController");
-const checkToken = require("../middleware/checkToken");
+const checkToken = require("../middleware/check_token");
 const checkDueDate = require("../middleware/checkDueDate");
 const checkDueDateWithRoleBypass = require("../middleware/checkDueDateWithRoleBypass");
 // Apply authentication to all routes

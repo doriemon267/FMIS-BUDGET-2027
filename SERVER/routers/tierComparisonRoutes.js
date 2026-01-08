@@ -6,7 +6,7 @@ const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const Income = require('../models/Income');
 const BudgetarySupport = require('../models/BudgetarySupport');
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 
 /**
  * GET /api/tier-comparison/tier1/finalized

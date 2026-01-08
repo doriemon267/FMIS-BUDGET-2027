@@ -7,7 +7,7 @@ const {
   getOvertimeByRegion,
 } = require("../controllers/overtimePayController");
 const Router = require("express").Router;
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 const checkDueDate = require("../middleware/checkDueDate");
 const { submissionWorkflowControl } = require("../middleware/submissionWorkflowControl");
 const overtimeRouter = Router();

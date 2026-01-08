@@ -8,7 +8,7 @@ const {
   getGroupedCategoriesSummary,
 } = require("../controllers/IncomeCategoryGroupController");
 const Router = require("express").Router;
-const checkToken = require("../middleware/checkToken");
+const checkToken = require("../middleware/check_token");
 
 const incomeCategoryGroupRouter = Router();
 

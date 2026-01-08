@@ -17,7 +17,7 @@ const {
 // Import the model directly to ensure it's available
 const PersonnelService = require('../models/PersonnelServices');
 const checkDueDate = require("../middleware/checkDueDate");
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
 const Router = require("express").Router;
 const personnelServicesRouter = Router();

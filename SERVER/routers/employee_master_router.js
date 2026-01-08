@@ -1,5 +1,5 @@
 const express = require("express");
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 const {
   createEmployee,
   getAllEmployees,

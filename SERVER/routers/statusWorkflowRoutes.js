@@ -3,7 +3,7 @@ const { submissionWorkflowTransitions } = require('../middleware/submissionWorkf
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
 const { requirePermission } = require('../middleware/hierarchicalAssignmentMiddleware');
 const { hasWorkflowRole } = require('../helpers/workflowRoleManager');
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 
 const router = Router();
 

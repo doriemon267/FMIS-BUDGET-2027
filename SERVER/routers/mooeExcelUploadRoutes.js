@@ -1,6 +1,6 @@
 const express = require("express");
 const multer = require("multer");
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 const mooeExcelUploadController = require("../controllers/mooeExcelUploadController");
 const router = express.Router();
 const storage = multer.memoryStorage();
@@ -11,4 +11,4 @@ router.use(checkToken);
 router.post("/mooe/upload", upload.single("file"), mooeExcelUploadController.uploadMooe);
 // Route for downloading sample template
 router.get("/mooe/template", mooeExcelUploadController.getSampleMooeTemplate);
-module.exports = router;
+module.exports = router;

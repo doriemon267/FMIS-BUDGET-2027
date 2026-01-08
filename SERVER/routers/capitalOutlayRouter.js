@@ -12,7 +12,7 @@ const {
 const Router = require("express").Router;
 const checkDueDate = require("../middleware/checkDueDate");
 const checkDueDateWithRoleBypass = require("../middleware/checkDueDateWithRoleBypass");
-const checkToken = require("../middleware/checkToken");
+const checkToken = require("../middleware/check_token");
 const { strictHierarchicalControl, hierarchicalAccessControl } = require('../middleware/hierarchicalAccessControl');
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
 const { enforceAccessRestrictions } = require('../middleware/accessRestrictions');

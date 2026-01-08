@@ -9,7 +9,7 @@ const {
   assignSubcategoryToRegion
 } = require("../controllers/IncomeSubcategoryControllerNew");
 const Router = require("express").Router;
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 const incomeSubcategoryRouter = Router();
 // Apply authentication to all income subcategory routes
 incomeSubcategoryRouter.use(checkToken);

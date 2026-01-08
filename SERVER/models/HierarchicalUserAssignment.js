@@ -220,6 +220,86 @@ HierarchicalUserAssignmentSchema.statics.getUserPermissions = async function(use
       // ignore fallback errors; will return stub below
     }
   }
+  // Normalize assignmentLevel and workflowRoles where possible to avoid legacy mismatches
+  try {
+    const mapping = {
+      'RESPONSIBILITY_CENTER': 'DIVISION_LEVEL',
+      'DIVISION': 'DIVISION_LEVEL',
+      'OFFICE': 'DEPARTMENT_REGIONAL_LEVEL',
+      'DEPARTMENT': 'DEPARTMENT_REGIONAL_LEVEL',
+      'REGION': 'BUDGET_AND_REVENUE_DIVISION'
+    };
+    if (doc && doc.assignmentLevel && mapping[doc.assignmentLevel]) {
+      const normalized = mapping[doc.assignmentLevel];
+      if (doc.assignmentLevel !== normalized) {
+        doc.legacyAssignmentLevel = doc.assignmentLevel;
+        doc.assignmentLevel = normalized;
+        // Persist normalization but don't block on errors
+        doc.save().catch(err => console.warn('Failed to persist normalized assignmentLevel:', err.message));
+      }
+    }
+    // Normalize workflow role casing - map to valid enum values
+    if (doc && Array.isArray(doc.workflowRoles) && doc.workflowRoles.length > 0) {
+      // Valid enum values for workflowRoles
+      const validRoles = new Set([
+        'divisionCreator', 'divisionReviewer', 'divisionApprover',
+        'officeCreator', 'officeApprover',
+        'budgetAnalyst', 'budgetOfficer', 'overallBudgetApprover', 'budgetAdmin',
+        'BUDGET_PREPARER', 'BUDGET_REVIEWER', 'BUDGET_APPROVER',
+        'BUDGET_PLANNING_ANALYST', 'BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_ADMIN',
+        'departmentCreator', 'departmentConsolidator', 'departmentSubmission',
+        'officeConsolidator', 'officeSubmission', 'officeFinalVerifier',
+        'regionCreator', 'regionFinalVerifier'
+      ]);
+      
+      // Map non-standard role names to valid enum values
+      const roleMapping = {
+        'BUDGETANALYST': 'budgetAnalyst',
+        'BUDGETPLANNINGANALYST': 'budgetAnalyst',
+        'BUDGET_ANALYST': 'budgetAnalyst',
+        'BUDGETOFFICER': 'budgetOfficer',
+        'OVERALLBUDGETAPPROVER': 'overallBudgetApprover',
+        'BUDGETADMIN': 'budgetAdmin',
+        'DIVISIONCREATOR': 'divisionCreator',
+        'DIVISIONREVIEWER': 'divisionReviewer',
+        'DIVISIONAPPROVER': 'divisionApprover',
+        'OFFICECREATOR': 'officeCreator',
+        'OFFICEAPPROVER': 'officeApprover',
+        'BUDGETPREPARER': 'BUDGET_PREPARER',
+        'BUDGETREVIEWER': 'BUDGET_REVIEWER',
+        'BUDGETAPPROVER': 'BUDGET_APPROVER',
+        'BUDGET PREPARER': 'BUDGET_PREPARER',
+        'BUDGET REVIEWER': 'BUDGET_REVIEWER',
+        'BUDGET APPROVER': 'BUDGET_APPROVER',
+        'BUDGET PLANNING ANALYST': 'BUDGET_PLANNING_ANALYST',
+        'BUDGET OFFICER': 'BUDGET_OFFICER',
+        'OVERALL BUDGET APPROVER': 'OVERALL_BUDGET_APPROVER',
+        'BUDGET ADMIN': 'BUDGET_ADMIN'
+      };
+      
+      const normalizedRoles = doc.workflowRoles.map(r => {
+        const role = String(r);
+        // If already valid, keep it
+        if (validRoles.has(role)) return role;
+        // Try mapping by uppercase key without spaces/underscores
+        const key = role.replace(/[_\s]+/g, '').toUpperCase();
+        if (roleMapping[key]) return roleMapping[key];
+        // Try direct mapping with original casing preserved
+        if (roleMapping[role]) return roleMapping[role];
+        // Return original if no mapping found (will be filtered out if invalid)
+        return role;
+      }).filter(r => validRoles.has(r));
+      
+      const uniq = Array.from(new Set(normalizedRoles));
+      if (JSON.stringify(uniq) !== JSON.stringify(doc.workflowRoles)) {
+        doc.workflowRoles = uniq;
+        doc.save().catch(err => console.warn('Failed to persist normalized workflowRoles:', err.message));
+      }
+    }
+  } catch (e) {
+    // Non-fatal -- normalization best-effort only
+    console.warn('Normalization check failed:', e.message);
+  }
   if (!doc) {
     // Check if user has workflow roles that grant default permissions
     const workflowRoles = Array.isArray(userRoles) ? userRoles : [];

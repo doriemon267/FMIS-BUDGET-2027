@@ -7,7 +7,7 @@ const {
 } = require("../controllers/loyaltyPayController");
 const { getEligibleForLoyaltyPay } = require("../controllers/employeelistController");
 const Router = require("express").Router;
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 const checkDueDate = require("../middleware/checkDueDate");
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
 const loyaltyPayRouter = Router();

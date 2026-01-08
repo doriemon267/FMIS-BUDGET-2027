@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const mssqlSalaryTableController = require('../controllers/mssqlSalaryTableController');
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 
 // List
 router.get('/', checkToken, mssqlSalaryTableController.list);

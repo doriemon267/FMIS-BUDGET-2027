@@ -1,5 +1,5 @@
 /**
- * 🎯 Workflow Assignment Helper (September 2025)
+ * Workflow Assignment Helper (September 2025)
  * 
  * This helper provides utilities for the new 6-step workflow assignment
  * and handles the new hierarchical structure with backward compatibility.

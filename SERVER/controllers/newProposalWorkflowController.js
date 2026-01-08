@@ -258,15 +258,19 @@ const getNotificationRecipients = async (action, proposal, currentUserRole, curr
         
         console.log('[getNotificationRecipients] Query:', JSON.stringify(query));
         let users = await HierarchicalUserAssignment.find(query).select('userId workflowRoles userRole regionId');
-        // Fallback: if no users found in hierarchical assignments, try User.roles as fallback
+        // Fallback: if no users found in hierarchical assignments, optionally try User.roles as fallback
         if (!users || users.length === 0) {
-          console.warn('[getNotificationRecipients] No HierarchicalUserAssignment found for roles, falling back to User.roles lookup', roles);
-          try {
-            const userDocs = await User.find({ roles: { $in: roles }, isActive: true }).select('userId roles');
-            users = userDocs.map(u => ({ userId: u.userId || String(u._id), workflowRoles: u.roles || [], regionId: null }));
-            console.log('[getNotificationRecipients] Fallback found', users.length, 'users via User.roles for roles', roles);
-          } catch (fallbackErr) {
-            console.error('[getNotificationRecipients] Error during fallback User.roles query:', fallbackErr.message);
+          if (process.env.ALLOW_USER_ROLES_FALLBACK === 'true') {
+            console.warn('[getNotificationRecipients] No HierarchicalUserAssignment found for roles, falling back to User.roles lookup (ALLOWED by env)')
+            try {
+              const userDocs = await User.find({ roles: { $in: roles }, isActive: true }).select('userId roles');
+              users = userDocs.map(u => ({ userId: u.userId || String(u._id), workflowRoles: u.roles || [], regionId: null }));
+              console.log('[getNotificationRecipients] Fallback found', users.length, 'users via User.roles for roles', roles);
+            } catch (fallbackErr) {
+              console.error('[getNotificationRecipients] Error during fallback User.roles query:', fallbackErr.message);
+            }
+          } else {
+            console.warn('[getNotificationRecipients] No HierarchicalUserAssignment found for roles, and User.roles fallback is disabled (ALLOW_USER_ROLES_FALLBACK != true)');
           }
         }
         console.log('[getNotificationRecipients] Found', users.length, 'users with roles', roles);
@@ -1111,10 +1115,16 @@ exports.getProposals = async (req, res) => {
   const nameFallback = await NewProposalWorkflow.find({ createdByName: userName, status: 'DRAFT' }).sort({ createdAt: -1 }).populate('region','Region regionName RegionName');
         newProposals = nameFallback;
       }
-      // Final fallback: return ALL draft proposals (for visibility) if still empty
+      // Final fallback: only return user-specific drafts. Do NOT return ALL drafts to avoid exposure.
       if (newProposals.length === 0) {
-  const allDrafts = await NewProposalWorkflow.find({ status: 'DRAFT' }).sort({ createdAt: -1 }).limit(25).populate('region','Region regionName RegionName');
-        newProposals = allDrafts;
+        const allUserDrafts = await NewProposalWorkflow.find({ createdBy: userIdString, status: 'DRAFT' }).sort({ createdAt: -1 }).limit(25).populate('region','Region regionName RegionName');
+        // Also try createdByName fallback, but do not broaden to all drafts
+        if (allUserDrafts.length > 0) {
+          newProposals = allUserDrafts;
+        } else {
+          const nameFallback = await NewProposalWorkflow.find({ createdByName: userName, status: 'DRAFT' }).sort({ createdAt: -1 }).populate('region','Region regionName RegionName');
+          newProposals = nameFallback;
+        }
       }
     }
 
@@ -1898,7 +1908,9 @@ exports.deleteProposal = async (req, res) => {
         session.startTransaction();
         usedTransaction = true;
       } catch (txErr) {
-        console.warn('Transactions are not available on this MongoDB deployment. Falling back to non-transactional delete. Error:', txErr && txErr.message ? txErr.message : txErr);
+        console.error('Transactions are not available on this MongoDB deployment. Falling back to non-transactional delete. Error:', txErr && txErr.message ? txErr.message : txErr);
+        // Mark transaction fallback in deletion results so operators can monitor
+        deletionResults.transactionFallback = true;
         if (session) {
           try { session.endSession(); } catch (e) {}
           session = null;
@@ -1962,7 +1974,7 @@ exports.deleteProposal = async (req, res) => {
         await NewProposalWorkflow.findByIdAndDelete(id);
       }
 
-      return res.json({ success: true, message: 'Proposal and related records deleted successfully', transactionUsed: usedTransaction, details: deletionResults });
+      return res.json({ success: true, message: 'Proposal and related records deleted successfully', transactionUsed: usedTransaction, transactionFallback: !!deletionResults.transactionFallback, details: deletionResults });
     } catch (innerErr) {
       try {
         if (usedTransaction && session) {
@@ -2062,8 +2074,23 @@ exports.deleteAttachment = async (req, res) => {
       });
     }
 
-    // Remove attachment
+    // Find the attachment object to be removed
     const initialLength = proposal.attachments.length;
+    const targetAttachment = proposal.attachments.find(att => String(att.attachmentId || att._id) === String(attachmentId));
+    if (!targetAttachment) {
+      return res.status(404).json({ success: false, message: 'Attachment not found' });
+    }
+
+    // Permission: only uploader, BRD staff, or SUPER ADMIN can delete attachments
+    const deleterUserId = String(req.user?.id);
+    const userRole = getUserRole(req);
+    const isBRDStaff = ['BUDGET PLANNING ANALYST', 'BUDGET_PLANNING_ANALYST', 'BUDGET OFFICER', 'BUDGET_OFFICER', 'BUDGET MANAGER', 'BUDGET_MANAGER'].includes(userRole);
+    const isUploader = String(targetAttachment.uploadedBy || '') === deleterUserId;
+    if (!req.user?.Roles?.includes('SUPER ADMIN') && !isBRDStaff && !isUploader) {
+      return res.status(403).json({ success: false, message: 'You do not have permission to delete this attachment' });
+    }
+
+    // Remove attachment
     proposal.attachments = proposal.attachments.filter(
       att => String(att.attachmentId || att._id) !== String(attachmentId)
     );
@@ -2076,7 +2103,30 @@ exports.deleteAttachment = async (req, res) => {
       });
     }
 
+    // Save after removal
     await proposal.save();
+
+    // Determine filename to delete (prefer attachment metadata)
+    let filenameToDelete = targetAttachment?.filename || req.body?.filename || req.body?.originalName || null;
+
+    // Best effort: delete the file from disk using the removed attachment filename
+    const filename = targetAttachment?.filename || filenameToDelete;
+    if (filename) {
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const uploadsDir = path.join(__dirname, '../uploads');
+        const filePath = path.join(uploadsDir, filename);
+        // Ensure the file to delete is inside the uploads directory to avoid path traversal
+        if (filePath.startsWith(uploadsDir)) {
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to delete attachment file from disk:', err.message);
+      }
+    }
 
     res.json({
       success: true,

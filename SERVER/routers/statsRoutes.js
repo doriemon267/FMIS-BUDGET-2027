@@ -1,5 +1,5 @@
 const express = require("express");
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 const { getOverviewStats } = require("../controllers/statsController");
 const { loadHierarchicalAssignment, applyHierarchicalFilters } = require('../middleware/hierarchicalAssignmentMiddleware');
 const router = express.Router();

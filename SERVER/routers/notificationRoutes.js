@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const Notification = require('../models/Notification');
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 
 // Auth for all notification routes
 router.use(checkToken);

@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 const Event = require('../models/Event');
 const Notification = require('../models/Notification');
 const { scheduleEventJobs, cancelEventJobs } = require('../schedulers/agenda');

@@ -199,5 +199,27 @@ newProposalWorkflowSchema.pre('save', function(next) {
   this.currentAssigneeRole = statusToRoleMap[this.status] || this.currentAssigneeRole;
   next();
 });
+// Provide a simple paginate fallback in case mongoose-paginate plugin is not installed
+newProposalWorkflowSchema.statics.paginate = async function(query = {}, options = {}) {
+  const page = parseInt(options.page, 10) || 1;
+  const limit = parseInt(options.limit, 10) || 10;
+  const sort = options.sort || { createdAt: -1 };
+  const skip = (page - 1) * limit;
+
+  const q = this.find(query).sort(sort).skip(skip).limit(limit);
+  if (Array.isArray(options.populate)) {
+    options.populate.forEach(p => q.populate(p));
+  }
+
+  const docs = await q.exec();
+  const totalDocs = await this.countDocuments(query);
+  return {
+    docs,
+    page,
+    limit,
+    totalDocs,
+    totalPages: Math.ceil(totalDocs / limit)
+  };
+};
 
 module.exports = mongoose.model('NewProposalWorkflow', newProposalWorkflowSchema);

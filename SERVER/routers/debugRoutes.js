@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 
 // Dev-only route to inspect authentication / identity for debugging
 router.get('/whoami', checkToken, (req, res) => {

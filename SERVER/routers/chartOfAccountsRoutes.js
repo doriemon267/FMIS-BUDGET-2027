@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 const {
   getAllChartOfAccounts,
   getChartOfAccountById,
@@ -26,4 +26,4 @@ router.delete("/chart-of-accounts/:id", deleteChartOfAccount);
 router.get("/accounting-titles", getAccountingTitles);
 // Get subline items (existing endpoint)
 router.get("/subline-items", getSublineItems);
-module.exports = router;
+module.exports = router;

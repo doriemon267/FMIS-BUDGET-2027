@@ -5,7 +5,7 @@ const {
   deleteSubsistenceST,
 } = require("../controllers/subsistenceAllowanceSTController");
 const Router = require("express").Router;
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 // Import old middleware for consistency with other allowance routes
 const checkDueDate = require("../middleware/checkDueDate");
 const { submissionWorkflowControl } = require("../middleware/submissionWorkflowControl");

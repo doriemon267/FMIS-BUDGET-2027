@@ -1,7 +1,7 @@
 const express = require("express");
 const multer = require("multer");
 const router = express.Router();
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 const corporateIncomeController = require("../controllers/corporateIncomeController");
 const { submissionWorkflowControl } = require("../middleware/submissionWorkflowControl");
 // Configure Multer (Store file in memory)

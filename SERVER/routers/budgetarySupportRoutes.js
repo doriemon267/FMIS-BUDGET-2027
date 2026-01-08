@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 const { strictHierarchicalControl, hierarchicalAccessControl } = require('../middleware/hierarchicalAccessControl');
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
 const {

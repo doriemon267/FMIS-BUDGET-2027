@@ -6,7 +6,7 @@ const {
   getPersonnelHiredBeforeJune1988,
 } = require("../controllers/personnel_service_controller_case_sensitive");
 const Router = require("express").Router;
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 const personnelServicesRouter = Router();
 // Apply authentication to all personnel services routes
 personnelServicesRouter.use(checkToken);
@@ -22,4 +22,4 @@ personnelServicesRouter.get("/getpersonnels/hiredBeforeJune1988",
   getPersonnelHiredBeforeJune1988 || 
     ((req, res) => res.status(500).json({ message: "Function not available" }))
 );
-module.exports = personnelServicesRouter;
+module.exports = personnelServicesRouter;

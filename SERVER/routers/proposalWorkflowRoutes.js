@@ -1,5 +1,5 @@
 const Router = require('express').Router;
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 const { normalizeRoles } = require('../middleware/normalizeRoles');
 const proposalWorkflowController = require('../controllers/proposalWorkflowController');
 

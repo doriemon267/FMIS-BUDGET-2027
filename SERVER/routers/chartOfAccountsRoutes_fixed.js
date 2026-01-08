@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 // 🔒 SECURITY: Import authentication middleware
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 const {
   getAllChartOfAccounts,
   getChartOfAccountById,
@@ -26,4 +26,4 @@ router.delete("/chart-of-accounts/:id", checkToken, deleteChartOfAccount);
 router.get("/accounting-titles", checkToken, getAccountingTitles);
 // Get subline items
 router.get("/subline-items", checkToken, getSublineItems);
-module.exports = router;
+module.exports = router;

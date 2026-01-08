@@ -5,7 +5,7 @@ const {
   deleteCategory,
   getSublineItems, // ⬅️ Import the new controller
 } = require("../controllers/category_controller"); // or update path if in a different controller
-const checkToken = require("../middleware/checkToken");
+const checkToken = require("../middleware/check_token");
 const Router = require("express").Router;
 const categoryRouter = Router();
 // Get all categories
@@ -18,4 +18,4 @@ categoryRouter.put("/categories/:id",checkToken, editCategory);
 categoryRouter.delete("/categories/:id",checkToken, deleteCategory);
 // ✅ Get subline items dynamically based on category name (from ChartOfAccounts)
 categoryRouter.get("/categories/subline-items",checkToken, getSublineItems); // ?category=YourCategory
-module.exports = categoryRouter;
+module.exports = categoryRouter;

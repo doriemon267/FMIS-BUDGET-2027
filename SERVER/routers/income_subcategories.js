@@ -1,7 +1,7 @@
 const { getAllIncomeSubcategories } = require('../controllers/incomeSubcategoryController');
 const router = require('express').Router();
-const checkToken = require("../middleware/checkToken");
+const checkToken = require("../middleware/check_token");
 const incomeSubcategoryRoutes = router;
 incomeSubcategoryRoutes.use(checkToken);
 incomeSubcategoryRoutes.get('/getAllIncomeSubcategories', getAllIncomeSubcategories);
-module.exports = incomeSubcategoryRoutes;
+module.exports = incomeSubcategoryRoutes;

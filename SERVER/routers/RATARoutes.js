@@ -10,7 +10,7 @@ const {
   clearAllRATALinks,
 } = require("../controllers/rataController");
 const Router = require("express").Router;
-const checkToken = require('../middleware/checkToken');
+const checkToken = require('../middleware/check_token');
 const rataRouter = Router();
 // Apply authentication to all RATA routes
 rataRouter.use(checkToken);

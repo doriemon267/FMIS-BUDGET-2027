@@ -8,7 +8,7 @@ const {
 } = require("../controllers/cospersonnelController");
 const Router = require("express").Router;
 const checkDueDate = require("../middleware/checkDueDate");
-const checkToken = require("../middleware/checkToken");
+const checkToken = require("../middleware/check_token");
 const { submissionWorkflowControl } = require("../middleware/submissionWorkflowControl");
 const cosPersonnelRouter = Router();
 // Apply authentication middleware to all routes in this router

@@ -23,7 +23,7 @@ const ACCESS_SCOPE = {
   REGION: 'REGION',       // Region-based access
   DEPARTMENT: 'DEPARTMENT', // Department-based access
   DIVISION: 'DIVISION',   // Division-based access
-  OWN_ONLY: 'OWN_ONLY'   // Own records only
+  // OWN_ONLY: 'OWN_ONLY'   // Own records only
 };
 // Role checking helper function
 const hasRequiredRole = (userRoles, requiredRoles) => {
