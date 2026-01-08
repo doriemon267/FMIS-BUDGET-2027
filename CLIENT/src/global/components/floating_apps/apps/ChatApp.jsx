@@ -526,21 +526,18 @@ export default function ChatApp() {
     }
   }
   useEffect(() => {
-    let devUid = null;
-    try { const cu = JSON.parse(localStorage.getItem('currentUser') || 'null'); if (cu) devUid = (Array.isArray(cu?.Username) ? cu.Username[0] : cu?.Username) || cu?.Id || cu?.id || cu?.userId; } catch(e) { devUid = null; }
+    // Use dev UID derived from in-memory `currentUser` only (do not read from localStorage)
+    const devUid = currentUser ? ((Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username) || currentUser?.Id || currentUser?.id || currentUser?.userId) : null;
     // If we have neither a dev UID (dev mode) nor a logged-in user (session via cookie), defer
     if (!devUid && !currentUser) {
       console.debug('[ChatApp] no devUserId or currentUser available yet; deferring socket/connect and loadConversations until user data available.');
       return;
     }
     loadConversations();
-    const serverUrl = env('SERVER_URL') || env('API_BASE_URL') || 'http://localhost:5005';
-    // Additional debug: check for a local dev user id to be sent with socket auth (dev only)
-    const currentUserStr = localStorage.getItem('currentUser');
-    let devUserId = null;
-    if (currentUserStr) {
-      try { const cu = JSON.parse(currentUserStr); devUserId = (Array.isArray(cu?.Username) ? cu.Username[0] : cu?.Username) || cu?.Id || cu?.id || cu?.userId; } catch (e) { devUserId = null; }
-    }
+    // Socket.IO is hosted by the main API server (same host as /api/chat routes)
+    const serverUrl = env('SERVER_URL') || env('API_BASE_URL') || env('AUTH_SERVER_URL') || 'http://localhost:5005';
+    // Additional debug: dev user id derived from `currentUser` only
+    const devUserId = devUid;
     // Determine whether to attempt a socket connection. Use devUserId in dev mode; otherwise server will authenticate via httpOnly cookie.
     const authObj = {};
     if (devUserId) authObj.devUserId = String(devUserId);
@@ -552,11 +549,21 @@ export default function ChatApp() {
     if (devUserId) console.debug('[ChatApp] Passing devUserId to socket auth (if ALLOW_MOCK_AUTH enabled)');
     conn.on('connect', () => {
       const uid = (currentUser?.Id || currentUser?.id || currentUser?.userId || (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username) || null);
-      console.debug('[ChatApp] socket connected', conn.id, 'uid=', uid, 'tokenPresent=', !!token);
+      console.debug('[ChatApp] socket connected', conn.id, 'uid=', uid);
       setSocketConnected(true);
       setSocketErrorMsg(null);
       setAuthRequired(false);
       if (uid) conn.emit('join-user-room', uid);
+    });
+
+    conn.on('connect_error', (err) => {
+      // Socket connect errors (authentication failures etc.)
+      console.error('[ChatApp] socket connect_error', err?.message || err);
+      setSocketErrorMsg(err?.message || String(err));
+      // If the server rejected due to missing/malformed token, require a re-auth or show UI
+      if ((err && String(err).toLowerCase().includes('token')) || (err?.message && err.message.toLowerCase().includes('token'))) {
+        setAuthRequired(true);
+      }
     });
     conn.on('chat-message', (payload) => {
       const who = payload.from;
@@ -720,6 +727,12 @@ export default function ChatApp() {
         // Stop attempting to reconnect and disconnect
         try { conn.disconnect(); } catch (e) { /* ignore */ }
         try { setSocket(null); } catch (e) { }
+        // Show a clear user-facing notification for token-related auth failures
+        try {
+          if (emsg.toLowerCase().includes('jwt') || emsg.toLowerCase().includes('token') || emsg.toLowerCase().includes('malformed')) {
+            toast.error('Real-time connection failed due to authentication (token issue). Please reload or re-login.');
+          }
+        } catch (e) {}
         return;
       }
       console.error('Chat socket connect_error:', err?.message || err);

@@ -13,10 +13,18 @@ const api = axios.create({
 
 // In-memory cache for CSRF token fetched from the server
 let _csrfToken = null;
+// In-memory dev user (avoid reading sensitive user info from localStorage)
+let _devUser = null;
+export function setDevUser(user) {
+  _devUser = user;
+}
 const fetchCsrfToken = async () => {
   if (_csrfToken) return _csrfToken;
   try {
-    const resp = await axios.get(`${env("SERVER_URL")}/csrf-token`, { withCredentials: true });
+    // CSRF endpoint is served by the main API server (same origin as protected routes)
+    const csrfBase = env("SERVER_URL") || env("API_BASE_URL") || env("AUTH_SERVER_URL");
+    if (!csrfBase) return null;
+    const resp = await axios.get(`${csrfBase}/csrf-token`, { withCredentials: true });
     _csrfToken = resp.data && resp.data.csrfToken;
     return _csrfToken;
   } catch (err) {
@@ -52,9 +60,8 @@ api.interceptors.request.use(
 
     // Dev-only header to tell the backend which userId to use when ACCOUNT_USER_API_URL is not set
     try {
-      const currentUserStr = localStorage.getItem('currentUser');
-      if (currentUserStr) {
-        const currentUser = JSON.parse(currentUserStr);
+      const currentUser = _devUser;
+      if (currentUser) {
         // Prefer Username (often holds the external employee/user number used for assignments)
         const devUserId = (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username) || currentUser?.userId || currentUser?.id || currentUser?.userCode || currentUser?.UserCode || currentUser?.Id;
         if (devUserId) {
