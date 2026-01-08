@@ -94,3 +94,6 @@ SERVER/archive/
 # other
 *.py
 *.ps1
+
+# Local archives
+SERVER/mssql.7z
