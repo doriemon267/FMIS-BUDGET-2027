@@ -274,9 +274,9 @@ const NewProposalWorkflowPage = () => {
         region: showAllRegions ? undefined : resolvedRegion,
         view: activeTabView,
       };
-      console.debug('[getProposals] Request params:', params);
+      // console.debug('[getProposals] Request params:', params);
       const response = await api.get(WORKFLOW_API_BASE, { params });
-      console.debug('[getProposals] Received proposals count:', (response.data.proposals || []).length);
+      // console.debug('[getProposals] Received proposals count:', (response.data.proposals || []).length);
       return response.data;
     },
     staleTime: 5000, // Consider data stale after 5 seconds
@@ -320,7 +320,7 @@ const NewProposalWorkflowPage = () => {
           (event.query.queryKey?.[0] === 'proposals' || 
            event.query.queryKey?.[0] === 'allProposals' ||
            event.query.queryKey?.[0] === 'personnelServices')) {
-        console.debug('[ProposalPage] Detected query invalidation, triggering refetch');
+        // console.debug('[ProposalPage] Detected query invalidation, triggering refetch');
         refetchProposals();
       }
     });

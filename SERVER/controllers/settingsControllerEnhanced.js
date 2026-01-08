@@ -534,6 +534,8 @@ exports.updateSettings = async (req, res) => {
       startDate,
       dueDate,
       budgetType,
+      budgetPeriods,
+      applicableRegions,
       isActive,
       ...otherSettings
     } = req.body;
@@ -584,10 +586,34 @@ exports.updateSettings = async (req, res) => {
 
     const toUpdate = {};
     if (fiscalYear !== undefined) toUpdate.fiscalYear = fiscalYear;
-    if (startDate !== undefined) toUpdate.startDate = new Date(startDate);
-    if (dueDate !== undefined) toUpdate.dueDate = new Date(dueDate);
     if (budgetType !== undefined) toUpdate.budgetType = budgetType;
-    if (isActive === true) toUpdate.isActive = true;
+    if (applicableRegions !== undefined) toUpdate.applicableRegions = applicableRegions;
+    if (isActive !== undefined) toUpdate.isActive = isActive;
+    
+    // Handle budgetPeriods update - this is the new structure
+    if (budgetPeriods !== undefined && Array.isArray(budgetPeriods)) {
+      // Process budget periods with proper date conversion
+      const processedPeriods = budgetPeriods.map((period, index) => ({
+        periodName: period.periodName || `Phase ${index + 1}`,
+        startDate: period.startDate ? new Date(period.startDate) : null,
+        dueDate: period.dueDate ? new Date(period.dueDate) : null,
+        isActive: period.isActive ?? (index === 0),
+        createdAt: period.createdAt || new Date()
+      }));
+      toUpdate.budgetPeriods = processedPeriods;
+      
+      // Sync legacy fields from the active period for backward compatibility
+      const activePeriod = processedPeriods.find(p => p.isActive) || processedPeriods[0];
+      if (activePeriod) {
+        toUpdate.startDate = activePeriod.startDate;
+        toUpdate.dueDate = activePeriod.dueDate;
+      }
+    } else {
+      // If only legacy fields are sent (for backward compatibility)
+      if (startDate !== undefined) toUpdate.startDate = new Date(startDate);
+      if (dueDate !== undefined) toUpdate.dueDate = new Date(dueDate);
+    }
+    
     // Only allow non-compensation fields from otherSettings
     for (const [k, v] of Object.entries(otherSettings)) {
       if (v !== undefined && !rejectedCompensationFields.includes(k)) {

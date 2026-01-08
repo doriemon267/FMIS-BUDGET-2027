@@ -9,6 +9,7 @@ const CapitalOutlay = require('../models/CapitalOutlay');
 const Income = require('../models/Income');
 const ProposalEditLog = require('../models/ProposalEditLog');
 const Notification = require('../models/Notification');
+const Settings = require('../models/Settings');
 const notificationController = require('./notificationController');
 const consolidationService = require('../utils/consolidationService');
 const { sendNotificationEmail } = require('../utils/emailNotification');
@@ -814,6 +815,53 @@ exports.createProposal = async (req, res) => {
         message: `Invalid modelType. Must be one of: ${validModelTypes.join(', ')}`
       });
     }
+
+    // ============ DUE DATE VALIDATION ============
+    // Check if the fiscal year settings allow proposal creation (due date not passed)
+    const isSuperAdmin = userRole === 'SUPER ADMIN' || userRole === 'SUPER_ADMIN';
+    
+    // Find the fiscal year settings for this fiscal year and budget type
+    const fiscalYearSettings = await Settings.findOne({
+      fiscalYear: String(fiscalYear),
+      budgetType: normalizedModelType,
+      isActive: true
+    });
+
+    if (fiscalYearSettings) {
+      const now = new Date();
+      
+      // Check budget periods (new structure)
+      if (fiscalYearSettings.budgetPeriods && fiscalYearSettings.budgetPeriods.length > 0) {
+        // Find an active period where due date hasn't passed
+        const activePeriod = fiscalYearSettings.budgetPeriods.find(period => {
+          const periodDueDate = new Date(period.dueDate);
+          return period.isActive && periodDueDate >= now;
+        });
+        
+        if (!activePeriod && !isSuperAdmin) {
+          // Find the latest due date to show in the message
+          const latestDueDate = fiscalYearSettings.budgetPeriods
+            .map(p => new Date(p.dueDate))
+            .sort((a, b) => b - a)[0];
+          
+          return res.status(403).json({
+            success: false,
+            message: `The submission period for FY ${fiscalYear} (${normalizedModelType}) has ended. Due date was ${latestDueDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}. Please contact your administrator to extend the deadline.`
+          });
+        }
+      } 
+      // Legacy due date field (backward compatibility)
+      else if (fiscalYearSettings.dueDate) {
+        const dueDate = new Date(fiscalYearSettings.dueDate);
+        if (dueDate < now && !isSuperAdmin) {
+          return res.status(403).json({
+            success: false,
+            message: `The submission period for FY ${fiscalYear} (${normalizedModelType}) has ended. Due date was ${dueDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}. Please contact your administrator to extend the deadline.`
+          });
+        }
+      }
+    }
+    // ============ END DUE DATE VALIDATION ============
 
   // Calculate the proposed budget amount
     const calculatedAmount = (Number(projectedCorporateIncome) || 0) + (Number(projectedSubsidy) || 0);

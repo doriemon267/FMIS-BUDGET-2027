@@ -18,7 +18,7 @@ const ChatApp = importWithDebug(() => import("./apps/ChatApp"), 'ChatApp');
 import FixedChatWindow from './FixedChatWindow';
 
 const AppTrayLauncher = () => {
-  console.debug('[AppTrayLauncher] render start');
+  // console.debug('[AppTrayLauncher] render start');
   const appConfig = useMemo(() => ({
     calc: { title: "Calculator", component: <CalculatorApp /> },
     todo: { title: "Todo List", component: <TodoApp /> },
@@ -107,7 +107,7 @@ const AppTrayLauncher = () => {
   }, [openApps, appConfig]);
 
   useEffect(() => {
-    console.debug("[AppTrayLauncher] openApps changed:", openApps.map((a) => a.id));
+    // console.debug("[AppTrayLauncher] openApps changed:", openApps.map((a) => a.id));
     try {
       const toSave = openApps.map(({ id, defaultPosition, minimized, key }) => ({ id, defaultPosition, minimized, key }));
       // Persist in sessionStorage so state is per-tab and cleared on full browser close
@@ -201,7 +201,7 @@ const AppTrayLauncher = () => {
 
   const activeAppId = openApps.length ? openApps[openApps.length - 1].id : null;
 
-  console.debug('[AppTrayLauncher] about to render, openApps:', openApps.map(a => a.id));
+  // console.debug('[AppTrayLauncher] about to render, openApps:', openApps.map(a => a.id));
   return (
     <>
       <AppTray onAppOpen={handleAppOpen} openAppIds={openApps.map((a) => a.id)} activeAppId={activeAppId} onCloseAll={closeAll} onMinimizeAll={minimizeAll} chatPinned={chatPinned} />

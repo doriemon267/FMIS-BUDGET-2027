@@ -91,6 +91,15 @@ const ProposalAttachments = ({ proposal, moduleName = 'general', userInfo, onCha
       toast.error('Only PDF and Excel files are allowed');
       return;
     }
+    
+    // Check file size (10MB limit)
+    const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+    if (file.size > maxSize) {
+      toast.error(`File is too large (${(file.size / 1024 / 1024).toFixed(2)}MB). Maximum allowed size is 10MB.`);
+      e.target.value = null;
+      return;
+    }
+    
     setUploading(true);
     try {
       const form = new FormData();
@@ -115,7 +124,13 @@ const ProposalAttachments = ({ proposal, moduleName = 'general', userInfo, onCha
         setAttachments(prev => [ ...(prev || []), att ]);
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to upload attachment');
+      // Check for file size error (Multer returns 400 with file size message)
+      const errorMsg = err.response?.data?.message || err.response?.data?.error || err.message || '';
+      if (errorMsg.toLowerCase().includes('file') && errorMsg.toLowerCase().includes('large')) {
+        toast.error('File is too large. Maximum allowed size is 10MB.');
+      } else {
+        toast.error(errorMsg || 'Failed to upload attachment');
+      }
     } finally {
       setUploading(false);
       // clear input value

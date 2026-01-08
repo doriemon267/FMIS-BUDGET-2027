@@ -164,6 +164,8 @@ const ProposalCustomPage = ({
   const [selectedFiscalYear, setSelectedFiscalYear] = useState("");
   const [availableFiscalYears, setAvailableFiscalYears] = useState([]);
   const [activeBudgetType, setActiveBudgetType] = useState("");
+  const [activeDueDate, setActiveDueDate] = useState(null);
+  const [isDueDatePassed, setIsDueDatePassed] = useState(false);
   const [budgetDeficit, setBudgetDeficit] = useState(null);
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -2406,6 +2408,28 @@ const ProposalCustomPage = ({
           setActiveFiscalYear(fiscalYear);
           setSelectedFiscalYear(fiscalYear); // Set selected fiscal year to active by default
           setActiveBudgetType(activeResponse.data.budgetType || "");
+          
+          // Check due date from budget periods or legacy dueDate field
+          let dueDate = null;
+          const budgetPeriods = activeResponse.data.budgetPeriods;
+          if (budgetPeriods && budgetPeriods.length > 0) {
+            // Find active period's due date
+            const activePeriod = budgetPeriods.find(p => p.isActive);
+            if (activePeriod?.dueDate) {
+              dueDate = new Date(activePeriod.dueDate);
+            }
+          } else if (activeResponse.data.dueDate) {
+            // Legacy due date field
+            dueDate = new Date(activeResponse.data.dueDate);
+          }
+          
+          if (dueDate) {
+            setActiveDueDate(dueDate);
+            setIsDueDatePassed(new Date() > dueDate);
+          } else {
+            setActiveDueDate(null);
+            setIsDueDatePassed(false);
+          }
         } else {
           console.warn("No active settings data returned from API");
         }
@@ -3108,41 +3132,75 @@ const ProposalCustomPage = ({
                 },
               }}
             />
-            {!currentProposalId && (
-              <Button
-                variant="contained"
+            {/* Due Date Chip - shows warning when passed */}
+            {activeDueDate && (
+              <Chip
+                icon={<CalendarTodayIcon />}
+                label={`Due: ${activeDueDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}${isDueDatePassed ? ' (EXPIRED)' : ''}`}
+                color={isDueDatePassed ? "error" : "success"}
+                variant="filled"
                 size="small"
-                onClick={() => setCreateDialogOpen(true)}
-                disabled={createProposalMutation.isLoading}
-                startIcon={
-                  createProposalMutation.isLoading ? (
-                    <CircularProgress size={16} />
-                  ) : null
+                sx={{
+                  fontWeight: 600,
+                  letterSpacing: "0.3px",
+                  "& .MuiChip-icon": {
+                    color: "white !important",
+                  },
+                  animation: isDueDatePassed ? "pulse 1.5s infinite" : "none",
+                  "@keyframes pulse": {
+                    "0%, 100%": { opacity: 1 },
+                    "50%": { opacity: 0.7 },
+                  },
+                }}
+              />
+            )}
+            {!currentProposalId && (
+              <Tooltip
+                title={
+                  isDueDatePassed && !isSuperAdmin
+                    ? `Submission period ended on ${activeDueDate?.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}. Contact your administrator to extend the deadline.`
+                    : ""
                 }
+              >
+                <span>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    onClick={() => setCreateDialogOpen(true)}
+                    disabled={createProposalMutation.isLoading || (isDueDatePassed && !isSuperAdmin)}
+                    startIcon={
+                      createProposalMutation.isLoading ? (
+                        <CircularProgress size={16} />
+                      ) : null
+                    }
                 sx={{
                   ml: 1,
-                  backgroundColor: "#4CAF50",
+                  backgroundColor: isDueDatePassed && !isSuperAdmin ? "#9e9e9e" : "#4CAF50",
                   fontWeight: 600,
                   letterSpacing: "0.5px",
                   borderRadius: "6px",
                   padding: "6px 16px",
                   textTransform: "capitalize",
-                  boxShadow: "0 2px 6px rgba(76, 175, 80, 0.3)",
+                  boxShadow: isDueDatePassed && !isSuperAdmin ? "none" : "0 2px 6px rgba(76, 175, 80, 0.3)",
                   transition: "all 0.3s cubic-bezier(0.3, 0, 0.7, 1)",
                   "&:hover": {
-                    backgroundColor: "#45a049",
-                    boxShadow: "0 4px 12px rgba(76, 175, 80, 0.4)",
-                    transform: "translateY(-2px)",
+                    backgroundColor: isDueDatePassed && !isSuperAdmin ? "#9e9e9e" : "#45a049",
+                    boxShadow: isDueDatePassed && !isSuperAdmin ? "none" : "0 4px 12px rgba(76, 175, 80, 0.4)",
+                    transform: isDueDatePassed && !isSuperAdmin ? "none" : "translateY(-2px)",
                   },
                   "&:active": {
                     transform: "translateY(0px)",
                   },
                 }}
-              >
-                {createProposalMutation.isLoading
-                  ? "Creating..."
-                  : "+ Create Proposal"}
-              </Button>
+                  >
+                    {createProposalMutation.isLoading
+                      ? "Creating..."
+                      : isDueDatePassed && !isSuperAdmin
+                      ? "Due Date Passed"
+                      : "+ Create Proposal"}
+                  </Button>
+                </span>
+              </Tooltip>
             )}
             {/* Show Proposal Linked chip only for Super Admin, hide for Budget Preparer */}
             {currentProposalId && isSuperAdmin && (

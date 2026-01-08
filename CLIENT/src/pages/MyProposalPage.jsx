@@ -667,16 +667,18 @@ const MyProposalPage = () => {
 
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
             <Tooltip title="Refresh proposals">
-              <IconButton
-                onClick={handleRefresh}
-                disabled={loading}
-                sx={{
-                  color: '#375e38',
-                  '&:hover': { backgroundColor: 'rgba(55, 94, 56, 0.1)' }
-                }}
-              >
-                {loading ? <CircularProgress size={24} sx={{ color: '#375e38' }} /> : <RefreshIcon />}
-              </IconButton>
+              <span>
+                <IconButton
+                  onClick={handleRefresh}
+                  disabled={loading}
+                  sx={{
+                    color: '#375e38',
+                    '&:hover': { backgroundColor: 'rgba(55, 94, 56, 0.1)' }
+                  }}
+                >
+                  {loading ? <CircularProgress size={24} sx={{ color: '#375e38' }} /> : <RefreshIcon />}
+                </IconButton>
+              </span>
             </Tooltip>
           </Box>
         </Box>

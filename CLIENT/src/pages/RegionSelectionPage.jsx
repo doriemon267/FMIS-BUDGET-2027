@@ -160,16 +160,18 @@ const RegionSelectionPage = () => {
           </Box>
 
           <Tooltip title="Refresh regions">
-            <IconButton
-              onClick={handleRefresh}
-              disabled={loading}
-              sx={{
-                color: '#375e38',
-                '&:hover': { backgroundColor: 'rgba(55, 94, 56, 0.1)' }
-              }}
-            >
-              {loading ? <CircularProgress size={24} sx={{ color: '#375e38' }} /> : <RefreshIcon />}
-            </IconButton>
+            <span>
+              <IconButton
+                onClick={handleRefresh}
+                disabled={loading}
+                sx={{
+                  color: '#375e38',
+                  '&:hover': { backgroundColor: 'rgba(55, 94, 56, 0.1)' }
+                }}
+              >
+                {loading ? <CircularProgress size={24} sx={{ color: '#375e38' }} /> : <RefreshIcon />}
+              </IconButton>
+            </span>
           </Tooltip>
         </Box>
 

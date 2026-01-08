@@ -37,6 +37,28 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
 });
 
+// Multer error handling middleware
+const handleMulterError = (err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'File is too large. Maximum allowed size is 10MB.' 
+      });
+    }
+    return res.status(400).json({ 
+      success: false, 
+      message: err.message 
+    });
+  } else if (err) {
+    return res.status(400).json({ 
+      success: false, 
+      message: err.message || 'Error uploading file' 
+    });
+  }
+  next();
+};
+
 // Apply authentication middleware to all routes
 router.use(checkToken);
 
@@ -63,7 +85,7 @@ router.post('/proposals/:id/action', newProposalWorkflowController.performAction
 router.get('/proposals/:workflowRefId/totals', newProposalWorkflowController.getProposalTotalsByWorkflowRef);
 
 // Attachment routes - BEFORE generic /:id routes
-router.post('/proposals/:id/attachments', upload.single('file'), newProposalWorkflowController.uploadAttachment);
+router.post('/proposals/:id/attachments', upload.single('file'), handleMulterError, newProposalWorkflowController.uploadAttachment);
 router.delete('/proposals/:id/attachments/:attachmentId', newProposalWorkflowController.deleteAttachment);
 router.get('/proposals/:id/attachments', newProposalWorkflowController.getAttachments);
 

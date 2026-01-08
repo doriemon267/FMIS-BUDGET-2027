@@ -28,7 +28,7 @@ createRoot(document.getElementById("root")).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <Router>
+        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           {/* Provide navigate to global helper */}
           <NavigationBridge />
           {/* Wrap ToastWrapper in an error boundary */}

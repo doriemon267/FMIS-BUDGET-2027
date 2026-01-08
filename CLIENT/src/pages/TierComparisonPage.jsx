@@ -863,24 +863,28 @@ const TierComparisonPage = () => {
                 </TableCell>
                 <TableCell align="center">
                   <Tooltip title="Edit">
-                    <IconButton 
-                      size="small" 
-                      color="primary" 
-                      onClick={() => handleEditTier2(item)}
-                      disabled={item.tier2Status === 'Finalized'}
-                    >
-                      <EditIcon fontSize="small" />
-                    </IconButton>
+                    <span>
+                      <IconButton 
+                        size="small" 
+                        color="primary" 
+                        onClick={() => handleEditTier2(item)}
+                        disabled={item.tier2Status === 'Finalized'}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </span>
                   </Tooltip>
                   <Tooltip title="Delete">
-                    <IconButton 
-                      size="small" 
-                      color="error" 
-                      onClick={() => handleDeleteTier2(item._id)}
-                      disabled={item.tier2Status === 'Finalized'}
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
+                    <span>
+                      <IconButton 
+                        size="small" 
+                        color="error" 
+                        onClick={() => handleDeleteTier2(item._id)}
+                        disabled={item.tier2Status === 'Finalized'}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </span>
                   </Tooltip>
                 </TableCell>
               </TableRow>

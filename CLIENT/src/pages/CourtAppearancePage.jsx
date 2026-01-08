@@ -572,64 +572,70 @@ const EmployeeCourtAppearancePage = () => {
 
       {/* Save Button */}
       <Tooltip title="Save all changes">
-        <Button
-          onClick={() => handleSaveAll(false)}
-          color="success"
-          variant="contained"
-          disabled={saveStatus === 'saving' || Object.keys(validationErrors).length > 0}
-          sx={{
-            background: "#009688",
-            color: "#fff",
-            "&:hover": {
-              background: "#00796B",
+        <span>
+          <Button
+            onClick={() => handleSaveAll(false)}
+            color="success"
+            variant="contained"
+            disabled={saveStatus === 'saving' || Object.keys(validationErrors).length > 0}
+            sx={{
+              background: "#009688",
               color: "#fff",
-              textDecoration: "underline rgb(255, 255, 255)"
-            },
-            "&:disabled": {
-              background: "#ccc",
-              color: "#666"
-            }
-          }}
-          startIcon={saveStatus === 'saving' ? <CircularProgress size={16} /> : <SaveIcon />}
-        >
-          {saveStatus === 'saving' ? 'Saving...' : 'Save'}
-        </Button>
+              "&:hover": {
+                background: "#00796B",
+                color: "#fff",
+                textDecoration: "underline rgb(255, 255, 255)"
+              },
+              "&:disabled": {
+                background: "#ccc",
+                color: "#666"
+              }
+            }}
+            startIcon={saveStatus === 'saving' ? <CircularProgress size={16} /> : <SaveIcon />}
+          >
+            {saveStatus === 'saving' ? 'Saving...' : 'Save'}
+          </Button>
+        </span>
       </Tooltip>
 
       {/* Cancel Button */}
       <Tooltip title="Discard all changes">
-        <Button
-          onClick={handleCancel}
-          color="warning"
-          variant="contained"
-          disabled={saveStatus === 'saving'}
-          sx={{
-            background: "#9E9E9E",
-            color: "#fff",
-            "&:hover": {
-              background: "#757575",
+        <span>
+          <Button
+            onClick={handleCancel}
+            color="warning"
+            variant="contained"
+            disabled={saveStatus === 'saving'}
+            sx={{
+              background: "#9E9E9E",
               color: "#fff",
-              textDecoration: "underline rgb(255, 255, 255)"
-            },
-          }}
-          startIcon={<MdCancel />}
-        >
-          Cancel
-        </Button>
+              "&:hover": {
+                background: "#757575",
+                color: "#fff",
+                textDecoration: "underline rgb(255, 255, 255)"
+              },
+            }}
+            startIcon={<MdCancel />}
+          >
+            Cancel
+          </Button>
+        </span>
       </Tooltip>
 
       {/* Refresh Button */}
       <Tooltip title="Refresh data">
-        <IconButton
-          onClick={fetchData}
-          disabled={loading}
-          sx={{
-            color: 'white',
-            '&:hover': { backgroundColor: alpha('#fff', 0.1) }
-          }}
-        >
-          <RefreshIcon />
-        </IconButton>
+        <span>
+          <IconButton
+            onClick={fetchData}
+            disabled={loading}
+            sx={{
+              color: 'white',
+              '&:hover': { backgroundColor: alpha('#fff', 0.1) }
+            }}
+          >
+            <RefreshIcon />
+          </IconButton>
+        </span>
       </Tooltip>
 
       {/* Export Menu */}

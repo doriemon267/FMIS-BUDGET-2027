@@ -516,6 +516,7 @@ app.use(
       "X-Dev-Roles",
       "X-Requested-With",
       "X-User-Object",
+      "X-Workflow-Ref",
     ],
   })
 );
@@ -750,7 +751,7 @@ const tierComparisonRoutes = require("./routers/tierComparisonRoutes");
 app.use("/api/tier-comparison", tierComparisonRoutes);
 app.use(rataRoutes);
 app.use(settings);
-app.use("/api", regionRouter);
+app.use("/api/regions", regionRouter);
 app.use("/api", todoRouter);
 app.use("/api/events", eventsRouter);
 app.use(annexRouter);
