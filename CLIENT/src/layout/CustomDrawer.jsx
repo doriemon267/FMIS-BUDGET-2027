@@ -136,6 +136,12 @@ const CustomDrawer = ({ collapsed = false }) => {
                 isAllow: isBudgetPlanningAnalyst || isBudgetOfficer || isOverallApprover || isSuperAdmin(currentUser),
                 icon: <BiData />,
               },
+              {
+                link: "/nep-ceiling",
+                name: "NEP Ceiling Management",
+                isAllow: isBudgetOfficer || isOverallApprover || isSuperAdmin(currentUser),
+                icon: <FaChartBar />,
+              },
               // {
               //   link: "/tier-comparison",
               //   name: "Tier Comparison",

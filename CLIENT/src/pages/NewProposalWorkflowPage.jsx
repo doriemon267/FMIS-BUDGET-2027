@@ -1948,6 +1948,7 @@ const NewProposalWorkflowPage = () => {
               </Button>
             </Box>
           )}
+
           {/* Search and Filter Bar */}
           <Box
             sx={{

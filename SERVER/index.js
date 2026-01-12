@@ -16,7 +16,7 @@ process.env.JWT_SECRET_KEY =
   process.env.SECRET_KEY;
 // Keep ALLOW_MOCK_AUTH exactly as provided: no normalization here so .env determines its value
 // If DEP0123 or other warnings are listed in SUPPRESS_NODE_DEPRECATION_WARNINGS,
-// set process.noDeprecation = true as early as possible to suppress Node deprecation warnings
+// set process.noDeprecation = true as early as possible to suppress Node runtime deprecation warnings
 // and also filter the emitted 'warning' events that match codes in that list.
 const SUPPRESS_NODE_DEPRECATION_WARNINGS = (
   process.env.SUPPRESS_NODE_DEPRECATION_WARNINGS || ""
@@ -305,6 +305,7 @@ const allowedSocketOrigins = [
   "https://localhost:3005",
   "http://localhost:3006",
   "https://localhost:3006",
+
 ].filter(Boolean);
 
 const io = socketIo(server, {
@@ -503,6 +504,7 @@ app.use(
       process.env.CLIENT1,
       process.env.CLIENT2,
       process.env.CLIENT3,
+
       // list more allowed origins
     ],
     credentials: true,
@@ -749,6 +751,10 @@ app.use("/api", require("./routers/notificationRoutes"));
 // Tier Comparison Routes (Tier 1 vs Tier 2 proposals)
 const tierComparisonRoutes = require("./routers/tierComparisonRoutes");
 app.use("/api/tier-comparison", tierComparisonRoutes);
+
+// Budget Ceiling Routes (BRD ceiling management for NEP/GAA)
+const budgetCeilingRoutes = require("./routers/budgetCeilingRoutes");
+app.use("/api/budget-ceiling", budgetCeilingRoutes);
 app.use(rataRoutes);
 app.use(settings);
 app.use("/api/regions", regionRouter);
@@ -838,7 +844,7 @@ app.use("/api/hierarchical-rbac", hierarchicalRBACRoutes);
 // Register employee master router
 app.use(employeeMasterRouter);
 const mooeExcelUploadRouter = require("./routers/mooeExcelUploadRoutes");
-app.use("/income", mooeExcelUploadRouter); // Mount under /income prefix for MOOE upload
+app.use("/income", mooeExcelUploadRouter); // Mount under /income prefix
 
 // Presence map for online users: Map<userId, count>
 // global.onlineUsers maps userId => { count: number, lastConnectedAt: number }

@@ -45,7 +45,7 @@ import {
 import api from '../config/api';
 import { useRegion } from '../context/RegionContext';
 import IncomeReportSummary from '../components/reports/IncomeReportSummary';
-import PDFPreviewDialog from '../components/PDFPreviewDialog';
+import EnhancedPDFPreviewDialog from '../components/EnhancedPDFPreviewDialog';
 // Import xlsx with named exports
 import * as XLSX from 'xlsx';
 
@@ -987,8 +987,8 @@ const ConsolidatedCorporateIncomePage = () => {
         )}
       </Paper>
 
-      {/* PDF Preview Dialog */}
-      <PDFPreviewDialog
+      {/* Enhanced PDF Preview Dialog with Server-Side Generation */}
+      <EnhancedPDFPreviewDialog
         open={pdfPreviewOpen}
         onClose={() => setPdfPreviewOpen(false)}
         reportData={reportData}
