@@ -546,4 +546,257 @@ router.get('/fiscal-years', checkToken, async (req, res) => {
   }
 });
 
+/**
+ * GET /api/tier-comparison/comparative-report
+ * Get comparative report data for a region showing current proposals vs historical GAA
+ */
+router.get('/comparative-report', checkToken, async (req, res) => {
+  try {
+    const { region, currentFiscalYear } = req.query;
+
+    if (!region || !currentFiscalYear) {
+      return res.status(400).json({
+        success: false,
+        message: 'Region and currentFiscalYear parameters are required'
+      });
+    }
+
+    const currentYear = parseInt(currentFiscalYear);
+    const pastYears = [currentYear - 3, currentYear - 2, currentYear - 1]; // 3 years back
+
+    // Fetch current proposals (Initial budget type, finalized)
+    const currentQuery = {
+      region,
+      fiscalYear: currentFiscalYear,
+      budgetType: 'Initial',
+      status: 'Finalized'
+    };
+
+    // Fetch historical GAA data
+    const gaaQueries = pastYears.map(year => ({
+      region,
+      fiscalYear: year.toString(),
+      budgetType: 'GAA'
+    }));
+
+    // Fetch all data concurrently
+    const [
+      currentPersonnel, currentMooe, currentCapital, currentIncome, currentBudgetarySupport,
+      gaaDataYear1, gaaDataYear2, gaaDataYear3
+    ] = await Promise.all([
+      // Current data
+      PersonnelService.find(currentQuery).lean(),
+      MooeProposal.find(currentQuery).lean(),
+      CapitalOutlay.find(currentQuery).lean(),
+      Income.find(currentQuery).lean(),
+      BudgetarySupport.find(currentQuery).lean(),
+      // Historical GAA data
+      Promise.all([
+        PersonnelService.find(gaaQueries[0]).lean(),
+        MooeProposal.find(gaaQueries[0]).lean(),
+        CapitalOutlay.find(gaaQueries[0]).lean(),
+        Income.find(gaaQueries[0]).lean(),
+        BudgetarySupport.find(gaaQueries[0]).lean()
+      ]),
+      Promise.all([
+        PersonnelService.find(gaaQueries[1]).lean(),
+        MooeProposal.find(gaaQueries[1]).lean(),
+        CapitalOutlay.find(gaaQueries[1]).lean(),
+        Income.find(gaaQueries[1]).lean(),
+        BudgetarySupport.find(gaaQueries[1]).lean()
+      ]),
+      Promise.all([
+        PersonnelService.find(gaaQueries[2]).lean(),
+        MooeProposal.find(gaaQueries[2]).lean(),
+        CapitalOutlay.find(gaaQueries[2]).lean(),
+        Income.find(gaaQueries[2]).lean(),
+        BudgetarySupport.find(gaaQueries[2]).lean()
+      ])
+    ]);
+
+    // Helper function to calculate total amount
+    const calculateTotal = (items) => items.reduce((sum, item) => {
+      const amount = item.Total || item.total || item.amount || item.cost || item.grandTotal || 0;
+      return sum + Number(amount);
+    }, 0);
+
+    // Structure the data according to user requirements
+    const buildComparativeData = () => {
+      // Current proposal totals
+      const current = {
+        personnel: calculateTotal(currentPersonnel),
+        mooe: calculateTotal(currentMooe),
+        capital: calculateTotal(currentCapital),
+        income: calculateTotal(currentIncome),
+        budgetarySupport: calculateTotal(currentBudgetarySupport)
+      };
+
+      // Historical GAA data
+      const gaa = pastYears.map((year, index) => {
+        const yearData = [gaaDataYear1, gaaDataYear2, gaaDataYear3][index];
+        return {
+          year: year.toString(),
+          personnel: calculateTotal(yearData[0] || []),
+          mooe: calculateTotal(yearData[1] || []),
+          capital: calculateTotal(yearData[2] || []),
+          income: calculateTotal(yearData[3] || []),
+          budgetarySupport: calculateTotal(yearData[4] || [])
+        };
+      });
+
+      // Calculate 3-year average GAA
+      const avgGaa = {
+        personnel: gaa.reduce((sum, y) => sum + y.personnel, 0) / 3,
+        mooe: gaa.reduce((sum, y) => sum + y.mooe, 0) / 3,
+        capital: gaa.reduce((sum, y) => sum + y.capital, 0) / 3,
+        income: gaa.reduce((sum, y) => sum + y.income, 0) / 3,
+        budgetarySupport: gaa.reduce((sum, y) => sum + y.budgetarySupport, 0) / 3
+      };
+
+      // Calculate 120% of 3-year average
+      const ceiling120 = {
+        personnel: avgGaa.personnel * 1.2,
+        mooe: avgGaa.mooe * 1.2,
+        capital: avgGaa.capital * 1.2,
+        income: avgGaa.income * 1.2,
+        budgetarySupport: avgGaa.budgetarySupport * 1.2
+      };
+
+      // Build the table structure
+      const tableData = [
+        // A. SOURCE OF FUNDS
+        {
+          particular: 'A. SOURCE OF FUNDS',
+          isHeader: true
+        },
+        {
+          particular: '1. CORPORATE INCOME',
+          [`${pastYears[2]} GAA`]: gaa[2].income,
+          [`${pastYears[2]} OBLIGATION`]: gaa[2].income, // Assuming obligation = GAA for now
+          [`${pastYears[1]} GAA`]: gaa[1].income,
+          [`${pastYears[1]} OBLIGATION`]: gaa[1].income,
+          [`${pastYears[0]} GAA`]: gaa[0].income,
+          [`${pastYears[0]} OBLIGATION`]: gaa[0].income,
+          '120% OF 3 YEARS AVERAGE GAA': ceiling120.income,
+          'WHICHEVER IS LOWER BETWEEN PROPOSAL AND AVERAGE': Math.min(current.income, avgGaa.income),
+          'OBLIGATION': current.income
+        },
+        {
+          particular: '2. BUDGETARY SUPPORT',
+          [`${pastYears[2]} GAA`]: gaa[2].budgetarySupport,
+          [`${pastYears[2]} OBLIGATION`]: gaa[2].budgetarySupport,
+          [`${pastYears[1]} GAA`]: gaa[1].budgetarySupport,
+          [`${pastYears[1]} OBLIGATION`]: gaa[1].budgetarySupport,
+          [`${pastYears[0]} GAA`]: gaa[0].budgetarySupport,
+          [`${pastYears[0]} OBLIGATION`]: gaa[0].budgetarySupport,
+          '120% OF 3 YEARS AVERAGE GAA': ceiling120.budgetarySupport,
+          'WHICHEVER IS LOWER BETWEEN PROPOSAL AND AVERAGE': Math.min(current.budgetarySupport, avgGaa.budgetarySupport),
+          'OBLIGATION': current.budgetarySupport
+        },
+        {
+          particular: 'TOTAL SOURCES OF FUNDS',
+          [`${pastYears[2]} GAA`]: gaa[2].income + gaa[2].budgetarySupport,
+          [`${pastYears[2]} OBLIGATION`]: gaa[2].income + gaa[2].budgetarySupport,
+          [`${pastYears[1]} GAA`]: gaa[1].income + gaa[1].budgetarySupport,
+          [`${pastYears[1]} OBLIGATION`]: gaa[1].income + gaa[1].budgetarySupport,
+          [`${pastYears[0]} GAA`]: gaa[0].income + gaa[0].budgetarySupport,
+          [`${pastYears[0]} OBLIGATION`]: gaa[0].income + gaa[0].budgetarySupport,
+          '120% OF 3 YEARS AVERAGE GAA': ceiling120.income + ceiling120.budgetarySupport,
+          'WHICHEVER IS LOWER BETWEEN PROPOSAL AND AVERAGE': Math.min(current.income + current.budgetarySupport, avgGaa.income + avgGaa.budgetarySupport),
+          'OBLIGATION': current.income + current.budgetarySupport
+        },
+        // B. USES OF FUNDS
+        {
+          particular: 'B. USES OF FUNDS CURRENT OPERATING EXPENDITURES',
+          isHeader: true
+        },
+        {
+          particular: '1. PERSONNEL SERVICES',
+          [`${pastYears[2]} GAA`]: gaa[2].personnel,
+          [`${pastYears[2]} OBLIGATION`]: gaa[2].personnel,
+          [`${pastYears[1]} GAA`]: gaa[1].personnel,
+          [`${pastYears[1]} OBLIGATION`]: gaa[1].personnel,
+          [`${pastYears[0]} GAA`]: gaa[0].personnel,
+          [`${pastYears[0]} OBLIGATION`]: gaa[0].personnel,
+          '120% OF 3 YEARS AVERAGE GAA': ceiling120.personnel,
+          'WHICHEVER IS LOWER BETWEEN PROPOSAL AND AVERAGE': Math.min(current.personnel, avgGaa.personnel),
+          'OBLIGATION': current.personnel
+        },
+        {
+          particular: '2. MOOE',
+          [`${pastYears[2]} GAA`]: gaa[2].mooe,
+          [`${pastYears[2]} OBLIGATION`]: gaa[2].mooe,
+          [`${pastYears[1]} GAA`]: gaa[1].mooe,
+          [`${pastYears[1]} OBLIGATION`]: gaa[1].mooe,
+          [`${pastYears[0]} GAA`]: gaa[0].mooe,
+          [`${pastYears[0]} OBLIGATION`]: gaa[0].mooe,
+          '120% OF 3 YEARS AVERAGE GAA': ceiling120.mooe,
+          'WHICHEVER IS LOWER BETWEEN PROPOSAL AND AVERAGE': Math.min(current.mooe, avgGaa.mooe),
+          'OBLIGATION': current.mooe
+        },
+        {
+          particular: '3. CAPITAL OUTLAY',
+          [`${pastYears[2]} GAA`]: gaa[2].capital,
+          [`${pastYears[2]} OBLIGATION`]: gaa[2].capital,
+          [`${pastYears[1]} GAA`]: gaa[1].capital,
+          [`${pastYears[1]} OBLIGATION`]: gaa[1].capital,
+          [`${pastYears[0]} GAA`]: gaa[0].capital,
+          [`${pastYears[0]} OBLIGATION`]: gaa[0].capital,
+          '120% OF 3 YEARS AVERAGE GAA': ceiling120.capital,
+          'WHICHEVER IS LOWER BETWEEN PROPOSAL AND AVERAGE': Math.min(current.capital, avgGaa.capital),
+          'OBLIGATION': current.capital
+        },
+        {
+          particular: 'TOTAL USES OF FUNDS',
+          [`${pastYears[2]} GAA`]: gaa[2].personnel + gaa[2].mooe + gaa[2].capital,
+          [`${pastYears[2]} OBLIGATION`]: gaa[2].personnel + gaa[2].mooe + gaa[2].capital,
+          [`${pastYears[1]} GAA`]: gaa[1].personnel + gaa[1].mooe + gaa[1].capital,
+          [`${pastYears[1]} OBLIGATION`]: gaa[1].personnel + gaa[1].mooe + gaa[1].capital,
+          [`${pastYears[0]} GAA`]: gaa[0].personnel + gaa[0].mooe + gaa[0].capital,
+          [`${pastYears[0]} OBLIGATION`]: gaa[0].personnel + gaa[0].mooe + gaa[0].capital,
+          '120% OF 3 YEARS AVERAGE GAA': ceiling120.personnel + ceiling120.mooe + ceiling120.capital,
+          'WHICHEVER IS LOWER BETWEEN PROPOSAL AND AVERAGE': Math.min(current.personnel + current.mooe + current.capital, avgGaa.personnel + avgGaa.mooe + avgGaa.capital),
+          'OBLIGATION': current.personnel + current.mooe + current.capital
+        },
+        // SURPLUS/DEFECIT
+        {
+          particular: 'SURPLUS/DEFECIT',
+          [`${pastYears[2]} GAA`]: (gaa[2].income + gaa[2].budgetarySupport) - (gaa[2].personnel + gaa[2].mooe + gaa[2].capital),
+          [`${pastYears[2]} OBLIGATION`]: (gaa[2].income + gaa[2].budgetarySupport) - (gaa[2].personnel + gaa[2].mooe + gaa[2].capital),
+          [`${pastYears[1]} GAA`]: (gaa[1].income + gaa[1].budgetarySupport) - (gaa[1].personnel + gaa[1].mooe + gaa[1].capital),
+          [`${pastYears[1]} OBLIGATION`]: (gaa[1].income + gaa[1].budgetarySupport) - (gaa[1].personnel + gaa[1].mooe + gaa[1].capital),
+          [`${pastYears[0]} GAA`]: (gaa[0].income + gaa[0].budgetarySupport) - (gaa[0].personnel + gaa[0].mooe + gaa[0].capital),
+          [`${pastYears[0]} OBLIGATION`]: (gaa[0].income + gaa[0].budgetarySupport) - (gaa[0].personnel + gaa[0].mooe + gaa[0].capital),
+          '120% OF 3 YEARS AVERAGE GAA': (ceiling120.income + ceiling120.budgetarySupport) - (ceiling120.personnel + ceiling120.mooe + ceiling120.capital),
+          'WHICHEVER IS LOWER BETWEEN PROPOSAL AND AVERAGE': Math.min((current.income + current.budgetarySupport) - (current.personnel + current.mooe + current.capital), (avgGaa.income + avgGaa.budgetarySupport) - (avgGaa.personnel + avgGaa.mooe + avgGaa.capital)),
+          'OBLIGATION': (current.income + current.budgetarySupport) - (current.personnel + current.mooe + current.capital)
+        }
+      ];
+
+      return tableData;
+    };
+
+    const comparativeData = buildComparativeData();
+
+    res.json({
+      success: true,
+      data: comparativeData,
+      metadata: {
+        region,
+        currentFiscalYear,
+        pastYears,
+        generatedAt: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching comparative report:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch comparative report',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

@@ -55,6 +55,7 @@ import AuditLogsPage from "./pages/AuditLogsPage";
 import ProposalDetailsPage from "./components/workflow/ProposalDetailsPage";
 import BRDConsolidationPage from "./pages/BRDConsolidationPage";
 import TierComparisonPage from "./pages/TierComparisonPage";
+import ComparativeReportPage from "./pages/ComparativeReportPage";
 import NEPCeilingPage from "./pages/NEPCeilingPage";
 const App = () => {
   return (
@@ -295,6 +296,16 @@ const App = () => {
               requiredWorkflowRoles={["BUDGET_PLANNING_ANALYST", "budgetAnalyst", "BUDGET_OFFICER", "BUDGET_MANAGER", "overallBudgetApprover", "superAdmin"]}
             >
               <TierComparisonPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/comparative-report"
+          element={
+            <ProtectedRoute
+              requiredWorkflowRoles={["BUDGET_PLANNING_ANALYST", "budgetAnalyst", "BUDGET_OFFICER", "BUDGET_MANAGER", "overallBudgetApprover", "superAdmin"]}
+            >
+              <ComparativeReportPage />
             </ProtectedRoute>
           }
         />

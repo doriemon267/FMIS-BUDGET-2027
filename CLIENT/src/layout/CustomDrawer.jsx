@@ -206,6 +206,12 @@ const CustomDrawer = ({ collapsed = false }) => {
                 isAllow: hasPermission(currentUser, "ViewReports"),
                 icon: <FaRegChartBar />,
               },
+              {
+                link: "/comparative-report",
+                name: "Comparative Budget Report",
+                isAllow: hasPermission(currentUser, "ViewReports"),
+                icon: <FaChartBar />,
+              },
               // {
               //   link: "/corporate-income-upload",
               //   name: "Corporate Income Upload",
