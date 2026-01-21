@@ -362,78 +362,21 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
       return [];
     }
 
-    // First, group by sublineItem for main categories
-    const grouped = {};
-    const parentEntries = [];
-    const childEntries = [];
-
-    // Separate parent and child entries
-    for (let idx = 0; idx < rawData.length; idx++) {
-      const item = rawData[idx];
-      if (item.sublineItem) {
-        // This is a parent entry
-        parentEntries.push(item);
-      } else {
-        // This might be a child entry
-        childEntries.push(item);
-      }
-    }
-
-    // Group parent entries by sublineItem
-    for (const item of parentEntries) {
+    const grouped = rawData.reduce((acc, item) => {
       const key = item.sublineItem;
-      if (!grouped[key]) {
-        grouped[key] = {
+      if (!acc[key]) {
+        acc[key] = {
           id: key,
-          sublineItem: item.sublineItem,
+          sublineItem: key,
           children: [],
         };
       }
-      grouped[key].children.push({
+      acc[key].children.push({
         ...item,
-        // Use stable ID based on data content, not timestamp/random
-        id: item._id || `${key}-${item.uacsCode || "none"}`,
+        id: item.id || item._id || `${key}-${item.uacsCode || Math.random()}`,
       });
-    }
-
-    // Now handle child entries - check if they belong to a parent
-    for (const child of childEntries) {
-      let foundParent = false;
-
-      // Check if this child belongs to a parent based on UACS code pattern
-      for (const parent of parentEntries) {
-        if (parent.uacsCode && child.uacsCode && child.uacsCode.startsWith(parent.uacsCode + '-')) {
-          // This child belongs to this parent
-          const key = parent.sublineItem;
-          if (grouped[key]) {
-            grouped[key].children.push({
-              ...child,
-              // Use stable ID based on data content, not timestamp/random
-              id: child._id || `${key}-${child.uacsCode || "none"}`,
-            });
-            foundParent = true;
-            break;
-          }
-        }
-      }
-
-      // If no parent found, create a new group or add to unknown
-      if (!foundParent) {
-        const key = child.sublineItem || `unknown-${child.uacsCode || "other"}`;
-        if (!grouped[key]) {
-          grouped[key] = {
-            id: key,
-            sublineItem: child.sublineItem || "Other",
-            children: [],
-          };
-        }
-        grouped[key].children.push({
-          ...child,
-          // Use stable ID based on data content, not timestamp/random
-          id: child._id || `${key}-${child.uacsCode || "none"}`,
-        });
-      }
-    }
+      return acc;
+    }, {});
 
     return Object.values(grouped);
   }, []);  // Calculate grand totals including IAs O&M Cost

@@ -1,4 +1,7 @@
-require("dotenv").config();
+require("dotenv").config(); // Load .env
+require("dotenv").config({ path: ".env.local", override: true }); // Load .env.local (overrides .env)
+// Decrypt any ENC(...) environment values using ENV_ENCRYPTION_KEY
+require("./utils/secretLoader");
 // Normalize a few env variable names for developer convenience (do not override explicit settings)
 // Ensure we use what the user's `.env` provides; allow multiple aliases while respecting user values
 process.env.MONGODB_URI =
@@ -174,6 +177,7 @@ const incomeExcelUploadRouter = require("./routers/incomeExcelUploadRoutes");
 const discountSettingsRouter = require("./routes/discountSettings");
 const retireeRouter = require("./routers/retireeRoutes");
 const budgetarySupportRoutes = require("./routers/budgetarySupportRoutes");
+const tierRoutes = require("./routers/tierRoutes");
 const chartOfAccountsCRUDRouter = require("./routers/chartOfAccountsRoutes");
 const titleMappingRouter = require("./routers/titleMappingRoutes");
 const employeeMasterRouter = require("./routers/employeeMasterRoutes");
@@ -824,6 +828,7 @@ app.use(require("./routers/personnelParamsRoutes"));
 app.use("/api/discount-settings", discountSettingsRouter);
 app.use(retireeRouter);
 app.use(budgetarySupportRoutes);
+app.use("/api/tier", tierRoutes);
 app.use(chartOfAccountsCRUDRouter);
 app.use(titleMappingRouter);
 // Chat router

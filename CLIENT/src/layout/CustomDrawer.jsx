@@ -212,6 +212,12 @@ const CustomDrawer = ({ collapsed = false }) => {
                 isAllow: hasPermission(currentUser, "ViewReports"),
                 icon: <FaChartBar />,
               },
+              {
+                link: "/tier",
+                name: "Tier",
+                isAllow: isSuperAdmin(currentUser),
+                icon: <FaChartBar />,
+              },
               // {
               //   link: "/corporate-income-upload",
               //   name: "Corporate Income Upload",

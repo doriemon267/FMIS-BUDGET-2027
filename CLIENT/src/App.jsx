@@ -57,6 +57,7 @@ import BRDConsolidationPage from "./pages/BRDConsolidationPage";
 import TierComparisonPage from "./pages/TierComparisonPage";
 import ComparativeReportPage from "./pages/ComparativeReportPage";
 import NEPCeilingPage from "./pages/NEPCeilingPage";
+import TierPage from "./pages/TierPage";
 const App = () => {
   return (
     <Routes>
@@ -76,6 +77,16 @@ const App = () => {
         }
       >
         <Route path="/dashboard" element={<DashBoardHome />} />
+        <Route
+          path="/tier"
+          element={
+            <ProtectedRoute
+              requiredWorkflowRoles={["superAdmin"]}
+            >
+              <TierPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/proposal" element={<Proposals />} />
         <Route
           path="/myProposals"

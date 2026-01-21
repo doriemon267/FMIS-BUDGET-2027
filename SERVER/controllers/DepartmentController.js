@@ -1,10 +1,42 @@
 const Department = require('../models/Department');
+const mongoose = require('mongoose');
+
 exports.getAllDepartment = async (req, res) => {
   try {
-    const departments = await Department.find();
-    res.status(200).json({departments});
+    const { region } = req.query;
+
+    if (region) {
+      // First find the region by name to get its _id
+      const Region = require('../models/Region');
+      const regionDoc = await Region.findOne({ Region: region });
+
+      if (!regionDoc) {
+        return res.status(404).json({ error: 'Region not found' });
+      }
+
+      // Filter departments by region using OrganizationStructure
+      const OrganizationStructure = require('../models/OrganizationStructure');
+      const mappings = await OrganizationStructure.find({ 
+        $or: [
+          { regionId: regionDoc._id },
+          { regionId: regionDoc._id.toString() }
+        ]
+      });
+
+      // Get unique department IDs
+      const departmentIds = [...new Set(mappings.map(mapping => mapping.departmentId))];
+
+      // Fetch departments by IDs
+      const departments = await Department.find({ _id: { $in: departmentIds } });
+      res.status(200).json({departments});
+    } else {
+      // Return all departments if no region filter
+      const departments = await Department.find();
+      res.status(200).json({departments});
+    }
   } catch (error) {
-    res.status(500).json({ error: 'An error occurred while fetching department.' });
+    console.error('Error fetching departments:', error);
+    res.status(500).json({ error: 'An error occurred while fetching departments.' });
   }
 };
 // Get PositionTitle by ID
@@ -18,4 +50,4 @@ exports.getDepartmentById = async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: 'An error occurred while fetching the department.' });
   }
-};
+};

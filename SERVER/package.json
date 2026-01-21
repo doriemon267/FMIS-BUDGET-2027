@@ -8,6 +8,8 @@
     "test": "jest --runInBand",
     "test:integration": "jest tests/integration --runInBand",
     "migrate:normalize-recipient-ids": "node ./scripts/normalize-recipient-userids.js"
+    ,
+    "encrypt:env": "node ./tools/encryptEnv.js"
   },
   "keywords": [],
   "author": "",

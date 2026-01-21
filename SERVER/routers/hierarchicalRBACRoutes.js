@@ -477,6 +477,81 @@ router.put(
 // HIERARCHICAL REPORTING ROUTES
 // =============================================================================
 /**
+ * Get divisions for a specific department
+ * GET /api/hierarchical-rbac/divisions?departmentId=:departmentId
+ */
+router.get(
+  '/divisions',
+  ...authenticatedRoute(),
+  async (req, res) => {
+    try {
+      const { departmentId } = req.query;
+      if (!departmentId) {
+        return res.status(400).json({
+          success: false,
+          message: 'departmentId query parameter is required'
+        });
+      }
+
+      const mongoose = require('mongoose');
+      const mappingsCollection = mongoose.connection.db.collection('departmentdivisionmappings');
+
+      // Find mappings for the specified department
+      let departmentObjectId;
+      try {
+        departmentObjectId = new mongoose.Types.ObjectId(departmentId);
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid departmentId format'
+        });
+      }
+
+      const mappings = await mappingsCollection.find({
+        departmentId: departmentObjectId
+      }).toArray();
+
+      if (!mappings || mappings.length === 0) {
+        return res.status(200).json({
+          success: true,
+          message: 'No divisions found for the specified department',
+          data: []
+        });
+      }
+
+      // Extract divisions from mappings
+      const divisions = [];
+      mappings.forEach(mapping => {
+        if (mapping.divisions && mapping.divisions.length > 0) {
+          mapping.divisions.forEach(div => {
+            if (div.isActive !== false) {
+              divisions.push({
+                name: div.name,
+                code: div.code,
+                sections: div.sections ? div.sections.filter(section => section.isActive !== false) : []
+              });
+            }
+          });
+        }
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Divisions retrieved successfully',
+        data: divisions
+      });
+    } catch (error) {
+      console.error('Error getting divisions:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error retrieving divisions',
+        error: error.message
+      });
+    }
+  }
+);
+
+/**
  * Get hierarchical organization structure (SUPPORTS BOTH OLD AND NEW STRUCTURES)
  * GET /api/hierarchical-rbac/organization-structure
  */
