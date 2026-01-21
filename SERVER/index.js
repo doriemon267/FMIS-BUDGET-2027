@@ -418,7 +418,8 @@ io.use(async (socket, next) => {
         console.warn(
           "[SocketAuth] No token in handshake and no devUserId available, refusing connection"
         );
-        return next(new Error("Authentication error: token missing"));
+        return next(new Error("Authenticati
+          on error: token missing"));
       }
     }
 
