@@ -342,15 +342,6 @@ const BackupNotificationSystem = ({
     );
   };
 
-  // Play sound for new notifications
-  useEffect(() => {
-    const newNotifications = activeNotifications.filter(n => !n.soundPlayed);
-    newNotifications.forEach(notification => {
-      playNotificationSound(notification.type);
-      notification.soundPlayed = true;
-    });
-  }, [activeNotifications, soundEnabled]);
-
   return (
     <>
       {/* Progress Notifications (Fixed position) */}
@@ -390,31 +381,6 @@ const BackupNotificationSystem = ({
         open={detailsDialog.open}
         onClose={() => setDetailsDialog({ open: false, notification: null })}
       />
-
-      {/* Sound Toggle (Optional) */}
-      <Box
-        sx={{
-          position: 'fixed',
-          bottom: 16,
-          right: 16,
-          zIndex: theme.zIndex.fab
-        }}
-      >
-        <IconButton
-          onClick={() => setSoundEnabled(!soundEnabled)}
-          color={soundEnabled ? 'primary' : 'default'}
-          sx={{
-            backgroundColor: 'background.paper',
-            boxShadow: 2,
-            '&:hover': {
-              backgroundColor: 'background.paper',
-              boxShadow: 4
-            }
-          }}
-        >
-          <NotificationsActive />
-        </IconButton>
-      </Box>
     </>
   );
 };

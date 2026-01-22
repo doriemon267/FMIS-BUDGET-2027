@@ -8,14 +8,14 @@ const { getBackupStoragePath } = require('./backupPaths');
  */
 const cleanupExpiredBackups = async () => {
   try {
-    // const deletedCount = await DatabaseBackup.cleanupExpired();
-    // return {
-    //   success: true,
-    //   deletedCount,
-    //   message: `Successfully deleted ${deletedCount} expired backups`
-    // };
+    const deletedCount = await DatabaseBackup.cleanupExpired();
+    return {
+      success: true,
+      deletedCount,
+      message: `Successfully deleted ${deletedCount} expired backups`
+    };
   } catch (error) {
-    // console.error('❌ Backup cleanup failed:', error);
+    console.error('❌ Backup cleanup failed:', error);
     return {
       success: false,
       error: error.message,
@@ -28,9 +28,9 @@ const cleanupExpiredBackups = async () => {
  */
 const cleanupOrphanedFiles = async () => {
   try {
-    // const backupDir = getBackupStoragePath();
+    const backupDir = getBackupStoragePath();
     if (!fs.existsSync(backupDir)) {
-      // return { success: true, deletedCount: 0, message: 'No backup directory found' };
+      return { success: true, deletedCount: 0, message: 'No backup directory found' };
     }
     const files = fs.readdirSync(backupDir);
     let deletedCount = 0;
@@ -49,13 +49,13 @@ const cleanupOrphanedFiles = async () => {
         }
       }
     }
-    // return {
-    //   success: true,
-    //   deletedCount,
-    //   message: `Successfully deleted ${deletedCount} orphaned backup files`
-    // };
+    return {
+      success: true,
+      deletedCount,
+      message: `Successfully deleted ${deletedCount} orphaned backup files`
+    };
   } catch (error) {
-    // console.error('❌ Orphaned file cleanup failed:', error);
+    console.error('❌ Orphaned file cleanup failed:', error);
     return {
       success: false,
       error: error.message,
@@ -198,7 +198,8 @@ const initializeCleanupScheduler = () => {
     const expiredCleanup = await cleanupExpiredBackups();
     const orphanedCleanup = await cleanupOrphanedFiles();
     const healthCheck = await checkBackupHealth();
-    });
+    console.log(`[Backup Cleanup] Daily task completed: ${expiredCleanup.deletedCount} expired, ${orphanedCleanup.deletedCount} orphaned`);
+  });
   // Weekly health check report (Sundays at 6:00 AM)
   cron.schedule('0 6 * * 0', async () => {
     await checkBackupHealth();

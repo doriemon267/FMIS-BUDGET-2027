@@ -553,6 +553,33 @@ const getStorageStatistics = async (req, res) => {
     });
   }
 };
+// Initialize scheduled jobs from database
+const initializeScheduledJobs = async () => {
+  try {
+    const scheduledBackups = await DatabaseBackup.find({ type: 'scheduled', enabled: true });
+    console.log(`[Backup] Initializing ${scheduledBackups.length} scheduled backup jobs`);
+    
+    for (const backup of scheduledBackups) {
+      if (backup.schedule && cron.validate(backup.schedule)) {
+        const task = cron.schedule(backup.schedule, async () => {
+          try {
+            await createScheduledBackup(backup._id);
+          } catch (error) {
+            console.error(`[Backup] Scheduled job failed for ${backup.name}:`, error);
+          }
+        }, {
+          scheduled: false
+        });
+        
+        scheduledJobs.set(backup._id.toString(), task);
+        task.start();
+      }
+    }
+  } catch (error) {
+    console.error('[Backup] Failed to initialize scheduled jobs:', error);
+  }
+};
+
 module.exports = {
   createBackup,
   scheduleBackup,
@@ -564,5 +591,6 @@ module.exports = {
   downloadBackup,
   getBackupStatus,
   cleanupBackups,
-  getStorageStatistics
+  getStorageStatistics,
+  initializeScheduledJobs
 };

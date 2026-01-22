@@ -384,11 +384,12 @@ const CustomDrawer = ({ collapsed = false }) => {
                 icon: <IoSettingsOutline />,
               },
 
-              // {
-              //   link: "/database-backup",
-              //   name: "Database Backup",
-              //   icon: <BiData />,
-              // }
+              {
+                link: "/database-backup",
+                name: "Database Backup",
+                icon: <BiData />,
+                isAllow: isSuperAdmin(currentUser),
+              },
             ]}
           />
 {/* 

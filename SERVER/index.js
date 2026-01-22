@@ -192,6 +192,7 @@ const checkToken = require("./middleware/checkToken");
 const enforceOrgAccess = require("./middleware/enforceOrgAccess");
 const { initializeCleanupScheduler } = require("./utils/backupCleanup");
 const { initializeBackupSystem } = require("./backup-scripts/initBackupSystem");
+const { initializeScheduledJobs } = require("./controllers/databaseBackupController");
 const income_categories = require("./routers/income_categories");
 const authRouter = require("./routers/AuthRoutes");
 const myProposalsRoutes = require("./routes/myProposalsRoutes");
@@ -263,8 +264,12 @@ mongoose.connection.once("open", async () => {
   try {
     await initAgenda({ mongoConnection: mongoose.connection });
     // console.log('Agenda scheduler initialized');
+    
+    // Initialize backup system and scheduled jobs
+    initializeCleanupScheduler();
+    await initializeScheduledJobs();
   } catch (e) {
-    console.error("Failed to initialize Agenda scheduler:", e.stack || e);
+    console.error("Failed to initialize schedulers:", e.stack || e);
   }
 });
 const app = express();
@@ -418,8 +423,7 @@ io.use(async (socket, next) => {
         console.warn(
           "[SocketAuth] No token in handshake and no devUserId available, refusing connection"
         );
-        return next(new Error("Authenticati
-          on error: token missing"));
+        return next(new Error("Authentication error: token missing"));
       }
     }
 
@@ -457,8 +461,9 @@ io.use(async (socket, next) => {
       }
     }
 
-    if (!userId)
-      return next(new Error("Authentication error: cannot determine user id"));
+    if (!userId) {
+      return next(new Error('Authentication error: cannot determine user id'));
+    }
 
     // Normalize roles
     let roles = payload.roles || payload.role || payload.Roles;
@@ -1034,10 +1039,6 @@ if (require.main === module) {
   server.listen(process.env.APP_PORT, () => {
     // Initialize backup system
     initializeBackupSystem();
-    // Initialize backup cleanup scheduler
-    setTimeout(() => {
-      initializeCleanupScheduler();
-    }, 5000); // Wait 5 seconds for database connection to be established
     // Always show essential startup message
     console.log("🚀", "FMIS - BUDGET IS UP AND RUNNING :: 5005");
     return null;

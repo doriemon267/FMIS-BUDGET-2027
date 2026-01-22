@@ -431,6 +431,17 @@ const App = () => {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/database-backup"
+          element={
+            <ProtectedRoute
+              requiredPermissions={["ManageSettings"]}
+              requiredWorkflowRoles={["superAdmin"]}
+            >
+              <DatabaseBackupPage />
+            </ProtectedRoute>
+          }
+        />
       </Route>
     </Routes>
   );

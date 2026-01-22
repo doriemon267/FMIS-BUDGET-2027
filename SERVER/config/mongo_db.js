@@ -1,13 +1,22 @@
 const mongoose = require('mongoose')
 
 // Create connection for main database
-const mainConnection = mongoose.createConnection(process.env.MONGODB_MAIN_URL,
-     {
-  // options if needed
-});
+let mainConnection;
+if (process.env.MONGODB_MAIN_URL) {
+    mainConnection = mongoose.createConnection(process.env.MONGODB_MAIN_URL, {
+        // options if needed
+    });
+} else {
+    // Create a dummy connection object if URL is missing to avoid immediate crash
+    mainConnection = mongoose.createConnection();
+}
 
 module.exports = async () => {
     try {
+        if (!process.env.MONGODB_BUDGET_URL || !process.env.MONGODB_MAIN_URL) {
+            throw new Error('MongoDB connection URLs are missing in environment variables');
+        }
+
         // Connect default database (budget)
         await mongoose.connect(process.env.MONGODB_BUDGET_URL)
         console.log('✅ Connected to FMIS Budget DB');
