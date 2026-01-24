@@ -1,0 +1,1 @@
+module.exports = !!process.env.PRODUCTION_MODE;

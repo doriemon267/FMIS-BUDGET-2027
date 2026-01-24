@@ -1,11 +1,16 @@
 const express = require("express");
 const router = express.Router();
 const checkToken = require('../middleware/check_token');
+const check_token_dev = require("../middlewares/check_token_dev");
+const check_token_prod = require("../middlewares/check_token_prod");
+const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
+const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
+
 const retireeController = require("../controllers/retireeController");
 const checkDueDate = require("../middleware/checkDueDate");
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
 // Apply authentication middleware to all routes in this router
-router.use(checkToken);
+router.use(tokenMiddleware);
 // Get eligible for retirement
 router.get("/retiree/eligible", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), retireeController.getEligibleForRetirement)
 // Get all retirees with pagination

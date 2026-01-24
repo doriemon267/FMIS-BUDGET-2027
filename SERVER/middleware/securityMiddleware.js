@@ -1,4 +1,9 @@
 const checkToken = require('./checkToken');
+const check_token_dev = require("../middlewares/check_token_dev");
+const check_token_prod = require("../middlewares/check_token_prod");
+const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
+const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
+
 const checkDueDate = require('./checkDueDate');
 const checkRegionAccess = require('./checkRegionAccess');
 const { checkUserRegionAccess } = require('./checkRegionAccess');
@@ -135,12 +140,12 @@ const checkOrganizationalAccess = async (req, res, next) => {
 };
 // Basic authentication middleware
 const authenticatedRoute = () => {
-  return [checkToken];
+  return [tokenMiddleware];
 };
 // Admin-only access middleware
 const adminRoute = () => {
   return [
-    checkToken,
+    tokenMiddleware,
     (req, res, next) => {
       const adminRoles = [
         PERMISSION_LEVELS.SUPER_ADMIN,
@@ -163,7 +168,7 @@ const adminRoute = () => {
 };
 // Enhanced due date protected route with permission level and organizational access
 const dueDateProtectedRoute = (permissionLevel = PERMISSION_LEVELS.USER, accessScope = ACCESS_SCOPE.REGION) => {
-  const middleware = [checkToken, checkDueDate];
+  const middleware = [tokenMiddleware, checkDueDate];
   // Add role checking if permission level is specified
   if (permissionLevel !== PERMISSION_LEVELS.USER) {
     middleware.push((req, res, next) => {
@@ -221,7 +226,7 @@ const dueDateProtectedRoute = (permissionLevel = PERMISSION_LEVELS.USER, accessS
 // Owner-only access (for viewing own proposals)
 const ownerOnlyRoute = () => {
   return [
-    checkToken,
+    tokenMiddleware,
     (req, res, next) => {
       const userId = req.user.id;
       const userRoles = req.user.Roles;
@@ -244,7 +249,7 @@ const ownerOnlyRoute = () => {
 // Workflow staff access (for PREPARER, BUDGET REVIEWER, APPROVER to view proposals)
 const workflowStaffRoute = (allowedOperations = ['read']) => {
   return [
-    checkToken,
+    tokenMiddleware,
     (req, res, next) => {
       const userRoles = req.user.Roles;
       
@@ -280,7 +285,7 @@ const workflowStaffRoute = (allowedOperations = ['read']) => {
 // Budget Officer restricted access
 const budgetOfficerRoute = (allowedOperations = ['read']) => {
   return [
-    checkToken,
+    tokenMiddleware,
     (req, res, next) => {
       const userRoles = req.user.Roles;
       
@@ -327,7 +332,7 @@ const budgetOfficerRoute = (allowedOperations = ['read']) => {
 };
 // Region access protected route
 const regionProtectedRoute = () => {
-  return [checkToken, checkRegionAccess];
+  return [tokenMiddleware, checkRegionAccess];
 };
 module.exports = {
   authenticatedRoute,

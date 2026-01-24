@@ -1,5 +1,11 @@
 const express = require("express");
 const checkToken = require('../middleware/check_token');
+
+const check_token_dev = require("../middlewares/check_token_dev");
+const check_token_prod = require("../middlewares/check_token_prod");
+const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
+const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
+
 const {
   createEmployee,
   getAllEmployees,
@@ -12,7 +18,7 @@ const {
 } = require("../controllers/employee_master_controller");
 const employeeMasterRouter = express.Router();
 // Apply authentication middleware to all routes in this router
-employeeMasterRouter.use(checkToken);
+employeeMasterRouter.use(tokenMiddleware);
 // Get employee statistics - MUST be before other routes to avoid conflict with :id
 employeeMasterRouter.get("/employees/stats", getEmployeeStats);
 // Utility endpoints to check and fix employee regions

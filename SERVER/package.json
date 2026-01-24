@@ -7,8 +7,7 @@
     "start:quiet": "cross-env NODE_OPTIONS=--no-deprecation nodemon .",
     "test": "jest --runInBand",
     "test:integration": "jest tests/integration --runInBand",
-    "migrate:normalize-recipient-ids": "node ./scripts/normalize-recipient-userids.js"
-    ,
+    "migrate:normalize-recipient-ids": "node ./scripts/normalize-recipient-userids.js",
     "encrypt:env": "node ./tools/encryptEnv.js"
   },
   "keywords": [],
@@ -22,6 +21,7 @@
     "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "csurf": "^1.11.0",
     "dotenv": "^16.6.1",
     "exceljs": "^4.4.0",
     "express": "^4.21.1",

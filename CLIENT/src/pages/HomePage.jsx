@@ -1,127 +1,422 @@
-import React, { useState, useEffect } from "react";
-import { Button, Typography, Box, Switch } from "@mui/material";
-import env from "../utils/env";
+import {
+  AppBar,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Container,
+  Grid,
+  Toolbar,
+  Typography,
+  useTheme,
+} from "@mui/material";
 import { motion } from "framer-motion";
+import {
+  FaCalculator,
+  FaCashRegister,
+  FaFileInvoiceDollar,
+  FaMoneyBillWave,
+} from "react-icons/fa";
+import env from "../utils/env";
+import IS_LOGIN from "../utils/IS_LOGIN";
+import IS_PRODUCTION from "../utils/IS_PRODUCTION";
 
-const motivationalQuotes = [
-  "Code is like humor. When you have to explain it, it’s bad.",
-  "Experience is the name everyone gives to their mistakes.",
-  "Simplicity is the soul of efficiency.",
-  "Make it work, make it right, make it fast.",
-  "Talk is cheap. Show me the code.",
-  "First, solve the problem. Then, write the code.",
-];
+// Animation variants
+const appBarVariants = {
+  hidden: { opacity: 0, y: -50 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.3, ease: "easeOut" }, // Reduced from 0.6 to 0.3
+  },
+};
 
-const HomePage = () => {
-  const [darkMode, setDarkMode] = useState(false);
-  const [quote, setQuote] = useState(motivationalQuotes[0]);
+const typographyVariants = {
+  hidden: { opacity: 0, x: -20 },
+  visible: {
+    opacity: 1,
+    x: 0,
+    transition: { duration: 0.3, ease: "easeOut" }, // Reduced from 0.5 to 0.3
+  },
+};
 
-  const [text, setText] = useState(
-    "Hello Dev! 🚀Welcome to the FMIS Project. Get started now!"
-  );
+const heroVariants = {
+  hidden: { opacity: 0, y: 50 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.4, ease: "easeOut" }, // Reduced from 0.8 to 0.4
+  },
+};
 
-  useEffect(() => {
-    let index = 13; // Start after "Hello Dev! 🚀"
-    const message = "Welcome to the FMIS Project. Get started now!";
-    setText("Hello Developer! 🚀"); // Reset text initially
-    const interval = setInterval(() => {
-      if (index - 13 < message.length) {
-        setText((prev) => prev + message[index - 14]);
-        index++;
-      } else {
-        clearInterval(interval);
-      }
-    }, 40);
-    return () => clearInterval(interval);
-  }, []);
+// New variants for hero section elements
+const heroElementVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: (i) => ({
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.25, delay: i * 0.1, ease: "easeOut" }, // Fast stagger
+  }),
+};
 
-  useEffect(() => {
-    const quoteInterval = setInterval(() => {
-      setQuote(
-        motivationalQuotes[
-          Math.floor(Math.random() * motivationalQuotes.length)
-        ]
-      );
-    }, 4000);
-    return () => clearInterval(quoteInterval);
-  }, []);
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1, // Reduced from 0.2 to 0.1
+    },
+  },
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 30 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.3, ease: "easeOut" }, // Reduced from 0.6 to 0.3
+  },
+};
+
+// New variants for card content (icon, title, description)
+const cardContentVariants = {
+  hidden: { opacity: 0, y: 15 },
+  visible: (i) => ({
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.2, delay: i * 0.1, ease: "easeOut" }, // Fast stagger
+  }),
+};
+
+export default function HomePage() {
+  const theme = useTheme();
 
   const handleNavigateToLogin = () => {
-    location.href = env("AUTH_CLIENT_URL") + "/login";
+    const currentUrl = window.location.origin + "/dashboard"; // or window.location.href if you want the exact page
+    const loginUrl = IS_PRODUCTION
+      ? `${env("LOGIN_REDIRECT_URL")}?ReturnUrl=${encodeURIComponent(currentUrl)}`
+      : `${env("CLIENT_URL_DEV")}/login`;
+
+    location.href = loginUrl;
   };
+
+  // Feature data with react-icons
+  const features = [
+    {
+      title: "Budget System",
+      description:
+        "Plan, allocate, and monitor budgets effectively across departments.",
+      icon: <FaCalculator style={{ fontSize: 40, color: "#fff" }} />,
+    },
+    {
+      title: "Disbursement Voucher System",
+      description:
+        "Streamline the process of creating and approving disbursement vouchers.",
+      icon: <FaFileInvoiceDollar style={{ fontSize: 40, color: "#fff" }} />,
+    },
+    {
+      title: "Cash System",
+      description:
+        "Manage cash inflows and outflows efficiently to maintain financial stability.",
+      icon: <FaCashRegister style={{ fontSize: 40, color: "#fff" }} />,
+    },
+    {
+      title: "Billing & Collection System",
+      description:
+        "Streamline billing and collection processes for efficient financial management.",
+      icon: <FaMoneyBillWave style={{ fontSize: 40, color: "#fff" }} />,
+    },
+  ];
 
   return (
     <Box
       sx={{
-        height: "100vh",
+        minHeight: "100vh",
+        width: "100%",
+        backgroundImage:
+          "linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url('/homepage.jpg')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundAttachment: "fixed",
         display: "flex",
         flexDirection: "column",
-        justifyContent: "center",
-        alignItems: "center",
-        textAlign: "center",
-        background: darkMode
-          ? "linear-gradient(135deg, #0f0f0f, #1a1a1a)"
-          : "linear-gradient(135deg, #002b36, #004d40)",
-        color: "white",
-        transition: "background 0.5s ease",
-        overflow: "hidden",
+        fontFamily: "'Roboto', sans-serif",
       }}
     >
-      <Switch
-        checked={darkMode}
-        onChange={() => setDarkMode(!darkMode)}
-        sx={{ position: "absolute", top: 20, right: 20 }}
-      />
-
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 1 }}
-      >
-        <Typography
-          variant="h1"
-          sx={{ fontWeight: "bold", mb: 2, textShadow: "0px 0px 20px #00ffcc" }}
-        >
-          {text}
-        </Typography>
-      </motion.div>
-
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1, duration: 1 }}
-      >
-        <Typography
-          variant="h5"
-          sx={{ mb: 4, fontStyle: "italic", color: "#00ffcc" }}
-        >
-          {quote}
-        </Typography>
-      </motion.div>
-
-      <motion.div whileHover={{ scale: 1.1 }}>
-        <Button
-          variant="contained"
+      {/* AppBar Section */}
+      <motion.div variants={appBarVariants} initial="hidden" animate="visible">
+        <AppBar
+          position="sticky"
+          color="primary"
+          elevation={0}
           sx={{
-            background: "#00ffcc",
-            color: "#002b36",
-            fontWeight: "bold",
-            fontSize: "1.2rem",
-            mb: 2,
-            boxShadow: "0px 0px 20px #00ffcc",
-            ":hover": {
-              background: "#00ffcc",
-              color: "#002b36",
-              boxShadow: "0px 0px 20px #00ffcc",
-            },
+            py: 1.5,
+            px: { xs: 2, sm: 4, md: 8 },
           }}
-          onClick={handleNavigateToLogin}
         >
-          LOGIN
-        </Button>
+          <Toolbar sx={{ justifyContent: "space-between" }}>
+            <Box sx={{ display: "flex", alignItems: "center" }}>
+              <img
+                src="/2020-nia-logo.svg"
+                alt="NIA Logo"
+                style={{ height: 50, marginRight: 16 }}
+              />
+
+              <Box sx={{ display: "flex", alignItems: "center" }}>
+                <motion.div
+                  variants={typographyVariants}
+                  initial="hidden"
+                  animate="visible"
+                >
+                  <Typography
+                    variant="h6"
+                    sx={{
+                      display: { xs: "none", sm: "block" },
+                      fontWeight: "bold",
+                      letterSpacing: 1.2,
+                      textTransform: "uppercase",
+                      fontFamily: '"Merriweather", "Georgia", serif',
+                    }}
+                    aria-label={env("APP_FULL_TITLE")}
+                  >
+                    {env("APP_FULL_TITLE")}
+                  </Typography>
+                </motion.div>
+                <motion.div
+                  variants={typographyVariants}
+                  initial="hidden"
+                  animate="visible"
+                >
+                  <Typography
+                    variant="h6"
+                    sx={{
+                      display: { xs: "block", sm: "none" },
+                      fontFamily: '"Merriweather", "Georgia", serif',
+                      fontWeight: 700,
+                      fontSize: "1.125rem",
+                      letterSpacing: 0.5,
+                      lineHeight: 1.4,
+                    }}
+                    aria-label={env("APP_TITLE")}
+                  >
+                    {env("APP_TITLE")}
+                  </Typography>
+                </motion.div>
+              </Box>
+            </Box>
+          </Toolbar>
+        </AppBar>
       </motion.div>
+
+      {/* Hero Section */}
+      <Box
+        sx={{
+          textAlign: "center",
+          color: "#fff",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: "70vh",
+          px: { xs: 2, sm: 4, md: 8 },
+        }}
+      >
+        <motion.div variants={heroVariants} initial="hidden" animate="visible">
+          <motion.div
+            variants={heroElementVariants}
+            initial="hidden"
+            animate="visible"
+            custom={0}
+          >
+            <Typography
+              variant="h1"
+              sx={{
+                fontSize: { xs: "2.8rem", sm: "4rem", md: "5rem" },
+                fontWeight: 900,
+                lineHeight: 1.1,
+                letterSpacing: -1,
+                mb: 2,
+                background: `linear-gradient(45deg, #fff, ${theme.palette.primary.light})`,
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+              }}
+            >
+              Welcome to FMIS Portal
+            </Typography>
+          </motion.div>
+          <motion.div
+            variants={heroElementVariants}
+            initial="hidden"
+            animate="visible"
+            custom={1}
+          >
+            <Typography
+              variant="h5"
+              sx={{
+                maxWidth: 800,
+                mx: "auto",
+                opacity: 0.9,
+                fontWeight: 300,
+                lineHeight: 1.6,
+                mb: 4,
+              }}
+            >
+              A centralized platform for managing and overseeing all
+              functionalities under the FMIS system with efficiency and ease.
+            </Typography>
+          </motion.div>
+          <motion.div
+            variants={heroElementVariants}
+            initial="hidden"
+            animate="visible"
+            custom={2}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            {IS_LOGIN ? (
+              <Button
+                onClick={handleNavigateToLogin} // <-- use handleNavigateToLogin
+                variant="outlined"
+                size="medium"
+                sx={{
+                  color: "#fff",
+                  borderColor: "#fff",
+                  background: "transparent",
+                  borderRadius: 24,
+                  px: 4,
+                  py: 1.5,
+                  textTransform: "none",
+                  fontWeight: 600,
+                  fontSize: "1rem",
+                  lineHeight: 1.5,
+                  minWidth: 120,
+                  height: 48,
+                  "&:hover": {
+                    backgroundColor: "rgba(255,255,255,0.15)",
+                    borderColor: "#fff",
+                    color: "#fff",
+                    boxShadow: "0 8px 32px rgba(255,255,255,0.2)",
+                    transform: "translateY(-2px)",
+                    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                  },
+                }}
+              >
+                Dashboard
+              </Button>
+            ) : (
+              <Button
+                onClick={handleNavigateToLogin} // <-- also here
+                variant="outlined"
+                size="medium"
+                sx={{
+                  color: "#fff",
+                  borderColor: "#fff",
+                  background: "transparent",
+                  borderRadius: 24,
+                  px: 4,
+                  py: 1.5,
+                  textTransform: "none",
+                  fontWeight: 600,
+                  fontSize: "1rem",
+                  lineHeight: 1.5,
+                  minWidth: 120,
+                  height: 48,
+                  "&:hover": {
+                    backgroundColor: "rgba(255,255,255,0.15)",
+                    borderColor: "#fff",
+                    color: "#fff",
+                    boxShadow: "0 8px 32px rgba(255,255,255,0.2)",
+                    transform: "translateY(-2px)",
+                    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                  },
+                }}
+              >
+                Login
+              </Button>
+            )}
+          </motion.div>
+        </motion.div>
+      </Box>
+
+      {/* Features Overview */}
+      <Container sx={{ py: 8 }}>
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true }}
+        >
+          <Grid container spacing={4} justifyContent="center">
+            {features.map((item, index) => (
+              <Grid item xs={12} sm={6} md={4} lg={3} key={index}>
+                <motion.div
+                  variants={cardVariants}
+                  whileHover={{
+                    scale: 1.05,
+                    transition: { duration: 0.3 },
+                  }}
+                >
+                  <Card
+                    sx={{
+                      background:
+                        "linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05))",
+                      backdropFilter: "blur(12px)",
+                      color: "#fff",
+                      padding: 3,
+                      borderRadius: "20px",
+                      border: "1px solid rgba(255,255,255,0.2)",
+                      boxShadow: "0px 8px 30px rgba(0,0,0,0.2)",
+                      transition: "all 0.3s ease",
+                    }}
+                  >
+                    <CardContent sx={{ textAlign: "center" }}>
+                      <motion.div
+                        variants={cardContentVariants}
+                        initial="hidden"
+                        whileInView="visible"
+                        viewport={{ once: true }}
+                        custom={0}
+                      >
+                        <Box sx={{ mb: 2 }}>{item.icon}</Box>
+                      </motion.div>
+                      <motion.div
+                        variants={cardContentVariants}
+                        initial="hidden"
+                        whileInView="visible"
+                        viewport={{ once: true }}
+                        custom={1}
+                      >
+                        <Typography
+                          variant="h6"
+                          fontWeight={700}
+                          gutterBottom
+                          sx={{ letterSpacing: 0.5 }}
+                        >
+                          {item.title}
+                        </Typography>
+                      </motion.div>
+                      <motion.div
+                        variants={cardContentVariants}
+                        initial="hidden"
+                        whileInView="visible"
+                        viewport={{ once: true }}
+                        custom={2}
+                      >
+                        <Typography
+                          variant="body2"
+                          sx={{ opacity: 0.85, lineHeight: 1.7 }}
+                        >
+                          {item.description}
+                        </Typography>
+                      </motion.div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              </Grid>
+            ))}
+          </Grid>
+        </motion.div>
+      </Container>
     </Box>
   );
-};
-
-export default HomePage;
+}

@@ -1,5 +1,10 @@
 const Router = require("express").Router;
 const checkToken = require('../middleware/check_token');
+const check_token_dev = require("../middlewares/check_token_dev");
+const check_token_prod = require("../middlewares/check_token_prod");
+const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
+const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
+
 const {
   getAllMedicalAllowances,
   getMedicalAllowance,
@@ -14,7 +19,7 @@ const checkDueDate = require("../middleware/checkDueDate");
 const { submissionWorkflowControl } = require('../middleware/submissionWorkflowControl');
 const medicalAllowanceRouter = Router();
 // Apply authentication middleware to all routes in this router
-medicalAllowanceRouter.use(checkToken);
+medicalAllowanceRouter.use(tokenMiddleware);
 // Apply submission workflow control middleware for read operations
 medicalAllowanceRouter.use('/medical-allowance', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
 medicalAllowanceRouter.use('/medical-allowance/stats', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));

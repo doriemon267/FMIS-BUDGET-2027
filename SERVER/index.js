@@ -310,10 +310,9 @@ const allowedSocketOrigins = [
   process.env.CLIENT1,
   process.env.CLIENT2,
   process.env.CLIENT3,
-  "http://localhost:3005",
-  "https://localhost:3005",
-  "http://localhost:3006",
-  "https://localhost:3006",
+  "https://budget.fmis.local",
+  
+
 
 ].filter(Boolean);
 
@@ -508,30 +507,53 @@ io.use(async (socket, next) => {
   }
 });
 // MIDDLEWARE
+// app.use(
+//   cors({
+//     origin: [
+//       process.env.CLIENT1,
+//       process.env.CLIENT2,
+//       process.env.CLIENT3,
+
+//       // list more allowed origins
+//     ],
+//     credentials: true,
+//     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+//     // Include common dev headers used by local development and debugging
+//     allowedHeaders: [
+//       "Content-Type",
+//       "Authorization",
+//       "X-CSRF-Token",
+//       "X-Dev-User-Id",
+//       "X-Dev-Roles",
+//       "X-Requested-With",
+//       "X-User-Object",
+//       "X-Workflow-Ref",
+//     ],
+//   })
+// );
+
+
 app.use(
   cors({
-    origin: [
-      process.env.CLIENT1,
-      process.env.CLIENT2,
-      process.env.CLIENT3,
+    origin: (origin, callback) => {
+      if (!origin) {
+        return callback(null, true);
+      }
 
-      // list more allowed origins
-    ],
+      const isNia = origin.endsWith(".nia.gov.ph");
+      const isLocal = origin.startsWith(".fmis.local");
+
+      if (isNia || isLocal) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    // Include common dev headers used by local development and debugging
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "X-CSRF-Token",
-      "X-Dev-User-Id",
-      "X-Dev-Roles",
-      "X-Requested-With",
-      "X-User-Object",
-      "X-Workflow-Ref",
-    ],
-  })
+  }),
 );
+
+
 // Increase payload limits for export functionality
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));

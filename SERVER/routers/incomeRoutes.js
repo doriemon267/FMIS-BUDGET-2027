@@ -1,11 +1,16 @@
 const express = require("express");
 const router = express.Router();
 const checkToken = require('../middleware/check_token');
+const check_token_dev = require("../middlewares/check_token_dev");
+const check_token_prod = require("../middlewares/check_token_prod");
+const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
+const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
+
 const incomeController = require("../controllers/IncomeController");
 const { submissionWorkflowControl } = require("../middleware/submissionWorkflowControl");
 const { enforceAccessRestrictions } = require('../middleware/accessRestrictions');
 // Apply authentication to all income routes
-router.use(checkToken);
+router.use(tokenMiddleware);
 // Create a new income entry (apply hierarchical create control, relaxed to avoid 403 during transition)
 router.post("/income", submissionWorkflowControl('create', { strictMode: false, enableConsolidation: true }), enforceAccessRestrictions({ checkBudgetType: true, checkFiscalYear: true, checkReadOnly: true }), incomeController.createIncome);
 // Bulk update income entries

@@ -72,7 +72,7 @@ const CustomDrawer = ({ collapsed = false }) => {
   
   // BUDGET_PLANNING_ANALYST should have same access as APPROVER for menus
   const isBudgetPlanningAnalystOrApprover = isBudgetPlanningAnalyst || isApprover;
-  const fmisUrl = process.env.NODE_ENV === 'production' ? 'https://fmis.nia.gov.ph/dashboard' : 'http://localhost:3000/dashboard';
+  const fmisUrl = process.env.NODE_ENV === 'production' ? 'https://fmis.nia.gov.ph/dashboard' : 'https://main.fmis.local/dashboard';
   return (
     <Box
       sx={{
@@ -412,8 +412,8 @@ const CustomDrawer = ({ collapsed = false }) => {
           name="Back To FMIS"
           link={
             IS_PRODUCTION
-              ? "https://fmis.nia.gov.ph/dashboard"
-              : "http://localhost:3000/dashboard"
+              ? "https://main.fmis.local/dashboard"
+              : "https://main.fmis.local/dashboard"
           }
         />
 

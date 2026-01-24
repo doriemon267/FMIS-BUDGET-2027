@@ -11,8 +11,17 @@ const {
   deleteBudgetarySupport,
   calculateBudgetarySupport
 } = require('../controllers/budgetarySupportController');
+
+
+
+const check_token_dev = require("../middlewares/check_token_dev");
+const check_token_prod = require("../middlewares/check_token_prod");
+const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
+
+const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
+
 // Apply authentication middleware to all routes in this router
-router.use(checkToken);
+router.use(tokenMiddleware);
 // Get all budgetary support entries - USE SUBMISSION WORKFLOW CONTROL
 router.get('/budgetary-support', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), getAllBudgetarySupport);
 // Calculate total budgetary support - USE SUBMISSION WORKFLOW CONTROL INSTEAD OF BASIC HIERARCHICAL

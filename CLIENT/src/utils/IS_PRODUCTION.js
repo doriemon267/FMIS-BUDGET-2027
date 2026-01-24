@@ -1,5 +1,3 @@
-import env from "../utils/env";
+import env from "./env";
 
-const IS_PRODUCTION = env("SERVER_URL").includes("https");
-
-export default IS_PRODUCTION;
+export default !!env("PRODUCTION_MODE");

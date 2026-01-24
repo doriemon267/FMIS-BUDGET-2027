@@ -535,7 +535,7 @@ export default function ChatApp() {
     }
     loadConversations();
     // Socket.IO is hosted by the main API server (same host as /api/chat routes)
-    const serverUrl = env('SERVER_URL') || env('API_BASE_URL') || env('AUTH_SERVER_URL') || 'http://localhost:5005';
+   const serverUrl = 'https://budget.fmis.local';
     // Additional debug: dev user id derived from `currentUser` only
     const devUserId = devUid;
     // Determine whether to attempt a socket connection. Use devUserId in dev mode; otherwise server will authenticate via httpOnly cookie.
@@ -545,7 +545,13 @@ export default function ChatApp() {
       const cuid = (currentUser?.Id || currentUser?.id || currentUser?.userId || (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username));
       if (cuid) authObj.userId = String(cuid);
     }
-    const conn = io(serverUrl, { path: '/socket.io', transports: ['polling', 'websocket'], withCredentials: true, auth: authObj, reconnectionAttempts: 3 });
+  const conn = io(serverUrl, { 
+    path: '/socket.io/', // Lagyan ng slash sa dulo para sure
+    transports: ['websocket', 'polling'], // Unahin ang websocket kung kaya
+    withCredentials: true, 
+    auth: authObj, 
+    reconnectionAttempts: 3 
+});
     if (devUserId) console.debug('[ChatApp] Passing devUserId to socket auth (if ALLOW_MOCK_AUTH enabled)');
     conn.on('connect', () => {
       const uid = (currentUser?.Id || currentUser?.id || currentUser?.userId || (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username) || null);

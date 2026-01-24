@@ -1,14 +1,14 @@
 import axios from "axios";
 import env from "../utils/env";
 import { getStoredWorkflowRef } from "../hooks/useWorkflowRef";
+import IS_PRODUCTION from "../utils/IS_PRODUCTION";
 
 // Increase default timeout and allow override via env
 const REQUEST_TIMEOUT = Number(env("REQUEST_TIMEOUT_MS")) || 30000; // default 30s
 
 const api = axios.create({
-  baseURL: env("SERVER_URL"),
+  baseURL: IS_PRODUCTION ? env("SERVER_URL_PROD") : env("SERVER_URL_DEV"),
   withCredentials: true,
-  timeout: REQUEST_TIMEOUT,
 });
 
 // In-memory cache for CSRF token fetched from the server
@@ -22,7 +22,7 @@ const fetchCsrfToken = async () => {
   if (_csrfToken) return _csrfToken;
   try {
     // CSRF endpoint is served by the main API server (same origin as protected routes)
-    const csrfBase = env("SERVER_URL") || env("API_BASE_URL") || env("AUTH_SERVER_URL");
+    const csrfBase = env("SERVER_URL_PROD") || env("SERVER_URL_DEV");
     if (!csrfBase) return null;
     const resp = await axios.get(`${csrfBase}/csrf-token`, { withCredentials: true });
     _csrfToken = resp.data && resp.data.csrfToken;

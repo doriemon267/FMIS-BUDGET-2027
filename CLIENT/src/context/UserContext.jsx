@@ -4,6 +4,7 @@ import { authApi } from "../config/api";
 import api, { setDevUser } from "../config/api";
 import Loading from "../global/components/Loading";
 import env from "../utils/env";
+import IS_PRODUCTION from "../utils/IS_PRODUCTION";
 import io from "socket.io-client"; // Import Socket.io client
 
 const UserContext = createContext({
@@ -30,31 +31,17 @@ const UserProvider = ({ children }) => {
   };
 
   const handleLogout = async () => {
-    // Disconnect WebSocket before logout
-    // if (socket) {
-    //   socket.disconnect();
-    //   setSocket(null);
-    // }
-
-    // Clear polling interval
-    // if (window.permissionPollingInterval) {
-    //   clearInterval(window.permissionPollingInterval);
-    //   window.permissionPollingInterval = null;
-    // }
-
-    await authApi.get("/logout");
+    await api.get("/logout");
     setCurrentUser(null);
-      try { setDevUser(null); } catch (e) {}
-      // Clear all storage keys for this origin so signing out removes any residual state
-      try {
-        sessionStorage.clear();
-      } catch (e) {}
-      try {
-        localStorage.clear();
-      } catch (e) {}
-    localStorage.removeItem("activeRegion"); // Clear active region
-    location.href = env("AUTH_CLIENT_URL") + "/login";
+    const currentUrl = window.location.origin + "/dashboard";
+    const loginUrl = IS_PRODUCTION
+      ? `${env("LOGIN_REDIRECT_URL")}?ReturnUrl=${encodeURIComponent(currentUrl)}`
+      : env("CLIENT_URL_DEV") + "/login";
+    location.href = loginUrl;
   };
+
+
+  
 
   // Function to refetch user hierarchical access (preferred over legacy region assignments)
   const refetchUserProfile = async () => {
@@ -212,12 +199,20 @@ const UserProvider = ({ children }) => {
           // initializeWebSocket(user);
         } else {
           try { setDevUser(null); } catch (e) {}
-          location.href = env("AUTH_CLIENT_URL") + "/login";
+          const currentUrl = window.location.origin + "/dashboard";
+          const loginUrl = IS_PRODUCTION
+            ? `${env("LOGIN_REDIRECT_URL")}?ReturnUrl=${encodeURIComponent(currentUrl)}`
+            : env("CLIENT_URL_DEV") + "/login";
+          location.href = loginUrl;
         }
       } catch (error) {
         try { setDevUser(null); } catch (e) {}
         console.error("Error fetching user:", error);
-        location.href = env("AUTH_CLIENT_URL") + "/login";
+        const currentUrl = window.location.origin + "/dashboard";
+        const loginUrl = IS_PRODUCTION
+          ? `${env("LOGIN_REDIRECT_URL")}?ReturnUrl=${encodeURIComponent(currentUrl)}`
+          : env("CLIENT_URL_DEV") + "/login";
+        location.href = loginUrl;
       } finally {
         setIsLoading(false);
       }

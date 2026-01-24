@@ -7,10 +7,17 @@ const {
   getCapitalOutlayDetailsSummary,
 } = require("../controllers/capitalOutlayDetailsController");
 const checkToken = require("../middleware/check_token");
+
+const check_token_dev = require("../middlewares/check_token_dev");
+const check_token_prod = require("../middlewares/check_token_prod");
+const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
+
+const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
+
 const checkDueDate = require("../middleware/checkDueDate");
 const checkDueDateWithRoleBypass = require("../middleware/checkDueDateWithRoleBypass");
 // Apply authentication to all routes
-router.use(checkToken);
+router.use(tokenMiddleware);
 // Get details for a specific capital outlay
 router.get("/capital-outlay/:capitalOutlayId/details", getCapitalOutlayDetails);
 // Save/Update details for a capital outlay

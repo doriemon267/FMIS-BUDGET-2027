@@ -7,13 +7,15 @@ import {
   MenuItem,
   Typography,
 } from "@mui/material";
-import React, { useState } from "react";
+import { useState } from "react";
 import { toast } from "react-hot-toast";
 import { LuLogOut } from "react-icons/lu";
 import { useUser } from "../context/UserContext";
 import CustomButton from "../global/components/CustomButton";
+import IS_PRODUCTION from "../utils/IS_PRODUCTION"; // make sure this exists
+import env from "../utils/env";
 
-const LogoutDialog = () => {
+const LogoutDialog = ({ handleCloseMenu }) => {
   const { logout, currentUser } = useUser();
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -21,15 +23,30 @@ const LogoutDialog = () => {
   const handleOpen = () => setIsOpen(true);
   const handleClose = () => {
     setIsOpen(false);
+    handleCloseMenu();
   };
 
   const handleLogout = async () => {
     setLoading(true);
     try {
-      await logout();
-      toast.success("Logged out successfully", { duration: 4000 });
+      if (IS_PRODUCTION) {
+        // Redirect to NIA production logoff URL
+        const clientId = env("CLIENT_ID"); // 2b4ffb22-5827-49fb-97c1-df7564c6a4cc
+        const currentUrl = window.location.origin + "/dashboard"; // or window.location.href if you want the exact page
+        const returnUrl = encodeURIComponent(
+          `https://accounts.nia.gov.ph/Account/Login?ReturnUrl=${encodeURIComponent(currentUrl)}`,
+        );
+        const logoffUrl = `https://accounts.nia.gov.ph/account/logoff?clientId=${clientId}&owner=${currentUser.particularID}&returnUrl=${returnUrl}`;
+
+        window.location.href = logoffUrl; // redirect user
+      } else {
+        // Dev/local logout
+        await logout();
+        toast.success("Logged out successfully", { duration: 4000 });
+      }
     } catch (error) {
       toast.error("Logout failed!", { duration: 4000 });
+      console.error(error);
     } finally {
       setLoading(false);
       handleClose(); // Close the modal after logout
@@ -43,7 +60,7 @@ const LogoutDialog = () => {
           <LuLogOut />
         </ListItemIcon>
         <Typography sx={{ textAlign: "center" }}>
-          Logout: {currentUser.Username[0]}
+          Logout: {currentUser.particularID}
         </Typography>
       </MenuItem>
 
@@ -51,6 +68,12 @@ const LogoutDialog = () => {
         open={isOpen}
         onClose={loading ? handleOpen : handleClose}
         aria-labelledby="logout-dialog-title"
+        BackdropProps={{
+          sx: {
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            backdropFilter: "blur(1.5px)",
+          },
+        }}
       >
         <DialogTitle id="logout-dialog-title">Logout</DialogTitle>
         <DialogContent sx={{ mt: 2 }}>
