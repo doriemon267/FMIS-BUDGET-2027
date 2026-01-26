@@ -1,5 +1,6 @@
 const Settings = require("../models/Settings");
 const checkDueDateWithRoleBypass = async (req, res, next) => {
+  if (req.method === 'OPTIONS') return next();
   try {
     // Check if user has admin privileges
     const userRoles = req.user?.Roles || [];

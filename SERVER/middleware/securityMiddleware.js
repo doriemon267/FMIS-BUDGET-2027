@@ -78,12 +78,13 @@ const hasFullAccess = (userRoles) => {
 };
 // Check organizational unit access with Budget Manager flexibility
 const checkOrganizationalAccess = async (req, res, next) => {
+  if (req.method === 'OPTIONS') return next();
   try {
     const userId = req.user.id;
     const userRoles = req.user.Roles;
     
     // SUPER ADMIN has unrestricted access to all organizational units
-    if (userRoles.includes('SUPER ADMIN')) {
+    if (userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN')) {
       const { region, department, division } = req.body;
       const queryRegion = req.query.region;
       const queryDepartment = req.query.department;
@@ -147,6 +148,7 @@ const adminRoute = () => {
   return [
     tokenMiddleware,
     (req, res, next) => {
+      if (req.method === 'OPTIONS') return next();
       const adminRoles = [
         PERMISSION_LEVELS.SUPER_ADMIN,
         PERMISSION_LEVELS.BUDGET_ADMIN,
@@ -155,7 +157,13 @@ const adminRoute = () => {
         'BUDGET PLANNING ANALYST',                 // Support display format
         PERMISSION_LEVELS.BUDGET_MANAGER,
         PERMISSION_LEVELS.OVERALL_BUDGET_APPROVER, // Accept either alias for budget manager
-        'OVERALL_BUDGET_APPROVER'
+        'OVERALL_BUDGET_APPROVER',
+        'BUDGET_PREPARER',                         // ✅ Support budget preparers accessing hierarchical assignments
+        'BUDGET PREPARER',
+        'BUDGET_REVIEWER',                         // ✅ Support budget reviewers
+        'BUDGET REVIEWER',
+        'BUDGET_APPROVER',                         // ✅ Support budget approvers
+        'BUDGET APPROVER'
       ];
       if (!hasRequiredRole(req.user?.Roles, adminRoles)) {
         return res.status(403).json({
@@ -172,10 +180,11 @@ const dueDateProtectedRoute = (permissionLevel = PERMISSION_LEVELS.USER, accessS
   // Add role checking if permission level is specified
   if (permissionLevel !== PERMISSION_LEVELS.USER) {
     middleware.push((req, res, next) => {
+      if (req.method === 'OPTIONS') return next();
       const userRoles = req.user?.Roles || [];
       
       // SUPER ADMIN bypasses all role restrictions
-      if (userRoles.includes('SUPER ADMIN')) {
+      if (userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN')) {
         return next();
       }
       
@@ -228,11 +237,12 @@ const ownerOnlyRoute = () => {
   return [
     tokenMiddleware,
     (req, res, next) => {
+      if (req.method === 'OPTIONS') return next();
       const userId = req.user.id;
       const userRoles = req.user.Roles;
       
       // SUPER ADMIN can view all records without restrictions
-      if (userRoles.includes('SUPER ADMIN')) {
+      if (userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN')) {
         return next();
       }
       
@@ -251,10 +261,11 @@ const workflowStaffRoute = (allowedOperations = ['read']) => {
   return [
     tokenMiddleware,
     (req, res, next) => {
+      if (req.method === 'OPTIONS') return next();
       const userRoles = req.user.Roles;
       
       // SUPER ADMIN bypasses all restrictions
-      if (userRoles.includes('SUPER ADMIN')) {
+      if (userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN')) {
         return next();
       }
       
@@ -287,10 +298,11 @@ const budgetOfficerRoute = (allowedOperations = ['read']) => {
   return [
     tokenMiddleware,
     (req, res, next) => {
+      if (req.method === 'OPTIONS') return next();
       const userRoles = req.user.Roles;
       
       // SUPER ADMIN bypasses all restrictions
-      if (userRoles.includes('SUPER ADMIN')) {
+      if (userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN')) {
         return next();
       }
       

@@ -3,6 +3,7 @@ const { hasFullAccess } = require('./securityMiddleware');
 // Middleware to control proposal access based on user's organizational assignments
 const proposalAccessControl = (operation = 'read') => {
   return async (req, res, next) => {
+    if (req.method === 'OPTIONS') return next();
     try {
       const userId = req.user.id;
       const userRoles = req.user.Roles;
@@ -92,6 +93,7 @@ const proposalAccessControl = (operation = 'read') => {
 // Middleware to check if user can edit a specific proposal
 const checkProposalOwnership = (Model) => {
   return async (req, res, next) => {
+    if (req.method === 'OPTIONS') return next();
     try {
       const userId = req.user.id;
       const userRoles = req.user.Roles;

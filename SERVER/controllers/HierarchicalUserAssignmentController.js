@@ -44,18 +44,20 @@ const lookupUserFromMainDB = async (req, res) => {
     // Get current user's highest role level
     const currentUserMaxLevel = Math.max(...currentUserRoles.map(role => roleHierarchy[role] || 0));
 
-    // Allow lookup for users with any budget role or admin roles
+    // Historically this endpoint returned basic user info for the UI's lookup
+    // field even for non-budget staff. Restricting it caused the UI to stop
+    // auto-populating the User Name / Roles when typing a User ID.
+    // Keep role detection for logging, but allow authenticated users to
+    // perform a read-only lookup so the client can display basic info.
     const hasBudgetRole = currentUserRoles.some(role => roleHierarchy[role] !== undefined);
     const hasAdminRole = currentUserRoles.some(role => 
       role.includes('ADMIN') || role.includes('SUPER') || role.includes('MANAGER')
     );
-
     if (!hasBudgetRole && !hasAdminRole) {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied. Budget or admin role required for user lookup.',
-        code: 'INSUFFICIENT_PERMISSIONS'
-      });
+      if (DEBUG) console.debug('ℹ️ Non-budget user performing user-lookup; allowing lookup for UI convenience', { userId: currentUserId, Roles: currentUserRoles });
+      // Note: if you want to re-introduce stricter controls, gate this
+      // behavior behind a configuration flag or require an explicit
+      // permission in the future.
     }
 
     // Query the assigned_roles collection from fmis_main database
@@ -595,7 +597,46 @@ const getHierarchicalAssignment = async (req, res) => {
  */
 const getAllHierarchicalAssignments = async (req, res) => {
   try {
-    const userRoles = req.user.Roles;
+    let userRoles = req.user.Roles || [];
+
+    // If userRoles is empty, try to enrich from fmis_main.assigned_roles (main DB)
+    if ((!userRoles || userRoles.length === 0) && req.user) {
+      try {
+        const AssignedRole = mainConnection.model('assigned_roles', new mongoose.Schema({}, { strict: false }), 'assigned_roles');
+        const Role = mainConnection.model('roles', new mongoose.Schema({}, { strict: false }), 'roles');
+        const queryUser = req.user.id || req.user.userId || req.user.user || req.user.username;
+        if (queryUser) {
+          const assignedDoc = await AssignedRole.findOne({
+            $or: [ { user: queryUser }, { user: parseInt(queryUser) } ]
+          }).lean();
+          if (assignedDoc && assignedDoc.roles && assignedDoc.roles.length > 0) {
+            const roleNames = [];
+            for (const roleItem of assignedDoc.roles) {
+              if (roleItem && roleItem._bsontype === 'ObjectId') {
+                const roleDoc = await Role.findById(roleItem, { name: 1 }).lean();
+                if (roleDoc && roleDoc.name) roleNames.push(roleDoc.name);
+              } else if (typeof roleItem === 'string') {
+                if (roleItem.match(/^[0-9a-fA-F]{24}$/)) {
+                  const roleDoc = await Role.findById(roleItem, { name: 1 }).lean();
+                  if (roleDoc && roleDoc.name) roleNames.push(roleDoc.name);
+                } else {
+                  roleNames.push(roleItem);
+                }
+              } else if (roleItem && typeof roleItem === 'object' && roleItem.name) {
+                roleNames.push(roleItem.name);
+              }
+            }
+            if (roleNames.length > 0) {
+              req.user.Roles = roleNames;
+              userRoles = req.user.Roles;
+              if (DEBUG) console.debug('🔁 Augmented req.user.Roles from main DB for user', queryUser, userRoles);
+            }
+          }
+        }
+      } catch (augmentErr) {
+        if (DEBUG) console.warn('Failed to augment user roles from main DB:', augmentErr.message);
+      }
+    }
     
     // Allow access for users with budget roles or admin privileges
     // ✅ Check both old (space-separated) and new (underscore) formats for backward compatibility

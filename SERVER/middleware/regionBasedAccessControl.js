@@ -25,6 +25,7 @@ const { hasFullAccess } = require('./securityMiddleware');
 const regionBasedAccessControl = (operation = 'read', options = {}) => {
   const { strictMode = true, logAccess = true } = options;
   return async (req, res, next) => {
+    if (req.method === 'OPTIONS') return next();
     try {
       const userId = req.user?.id;
       if (!userId) {

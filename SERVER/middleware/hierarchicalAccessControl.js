@@ -25,6 +25,7 @@ const hierarchicalAccessControl = (operation = 'read', options = {}) => {
     enableConsolidation = true 
   } = options;
   return async (req, res, next) => {
+    if (req.method === 'OPTIONS') return next();
     try {
       const userId = req.user.id;
       const userRoles = req.user.Roles;
@@ -360,6 +361,7 @@ const strictHierarchicalControl = (operation, options = {}) => {
  * Middleware to get user's hierarchical access information
  */
 const getHierarchicalAccessInfo = async (req, res, next) => {
+  if (req.method === 'OPTIONS') return next();
   try {
     const userId = req.user.id;
     const userRoles = req.user.Roles;
@@ -733,6 +735,7 @@ const enforceWorkflowTransition = (transition) => {
     regionFinalVerify: 'REGION',
   };
   return async (req, res, next) => {
+    if (req.method === 'OPTIONS') return next();
     try {
       const userId = req.user.id;
       const userRoles = req.user?.Roles || [];

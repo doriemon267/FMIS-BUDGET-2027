@@ -342,53 +342,56 @@ function TierTable({ fiscalYear, region, department, division, onTierDataChange 
     };
   }, [tierInputs, incomeData, personnelData, mooeData, capitalOutlayData, groupedMooeData]);
 
+  const allData = useMemo(() => {
+    // prepare displayedItems map including fallback to original values when user hasn't entered values
+    const displayedItems = {};
+
+    const processAndCollect = (name, item) => {
+      const id = `${name}-${item.uacsCode || item._id || item.key || item.name}`;
+      const entered = tierInputs[id] || {};
+      const orig = (function(i) {
+        const t1Props = ['tier1','tier_1','tierOne','tier_one','t1','tier1Amount','tier_1_amount','subsidyTier1','subsidy_tier1'];
+        const t2Props = ['tier2','tier_2','tierTwo','tier_two','t2','tier2Amount','tier_2_amount','subsidyTier2','subsidy_tier2'];
+        let ot1, ot2;
+        for (const p of t1Props) if (Object.prototype.hasOwnProperty.call(i, p)) { ot1 = Number(i[p]) || 0; break; }
+        for (const p of t2Props) if (Object.prototype.hasOwnProperty.call(i, p)) { ot2 = Number(i[p]) || 0; break; }
+        if (ot1 !== undefined || ot2 !== undefined) return { tier1: ot1 || 0, tier2: ot2 || 0, total: (ot1 || 0) + (ot2 || 0) };
+        if (i.amount !== undefined) return { tier1: undefined, tier2: undefined, total: Number(i.amount) || 0 };
+        return { tier1: undefined, tier2: undefined, total: 0 };
+      })(item);
+
+      const enteredTier1 = entered.hasOwnProperty('tier1') ? entered.tier1 : undefined;
+      const enteredTier2 = entered.hasOwnProperty('tier2') ? entered.tier2 : undefined;
+
+      const displayTier1 = enteredTier1 !== undefined ? (enteredTier1 === '' ? 0 : enteredTier1) : (orig.tier1 !== undefined ? orig.tier1 : 0);
+      const displayTier2 = enteredTier2 !== undefined ? (enteredTier2 === '' ? 0 : enteredTier2) : (orig.tier2 !== undefined ? orig.tier2 : 0);
+
+      displayedItems[id] = { tier1: displayTier1, tier2: displayTier2, category: name };
+    };
+
+    // personnel categories
+    personnelData.forEach(category => {
+      const catName = category.name || category.key || 'Personnel Services';
+      (category.items || []).forEach(item => processAndCollect(catName, item));
+    });
+
+    // mooe groups (keep parent 'Maintenance and Other Operating Expenses')
+    Object.values(groupedMooeData).forEach(group => group.forEach(item => processAndCollect('Maintenance and Other Operating Expenses', item)));
+
+    // capital outlay
+    capitalOutlayData.forEach(item => processAndCollect('Capital Outlay', item));
+
+    return {
+        items: tierInputs,
+        displayedItems,
+    };
+  }, [tierInputs, personnelData, groupedMooeData, capitalOutlayData]);
+
   useEffect(() => {
     if (onTierDataChange) {
-      // prepare displayedItems map including fallback to original values when user hasn't entered values
-      const displayedItems = {};
-
-      const processAndCollect = (name, item) => {
-        const id = `${name}-${item.uacsCode || item._id || item.key || item.name}`;
-        const entered = tierInputs[id] || {};
-        const orig = (function(i) {
-          const t1Props = ['tier1','tier_1','tierOne','tier_one','t1','tier1Amount','tier_1_amount','subsidyTier1','subsidy_tier1'];
-          const t2Props = ['tier2','tier_2','tierTwo','tier_two','t2','tier2Amount','tier_2_amount','subsidyTier2','subsidy_tier2'];
-          let ot1, ot2;
-          for (const p of t1Props) if (Object.prototype.hasOwnProperty.call(i, p)) { ot1 = Number(i[p]) || 0; break; }
-          for (const p of t2Props) if (Object.prototype.hasOwnProperty.call(i, p)) { ot2 = Number(i[p]) || 0; break; }
-          if (ot1 !== undefined || ot2 !== undefined) return { tier1: ot1 || 0, tier2: ot2 || 0, total: (ot1 || 0) + (ot2 || 0) };
-          if (i.amount !== undefined) return { tier1: undefined, tier2: undefined, total: Number(i.amount) || 0 };
-          return { tier1: undefined, tier2: undefined, total: 0 };
-        })(item);
-
-        const enteredTier1 = entered.hasOwnProperty('tier1') ? entered.tier1 : undefined;
-        const enteredTier2 = entered.hasOwnProperty('tier2') ? entered.tier2 : undefined;
-
-        const displayTier1 = enteredTier1 !== undefined ? (enteredTier1 === '' ? 0 : enteredTier1) : (orig.tier1 !== undefined ? orig.tier1 : 0);
-        const displayTier2 = enteredTier2 !== undefined ? (enteredTier2 === '' ? 0 : enteredTier2) : (orig.tier2 !== undefined ? orig.tier2 : 0);
-
-        displayedItems[id] = { tier1: displayTier1, tier2: displayTier2, category: name };
-      };
-
-      // personnel categories
-      personnelData.forEach(category => {
-        const catName = category.name || category.key || 'Personnel Services';
-        (category.items || []).forEach(item => processAndCollect(catName, item));
-      });
-
-      // mooe groups (keep parent 'Maintenance and Other Operating Expenses')
-      Object.values(groupedMooeData).forEach(group => group.forEach(item => processAndCollect('Maintenance and Other Operating Expenses', item)));
-
-      // capital outlay
-      capitalOutlayData.forEach(item => processAndCollect('Capital Outlay', item));
-
-      const allData = {
-          items: tierInputs,
-          displayedItems,
-      }
       onTierDataChange(allData);
     }
-  }, [tierInputs, onTierDataChange, personnelData, groupedMooeData, capitalOutlayData]);
+  }, [allData, onTierDataChange]);
 
   if (isLoading) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>;

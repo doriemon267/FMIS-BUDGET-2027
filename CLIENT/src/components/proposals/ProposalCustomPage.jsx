@@ -979,6 +979,7 @@ const ProposalCustomPage = ({
         key: item._id,
       }));
     },
+    enabled: !!(selectedFiscalYear || activeFiscalYear),
     onSuccess: (data) => {
       setPersonnelData(data);
     },
@@ -1012,6 +1013,7 @@ const ProposalCustomPage = ({
         key: item._id,
       }));
     },
+    enabled: !!(selectedFiscalYear || activeFiscalYear),
     onSuccess: (data) => {
       setMooeData(data);
     },
@@ -1044,6 +1046,7 @@ const ProposalCustomPage = ({
         return { nis: 0, cis: 0, nisSubsidy: 0, cisSubsidy: 0 };
       }
     },
+    enabled: !!(selectedFiscalYear || activeFiscalYear),
     refetchInterval: 15000,
     refetchIntervalInBackground: true,
   });
@@ -1075,6 +1078,7 @@ const ProposalCustomPage = ({
         status: item.status || "Not Submitted",
       }));
     },
+    enabled: !!(selectedFiscalYear || activeFiscalYear),
     onSuccess: (data) => {
       setCapitalOutlayData(data);
     },
@@ -1105,6 +1109,7 @@ const ProposalCustomPage = ({
         key: item._id,
       }));
     },
+    enabled: !!(selectedFiscalYear || activeFiscalYear),
     onSuccess: (data) => {
       setIncomeData(data);
     },
@@ -2464,7 +2469,7 @@ const ProposalCustomPage = ({
     };
 
     fetchActiveSettings();
-  }, [activeFiscalYear]);
+  }, []);
 
   // Refresh data when active region changes
   useEffect(() => {

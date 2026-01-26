@@ -27,6 +27,7 @@ const logToFile = (message) => {
 
 const budgetRoleVisibilityControl = () => {
   return async (req, res, next) => {
+    if (req.method === 'OPTIONS') return next();
     try {
       const userId = req.user?.id;
       // logToFile('🔍 BUDGET ROLE VISIBILITY MIDDLEWARE CALLED: ' + JSON.stringify({
@@ -44,29 +45,16 @@ const budgetRoleVisibilityControl = () => {
       if (!hierarchicalAssignment.userId) {
         try {
           const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
-          let assignment = await HierarchicalUserAssignment.findOne({ userId: userId });
-          
-          // If not found by userId, try by userName (in case dev headers send name instead of ID)
-          if (!assignment) {
-            // console.log('❌ Assignment not found by userId, trying userName:', userId);
-            assignment = await HierarchicalUserAssignment.findOne({ userName: userId });
-            // if (assignment) {
-            //   console.log('✅ Found assignment by userName');
-            // }
-          }
+          let assignment = await HierarchicalUserAssignment.getUserPermissions(userId, userRoles);
           
           if (assignment) {
-            hierarchicalAssignment = assignment.toObject();
+            // Check if it's a Mongoose document or a plain object (getUserPermissions can return both)
+            hierarchicalAssignment = typeof assignment.toObject === 'function' ? assignment.toObject() : assignment;
             // Cache it on the request for other middleware
             req.userHierarchicalAssignment = hierarchicalAssignment;
-            // console.log('✅ Loaded hierarchical assignment for user:', userId);
           } 
-          // else {
-          //   console.log('❌ No hierarchical assignment found for user:', userId);
-          // }
         } catch (error) {
-          console.error('❌ Error loading hierarchical assignment:', error);
-          // Continue without hierarchical assignment
+          console.error('❌ Error loading hierarchical assignment in visibility control:', error);
         }
       }
       const workflowRoles = hierarchicalAssignment.workflowRoles || [];
@@ -79,17 +67,17 @@ const budgetRoleVisibilityControl = () => {
       let budgetRole = null;
       if (userRoles.includes('SUPER ADMIN') || userRoles.includes('SUPER_ADMIN') || workflowRoles.includes('superAdmin')) {
         budgetRole = 'SUPER ADMIN';
-      } else if (userRoles.includes('BUDGET MANAGER') || workflowRoles.includes('budgetManager')) {
+      } else if (userRoles.includes('BUDGET MANAGER') || userRoles.includes('BUDGET_MANAGER') || workflowRoles.includes('budgetManager')) {
         budgetRole = 'BUDGET MANAGER';
-      } else if (userRoles.includes('BUDGET_OFFICER') || workflowRoles.includes('BUDGET_OFFICER')) {
+      } else if (userRoles.includes('BUDGET OFFICER') || userRoles.includes('BUDGET_OFFICER') || workflowRoles.includes('BUDGET_OFFICER')) {
         budgetRole = 'BUDGET_OFFICER';
-      } else if (userRoles.includes('BUDGET_PLANNING_ANALYST') || workflowRoles.includes('BUDGET_PLANNING_ANALYST')) {
+      } else if (userRoles.includes('BUDGET_PLANNING_ANALYST') || userRoles.includes('BUDGET PLANNING ANALYST') || workflowRoles.includes('BUDGET_PLANNING_ANALYST') || workflowRoles.includes('budgetAnalyst')) {
         budgetRole = 'BUDGET_PLANNING_ANALYST';
       } else if (userRoles.includes('BUDGET APPROVER') || userRoles.includes('BUDGET_APPROVER') || workflowRoles.includes('APPROVER') || workflowRoles.includes('divisionApprover') || workflowRoles.includes('officeApprover')) {
         budgetRole = 'BUDGET APPROVER';
-      } else if (userRoles.includes('BUDGET PREPARER') || userRoles.includes('BUDGET_PREPARER') || workflowRoles.includes('BUDGET PREPARER') || workflowRoles.includes('BUDGET_PREPARER') || workflowRoles.includes('divisionCreator') || workflowRoles.includes('officeCreator')) {
+      } else if (userRoles.includes('BUDGET PREPARER') || userRoles.includes('BUDGET_PREPARER') || workflowRoles.includes('divisionCreator') || workflowRoles.includes('officeCreator')) {
         budgetRole = 'BUDGET PREPARER';
-      } else if (userRoles.includes('BUDGET REVIEWER') || userRoles.includes('BUDGET_REVIEWER') || workflowRoles.includes('BUDGET REVIEWER') || workflowRoles.includes('BUDGET_REVIEWER') || workflowRoles.includes('divisionReviewer')) {
+      } else if (userRoles.includes('BUDGET REVIEWER') || userRoles.includes('BUDGET_REVIEWER') || workflowRoles.includes('divisionReviewer')) {
         budgetRole = 'BUDGET REVIEWER';
       }
 

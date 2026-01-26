@@ -9,6 +9,7 @@ const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment
  * Load user's hierarchical assignment and add to request
  */
 const loadHierarchicalAssignment = async (req, res, next) => {
+  if (req.method === 'OPTIONS') return next();
   try {
     // Skip if user is not authenticated
     if (!req.user || !req.user.id) {
@@ -113,6 +114,7 @@ const hasPermission = (req, permission) => {
  */
 const requirePermission = (permission, errorMessage = null) => {
   return (req, res, next) => {
+    if (req.method === 'OPTIONS') return next();
     if (!hasPermission(req, permission)) {
       return res.status(403).json({
         success: false,
@@ -128,6 +130,7 @@ const requirePermission = (permission, errorMessage = null) => {
  * Middleware to apply hierarchical data filters to database queries
  */
 const applyHierarchicalFilters = (req, res, next) => {
+  if (req.method === 'OPTIONS') return next();
   const assignment = req.userHierarchicalAssignment;
   if (!assignment || assignment.assignmentLevel === 'NONE') {
     // No assignment - restrict to own data only

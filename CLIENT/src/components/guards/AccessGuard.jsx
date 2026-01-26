@@ -113,31 +113,26 @@ const AccessGuard = ({ children }) => {
   // Budget staff roles + Workflow roles that should have access (6-step workflow standardized names)
   const authorizedRoles = [
     'SUPER ADMIN',
-    'SUPER ADMIN',  // Handle underscore variant
+    'SUPER_ADMIN',
     'ADMIN',
     'BUDGET COORDINATOR',
+    'BUDGET_COORDINATOR',
     'BUDGET MANAGER',
+    'BUDGET_MANAGER',
     'BUDGET OFFICER',
-    'BUDGET OFFICER',
-    'BUDGET PREPARER',
+    'BUDGET_OFFICER',
     'BUDGET PREPARER',
     'BUDGET REVIEWER',
-    'BUDGET REVIEWER',
     'BUDGET APPROVER',
-    'BUDGET APPROVER',
-    'BUDGET PLANNING ANALYST',     // ✅ NEW: Add BUDGET_PLANNING_ANALYST (standardized)
-    'BUDGET PLANNING ANALYST',     // ✅ NEW: Add variant with spaces
+    'BUDGET PLANNING ANALYST',
+    'BUDGET_PLANNING_ANALYST',
     'OVERALL BUDGET APPROVER',
-    'BUDGET MANAGER',
+    'OVERALL_BUDGET_APPROVER',
     'REVIEWER',
     'APPROVER'
   ];
   
-  const isAuthorized = roles.some(role => authorizedRoles.includes(role));
-
-  if (!isAuthorized) {
-    return <AccessRestrictedPage />;
-  }
+  const isAuthorized = roles.some(role => authorizedRoles.includes(role?.toUpperCase()));
 
   return children;
 };

@@ -21,6 +21,7 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
   } = options;
 
   return async (req, res, next) => {
+    if (req.method === 'OPTIONS') return next();
     try {
       const userId = req.user.id;
       const userRoles = req.user.Roles;
@@ -38,13 +39,20 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
       // Check if user has budget role or 6-step workflow role - these use budgetRoleAccessControl middleware instead
       const hasBudgetRole = userRoles && (
         userRoles.includes('BUDGET_ADMIN') ||
-        // 6-step workflow roles
-        userRoles.includes('BUDGET PREPARER') ||
-        userRoles.includes('BUDGET REVIEWER') ||
+        userRoles.includes('BUDGET_PREPARER') ||
+        userRoles.includes('BUDGET_REVIEWER') ||
+        userRoles.includes('BUDGET_APPROVER') ||
         userRoles.includes('APPROVER') ||
         userRoles.includes('BUDGET_PLANNING_ANALYST') ||
+        userRoles.includes('BUDGET_OFFICER') ||
+        userRoles.includes('OVERALL_BUDGET_APPROVER') ||
+        // Backward compatibility for legacy space-separated names
+        userRoles.includes('BUDGET PREPARER') ||
+        userRoles.includes('BUDGET REVIEWER') ||
+        userRoles.includes('BUDGET APPROVER') ||
+        userRoles.includes('BUDGET PLANNING ANALYST') ||
         userRoles.includes('BUDGET OFFICER') ||
-        userRoles.includes('OVERALL_BUDGET_APPROVER')
+        userRoles.includes('OVERALL BUDGET APPROVER')
       );
       
       if (hasBudgetRole) {
@@ -81,16 +89,29 @@ const submissionWorkflowControl = (operation = 'read', options = {}) => {
       }
 
       if (!assignment) {
-        // If user has full access roles but no hierarchical assignment, allow full access
-        // (This case should be rare since full access users now bypass above)
-        if (hasFullAccess(userRoles)) {
-          return next();
-        }
-        return res.status(403).json({
-          success: false,
-          message: 'No organizational assignment found. Please contact administrator.',
-          code: 'NO_ORG_ASSIGNMENT'
-        });
+        // Fallback to a safe OWN_ONLY assignment instead of 403ing if no database record found
+        // This allows users to still access their own data even if not yet assigned to a unit
+        assignment = {
+          userId,
+          accessScope: 'OWN_ONLY',
+          assignmentLevel: 'NONE',
+          regions: [],
+          departments: [],
+          divisions: [],
+          offices: [],
+          responsibilityCenters: [],
+          rolePermissions: {
+            CreateProposals: true,
+            EditOwnProposals: true,
+            EditAllProposals: false,
+            DeleteProposals: false,
+            ApproveProposals: false,
+            ViewReports: true,
+            ManageUsers: false,
+            ManageSettings: false
+          }
+        };
+        isNewStructure = true; // Use new structure handling for simplicity
       }
 
       // User has hierarchical assignment, applying submission workflow control
@@ -200,6 +221,7 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
         break;
 
       case 'FULL':
+      case 'WORKFLOW_ACCESS':
         // Full access users see submitted-only across all offices; hide unsubmitted lower-level drafts
         if (enforceSubmissionWorkflow) {
           submissionFilters = {
@@ -414,6 +436,7 @@ const handleSubmissionWorkflowRead = async (req, res, next, assignment, options)
         break;
 
       case 'FULL':
+      case 'WORKFLOW':
         // Full access users see submitted-only across all regions; hide unsubmitted lower-level drafts
         if (enforceSubmissionWorkflow) {
           submissionFilters = {
@@ -593,6 +616,7 @@ const handleSubmissionWorkflowWrite = async (req, res, next, assignment, operati
         };
         break;
       case 'FULL':
+      case 'WORKFLOW_ACCESS':
         // Full access - no filters
         hierarchicalFilters = {};
         break;
@@ -630,6 +654,7 @@ const handleSubmissionWorkflowWrite = async (req, res, next, assignment, operati
         };
         break;
       case 'FULL':
+      case 'WORKFLOW':
         // Full access - no filters
         hierarchicalFilters = {};
         break;
@@ -709,6 +734,7 @@ const applySubmissionWorkflowConsolidation = (req, assignment, isNewStructure = 
         break;
 
       case 'FULL':
+      case 'WORKFLOW_ACCESS':
         // Full access - no consolidation needed
         req.body.originalLevel = req.body.originalLevel || 'FULL';
         req.body.workflowLevel = req.body.workflowLevel || 'FULL';
@@ -778,6 +804,7 @@ const applySubmissionWorkflowConsolidation = (req, assignment, isNewStructure = 
         req.body.status = req.body.status || 'Draft'; // Default to Draft for new submissions
         break;
       case 'FULL':
+      case 'WORKFLOW':
         // Full access - no consolidation needed
         req.body.originalLevel = req.body.originalLevel || 'FULL';
         req.body.workflowLevel = req.body.workflowLevel || 'FULL';
@@ -814,6 +841,12 @@ const applySubmissionWorkflowConsolidation = (req, assignment, isNewStructure = 
  * Validate hierarchical access permissions
  */
 const validateHierarchicalAccess = async (req, assignment, isNewStructure = false) => {
+  // FULL and WORKFLOW users bypass hierarchical validation (they have broad access)
+  const userLevel = isNewStructure ? assignment.accessScope : assignment.assignmentLevel;
+  if (['FULL', 'WORKFLOW', 'WORKFLOW_ACCESS'].includes(userLevel)) {
+    return true;
+  }
+
   if (isNewStructure) {
     // NEW STRUCTURE: Validate Office and Responsibility Center access
     const { office, responsibilityCenter } = req.body;

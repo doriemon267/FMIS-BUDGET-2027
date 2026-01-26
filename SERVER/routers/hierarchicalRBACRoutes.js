@@ -57,7 +57,7 @@ router.get(
  */
 router.get(
   '/assignments',
-  ...adminRoute(),
+  ...authenticatedRoute(),
   getAllHierarchicalAssignments
 );
 /**

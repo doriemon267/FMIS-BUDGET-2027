@@ -14,6 +14,7 @@ const enforceAccessRestrictions = (options = {}) => {
   } = options;
 
   return async (req, res, next) => {
+    if (req.method === 'OPTIONS') return next();
     try {
       const userId = req.user?.id;
       const userRoles = req.user?.Roles || [];

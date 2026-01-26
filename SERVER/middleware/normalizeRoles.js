@@ -84,6 +84,7 @@ function normalizeRole(role) {
  * Adds both original and normalized roles to req.user
  */
 const normalizeRoles = (req, res, next) => {
+  if (req.method === 'OPTIONS') return next();
   try {
     if (!req.user || !req.user.Roles) {
       return next();

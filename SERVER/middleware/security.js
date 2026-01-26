@@ -162,6 +162,7 @@ const bruteForceLimiter = rateLimit({
 });
 // Middleware to log security events
 const securityLogger = (req, res, next) => {
+  if (req.method === 'OPTIONS') return next();
   // Log sensitive operations
   const sensitiveOperations = ['DELETE', 'PUT', 'PATCH'];
   const sensitiveEndpoints = ['/upload', '/delete', '/admin', '/settings'];
@@ -179,6 +180,7 @@ const securityLogger = (req, res, next) => {
 // IP whitelist middleware (for admin operations)
 const createIPWhitelist = (allowedIPs = []) => {
   return (req, res, next) => {
+    if (req.method === 'OPTIONS') return next();
     const clientIP = req.ip || req.connection.remoteAddress;
     if (allowedIPs.length > 0 && !allowedIPs.includes(clientIP)) {
       return res.status(403).json({

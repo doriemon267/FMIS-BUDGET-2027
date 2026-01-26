@@ -16,7 +16,7 @@ const UserOrganizationalAssignmentSchema = new mongoose.Schema({
   // Access scope defines the level of organizational access
   accessScope: {
     type: String,
-    enum: ['FULL', 'OFFICE', 'RESPONSIBILITY_CENTER', 'OWN_ONLY'],
+    enum: ['FULL', 'OFFICE', 'RESPONSIBILITY_CENTER', 'OWN_ONLY', 'WORKFLOW_ACCESS'],
     default: 'OFFICE'
   },
   // Office assignments (combines old department and region functionality)

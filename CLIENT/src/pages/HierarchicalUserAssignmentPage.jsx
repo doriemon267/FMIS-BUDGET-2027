@@ -156,11 +156,16 @@ const HierarchicalUserAssignmentPage = () => {
 
   // Check if user is admin
   const isAdmin = currentUser?.Roles && (
-    currentUser.Roles.includes('BUDGET MANAGER') ||
-    currentUser.Roles.includes('BUDGET OFFICER') ||
     currentUser.Roles.includes('SUPER_ADMIN') ||
     currentUser.Roles.includes('SUPER ADMIN') ||
-    currentUser.Roles.includes('ADMIN')
+    currentUser.Roles.includes('BUDGET_ADMIN') ||
+    currentUser.Roles.includes('BUDGET_ANALYST') ||
+    currentUser.Roles.includes('BUDGET_PLANNING_ANALYST') ||
+    currentUser.Roles.includes('BUDGET_MANAGER') ||
+    currentUser.Roles.includes('OVERALL_BUDGET_APPROVER') ||
+    currentUser.Roles.includes('BUDGET_PREPARER') ||
+    currentUser.Roles.includes('BUDGET_REVIEWER') ||
+    currentUser.Roles.includes('BUDGET_APPROVER')
   );
 
   // Fetch organization structure
@@ -243,15 +248,13 @@ const HierarchicalUserAssignmentPage = () => {
 
         // Allow all users with budget roles to see assignments, not just admins
         const hasBudgetRole = currentUser?.Roles && (
-          currentUser.Roles.includes('BUDGET_PREPARER') ||
-          currentUser.Roles.includes('BUDGET_REVIEWER') ||
-          currentUser.Roles.includes('BUDGET_APPROVER') ||
-          currentUser.Roles.includes('BUDGET_PLANNING_ANALYST') ||
-          currentUser.Roles.includes('BUDGET OFFICER') ||
-          currentUser.Roles.includes('BUDGET MANAGER') ||
           currentUser.Roles.includes('SUPER_ADMIN') ||
           currentUser.Roles.includes('SUPER ADMIN') ||
-          currentUser.Roles.includes('ADMIN')
+          currentUser.Roles.includes('BUDGET_ADMIN') ||
+          currentUser.Roles.includes('BUDGET_ANALYST') ||
+          currentUser.Roles.includes('BUDGET_PLANNING_ANALYST') ||
+          currentUser.Roles.includes('BUDGET_MANAGER') ||
+          currentUser.Roles.includes('OVERALL_BUDGET_APPROVER')
         );
 
         if (isAdmin || hasBudgetRole) {

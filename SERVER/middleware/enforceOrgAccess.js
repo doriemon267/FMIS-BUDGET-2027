@@ -8,17 +8,21 @@ const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment
  * - If invalid, responds 403
  */
 module.exports = async function enforceOrgAccess(req, res, next) {
+  if (req.method === 'OPTIONS') return next();
   try {
     const userId = req.user?.id;
     const roles = req.user?.Roles || [];
     if (!userId) {
       return res.status(401).json({ message: 'Unauthorized: missing user' });
     }
-    // Full access roles can transact anywhere (SUPER_ADMIN, ADMIN, BUDGET_OFFICER, OVERALL_BUDGET_APPROVER)
+    // Full access roles can transact anywhere (SUPER_ADMIN, ADMIN, BUDGET_OFFICER, OVERALL_BUDGET_APPROVER, BUDGET_PLANNING_ANALYST)
     const hasFullRole = roles.includes('SUPER_ADMIN') || roles.includes('SUPER ADMIN') || 
                         roles.includes('ADMIN') || 
+                        roles.includes('BUDGET_ADMIN') || roles.includes('BUDGET ADMIN') ||
                         roles.includes('BUDGET_OFFICER') || roles.includes('BUDGET OFFICER') ||
                         roles.includes('OVERALL_BUDGET_APPROVER') || roles.includes('OVERALL BUDGET APPROVER') ||
+                        roles.includes('BUDGET_PLANNING_ANALYST') || roles.includes('BUDGET PLANNING ANALYST') ||
+                        roles.includes('BUDGET_ANALYST') || roles.includes('BUDGET ANALYST') ||
                         roles.includes('BUDGET MANAGER'); // Legacy support
     if (hasFullRole) return next();
   // Get assignment

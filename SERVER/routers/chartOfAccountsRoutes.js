@@ -1,6 +1,5 @@
 const express = require('express');
 const router = express.Router();
-const checkToken = require('../middleware/check_token');
 
 
 const check_token_dev = require("../middleware/check_token_dev");

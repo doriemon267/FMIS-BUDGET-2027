@@ -24,6 +24,7 @@ const { hasFullAccess } = require('./securityMiddleware');
  */
 const budgetPlanningAnalystAccessControl = (operation = 'read') => {
   return async (req, res, next) => {
+    if (req.method === 'OPTIONS') return next();
     try {
       const userId = req.user?.id;
       const userRoles = req.user?.Roles || [];

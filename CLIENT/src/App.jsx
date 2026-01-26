@@ -4,7 +4,7 @@ import UserProvider from "./context/UserContext";
 import { RegionProvider } from "./context/RegionContext";
 import Dashboard from "./layout/Dashboard";
 import HomePage from "./pages/HomePage";
-import RegionAssignmentGuard from "./components/guards/RegionAssignmentGuard";
+import AccessGuard from "./components/guards/AccessGuard";
 import DashBoardHome from "./pages/DashBoard";
 import Proposals from "./pages/Proposals";
 import ProposalPage from "./pages/MyProposalPage";
@@ -69,9 +69,9 @@ const App = () => {
         element={
           <UserProvider>
             <RegionProvider>
-              <RegionAssignmentGuard>
+              <AccessGuard>
                 <Dashboard />
-              </RegionAssignmentGuard>
+              </AccessGuard>
             </RegionProvider>
           </UserProvider>
         }

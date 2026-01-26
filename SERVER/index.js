@@ -189,12 +189,14 @@ const comprehensiveReportsRouter = require("./routers/comprehensiveReportsRoutes
 const databaseBackupRouter = require("./routers/databaseBackupRoutes");
 const budgetOfficerEditRouter = require("./routers/budgetOfficerEditRoutes");
 const checkToken = require("./middleware/checkToken");
+const authRouter = require("./routers/auth_router");
+
 const enforceOrgAccess = require("./middleware/enforceOrgAccess");
 const { initializeCleanupScheduler } = require("./utils/backupCleanup");
 const { initializeBackupSystem } = require("./backup-scripts/initBackupSystem");
 const { initializeScheduledJobs } = require("./controllers/databaseBackupController");
 const income_categories = require("./routers/income_categories");
-const authRouter = require("./routers/AuthRoutes");
+
 const myProposalsRoutes = require("./routes/myProposalsRoutes");
 require("./config/mongo_db")();
 // Fix database index for region isolation
@@ -310,10 +312,9 @@ const allowedSocketOrigins = [
   process.env.CLIENT1,
   process.env.CLIENT2,
   process.env.CLIENT3,
-  "https://budget.fmis.local",
-  
-
-
+  "http://localhost:3005",
+  "https://budget.nia.gov.ph",
+  "https://budget-server.nia.gov.ph"
 ].filter(Boolean);
 
 const io = socketIo(server, {
@@ -536,20 +537,38 @@ io.use(async (socket, next) => {
 app.use(
   cors({
     origin: (origin, callback) => {
+      console.log("CORS check for origin:", origin); // a new line of code here
       if (!origin) {
+        console.log("CORS: No origin, allowing.");
         return callback(null, true);
       }
 
       const isNia = origin.endsWith(".nia.gov.ph");
-      const isLocal = origin.startsWith(".fmis.local");
+      const isLocal = origin.startsWith("http://localhost");
+
+      console.log(`CORS check: isNia=${isNia}, isLocal=${isLocal}`); // a new line of code here
 
       if (isNia || isLocal) {
+        console.log("CORS: Origin allowed.");
         return callback(null, true);
       }
 
+      console.log("CORS: Origin blocked.");
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-CSRF-Token",
+      "X-Workflow-Ref",
+      "X-Dev-User-Id",
+      "X-Dev-Roles",
+      "X-Requested-With",
+      "X-User-Object",
+    ],
+    optionsSuccessStatus: 204,
   }),
 );
 
@@ -564,13 +583,13 @@ app.use(helmet());
 // CSRF protection for state-changing requests. For SPAs we expose a
 // /csrf-token endpoint so the client can fetch the token and include it in
 // the X-CSRF-Token header for POST/PUT/DELETE requests.
-const _csrfProtection = csurf({
-  cookie: {
-    httpOnly: false, // allow client JS to read the generated token if needed
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
-  },
-});
+const csrfCookieOptions = {
+  httpOnly: false, // allow client JS to read the generated token if needed
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
+};
+if (process.env.COOKIE_DOMAIN) csrfCookieOptions.domain = process.env.COOKIE_DOMAIN;
+const _csrfProtection = csurf({ cookie: csrfCookieOptions });
 
 // Exempt login and other preflight/public endpoints from CSRF for now to avoid
 // breaking non-updated clients. Encourage clients to fetch /csrf-token and include
@@ -721,8 +740,8 @@ app.get("/test", (req, res) => {
 // Global organizational enforcement for all mutating routes (non-GET)
 app.use((req, res, next) => {
   try {
-    if (req.method === "GET") {
-      // Allow GET requests to compensation settings for the management page
+    if (req.method === "GET" || req.method === "OPTIONS") {
+      // Allow GET and OPTIONS requests to bypass global organizational enforcement
       if (req.path === "/compensation") return next();
       return next();
     }

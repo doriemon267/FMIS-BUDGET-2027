@@ -1786,12 +1786,17 @@ exports.updateProposal = async (req, res) => {
       });
     }
 
-    // Only allow editing if user is the creator and status is DRAFT, or user has BRD roles
-  const isBRDStaff = ['BUDGET PLANNING ANALYST', 'BUDGET_PLANNING_ANALYST', 'BUDGET OFFICER', 'BUDGET_OFFICER', 'BUDGET MANAGER', 'BUDGET_MANAGER'].includes(userRole);
-  // Normalize to string to avoid ObjectId vs string mismatch
-  const isCreatorEditingDraft = String(proposal.createdBy) === String(userId) && proposal.status === 'DRAFT';
+    // Only allow editing if:
+    // 1. User is the creator and status is DRAFT
+    // 2. User has BRD staff roles (Analyst, Officer, Manager)
+    // 3. User is SUPER ADMIN
+    const isBRDStaff = ['BUDGET PLANNING ANALYST', 'BUDGET_PLANNING_ANALYST', 'BUDGET OFFICER', 'BUDGET_OFFICER', 'BUDGET MANAGER', 'BUDGET_MANAGER'].includes(userRole);
+    const isSuperAdmin = userRole === 'SUPER ADMIN';
     
-    if (!isCreatorEditingDraft && !isBRDStaff) {
+    // Normalize to string to avoid ObjectId vs string mismatch
+    const isCreatorEditingDraft = String(proposal.createdBy) === String(userId) && proposal.status === 'DRAFT';
+    
+    if (!isCreatorEditingDraft && !isBRDStaff && !isSuperAdmin) {
       return res.status(403).json({
         success: false,
         message: 'You do not have permission to edit this proposal'
@@ -2134,7 +2139,7 @@ exports.deleteAttachment = async (req, res) => {
     const userRole = getUserRole(req);
     const isBRDStaff = ['BUDGET PLANNING ANALYST', 'BUDGET_PLANNING_ANALYST', 'BUDGET OFFICER', 'BUDGET_OFFICER', 'BUDGET MANAGER', 'BUDGET_MANAGER'].includes(userRole);
     const isUploader = String(targetAttachment.uploadedBy || '') === deleterUserId;
-    if (!req.user?.Roles?.includes('SUPER ADMIN') && !isBRDStaff && !isUploader) {
+    if (userRole !== 'SUPER ADMIN' && !isBRDStaff && !isUploader) {
       return res.status(403).json({ success: false, message: 'You do not have permission to delete this attachment' });
     }
 

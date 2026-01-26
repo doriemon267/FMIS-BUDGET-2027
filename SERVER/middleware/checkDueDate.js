@@ -1,5 +1,6 @@
 const Settings = require("../models/Settings");
 const checkDueDate = async (req, res, next) => {
+  if (req.method === 'OPTIONS') return next();
   try {
     // SUPER ADMIN bypasses due date restrictions
     const userRoles = req.user?.Roles || [];

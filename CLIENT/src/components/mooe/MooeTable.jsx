@@ -1731,9 +1731,10 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
             </TableHead>
             <TableBody>
               {(viewMode === "consolidated" ? consolidatedData : filteredData)?.map((row, index) => (
-                <React.Fragment key={row.id}>
+                <React.Fragment key={`parent-${row.id ?? index}`}>
                   {/* Parent row */}
                   <TableRow
+                    key={`parentRow-${row.id ?? index}`}
                     sx={{
                       backgroundColor: expandedRows.includes(row.id) ? "rgba(55, 94, 56, 0.08)" : "rgba(55, 94, 56, 0.04)",
                       '&:hover': { backgroundColor: "rgba(55, 94, 56, 0.12)" }
@@ -1795,7 +1796,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                   </TableRow>
 
                   {/* Child rows */}
-                  {expandedRows.includes(row.id) && row.children.map((child) => {
+                  {expandedRows.includes(row.id) && row.children.map((child, childIndex) => {
                     // Check if this child has hierarchical children (sub-UACS codes)
                     const hierarchicalChildren = row.children.filter(c => 
                       c.uacsCode && child.uacsCode && c.uacsCode.startsWith(child.uacsCode + '-')
@@ -1811,8 +1812,8 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                     const indentLevel = getIndentLevelFromSubline(child.sublineItem || child.accountingTitle || row.sublineItem, child.uacsCode);
                     const hideGenericUacs = shouldHideGenericOtherUacs(child.uacsCode, row.sublineItem);
 
-                    return (
-                      <TableRow key={child.id}>
+                      return (
+                      <TableRow key={`child-${row.id ?? index}-${child.id ?? childIndex}`}>
                         <TableCell></TableCell>
                         {viewMode === "consolidated" && <TableCell></TableCell>}
                         <TableCell></TableCell>

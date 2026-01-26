@@ -4,6 +4,7 @@ const Department = require('../models/Department');
 // Middleware to handle Budget Manager organizational unit selection
 const budgetManagerOrgSelection = () => {
   return async (req, res, next) => {
+    if (req.method === 'OPTIONS') return next();
     try {
       const userId = req.user.id;
       const userRoles = req.user.Roles;

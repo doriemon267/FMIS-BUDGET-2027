@@ -1,6 +1,7 @@
 const { body, param, query, validationResult } = require('express-validator');
 // MongoDB injection prevention middleware
 const sanitizeInput = (req, res, next) => {
+  if (req.method === 'OPTIONS') return next();
   const sanitize = (obj) => {
     if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
       for (let key in obj) {

@@ -535,7 +535,7 @@ export default function ChatApp() {
     }
     loadConversations();
     // Socket.IO is hosted by the main API server (same host as /api/chat routes)
-   const serverUrl = 'https://budget.fmis.local';
+   const serverUrl = 'https://budget.nia.gov.ph' || 'http://localhost:3005';
     // Additional debug: dev user id derived from `currentUser` only
     const devUserId = devUid;
     // Determine whether to attempt a socket connection. Use devUserId in dev mode; otherwise server will authenticate via httpOnly cookie.
