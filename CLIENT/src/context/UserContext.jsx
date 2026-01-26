@@ -34,9 +34,7 @@ const UserProvider = ({ children }) => {
     await api.get("/logout");
     setCurrentUser(null);
     const currentUrl = window.location.origin + "/dashboard";
-    const loginUrl = IS_PRODUCTION
-      ? `${env("LOGIN_REDIRECT_URL")}?ReturnUrl=${encodeURIComponent(currentUrl)}`
-      : env("CLIENT_URL_DEV") + "/login";
+    const loginUrl = `${env("LOGIN_REDIRECT_URL")}?ReturnUrl=${encodeURIComponent(currentUrl)}`;
     location.href = loginUrl;
   };
 
@@ -200,18 +198,14 @@ const UserProvider = ({ children }) => {
         } else {
           try { setDevUser(null); } catch (e) {}
           const currentUrl = window.location.origin + "/dashboard";
-          const loginUrl = IS_PRODUCTION
-            ? `${env("LOGIN_REDIRECT_URL")}?ReturnUrl=${encodeURIComponent(currentUrl)}`
-            : env("CLIENT_URL_DEV") + "/login";
+          const loginUrl = `${env("LOGIN_REDIRECT_URL")}?ReturnUrl=${encodeURIComponent(currentUrl)}`;
           location.href = loginUrl;
         }
       } catch (error) {
         try { setDevUser(null); } catch (e) {}
         console.error("Error fetching user:", error);
         const currentUrl = window.location.origin + "/dashboard";
-        const loginUrl = IS_PRODUCTION
-          ? `${env("LOGIN_REDIRECT_URL")}?ReturnUrl=${encodeURIComponent(currentUrl)}`
-          : env("CLIENT_URL_DEV") + "/login";
+        const loginUrl = `${env("LOGIN_REDIRECT_URL")}?ReturnUrl=${encodeURIComponent(currentUrl)}`;
         location.href = loginUrl;
       } finally {
         setIsLoading(false);

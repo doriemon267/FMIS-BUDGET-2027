@@ -1,5 +1,5 @@
 const jwt = require("jsonwebtoken");
-const assignedRole = require("../models/assigned_role");
+const assignedRole = require("../models/AssignedRole");
 
 exports.login = async (req, res) => {
   const { username, password, rememberMe } = req.body;

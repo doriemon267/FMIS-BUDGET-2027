@@ -15,7 +15,7 @@ exports.getAllUserProposals = async (req, res) => {
     const sortBy = req.query.sortBy || 'updatedAt';
     const sortOrder = (req.query.sortOrder || 'desc').toLowerCase() === 'asc' ? 1 : -1;
 
-    // Base filters from middlewares
+    // Base filters from middleware
     const roleFilter = req.budgetRoleVisibilityFilter || {};
     const orgFilter = req.hierarchicalFilters || {};
 

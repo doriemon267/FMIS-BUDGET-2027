@@ -93,9 +93,7 @@ export default function HomePage() {
 
   const handleNavigateToLogin = () => {
     const currentUrl = window.location.origin + "/dashboard"; // or window.location.href if you want the exact page
-    const loginUrl = IS_PRODUCTION
-      ? `${env("LOGIN_REDIRECT_URL")}?ReturnUrl=${encodeURIComponent(currentUrl)}`
-      : `${env("CLIENT_URL_DEV")}/login`;
+    const loginUrl = `${env("LOGIN_REDIRECT_URL")}?ReturnUrl=${encodeURIComponent(currentUrl)}`;
 
     location.href = loginUrl;
   };
