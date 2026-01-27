@@ -35,24 +35,41 @@ const StatCard = ({ title, value, color, icon: Icon, isLoading, subtitle, filled
   const { mode } = useThemeContext();
   const isDarkMode = mode === 'dark';
 
+  const baseCardBg = filled
+    ? (isDarkMode ? alpha(color, 0.14) : alpha(color, 0.1))
+    : (isDarkMode ? alpha(color, 0.08) : '#ffffff');
+
   return (
     <Card
       elevation={isDarkMode ? 4 : 2}
       sx={{
         height: '100%',
-        borderRadius: 2,
-        background: filled
-          ? `linear-gradient(135deg, ${alpha(color, 0.18)} 0%, ${alpha(color, 0.12)} 100%)`
-          : (isDarkMode
-              ? `linear-gradient(135deg, ${alpha(color, 0.08)} 0%, ${alpha(color, 0.04)} 100%)`
-              : `linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)`),
+        borderRadius: 2.5,
+        backgroundColor: baseCardBg,
+        backgroundImage: 'none',
         border: `1px solid ${alpha(color, filled ? 0.4 : 0.2)}`,
+        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+        '&:hover': {
+          transform: 'translateY(-2px)',
+          boxShadow: isDarkMode
+            ? `0 10px 25px ${alpha(color, 0.2)}`
+            : `0 10px 20px ${alpha(color, 0.15)}`
+        }
       }}
     >
-      <CardContent sx={{ textAlign: 'center', p: 3 }}>
+      <CardContent
+        sx={{
+          textAlign: 'center',
+          p: { xs: 2.5, md: 3 },
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          height: '100%'
+        }}
+      >
         <Box sx={{
           display: 'inline-flex',
-          p: 1.5,
+          p: 1.25,
           borderRadius: '50%',
           bgcolor: alpha(color, 0.1),
           mb: 2
@@ -84,7 +101,7 @@ const ActionCard = ({ title, description, icon: Icon, color, onClick, buttonText
     <Card
       elevation={isDarkMode ? 4 : 2}
       sx={{
-        borderRadius: 2,
+        borderRadius: 2.5,
         cursor: 'pointer',
         transition: 'all 0.2s ease-in-out',
         background: isDarkMode
@@ -102,7 +119,7 @@ const ActionCard = ({ title, description, icon: Icon, color, onClick, buttonText
       }}
       onClick={onClick}
     >
-      <CardContent sx={{ p: 3 }}>
+      <CardContent sx={{ p: { xs: 2.5, md: 3 }, height: '100%' }}>
         <Stack spacing={2}>
           <Box sx={{
             display: 'inline-flex',
@@ -229,7 +246,7 @@ const HomePage = () => {
   const handleCreateProposal = () => navigate('/proposal');
   const handleViewProposals = () => navigate('/myProposals');
   const handleGenerateReports = () => navigate('/consolidated-reports');
-  const handleViewAllProposals = () => navigate('/AllProposals');
+  const handleViewAllProposals = () => navigate('/allproposal');
   const handleRefreshStats = async () => {
     await queryClient.invalidateQueries(['dashboardStats', regionName, userAccessLevel]);
   };
@@ -272,7 +289,7 @@ const HomePage = () => {
 
   return (
     <>
-      <Container maxWidth='xl' sx={{ py: 3 }}>
+      <Container maxWidth='xl' sx={{ py: { xs: 2.5, md: 3.5 } }}>
         <Stack spacing={4}>
           {/* Hero / Welcome Section */}
           <Paper
@@ -297,13 +314,23 @@ const HomePage = () => {
                 <Typography variant='overline' sx={{ letterSpacing: 2, opacity: 0.85 }}>
                   Budget Performance Dashboard
                 </Typography>
-                <Typography variant='h4' fontWeight={700} sx={{ mt: 1, mb: 1 }}>
+                <Typography
+                  variant='h4'
+                  fontWeight={700}
+                  sx={{ mt: 1, mb: 1, fontSize: { xs: '1.6rem', md: '2rem' } }}
+                >
                   Welcome back, {currentUser?.FirstName || 'Team Member'}
                 </Typography>
-                <Typography variant='body1' sx={{ opacity: 0.9, mb: 2 }}>
+                <Typography variant='body1' sx={{ opacity: 0.9, mb: 2, maxWidth: 680 }}>
                   Monitor submissions, act on pending work, and keep {displayInfo.name} on track for the current fiscal cycle.
                 </Typography>
-                <Stack direction='row' spacing={1} flexWrap='wrap' sx={{ mb: 3 }}>
+                <Stack
+                  direction='row'
+                  spacing={1}
+                  flexWrap='wrap'
+                  useFlexGap
+                  sx={{ mb: 3 }}
+                >
                   {actionChips.map((chip) => (
                     <Chip
                       key={chip.label}
@@ -314,8 +341,6 @@ const HomePage = () => {
                       sx={{
                         color: 'white',
                         borderColor: alpha('#ffffff', 0.35),
-                        mr: 1,
-                        mb: 1,
                       }}
                     />
                   ))}
@@ -343,6 +368,8 @@ const HomePage = () => {
                         borderColor: 'white',
                       },
                     }}
+                    startIcon={isLoading ? <CircularProgress size={16} sx={{ color: 'white' }} /> : null}
+                    disabled={isLoading}
                   >
                     Refresh Stats
                   </Button>
@@ -400,7 +427,7 @@ const HomePage = () => {
             <Typography variant='h6' fontWeight='bold' sx={{ mb: 2 }}>
               📊 Key Metrics
             </Typography>
-            <Grid container spacing={3}>
+            <Grid container spacing={{ xs: 2, md: 3 }}>
               <Grid item xs={12} sm={6} md={3}>
                 <StatCard
                   title='Total Proposals'
@@ -448,11 +475,11 @@ const HomePage = () => {
           </Box>
 
           {/* Health + Context */}
-          <Grid container spacing={3}>
+          <Grid container spacing={{ xs: 2, md: 3 }}>
             <Grid item xs={12} md={7}>
               <Paper
                 elevation={isDarkMode ? 5 : 1}
-                sx={{ p: 3, borderRadius: 3 }}
+                sx={{ p: { xs: 2.5, md: 3 }, borderRadius: 3 }}
               >
                 <Stack direction='row' justifyContent='space-between' alignItems='center' sx={{ mb: 2 }}>
                   <Typography variant='h6' fontWeight={600}>
@@ -493,7 +520,7 @@ const HomePage = () => {
             <Grid item xs={12} md={5}>
               <Paper
                 elevation={isDarkMode ? 5 : 1}
-                sx={{ p: 3, borderRadius: 3, height: '100%' }}
+                sx={{ p: { xs: 2.5, md: 3 }, borderRadius: 3, height: '100%' }}
               >
                 <Typography variant='h6' fontWeight={600} sx={{ mb: 2 }}>
                   Access & Region Context
@@ -535,7 +562,7 @@ const HomePage = () => {
               🚀 Quick Actions
             </Typography>
 
-            <Grid container spacing={3}>
+            <Grid container spacing={{ xs: 2, md: 3 }}>
               {isPreparer && (
                 <Grid item xs={12} sm={6} md={4}>
                   <ActionCard

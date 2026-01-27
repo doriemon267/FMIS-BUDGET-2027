@@ -711,6 +711,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
     // });
     const grouped = {
       'Irrigation Service Fees': { subtotal: 0 },
+      'Net Irrigation Service Fees': { subtotal: 0 },
       'Rent Income': { subtotal: 0 },
       'Water Service Fee': { subtotal: 0 },
       'Miscellaneous Income': { subtotal: 0 }
@@ -724,7 +725,8 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
       
       // Map to display categories
       let displayCategory = 'Miscellaneous Income';
-      if (categoryName.includes('Irrigation')) displayCategory = 'Irrigation Service Fees';
+      if (categoryName.includes('Net Irrigation')) displayCategory = 'Net Irrigation Service Fees';
+      else if (categoryName.includes('Irrigation')) displayCategory = 'Irrigation Service Fees';
       else if (categoryName.includes('Rent')) displayCategory = 'Rent Income';
       else if (categoryName.includes('Water')) displayCategory = 'Water Service Fee';
       else if (categoryName.includes('Miscellaneous')) displayCategory = 'Miscellaneous Income';
@@ -854,9 +856,43 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
     // console.log(`✅ ${category}: Returning total income: ₱${totalIncome.toLocaleString()}`);
     return totalIncome;
   }, [calculatedBudgetarySupport, capitalOutlayData, mooeData, matchesAssignmentScope, hasAssignmentFilters]);
+  const irrigationMeta = useMemo(() => {
+    const entries = Object.keys(effectiveGroupedItems || {});
+    const findKey = (matcher) =>
+      entries.find((key) => matcher(normalizeName(key))) || "";
+
+    const netKey = findKey((name) => name.includes("net irrigation service fees"));
+    const grossKey = findKey(
+      (name) => name.includes("irrigation service fees") && !name.includes("net irrigation")
+    );
+    const netSubtotal = toNumber(effectiveGroupedItems?.[netKey]?.subtotal || 0);
+    const grossSubtotal = toNumber(effectiveGroupedItems?.[grossKey]?.subtotal || 0);
+    const hasNet = netKey && netSubtotal > 0;
+    const displayKey = hasNet ? netKey : (grossKey || "Irrigation Service Fees");
+    const displayLabel = hasNet ? "NET IRRIGATION SERVICE FEES" : "IRRIGATION SERVICE FEES";
+    const displaySubtotal = hasNet ? netSubtotal : grossSubtotal;
+
+    return {
+      netKey,
+      grossKey,
+      hasNet,
+      displayKey,
+      displayLabel,
+      displaySubtotal
+    };
+  }, [effectiveGroupedItems]);
+
   const useOfFundsBreakdown = useMemo(() => {
+    const { netKey, grossKey, displaySubtotal } = irrigationMeta;
+    const irrigationSubtotal = displaySubtotal || 0;
+
     // A.1 CORPORATE INCOME - Sum of grouped items to ensure consistency with displayed rows
-    const corporateIncome = Object.values(effectiveGroupedItems || {}).reduce((sum, item) => sum + (item.subtotal || 0), 0);
+    const corporateIncome = Object.entries(effectiveGroupedItems || {}).reduce((sum, [key, item]) => {
+      if (!item) return sum;
+      if (normalizeName(key).includes("less")) return sum;
+      if (key === netKey || key === grossKey) return sum;
+      return sum + toNumber(item?.subtotal);
+    }, 0) + irrigationSubtotal;
 
     // B.1.1 Personnel Services - Use Total field approach like Budget Summary cards
     let personalServices = 0;
@@ -994,7 +1030,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
       chargedToIncomeAmount,
       chargedToIncomeSubsidy
     };
-  }, [mooeData, capitalOutlayData, personalServicesData, chargedToIncomeData, effectiveGroupedItems, matchesAssignmentScope, hasAssignmentFilters]);
+  }, [mooeData, capitalOutlayData, personalServicesData, chargedToIncomeData, effectiveGroupedItems, matchesAssignmentScope, hasAssignmentFilters, irrigationMeta]);
 
   useEffect(() => {
     if (onChargedToIncomeChange && useOfFundsBreakdown.chargedToIncomeAmount !== undefined) {
@@ -1126,6 +1162,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
 
   // Separate the "Corporate Income" subtotal (from the list) from the "Total Projected Income" (Grand Total)
   const corporateIncomeSubtotal = Number(useOfFundsBreakdown.corporateIncome || 0);
+  const irrigationDisplayKey = irrigationMeta.displayKey;
   
   // Use ONLY the Corporate Income subtotal for Sources (separate from uses)
   // Always use the displayed subtotal from category breakdown to keep UI consistent
@@ -1354,7 +1391,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
             </TableHead>
             <TableBody>
               {[
-                { label: 'IRRIGATION SERVICE FEES', key: 'Irrigation Service Fees' },
+                { label: irrigationMeta.displayLabel, key: irrigationDisplayKey },
                 { label: 'RENT INCOME', key: 'Rent Income' },
                 { label: 'WATER SERVICE FEE', key: 'Water Service Fee' },
                 { label: 'MISCELLENEOUS INCOME', key: 'Miscellaneous Income' }
@@ -1370,7 +1407,8 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                   </TableCell>
                   <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                     <Typography variant="body2" sx={{ fontWeight: 500, color: '#1565c0', letterSpacing: 0.2 }}>
-                      ₱{(effectiveGroupedItems?.[row.key]?.subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₱{(row.key === irrigationDisplayKey ? irrigationMeta.displaySubtotal : toNumber(effectiveGroupedItems?.[row.key]?.subtotal || 0))
+                        .toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
                   </TableCell>
                   <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
@@ -1380,7 +1418,8 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                   </TableCell>
                   <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                     <Typography variant="body2" sx={{ fontWeight: 500, color: '#1565c0', letterSpacing: 0.2 }}>
-                      ₱{(effectiveGroupedItems?.[row.key]?.subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₱{(row.key === irrigationDisplayKey ? irrigationMeta.displaySubtotal : toNumber(effectiveGroupedItems?.[row.key]?.subtotal || 0))
+                        .toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
                   </TableCell>
                 </TableRow>

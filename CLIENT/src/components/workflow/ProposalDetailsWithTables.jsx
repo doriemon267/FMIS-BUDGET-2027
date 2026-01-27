@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -48,6 +48,7 @@ const ProposalDetailsWithTables = ({ open, onClose, proposal, userInfo }) => {
   const [mooeData, setMooeData] = useState([]);
   const [capitalOutlayData, setCapitalOutlayData] = useState([]);
   const [incomeData, setIncomeData] = useState([]);
+  const [discountSettings, setDiscountSettings] = useState(null);
   const [tabLoading, setTabLoading] = useState({});
   const [expandedRows, setExpandedRows] = useState({});
   const [workflowHistory, setWorkflowHistory] = useState([]);
@@ -203,7 +204,26 @@ const ProposalDetailsWithTables = ({ open, onClose, proposal, userInfo }) => {
       // console.log('📍 Fetching Income data for proposal:', { fiscalYear: proposal.fiscalYear, region: proposal.region, budgetType: proposal.budgetType });
       const response = await api.get(`/income/getByParams?fiscalYear=${proposal.fiscalYear}&region=${proposal.region}&budgetType=${proposal.budgetType}`);
       // console.log('✅ Income response:', response.data);
-      setIncomeData(response.data || []);
+      const incomeItems = response.data || [];
+      setIncomeData(incomeItems);
+      try {
+        const regionCandidate =
+          proposal?.region ||
+          incomeItems?.[0]?.region ||
+          incomeItems?.[0]?.Region ||
+          "";
+        const settingsResp = await api.get('/api/discount-settings', {
+          params: {
+            fiscalYear: proposal.fiscalYear,
+            budgetType: proposal.budgetType,
+            region: regionCandidate
+          }
+        });
+        setDiscountSettings(settingsResp.data || null);
+      } catch (settingsError) {
+        console.warn('⚠️ Discount settings not available:', settingsError?.message || settingsError);
+        setDiscountSettings(null);
+      }
     } catch (error) {
       console.error('❌ Error fetching income data:', error);
       setIncomeData([]);
@@ -216,6 +236,110 @@ const ProposalDetailsWithTables = ({ open, onClose, proposal, userInfo }) => {
     const num = Number(value) || 0;
     return `₱${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
+
+  const normalizeName = (value) => {
+    if (!value) return '';
+    return String(value)
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .replace(/[^a-z0-9\s\-()/]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  const toNumber = (value) => {
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : 0;
+    }
+    if (typeof value === 'string') {
+      const parsed = Number(value.replace(/,/g, '').trim());
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+    return 0;
+  };
+
+  const incomeSummary = useMemo(() => {
+    const summary = {
+      irrigation: 0,
+      rent: 0,
+      water: 0,
+      misc: 0,
+      total: 0,
+      irrigationLabel: 'IRRIGATION SERVICE FEES'
+    };
+
+    const items = Array.isArray(incomeData) ? incomeData : [];
+    let irrigationGross = 0;
+    let irrigationNetItems = 0;
+    let currentAccountTotal = 0;
+
+    items.forEach((item) => {
+      const categoryName =
+        item.incomecategory?.name ||
+        item.incomecategory?.incomeCategoryName ||
+        item.categoryName ||
+        item.category ||
+        item.type ||
+        '';
+      const normalized = normalizeName(categoryName);
+      const amount = toNumber(item.amount ?? item.totalAmount ?? 0);
+
+      if (normalized.includes('net irrigation service fees')) {
+        irrigationNetItems += amount;
+        return;
+      }
+
+      if (normalized.includes('irrigation service fees')) {
+        irrigationGross += amount;
+        const subcategory = normalizeName(item.subcategory || item.subCategory || '');
+        if (subcategory.includes('current account')) {
+          currentAccountTotal += amount;
+        }
+        return;
+      }
+
+      if (normalized.includes('rent')) {
+        summary.rent += amount;
+        return;
+      }
+
+      if (normalized.includes('water service fee')) {
+        summary.water += amount;
+        return;
+      }
+
+      summary.misc += amount;
+    });
+
+    const discountType = discountSettings?.discountType || 'percentage';
+    const discountValue = toNumber(discountSettings?.discountValue || 0);
+    const applyDiscount = Boolean(discountSettings?.applyDiscount);
+    const regionMatches =
+      normalizeName(discountSettings?.region) === normalizeName(proposal?.region);
+
+    let irrigationNetFromDiscount = irrigationGross;
+    const discountBase =
+      currentAccountTotal > 0 ? currentAccountTotal : irrigationGross;
+    if (applyDiscount && regionMatches && irrigationGross > 0 && discountBase > 0) {
+      const discountAmount =
+        discountType === 'percentage'
+          ? discountBase * (discountValue / 100)
+          : Math.min(discountValue, discountBase);
+      irrigationNetFromDiscount = irrigationGross - discountAmount;
+    }
+
+    const useNet = irrigationNetItems > 0 || (applyDiscount && regionMatches);
+    summary.irrigation = useNet
+      ? (irrigationNetItems > 0 ? irrigationNetItems : irrigationNetFromDiscount)
+      : irrigationGross;
+    summary.irrigationLabel = useNet ? 'NET IRRIGATION SERVICE FEES' : 'IRRIGATION SERVICE FEES';
+
+    summary.total =
+      summary.irrigation + summary.rent + summary.water + summary.misc;
+
+    return summary;
+  }, [incomeData, discountSettings, proposal?.region]);
 
   const checkEditPermission = (userRole, status) => {
     // Can't edit if status is Finalized
@@ -735,8 +859,44 @@ const ProposalDetailsWithTables = ({ open, onClose, proposal, userInfo }) => {
                     <CircularProgress />
                   </Box>
                 ) : incomeData.length > 0 ? (
-                  <TableContainer>
-                    <Table size="small">
+                  <>
+                    <TableContainer component={Paper} sx={{ mb: 2 }}>
+                      <Table size="small">
+                        <TableHead sx={{ bgcolor: '#f5f5f5' }}>
+                          <TableRow>
+                            <TableCell sx={{ fontWeight: 'bold' }}>Category</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>Total</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          <TableRow>
+                            <TableCell>{incomeSummary.irrigationLabel}</TableCell>
+                            <TableCell align="right">{formatCurrency(incomeSummary.irrigation)}</TableCell>
+                          </TableRow>
+                          <TableRow>
+                            <TableCell>RENT INCOME</TableCell>
+                            <TableCell align="right">{formatCurrency(incomeSummary.rent)}</TableCell>
+                          </TableRow>
+                          <TableRow>
+                            <TableCell>WATER SERVICE FEE</TableCell>
+                            <TableCell align="right">{formatCurrency(incomeSummary.water)}</TableCell>
+                          </TableRow>
+                          <TableRow>
+                            <TableCell>MISCELLANEOUS INCOME</TableCell>
+                            <TableCell align="right">{formatCurrency(incomeSummary.misc)}</TableCell>
+                          </TableRow>
+                          <TableRow sx={{ bgcolor: '#f0f0f0' }}>
+                            <TableCell sx={{ fontWeight: 'bold' }}>TOTAL</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>
+                              {formatCurrency(incomeSummary.total)}
+                            </TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+
+                    <TableContainer>
+                      <Table size="small">
                       <TableHead sx={{ bgcolor: '#f5f5f5' }}>
                         <TableRow>
                           <TableCell sx={{ width: 50 }}></TableCell>
@@ -806,6 +966,7 @@ const ProposalDetailsWithTables = ({ open, onClose, proposal, userInfo }) => {
                       </TableBody>
                     </Table>
                   </TableContainer>
+                  </>
                 ) : (
                   <Alert severity="info">No income data found</Alert>
                 )}

@@ -410,6 +410,7 @@ const CustomDrawer = ({ collapsed = false }) => {
           isAllow
           icon={<FaArrowLeft size={22} />}
           name="Back To FMIS"
+          collapsed={collapsed}
           link={
             IS_PRODUCTION
               ? "https://fmis.nia.gov.ph/dashboard"
@@ -426,8 +427,8 @@ const CustomDrawer = ({ collapsed = false }) => {
         sx={{
           position: "sticky",
           bottom: 0,
-          background: "rgba(0,0,0,0.7996848739495799)",
-          backdropFilter: "blur(2px)",
+          background: "linear-gradient(180deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.85) 100%)",
+          backdropFilter: "blur(4px)",
         }}
       >
         <Divider sx={{ borderColor: "primary.light" }} />
@@ -435,7 +436,7 @@ const CustomDrawer = ({ collapsed = false }) => {
           <Typography
             variant="body2"
             align="center"
-            sx={{ color: "common.white", py: 2 }}
+            sx={{ color: "common.white", py: 1.75, letterSpacing: "0.03em" }}
           >
             &copy; {new Date().getFullYear()} NIA - FMIS
           </Typography>
@@ -446,7 +447,7 @@ const CustomDrawer = ({ collapsed = false }) => {
               display: "flex",
               justifyContent: "center",
               alignItems: "center",
-              py: 2,
+              py: 1.75,
             }}
           >
             <Typography

@@ -87,9 +87,8 @@ const DashboardContent = () => {
     return () => clearInterval(iv);
   }, [dueDateRaw]);
 
-  // Calendar icon click (no alert)
-  const handleFiscalInfoClick = () => {
-    // Optionally show a dialog or toast here if needed
+  const handleFiscalInfoClick = (event) => {
+    handleFiscalClick(event);
   };
 
   // Remove old notification logic, will use WorkflowNotifications instead
@@ -116,7 +115,10 @@ const DashboardContent = () => {
           borderColor: "secondary.main",
         }}
       >
-        <Toolbar>
+
+
+
+        <Toolbar sx={{ gap: 1.5 }}>
           <IconButton
             color="inherit"
             aria-label="toggle drawer"
@@ -136,29 +138,57 @@ const DashboardContent = () => {
             style={{ height: 40, marginRight: 10, cursor: "pointer" }}
             onClick={() => nav("/")}
           />
-          <Typography variant="h6" noWrap flexGrow={1}>
+           <Typography
+            variant="h6"
+            noWrap
+            flexGrow={1}
+            sx={{
+              display: { xs: "none", sm: "block" },
+              fontWeight: "bold",
+              letterSpacing: 1.2,
+              textTransform: "uppercase",
+              fontFamily: '"Merriweather", "Georgia", serif', // ← example
+            }}
+          >
+            {env("APP_FULL_TITLE")}
+          </Typography>
+
+          <Typography
+            variant="h6"
+            noWrap
+            flexGrow={1}
+            sx={{
+              display: { xs: "block", sm: "none" },
+              fontWeight: "bold",
+              letterSpacing: 1.2,
+              textTransform: "uppercase",
+              fontFamily: '"Merriweather", "Georgia", serif', // ← same here
+            }}
+          >
             {env("APP_TITLE")}
           </Typography>
 
           {/* Active Region Display */}
-          <Box sx={{ mr: 2, display: 'flex', alignItems: 'center' }}>
+          <Box sx={{ mr: 1.5, display: "flex", alignItems: "center" }}>
             <ActiveRegionDisplay variant="compact" showButton={false} />
           </Box>
           
           {/* Calendar icon: white by default, blinking red when within 1 day of due date */}
-          <IconButton
-            onClick={handleFiscalInfoClick}
-            aria-label="Active Fiscal Year"
-            sx={{
-              mr: 2,
-              color: blinkActive ? "error.main" : "inherit",
-              ...(blinkActive && {
-                animation: `${blink} 1s infinite`,
-              }),
-            }}
-          >
-            <DateRangeIcon />
-          </IconButton>
+          <Tooltip title="Fiscal year info">
+            <IconButton
+              onClick={handleFiscalInfoClick}
+              aria-label="Active Fiscal Year"
+              sx={{
+                mr: 1,
+                color: blinkActive ? "error.main" : "inherit",
+                ...(blinkActive && {
+                  animation: `${blink} 1s infinite`,
+                }),
+              }}
+            >
+              <DateRangeIcon />
+            </IconButton>
+          </Tooltip>
           <Menu
             anchorEl={anchorFiscalEl}
             open={openFiscal}
@@ -208,7 +238,7 @@ const DashboardContent = () => {
             width: collapsed && !isMdScreen ? collapsedDrawerWidth : drawerWidth,
             boxSizing: "border-box",
             background:
-              "linear-gradient(169deg, rgba(55,94,56,1) 10%, rgba(0,0,0,0.9) 100%)",
+              "linear-gradient(169deg, rgba(55,94,56,0.98) 10%, rgba(0,0,0,0.92) 100%)",
             transition: "width 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
             overflowX: "hidden",
             boxShadow: "2px 0 8px rgba(0,0,0,0.15)",
@@ -222,47 +252,63 @@ const DashboardContent = () => {
         <CustomDrawer collapsed={collapsed && !isMdScreen} />
       </Drawer>
 
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          bgcolor: "background.default",
-          transition: "margin 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-          marginLeft: open && !isMdScreen
-            ? collapsed
-              ? `${collapsedDrawerWidth}px`
-              : `${drawerWidth}px`
-            : 0,
-          minHeight: "calc(100vh - 64px)",
-          overflowX: "hidden",
-        }}
-      >
-        <Toolbar />
-        <Box sx={{ maxWidth: "100%", overflowX: "auto" }}>
-          <Outlet />
-             <ErrorBoundary
-               FallbackComponent={({ error }) => (
-                 <div style={{ padding: 12, color: 'red' }}>
-                   <strong>AppTrayLauncher failed to render:</strong>
-                   <pre style={{ whiteSpace: 'pre-wrap' }}>{error?.message}</pre>
-                 </div>
-               )}
-               onError={(error, info) => {
-                 // Log stack/message so we can capture details in the terminal as well
-                 console.error('[ErrorBoundary] AppTrayLauncher render error', error, info);
-               }}
-             >
-               <AppTrayLauncher />
-             </ErrorBoundary>
-        </Box>
-        <Typography
-          variant="body2"
-          align="center"
-          sx={{ px: 1.5, py: 2, color: "text.secondary" }}
+        <Box
+          component="main"
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            flexGrow: 1,
+            bgcolor: "background.default",
+            transition: "margin 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+            marginLeft:
+              open && !isMdScreen
+                ? collapsed
+                  ? `${collapsedDrawerWidth}px`
+                  : `${drawerWidth}px`
+                : 0,
+            minHeight: "100vh",
+            overflowX: "hidden",
+          }}
         >
-          &copy; {new Date().getFullYear()} NIA – {env("APP_TITLE")}
-        </Typography>
-      </Box>
+          <Toolbar />
+          <Box
+            sx={{
+              flex: 1,
+              minHeight: 0,
+              maxWidth: "100%",
+              overflowX: "auto",
+              px: { xs: 1.5, md: 2.5 },
+              pb: 2,
+            }}
+          >
+            <Outlet />
+            <ErrorBoundary
+              FallbackComponent={({ error }) => (
+                <div style={{ padding: 12, color: "red" }}>
+                  <strong>AppTrayLauncher failed to render:</strong>
+                  <pre style={{ whiteSpace: "pre-wrap" }}>{error?.message}</pre>
+                </div>
+              )}
+              onError={(error, info) => {
+                console.error(
+                  "[ErrorBoundary] AppTrayLauncher render error",
+                  error,
+                  info
+                );
+              }}
+            >
+              <AppTrayLauncher />
+            </ErrorBoundary>
+          </Box>
+          <Divider sx={{ borderColor: "divider" }} />
+          <Typography
+            variant="body2"
+            align="center"
+            sx={{ px: 1.5, py: 2, color: "text.secondary" }}
+          >
+            &copy; {new Date().getFullYear()} NIA – {env("APP_TITLE")}
+          </Typography>
+        </Box>
     </Box>
   );
 };

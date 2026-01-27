@@ -46,7 +46,7 @@ const NumericFormatInput = React.forwardRef(function NumericFormatInput(props, r
   );
 });
 
-const EditableIncomeTable = ({ data = [], onChange }) => {
+const EditableIncomeTable = ({ data = [], onChange, discountSettings = null, regionName = '' }) => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [expandedCategories, setExpandedCategories] = useState({});
@@ -99,17 +99,125 @@ const EditableIncomeTable = ({ data = [], onChange }) => {
     }
   }, [data, onChange]);
 
+  const normalizeName = useCallback((value) => {
+    if (!value) return '';
+    return String(value)
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .replace(/[^a-z0-9\s\-()/]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }, []);
+
+  const irrigationMeta = useMemo(() => {
+    let irrigationGross = 0;
+    let irrigationNet = 0;
+    let currentAccountTotal = 0;
+
+    data.forEach((item) => {
+      if (item.changeType === 'deleted') return;
+      const categoryRaw =
+        item.category ||
+        item.categoryName ||
+        item.type ||
+        item.incomecategory?.name ||
+        item.incomecategory?.incomeCategoryName ||
+        '';
+      const category = normalizeName(categoryRaw);
+      const amount = Number(item.amount || 0);
+      const subcategoryRaw = item.subcategory || item.subCategory || '';
+      const subcategory = normalizeName(subcategoryRaw);
+
+      if (category.includes('net irrigation service fees')) {
+        irrigationNet += amount;
+        return;
+      }
+      if (category.includes('irrigation service fees')) {
+        irrigationGross += amount;
+        if (subcategory.includes('current account')) {
+          currentAccountTotal += amount;
+        }
+      }
+    });
+
+    const discountType = discountSettings?.discountType || 'percentage';
+    const discountValue = Number(discountSettings?.discountValue || 0);
+    const applyDiscount = Boolean(discountSettings?.applyDiscount);
+    const discountRegion = normalizeName(discountSettings?.region || '');
+    const regionMatch = !discountRegion || discountRegion === normalizeName(regionName || '');
+
+    let discountAmount = 0;
+    const discountBase =
+      currentAccountTotal > 0 ? currentAccountTotal : irrigationGross;
+    if (applyDiscount && regionMatch && discountValue > 0 && discountBase > 0) {
+      discountAmount =
+        discountType === 'percentage'
+          ? discountBase * (discountValue / 100)
+          : Math.min(discountValue, discountBase);
+    }
+
+    const useNet = irrigationNet > 0 || (applyDiscount && regionMatch && discountAmount > 0);
+    const netTotal = Math.max(
+      0,
+      useNet ? (irrigationNet || (irrigationGross - discountAmount)) : irrigationGross
+    );
+
+    return {
+      useNet,
+      netTotal,
+      hasGrossItems: irrigationGross > 0,
+      displayLabel: useNet ? 'Net Irrigation Service Fees' : 'Irrigation Service Fees',
+    };
+  }, [data, discountSettings, normalizeName, regionName]);
+
   const groupedData = useMemo(() => {
     const groups = {};
     data.forEach((item, index) => {
-      const category = item.category || 'No category';
-      if (!groups[category]) {
-        groups[category] = [];
+      const rawCategory =
+        item.category ||
+        item.categoryName ||
+        item.type ||
+        item.incomecategory?.name ||
+        item.incomecategory?.incomeCategoryName ||
+        'No category';
+      const normalized = normalizeName(rawCategory);
+      const isNetRow =
+        normalized.includes('net irrigation service fees') || Boolean(item.isComputed);
+      const hideNetRow = irrigationMeta.useNet && irrigationMeta.hasGrossItems;
+      if (hideNetRow && isNetRow) {
+        return;
       }
-      groups[category].push({ ...item, originalIndex: index });
+      const isIrrigation = normalized.includes('irrigation service fees');
+      const categoryKey =
+        isIrrigation && irrigationMeta.useNet ? 'Net Irrigation Service Fees' : rawCategory || 'No category';
+
+      if (!groups[categoryKey]) {
+        groups[categoryKey] = [];
+      }
+      groups[categoryKey].push({ ...item, originalIndex: index });
     });
     return groups;
-  }, [data]);
+  }, [data, irrigationMeta.useNet, irrigationMeta.hasGrossItems, normalizeName]);
+
+  const categoryTotals = useMemo(() => {
+    const totals = {};
+    Object.entries(groupedData).forEach(([category, items]) => {
+      if (normalizeName(category).includes('irrigation service fees') && irrigationMeta.useNet) {
+        totals[category] = irrigationMeta.netTotal;
+        return;
+      }
+      totals[category] = items.reduce((sum, item) => {
+        if (item.changeType === 'deleted') return sum;
+        return sum + (Number(item.amount) || 0);
+      }, 0);
+    });
+    return totals;
+  }, [groupedData, irrigationMeta.netTotal, irrigationMeta.useNet, normalizeName]);
+
+  const grandTotal = useMemo(() => {
+    return Object.values(categoryTotals).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  }, [categoryTotals]);
 
   useEffect(() => {
     setExpandedCategories((prev) => {
@@ -279,7 +387,7 @@ const EditableIncomeTable = ({ data = [], onChange }) => {
     <Box>
       <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Box>
-          <Chip label={`Total: ${formatCurrency(data.reduce((sum, item) => sum + (item.changeType !== 'deleted' ? (item.amount || 0) : 0), 0))}`} color="primary" />
+          <Chip label={`Total: ${formatCurrency(grandTotal)}`} color="primary" />
         </Box>
         {onChange && (
           <Button
@@ -327,11 +435,15 @@ const EditableIncomeTable = ({ data = [], onChange }) => {
                         >
                           {rowData.expanded ? <KeyboardArrowDownIcon /> : <KeyboardArrowRightIcon />}
                         </IconButton>
-                        <Box component="span">{rowData.category}</Box>
+                        <Box component="span">
+                          {normalizeName(rowData.category).includes('irrigation service fees') && irrigationMeta.useNet
+                            ? irrigationMeta.displayLabel
+                            : rowData.category}
+                        </Box>
                       </TableCell>
                       <TableCell></TableCell>
                       <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                        {formatCurrency(rowData.items.reduce((sum, item) => sum + (item.changeType !== 'deleted' ? (item.amount || 0) : 0), 0))}
+                        {formatCurrency(categoryTotals[rowData.category] || 0)}
                       </TableCell>
                       <TableCell></TableCell>
                       {onChange && <TableCell></TableCell>}
@@ -410,7 +522,7 @@ const EditableIncomeTable = ({ data = [], onChange }) => {
               <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
                 <TableCell colSpan={2} sx={{ fontWeight: 'bold' }}>Grand Total</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                  {formatCurrency(data.reduce((sum, item) => sum + (item.changeType !== 'deleted' ? (item.amount || 0) : 0), 0))}
+                  {formatCurrency(grandTotal)}
                 </TableCell>
                 <TableCell colSpan={2}></TableCell>
               </TableRow>

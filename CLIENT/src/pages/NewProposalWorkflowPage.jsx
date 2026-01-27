@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   Box,
   Paper,
@@ -194,6 +194,7 @@ const NewProposalWorkflowPage = () => {
   const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
   const [availableActionsForMenu, setAvailableActionsForMenu] = useState([]);
   const [proposalDetails, setProposalDetails] = useState(null);
+  const [discountSettings, setDiscountSettings] = useState(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsTab, setDetailsTab] = useState("income");
   const [historyPage, setHistoryPage] = useState(0);
@@ -225,6 +226,62 @@ const NewProposalWorkflowPage = () => {
     description: "",
   });
   const [proposalEditDirty, setProposalEditDirty] = useState(false);
+
+  const normalizeName = useCallback((value) => {
+    if (!value) return "";
+    return String(value)
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .replace(/[^a-z0-9\s\-()/]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }, []);
+
+  const toNumber = useCallback((value) => {
+    if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+    if (typeof value === "string") {
+      const parsed = Number(value.replace(/,/g, "").trim());
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+    return 0;
+  }, []);
+
+  useEffect(() => {
+    const fetchDiscountSettings = async () => {
+      const fiscalYear = selectedProposal?.fiscalYear || proposalDetails?.fiscalYear;
+      const budgetType = selectedProposal?.budgetType || proposalDetails?.budgetType;
+      const region =
+        selectedProposal?.region ||
+        proposalDetails?.region ||
+        proposalDetails?.income?.[0]?.region ||
+        proposalDetails?.income?.[0]?.Region ||
+        "";
+      if (!fiscalYear || !budgetType || !region) {
+        setDiscountSettings(null);
+        return;
+      }
+      try {
+        const response = await api.get("/api/discount-settings", {
+          params: { fiscalYear, budgetType, region }
+        });
+        setDiscountSettings(response.data || null);
+      } catch (error) {
+        console.warn("⚠️ Unable to load discount settings:", error?.message || error);
+        setDiscountSettings(null);
+      }
+    };
+
+    fetchDiscountSettings();
+  }, [
+    selectedProposal?.fiscalYear,
+    selectedProposal?.budgetType,
+    selectedProposal?.region,
+    proposalDetails?.fiscalYear,
+    proposalDetails?.budgetType,
+    proposalDetails?.region,
+    proposalDetails?.income
+  ]);
 
   // Pagination
   const [page, setPage] = useState(0);
@@ -3174,27 +3231,116 @@ const NewProposalWorkflowPage = () => {
                   (proposalDetails?.income?.length > 0 ? (
                     <>
                       {(() => {
-                        const groupedIncome = proposalDetails.income.reduce(
-                          (acc, item) => {
-                            const category = item.category || "Uncategorized";
-                            if (!acc[category]) acc[category] = [];
-                            acc[category].push(item);
+                        const items = proposalDetails.income || [];
+                        const discountType = discountSettings?.discountType || "percentage";
+                        const discountValue = toNumber(discountSettings?.discountValue || 0);
+                        const applyDiscount = Boolean(discountSettings?.applyDiscount);
+
+                        let irrigationGross = 0;
+                        let irrigationNet = 0;
+                        let currentAccountTotal = 0;
+
+                        items.forEach((item) => {
+                          const categoryRaw =
+                            item.category ||
+                            item.categoryName ||
+                            item.type ||
+                            item.incomecategory?.name ||
+                            item.incomecategory?.incomeCategoryName ||
+                            "Uncategorized";
+                          const category = normalizeName(categoryRaw);
+                          const amount = toNumber(item.amount || 0);
+                          const subcategory = normalizeName(
+                            item.subcategory || item.subCategory || ""
+                          );
+
+                          if (category.includes("net irrigation service fees")) {
+                            irrigationNet += amount;
+                            return;
+                          }
+                          if (category.includes("irrigation service fees")) {
+                            irrigationGross += amount;
+                            if (subcategory.includes("current account")) {
+                              currentAccountTotal += amount;
+                            }
+                          }
+                        });
+
+                        let discountAmount = 0;
+                        const discountBase =
+                          currentAccountTotal > 0 ? currentAccountTotal : irrigationGross;
+                        if (applyDiscount && discountValue > 0 && discountBase > 0) {
+                          discountAmount =
+                            discountType === "percentage"
+                              ? discountBase * (discountValue / 100)
+                              : Math.min(discountValue, discountBase);
+                        }
+
+                        const hasGrossIrrigation = irrigationGross > 0;
+                        const useNet = irrigationNet > 0 || (applyDiscount && discountAmount > 0);
+                        const irrigationLabel = useNet
+                          ? "Net Irrigation Service Fees"
+                          : "Irrigation Service Fees";
+                        const irrigationTotal = useNet
+                          ? (irrigationNet || Math.max(0, irrigationGross - discountAmount))
+                          : irrigationGross;
+
+                        const shouldHideNetRow = useNet && hasGrossIrrigation;
+
+                        const groupedIncome = items.reduce((acc, item) => {
+                          const rawCategory =
+                            item.category ||
+                            item.categoryName ||
+                            item.type ||
+                            item.incomecategory?.name ||
+                            item.incomecategory?.incomeCategoryName ||
+                            "Uncategorized";
+                          const normalized = normalizeName(rawCategory);
+                          const isNetRow =
+                            normalized.includes("net irrigation service fees") ||
+                            Boolean(item.isComputed);
+                          if (shouldHideNetRow && isNetRow) {
                             return acc;
+                          }
+                          const category =
+                            normalized.includes("irrigation service fees") && useNet
+                              ? irrigationLabel
+                              : rawCategory;
+                          if (!acc[category]) acc[category] = [];
+                          acc[category].push(item);
+                          return acc;
+                        }, {});
+
+                        const groupedEntries = Object.entries(groupedIncome);
+                        const grandTotal = groupedEntries.reduce(
+                          (sum, [category, groupItems]) => {
+                            const categoryTotal =
+                              normalizeName(category).includes("irrigation service fees") && useNet
+                                ? irrigationTotal
+                                : groupItems.reduce(
+                                    (groupSum, item) => groupSum + toNumber(item.amount || 0),
+                                    0
+                                  );
+                            return sum + categoryTotal;
                           },
-                          {}
+                          0
                         );
 
-                        return Object.entries(groupedIncome).map(
-                          ([category, items]) => {
-                            const categoryTotal = items.reduce(
-                              (sum, item) => sum + (item.amount || 0),
-                              0
-                            );
-                            const isExpanded =
-                              expandedGroups[`income-${category}`];
+                        return (
+                          <>
+                            {groupedEntries.map(([category, groupItems]) => {
+                              const categoryTotal =
+                                normalizeName(category).includes("irrigation service fees") && useNet
+                                  ? irrigationTotal
+                                  : groupItems.reduce(
+                                      (sum, item) => sum + toNumber(item.amount || 0),
+                                      0
+                                    );
+                              const isExpanded =
+                                expandedGroups[`income-${category}`];
 
-                            return (
-                              <Box key={category} sx={{ mb: 2 }}>
+                              return (
+                                <Box key={category} sx={{ mb: 2 }}>
                                 <Box
                                   onClick={() =>
                                     setExpandedGroups((prev) => ({
@@ -3231,8 +3377,8 @@ const NewProposalWorkflowPage = () => {
                                       variant="subtitle1"
                                       sx={{ fontWeight: 600 }}
                                     >
-                                      {category} ({items.length}{" "}
-                                      {items.length === 1 ? "item" : "items"})
+                                      {category} ({groupItems.length}{" "}
+                                      {groupItems.length === 1 ? "item" : "items"})
                                     </Typography>
                                   </Box>
                                   <Typography
@@ -3246,179 +3392,178 @@ const NewProposalWorkflowPage = () => {
                                   </Typography>
                                 </Box>
 
-                                {isExpanded && (
-                                  <TableContainer sx={{ mt: 1 }}>
-                                    <Table size="small">
-                                      <TableHead>
-                                        <TableRow sx={{ bgcolor: "#f5f5f5" }}>
-                                          <TableCell
-                                            sx={{ fontWeight: "bold" }}
-                                          >
-                                            Item
-                                          </TableCell>
-                                          <TableCell
-                                            sx={{ fontWeight: "bold" }}
-                                          >
-                                            Description
-                                          </TableCell>
-                                          <TableCell
-                                            sx={{ fontWeight: "bold" }}
-                                          >
-                                            Category
-                                          </TableCell>
-                                          <TableCell
-                                            align="right"
-                                            sx={{ fontWeight: "bold" }}
-                                          >
-                                            Amount
-                                          </TableCell>
-                                          <TableCell
-                                            align="right"
-                                            sx={{ fontWeight: "bold" }}
-                                          >
-                                            Total
-                                          </TableCell>
-                                        </TableRow>
-                                      </TableHead>
-                                      <TableBody>
-                                        {items.map((item, idx) => {
-                                          const globalIndex =
-                                            proposalDetails.income.indexOf(
-                                              item
-                                            );
-                                          const itemKey = `income-${globalIndex}`;
-                                          const isChanged =
-                                            changedItems.has(itemKey);
-                                          const editedItem =
-                                            editableItems.income[globalIndex];
-                                          const itemAmount =
-                                            editedItem?.amount || 0;
-                                          return (
-                                            <TableRow
-                                              key={idx}
-                                              hover
-                                              sx={{
-                                                bgcolor: isChanged
-                                                  ? "#fff3cd"
-                                                  : "transparent",
-                                                transition:
-                                                  "background-color 0.3s ease",
-                                              }}
+                                  {isExpanded && (
+                                    <TableContainer sx={{ mt: 1 }}>
+                                      <Table size="small">
+                                        <TableHead>
+                                          <TableRow sx={{ bgcolor: "#f5f5f5" }}>
+                                            <TableCell
+                                              sx={{ fontWeight: "bold" }}
                                             >
-                                              <TableCell>
-                                                {item.particulars ||
-                                                  item.itemName ||
-                                                  item.title ||
-                                                  "N/A"}
-                                              </TableCell>
-                                              <TableCell>
-                                                {item.description || "N/A"}
-                                              </TableCell>
-                                              <TableCell>
-                                                {item.categoryName ||
-                                                  item.category ||
-                                                  item.type ||
-                                                  item.subcategory ||
-                                                  "N/A"}
-                                              </TableCell>
-                                              <TableCell align="right">
-                                                {canUserEdit() ? (
-                                                  <TextField
-                                                    type="text"
-                                                    size="small"
-                                                    value={itemAmount.toLocaleString(
-                                                      "en-US",
-                                                      {
-                                                        minimumFractionDigits: 2,
-                                                        maximumFractionDigits: 2,
-                                                      }
-                                                    )}
-                                                    onChange={(e) => {
-                                                      const numValue =
-                                                        parseFloat(
-                                                          e.target.value.replace(
-                                                            /,/g,
-                                                            ""
-                                                          )
-                                                        );
-                                                      if (!isNaN(numValue)) {
-                                                        handleEditItemAmount(
-                                                          "income",
-                                                          globalIndex,
-                                                          numValue
-                                                        );
-                                                      }
-                                                    }}
-                                                    inputProps={{
-                                                      style: {
-                                                        textAlign: "right",
-                                                      },
-                                                    }}
-                                                    sx={{
-                                                      width: 120,
-                                                      "& .MuiOutlinedInput-root":
-                                                        {
-                                                          bgcolor: isChanged
-                                                            ? "#fff9e6"
-                                                            : "white",
-                                                          borderColor: isChanged
-                                                            ? "#ffc107"
-                                                            : undefined,
-                                                        },
-                                                    }}
-                                                  />
-                                                ) : (
-                                                  `₱${itemAmount.toLocaleString(
-                                                    "en-US",
-                                                    { minimumFractionDigits: 2 }
-                                                  )}`
-                                                )}
-                                              </TableCell>
-                                              <TableCell
-                                                align="right"
+                                              Item
+                                            </TableCell>
+                                            {/* <TableCell
+                                              sx={{ fontWeight: "bold" }}
+                                            >
+                                              Description
+                                            </TableCell> */}
+                                            <TableCell
+                                              sx={{ fontWeight: "bold" }}
+                                            >
+                                              Category
+                                            </TableCell>
+                                            <TableCell
+                                              align="right"
+                                              sx={{ fontWeight: "bold" }}
+                                            >
+                                              Amount
+                                            </TableCell>
+                                            <TableCell
+                                              align="right"
+                                              sx={{ fontWeight: "bold" }}
+                                            >
+                                              Total
+                                            </TableCell>
+                                          </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                          {groupItems.map((item, idx) => {
+                                            const globalIndex =
+                                              proposalDetails.income.indexOf(
+                                                item
+                                              );
+                                            const itemKey = `income-${globalIndex}`;
+                                            const isChanged =
+                                              changedItems.has(itemKey);
+                                            const editedItem =
+                                              editableItems.income[globalIndex];
+                                            const itemAmount =
+                                              editedItem?.amount || 0;
+                                            return (
+                                              <TableRow
+                                                key={idx}
+                                                hover
                                                 sx={{
-                                                  fontWeight: "bold",
-                                                  bgcolor: "#f0f0f0",
+                                                  bgcolor: isChanged
+                                                    ? "#fff3cd"
+                                                    : "transparent",
+                                                  transition:
+                                                    "background-color 0.3s ease",
                                                 }}
                                               >
-                                                ₱
-                                                {itemAmount.toLocaleString(
-                                                  "en-US",
-                                                  { minimumFractionDigits: 2 }
-                                                )}
-                                              </TableCell>
-                                            </TableRow>
-                                          );
-                                        })}
-                                      </TableBody>
-                                    </Table>
-                                  </TableContainer>
-                                )}
-                              </Box>
-                            );
-                          }
+                                                <TableCell>
+                                                  {item.particulars ||
+                                                    item.itemName ||
+                                                    item.title ||
+                                                    "N/A"}
+                                                </TableCell>
+                                                {/* <TableCell>
+                                                  {item.description || "N/A"}
+                                                </TableCell> */}
+                                                <TableCell>
+                                                  {item.categoryName ||
+                                                    item.category ||
+                                                    item.type ||
+                                                    item.subcategory ||
+                                                    "N/A"}
+                                                </TableCell>
+                                                <TableCell align="right">
+                                                  {canUserEdit() ? (
+                                                    <TextField
+                                                      type="text"
+                                                      size="small"
+                                                      value={itemAmount.toLocaleString(
+                                                        "en-US",
+                                                        {
+                                                          minimumFractionDigits: 2,
+                                                          maximumFractionDigits: 2,
+                                                        }
+                                                      )}
+                                                      onChange={(e) => {
+                                                        const numValue =
+                                                          parseFloat(
+                                                            e.target.value.replace(
+                                                              /,/g,
+                                                              ""
+                                                            )
+                                                          );
+                                                        if (!isNaN(numValue)) {
+                                                          handleEditItemAmount(
+                                                            "income",
+                                                            globalIndex,
+                                                            numValue
+                                                          );
+                                                        }
+                                                      }}
+                                                      inputProps={{
+                                                        style: {
+                                                          textAlign: "right",
+                                                        },
+                                                      }}
+                                                      sx={{
+                                                        width: 120,
+                                                        "& .MuiOutlinedInput-root":
+                                                          {
+                                                            bgcolor: isChanged
+                                                              ? "#fff9e6"
+                                                              : "white",
+                                                            borderColor: isChanged
+                                                              ? "#ffc107"
+                                                              : undefined,
+                                                          },
+                                                      }}
+                                                    />
+                                                  ) : (
+                                                    `₱${itemAmount.toLocaleString(
+                                                      "en-US",
+                                                      { minimumFractionDigits: 2 }
+                                                    )}`
+                                                  )}
+                                                </TableCell>
+                                                <TableCell
+                                                  align="right"
+                                                  sx={{
+                                                    fontWeight: "bold",
+                                                    bgcolor: "#f0f0f0",
+                                                  }}
+                                                >
+                                                  ₱
+                                                  {itemAmount.toLocaleString(
+                                                    "en-US",
+                                                    { minimumFractionDigits: 2 }
+                                                  )}
+                                                </TableCell>
+                                              </TableRow>
+                                            );
+                                          })}
+                                        </TableBody>
+                                      </Table>
+                                    </TableContainer>
+                                  )}
+                                </Box>
+                              );
+                            })}
+                            <Box
+                              sx={{
+                                mt: 3,
+                                p: 2,
+                                bgcolor: "#f5f5f5",
+                                borderRadius: "8px",
+                              }}
+                            >
+                              <Typography
+                                variant="h6"
+                                sx={{ fontWeight: "bold", color: "#1976d2" }}
+                              >
+                                Grand Total: ₱
+                                {grandTotal.toLocaleString("en-US", {
+                                  minimumFractionDigits: 2,
+                                })}
+                              </Typography>
+                            </Box>
+                          </>
                         );
                       })()}
-                      <Box
-                        sx={{
-                          mt: 3,
-                          p: 2,
-                          bgcolor: "#f5f5f5",
-                          borderRadius: "8px",
-                        }}
-                      >
-                        <Typography
-                          variant="h6"
-                          sx={{ fontWeight: "bold", color: "#1976d2" }}
-                        >
-                          Grand Total: ₱
-                          {editableItems.income
-                            .reduce((sum, item) => sum + (item.amount || 0), 0)
-                            .toLocaleString("en-US", {
-                              minimumFractionDigits: 2,
-                            })}
-                        </Typography>
-                      </Box>
                     </>
                   ) : (
                     <Box sx={{ textAlign: "center", py: 4 }}>

@@ -65,6 +65,7 @@ const PermanentCustomTable = ({
   });
   const [totals, setTotals] = useState({});
   const [grandTotal, setGrandTotal] = useState(0);
+  const [, setFilteredRows] = useState([]);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: [dataListName, page, rowsPerPage, orderBy, order, fieldAndValue, searchValue],

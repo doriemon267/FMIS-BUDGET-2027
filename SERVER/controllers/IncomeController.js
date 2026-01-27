@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const Income = require("../models/Income");
+const DiscountSettings = require("../models/DiscountSettings");
 const Settings = require("../models/Settings");
 const Proposal = require('../models/Proposal');
 const ProposalEditLog = require('../models/ProposalEditLog');
@@ -511,6 +512,100 @@ exports.getIncomeByParams = async (req, res) => {
       }
     }
     
+    try {
+      const sampleRegion = income?.[0]?.region || req.query.region || "";
+      const settingsQuery = {
+        fiscalYear: req.query.fiscalYear || income?.[0]?.fiscalYear,
+        budgetType: req.query.budgetType || income?.[0]?.budgetType,
+        name: "ISF_DISCOUNT"
+      };
+      if (sampleRegion) {
+        const escapedRegion = String(sampleRegion).trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        settingsQuery.region = new RegExp(`^${escapedRegion}$`, "i");
+      }
+      const settings =
+        settingsQuery.fiscalYear && settingsQuery.budgetType
+          ? await DiscountSettings.findOne(settingsQuery).lean()
+          : null;
+
+      if (settings?.applyDiscount && Number(settings.discountValue) > 0) {
+        const normalizeName = (value) =>
+          String(value || "")
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/\p{Diacritic}/gu, "")
+            .replace(/[^a-z0-9\s\-()/]/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+
+        const hasNetEntry = income.some((item) => {
+          const rawCategory =
+            item?.incomecategory?.name ||
+            item?.incomecategory?.incomeCategoryName ||
+            item?.category ||
+            item?.categoryName ||
+            item?.type ||
+            "";
+          return normalizeName(rawCategory).includes("net irrigation service fees");
+        });
+
+        if (!hasNetEntry) {
+          let irrigationGross = 0;
+          let currentAccountTotal = 0;
+
+          income.forEach((item) => {
+            const rawCategory =
+              item?.incomecategory?.name ||
+              item?.incomecategory?.incomeCategoryName ||
+              item?.category ||
+              item?.categoryName ||
+              item?.type ||
+              "";
+            const category = normalizeName(rawCategory);
+            if (!category.includes("irrigation service fees")) return;
+            if (category.includes("net irrigation service fees")) return;
+
+            const amount = Number(item?.amount || 0);
+            irrigationGross += amount;
+
+            const subcategory = normalizeName(item?.subcategory || item?.subCategory || "");
+            if (subcategory.includes("current account")) {
+              currentAccountTotal += amount;
+            }
+          });
+
+          if (irrigationGross > 0) {
+            const discountType = settings.discountType || "percentage";
+            const discountValue = Number(settings.discountValue || 0);
+            const discountBase = currentAccountTotal > 0 ? currentAccountTotal : irrigationGross;
+            const discountAmount =
+              discountType === "percentage"
+                ? discountBase * (discountValue / 100)
+                : Math.min(discountValue, discountBase);
+            const netAmount = Math.max(0, irrigationGross - discountAmount);
+
+            income.push({
+              _id: `net-isf-${settingsQuery.fiscalYear}-${settingsQuery.budgetType}-${String(sampleRegion).replace(/\s+/g, "-")}`.toLowerCase(),
+              particulars: "Net Irrigation Service Fees",
+              subcategory: "Computed",
+              category: "Net Irrigation Service Fees",
+              amount: netAmount,
+              fiscalYear: settingsQuery.fiscalYear,
+              budgetType: settingsQuery.budgetType,
+              region: sampleRegion,
+              isComputed: true,
+              incomecategory: {
+                name: "Net Irrigation Service Fees",
+                incomeCategoryName: "Net Irrigation Service Fees"
+              }
+            });
+          }
+        }
+      }
+    } catch (netErr) {
+      console.warn("[Income] Net ISF computation skipped:", netErr?.message);
+    }
+
     res.status(200).json(income);
   } catch (error) {
     console.error("Error fetching income by params:", error);

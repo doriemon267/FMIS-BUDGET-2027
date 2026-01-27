@@ -13,9 +13,11 @@ exports.getDiscountSettings = async (req, res) => {
       budgetType: budget,
       name: "ISF_DISCOUNT"
     };
-    // Add region to query if provided
+    // Add region to query if provided (case-insensitive match)
     if (region) {
-      query.region = region;
+      const trimmedRegion = String(region).trim();
+      const escapedRegion = trimmedRegion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      query.region = new RegExp(`^${escapedRegion}$`, "i");
     }
     // // Find settings for this fiscal year, budget type, and region
     let settings = await DiscountSettings.findOne(query);
@@ -23,6 +25,7 @@ exports.getDiscountSettings = async (req, res) => {
     if (!settings) {
       // Only create default settings if region is provided
       if (region) {
+        const trimmedRegion = String(region).trim();
         settings = await DiscountSettings.create({
           name: "ISF_DISCOUNT",
           discountType: "percentage",
@@ -30,7 +33,7 @@ exports.getDiscountSettings = async (req, res) => {
           applyDiscount: true,
           fiscalYear: year,
           budgetType: budget,
-          region: region, // Include the region
+          region: trimmedRegion, // Include normalized region
           processBy: req.user?.username || "system",
           processDate: new Date()
         });

@@ -1,5 +1,5 @@
 // LinkTo.js
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ListItem,
   ListItemIcon,
@@ -26,30 +26,57 @@ const LinkTo = ({
   const isActive = location.pathname === link; // Check if the current path matches the link
   const [open, setOpen] = useState(false); // State to manage sub-link visibility
   const [hoverMenuOpen, setHoverMenuOpen] = useState(false); // State for hover menu in collapsed mode
-  const [menuPosition, setMenuPosition] = useState({ top: 0 });
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+  const closeTimerRef = useRef(null);
+  const menuId = link || name;
 
   const handleToggle = () => setOpen(!open);
+  const handleCollapsedToggle = (event) => {
+    if (!collapsed || !subLinks) return;
+    if (hoverMenuOpen) {
+      setHoverMenuOpen(false);
+    } else {
+      handleMouseEnter(event);
+    }
+  };
 
   const handleMouseEnter = (event) => {
     if (collapsed && subLinks) {
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
+      window.dispatchEvent(new CustomEvent("sidebar-hover", { detail: menuId }));
       const rect = event.currentTarget.getBoundingClientRect();
       const windowHeight = window.innerHeight;
+      const windowWidth = window.innerWidth;
       const menuHeight = subLinks.length * 48 + 60; // Approximate height
+      const menuWidth = 260;
+      const preferredLeft = rect.right + 12;
 
       // Adjust position if menu would go off-screen
       let topPosition = rect.top;
       if (topPosition + menuHeight > windowHeight) {
         topPosition = Math.max(10, windowHeight - menuHeight);
       }
+      let leftPosition = preferredLeft;
+      if (leftPosition + menuWidth > windowWidth) {
+        leftPosition = Math.max(10, rect.left - menuWidth - 12);
+      }
 
-      setMenuPosition({ top: topPosition });
+      setMenuPosition({ top: topPosition, left: leftPosition });
       setHoverMenuOpen(true);
     }
   };
   
   const handleMouseLeave = () => {
     if (collapsed) {
-      setHoverMenuOpen(false);
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current);
+      }
+      closeTimerRef.current = setTimeout(() => {
+        setHoverMenuOpen(false);
+      }, 120);
     }
   };
 
@@ -61,17 +88,37 @@ const LinkTo = ({
     return () => setOpen(false);
   }, [subLinks, location]);
 
+  useEffect(() => {
+    setHoverMenuOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const handleOtherHover = (event) => {
+      if (event.detail !== menuId) {
+        setHoverMenuOpen(false);
+      }
+    };
+    window.addEventListener("sidebar-hover", handleOtherHover);
+    return () => window.removeEventListener("sidebar-hover", handleOtherHover);
+  }, [menuId]);
+
   const renderListItem = () => (
     <ListItem
       component={link ? Link : "div"} // Use Link for navigation if link is provided
       to={link}
-      onClick={subLinks && !collapsed ? handleToggle : undefined} // Toggle sub-links on click if they exist (disabled when collapsed)
+      onClick={
+        subLinks
+          ? collapsed
+            ? handleCollapsedToggle
+            : handleToggle
+          : undefined
+      }
       onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
+      onMouseLeave={collapsed && subLinks ? undefined : handleMouseLeave}
       sx={{
-        bgcolor: isActive ? "rgba(250,250,250,.2)" : "transparent",
+        bgcolor: isActive ? "rgba(250,250,250,0.28)" : "transparent",
         "&:hover": {
-          bgcolor: "rgba(250,250,250,.2)",
+          bgcolor: "rgba(250,250,250,0.22)",
         },
         justifyContent: collapsed ? "center" : "flex-start",
         px: collapsed ? 1 : 2,
@@ -80,6 +127,7 @@ const LinkTo = ({
         mx: collapsed ? 1 : 0,
         transition: "all 0.2s ease",
         position: "relative",
+        borderLeft: isActive && !collapsed ? "3px solid rgba(255,255,255,0.6)" : "3px solid transparent",
       }}
     >
       <ListItemIcon
@@ -143,7 +191,7 @@ const LinkTo = ({
     <Paper
       sx={{
         position: "fixed",
-        left: 85,
+        left: menuPosition.left,
         top: menuPosition.top,
         zIndex: 1300,
         minWidth: 220,
@@ -154,6 +202,8 @@ const LinkTo = ({
         borderRadius: 2,
         boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
         py: 1,
+        maxHeight: "calc(100vh - 20px)",
+        overflowY: "auto",
         animation: "slideIn 0.2s ease-out",
         "@keyframes slideIn": {
           from: {
@@ -166,8 +216,14 @@ const LinkTo = ({
           },
         },
       }}
-      onMouseEnter={() => setHoverMenuOpen(true)}
-      onMouseLeave={() => setHoverMenuOpen(false)}
+      onMouseEnter={() => {
+        if (closeTimerRef.current) {
+          clearTimeout(closeTimerRef.current);
+          closeTimerRef.current = null;
+        }
+        setHoverMenuOpen(true);
+      }}
+      onMouseLeave={handleMouseLeave}
     >
       <Box sx={{ px: 2, py: 1, borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -282,7 +338,7 @@ const LinkTo = ({
           timeout="auto" 
           unmountOnExit 
           sx={{ 
-            ml: 3
+            ml: 2
           }}
         >
           <List component="div" disablePadding>

@@ -134,22 +134,21 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
     }
   }, [currentUser, fiscalYear, budgetType]);
 
+  const activeRegionKey = useMemo(() => {
+    if (!activeRegion) return "";
+    return activeRegion.name || activeRegion.regionName || activeRegion.Region || "";
+  }, [activeRegion]);
+
   useEffect(() => {
-    
-    if (activeRegion) {
-      const regionName = activeRegion.name || activeRegion.regionName;
-      
-      // If region changed, invalidate existing queries to force fresh data
-      if (regionFilter && regionFilter !== regionName) {
-        queryClient.invalidateQueries(["income-items"]);
-        queryClient.invalidateQueries(["income-categories"]);
-      }
-      
-      setRegionFilter(regionName);
-    } else {
-      setRegionFilter(REGIONS.DEFAULT_REGION);
+    const nextRegion = activeRegionKey || REGIONS.DEFAULT_REGION;
+    if (regionFilter && regionFilter !== nextRegion) {
+      queryClient.invalidateQueries(["income-items"]);
+      queryClient.invalidateQueries(["income-categories"]);
     }
-  }, [activeRegion, regionFilter, queryClient]);
+    if (nextRegion && regionFilter !== nextRegion) {
+      setRegionFilter(nextRegion);
+    }
+  }, [activeRegionKey, regionFilter, queryClient]);
 
   const { data: discountSettings, isLoading: loadingSettings } = useQuery({
     queryKey: ["discount-settings", fiscalYear, budgetType, regionFilter],

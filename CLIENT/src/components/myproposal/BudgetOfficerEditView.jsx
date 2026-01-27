@@ -20,6 +20,7 @@ import SaveIcon from '@mui/icons-material/Save';
 import SendIcon from '@mui/icons-material/Send';
 import toast from 'react-hot-toast';
 import { saveDraftEdit, submitEdit } from '../../services/budgetOfficerEditService';
+import api from '../../config/api';
 import EditableIncomeTable from './tables/EditableIncomeTable';
 import EditablePersonnelTable from './tables/EditablePersonnelTable';
 import EditableMOOETable from './tables/EditableMOOETable';
@@ -86,6 +87,25 @@ const BudgetOfficerEditView = forwardRef(({
   const [chargedToIncomeData, setChargedToIncomeData] = useState([]);
   const [mooeData, setMooeData] = useState([]);
   const [capitalOutlayData, setCapitalOutlayData] = useState([]);
+  const [discountSettings, setDiscountSettings] = useState(null);
+
+  const proposalRegion = useMemo(
+    () =>
+      proposalData?.region ||
+      proposal?.region ||
+      incomeData?.[0]?.region ||
+      incomeData?.[0]?.Region ||
+      '',
+    [proposalData?.region, proposal?.region, incomeData]
+  );
+  const proposalFiscalYear = useMemo(
+    () => proposalData?.fiscalYear || proposal?.fiscalYear || '',
+    [proposalData?.fiscalYear, proposal?.fiscalYear]
+  );
+  const proposalBudgetType = useMemo(
+    () => proposalData?.budgetType || proposal?.budgetType || '',
+    [proposalData?.budgetType, proposal?.budgetType]
+  );
 
   // Expose methods to parent component via ref
   useImperativeHandle(ref, () => ({
@@ -199,6 +219,30 @@ const BudgetOfficerEditView = forwardRef(({
       }
     }
   }, [proposalData]);
+
+  useEffect(() => {
+    const fetchDiscountSettings = async () => {
+      if (!proposalFiscalYear || !proposalBudgetType) {
+        setDiscountSettings(null);
+        return;
+      }
+      try {
+        const response = await api.get('/api/discount-settings', {
+          params: {
+            fiscalYear: proposalFiscalYear,
+            budgetType: proposalBudgetType,
+            region: proposalRegion || undefined
+          }
+        });
+        setDiscountSettings(response.data || null);
+      } catch (error) {
+        console.warn('⚠️ Unable to load discount settings:', error?.message || error);
+        setDiscountSettings(null);
+      }
+    };
+
+    fetchDiscountSettings();
+  }, [proposalFiscalYear, proposalBudgetType, proposalRegion]);
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -548,6 +592,8 @@ const BudgetOfficerEditView = forwardRef(({
               <EditableIncomeTable 
                 data={incomeData} 
                 onChange={readOnly ? undefined : setIncomeData}
+                discountSettings={discountSettings}
+                regionName={proposalRegion}
               />
             )}
             {activeTab === 1 && (
