@@ -3,7 +3,6 @@ import React, {
   useEffect,
   useCallback,
   useMemo,
-  Suspense,
 } from "react";
 import api from "../../config/api";
 
@@ -24,7 +23,6 @@ import CapitalOutlayTable from "../capitaloutlay/CapitalOutlayTableEnhanced";
 import CapitalOutlayDataGrid from "../capitaloutlay/CapitalOutlayDataGrid";
 import PSCOSCustomPageTable from "../jocos/PersonnelServicesPage";
 import IncomeTable from "../corporateincome/IncomeTable";
-import ErrorBoundary from "../../global/components/ErrorBoundary";
 import "./Tabs.css";
 import {
   Box,
@@ -34,13 +32,9 @@ import {
   DialogContent,
   DialogTitle,
   TextField,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  CircularProgress,
   Typography,
-  Alert,
+  MenuItem,
+  CircularProgress,
   Paper,
   Tooltip,
   Accordion,
@@ -49,28 +43,25 @@ import {
   Chip,
   Switch,
   FormControlLabel,
-  Checkbox,
   Menu,
   Divider,
+  Alert,
   List,
   ListItem,
   ListItemText,
   ListItemIcon,
-  IconButton,
+  Checkbox,
   Tabs,
   Tab,
   useMediaQuery,
   useTheme,
-  Drawer,
   SpeedDial,
   SpeedDialAction,
   SpeedDialIcon,
-  Fab,
   InputAdornment,
 } from "@mui/material";
 import ExpandMore from "@mui/icons-material/ExpandMore";
 import { useUser } from "../../context/UserContext";
-import BalanceIcon from "@mui/icons-material/Balance";
 import CustomSnackbar from "../../global/components/CustomSnackbar";
 import { FaProjectDiagram } from "react-icons/fa";
 import BudgetarySupportTable from "../budgetarysupport/BudgetarySupportTable";
@@ -80,7 +71,6 @@ import CompareArrowsIcon from "@mui/icons-material/CompareArrows";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
 import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
 import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
-import SaveIcon from "@mui/icons-material/Save";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import EditIcon from "@mui/icons-material/Edit";
 import ErrorIcon from "@mui/icons-material/Error";
@@ -88,81 +78,48 @@ import PendingIcon from "@mui/icons-material/Pending";
 // New icons for enhancements
 import GetAppIcon from "@mui/icons-material/GetApp";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
-import TableChartIcon from "@mui/icons-material/TableChart";
 import SelectAllIcon from "@mui/icons-material/SelectAll";
 import DeselectIcon from "@mui/icons-material/Deselect";
 import HistoryIcon from "@mui/icons-material/History";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import MenuIcon from "@mui/icons-material/Menu";
-import CloseIcon from "@mui/icons-material/Close";
-import CheckIcon from "@mui/icons-material/Check";
-import DraftsIcon from "@mui/icons-material/Drafts";
 import SearchIcon from "@mui/icons-material/Search";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import BudgetSummary from "./BudgetSummary";
 import { hasPermission, PERMISSIONS } from "../../utils/permissions";
 import { useUserRestrictions } from "../../hooks/useUserRestrictions";
 import { styled } from "@mui/material/styles";
 
 const CAPITAL_OUTLAY_VIEW_PREFERENCE_KEY = "capitalOutlayViewPreference";
 
-const StyledTab = styled((props) => <Tab {...props} />)(({ theme }) => ({
-  textTransform: "none",
-  minWidth: 0,
-  padding: "12px 16px",
-  [theme.breakpoints.up("sm")]: {
-    minWidth: 0,
-  },
-  fontWeight: theme.typography.fontWeightRegular,
-  marginRight: theme.spacing(1),
-  color: "rgba(0, 0, 0, 0.7)",
-  borderRadius: "8px 8px 0 0",
-  transition: "all 0.3s ease",
-  "&:hover": {
-    backgroundColor: "rgba(55, 94, 56, 0.08)",
-    color: theme.palette.primary.main,
-    "& svg": {
-      transform: "scale(1.2)",
-      color: theme.palette.primary.main,
-    },
-  },
-  "&.Mui-selected": {
-    color: theme.palette.primary.main,
-    fontWeight: theme.typography.fontWeightMedium,
-    backgroundColor: "rgba(55, 94, 56, 0.12)",
-  },
-  "& .MuiSvgIcon-root, & svg": {
-    marginRight: theme.spacing(1),
-    fontSize: "1.2rem",
-    transition: "transform 0.3s ease",
-  },
-}));
-
 const ProposalCustomPage = ({
   dataListName,
   schema,
   title = "Budget Proposal Entry",
   description = "",
-  searchable = true,
 }) => {
   const { currentUser } = useUser();
   const { activeRegion } = useRegion();
-  const { readOnly, canCreate, canDelete } = useUserRestrictions();
+  const { readOnly, canCreate } = useUserRestrictions();
+  const queryClient = useQueryClient();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+  const activeRegionKey =
+    activeRegion?.name ||
+    activeRegion?.regionName ||
+    activeRegion?.Region ||
+    activeRegion?.id ||
+    "";
   const [regionFilter, setRegionFilter] = useState("");
   const [personnelData, setPersonnelData] = useState([]);
   const [mooeData, setMooeData] = useState([]);
   const [capitalOutlayData, setCapitalOutlayData] = useState([]);
   const [incomeData, setIncomeData] = useState([]);
   const [budgetarySupportData, setBudgetarySupportData] = useState([]);
-  const [activeTab, setActiveTab] = useState("Income");
-  const [openDialog, setOpenDialog] = useState(false);
+  const [iasOMCostData, setIasOMCostData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [availableFiscalYears, setAvailableFiscalYears] = useState([]);
+  const [activeTab, setActiveTab] = useState("Income");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeFiscalYear, setActiveFiscalYear] = useState("");
   const [selectedFiscalYear, setSelectedFiscalYear] = useState("");
-  const [availableFiscalYears, setAvailableFiscalYears] = useState([]);
   const [activeBudgetType, setActiveBudgetType] = useState("");
   const [activeDueDate, setActiveDueDate] = useState(null);
   const [isDueDatePassed, setIsDueDatePassed] = useState(false);
@@ -172,6 +129,68 @@ const ProposalCustomPage = ({
     message: "",
     severity: "success",
   });
+  const handleSnackbarClose = useCallback(() => {
+    setSnackbar((prev) => ({ ...prev, open: false }));
+  }, []);
+
+  function getBudgetParams() {
+    const region = activeRegion?.name || activeRegion?.regionName || activeRegion?.Region;
+    const fiscalYear = selectedFiscalYear || activeFiscalYear;
+    const budgetType = activeBudgetType || "Initial";
+
+    return {
+      region,
+      fiscalYear,
+      budgetType,
+    };
+  }
+
+  // Fetch all budget data for the active/selected filters
+  async function fetchAllData() {
+    setLoading(true);
+    try {
+      const params = getBudgetParams();
+
+      const [personnelRes, mooeRes, coRes, incomeRes, bsRes, iasOMRes] = await Promise.all([
+        api.get("/getpersonnels/byParams", { params }),
+        api.get("/mooe-data", { params }),
+        api.get("/capital-outlay/getByParams", { params }),
+        api.get("/income/getByParams", { params }),
+        api.get("/budgetary-support", { params }),
+        api.get("/ias-om-cost", { params })
+      ]);
+
+      setPersonnelData(personnelRes.data || []);
+      setMooeData(mooeRes.data?.entries || []);
+      setCapitalOutlayData(coRes.data || []);
+      setIncomeData(incomeRes.data || []);
+      setBudgetarySupportData(bsRes.data || []);
+      setIasOMCostData(iasOMRes.data || null);
+
+    } catch (error) {
+      console.error("Error fetching all data:", error);
+      // Only show error if it's not a 404 for ias-om-cost which is expected for new regions
+      if (error.response?.status !== 404) {
+        toast.error("Failed to fetch budget data");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Refresh data when active region changes
+  useEffect(() => {
+    if (activeRegionKey) {
+      fetchAllData();
+    }
+  }, [activeRegionKey, activeFiscalYear, selectedFiscalYear, activeBudgetType]);
+
+  // Refresh data when selected fiscal year changes
+  useEffect(() => {
+    if (selectedFiscalYear) {
+      fetchAllData();
+    }
+  }, [selectedFiscalYear, activeFiscalYear, activeBudgetType, activeRegionKey]);
 
   // State for the new proposal form
   const [newProposalData, setNewProposalData] = useState({
@@ -317,7 +336,6 @@ const ProposalCustomPage = ({
   const [exportMenuAnchor, setExportMenuAnchor] = useState(null);
   const [activityLog, setActivityLog] = useState([]);
   const [showActivityLog, setShowActivityLog] = useState(false);
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [speedDialOpen, setSpeedDialOpen] = useState(false);
 
   // Capital Outlay view toggle (true = new DataGrid, false = old table)
@@ -331,28 +349,10 @@ const ProposalCustomPage = ({
 
   // Use canCreate from the hook, but keep canEditOwn from permissions
   const canEditOwn = hasPermission(currentUser, PERMISSIONS.EDIT_OWN);
-  // Initialize budgetSummary with default values
-  const [budgetSummary, setBudgetSummary] = useState({
-    personnelTotal: 0,
-    mooeTotal: 0,
-    capitalOutlayTotal: 0,
-    expensesTotal: 0,
-    incomeTotal: 0,
-    mooeIncomeTotal: 0,
-    capitalOutlayIncomeTotal: 0,
-    combinedIncomeTotal: 0,
-    isIncomeBalanced: false,
-    mooeSubsidyTotal: 0,
-    capitalOutlaySubsidyTotal: 0,
-    combinedSubsidyTotal: 0,
-    isSubsidyBalanced: false,
-    isBalanced: false,
-  });
   // Add a state to track the income grand total from IncomeTable
   const [incomeGrandTotal, setIncomeGrandTotal] = useState(0);
   // Add state for tracking if income fields should be disabled
   const [disableIncomeInputs, setDisableIncomeInputs] = useState(false);
-  const [overviewExpanded, setOverviewExpanded] = useState(true);
   const [summaryExpanded, setSummaryExpanded] = useState(false);
   const [groupedItems, setGroupedItems] = useState({});
   const [chargedToIncomeAmount, setChargedToIncomeAmount] = useState(0);
@@ -365,7 +365,6 @@ const ProposalCustomPage = ({
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [saveStatus, setSaveStatus] = useState("saved"); // 'saved', 'saving', 'error'
   const [validationErrors, setValidationErrors] = useState({});
-  const [isValidating, setIsValidating] = useState(false);
 
   // ADDED: Restore activeWorkflowRef from storage on mount to preserve proposal ID across page refreshes
   // Also verify that the stored proposal still exists in the database
@@ -458,1382 +457,43 @@ const ProposalCustomPage = ({
     budgetarySupportData,
   ]);
 
-  // Real-time validation
-  const validateBudgetData = useCallback(() => {
-    setIsValidating(true);
-    const errors = {};
-
-    // Validate fiscal year and budget type
-    if (!activeFiscalYear) errors.fiscalYear = "Fiscal year is required";
-    if (!activeBudgetType) errors.budgetType = "Budget type is required";
-
-    // Validate user information
-    if (!currentUser?.Region) errors.region = "User region is missing";
-    if (!currentUser?.FirstName || !currentUser?.LastName) {
-      errors.user = "User name information is incomplete";
-    }
-
-    // Validate budget balance
-    if (
-      budgetSummary.incomeTotal > 0 &&
-      budgetSummary.combinedIncomeTotal > 0
-    ) {
-      const imbalance = Math.abs(
-        budgetSummary.incomeTotal - budgetSummary.combinedIncomeTotal
-      );
-      if (imbalance > 0.01) {
-        errors.balance = `Budget is not balance. Difference: ₱${imbalance.toLocaleString()}`;
-      }
-    }
-
-    // Validate minimum proposals
-    const totalProposals =
-      personnelData.length +
-      mooeData.length +
-      capitalOutlayData.length +
-      incomeData.length +
-      budgetarySupportData.length;
-    if (totalProposals === 0) {
-      errors.proposals = "At least one proposal is required";
-    }
-
-    setValidationErrors(errors);
-    setIsValidating(false);
-
-    return Object.keys(errors).length === 0;
-  }, [
-    activeFiscalYear,
-    activeBudgetType,
-    currentUser,
-    budgetSummary,
-    personnelData,
-    mooeData,
-    capitalOutlayData,
-    incomeData,
-    budgetarySupportData,
-  ]);
-
   // Helper function - must be defined before enhancement functions
-  const isEligibleForSubmission = (status) =>
-    status === "Not Submitted" || status === "Returned" || status === "Draft";
-
-  // Define query keys
-  const QUERY_KEYS = {
-    personnel: "personnelServices",
-    mooe: "mooeServices",
-    capitalOutlay: "capitalOutlayServices",
-    income: "incomeServices",
-    budgetarySupport: "budgetarySupportServices",
-  };
-
-  // React Query client
-  const queryClient = useQueryClient();
-
-  // Enhancement Functions will be defined after useQuery hooks
-
-  // Run validation when data changes
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      validateBudgetData();
-    }, 500); // Debounce validation
-
-    return () => clearTimeout(timeoutId);
-  }, [validateBudgetData]);
-
-  const hasDrafts =
-    personnelData.some((p) => p.status === "Draft") ||
-    mooeData.some((p) => p.status === "Draft") ||
-    capitalOutlayData.some((p) => p.status === "Draft") ||
-    incomeData.some((p) => p.status === "Draft");
-
-  const anyNotSubmitted = useMemo(() => {
-    // Temporarily exclude budgetary support from the calculation to isolate the issue
-    const result =
-      personnelData.some((p) => isEligibleForSubmission(p.status)) ||
-      mooeData.some((p) => isEligibleForSubmission(p.status)) ||
-      capitalOutlayData.some((p) => isEligibleForSubmission(p.status)) ||
-      incomeData.some((p) => isEligibleForSubmission(p.status));
-    // TODO: Re-add budgetary support once data loading is confirmed
-    // || budgetarySupportData.some((p) => isEligibleForSubmission(p.status));
-
-    // Debug logging to help identify why save as draft might be disabled
-    // console.log("Debug - anyNotSubmitted calculation:", {
-    //   result,
-    //   personnelEligible: personnelData.filter((p) =>
-    //     isEligibleForSubmission(p.status)
-    //   ).length,
-    //   mooeEligible: mooeData.filter((p) => isEligibleForSubmission(p.status))
-    //     .length,
-    //   capitalOutlayEligible: capitalOutlayData.filter((p) =>
-    //     isEligibleForSubmission(p.status)
-    //   ).length,
-    //   incomeEligible: incomeData.filter((p) =>
-    //     isEligibleForSubmission(p.status)
-    //   ).length,
-    //   budgetarySupportEligible: budgetarySupportData.filter((p) =>
-    //     isEligibleForSubmission(p.status)
-    //   ).length,
-    //   totalPersonnel: personnelData.length,
-    //   totalMooe: mooeData.length,
-    //   totalCapitalOutlay: capitalOutlayData.length,
-    //   totalIncome: incomeData.length,
-    //   totalBudgetarySupport: budgetarySupportData.length,
-    //   // Show actual data and statuses to debug
-    //   personnelStatuses: personnelData.map((item) => ({
-    //     id: item._id,
-    //     status: item.status,
-    //   })),
-    //   mooeStatuses: mooeData.map((item) => ({
-    //     id: item._id,
-    //     status: item.status,
-    //   })),
-    //   capitalOutlayStatuses: capitalOutlayData.map((item) => ({
-    //     id: item._id,
-    //     status: item.status,
-    //   })),
-    //   incomeStatuses: incomeData.map((item) => ({
-    //     id: item._id,
-    //     status: item.status,
-    //   })),
-    //   budgetarySupportStatuses: budgetarySupportData.map((item) => ({
-    //     id: item._id,
-    //     status: item.status,
-    //   })),
-    //   // Show what statuses are considered eligible
-    //   eligibleStatuses: ["Not Submitted", "Returned", "Draft"],
-    // });
-
-    return result;
-  }, [
-    personnelData,
-    mooeData,
-    capitalOutlayData,
-    incomeData,
-    budgetarySupportData,
-  ]);
-
-  // Detect if there are any proposals at all for the currently selected fiscal year
-  const hasAnyProposalsForFY = useMemo(() => {
-    const counts = [
-      Array.isArray(personnelData) ? personnelData.length : 0,
-      Array.isArray(mooeData) ? mooeData.length : 0,
-      Array.isArray(capitalOutlayData) ? capitalOutlayData.length : 0,
-      Array.isArray(incomeData) ? incomeData.length : 0,
-      Array.isArray(budgetarySupportData) ? budgetarySupportData.length : 0,
-    ];
-    return counts.reduce((a, b) => a + b, 0) > 0;
-  }, [
-    personnelData,
-    mooeData,
-    capitalOutlayData,
-    incomeData,
-    budgetarySupportData,
-  ]);
-
-  // Lock only when there ARE proposals for this FY and none of them are editable (i.e., not Draft/Returned/Not Submitted)
-  // If there are NO proposals for the selected FY, keep it unlocked so users can start creating.
-  const submissionLocked = useMemo(() => {
-    if (!hasAnyProposalsForFY) return false;
-    return !anyNotSubmitted;
-  }, [hasAnyProposalsForFY, anyNotSubmitted]);
-
-  // Auto-save functionality (moved here after anyNotSubmitted is declared)
-  useEffect(() => {
-    if (
-      !autoSaveEnabled ||
-      !anyNotSubmitted ||
-      isSubmitting ||
-      !hasUnsavedChanges
-    )
-      return;
-
-    const autoSaveInterval = setInterval(async () => {
-      if (currentUser && activeFiscalYear && activeBudgetType) {
-        setSaveStatus("saving");
-        try {
-          await handleSaveAsDraft(true); // Pass true to indicate auto-save
-          setLastSaved(new Date());
-          setHasUnsavedChanges(false);
-          setSaveStatus("saved");
-        } catch (error) {
-          console.error("Auto-save failed:", error);
-          setSaveStatus("error");
-        }
-      }
-    }, 30000); // Auto-save every 30 seconds
-
-    return () => clearInterval(autoSaveInterval);
-  }, [
-    autoSaveEnabled,
-    anyNotSubmitted,
-    isSubmitting,
-    hasUnsavedChanges,
-    currentUser,
-    activeFiscalYear,
-    activeBudgetType,
-  ]);
-
-  // Keyboard shortcuts (moved here after anyNotSubmitted is declared)
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.ctrlKey || e.metaKey) {
-        switch (e.key) {
-          case "s":
-            e.preventDefault();
-            if (
-              anyNotSubmitted &&
-              !isSubmitting &&
-              Object.keys(validationErrors).length === 0
-            ) {
-              handleSaveAsDraft();
-            }
-            break;
-          case "Enter":
-            if (e.shiftKey) {
-              e.preventDefault();
-              if (
-                anyNotSubmitted &&
-                !isSubmitting &&
-                budgetSummary.isIncomeBalanced &&
-                Object.keys(validationErrors).length === 0
-              ) {
-                handleOpenDialog();
-              }
-            }
-            break;
-        }
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [
-    anyNotSubmitted,
-    isSubmitting,
-    validationErrors,
-    budgetSummary.isIncomeBalanced,
-  ]);
-
-  // Create a callback function to receive the grand total from IncomeTable
-  const handleIncomeGrandTotalUpdate = useCallback(
-    (total) => {
-      const regionName =
-        activeRegion?.name || activeRegion?.regionName || "Unknown";
-      setIncomeGrandTotal(total);
-
-      // Calculate total from MOOE and Capital Outlay
-      const mooeIncomeTotal = mooeData.reduce(
-        (sum, item) => sum + (parseFloat(item.income) || 0),
-        0
-      );
-      const capitalOutlayIncomeTotal = capitalOutlayData.reduce(
-        (sum, item) => sum + (parseFloat(item.income) || 0),
-        0
-      );
-      const combinedTotal = mooeIncomeTotal + capitalOutlayIncomeTotal;
-      // Set disable flag if totals match or if user is in read-only mode
-      setDisableIncomeInputs(
-        Math.abs(total - combinedTotal) < 0.01 || readOnly
-      ); // Using small epsilon for float comparison
-    },
-    [mooeData, capitalOutlayData, activeRegion, readOnly]
+  const isEligibleForSubmission = useCallback(
+    (status) =>
+      status === "Not Submitted" || status === "Returned" || status === "Draft",
+    []
   );
 
-  const calculateBudgetSummary = useCallback(() => {
-    try {
-      // Use the selected fiscal year for filtering (fall back to active fiscal year if not set)
-      const fiscalYearToUse = selectedFiscalYear || activeFiscalYear;
+  const anyNotSubmitted = useMemo(() => {
+    const fiscalYearToUse = selectedFiscalYear || activeFiscalYear;
+    const matchesFilters = (item) => {
+      const matchesRegion = !regionFilter || item.region === regionFilter;
+      const matchesFiscalYear =
+        !fiscalYearToUse || item.fiscalYear === fiscalYearToUse;
+      return matchesRegion && matchesFiscalYear;
+    };
+    const isEligible = (item) =>
+      isEligibleForSubmission(item.status || "Not Submitted");
 
-      // Filter data by fiscal year
-      const filteredPersonnelData = Array.isArray(personnelData)
-        ? personnelData.filter((p) => p && p.fiscalYear === fiscalYearToUse)
-        : [];
-      const filteredMooeData = Array.isArray(mooeData)
-        ? mooeData.filter((p) => p && p.fiscalYear === fiscalYearToUse)
-        : [];
-      const filteredCapitalOutlayData = Array.isArray(capitalOutlayData)
-        ? capitalOutlayData.filter((p) => p && p.fiscalYear === fiscalYearToUse)
-        : [];
-      const filteredIncomeData = Array.isArray(incomeData)
-        ? incomeData.filter((p) => p && p.fiscalYear === fiscalYearToUse)
-        : [];
-
-      // Calculate personnel total with proper type conversion
-      const personnelTotal = Array.isArray(filteredPersonnelData)
-        ? filteredPersonnelData.reduce((sum, p) => {
-            if (!p) return sum;
-
-            return (
-              sum +
-              (Number(p.annualSalary) || 0) +
-              (Number(p.RATA) || 0) +
-              (Number(p.PERA) || 0) +
-              (Number(p.uniformALLOWANCE) || 0) +
-              (Number(p.productivityIncentive) || 0) +
-              (Number(p.medical) || 0) +
-              (Number(p.childrenAllowance) || 0) +
-              (Number(p.meal) || 0) +
-              (Number(p.cashGift) || 0) +
-              (Number(p.subsistenceAllowanceMDS) || 0) +
-              (Number(p.subsistenceAllowanceST) || 0) +
-              (Number(p.midyearBonus) || 0) +
-              (Number(p.yearEndBonus) || 0) +
-              (Number(p.gsisPremium) || 0) +
-              (Number(p.philhealthPremium) || 0) +
-              (Number(p.pagibigPremium) || 0) +
-              (Number(p.employeeCompensation) || 0) +
-              (Number(p.loyaltyAward) || 0) +
-              (Number(p.overtimePay) || 0) +
-              (Number(p.earnedLeaves) || 0) +
-              (Number(p.retirementBenefits) || 0) +
-              (Number(p.terminalLeave) || 0) +
-              (Number(p.courtAppearance) || 0)
-            );
-          }, 0)
-        : 0;
-
-      // Calculate regular MOOE total with proper type conversion
-      const mooeRegularTotal = Array.isArray(filteredMooeData)
-        ? filteredMooeData.reduce((sum, p) => {
-            if (!p) return sum;
-            return sum + (Number(p.amount) || 0);
-          }, 0)
-        : 0;
-
-      // Calculate IAs O&M Cost total (ALWAYS include if present)
-      const iasOMCostTotal = iasOMCostData
-        ? (Number(iasOMCostData.nis) || 0) +
-          (Number(iasOMCostData.cis) || 0) +
-          (Number(iasOMCostData.nisSubsidy) || 0) +
-          (Number(iasOMCostData.cisSubsidy) || 0)
-        : 0;
-
-      // Total MOOE is regular MOOE plus IAs O&M Cost
-      const mooeTotal = mooeRegularTotal + iasOMCostTotal;
-
-      // Calculate Capital Outlay total with proper type conversion
-      const capitalOutlayTotal = Array.isArray(filteredCapitalOutlayData)
-        ? filteredCapitalOutlayData.reduce((sum, p) => {
-            if (!p) return sum;
-            return sum + (Number(p.cost) || 0);
-          }, 0)
-        : 0;
-
-      // Calculate MOOE income total
-      const mooeIncomeTotal = Array.isArray(filteredMooeData)
-        ? filteredMooeData.reduce((sum, item) => {
-            if (!item) return sum;
-            return sum + (parseFloat(item.income) || 0);
-          }, 0)
-        : 0;
-
-      // Calculate Capital Outlay income total
-      const capitalOutlayIncomeTotal = Array.isArray(filteredCapitalOutlayData)
-        ? filteredCapitalOutlayData.reduce((sum, item) => {
-            if (!item) return sum;
-            return sum + (parseFloat(item.income) || 0);
-          }, 0)
-        : 0;
-
-      // Calculate combined income total from MOOE and Capital Outlay
-      const combinedIncomeTotal = mooeIncomeTotal + capitalOutlayIncomeTotal;
-
-      // Use the incomeGrandTotal from IncomeTable
-      const incomeTotal = incomeGrandTotal || 0;
-      // Calculate total expenses (MOOE + Capital Outlay)
-      const expensesTotal = mooeTotal + capitalOutlayTotal;
-
-      // Check if income is balanced (Corporate Income vs MOOE+CapitalOutlay income)
-      const isIncomeBalanced =
-        Math.abs(incomeTotal - combinedIncomeTotal) < 0.01;
-
-      // Calculate subsidy totals from MOOE and Capital Outlay data
-      // console.log(
-      //   "Debug - Filtered MOOE Data for subsidy calculation:",
-      //   filteredMooeData
-      // );
-      // console.log(
-      //   "Debug - Filtered Capital Outlay Data for subsidy calculation:",
-      //   filteredCapitalOutlayData
-      // );
-      // console.log("Debug - Filtered Income Data:", filteredIncomeData);
-      // console.log("Debug - Fiscal Year Used:", fiscalYearToUse);
-
-      const mooeSubsidyTotal = Array.isArray(filteredMooeData)
-        ? filteredMooeData.reduce((sum, item) => {
-            if (!item) return sum;
-            const subsidyValue = Number(item.subsidy) || 0;
-            // console.log(`MOOE item subsidy: ${subsidyValue}`, item);
-            return sum + subsidyValue;
-          }, 0)
-        : 0;
-
-      const capitalOutlaySubsidyTotal = Array.isArray(filteredCapitalOutlayData)
-        ? filteredCapitalOutlayData.reduce((sum, item) => {
-            if (!item) return sum;
-            const subsidyValue = Number(item.subsidy) || 0;
-            // console.log(`Capital Outlay item subsidy: ${subsidyValue}`, item);
-            return sum + subsidyValue;
-          }, 0)
-        : 0;
-
-      const combinedSubsidyTotal = mooeSubsidyTotal + capitalOutlaySubsidyTotal;
-
-      // Check if subsidy is balanced (Budgetary Support should equal Combined Subsidy)
-      const budgetarySupportTotal =
-        calculateTotalBudget.budgetarySupportTotal || 0;
-      const isSubsidyBalanced =
-        Math.abs(budgetarySupportTotal - combinedSubsidyTotal) < 0.01;
-
-      // Check if budget is balanced (expenses vs income)
-      const isBalanced = Math.abs(expensesTotal - incomeTotal) < 0.01;
-
-      // console.log("ProposalCustomPage: Setting budget summary:", {
-      //   personnelTotal,
-      //   mooeTotal,
-      //   capitalOutlayTotal,
-      //   expensesTotal,
-      //   incomeTotal,
-      //   mooeIncomeTotal,
-      //   capitalOutlayIncomeTotal,
-      //   combinedIncomeTotal,
-      //   isIncomeBalanced,
-      //   mooeSubsidyTotal,
-      //   capitalOutlaySubsidyTotal,
-      //   combinedSubsidyTotal,
-      //   budgetarySupportTotal,
-      //   isSubsidyBalanced,
-      //   isBalanced,
-      // });
-
-      setBudgetSummary({
-        personnelTotal,
-        mooeTotal,
-        capitalOutlayTotal,
-        expensesTotal,
-        incomeTotal,
-        mooeIncomeTotal,
-        capitalOutlayIncomeTotal,
-        combinedIncomeTotal,
-        isIncomeBalanced,
-        mooeSubsidyTotal,
-        capitalOutlaySubsidyTotal,
-        combinedSubsidyTotal,
-        isSubsidyBalanced,
-        isBalanced,
-      });
-    } catch (error) {
-      console.error("Error calculating budget summary:", error);
-      // Set default values in case of error
-      setBudgetSummary({
-        personnelTotal: 0,
-        mooeTotal: 0,
-        capitalOutlayTotal: 0,
-        expensesTotal: 0,
-        incomeTotal: 0,
-        mooeIncomeTotal: 0,
-        capitalOutlayIncomeTotal: 0,
-        combinedIncomeTotal: 0,
-        isIncomeBalanced: false,
-        mooeSubsidyTotal: 0,
-        capitalOutlaySubsidyTotal: 0,
-        combinedSubsidyTotal: 0,
-        isSubsidyBalanced: false,
-        isBalanced: false,
-      });
-    }
-  }, [
-    personnelData,
-    mooeData,
-    capitalOutlayData,
-    incomeGrandTotal,
-    selectedFiscalYear,
-    activeFiscalYear,
-  ]);
-
-  // Add React Query for data fetching
-
-  // Use React Query for data fetching
-  const { data: personnelQueryData } = useQuery({
-    queryKey: [
-      QUERY_KEYS.personnel,
-      activeRegion?.name || activeRegion?.regionName,
-      selectedFiscalYear || activeFiscalYear,
-    ],
-    queryFn: async () => {
-      const region = activeRegion?.name || activeRegion?.regionName;
-      const fiscalYear = selectedFiscalYear || activeFiscalYear;
-      const isFullAccess = currentUser?.hierarchicalAccess?.scope === "FULL";
-
-      // For FULL access users, don't include region parameter to get all regions
-      const url = isFullAccess
-        ? `/getpersonnels?fiscalYear=${fiscalYear}`
-        : `/getpersonnels?region=${region}&fiscalYear=${fiscalYear}`;
-
-      const response = await api.get(url);
-      // console.log(
-      //   `Fetched personnel data for ${isFullAccess ? 'all regions' : 'region: ' + region}, fiscal year: ${fiscalYear}`
-      // );
-      return response.data.map((item) => ({
-        ...item,
-        key: item._id,
-      }));
-    },
-    enabled: !!(selectedFiscalYear || activeFiscalYear),
-    onSuccess: (data) => {
-      setPersonnelData(data);
-    },
-    // Refresh every 5 seconds in the background
-    refetchInterval: 5000,
-    refetchIntervalInBackground: true,
-  });
-
-  const { data: mooeQueryData } = useQuery({
-    queryKey: [
-      QUERY_KEYS.mooe,
-      activeRegion?.name || activeRegion?.regionName,
-      selectedFiscalYear || activeFiscalYear,
-    ],
-    queryFn: async () => {
-      const region = activeRegion?.name || activeRegion?.regionName;
-      const fiscalYear = selectedFiscalYear || activeFiscalYear;
-      const isFullAccess = currentUser?.hierarchicalAccess?.scope === "FULL";
-
-      // For FULL access users, don't include region parameter to get all regions
-      const url = isFullAccess
-        ? `/mooe-list?fiscalYear=${fiscalYear}`
-        : `/mooe-list?region=${region}&fiscalYear=${fiscalYear}`;
-
-      const response = await api.get(url);
-      // console.log(
-      //   `Fetched MOOE data for region: ${region}, fiscal year: ${fiscalYear}`
-      // );
-      return response.data.map((item) => ({
-        ...item,
-        key: item._id,
-      }));
-    },
-    enabled: !!(selectedFiscalYear || activeFiscalYear),
-    onSuccess: (data) => {
-      setMooeData(data);
-    },
-    refetchInterval: 15000,
-    refetchIntervalInBackground: true,
-  });
-
-  // Fetch IAs O&M Cost data
-  const { data: iasOMCostData } = useQuery({
-    queryKey: [
-      "iasOMCost",
-      activeRegion?.name || activeRegion?.regionName,
-      selectedFiscalYear || activeFiscalYear,
-    ],
-    queryFn: async () => {
-      try {
-        const region = activeRegion?.name || activeRegion?.regionName;
-        const fiscalYear = selectedFiscalYear || activeFiscalYear;
-        const response = await api.get("/ias-om-cost", {
-          params: { region, fiscalYear },
-          withCredentials: true,
-        });
-        // console.log(
-        //   `Fetched IAs O&M Cost data for region: ${region}, fiscal year: ${fiscalYear}`
-        // );
-        return response.data;
-      } catch (err) {
-        console.error("Error fetching IAs O&M Cost data:", err);
-        // If the endpoint doesn't exist yet or there's an error, return default values
-        return { nis: 0, cis: 0, nisSubsidy: 0, cisSubsidy: 0 };
-      }
-    },
-    enabled: !!(selectedFiscalYear || activeFiscalYear),
-    refetchInterval: 15000,
-    refetchIntervalInBackground: true,
-  });
-
-  const { data: capitalOutlayQueryData } = useQuery({
-    queryKey: [
-      QUERY_KEYS.capitalOutlay,
-      activeRegion?.name || activeRegion?.regionName,
-      selectedFiscalYear || activeFiscalYear,
-    ],
-    queryFn: async () => {
-      // Use the same endpoint as CapitalOutlayTable for consistency
-      const region = activeRegion?.name || activeRegion?.regionName;
-      const fiscalYear = selectedFiscalYear || activeFiscalYear;
-      const isFullAccess = currentUser?.hierarchicalAccess?.scope === "FULL";
-
-      // For FULL access users, don't include region parameter to get all regions
-      const url = isFullAccess
-        ? `/capital-outlays?fiscalYear=${fiscalYear}`
-        : `/capital-outlays?region=${region}&fiscalYear=${fiscalYear}`;
-
-      const response = await api.get(url);
-      // console.log(
-      //   `Fetched Capital Outlay data for region: ${region}, fiscal year: ${fiscalYear}`
-      // );
-      return response.data.capitalOutlays.map((item) => ({
-        ...item,
-        key: item._id,
-        status: item.status || "Not Submitted",
-      }));
-    },
-    enabled: !!(selectedFiscalYear || activeFiscalYear),
-    onSuccess: (data) => {
-      setCapitalOutlayData(data);
-    },
-    refetchInterval: 15000,
-    refetchIntervalInBackground: true,
-  });
-
-  const { data: incomeQueryData } = useQuery({
-    queryKey: [
-      QUERY_KEYS.income,
-      activeRegion?.name || activeRegion?.regionName,
-      selectedFiscalYear || activeFiscalYear,
-    ],
-    queryFn: async () => {
-      const region = activeRegion?.name || activeRegion?.regionName;
-      const fiscalYear = selectedFiscalYear || activeFiscalYear;
-      const isFullAccess = currentUser?.hierarchicalAccess?.scope === "FULL";
-
-      // For FULL access users, don't include region parameter to get all regions
-      const params = isFullAccess ? { fiscalYear } : { fiscalYear, region };
-
-      const response = await api.get("/income", { params });
-      // console.log(
-      //   `Fetched Income data for region: ${region}, fiscal year: ${fiscalYear}`
-      // );
-      return response.data.map((item) => ({
-        ...item,
-        key: item._id,
-      }));
-    },
-    enabled: !!(selectedFiscalYear || activeFiscalYear),
-    onSuccess: (data) => {
-      setIncomeData(data);
-    },
-    refetchInterval: 15000,
-    refetchIntervalInBackground: true,
-  });
-
-  const { data: budgetarySupportQueryData, error: budgetarySupportError } =
-    useQuery({
-      queryKey: [
-        QUERY_KEYS.budgetarySupport,
-        selectedFiscalYear || activeFiscalYear,
-        activeBudgetType,
-        activeRegion?.name || activeRegion?.regionName,
-      ],
-      queryFn: async () => {
-        const region = activeRegion?.name || activeRegion?.regionName;
-        const fiscalYear = selectedFiscalYear || activeFiscalYear;
-        const isFullAccess = currentUser?.hierarchicalAccess?.scope === "FULL";
-
-        // For FULL access users, don't include region parameter to get all regions
-        const params = isFullAccess
-          ? { fiscalYear, budgetType: activeBudgetType }
-          : { fiscalYear, budgetType: activeBudgetType, region };
-
-        const response = await api.get("/budgetary-support", { params });
-        // console.log("Budgetary support response:", response.data);
-        return response.data.map((item) => ({
-          ...item,
-          key: item._id,
-        }));
-      },
-      enabled: !!activeFiscalYear && !!activeBudgetType, // Only run when we have the required parameters
-      onSuccess: (data) => {
-        // console.log("Budgetary support data loaded successfully:", data);
-        setBudgetarySupportData(data);
-      },
-      onError: (error) => {
-        console.error("Error fetching budgetary support data:", error);
-        setBudgetarySupportData([]); // Set empty array on error
-      },
-      refetchInterval: 5000,
-      refetchIntervalInBackground: true,
-    });
-
-  const { data: chargedToIncomeQueryData = 0 } = useQuery({
-    queryKey: [
-      "chargedToIncomeAmount",
-      selectedFiscalYear || activeFiscalYear,
-      activeBudgetType,
-    ],
-    queryFn: async () => {
-      const fiscalYear = selectedFiscalYear || activeFiscalYear;
-      const baseParams = {
-        fiscalYear: Number(fiscalYear),
-        budgetType: activeBudgetType,
-        chargedToIncomeEligible: true,
-        limit: 1000,
-        page: 1,
-      };
-
-      try {
-        const response = await api.get("/personnelServices", {
-          params: baseParams,
-        });
-        const data = response.data?.personnelServices || [];
-
-        if (!Array.isArray(data)) return 0;
-
-        const total = data.reduce((sum, p) => {
-          return sum + Number(p.chargedToIncomeAmount || 0);
-        }, 0);
-
-        return total;
-      } catch (error) {
-        console.error("Error fetching charged to income data:", error);
-        return 0;
-      }
-    },
-    enabled: !!activeFiscalYear && !!activeBudgetType,
-    staleTime: 30000,
-  });
-
-  // Use React Query's cache to update data
-  useEffect(() => {
-    if (personnelQueryData) setPersonnelData(personnelQueryData);
-    if (mooeQueryData) setMooeData(mooeQueryData);
-    if (capitalOutlayQueryData) setCapitalOutlayData(capitalOutlayQueryData);
-    if (incomeQueryData) setIncomeData(incomeQueryData);
-    if (budgetarySupportQueryData)
-      setBudgetarySupportData(budgetarySupportQueryData);
-    if (chargedToIncomeQueryData)
-      setChargedToIncomeAmount(chargedToIncomeQueryData);
-  }, [
-    personnelQueryData,
-    mooeQueryData,
-    capitalOutlayQueryData,
-    incomeQueryData,
-    budgetarySupportQueryData,
-    chargedToIncomeQueryData,
-  ]);
-
-  // Update budget summary when data changes or selected fiscal year changes
-  useEffect(() => {
-    calculateBudgetSummary();
+    return [
+      personnelData,
+      mooeData,
+      capitalOutlayData,
+      incomeData,
+      budgetarySupportData,
+    ].some((list) => list.some((item) => matchesFilters(item) && isEligible(item)));
   }, [
     personnelData,
     mooeData,
     capitalOutlayData,
     incomeData,
+    budgetarySupportData,
+    regionFilter,
     selectedFiscalYear,
-    calculateBudgetSummary,
-    iasOMCostData,
-  ]);
-
-  // Create a mutation for adding personnel services
-  const addPersonnelMutation = useMutation({
-    mutationFn: async (newPersonnel) => {
-      return await api.post("/personnelServices", newPersonnel);
-    },
-    onSuccess: (data) => {
-      // Optimistically update the cache
-      const currentData =
-        queryClient.getQueryData([QUERY_KEYS.personnel]) || [];
-      queryClient.setQueryData(
-        [QUERY_KEYS.personnel],
-        [...currentData, { ...data.data, key: data.data._id }]
-      );
-
-      // Show success message
-      setSnackbar({
-        open: true,
-        message: "Personnel service added successfully!",
-        severity: "success",
-      });
-    },
-    onError: (error) => {
-      setSnackbar({
-        open: true,
-        message:
-          error.response?.data?.message || "Failed to add personnel service",
-        severity: "error",
-      });
-    },
-  });
-
-  // Create mutations for other services (MOOE, Capital Outlay, Income)
-  const addMooeMutation = useMutation({
-    mutationFn: async (newMooe) => {
-      return await api.post("/mooe", newMooe);
-    },
-    onSuccess: (data) => {
-      // Optimistically update the cache
-      const currentData = queryClient.getQueryData([QUERY_KEYS.mooe]) || [];
-      queryClient.setQueryData(
-        [QUERY_KEYS.mooe],
-        [...currentData, { ...data.data, key: data.data._id }]
-      );
-
-      // Show success message
-      setSnackbar({
-        open: true,
-        message: "MOOE added successfully!",
-        severity: "success",
-      });
-    },
-    onError: (error) => {
-      setSnackbar({
-        open: true,
-        message: error.response?.data?.message || "Failed to add MOOE",
-        severity: "error",
-      });
-    },
-  });
-
-  const handleSubmitAll = async () => {
-    // Check user permissions before proceeding
-    try {
-      // Quick permission check by calling a simple endpoint
-      await api.get("/my-proposals?limit=1");
-    } catch (error) {
-      if (error.response?.status === 403) {
-        setSnackbar({
-          open: true,
-          message:
-            "You don't have permission to submit proposals. Please contact your administrator to assign proper permissions.",
-          severity: "error",
-        });
-        return;
-      }
-    }
-
-    // Use the active region from context instead of user's default region
-    // This ensures we use the currently selected region, not just the user's default
-    const userRegion = activeRegion
-      ? activeRegion.name || activeRegion.regionName || activeRegion
-      : currentUser?.Region || currentUser?.region;
-
-    if (!userRegion) {
-      console.error("Region information is missing", {
-        activeRegion,
-        currentUserRegion: currentUser?.Region,
-      });
-      setSnackbar({
-        open: true,
-        message:
-          "Region information is missing. Please select a region or update your profile.",
-        severity: "error",
-      });
-      return;
-    }
-    // Check for budget deficit - BLOCK submission if there's a deficit
-    if (budgetDeficit && budgetDeficit.hasDeficit) {
-      setSnackbar({
-        open: true,
-        message: `Cannot submit: Budget has a deficit of ₱${budgetDeficit.amount.toLocaleString(
-          undefined,
-          { minimumFractionDigits: 2, maximumFractionDigits: 2 }
-        )}. Total Sources (₱${budgetDeficit.totalSources.toLocaleString(
-          undefined,
-          { minimumFractionDigits: 2, maximumFractionDigits: 2 }
-        )}) must equal or exceed Total Uses (₱${budgetDeficit.totalUses.toLocaleString(
-          undefined,
-          { minimumFractionDigits: 2, maximumFractionDigits: 2 }
-        )}).`,
-        severity: "error",
-      });
-      return;
-    }
-
-    // If income is not balanced, allow submission but warn the user
-    if (!budgetSummary.isIncomeBalanced) {
-      setSnackbar({
-        open: true,
-        message:
-          "Warning: Income is not balanced. Submission will proceed, but may be returned by reviewers.",
-        severity: "warning",
-      });
-      // Continue without blocking
-    }
-
-    // Get all eligible proposals for submission
-    const personnelIds = personnelData
-      .filter((p) => isEligibleForSubmission(p.status))
-      .map((p) => p._id);
-
-    const mooeIds = mooeData
-      .filter((p) => isEligibleForSubmission(p.status))
-      .map((p) => p._id);
-
-    const capitalOutlayIds = capitalOutlayData
-      .filter((p) => isEligibleForSubmission(p.status))
-      .map((p) => p._id);
-
-    const incomeIds = incomeData
-      .filter((p) => isEligibleForSubmission(p.status))
-      .map((p) => p._id);
-
-    const budgetarySupportIds = budgetarySupportData
-      .filter((p) => isEligibleForSubmission(p.status))
-      .map((p) => p._id);
-
-    if (
-      personnelIds.length === 0 &&
-      mooeIds.length === 0 &&
-      capitalOutlayIds.length === 0 &&
-      incomeIds.length === 0 &&
-      budgetarySupportIds.length === 0
-    ) {
-      setSnackbar({
-        open: true,
-        message: "No proposals are eligible for submission.",
-        severity: "warning",
-      });
-      return;
-    }
-
-    setLoading(true);
-    setIsSubmitting(true);
-
-    const payload = {
-      personnelIds,
-      mooeIds,
-      capitalOutlayIds,
-      incomeIds,
-      budgetarySupportIds,
-      fiscalYear: activeFiscalYear,
-      budgetType: activeBudgetType,
-      processBy: `${currentUser.FirstName} ${currentUser.LastName}`,
-      region: userRegion,
-      userId: currentUser._id,
-      // Only send essential budget data for performance
-      isIncomeBalanced: budgetSummary.isIncomeBalanced,
-    };
-    try {
-      const response = await api.post("/updateProposalStatus", payload);
-      // Clear any stored income grand total after successful submission
-      localStorage.removeItem("incomeGrandTotal");
-      localStorage.removeItem("incomeFieldsLocked");
-      await fetchAllData();
-      setSnackbar({
-        open: true,
-        message: "Proposals submitted successfully!",
-        severity: "success",
-      });
-    } catch (error) {
-      console.error(
-        "Error updating proposal status:",
-        error.response?.data || error.message
-      );
-
-      // Handle permission errors specifically
-      if (error.response?.status === 403) {
-        const errorData = error.response.data;
-        if (
-          errorData.code === "INSUFFICIENT_PERMISSIONS" &&
-          errorData.required === "canEditOwnProposals"
-        ) {
-          setSnackbar({
-            open: true,
-            message:
-              "You don't have permission to submit proposals. Please contact your administrator to grant 'canEditOwnProposals' permission.",
-            severity: "error",
-          });
-          return;
-        }
-      }
-
-      setSnackbar({
-        open: true,
-        message:
-          "An error occurred while submitting proposals. Please try again.",
-        severity: "error",
-      });
-    } finally {
-      setLoading(false);
-      setIsSubmitting(false);
-    }
-  };
-
-  const fetchAllData = useCallback(async () => {
-    try {
-      const regionName = activeRegion?.name || activeRegion?.regionName;
-      const fiscalYear = selectedFiscalYear || activeFiscalYear;
-      // Invalidate cache in parallel for better performance
-      await Promise.all([
-        queryClient.invalidateQueries([
-          QUERY_KEYS.personnel,
-          regionName,
-          fiscalYear,
-        ]),
-        queryClient.invalidateQueries([
-          QUERY_KEYS.mooe,
-          regionName,
-          fiscalYear,
-        ]),
-        queryClient.invalidateQueries([
-          QUERY_KEYS.capitalOutlay,
-          regionName,
-          fiscalYear,
-        ]),
-        queryClient.invalidateQueries([
-          QUERY_KEYS.income,
-          regionName,
-          fiscalYear,
-        ]),
-        queryClient.invalidateQueries([
-          QUERY_KEYS.budgetarySupport,
-          fiscalYear,
-          activeBudgetType,
-          regionName,
-        ]),
-      ]);
-
-      // Then refetch all data
-      await queryClient.refetchQueries([
-        QUERY_KEYS.personnel,
-        regionName,
-        fiscalYear,
-      ]);
-      await queryClient.refetchQueries([
-        QUERY_KEYS.mooe,
-        regionName,
-        fiscalYear,
-      ]);
-      await queryClient.refetchQueries([
-        QUERY_KEYS.capitalOutlay,
-        regionName,
-        fiscalYear,
-      ]);
-      await queryClient.refetchQueries([
-        QUERY_KEYS.income,
-        regionName,
-        fiscalYear,
-      ]);
-      await queryClient.refetchQueries([
-        QUERY_KEYS.budgetarySupport,
-        fiscalYear,
-        activeBudgetType,
-        regionName,
-      ]);
-    } catch (error) {
-      console.error("Error refreshing data:", error);
-      setSnackbar({
-        open: true,
-        message: "Failed to refresh data. Please reload the page.",
-        severity: "error",
-      });
-    }
-  }, [
-    activeRegion,
     activeFiscalYear,
-    selectedFiscalYear,
-    activeBudgetType,
-    queryClient,
-    setSnackbar,
+    isEligibleForSubmission,
   ]);
 
-  const handleSaveAsDraft = async (isAutoSave = false) => {
-    if (!isAutoSave) {
-    }
-
-    // Enhanced debugging for save as draft issues
-    if (!currentUser || !currentUser.Username) {
-      console.error("User information missing", { currentUser });
-      setSnackbar({
-        open: true,
-        message: "User information is missing. Please log in again.",
-        severity: "error",
-      });
-      return;
-    }
-
-    if (!activeFiscalYear || !activeBudgetType) {
-      console.error("Missing activeFiscalYear or activeBudgetType", {
-        activeFiscalYear,
-        activeBudgetType,
-      });
-      setSnackbar({
-        open: true,
-        message: "System settings are missing. Please contact support.",
-        severity: "error",
-      });
-      return;
-    }
-
-    // Get all eligible proposals for saving as draft
-    const personnelIds = personnelData
-      .filter((p) => isEligibleForSubmission(p.status))
-      .map((p) => p._id);
-
-    const mooeIds = mooeData
-      .filter((p) => isEligibleForSubmission(p.status))
-      .map((p) => p._id);
-
-    const capitalOutlayIds = capitalOutlayData
-      .filter((p) => isEligibleForSubmission(p.status))
-      .map((p) => p._id);
-
-    const incomeIds = incomeData
-      .filter((p) => isEligibleForSubmission(p.status))
-      .map((p) => p._id);
-
-    const budgetarySupportIds = budgetarySupportData
-      .filter((p) => isEligibleForSubmission(p.status))
-      .map((p) => p._id);
-
-    if (
-      personnelIds.length === 0 &&
-      mooeIds.length === 0 &&
-      capitalOutlayIds.length === 0 &&
-      incomeIds.length === 0 &&
-      budgetarySupportIds.length === 0
-    ) {
-      setSnackbar({
-        open: true,
-        message: "No proposals are eligible to be saved as draft.",
-        severity: "warning",
-      });
-      return;
-    }
-
-    // Use the active region from context instead of user's default region
-    // This ensures we use the currently selected region, not just the user's default
-    const userRegion = activeRegion
-      ? activeRegion.name || activeRegion.regionName || activeRegion
-      : currentUser?.Region || currentUser?.region;
-
-    if (!userRegion) {
-      console.error("Region information is missing", {
-        activeRegion,
-        currentUserRegion: currentUser?.Region,
-      });
-      setSnackbar({
-        open: true,
-        message:
-          "Region information is missing. Please select a region or update your profile.",
-        severity: "error",
-      });
-      return;
-    }
-    const payload = {
-      personnelIds,
-      mooeIds,
-      capitalOutlayIds,
-      incomeIds,
-      budgetarySupportIds,
-      fiscalYear: activeFiscalYear,
-      budgetType: activeBudgetType,
-      processBy: `${currentUser.FirstName} ${currentUser.LastName}`,
-      region: userRegion,
-    };
-    setLoading(true);
-    setIsSubmitting(true);
-
-    try {
-      const response = await api.post("/saveAsDraft", payload);
-      // Remove artificial delay for better performance
-      // await new Promise(resolve => setTimeout(resolve, 1000));
-
-      await fetchAllData();
-
-      // Check if there were any items that couldn't be updated because they belong to a different region
-      if (response.data.notUpdatedCounts) {
-        const totalNotUpdated = Object.values(
-          response.data.notUpdatedCounts
-        ).reduce((sum, count) => sum + count, 0);
-
-        if (totalNotUpdated > 0) {
-          console.warn(
-            `${totalNotUpdated} items were not updated because they belong to a different region`
-          );
-
-          if (!isAutoSave) {
-            setSnackbar({
-              open: true,
-              message: `Proposals saved as draft, but ${totalNotUpdated} items were not updated because they belong to a different region than ${userRegion}`,
-              severity: "warning",
-            });
-          }
-        } else {
-          if (!isAutoSave) {
-            setSnackbar({
-              open: true,
-              message: "Proposals saved as draft successfully!",
-              severity: "success",
-            });
-          }
-        }
-      } else {
-        if (!isAutoSave) {
-          setSnackbar({
-            open: true,
-            message: "Proposals saved as draft successfully!",
-            severity: "success",
-          });
-        }
-      }
-
-      setLastSaved(new Date());
-      setHasUnsavedChanges(false);
-      setSaveStatus("saved");
-    } catch (error) {
-      console.error(
-        "Error saving proposals as draft:",
-        error.response?.data || error.message
-      );
-
-      setSaveStatus("error");
-
-      if (!isAutoSave) {
-        setSnackbar({
-          open: true,
-          message:
-            "An error occurred while saving proposals as draft. Please try again.",
-          severity: "error",
-        });
-      }
-    } finally {
-      setLoading(false);
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleOpenDialog = () => {
-    // Check for budget deficit - BLOCK if there's a deficit
-    if (budgetDeficit && budgetDeficit.hasDeficit) {
-      setSnackbar({
-        open: true,
-        message: `Cannot submit: Budget has a deficit of ₱${budgetDeficit.amount.toLocaleString(
-          undefined,
-          { minimumFractionDigits: 2, maximumFractionDigits: 2 }
-        )}. Total Sources must equal or exceed Total Uses.`,
-        severity: "error",
-      });
-      return;
-    }
-
-    if (!budgetSummary.isIncomeBalanced) {
-      setSnackbar({
-        open: true,
-        message:
-          "Income is not balanced. You can still submit, but reviewers may return it.",
-        severity: "warning",
-      });
-      // Do not block dialog; allow user to proceed with a warning
-    }
-    setOpenDialog(true);
-  };
-
-  const handleCloseDialog = (confirm) => {
-    setOpenDialog(false);
-    if (confirm) {
-      handleSubmitAll();
-    }
-  };
-
-  const handleSnackbarClose = (event, reason) => {
-    if (reason === "clickaway") {
-      return;
-    }
-    setSnackbar({ ...snackbar, open: false });
-  };
-
-  // Add this effect to show a notification when inputs become disabled
-  // useEffect(() => {
-  //   if (disableIncomeInputs) {
-  //     toast.info(
-  //       "Income fields are now locked because the total matches the Corporate Income projection. To make changes, adjust the Corporate Income first.",
-  //       {
-  //         position: "top-right",
-  //         autoClose: 5000,
-  //         hideProgressBar: false,
-  //         closeOnClick: true,
-  //         pauseOnHover: true,
-  //         draggable: true,
-  //       }
-  //     );
-  //   }
-  // }, [disableIncomeInputs]);
-
-  // Also add a more visible indicator at the top of each tab
-  const handleForceUnlock = () => {
-    if (
-      window.confirm(
-        "Are you sure you want to unlock income fields? This should only be done if there is a discrepancy that needs to be fixed."
-      )
-    ) {
-      setDisableIncomeInputs(false);
-      localStorage.removeItem("incomeFieldsLocked");
-      toast.success("Income fields unlocked. You can now make changes.");
-    }
-  };
-
-  const IncomeLockedBanner = () => {
-    if (!disableIncomeInputs) return null;
-
-    return (
-      <Box
-        sx={{
-          bgcolor: "#ffebee",
-          p: { xs: 1.5, sm: 3 },
-          mb: 3,
-          borderRadius: 2,
-          border: "2px solid #f44336",
-          display: "flex",
-          flexDirection: { xs: "column", sm: "row" },
-          alignItems: "center",
-          gap: 2,
-          position: "sticky",
-          top: 0,
-          zIndex: 100,
-          boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-        }}
-      >
-        <LockIcon color="error" fontSize="large" />
-        <Box sx={{ flexGrow: 1 }}>
-          <Typography
-            variant="h6"
-            color="error"
-            gutterBottom
-            fontSize={{ xs: "1rem", sm: "1.25rem" }}
-          >
-            Income Fields Locked
-          </Typography>
-          <Typography fontSize={{ xs: "0.875rem", sm: "1rem" }}>
-            Income fields are locked because the total matches the Corporate
-            Income projection.
-            <strong> All save attempts will be blocked.</strong> To make
-            changes, adjust the Corporate Income first.
-          </Typography>
-        </Box>
-        <Button
-          variant="outlined"
-          color="error"
-          onClick={handleForceUnlock}
-          startIcon={<LockOpenIcon />}
-          size="small"
-          sx={{ mt: { xs: 1, sm: 0 } }}
-        >
-          Force Unlock
-        </Button>
-      </Box>
-    );
-  };
-
-  // Update region filter when active region changes
-  useEffect(() => {
-    if (activeRegion) {
-      const regionName = activeRegion.name || activeRegion.regionName;
-      setRegionFilter(regionName);
-
-      // Force refresh income data when region changes
-      queryClient.invalidateQueries(["income-items"]);
-      queryClient.invalidateQueries(["income-categories"]);
-
-      // Reset income grand total to trigger recalculation
-      setIncomeGrandTotal(0);
-    } else {
-      setRegionFilter("");
-    }
-  }, [activeRegion, queryClient]);
-
-  // Calculate total budget across all categories
   const calculateTotalBudget = useMemo(() => {
     try {
       // Use the selected fiscal year for filtering (fall back to active fiscal year if not set)
@@ -1968,7 +628,239 @@ const ProposalCustomPage = ({
     iasOMCostData,
   ]);
 
+  const budgetSummary = useMemo(() => {
+    try {
+      // Use the selected fiscal year for filtering (fall back to active fiscal year if not set)
+      const fiscalYearToUse = selectedFiscalYear || activeFiscalYear;
+
+      // Filter data by fiscal year
+      const filteredPersonnelData = Array.isArray(personnelData)
+        ? personnelData.filter((p) => p && p.fiscalYear === fiscalYearToUse)
+        : [];
+      const filteredMooeData = Array.isArray(mooeData)
+        ? mooeData.filter((p) => p && p.fiscalYear === fiscalYearToUse)
+        : [];
+      const filteredCapitalOutlayData = Array.isArray(capitalOutlayData)
+        ? capitalOutlayData.filter((p) => p && p.fiscalYear === fiscalYearToUse)
+        : [];
+
+      // Calculate personnel total with proper type conversion
+      const personnelTotal = Array.isArray(filteredPersonnelData)
+        ? filteredPersonnelData.reduce((sum, p) => {
+            if (!p) return sum;
+
+            return (
+              sum +
+              (Number(p.annualSalary) || 0) +
+              (Number(p.RATA) || 0) +
+              (Number(p.PERA) || 0) +
+              (Number(p.uniformALLOWANCE) || 0) +
+              (Number(p.productivityIncentive) || 0) +
+              (Number(p.medical) || 0) +
+              (Number(p.childrenAllowance) || 0) +
+              (Number(p.meal) || 0) +
+              (Number(p.cashGift) || 0) +
+              (Number(p.subsistenceAllowanceMDS) || 0) +
+              (Number(p.subsistenceAllowanceST) || 0) +
+              (Number(p.midyearBonus) || 0) +
+              (Number(p.yearEndBonus) || 0) +
+              (Number(p.gsisPremium) || 0) +
+              (Number(p.philhealthPremium) || 0) +
+              (Number(p.pagibigPremium) || 0) +
+              (Number(p.employeeCompensation) || 0) +
+              (Number(p.loyaltyAward) || 0) +
+              (Number(p.overtimePay) || 0) +
+              (Number(p.earnedLeaves) || 0) +
+              (Number(p.retirementBenefits) || 0) +
+              (Number(p.terminalLeave) || 0) +
+              (Number(p.courtAppearance) || 0)
+            );
+          }, 0)
+        : 0;
+
+      // Calculate regular MOOE total with proper type conversion
+      const mooeRegularTotal = Array.isArray(filteredMooeData)
+        ? filteredMooeData.reduce((sum, p) => {
+            if (!p) return sum;
+            return sum + (Number(p.amount) || 0);
+          }, 0)
+        : 0;
+
+      // Calculate IAs O&M Cost total (ALWAYS include if present)
+      const iasOMCostTotal = iasOMCostData
+        ? (Number(iasOMCostData.nis) || 0) +
+          (Number(iasOMCostData.cis) || 0) +
+          (Number(iasOMCostData.nisSubsidy) || 0) +
+          (Number(iasOMCostData.cisSubsidy) || 0)
+        : 0;
+
+      // Total MOOE is regular MOOE plus IAs O&M Cost
+      const mooeTotal = mooeRegularTotal + iasOMCostTotal;
+
+      // Calculate Capital Outlay total with proper type conversion
+      const capitalOutlayTotal = Array.isArray(filteredCapitalOutlayData)
+        ? filteredCapitalOutlayData.reduce((sum, p) => {
+            if (!p) return sum;
+            return sum + (Number(p.cost) || 0);
+          }, 0)
+        : 0;
+
+      // Calculate MOOE income total
+      const mooeIncomeTotal = Array.isArray(filteredMooeData)
+        ? filteredMooeData.reduce((sum, item) => {
+            if (!item) return sum;
+            return sum + (parseFloat(item.income) || 0);
+          }, 0)
+        : 0;
+
+      // Calculate Capital Outlay income total
+      const capitalOutlayIncomeTotal = Array.isArray(filteredCapitalOutlayData)
+        ? filteredCapitalOutlayData.reduce((sum, item) => {
+            if (!item) return sum;
+            return sum + (parseFloat(item.income) || 0);
+          }, 0)
+        : 0;
+
+      // Calculate combined income total from MOOE and Capital Outlay
+      const combinedIncomeTotal = mooeIncomeTotal + capitalOutlayIncomeTotal;
+
+      // Use the incomeGrandTotal from IncomeTable
+      const incomeTotal = incomeGrandTotal || 0;
+      // Calculate total expenses (MOOE + Capital Outlay)
+      const expensesTotal = mooeTotal + capitalOutlayTotal;
+
+      // Check if income is balanced (Corporate Income vs MOOE+CapitalOutlay income)
+      const isIncomeBalanced =
+        Math.abs(incomeTotal - combinedIncomeTotal) < 0.01;
+
+      const mooeSubsidyTotal = Array.isArray(filteredMooeData)
+        ? filteredMooeData.reduce((sum, item) => {
+            if (!item) return sum;
+            const subsidyValue = Number(item.subsidy) || 0;
+            return sum + subsidyValue;
+          }, 0)
+        : 0;
+
+      const capitalOutlaySubsidyTotal = Array.isArray(filteredCapitalOutlayData)
+        ? filteredCapitalOutlayData.reduce((sum, item) => {
+            if (!item) return sum;
+            const subsidyValue = Number(item.subsidy) || 0;
+            return sum + subsidyValue;
+          }, 0)
+        : 0;
+
+      const combinedSubsidyTotal = mooeSubsidyTotal + capitalOutlaySubsidyTotal;
+
+      // Check if subsidy is balanced (Budgetary Support should equal Combined Subsidy)
+      const budgetarySupportTotal =
+        calculateTotalBudget.budgetarySupportTotal || 0;
+      const isSubsidyBalanced =
+        Math.abs(budgetarySupportTotal - combinedSubsidyTotal) < 0.01;
+
+      // Check if budget is balanced (expenses vs income)
+      const isBalanced = Math.abs(expensesTotal - incomeTotal) < 0.01;
+
+      return {
+        personnelTotal,
+        mooeTotal,
+        capitalOutlayTotal,
+        expensesTotal,
+        incomeTotal,
+        mooeIncomeTotal,
+        capitalOutlayIncomeTotal,
+        combinedIncomeTotal,
+        isIncomeBalanced,
+        mooeSubsidyTotal,
+        capitalOutlaySubsidyTotal,
+        combinedSubsidyTotal,
+        isSubsidyBalanced,
+        isBalanced,
+      };
+    } catch (error) {
+      console.error("Error calculating budget summary:", error);
+      return {
+        personnelTotal: 0,
+        mooeTotal: 0,
+        capitalOutlayTotal: 0,
+        expensesTotal: 0,
+        incomeTotal: 0,
+        mooeIncomeTotal: 0,
+        capitalOutlayIncomeTotal: 0,
+        combinedIncomeTotal: 0,
+        isIncomeBalanced: false,
+        mooeSubsidyTotal: 0,
+        capitalOutlaySubsidyTotal: 0,
+        combinedSubsidyTotal: 0,
+        isSubsidyBalanced: false,
+        isBalanced: false,
+      };
+    }
+  }, [
+    personnelData,
+    mooeData,
+    capitalOutlayData,
+    incomeData,
+    incomeGrandTotal,
+    selectedFiscalYear,
+    activeFiscalYear,
+    iasOMCostData,
+    calculateTotalBudget,
+  ]);
+
   // Enhancement Functions (defined after all hooks to ensure proper dependency access)
+
+  // Real-time validation
+  const validateBudgetData = useCallback(() => {
+    const errors = {};
+
+    // Validate fiscal year and budget type
+    if (!activeFiscalYear) errors.fiscalYear = "Fiscal year is required";
+    if (!activeBudgetType) errors.budgetType = "Budget type is required";
+
+    // Validate user information
+    if (!currentUser?.Region) errors.region = "User region is missing";
+    if (!currentUser?.FirstName || !currentUser?.LastName) {
+      errors.user = "User name information is incomplete";
+    }
+
+    // Validate budget balance
+    if (
+      budgetSummary.incomeTotal > 0 &&
+      budgetSummary.combinedIncomeTotal > 0
+    ) {
+      const imbalance = Math.abs(
+        budgetSummary.incomeTotal - budgetSummary.combinedIncomeTotal
+      );
+      if (imbalance > 0.01) {
+        errors.balance = `Budget is not balance. Difference: ₱${imbalance.toLocaleString()}`;
+      }
+    }
+
+    // Validate minimum proposals
+    const totalProposals =
+      personnelData.length +
+      mooeData.length +
+      capitalOutlayData.length +
+      incomeData.length +
+      budgetarySupportData.length;
+    if (totalProposals === 0) {
+      errors.proposals = "At least one proposal is required";
+    }
+
+    setValidationErrors(errors);
+
+    return Object.keys(errors).length === 0;
+  }, [
+    activeFiscalYear,
+    activeBudgetType,
+    currentUser,
+    budgetSummary,
+    personnelData,
+    mooeData,
+    capitalOutlayData,
+    incomeData,
+    budgetarySupportData,
+  ]);
 
   // Bulk Selection Functions
   const handleBulkSelect = useCallback((type, ids) => {
@@ -2099,7 +991,6 @@ const ProposalCustomPage = ({
       activeBudgetType,
       currentUser,
       activeRegion,
-      fetchAllData,
     ]
   );
 
@@ -2470,20 +1361,6 @@ const ProposalCustomPage = ({
 
     fetchActiveSettings();
   }, []);
-
-  // Refresh data when active region changes
-  useEffect(() => {
-    if (activeRegion) {
-      fetchAllData();
-    }
-  }, [activeRegion, fetchAllData]);
-
-  // Refresh data when selected fiscal year changes
-  useEffect(() => {
-    if (selectedFiscalYear) {
-      fetchAllData();
-    }
-  }, [selectedFiscalYear, fetchAllData]);
 
   // Add event listener for capital outlay data changes
   useEffect(() => {
