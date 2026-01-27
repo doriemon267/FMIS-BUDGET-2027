@@ -412,8 +412,8 @@ const CustomDrawer = ({ collapsed = false }) => {
           name="Back To FMIS"
           link={
             IS_PRODUCTION
-              ? "https://main.fmis.local/dashboard"
-              : "https://main.fmis.local/dashboard"
+              ? "https://fmis.nia.gov.ph/dashboard"
+              : "http://localhost:3000/dashboard"
           }
         />
 

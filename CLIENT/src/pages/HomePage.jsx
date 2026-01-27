@@ -18,8 +18,9 @@ import {
   FaMoneyBillWave,
 } from "react-icons/fa";
 import env from "../utils/env";
-import IS_LOGIN from "../utils/IS_LOGIN";
 import IS_PRODUCTION from "../utils/IS_PRODUCTION";
+import { useEffect, useState } from "react";
+import api from "../config/api";
 
 // Animation variants
 const appBarVariants = {
@@ -90,6 +91,16 @@ const cardContentVariants = {
 
 export default function HomePage() {
   const theme = useTheme();
+
+  const [hasUser, setHasUser] = useState(false);
+  useEffect(() => {
+    (async () => {
+      const res = await api.get("/get-user");
+      // console.log(res.data.user);
+      if (res.data.user) setHasUser(true);
+      else setHasUser(false);
+    })();
+  }, []);
 
   const handleNavigateToLogin = () => {
     const currentUrl = window.location.origin + "/dashboard"; // or window.location.href if you want the exact page
@@ -273,9 +284,9 @@ export default function HomePage() {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
           >
-            {IS_LOGIN ? (
+            {hasUser ? (
               <Button
-                onClick={handleNavigateToLogin} // <-- use handleNavigateToLogin
+                href="/dashboard"
                 variant="outlined"
                 size="medium"
                 sx={{

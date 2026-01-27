@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const PersonnelServices = require("../models/PersonnelServices");
 const EmployeeMaster = require("../models/EmployeeList");
+const MealAllowance = require("../models/mealAllowance");
 const Settings = require("../models/Settings");
 const Proposal = require('../models/Proposal');
 const ProposalEditLog = require('../models/ProposalEditLog');
@@ -93,9 +94,8 @@ async function syncMealAllowanceData(employeeNumber, fiscalYear) {
         const annualAmount = monthlyAmount * 12;
         // Update the personnel services record
         await PersonnelServices.updateOne(
-          { employeerails: true },
           { employeeNumber, fiscalYear },
-          { meal: annualAmount }
+          { $set: { meal: annualAmount } }
         );
         // Recalculate the Total field
         const updatedPersonnel = await PersonnelServices.findOne({
@@ -758,44 +758,60 @@ exports.bulkAddPersonnelServices = async (req, res) => {
     }
     const personnelServicesData = [];
     const duplicates = [];
+
+    // 🚀 OPTIMIZATION: Fetch all existing personnel services for this fiscal year and region once
+    // to avoid thousands of findOne calls in the loop below.
+    const existingServices = await PersonnelServices.find({
+      fiscalYear: fiscalYear,
+      region: userRegion
+    }).select('employeeNumber itemNumber positionTitle department division section gradelevel_SG statusOfAppointment employeeFullName').lean();
+
+    // Create lookup maps for fast duplicate checking
+    const existingByEmployeeNumber = new Map();
+    const existingVacantByDetails = new Set();
+    const existingByItemNumber = new Map();
+
+    existingServices.forEach(s => {
+      if (s.employeeNumber && s.employeeNumber !== 'VACANT' && s.employeeNumber !== '') {
+        existingByEmployeeNumber.set(s.employeeNumber, s);
+      }
+      
+      if (s.itemNumber && s.itemNumber.trim() !== '') {
+        existingByItemNumber.set(s.itemNumber.trim(), s);
+      }
+
+      const isVacant = s.employeeFullName && s.employeeFullName.toString().toUpperCase() === 'VACANT';
+      if (isVacant) {
+        // Create a unique key for vacant positions based on details
+        const vacantKey = `${s.positionTitle}|${s.department}|${s.division || ''}|${s.section || ''}|${s.gradelevel_SG}`;
+        existingVacantByDetails.add(vacantKey);
+      }
+    });
     
-  for (const employee of employees) {
-      let existingPersonnelService;
+    for (const employee of employees) {
+      let existingPersonnelService = null;
       
       // Check for duplicates differently based on whether it's a VACANT position
       const isVacant = employee.EmployeeFullName && 
                       employee.EmployeeFullName.toString().toUpperCase() === 'VACANT';
       
       if (isVacant) {
-        // For VACANT positions, check by position details since employeeNumber might be null/empty
-        const duplicateConditions = [];
-        
         // Check by ItemNumber if available (most reliable)
         if (employee.ItemNumber && employee.ItemNumber.trim() !== '') {
-          duplicateConditions.push({ itemNumber: employee.ItemNumber });
+          existingPersonnelService = existingByItemNumber.get(employee.ItemNumber.trim());
         }
         
-        // Always include position details as fallback
-        duplicateConditions.push({
-          positionTitle: employee.PositionTitle,
-          department: employee.Department,
-          division: employee.Division || null,
-          section: employee.Section || null,
-          gradelevel_SG: employee.SG?.toString() || "",
-          fiscalYear: fiscalYear,
-          region: employee.Region,
-          employeeFullName: "VACANT"
-        });
-        
-        existingPersonnelService = await PersonnelServices.findOne({
-          $or: duplicateConditions
-        });
+        // Fallback to position details for VACANT
+        if (!existingPersonnelService) {
+          const vacantKey = `${employee.PositionTitle}|${employee.Department}|${employee.Division || ''}|${employee.Section || ''}|${employee.SG?.toString() || ""}`;
+          if (existingVacantByDetails.has(vacantKey)) {
+            // We don't have the full object in the Set, but we know it exists
+            existingPersonnelService = true; 
+          }
+        }
       } else {
-        // For regular employees, check by employeeNumber and fiscalYear
-        existingPersonnelService = await PersonnelServices.findOne({
-          employeeNumber: employee.EmployeeID,
-          fiscalYear: fiscalYear,
-        });
+        // For regular employees, check by employeeNumber
+        existingPersonnelService = existingByEmployeeNumber.get(employee.EmployeeID);
       }
       
       if (existingPersonnelService) {

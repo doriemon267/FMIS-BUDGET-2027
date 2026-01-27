@@ -378,7 +378,20 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
       return acc;
     }, {});
 
-    return Object.values(grouped);
+    const formatted = Object.values(grouped).map(group => ({
+      ...group,
+      children: group.children.sort((a, b) => {
+        if (!a.uacsCode) return 1;
+        if (!b.uacsCode) return -1;
+        return a.uacsCode.localeCompare(b.uacsCode, undefined, { numeric: true, sensitivity: 'base' });
+      })
+    })).sort((a, b) => {
+      const aUacs = a.children[0]?.uacsCode || '';
+      const bUacs = b.children[0]?.uacsCode || '';
+      return aUacs.localeCompare(bUacs, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    return formatted;
   }, []);  // Calculate grand totals including IAs O&M Cost
   // Calculate grand totals for REGULAR MOOE ONLY (exclude IAs O&M Cost)
   const grandTotals = useMemo(() => {

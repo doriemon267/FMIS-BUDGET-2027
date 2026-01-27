@@ -1,8 +1,9 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api, { authApi, setDevUser } from "../config/api"; // Siguraduhing tama ang import path mo dito
+import api, { authApi, setDevUser } from "../config/api";
 import Loading from "../global/components/Loading";
 import env from "../utils/env";
+import IS_PRODUCTION from "../utils/IS_PRODUCTION"; // Import mo ito ulit
 
 const UserContext = createContext({
   currentUser: null,
@@ -10,8 +11,7 @@ const UserContext = createContext({
   isLoading: false,
   error: null,
   logout: async () => {},
-  // Idinagdag natin para ma-access sa ibang components
-  hasWorkflowRole: () => false, 
+  hasWorkflowRole: () => false,
   workflowRoles: [],
 });
 
@@ -20,23 +20,19 @@ const UserProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const nav = useNavigate();
 
-  // --- HELPER: Kuhanin ang RBAC at Workflow Roles ---
-  // Ito ang "bridge" para makuha yung logic galing sa old code nang hindi pumuputok ang useEffect
+  // --- HELPER: Enrichment Logic ---
   const enrichUserWithRoles = async (user) => {
     try {
       if (!user) return null;
 
-      // 1. Prepare Headers (gaya ng dati)
       const devHeaders = {};
       const devUserId = (Array.isArray(user?.Username) ? user.Username[0] : user?.Username) || user?.Id || user?.id || user?.userId;
       if (devUserId) devHeaders['X-Dev-User-Id'] = String(devUserId);
       if (user?.Roles) devHeaders['X-Dev-Roles'] = (Array.isArray(user.Roles) ? user.Roles : [user.Roles]).join(',');
 
-      // 2. Fetch Access Info
       const haRes = await api.get("/api/hierarchical-rbac/my-access", { headers: devHeaders });
       const accessInfo = haRes?.data?.accessInfo;
 
-      // 3. Fetch Workflow Assignments
       let userWorkflowRoles = [];
       try {
         if (devUserId) {
@@ -46,15 +42,14 @@ const UserProvider = ({ children }) => {
           }
         }
       } catch (err) {
-        console.warn("No assignment found or error fetching assignment:", err.message);
+        console.warn("No assignment found:", err.message);
       }
 
-      // 4. Fallback for FULL access (Auto-assign roles if super admin/full scope)
+      // Fallback for FULL access
       if (accessInfo?.scope === 'FULL' && (!userWorkflowRoles || userWorkflowRoles.length === 0)) {
         userWorkflowRoles = ['responsibilityCenterCreator', 'responsibilityCenterApprover', 'officeCreator', 'officeConsolidator', 'officeSubmission', 'responsibilityCenterFinalVerifier', 'officeFinalVerifier'];
       }
 
-      // 5. Merge Data & Normalize Regions
       if (accessInfo) {
         const normalizedRegions = (accessInfo.accessibleRegions || []).map((r) => ({
           id: r._id,
@@ -73,20 +68,27 @@ const UserProvider = ({ children }) => {
           regions: normalizedRegions,
         };
       }
-      
-      return user; // Kung walang RBAC, return basic user
+      return user;
     } catch (error) {
       console.warn("Error enriching user roles:", error);
-      return user; // Return basic user on error para hindi mag-crash
+      return user;
     }
+  };
+
+  // --- REDIRECT LOGIC HELPER ---
+  const redirectToLogin = () => {
+    const currentUrl = window.location.origin + "/dashboard";
+    const loginUrl = IS_PRODUCTION
+      ? `${env("LOGIN_REDIRECT_URL")}?ReturnUrl=${encodeURIComponent(currentUrl)}`
+      : `${env("CLIENT_URL_DEV")}/login`;
+    window.location.href = loginUrl;
   };
 
   // --- LOGIN HANDLER ---
   const handleSetUserInitialization = async () => {
     const res = await authApi.get("/get-user");
-    // I-enrich muna natin bago i-save
     const fullUser = await enrichUserWithRoles(res.data.user);
-    setDevUser(fullUser); // Set dev user for API interceptor
+    setDevUser(fullUser);
     setCurrentUser(fullUser);
   };
 
@@ -96,20 +98,22 @@ const UserProvider = ({ children }) => {
     window.location.href = env("CLIENT_URL_DEV") + "/login";
   };
 
-  // --- MAIN INITIALIZATION (useEffect) ---
+  // --- MAIN INITIALIZATION ---
   useEffect(() => {
     const fetchUser = async () => {
       try {
         const res = await authApi.get("/get-user");
         if (res.data.user) {
-            // Dito natin tinatawag yung enrichment logic
-            const fullUser = await enrichUserWithRoles(res.data.user);
-            setDevUser(fullUser); // Set dev user for API interceptor
-            setCurrentUser(fullUser);
+          const fullUser = await enrichUserWithRoles(res.data.user);
+          setDevUser(fullUser);
+          setCurrentUser(fullUser);
+        } else {
+          // Kapag walang user response (logged out)
+          redirectToLogin();
         }
       } catch (error) {
-        console.warn("Error fetching user:", error);
-        // Optional: Redirect to login if needed, or stay silent
+        console.error("Error fetching user:", error);
+        redirectToLogin(); // Kapag nag-error (unauthorized), kick out
       } finally {
         setIsLoading(false);
       }
@@ -117,7 +121,7 @@ const UserProvider = ({ children }) => {
     fetchUser();
   }, [nav]);
 
-  // --- HELPERS PARA SA UI (Para gumana yung mga buttons mo) ---
+  // --- UI HELPERS ---
   const hierarchical = currentUser?.hierarchicalAccess || {};
   const workflowRoles = Array.isArray(hierarchical.workflowRoles) ? hierarchical.workflowRoles : [];
   const isSuperAdmin = currentUser?.Roles?.includes('SUPER_ADMIN') || currentUser?.Roles?.includes('ADMIN');
@@ -132,7 +136,6 @@ const UserProvider = ({ children }) => {
     setCurrentUser: handleSetUserInitialization,
     logout: handleLogout,
     isLoading,
-    // Extra helpers na kailangan mo
     workflowRoles,
     hasWorkflowRole, 
   };

@@ -774,6 +774,14 @@ exports.getMOOEData = async (req, res) => {
                           : (proposal?.amount?.toString() || "0")
       };
     });
+
+    // 6.5. Sort entries by UACS code
+    entries.sort((a, b) => {
+      if (!a.uacsCode) return 1;
+      if (!b.uacsCode) return -1;
+      return a.uacsCode.localeCompare(b.uacsCode, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
     // 7. Return payload
     const response = {
       entries,

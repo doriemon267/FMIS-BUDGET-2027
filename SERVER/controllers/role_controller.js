@@ -100,7 +100,7 @@ exports.updateRole = async (req, res) => {
     const updatedRole = await Role.findByIdAndUpdate(
       id,
       { name, label, permission, enabled },
-      { new: true }
+      { new: true },
     );
 
     if (!updatedRole) {
@@ -134,7 +134,7 @@ exports.assignRole = async (req, res) => {
           fullName,
           roles,
         },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
+        { upsert: true, new: true, setDefaultsOnInsert: true },
       )
       .populate("roles");
 
@@ -169,7 +169,7 @@ exports.getAllAssignedRoles = async (req, res) => {
 
     // === 1. Get current user from token ===
     const currentUser = req.user;
-    const currentUserId = currentUser?.Username?.[0];
+    const currentUserId = currentUser?.particularID;
 
     if (!currentUserId) {
       return res
@@ -183,7 +183,7 @@ exports.getAllAssignedRoles = async (req, res) => {
       .populate("roles");
 
     const isSuperAdmin = currentUserAssignment?.roles?.some(
-      (role) => role.name === "SUPER ADMIN"
+      (role) => role.name === "SUPER ADMIN",
     );
 
     // === 3. Build base query ===
@@ -270,7 +270,7 @@ exports.reAssignRole = async (req, res) => {
   const { id } = req.params;
   const { roles = [] } = req.body; // Default to empty array if not sent
 
-  // Allow empty array → user can have no roles
+  // Allow empty array â†’ user can have no roles
   if (!Array.isArray(roles)) {
     return res.status(400).json({ error: "Roles must be an array" });
   }
@@ -279,8 +279,8 @@ exports.reAssignRole = async (req, res) => {
     const updated = await assigned_role
       .findByIdAndUpdate(
         id,
-        { roles }, // Can be [] → removes all roles
-        { new: true }
+        { roles }, // Can be [] â†’ removes all roles
+        { new: true },
       )
       .populate("roles");
 

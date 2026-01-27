@@ -1,11 +1,11 @@
 export const UACS_OTHER_MOOE_BASE = 'Other Maintenance and Operating Expenses';
 
-export const shouldHideGenericOtherUacs = (uacsCode, sublineItem) => {
-  if (!uacsCode || !sublineItem) return false;
-  // Hide only the variants that have a suffix after the base 5-02-99-990 (e.g., 5-02-99-990-1)
+export const shouldHideGenericOtherUacs = (uacsCode, _sublineItem) => {
+  if (!uacsCode) return false;
+  // Hide all variants that have a suffix after the base 5-02-99-990 (e.g., 5-02-99-990-1, 5-02-99-990-NIS)
   // Keep the base '5-02-99-990' visible
   const basePrefix = '5-02-99-990-';
-  return uacsCode.startsWith(basePrefix) && sublineItem.startsWith(UACS_OTHER_MOOE_BASE);
+  return uacsCode.startsWith(basePrefix);
 };
 
 export const displayUacs = (uacsCode, sublineItem) => {

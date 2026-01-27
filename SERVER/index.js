@@ -54,6 +54,16 @@ if (SUPPRESS_NODE_DEPRECATION_WARNINGS.length > 0) {
     }
   });
 }
+
+// Global error handlers to prevent crashes from unhandled rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception thrown:', err);
+  // Optional: process.exit(1) if you want it to restart, but for now let's just log
+});
 // Note: No re-declaration of SUPPRESS_NODE_DEPRECATION_WARNINGS here; handled above
 // Removed console silencing - we want essential startup messages to show
 
@@ -543,18 +553,27 @@ app.use(
         return callback(null, true);
       }
 
-      const isNia = origin.endsWith(".nia.gov.ph");
-      const isLocal = origin.startsWith("http://localhost");
+      const allowedOrigins = [
+        process.env.CLIENT1,
+        process.env.CLIENT2,
+        process.env.CLIENT3,
+        "https://budget.nia.gov.ph",
+        "https://budget-server.nia.gov.ph"
+      ].filter(Boolean);
 
-      console.log(`CORS check: isNia=${isNia}, isLocal=${isLocal}`); // a new line of code here
+      const isAllowed = allowedOrigins.includes(origin);
+      const isNia = origin.endsWith(".nia.gov.ph") || origin === "https://nia.gov.ph";
+      const isLocal = origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1");
 
-      if (isNia || isLocal) {
+      console.log(`CORS check: isAllowed=${isAllowed}, isNia=${isNia}, isLocal=${isLocal}`);
+
+      if (isAllowed || isNia || isLocal) {
         console.log("CORS: Origin allowed.");
         return callback(null, true);
       }
 
-      console.log("CORS: Origin blocked.");
-      return callback(new Error("Not allowed by CORS"));
+      console.warn("CORS: Origin blocked:", origin);
+      return callback(null, false); // Return false instead of Error to avoid 500s in some configurations
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],

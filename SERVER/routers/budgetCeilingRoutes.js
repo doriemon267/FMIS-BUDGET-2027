@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const BudgetCeiling = require('../models/BudgetCeiling');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+const Proposal = require('../models/Proposal');
 const PersonnelService = require('../models/PersonnelServices');
 const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
@@ -571,6 +572,11 @@ router.post('/:id/generate-nep', tokenMiddleware, isBRDStaff, async (req, res) =
         region: template.region,
         division: allocation.division,
         department: allocation.department,
+        // Clone granular data from template
+        mooeData: template.mooeData,
+        capitalData: template.capitalData,
+        personnelData: template.personnelData,
+        incomeData: template.incomeData,
         createdBy: userId,
         createdByName: userName,
         currentAssigneeRole: 'BUDGET PREPARER',
@@ -587,6 +593,34 @@ router.post('/:id/generate-nep', tokenMiddleware, isBRDStaff, async (req, res) =
 
       await nepProposal.save();
       nepProposals.push(nepProposal);
+
+      // Create a Proposal document for legacy compatibility
+      const legacyProposal = new Proposal({
+        title: nepProposal.title,
+        description: nepProposal.description,
+        fiscalYear: String(nepProposal.fiscalYear),
+        budgetType: 'NEP',
+        region: ceiling.region,
+        department: nepProposal.department,
+        division: nepProposal.division,
+        processBy: userName,
+        status: 'Draft',
+        workflowLevel: 'BUDGET PREPARER',
+        currentStep: 'PREPARER_DRAFT',
+        workflowRef: nepProposal._id,
+        proposalId: nepProposal._id,
+        createdBy: userId,
+        createdByName: userName
+      });
+      await legacyProposal.save();
+
+      // Recalculate totals to sync legacy Proposal with cloned granular data
+      try {
+        const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
+        await recalculateAndSaveProposalTotals({ proposalId: legacyProposal._id });
+      } catch (calcErr) {
+        console.error(`Warning: Failed to recalculate totals for NEP proposal ${nepProposal._id}:`, calcErr.message);
+      }
 
       // Update allocation with NEP reference
       allocation.nepProposalId = nepProposal._id;
