@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import api from '../../config/api';
 import { Box, Button, Typography, Paper, List, ListItem, ListItemText, CircularProgress } from '@mui/material';
 
 const DirectFetchTest = () => {
@@ -10,8 +11,8 @@ const DirectFetchTest = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('http://localhost:5005/income-subcategories');
-      const data = await response.json();
+      const response = await api.get('/income-subcategories');
+      const data = response.data;
       
       if (data && data.incomeSubcategories) {
         setSubcategories(data.incomeSubcategories);

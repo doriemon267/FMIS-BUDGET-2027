@@ -30,6 +30,7 @@ import { FiSearch, FiRefreshCw, FiSettings, FiCheck, FiBell, FiBellOff, FiChevro
 import io from 'socket.io-client';
 import api from '../../../../config/api';
 import env from '../../../../utils/env';
+import IS_PRODUCTION from '../../../../utils/IS_PRODUCTION';
 import { useUser } from '../../../../context/UserContext';
 import toast from 'react-hot-toast';
 
@@ -527,34 +528,58 @@ export default function ChatApp() {
   }
   useEffect(() => {
     // Use dev UID derived from in-memory `currentUser` only (do not read from localStorage)
-    const devUid = currentUser ? ((Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username) || currentUser?.Id || currentUser?.id || currentUser?.userId) : null;
+    const devUid = currentUser
+      ? (
+          (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username) ||
+          currentUser?.Id ||
+          currentUser?.id ||
+          currentUser?.userId ||
+          currentUser?.particularID ||
+          currentUser?.particularId
+        )
+      : null;
     // If we have neither a dev UID (dev mode) nor a logged-in user (session via cookie), defer
     if (!devUid && !currentUser) {
       console.debug('[ChatApp] no devUserId or currentUser available yet; deferring socket/connect and loadConversations until user data available.');
       return;
     }
     loadConversations();
-    // Socket.IO is hosted by the main API server (same host as /api/chat routes)
-   const serverUrl = 'https://budget.nia.gov.ph' || 'http://localhost:3005';
+    // Socket.IO via IIS proxy in production; direct dev server in development
+    const serverUrl = "/";
     // Additional debug: dev user id derived from `currentUser` only
     const devUserId = devUid;
     // Determine whether to attempt a socket connection. Use devUserId in dev mode; otherwise server will authenticate via httpOnly cookie.
     const authObj = {};
     if (devUserId) authObj.devUserId = String(devUserId);
     if (currentUser) {
-      const cuid = (currentUser?.Id || currentUser?.id || currentUser?.userId || (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username));
+      const cuid = (
+        currentUser?.Id ||
+        currentUser?.id ||
+        currentUser?.userId ||
+        currentUser?.particularID ||
+        currentUser?.particularId ||
+        (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username)
+      );
       if (cuid) authObj.userId = String(cuid);
     }
-  const conn = io(serverUrl, { 
-    path: '/socket.io/', // Lagyan ng slash sa dulo para sure
-    transports: ['websocket', 'polling'], // Unahin ang websocket kung kaya
-    withCredentials: true, 
-    auth: authObj, 
-    reconnectionAttempts: 3 
-});
+    const conn = io(serverUrl, {
+      path: "/socket.io",
+      transports: ["websocket", "polling"],
+      withCredentials: true,
+      auth: authObj,
+      reconnectionAttempts: 3
+    });
     if (devUserId) console.debug('[ChatApp] Passing devUserId to socket auth (if ALLOW_MOCK_AUTH enabled)');
     conn.on('connect', () => {
-      const uid = (currentUser?.Id || currentUser?.id || currentUser?.userId || (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username) || null);
+      const uid = (
+        currentUser?.Id ||
+        currentUser?.id ||
+        currentUser?.userId ||
+        currentUser?.particularID ||
+        currentUser?.particularId ||
+        (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username) ||
+        null
+      );
       console.debug('[ChatApp] socket connected', conn.id, 'uid=', uid);
       setSocketConnected(true);
       setSocketErrorMsg(null);

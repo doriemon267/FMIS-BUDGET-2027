@@ -58,9 +58,8 @@ const CustomTable = ({
     queryFn: async () => {
       try {
         
-        // Use direct fetch which we know works
-        const response = await fetch('http://localhost:5005/income-subcategories');
-        const responseData = await response.json();
+        const response = await api.get("/income-subcategories");
+        const responseData = response.data;
         
         // Initialize result object
         let result = { [dataListName]: [], totalRecords: 0 };

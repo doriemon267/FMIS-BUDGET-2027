@@ -5,9 +5,10 @@ import IS_PRODUCTION from "../utils/IS_PRODUCTION";
 
 // Increase default timeout and allow override via env
 const REQUEST_TIMEOUT = Number(env("REQUEST_TIMEOUT_MS")) || 30000; // default 30s
+const apiPrefix = "/api";
 
 const api = axios.create({
-  baseURL: IS_PRODUCTION ? env("BUDGET_SERVER_URL_PROD") : env("SERVER_URL_DEV"),
+  baseURL: IS_PRODUCTION ? "/" : env("SERVER_URL_DEV"),
   withCredentials: true,
 });
 
@@ -24,7 +25,7 @@ const fetchCsrfToken = async () => {
     // CSRF endpoint is served by the main API server (same origin as protected routes)
     const csrfBase = IS_PRODUCTION ? env("BUDGET_SERVER_URL_PROD") : env("SERVER_URL_DEV");
     if (!csrfBase) return null;
-    const resp = await axios.get(`${csrfBase}/csrf-token`, { withCredentials: true });
+    const resp = await axios.get(`${csrfBase}${apiPrefix}/csrf-token`, { withCredentials: true });
     _csrfToken = resp.data && resp.data.csrfToken;
     return _csrfToken;
   } catch (err) {
@@ -36,6 +37,20 @@ const fetchCsrfToken = async () => {
 // Attach token to requests
 api.interceptors.request.use(
   async (config) => {
+    const normalizeUrl = (url) => {
+      if (!url || typeof url !== "string") return url;
+      if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("//")) {
+        return url;
+      }
+      if (url.startsWith("/uploads")) return url;
+      if (url.startsWith(apiPrefix)) return url;
+      const normalized = url.startsWith("/") ? url : `/${url}`;
+      return `${apiPrefix}${normalized}`;
+    };
+
+    if (config.url) {
+      config.url = normalizeUrl(config.url);
+    }
     // Authentication now uses httpOnly cookies (authToken) set by the auth server.
     // Do NOT attach tokens from localStorage; this prevents JS-accessible storage of tokens.
 

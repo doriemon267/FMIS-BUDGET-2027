@@ -285,6 +285,7 @@ mongoose.connection.once("open", async () => {
   }
 });
 const app = express();
+const apiPrefix = "/api";
 // Ensure uploads folder exists for attachments
 try {
   const uploadsPath = path.join(__dirname, "uploads", "proposal_attachments");
@@ -333,6 +334,7 @@ const io = socketIo(server, {
     methods: ["GET", "POST"],
     credentials: true,
   },
+  path: "/socket.io/",
 });
 const Message = require("./models/Message");
 
@@ -390,10 +392,13 @@ io.use(async (socket, next) => {
         ? authHeader.split(" ")[1]
         : null);
 
-    // Fallback: check auth cookie in handshake headers (authToken)
+    // Fallback: check auth cookie in handshake headers (authToken/jwtToken)
     if (!token && socket.handshake.headers && socket.handshake.headers.cookie) {
       const cookieStr = socket.handshake.headers.cookie;
-      const match = cookieStr.match(/(?:^|; )authToken=([^;]+)/);
+      const match =
+        cookieStr.match(/(?:^|; )authToken=([^;]+)/) ||
+        cookieStr.match(/(?:^|; )jwtToken=([^;]+)/) ||
+        cookieStr.match(/(?:^|; )jwt=([^;]+)/);
       if (match && match[1]) {
         token = decodeURIComponent(match[1]);
       }
@@ -437,8 +442,23 @@ io.use(async (socket, next) => {
       }
     }
 
-    const payload = jwt.verify(token, process.env.JWT_SECRET_KEY);
-    if (!payload) return next(new Error("Authentication error: token invalid"));
+    const jwtSecrets = [
+      process.env.JWT_SECRET_KEY,
+      process.env.JWT_CLIENT_SECRET_PROD,
+      process.env.JWT_SECRET
+    ].filter(Boolean);
+    let payload = null;
+    for (const secret of jwtSecrets) {
+      try {
+        payload = jwt.verify(token, secret);
+        break;
+      } catch (e) {
+        // try next secret
+      }
+    }
+    if (!payload) {
+      return next(new Error("Authentication error: token invalid"));
+    }
 
     // Build a minimal user object similar to checkToken middleware
     let userId = null;
@@ -450,6 +470,8 @@ io.use(async (socket, next) => {
       userId = payload.Username[0];
     else if (payload.Username) userId = payload.Username;
     else if (payload.userId) userId = payload.userId;
+    else if (payload.particularID) userId = payload.particularID;
+    else if (payload.particularId) userId = payload.particularId;
     else if (payload.Id) userId = payload.Id;
     else if (payload.id) userId = payload.id;
     else if (payload.sub) userId = payload.sub;
@@ -469,6 +491,35 @@ io.use(async (socket, next) => {
       } catch (err) {
         // ignore; proceed to fail if userId still not found
       }
+    }
+
+    if (!userId && payload.accessToken) {
+      try {
+        const decoded = jwt.decode(payload.accessToken) || {};
+        if (decoded.Username && Array.isArray(decoded.Username) && decoded.Username[0]) {
+          userId = decoded.Username[0];
+        } else if (decoded.Username) {
+          userId = decoded.Username;
+        } else {
+          userId =
+            decoded.userId ||
+            decoded.particularID ||
+            decoded.particularId ||
+            decoded.id ||
+            decoded.sub ||
+            decoded.user_id ||
+            decoded.username ||
+            decoded.preferred_username ||
+            decoded.email ||
+            null;
+        }
+      } catch (err) {
+        // ignore decode errors
+      }
+    }
+
+    if (!userId && userIdAuth) {
+      userId = userIdAuth;
     }
 
     if (!userId) {
@@ -599,6 +650,23 @@ app.use(cookieParser());
 // Security headers
 app.use(helmet());
 
+// Legacy URL compatibility: rewrite non-/api requests to /api
+// Exclusions include static uploads, socket.io, and root path.
+app.use((req, res, next) => {
+  try {
+    if (req.path.startsWith(apiPrefix)) return next();
+    if (req.path === "/") return next();
+    const excludedPrefixes = ["/uploads", "/socket.io", "/favicon.ico"];
+    if (excludedPrefixes.some((prefix) => req.path.startsWith(prefix))) {
+      return next();
+    }
+    req.url = `${apiPrefix}${req.url}`;
+    return next();
+  } catch (e) {
+    return next();
+  }
+});
+
 // CSRF protection for state-changing requests. For SPAs we expose a
 // /csrf-token endpoint so the client can fetch the token and include it in
 // the X-CSRF-Token header for POST/PUT/DELETE requests.
@@ -614,12 +682,20 @@ const _csrfProtection = csurf({ cookie: csrfCookieOptions });
 // breaking non-updated clients. Encourage clients to fetch /csrf-token and include
 // X-CSRF-Token for POST/PUT/DELETE requests.
 app.use((req, res, next) => {
-  const exemptPaths = ['/login', '/api/webhook', '/health'];
+  const exemptPaths = [
+    "/login",
+    "/webhook",
+    "/health",
+    `${apiPrefix}/login`,
+    `${apiPrefix}/webhook`,
+    `${apiPrefix}/health`
+  ];
+  if (req.path.startsWith(`${apiPrefix}/chat`)) return next();
   if (exemptPaths.includes(req.path)) return next();
   return _csrfProtection(req, res, next);
 });
 
-app.get('/csrf-token', (req, res) => {
+app.get(`${apiPrefix}/csrf-token`, (req, res) => {
   try {
     res.json({ csrfToken: req.csrfToken() });
   } catch (err) {
@@ -637,7 +713,7 @@ app.use((err, req, res, next) => {
 app.get("/", (req, res) => res.json({ message: "server is UP!" }));
 
 // Temporary public endpoint for compensation settings (for management page)
-app.get("/compensation", async (req, res) => {
+app.get(`${apiPrefix}/compensation`, async (req, res) => {
   try {
     const CompensationSettings = require("./models/CompensationSettings");
     const Settings = require("./models/Settings");
@@ -685,7 +761,7 @@ app.get("/compensation", async (req, res) => {
 });
 
 // Temporary public template download endpoint (for testing)
-app.get("/api/excel-upload/template", checkToken, async (req, res) => {
+app.get(`${apiPrefix}/excel-upload/template`, checkToken, async (req, res) => {
   try {
     console.log("TEMP: Template download requested by authenticated user");
 
@@ -747,7 +823,7 @@ app.get("/api/excel-upload/template", checkToken, async (req, res) => {
 });
 
 // Test endpoint without MongoDB
-app.get("/test", (req, res) => {
+app.get(`${apiPrefix}/test`, (req, res) => {
   res.json({
     message: "Server is working without MongoDB!",
     timestamp: new Date(),
@@ -761,12 +837,12 @@ app.use((req, res, next) => {
   try {
     if (req.method === "GET" || req.method === "OPTIONS") {
       // Allow GET and OPTIONS requests to bypass global organizational enforcement
-      if (req.path === "/compensation") return next();
+      if (req.path === `${apiPrefix}/compensation`) return next();
       return next();
     }
     // Skip enforcement for hierarchical assignment management endpoints
     const p = (req.path || "").toLowerCase();
-    if (p.startsWith("/api/hierarchical-rbac/assignments")) {
+    if (p.startsWith(`${apiPrefix}/hierarchical-rbac/assignments`)) {
       return next();
     }
     // Ensure user is authenticated before enforcing org access
@@ -782,140 +858,139 @@ app.use((req, res, next) => {
 // ✅ Protected /uploads route - requires authentication
 app.use("/uploads", checkToken, express.static(path.join(__dirname, "uploads")));
 
-app.use(employeeRouter);
-app.use(statusRouter);
-app.use(salaryRouter);
+app.use(apiPrefix, employeeRouter);
+app.use(apiPrefix, statusRouter);
+app.use(apiPrefix, salaryRouter);
 // Routes
-app.use(authRouter);
-app.use(personnelRoutes);
+app.use(apiPrefix, authRouter);
+app.use(apiPrefix, personnelRoutes);
 //Position Title Routes
-app.use(positionTitleRoutes);
-app.use(attachWorkflowRef, mooeRoutes);
-app.use(fiscalYearRoutes);
+app.use(apiPrefix, positionTitleRoutes);
+app.use(apiPrefix, attachWorkflowRef, mooeRoutes);
+app.use(apiPrefix, fiscalYearRoutes);
 //Department Title Routes
-app.use(departmentRouter);
-app.use(attachWorkflowRef, personnelServicesRouter);
-app.use("/api", excelUploadRouter); // Excel Upload Route
-app.use(attachWorkflowRef, capitalOutlayRouter);
-app.use("/api", capitalOutlayDetailsRouter);
-app.use(categoryRouter);
+app.use(apiPrefix, departmentRouter);
+app.use(apiPrefix, attachWorkflowRef, personnelServicesRouter);
+app.use(apiPrefix, excelUploadRouter); // Excel Upload Route
+app.use(apiPrefix, attachWorkflowRef, capitalOutlayRouter);
+app.use(apiPrefix, capitalOutlayDetailsRouter);
+app.use(apiPrefix, categoryRouter);
 // app.use(proposalRouter);  // DISABLED - Using RBAC router instead
-app.use("/api", proposalRBACRouter); // ✅ RBAC router with role-based visibility control
+app.use(apiPrefix, proposalRBACRouter); // ✅ RBAC router with role-based visibility control
 
 // Budget Officer Edit Routes
 const { comparisonRouter } = require("./routers/budgetOfficerEditRoutes");
-app.use("/api/budget-officer-edits", comparisonRouter);
-app.use("/api/budget-officer-edits", budgetOfficerEditRouter);
+app.use(`${apiPrefix}/budget-officer-edits`, comparisonRouter);
+app.use(`${apiPrefix}/budget-officer-edits`, budgetOfficerEditRouter);
 // My Proposals Routes (for role-based proposal listing)
-app.use("/api/my-proposals", myProposalsRoutes);
+app.use(`${apiPrefix}/my-proposals`, myProposalsRoutes);
 // Workflow-specific endpoints
-app.use("/api/workflow", require("./routers/proposalWorkflowRoutes"));
+app.use(`${apiPrefix}/workflow`, require("./routers/proposalWorkflowRoutes"));
 // 🔄 Submission Workflow Routes - Controls data visibility based on submission status
 const submissionWorkflowRoutes = require("./routers/submissionWorkflowRoutes");
-app.use("/api/submission-workflow", submissionWorkflowRoutes);
+app.use(`${apiPrefix}/submission-workflow`, submissionWorkflowRoutes);
 // 🔄 Status Workflow Routes - Legacy workflow compatibility
 const statusWorkflowRoutes = require("./routers/statusWorkflowRoutes");
-app.use("/api/status-workflow", statusWorkflowRoutes);
+app.use(`${apiPrefix}/status-workflow`, statusWorkflowRoutes);
 // In-app notifications
-app.use("/api", require("./routers/notificationRoutes"));
+app.use(apiPrefix, require("./routers/notificationRoutes"));
 // Tier Comparison Routes (Tier 1 vs Tier 2 proposals)
 const tierComparisonRoutes = require("./routers/tierComparisonRoutes");
-app.use("/api/tier-comparison", tierComparisonRoutes);
+app.use(`${apiPrefix}/tier-comparison`, tierComparisonRoutes);
 
 // Budget Ceiling Routes (BRD ceiling management for NEP/GAA)
 const budgetCeilingRoutes = require("./routers/budgetCeilingRoutes");
-app.use("/api/budget-ceiling", budgetCeilingRoutes);
-app.use(rataRoutes);
-app.use(settings);
-app.use("/api/regions", regionRouter);
-app.use("/api", todoRouter);
-app.use("/api/events", eventsRouter);
-app.use(annexRouter);
-app.use(personnelServicesAnnexesRoutes);
-app.use(setupRouter);
-app.use(employeeCourtAppearanceRouter);
-app.use(overtimeRouter);
-app.use(subsistenceAllowanceRouter);
-app.use(iasOMCostRouter);
-app.use(subsistenceSTRouter);
-app.use(loyaltyPayRouter);
-app.use("/reports", reportsRouter); // Mount with /reports prefix
-app.use(cosPersonnelRouter);
-app.use("/", mooeRoutes);
-app.use("/api/proposalSummary", proposalSummaryRoutes);
-app.use("/api/allproposal", newProposalWorkflowRoutes);
+app.use(`${apiPrefix}/budget-ceiling`, budgetCeilingRoutes);
+app.use(apiPrefix, rataRoutes);
+app.use(apiPrefix, settings);
+app.use(`${apiPrefix}/regions`, regionRouter);
+app.use(apiPrefix, todoRouter);
+app.use(`${apiPrefix}/events`, eventsRouter);
+app.use(apiPrefix, annexRouter);
+app.use(apiPrefix, personnelServicesAnnexesRoutes);
+app.use(apiPrefix, setupRouter);
+app.use(apiPrefix, employeeCourtAppearanceRouter);
+app.use(apiPrefix, overtimeRouter);
+app.use(apiPrefix, subsistenceAllowanceRouter);
+app.use(apiPrefix, iasOMCostRouter);
+app.use(apiPrefix, subsistenceSTRouter);
+app.use(apiPrefix, loyaltyPayRouter);
+app.use(`${apiPrefix}/reports`, reportsRouter); // Mount with /reports prefix
+app.use(apiPrefix, cosPersonnelRouter);
+app.use(`${apiPrefix}/proposalSummary`, proposalSummaryRoutes);
+app.use(`${apiPrefix}/allproposal`, newProposalWorkflowRoutes);
 // MSSQL routes (optional): mount when MSSQL is configured
 // Dedicated route for SalaryTable MSSQL table (mount before generic mssql routes)
-app.use("/api/mssql/salarytable", mssqlSalaryTableRoutes);
+app.use(`${apiPrefix}/mssql/salarytable`, mssqlSalaryTableRoutes);
 // MSSQL routes (optional): mount when MSSQL is configured
-app.use("/api/mssql", mssqlRoutes);
+app.use(`${apiPrefix}/mssql`, mssqlRoutes);
 // Only register debug routes in development / when explicitly allowed
 if (
   process.env.DEBUG_MODE === "true" ||
   process.env.ALLOW_MOCK_AUTH === "true"
 ) {
-  app.use("/api/debug", debugRoutes);
+  app.use(`${apiPrefix}/debug`, debugRoutes);
 }
 //para sa mga uploader
-app.use(chartOfAccountsRouter);
-app.use(uploadcategories);
-app.use(uploadstatus);
-app.use(uploadregions);
-app.use(uploaddepartments);
-app.use(uploadpositions);
-app.use(uploadsalaries);
-app.use(uploadstatuses);
-app.use(uploadratas);
-app.use(mealAllowance);
-app.use(incomeCategoryRouter);
-app.use(incomeCategoryGroupRouter);
-app.use(incomeSubcategoryRouter);
-app.use(incomeSubcategoryRoutes);
-app.use("/stats", statsRouter);
-app.use(childrenAllowance);
-app.use("/api/export", exportRoutes);
-app.use(medicalAllowanceRouter);
+app.use(apiPrefix, chartOfAccountsRouter);
+app.use(apiPrefix, uploadcategories);
+app.use(apiPrefix, uploadstatus);
+app.use(apiPrefix, uploadregions);
+app.use(apiPrefix, uploaddepartments);
+app.use(apiPrefix, uploadpositions);
+app.use(apiPrefix, uploadsalaries);
+app.use(apiPrefix, uploadstatuses);
+app.use(apiPrefix, uploadratas);
+app.use(apiPrefix, mealAllowance);
+app.use(apiPrefix, incomeCategoryRouter);
+app.use(apiPrefix, incomeCategoryGroupRouter);
+app.use(apiPrefix, incomeSubcategoryRouter);
+app.use(apiPrefix, incomeSubcategoryRoutes);
+app.use(`${apiPrefix}/stats`, statsRouter);
+app.use(apiPrefix, childrenAllowance);
+app.use(`${apiPrefix}/export`, exportRoutes);
+app.use(apiPrefix, medicalAllowanceRouter);
 // Income routes also benefit from unified workflowRef injection
-app.use(attachWorkflowRef, incomeRouter);
-app.use(income_categories);
-app.use("/income", incomeExcelUploadRouter); // Mount under /income prefix
-app.use("/api/consolidated-reports", consolidatedReportsRouter); // Mount consolidated reports routes
-app.use("/api/consolidated-reports", consolidatedCapitalOutlayRouter); // Mount consolidated capital outlay routes
-app.use("/api/consolidated-reports", consolidatedPersonnelServicesRouter); // Mount consolidated personnel services routes
-app.use("/api/comprehensive-reports", comprehensiveReportsRouter); // Mount comprehensive reports routes
-app.use("/api/database-backup", databaseBackupRouter); // Mount database backup routes
+app.use(apiPrefix, attachWorkflowRef, incomeRouter);
+app.use(apiPrefix, income_categories);
+app.use(`${apiPrefix}/income`, incomeExcelUploadRouter); // Mount under /income prefix
+app.use(`${apiPrefix}/consolidated-reports`, consolidatedReportsRouter); // Mount consolidated reports routes
+app.use(`${apiPrefix}/consolidated-reports`, consolidatedCapitalOutlayRouter); // Mount consolidated capital outlay routes
+app.use(`${apiPrefix}/consolidated-reports`, consolidatedPersonnelServicesRouter); // Mount consolidated personnel services routes
+app.use(`${apiPrefix}/comprehensive-reports`, comprehensiveReportsRouter); // Mount comprehensive reports routes
+app.use(`${apiPrefix}/database-backup`, databaseBackupRouter); // Mount database backup routes
 // app.use("/api", overtimeRouter);
 // Add this line to use the new router
-app.use(require("./routers/personnelParamsRoutes"));
+app.use(apiPrefix, require("./routers/personnelParamsRoutes"));
 // REMOVED: The old personnelServicesRoutes has submission workflow disabled
 // This was overriding the correct personnelServices_router loaded earlier at line 274
 // app.use(require("./routers/personnelServicesRoutes"));
 // app.use(require("./routers/medicalAllowanceRoutes"));
-app.use("/api/discount-settings", discountSettingsRouter);
-app.use(retireeRouter);
-app.use(budgetarySupportRoutes);
-app.use("/api/tier", tierRoutes);
-app.use(chartOfAccountsCRUDRouter);
-app.use(titleMappingRouter);
+app.use(`${apiPrefix}/discount-settings`, discountSettingsRouter);
+app.use(apiPrefix, retireeRouter);
+app.use(apiPrefix, budgetarySupportRoutes);
+app.use(`${apiPrefix}/tier`, tierRoutes);
+app.use(apiPrefix, chartOfAccountsCRUDRouter);
+app.use(apiPrefix, titleMappingRouter);
 // Chat router
-app.use("/api/chat", require("./routers/chatRoutes"));
+app.use(`${apiPrefix}/chat`, require("./routers/chatRoutes"));
 // Legacy user-region and organizational assignment routers removed in favor of hierarchical RBAC
 // const userRegionAssignmentRouter = require('./routers/UserRegionAssignmentRoutes');
 // app.use("/api", userRegionAssignmentRouter);
 // const userOrgAssignmentRouter = require('./routers/UserOrganizationalAssignmentRoutes');
 // app.use(userOrgAssignmentRouter);
 const userProfileRouter = require("./routers/UserProfileRoutes");
-app.use("/api", userProfileRouter);
+app.use(apiPrefix, userProfileRouter);
 const budgetManagerOrgRoutes = require("./routers/budgetManagerOrgRoutes");
-app.use(budgetManagerOrgRoutes);
+app.use(apiPrefix, budgetManagerOrgRoutes);
 // 🏢 Hierarchical RBAC Routes - Enhanced organizational access control with Division → Department → Region consolidation
 const hierarchicalRBACRoutes = require("./routers/hierarchicalRBACRoutes");
-app.use("/api/hierarchical-rbac", hierarchicalRBACRoutes);
+app.use(`${apiPrefix}/hierarchical-rbac`, hierarchicalRBACRoutes);
 // Test routes removed for production security
 // Register employee master router
-app.use(employeeMasterRouter);
+app.use(apiPrefix, employeeMasterRouter);
 const mooeExcelUploadRouter = require("./routers/mooeExcelUploadRoutes");
-app.use("/income", mooeExcelUploadRouter); // Mount under /income prefix
+app.use(`${apiPrefix}/income`, mooeExcelUploadRouter); // Mount under /income prefix
 
 // Presence map for online users: Map<userId, count>
 // global.onlineUsers maps userId => { count: number, lastConnectedAt: number }

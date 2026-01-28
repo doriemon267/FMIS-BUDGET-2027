@@ -144,8 +144,17 @@ const PSPCustomPageTable = ({
   const fetchRATA = useCallback(async () => {
     try {
       const response = await api.get("/ratas");
-      if (response.data && Array.isArray(response.data.ratas)) {
-        setRATA(response.data.ratas);
+      const payload = response.data;
+      const ratas =
+        Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.ratas)
+            ? payload.ratas
+            : Array.isArray(payload?.data)
+              ? payload.data
+              : null;
+      if (ratas) {
+        setRATA(ratas);
       } else {
         toast.error("RATA data format incorrect.");
         console.error("RATA response format incorrect:", response.data);

@@ -1,12 +1,12 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
-import axios from "axios";
+import api from "../../config/api";
 
 const PersonnelAggregates = () => {
   const { data, isLoading, error } = useQuery({
     queryKey: ["personnelAggregates"],
     queryFn: async () => {
-      const response = await axios.get("/personnelAggregates");
+      const response = await api.get("/personnelAggregates");
       return response.data;
     },
   });

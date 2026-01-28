@@ -3,7 +3,7 @@ import CustomPageTable from "./PersonnelCustomPageTable";
 //import CustomPage from "../../global/components/CustomPage";
 import { Button, Box } from "@mui/material";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import axios from "axios";
+import api from "../../config/api";
 import { toast } from "react-hot-toast";
 
 const PersonnelServicesPage = () => {
@@ -188,7 +188,7 @@ const PersonnelServicesPage = () => {
 
   const syncMealAllowances = useMutation({
     mutationFn: async () => {
-      return axios.post("/personnelServices/sync-meal-allowances");
+      return api.post("/personnelServices/sync-meal-allowances");
     },
     onSuccess: (data) => {
       toast.success(`Meal allowances synced successfully: ${data.data.message}`);
