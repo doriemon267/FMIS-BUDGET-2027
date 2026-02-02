@@ -1604,18 +1604,21 @@ exports.getMOOEByParams = async (req, res) => {
 
     // ✅ Primary filter: if proposalId is provided, accept either legacy Proposal _id or NewProposalWorkflow _id
     if (proposalId) {
+      let workflowId = proposalId;
+      if (typeof proposalId === 'string' && require('mongoose').Types.ObjectId.isValid(proposalId)) {
+        try {
+          workflowId = new require('mongoose').Types.ObjectId(proposalId);
+        } catch (_) {}
+      }
       try {
-        // Match by workflowRef directly
-        query.$or = [{ workflowRef: proposalId }];
-        // Try to resolve legacy Proposal id linked to this workflow proposal id
+        query.$or = [{ workflowRef: workflowId }];
         const Proposal = require('../models/Proposal');
-        const legacy = await Proposal.findOne({ workflowRef: proposalId }).select('_id').lean();
+        const legacy = await Proposal.findOne({ workflowRef: workflowId }).select('_id').lean();
         if (legacy?._id) {
           query.$or.push({ proposalId: legacy._id });
         }
       } catch (_e) {
-        // Fallback: treat proposalId as legacy Proposal _id
-        query.proposalId = proposalId;
+        query.proposalId = workflowId;
       }
     } else {
       // Fallback: use individual parameters
@@ -1629,56 +1632,71 @@ exports.getMOOEByParams = async (req, res) => {
     }
 
     let mooe = await MooeProposal.find(query).lean();
+
+    // Fallback: unlinked records (no workflowRef) with same fiscalYear + budgetType + division
+    if (proposalId && mooe.length === 0 && (req.query.fiscalYear || req.query.budgetType)) {
+      const fallbackQuery = {
+        $or: [{ workflowRef: null }, { workflowRef: { $exists: false } }],
+        ...(req.query.fiscalYear && { fiscalYear: req.query.fiscalYear }),
+        ...(req.query.budgetType && { budgetType: req.query.budgetType }),
+        ...(req.query.division && { division: req.query.division }),
+      };
+      const fallbackMooe = await MooeProposal.find(fallbackQuery).lean();
+      if (fallbackMooe.length > 0) {
+        mooe = fallbackMooe;
+      }
+    }
     
-    // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's CURRENT organizational assignment
-    const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
-    const userIdString = userId ? String(userId) : undefined;
-    const userRoles = req.user?.Roles || [];
+    // When proposalId is provided we're viewing a specific proposal (e.g. Proposal Details dialog).
+    // Return all MOOE linked to that proposal; access is already controlled by who can open the proposal.
+    const isProposalContext = Boolean(proposalId);
     
-    const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
-    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
-    
-    // SUPER_ADMIN sees only their own records
-    if (isSuperAdmin && userIdString) {
-      // Allow SUPER_ADMIN to see all records (removed restriction)
-    } else if (!isBudgetManager && userIdString) {
-      try {
-        const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
-        const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
-          .populate('departmentId', 'Department DepartmentName department')
-          .populate('regionId', 'Region RegionName region')
-          .lean();
-        
-        if (userAssignment) {
-          const assignedDepartment = userAssignment.departmentId?.Department || 
-                                    userAssignment.departmentId?.DepartmentName ||
-                                    userAssignment.departmentId?.department;
-          const assignedRegion = userAssignment.regionId?.Region ||
-                                userAssignment.regionId?.RegionName ||
-                                userAssignment.regionId?.region;
-          const assignedDivision = userAssignment.divisionName;
+    if (!isProposalContext) {
+      // RESPONSIBILITY CENTER FILTERING: Only when NOT scoped to a single proposal
+      const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
+      const userIdString = userId ? String(userId) : undefined;
+      const userRoles = req.user?.Roles || [];
+      
+      const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+      
+      if (!isBudgetManager && userIdString) {
+        try {
+          const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+          const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
+            .populate('departmentId', 'Department DepartmentName department')
+            .populate('regionId', 'Region RegionName region')
+            .lean();
           
-          const filteredMooe = mooe.filter(m => {
-            if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
-              return m.division === assignedDivision;
-            }
-            if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
-              return m.department === assignedDepartment;
-            }
-            if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
-              return m.region === assignedRegion;
-            }
-            if (userAssignment.assignmentLevel === 'FULL') {
-              return true;
-            }
-            return false;
-          });
-          
-          // Always apply filter - don't show data from other responsibility centers
-          mooe = filteredMooe;
+          if (userAssignment) {
+            const assignedDepartment = userAssignment.departmentId?.Department || 
+                                      userAssignment.departmentId?.DepartmentName ||
+                                      userAssignment.departmentId?.department;
+            const assignedRegion = userAssignment.regionId?.Region ||
+                                  userAssignment.regionId?.RegionName ||
+                                  userAssignment.regionId?.region;
+            const assignedDivision = userAssignment.divisionName;
+            
+            const filteredMooe = mooe.filter(m => {
+              if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
+                return m.division === assignedDivision;
+              }
+              if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
+                return m.department === assignedDepartment;
+              }
+              if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
+                return m.region === assignedRegion;
+              }
+              if (userAssignment.assignmentLevel === 'FULL') {
+                return true;
+              }
+              return false;
+            });
+            
+            mooe = filteredMooe;
+          }
+        } catch (err) {
+          console.error('[ORG_FILTER] Error in getMOOEByParams:', err.message);
         }
-      } catch (err) {
-        console.error('[ORG_FILTER] Error in getMOOEByParams:', err.message);
       }
     }
     

@@ -40,44 +40,47 @@ const ProposalAttachments = ({ proposal, moduleName = 'general', userInfo, onCha
   
   // Determine if user can attach files based on proposal status and their role
   const canAttachFiles = () => {
-    const status = proposal?.status || '';
+    const status = String(proposal?.status || '').trim();
+    const statusUpper = status.toUpperCase();
     
-    // Super admins can always attach
+    // FINALIZED - No one can attach (read-only), including Super Admin
+    if (statusUpper === 'FINALIZED') {
+      return false;
+    }
+    
+    // Super admins can attach (except when Finalized, handled above)
     if (isSuperAdmin) {
       return true;
     }
     
     // DRAFT - Only Budget Preparer can attach
-    if (status === 'DRAFT') {
+    if (statusUpper === 'DRAFT') {
       if (isPreparer) {
         return true;
       }
     }
     
     // FORWARDED_TO_REVIEWER - Budget Preparer (owner) can still add docs, or Reviewer can
-    if (status === 'FORWARDED_TO_REVIEWER' && ((isPreparer && isOwner) || isReviewer)) return true;
+    if (statusUpper === 'FORWARDED_TO_REVIEWER' && ((isPreparer && isOwner) || isReviewer)) return true;
     
     // FORWARDED_TO_APPROVER - Reviewer or Approver can attach
-    if (status === 'FORWARDED_TO_APPROVER' && (isReviewer || isApprover)) return true;
+    if (statusUpper === 'FORWARDED_TO_APPROVER' && (isReviewer || isApprover)) return true;
     
     // FORWARDED_TO_BRD_ANALYST - Approver or Analyst can attach
-    if (status === 'FORWARDED_TO_BRD_ANALYST' && (isApprover || normalizedRoles.includes('BUDGET_PLANNING_ANALYST') || normalizedRoles.includes('BUDGET PLANNING ANALYST'))) return true;
+    if (statusUpper === 'FORWARDED_TO_BRD_ANALYST' && (isApprover || normalizedRoles.includes('BUDGET_PLANNING_ANALYST') || normalizedRoles.includes('BUDGET PLANNING ANALYST'))) return true;
     
     // FORWARDED_TO_BRD_OFFICER - Officer can attach
-    if (status === 'FORWARDED_TO_BRD_OFFICER' && (normalizedRoles.includes('BUDGET_OFFICER') || normalizedRoles.includes('BUDGET OFFICER') || isManager)) return true;
+    if (statusUpper === 'FORWARDED_TO_BRD_OFFICER' && (normalizedRoles.includes('BUDGET_OFFICER') || normalizedRoles.includes('BUDGET OFFICER') || isManager)) return true;
     
     // FORWARDED_TO_BRD_MANAGER - Manager can attach
-    if (status === 'FORWARDED_TO_BRD_MANAGER' && isManager) return true;
+    if (statusUpper === 'FORWARDED_TO_BRD_MANAGER' && isManager) return true;
     
     // RETURNED statuses - whoever it was returned to can attach
-    if (status === 'RETURNED_TO_PREPARER' && isPreparer && isOwner) return true;
-    if (status === 'RETURNED_TO_REVIEWER' && isReviewer) return true;
-    if (status === 'RETURNED_TO_APPROVER' && isApprover) return true;
-    if (status === 'RETURNED_TO_PLANNING_ANALYST' && (normalizedRoles.includes('BUDGET_PLANNING_ANALYST') || normalizedRoles.includes('BUDGET PLANNING ANALYST'))) return true;
-    if (status === 'RETURNED_TO_OFFICER' && (normalizedRoles.includes('BUDGET_OFFICER') || normalizedRoles.includes('BUDGET OFFICER'))) return true;
-    
-    // FINALIZED - No one can attach (read-only)
-    if (status === 'FINALIZED') return false;
+    if (statusUpper === 'RETURNED_TO_PREPARER' && isPreparer && isOwner) return true;
+    if (statusUpper === 'RETURNED_TO_REVIEWER' && isReviewer) return true;
+    if (statusUpper === 'RETURNED_TO_APPROVER' && isApprover) return true;
+    if (statusUpper === 'RETURNED_TO_PLANNING_ANALYST' && (normalizedRoles.includes('BUDGET_PLANNING_ANALYST') || normalizedRoles.includes('BUDGET PLANNING ANALYST'))) return true;
+    if (statusUpper === 'RETURNED_TO_OFFICER' && (normalizedRoles.includes('BUDGET_OFFICER') || normalizedRoles.includes('BUDGET OFFICER'))) return true;
     
     return false;
   };
@@ -171,26 +174,11 @@ const ProposalAttachments = ({ proposal, moduleName = 'general', userInfo, onCha
   if (!attachments && !canAttachFiles()) return null;
 
   const filtered = (attachments || []).filter(a => (a.module || 'general') === moduleName);
-  
-  // Debug info (can be removed later)
-  const debugInfo = {
-    status: proposal?.status,
-    canAttach: canAttachFiles(),
-    isPreparer,
-    isReviewer,
-    isApprover,
-    isManager,
-    isSuperAdmin,
-    isOwner,
-    userId,
-    processBy: proposal?.processBy,
-    draftCheck: proposal?.status === 'DRAFT' ? 'true (DRAFT status)' : 'false (not DRAFT)'
-  };
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 2 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="subtitle2">Supporting Documents</Typography>
+        <Typography variant="subtitle2" sx={{ fontWeight: 600, color: 'text.primary' }}>Supporting Documents</Typography>
         {canAttachFiles() && (
           <Box>
             <input
@@ -208,21 +196,6 @@ const ProposalAttachments = ({ proposal, moduleName = 'general', userInfo, onCha
           </Box>
         )}
       </Box>
-      
-      {/* Debug Helper - shows why upload is disabled */}
-      {!canAttachFiles() && filtered.length === 0 && (
-        <Box sx={{ backgroundColor: '#fff3cd', p: 1, borderRadius: 0.5, border: '1px solid #ffc107' }}>
-          <Typography variant="caption" sx={{ fontSize: '0.75rem', display: 'block', mb: 0.5 }}>
-            ℹ️ Status: <strong>{debugInfo.status || 'Unknown'}</strong> | Role: <strong>{isPreparer ? 'Preparer' : isReviewer ? 'Reviewer' : isApprover ? 'Approver' : isManager ? 'Manager' : 'Other'}</strong>
-          </Typography>
-          <Typography variant="caption" sx={{ fontSize: '0.7rem', color: '#666', display: 'block' }}>
-            Can Attach: <strong>{debugInfo.canAttach ? 'Yes ✅' : 'No ❌'}</strong> | Is Owner (DRAFT check): <strong>{debugInfo.draftCheck}</strong>
-          </Typography>
-          <Typography variant="caption" sx={{ fontSize: '0.7rem', color: '#999', display: 'block' }}>
-            User ID: {debugInfo.userId} | ProcessBy: {debugInfo.processBy}
-          </Typography>
-        </Box>
-      )}
       
       <List dense>
         {filtered.length === 0 && (
@@ -243,7 +216,7 @@ const ProposalAttachments = ({ proposal, moduleName = 'general', userInfo, onCha
                   {att.mimeType === 'application/pdf' ? <PictureAsPdfIcon /> : <InsertDriveFileIcon />}
                 </IconButton>
               </Tooltip>
-              {(canAttachFiles() || isSuperAdmin) && (
+              {canAttachFiles() && (
                 <Tooltip title="Delete">
                   <IconButton size="small" onClick={() => handleDelete(att)}><DeleteIcon /></IconButton>
                 </Tooltip>

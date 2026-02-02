@@ -42,13 +42,9 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
 
   const entered = allTierInputs[lineItemId] || {};
   const orig = getOriginalTiersLocal(item);
-
-  const displayTier1 = entered.hasOwnProperty('tier1') ? (entered.tier1 === '' ? 0 : entered.tier1) : (orig.tier1 !== undefined ? orig.tier1 : '');
+  // TIER 1 is read-only from finalized (0 per line); only TIER 2 is editable. TOTAL = TIER 1 + TIER 2 per line.
   const displayTier2 = entered.hasOwnProperty('tier2') ? (entered.tier2 === '' ? 0 : entered.tier2) : (orig.tier2 !== undefined ? orig.tier2 : '');
-
-  const totalValue = (entered.hasOwnProperty('tier1') || entered.hasOwnProperty('tier2'))
-    ? ((entered.tier1 === '' ? 0 : (entered.tier1 || 0)) + (entered.tier2 === '' ? 0 : (entered.tier2 || 0)))
-    : (orig.total !== undefined ? orig.total : 0);
+  const totalValue = Number(displayTier2) || 0;
 
   return (
     <TableRow>
@@ -58,12 +54,10 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
         <TextField
           size="small"
           type="number"
-          inputProps={{ min: 0, step: 0.01 }}
-          InputProps={{ startAdornment: <InputAdornment position="start">₱</InputAdornment> }}
-          value={allTierInputs[lineItemId]?.tier1 ?? (orig.tier1 !== undefined ? orig.tier1 : '')}
-          onChange={(e) => handleTierInputChange(lineItemId, 'tier1', e.target.value, name)}
-          helperText={orig.tier1 !== undefined ? `Orig: ${formatCurrency(orig.tier1)}` : ''}
-          sx={{ maxWidth: 160 }}
+          inputProps={{ min: 0, step: 0.01, readOnly: true }}
+          InputProps={{ startAdornment: <InputAdornment position="start">₱</InputAdornment>, readOnly: true }}
+          value={0}
+          sx={{ maxWidth: 160, '& .MuiInputBase-input': { backgroundColor: 'action.hover' } }}
         />
       </TableCell>
       <TableCell>
@@ -142,7 +136,26 @@ function TierTable({ fiscalYear, region, department, division, onTierDataChange 
     return params;
   }, [fiscalYear, region, department, division]);
 
+  const finalizedParams = useMemo(() => {
+    const params = { fiscalYear };
+    if (region) params.region = region;
+    if (department) params.department = department;
+    if (division) params.division = division;
+    return params;
+  }, [fiscalYear, region, department, division]);
+
   const hasRequiredParams = !!fiscalYear;
+
+  // Finalized Initial proposals for this scope (PROJECTED CORPORATE INCOME and PROJECTED SUBSIDY → TIER 1). Tier data appears when hasFinalized for the selected Region/Department/Division.
+  const [finalizedQuery] = useQueries({
+    queries: [
+      {
+        queryKey: ['tierFinalizedData', finalizedParams],
+        queryFn: () => api.get('/api/tier/finalized-data', { params: finalizedParams }).then(res => res.data),
+        enabled: hasRequiredParams,
+      },
+    ],
+  });
 
   const results = useQueries({
     queries: [
@@ -176,8 +189,13 @@ function TierTable({ fiscalYear, region, department, division, onTierDataChange 
     ],
   });
 
-  const isLoading = results.some(r => r.isLoading);
+  const isLoading = finalizedQuery?.isLoading || results.some(r => r.isLoading);
   const isError = results.some(r => r.isError);
+
+  const finalizedData = finalizedQuery?.data || null;
+  const hasFinalized = finalizedData?.hasFinalized === true;
+  const projectedCorporateIncome = Number(finalizedData?.projectedCorporateIncome) || 0;
+  const projectedSubsidyTier1 = Number(finalizedData?.projectedSubsidy) || 0;
 
   const personnelData = results[0].data || [];
   const mooeData = results[1].data || [];
@@ -206,13 +224,15 @@ function TierTable({ fiscalYear, region, department, division, onTierDataChange 
     return Array.isArray(personnelData) ? personnelData : [];
   }, [personnelData]);
 
+  // Only TIER 2 is editable; TIER 1 comes from finalized (PROJECTED SUBSIDY).
   const handleTierInputChange = useCallback((lineItemId, field, value, category) => {
+    if (field !== 'tier2') return;
     const numValue = value === '' ? '' : parseFloat(value) || 0;
     setTierInputs(prev => ({
       ...prev,
       [lineItemId]: {
         ...prev[lineItemId],
-        [field]: numValue,
+        tier2: numValue,
         category,
       },
     }));
@@ -309,16 +329,15 @@ function TierTable({ fiscalYear, region, department, division, onTierDataChange 
       uses[capitalParent].total += displayTotal;
     });
 
-    const totalUsesTier1 = Object.values(uses).reduce((s, u) => s + (u.tier1 || 0), 0);
     const totalUsesTier2 = Object.values(uses).reduce((s, u) => s + (u.tier2 || 0), 0);
     const totalUses = Object.values(uses).reduce((s, u) => s + (u.total || 0), 0);
-
-    const corporateIncome = incomeData.reduce((acc, item) => acc + (item.amount || 0), 0);
-    const budgetarySupportTotal = totalUses;
-    const totalSources = corporateIncome + budgetarySupportTotal;
-
+    // TIER 1 total from finalized (PROJECTED SUBSIDY); TIER 2 from editable inputs. TOTAL = TIER 1 + TIER 2.
+    const totalUsesTier1 = projectedSubsidyTier1;
+    const subsidyTotal = totalUsesTier1 + totalUsesTier2;
+    // PROJECTED CORPORATE INCOME from finalized (read-only). PROPOSED BUDGET = PROJECTED CORPORATE INCOME + TOTAL.
+    const corporateIncome = projectedCorporateIncome;
+    const totalSources = corporateIncome + subsidyTotal;
     const proposedBudget = totalSources;
-
     const surplus = totalSources - totalUses;
 
     return {
@@ -327,20 +346,20 @@ function TierTable({ fiscalYear, region, department, division, onTierDataChange 
         budgetarySupport: {
           tier1: totalUsesTier1,
           tier2: totalUsesTier2,
-          total: budgetarySupportTotal,
+          total: subsidyTotal,
         },
         total: totalSources,
         proposedBudget,
       },
       usesOfFunds: {
         ...uses,
-        total: totalUses,
+        total: subsidyTotal,
         totalTier1: totalUsesTier1,
         totalTier2: totalUsesTier2,
       },
-      surplusDeficit: surplus,
+      surplusDeficit: totalSources - subsidyTotal,
     };
-  }, [tierInputs, incomeData, personnelData, mooeData, capitalOutlayData, groupedMooeData]);
+  }, [tierInputs, projectedCorporateIncome, projectedSubsidyTier1, personnelData, mooeData, capitalOutlayData, groupedMooeData]);
 
   const allData = useMemo(() => {
     // prepare displayedItems map including fallback to original values when user hasn't entered values
@@ -402,6 +421,20 @@ function TierTable({ fiscalYear, region, department, division, onTierDataChange 
 
   const hasAnyData = personnelData.length || mooeData.length || capitalOutlayData.length || incomeData.length;
 
+  // Tier data appears only when there are finalized Initial proposals for this scope (fiscal year + region/department/division). Page is for all levels (Region/Department/Division), not BRD-only.
+  if (hasRequiredParams && !finalizedQuery?.isLoading && !hasFinalized) {
+    return (
+      <Paper sx={{ p: 3 }}>
+        <Typography variant="body1" color="textSecondary" gutterBottom>
+          No finalized data for this scope.
+        </Typography>
+        <Typography variant="body2" color="textSecondary">
+          Tier data will appear once Initial proposals for the selected Region/Department/Division and fiscal year (current settings) have been finalized in New Proposal Workflow.
+        </Typography>
+      </Paper>
+    );
+  }
+
   if (!hasAnyData) {
     return (
       <Paper sx={{ p: 3 }}>
@@ -439,19 +472,17 @@ function TierTable({ fiscalYear, region, department, division, onTierDataChange 
               </TableCell>
             </TableRow>
 
-            {incomeData.map(item => (
-              <TableRow key={item._id}>
-                <TableCell>{item.incomeCategory?.name || 'Income'}</TableCell>
-                <TableCell align="right">{formatCurrency(item.amount)}</TableCell>
-                <TableCell></TableCell>
-                <TableCell></TableCell>
-                <TableCell></TableCell>
-                <TableCell align="right">{formatCurrency(item.amount)}</TableCell>
-              </TableRow>
-            ))}
+            <TableRow>
+              <TableCell>Projected Corporate Income</TableCell>
+              <TableCell align="right">{formatCurrency(sourcesOfFunds.corporateIncome)}</TableCell>
+              <TableCell></TableCell>
+              <TableCell></TableCell>
+              <TableCell></TableCell>
+              <TableCell align="right">{formatCurrency(sourcesOfFunds.corporateIncome)}</TableCell>
+            </TableRow>
 
             <TableRow>
-              <TableCell>Budgetary Support</TableCell>
+              <TableCell>Budgetary Support (Tier 1 from finalized subsidy; Tier 2 editable)</TableCell>
               <TableCell></TableCell>
               <TableCell align="right">{formatCurrency(sourcesOfFunds.budgetarySupport.tier1)}</TableCell>
               <TableCell align="right">{formatCurrency(sourcesOfFunds.budgetarySupport.tier2)}</TableCell>
@@ -460,12 +491,12 @@ function TierTable({ fiscalYear, region, department, division, onTierDataChange 
             </TableRow>
 
             <TableRow sx={{ backgroundColor: 'primary.main', color: 'white' }}>
-              <TableCell><Typography variant="h6" sx={{color: 'white'}}>TOTAL SOURCES OF FUNDS</Typography></TableCell>
+              <TableCell><Typography variant="h6" sx={{color: 'white'}}>TOTAL SOURCES OF FUNDS (PROPOSED BUDGET = PROJECTED CORPORATE INCOME + TOTAL)</Typography></TableCell>
               <TableCell align="right"><Typography variant="h6" sx={{color: 'white'}}>{formatCurrency(sourcesOfFunds.corporateIncome)}</Typography></TableCell>
               <TableCell></TableCell>
               <TableCell></TableCell>
               <TableCell align="right"><Typography variant="h6" sx={{color: 'white'}}>{formatCurrency(sourcesOfFunds.budgetarySupport.total)}</Typography></TableCell>
-              <TableCell align="right"><Typography variant="h6" sx={{color: 'white'}}>{formatCurrency(sourcesOfFunds.total)}</Typography></TableCell>
+              <TableCell align="right"><Typography variant="h6" sx={{color: 'white'}}>{formatCurrency(sourcesOfFunds.proposedBudget)}</Typography></TableCell>
             </TableRow>
 
             <TableRow sx={{ backgroundColor: 'primary.light' }}>

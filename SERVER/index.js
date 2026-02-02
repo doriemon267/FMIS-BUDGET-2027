@@ -678,19 +678,11 @@ const csrfCookieOptions = {
 if (process.env.COOKIE_DOMAIN) csrfCookieOptions.domain = process.env.COOKIE_DOMAIN;
 const _csrfProtection = csurf({ cookie: csrfCookieOptions });
 
-// Exempt login and other preflight/public endpoints from CSRF for now to avoid
-// breaking non-updated clients. Encourage clients to fetch /csrf-token and include
-// X-CSRF-Token for POST/PUT/DELETE requests.
+// CSRF: Exempt all /api routes so SPA works when cookie is not sent across proxy/origin (e.g. budget.nia.gov.ph vs API).
+// All /api routes remain protected by tokenMiddleware (check_token_prod/check_token_dev) on their routers.
 app.use((req, res, next) => {
-  const exemptPaths = [
-    "/login",
-    "/webhook",
-    "/health",
-    `${apiPrefix}/login`,
-    `${apiPrefix}/webhook`,
-    `${apiPrefix}/health`
-  ];
-  if (req.path.startsWith(`${apiPrefix}/chat`)) return next();
+  if (req.path.startsWith(apiPrefix)) return next();
+  const exemptPaths = ["/login", "/webhook", "/health"];
   if (exemptPaths.includes(req.path)) return next();
   return _csrfProtection(req, res, next);
 });
@@ -870,6 +862,8 @@ app.use(apiPrefix, attachWorkflowRef, mooeRoutes);
 app.use(apiPrefix, fiscalYearRoutes);
 //Department Title Routes
 app.use(apiPrefix, departmentRouter);
+// Mount personnelParamsRoutes BEFORE personnelServices_router so /personnel/getByParams (with proposalId) is handled correctly
+app.use(apiPrefix, require("./routers/personnelParamsRoutes"));
 app.use(apiPrefix, attachWorkflowRef, personnelServicesRouter);
 app.use(apiPrefix, excelUploadRouter); // Excel Upload Route
 app.use(apiPrefix, attachWorkflowRef, capitalOutlayRouter);
@@ -960,8 +954,7 @@ app.use(`${apiPrefix}/consolidated-reports`, consolidatedPersonnelServicesRouter
 app.use(`${apiPrefix}/comprehensive-reports`, comprehensiveReportsRouter); // Mount comprehensive reports routes
 app.use(`${apiPrefix}/database-backup`, databaseBackupRouter); // Mount database backup routes
 // app.use("/api", overtimeRouter);
-// Add this line to use the new router
-app.use(apiPrefix, require("./routers/personnelParamsRoutes"));
+// REMOVED: personnelParamsRoutes moved earlier (before personnelServices_router) for /personnel/getByParams
 // REMOVED: The old personnelServicesRoutes has submission workflow disabled
 // This was overriding the correct personnelServices_router loaded earlier at line 274
 // app.use(require("./routers/personnelServicesRoutes"));

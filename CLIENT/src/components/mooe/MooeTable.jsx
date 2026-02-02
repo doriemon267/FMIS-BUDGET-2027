@@ -436,12 +436,29 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
   // Keep all rows collapsed by default for better performance
   // Removed auto-expand functionality to improve loading speed
 
+  // Effective income/subsidy per child: use amount when income+subsidy is 0 so parent row and 5-02-99-990 show correct total
+  const getEffectiveIncome = useCallback((c) => {
+    const income = parseFloat(c.income || 0);
+    const subsidy = parseFloat(c.subsidy || 0);
+    const amount = parseFloat(c.amount || 0);
+    if (income + subsidy > 0) return income;
+    return amount > 0 ? 0 : income;
+  }, []);
+  const getEffectiveSubsidy = useCallback((c) => {
+    const income = parseFloat(c.income || 0);
+    const subsidy = parseFloat(c.subsidy || 0);
+    const amount = parseFloat(c.amount || 0);
+    if (income + subsidy > 0) return subsidy;
+    return amount > 0 ? amount : subsidy;
+  }, []);
+
   // Calculate total function (moved up to avoid hoisting issues)
   const calculateTotal = useCallback((children) => {
     return children.reduce((sum, child) => {
       const income = parseFloat(child.income || 0);
       const subsidy = parseFloat(child.subsidy || 0);
-      return sum + income + subsidy;
+      const amount = parseFloat(child.amount || 0);
+      return sum + (income + subsidy > 0 ? income + subsidy : amount);
     }, 0);
   }, []);
 
@@ -673,18 +690,23 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
       return;
     }
 
-    // Parse childId to get rowId - childId format is "{sublineItem}-{uacsCode}-{index}"
-    // We need to find the row that contains this child
-    const parts = childId.split('-');
-    const rowId = parts[0]; // First part is the sublineItem which is used as rowId
+    // Find row that contains this child (row.id is sublineItem; childId can be "Subline Item-5-02-99-990" or MongoDB _id)
+    const queryKey = ["mooeData", activeRegion?.name];
+    const currentData = queryClient.getQueryData(queryKey);
+    let rowId = null;
+    if (currentData?.formattedData) {
+      for (const row of currentData.formattedData) {
+        if (row.children.some(c => c.id === childId)) {
+          rowId = row.id;
+          break;
+        }
+      }
+    }
+    if (rowId == null) return;
 
     // Don't convert empty string to 0 - preserve the actual input
     const stringValue = value === "" ? "" : value.toString().trim();
     const numValue = parseFloat(stringValue);
-
-    // Debug: Check current data structure
-    const queryKey = ["mooeData", activeRegion?.name];
-    const currentData = queryClient.getQueryData(queryKey);
 
     // Enhanced validation with better error messages
     if (stringValue !== "") {
@@ -765,18 +787,23 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
 
   const handleSubsidyChange = useCallback(debounce((childId, value) => {
 
-    // Parse childId to get rowId - childId format is "{sublineItem}-{uacsCode}-{index}"
-    // We need to find the row that contains this child
-    const parts = childId.split('-');
-    const rowId = parts[0]; // First part is the sublineItem which is used as rowId
+    // Find row that contains this child (same as handleIncomeChange)
+    const queryKey = ["mooeData", activeRegion?.name];
+    const currentData = queryClient.getQueryData(queryKey);
+    let rowId = null;
+    if (currentData?.formattedData) {
+      for (const row of currentData.formattedData) {
+        if (row.children.some(c => c.id === childId)) {
+          rowId = row.id;
+          break;
+        }
+      }
+    }
+    if (rowId == null) return;
 
     // Don't convert empty string to 0 - preserve the actual input
     const stringValue = value === "" ? "" : value.toString().trim();
     const numValue = parseFloat(stringValue);
-
-    // Debug: Check current data structure
-    const queryKey = ["mooeData", activeRegion?.name];
-    const currentData = queryClient.getQueryData(queryKey);
 
     // Enhanced validation with better error messages
     if (stringValue !== "") {
@@ -1029,9 +1056,10 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
           })
         )
         .filter(entry => {
-          // Save only rows that actually have values; drop blanks regardless of existingId
+          // Keep rows with values OR existing records (so we can update to 0 when user clears)
           const hasValues = parseFloat(entry.income || 0) !== 0 || parseFloat(entry.subsidy || 0) !== 0;
-          return hasValues;
+          const hasExistingId = entry.id && entry.id !== "undefined" && entry.id !== "";
+          return hasValues || hasExistingId;
         });
     } else {
       // Normal processing if income inputs are not disabled
@@ -1074,9 +1102,10 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
           })
         )
         .filter(entry => {
-          // Save only rows that actually have values; drop blanks regardless of existingId
+          // Keep rows with values OR existing records (so we can update to 0 when user clears)
           const hasValues = parseFloat(entry.income || 0) !== 0 || parseFloat(entry.subsidy || 0) !== 0;
-          return hasValues;
+          const hasExistingId = entry.id && entry.id !== "undefined" && entry.id !== "";
+          return hasValues || hasExistingId;
         });
     }
 
@@ -1777,69 +1806,97 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                     <TableCell colSpan={viewMode === "consolidated" ? 1 : 2}></TableCell>
                     <TableCell align="right" sx={{ fontWeight: "bold" }}>
                       {(() => {
-                        const total = row.children.reduce((sum, child) => sum + parseFloat(child.income || 0), 0);
-                        const hasValues = row.children.some(child => child.income && parseFloat(child.income) > 0);
-                        return hasValues ? `₱${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : "";
-                      })()}
-                    </TableCell>
-                    <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                      {(() => {
-                        const total = row.children.reduce((sum, child) => sum + parseFloat(child.subsidy || 0), 0);
-                        const hasValues = row.children.some(child => child.subsidy && parseFloat(child.subsidy) > 0);
-                        return hasValues ? `₱${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : "";
+                        // Include hierarchical children (e.g. sub-items under 5-02-99-990); use effective income/subsidy (fallback to amount)
+                        const total = row.children.reduce((sum, child) => {
+                          const hierarchicalChildren = row.children.filter(c =>
+                            c.uacsCode && child.uacsCode && c.uacsCode.startsWith(child.uacsCode + '-')
+                          );
+                          if (hierarchicalChildren.length > 0) {
+                            return sum + hierarchicalChildren.reduce((s, c) => s + getEffectiveIncome(c), 0);
+                          }
+                          return sum + getEffectiveIncome(child);
+                        }, 0);
+                        return total > 0 ? `₱${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : (total === 0 ? "₱0.00" : "");
                       })()}
                     </TableCell>
                     <TableCell align="right" sx={{ fontWeight: "bold" }}>
                       {(() => {
                         const total = row.children.reduce((sum, child) => {
-                          const income = parseFloat(child.income || 0);
-                          const subsidy = parseFloat(child.subsidy || 0);
-                          return sum + income + subsidy;
+                          const hierarchicalChildren = row.children.filter(c =>
+                            c.uacsCode && child.uacsCode && c.uacsCode.startsWith(child.uacsCode + '-')
+                          );
+                          if (hierarchicalChildren.length > 0) {
+                            return sum + hierarchicalChildren.reduce((s, c) => s + getEffectiveSubsidy(c), 0);
+                          }
+                          return sum + getEffectiveSubsidy(child);
                         }, 0);
-                        
-                        // Only show total if there are actual values
-                        const hasValues = row.children.some(child => 
-                          (child.income && parseFloat(child.income) > 0) || 
-                          (child.subsidy && parseFloat(child.subsidy) > 0)
-                        );
-                        
-                        return hasValues ? `₱${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : "";
+                        return total > 0 ? `₱${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : (total === 0 ? "₱0.00" : "");
+                      })()}
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: "bold" }}>
+                      {(() => {
+                        const total = row.children.reduce((sum, child) => {
+                          const hierarchicalChildren = row.children.filter(c =>
+                            c.uacsCode && child.uacsCode && c.uacsCode.startsWith(child.uacsCode + '-')
+                          );
+                          if (hierarchicalChildren.length > 0) {
+                            return sum + hierarchicalChildren.reduce((s, c) => s + getEffectiveIncome(c) + getEffectiveSubsidy(c), 0);
+                          }
+                          return sum + getEffectiveIncome(child) + getEffectiveSubsidy(child);
+                        }, 0);
+                        return total > 0 ? `₱${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : (total === 0 ? "₱0.00" : "");
                       })()}
                     </TableCell>
                   </TableRow>
 
-                  {/* Child rows */}
-                  {expandedRows.includes(row.id) && row.children.map((child, childIndex) => {
-                    // Check if this child has hierarchical children (sub-UACS codes)
+                  {/* Child rows - skip any blank "mother" row (no label, with or without UACS) so total appears only in 5-02-99-990 row */}
+                  {expandedRows.includes(row.id) && row.children
+                    .filter(child => {
+                      const hasNoLabel = !(child.accountingTitle || child.name);
+                      const isBlankParent = hasNoLabel && (child.uacsCode === '5-02-99-990' || !child.uacsCode || child.uacsCode === '');
+                      const hasLabeled5_02_99_990 = row.children.some(c => c.uacsCode === '5-02-99-990' && (c.accountingTitle || c.name));
+                      if (isBlankParent && hasLabeled5_02_99_990) return false;
+                      return true;
+                    })
+                    .map((child, childIndex) => {
+                    const base = 'Other Maintenance and Operating Expenses';
                     const hierarchicalChildren = row.children.filter(c => 
                       c.uacsCode && child.uacsCode && c.uacsCode.startsWith(child.uacsCode + '-')
                     );
                     const hasHierarchicalChildren = hierarchicalChildren.length > 0;
+                    // Show sub-children total in 5-02-99-990 row regardless of category name (e.g. "Regular MOOE")
+                    const isMainOtherMooeRow = child.uacsCode === '5-02-99-990';
+                    const showSubChildrenTotal = isMainOtherMooeRow && hasHierarchicalChildren;
+                    // Include amount from any blank siblings we skip (no label, 5-02-99-990 or no UACS) so total is correct
+                    const blankSiblings = row.children.filter(c =>
+                      c !== child && !(c.accountingTitle || c.name) && (c.uacsCode === '5-02-99-990' || !c.uacsCode || c.uacsCode === '')
+                    );
+                    const hierarchicalIncomeSum = hierarchicalChildren.reduce((sum, c) => sum + getEffectiveIncome(c), 0)
+                      + blankSiblings.reduce((sum, c) => sum + getEffectiveIncome(c), 0);
+                    const hierarchicalSubsidySum = hierarchicalChildren.reduce((sum, c) => sum + getEffectiveSubsidy(c), 0)
+                      + blankSiblings.reduce((sum, c) => sum + getEffectiveSubsidy(c), 0);
                     
-                    // Calculate sum of hierarchical children
-                    const hierarchicalIncomeSum = hierarchicalChildren.reduce((sum, c) => sum + parseFloat(c.income || 0), 0);
-                    const hierarchicalSubsidySum = hierarchicalChildren.reduce((sum, c) => sum + parseFloat(c.subsidy || 0), 0);
-                    
-                    const base = 'Other Maintenance and Operating Expenses';
-                    const isOto = row.sublineItem && row.sublineItem.startsWith(base);
                     const indentLevel = getIndentLevelFromSubline(child.sublineItem || child.accountingTitle || row.sublineItem, child.uacsCode);
                     const hideGenericUacs = shouldHideGenericOtherUacs(child.uacsCode, row.sublineItem);
+                    const displayLabel = isMainOtherMooeRow
+                      ? (child.accountingTitle || child.name || row.sublineItem || base)
+                      : (child.accountingTitle || child.name);
 
                       return (
                       <TableRow key={`child-${row.id ?? index}-${child.id ?? childIndex}`}>
                         <TableCell></TableCell>
                         {viewMode === "consolidated" && <TableCell></TableCell>}
                         <TableCell></TableCell>
-                        <TableCell sx={{ pl: indentLevel ? 3 : 0 }}>{child.accountingTitle || child.name}</TableCell>
+                        <TableCell sx={{ pl: indentLevel ? 3 : 0 }}>{displayLabel}</TableCell>
                         <TableCell>{hideGenericUacs ? '' : (child.uacsCode || child.particulars)}</TableCell>
 
-                        {/* Income field */}
+                        {/* Income field - sub-children total only in 5-02-99-990 row */}
                         <TableCell>
                           {viewMode === "consolidated" ? (
                             <Typography variant="body2" align="right">
                               ₱{parseFloat(child.income || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </Typography>
-                          ) : hasHierarchicalChildren ? (
+                          ) : showSubChildrenTotal ? (
                             <Typography variant="body2" align="right" sx={{ fontWeight: 'bold', color: '#375e38' }}>
                               ₱{hierarchicalIncomeSum.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </Typography>
@@ -1879,13 +1936,13 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                           )}
                         </TableCell>
 
-                        {/* Subsidy field */}
+                        {/* Subsidy field - sub-children total only in 5-02-99-990 row */}
                         <TableCell>
                           {viewMode === "consolidated" ? (
                             <Typography variant="body2" align="right">
                               ₱{parseFloat(child.subsidy || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </Typography>
-                          ) : hasHierarchicalChildren ? (
+                          ) : showSubChildrenTotal ? (
                             <Typography variant="body2" align="right" sx={{ fontWeight: 'bold', color: '#375e38' }}>
                               ₱{hierarchicalSubsidySum.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </Typography>
@@ -1925,13 +1982,12 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                           )}
                         </TableCell>
 
-                        {/* Amount field (calculated) */}
+                        {/* Amount field - sub-children total only in 5-02-99-990 row */}
                         <TableCell>
                           <Typography variant="body2" align="right">
                             {(() => {
-                              // Prefer draft values while typing
-                              const income = hasHierarchicalChildren ? hierarchicalIncomeSum : parseFloat((draftInputs[child.id]?.income ?? child.income) || 0);
-                              const subsidy = hasHierarchicalChildren ? hierarchicalSubsidySum : parseFloat((draftInputs[child.id]?.subsidy ?? child.subsidy) || 0);
+                              const income = showSubChildrenTotal ? hierarchicalIncomeSum : parseFloat((draftInputs[child.id]?.income ?? child.income) || 0);
+                              const subsidy = showSubChildrenTotal ? hierarchicalSubsidySum : parseFloat((draftInputs[child.id]?.subsidy ?? child.subsidy) || 0);
                               const total = income + subsidy;
                             
                               if (total === 0 && !(draftInputs[child.id]?.income ?? child.income) && !(draftInputs[child.id]?.subsidy ?? child.subsidy)) {

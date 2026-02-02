@@ -511,7 +511,7 @@ const CompensationStandaloneDialog = ({
                             fullWidth
                             InputProps={{ inputComponent: Component }}
                             error={!!errors[name]}
-                            helperText={name === "philhealthPremium" ? "Fixed at 5% per PhilHealth Circular 2019-0009" : errors[name]?.message}
+                            helperText={name === "philhealthPremium" ? "2025: Total 5% (Employee 2.5% + Employer 2.5%). Salary ₱10,000–₱100,000. Cap ₱2,500 each at ₱100,000+." : errors[name]?.message}
                             sx={{
                               '& .MuiOutlinedInput-root': {
                                 '&:hover fieldset': { borderColor: '#264524' },

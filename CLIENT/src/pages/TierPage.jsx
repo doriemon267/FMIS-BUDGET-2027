@@ -203,10 +203,10 @@ const TierPage = () => {
           Tier
         </Typography>
         <Typography variant="body1">
-          View and manage Tier data.
+          View and manage Tier data by Region/Department/Division. Data appears when Initial proposals for the selected scope have been finalized (New Proposal Workflow). Fiscal year is from current settings.
         </Typography>
         <Typography variant="body2" sx={{ opacity: 0.9, mt: 1 }}>
-          Note: Original amounts from source data are shown as "Orig" beside inputs. Edit Tier values as needed and click Save.
+          PROJECTED CORPORATE INCOME and TIER 1 (from PROJECTED SUBSIDY) are read-only from finalized data. Only TIER 2 is editable. TOTAL = TIER 1 + TIER 2; PROPOSED BUDGET = PROJECTED CORPORATE INCOME + TOTAL.
         </Typography>
       </Paper>
 

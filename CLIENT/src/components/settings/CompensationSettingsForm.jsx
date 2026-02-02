@@ -365,7 +365,7 @@ const GovernmentShareSection = ({ control, errors }) => {
                   helperText={
                     errors[name]?.message ||
                     (name === "philhealthPremium"
-                      ? "Fixed at 5% for 2025 per PhilHealth Circular 2019-0009."
+                      ? "2025: Total 5% of monthly basic salary (Employee 2.5% + Employer 2.5%). Salary range ₱10,000–₱100,000. Cap: ₱2,500 each share at ₱100,000+."
                       : "")
                   }
                   sx={{

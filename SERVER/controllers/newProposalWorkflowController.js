@@ -1450,7 +1450,7 @@ exports.getProposalById = async (req, res) => {
 
     // Fallback: Try NewProposalWorkflow model (fmis_budget)
     proposal = await NewProposalWorkflow.findById(id)
-      .populate('region', 'name regionName');
+      .populate('region', 'Region regionName RegionName');
 
     if (!proposal) {
       return res.status(404).json({
@@ -1470,9 +1470,24 @@ exports.getProposalById = async (req, res) => {
       }
     }
 
+    // Map to same format as getProposals so Responsibility Center and Budget Type display correctly
+    const legacy = await Proposal.findOne({ workflowRef: id }).lean();
+    const regionName = legacy?.region || proposal.region?.Region || proposal.region?.regionName || proposal.region?.RegionName || '';
+    const divisionName = legacy?.division || proposal.division || '';
+    const departmentName = legacy?.department || proposal.department || '';
+    const responsibilityCenter = divisionName || departmentName || regionName || undefined;
+
+    const mappedProposal = {
+      ...proposal.toObject ? proposal.toObject() : proposal,
+      responsibilityCenter,
+      division: divisionName || proposal.division,
+      department: departmentName || proposal.department,
+      budgetType: proposal.modelType
+    };
+
     res.json({
       success: true,
-      data: proposal
+      data: mappedProposal
     });
   } catch (error) {
     console.error('Error fetching proposal:', error);

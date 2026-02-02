@@ -102,32 +102,10 @@ personnelServicesRouter.get("/getpersonnels/byParams", async (req, res) => {
     res.status(500).json({ message: "Failed to fetch personnel data" });
   }
 });
-// Bulk update personnel entries
-personnelServicesRouter.put("/api/personnel/bulk-update", submissionWorkflowControl('update', { strictMode: true, enableConsolidation: true }), bulkUpdatePersonnelService);
+// Bulk update personnel entries - path relative to /api mount
+personnelServicesRouter.put("/personnel/bulk-update", submissionWorkflowControl('update', { strictMode: true, enableConsolidation: true }), bulkUpdatePersonnelService);
 
-// Keep the original route for backward compatibility
-personnelServicesRouter.get("/api/personnel/getByParams", async (req, res) => {
-  try {
-    const { fiscalYear, budgetType, processBy, region, status } = req.query;
-    console.log("Request query params:", { fiscalYear, budgetType, processBy, region, status });
-    const query = {};
-    if (fiscalYear) query.fiscalYear = fiscalYear;
-    if (budgetType) query.budgetType = budgetType;
-    if (processBy) query.processBy = processBy;
-    if (region) query.region = region;
-    if (status) query.status = status;
-    // Ensure we have a model to work with
-    if (!PersonnelService) {
-      console.error("PersonnelServices model is not available");
-      return res.status(500).json({ message: "Internal server error: Model not available" });
-    }
-    const personnel = await PersonnelService.find(query).lean();
-    res.status(200).json(personnel);
-  } catch (error) {
-    console.error("Error fetching personnel by params:", error);
-    res.status(500).json({ message: "Failed to fetch personnel data" });
-  }
-});
+// NOTE: /personnel/getByParams is handled by personnelParamsRoutes (supports proposalId for workflow)
 // personnelServicesRouter.get(
 //   "/getpersonnels/hiredBeforeJune1988", 
 //   getPersonnelHiredBeforeJune1988 || 

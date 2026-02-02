@@ -17,6 +17,20 @@
 - [x] Resolved proposal data integrity and calculation issues
 - [x] Tested extensive workflow scenarios and edge cases
 
+**Tasks Completed (January 16 – January 30):**
+•	Frontend Development: Integrated SSO with accounts.nia.gov.ph—login redirect (LOGIN_REDIRECT_URL) to Account/Login, LogoutDialog redirect to account/logoff with clientId and returnUrl, and auth flow via auth server (AUTH_SERVER_URL_PROD/DEV).
+•	Frontend Development: State & storage—moved open-apps (fmis_open_apps_v1) and calculator state (calculator-state-v1, calcScientificMode, calcTheme, history) from localStorage → sessionStorage (migrated legacy keys and removed from localStorage after migration); removed unsafe localStorage usage for currentUser (auth uses httpOnly cookies; ChatApp and app tray use currentUser from UserContext only); UI keys are session-scoped and cleared on tab close / logout redirect.
+•	Frontend Development: Auth & API layer—authentication via httpOnly cookies only (no client-side token storage); X-CSRF-Token attached to POST/PUT/DELETE/PATCH; 401/403 response interceptor with get-user refresh and single retry; auth diagnostic (get-user + hierarchical my-access) on refresh failure; retry with exponential backoff for timeouts (max 2 retries). HomePage and UserContext redirect unauthenticated users to LOGIN_REDIRECT_URL.
+•	Frontend Development: Logout & session—LogoutDialog in production redirects to accounts.nia.gov.ph/account/logoff with CLIENT_ID and particularID from env/UserContext; session identity from UserContext (currentUser) only; no sensitive user data in localStorage.
+•	Frontend Development: Workflow ref—activeWorkflowRef stored in sessionStorage (useWorkflowRef, getStoredWorkflowRef); X-Workflow-Ref attached to API requests; cleared on proposal close in ProposalCustomPage.
+•	Frontend Development: Real-time (ChatApp)—session validity via httpOnly cookie; currentUser from UserContext only (no localStorage); socket auth via cookie/token; auth-required UI when connection fails due to token/session.
+•	Backend Development: Wired auth to accounts.nia.gov.ph—token exchange (ACCOUNT_TOKEN_API_URL), user lookup (ACCOUNT_USER_API_URL), auth_controller and check_token_prod/check_token_dev using account APIs; socket handshake uses accessToken and optional ACCOUNT_USER_API_URL for user resolution. Updated example env (.env.example) for auth service URL and documented env backup for account/token URLs.
+•	Backend Development: Auth controller—login exchanges credentials for access token and sets httpOnly cookie (jwtToken); getUser enriches user with assigned roles from assigned_roles collection; logout clears jwtToken cookie (sameSite, secure).
+•	Backend Development: Token middleware—check_token_prod reads jwtToken/authToken from cookie or Bearer header; verifies JWT; fetches user from ACCOUNT_USER_API_URL; fallback to main DB assigned_roles for roles; resolveUserIdentity for audit/client IP.
+•	Backend Development: Socket authentication—handshake accepts token from auth object, query, Authorization header, or cookie (authToken/jwtToken/jwt); JWT verification with multiple secrets; optional ACCOUNT_USER_API_URL for user resolution; mock auth via devUserId in dev when ALLOW_MOCK_AUTH enabled.
+•	Backend Development: CSRF—csurf with cookie; /api/csrf-token endpoint for client; login exempt; 403 on invalid CSRF token for state-changing requests.
+•	CORS & Security: CORS updated to allow budget.nia.gov.ph, budget-server.nia.gov.ph, and origins ending in .nia.gov.ph; JWT validation in socket handshakes and cookie-based authToken/jwtToken fallback for real-time connections.
+
 **Backend Tasks (Completed):**
 - [x] Modify Settings.js model for multi-period and region support
 - [x] Create CompensationSettings.js model for separated compensation

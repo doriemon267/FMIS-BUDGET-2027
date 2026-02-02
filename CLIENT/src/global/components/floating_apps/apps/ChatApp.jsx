@@ -528,16 +528,7 @@ export default function ChatApp() {
   }
   useEffect(() => {
     // Use dev UID derived from in-memory `currentUser` only (do not read from localStorage)
-    const devUid = currentUser
-      ? (
-          (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username) ||
-          currentUser?.Id ||
-          currentUser?.id ||
-          currentUser?.userId ||
-          currentUser?.particularID ||
-          currentUser?.particularId
-        )
-      : null;
+    const devUid = currentUser ? ((Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username) || currentUser?.Id || currentUser?.id || currentUser?.userId) : null;
     // If we have neither a dev UID (dev mode) nor a logged-in user (session via cookie), defer
     if (!devUid && !currentUser) {
       console.debug('[ChatApp] no devUserId or currentUser available yet; deferring socket/connect and loadConversations until user data available.');
@@ -552,14 +543,7 @@ export default function ChatApp() {
     const authObj = {};
     if (devUserId) authObj.devUserId = String(devUserId);
     if (currentUser) {
-      const cuid = (
-        currentUser?.Id ||
-        currentUser?.id ||
-        currentUser?.userId ||
-        currentUser?.particularID ||
-        currentUser?.particularId ||
-        (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username)
-      );
+      const cuid = (currentUser?.Id || currentUser?.id || currentUser?.userId || (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username));
       if (cuid) authObj.userId = String(cuid);
     }
     const conn = io(serverUrl, {
@@ -571,15 +555,7 @@ export default function ChatApp() {
     });
     if (devUserId) console.debug('[ChatApp] Passing devUserId to socket auth (if ALLOW_MOCK_AUTH enabled)');
     conn.on('connect', () => {
-      const uid = (
-        currentUser?.Id ||
-        currentUser?.id ||
-        currentUser?.userId ||
-        currentUser?.particularID ||
-        currentUser?.particularId ||
-        (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username) ||
-        null
-      );
+      const uid = (currentUser?.Id || currentUser?.id || currentUser?.userId || (Array.isArray(currentUser?.Username) ? currentUser.Username[0] : currentUser?.Username) || null);
       console.debug('[ChatApp] socket connected', conn.id, 'uid=', uid);
       setSocketConnected(true);
       setSocketErrorMsg(null);

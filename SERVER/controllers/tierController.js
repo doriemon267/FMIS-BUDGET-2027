@@ -3,7 +3,93 @@ const Tier = require('../models/Tier');
 const PersonnelServices = require('../models/PersonnelServices');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const mooeProposals = require('../models/mooeProposals');
+const NewProposalWorkflow = require('../models/NewProposalWorkflow');
 const PDFDocument = require('pdfkit');
+
+/**
+ * GET /api/tier/finalized-data
+ * Returns PROJECTED CORPORATE INCOME and PROJECTED SUBSIDY (→ TIER 1) from BRD-finalized Initial proposals.
+ * Strictly filtered by fiscalYear (from current settings), region, department, division.
+ * Tier page should only show data when hasFinalized is true.
+ */
+const getFinalizedData = async (req, res) => {
+  try {
+    const { fiscalYear, region, department, division } = req.query;
+
+    if (!fiscalYear) {
+      return res.status(400).json({
+        success: false,
+        message: 'fiscalYear is required (use current settings fiscal year).',
+      });
+    }
+
+    const fy = parseInt(String(fiscalYear), 10);
+    if (isNaN(fy)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid fiscalYear.',
+      });
+    }
+
+    const query = {
+      modelType: 'Initial',
+      status: { $in: ['FINALIZED', 'Finalized'] },
+      fiscalYear: fy,
+    };
+
+    if (region) {
+      if (mongoose.Types.ObjectId.isValid(region)) {
+        query.region = new mongoose.Types.ObjectId(region);
+      } else {
+        const Region = require('../models/Region');
+        const regionDoc = await Region.findOne({
+          $or: [
+            { regionName: region },
+            { Region: region },
+            { name: region },
+          ],
+        });
+        if (regionDoc) query.region = regionDoc._id;
+        else query.region = region; // allow string match if stored as string
+      }
+    }
+
+    if (department) query.department = department;
+    if (division) query.division = division;
+
+    const proposals = await NewProposalWorkflow.find(query).lean();
+
+    const projectedCorporateIncome = proposals.reduce(
+      (sum, p) => sum + (Number(p.projectedCorporateIncome) || 0),
+      0
+    );
+    const projectedSubsidy = proposals.reduce(
+      (sum, p) => sum + (Number(p.projectedSubsidy) || 0),
+      0
+    );
+
+    res.json({
+      success: true,
+      hasFinalized: proposals.length > 0,
+      projectedCorporateIncome,
+      projectedSubsidy,
+      proposalCount: proposals.length,
+      proposals: proposals.map((p) => ({
+        _id: p._id,
+        division: p.division,
+        department: p.department,
+        projectedCorporateIncome: p.projectedCorporateIncome,
+        projectedSubsidy: p.projectedSubsidy,
+      })),
+    });
+  } catch (error) {
+    console.error('Error in getFinalizedData:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch finalized tier data.',
+    });
+  }
+};
 
 const getTierData = async (req, res) => {
   try {
@@ -319,6 +405,7 @@ const generateTierPDF = async (req, res) => {
 
 
 module.exports = {
+  getFinalizedData,
   getTierData,
   saveTierData,
   generateTierPDF,

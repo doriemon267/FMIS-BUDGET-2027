@@ -1,17 +1,77 @@
+const mongoose = require("mongoose");
 const PersonnelServices = require("../models/PersonnelServices");
 const Settings = require("../models/Settings");
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 
 const getPersonnelByParams = async (req, res) => {
   try {
-    const { fiscalYear, budgetType, processBy, region, status } = req.query;
+    const { proposalId, fiscalYear, budgetType, processBy, region, status, division } = req.query;
     const query = {};
-    if (fiscalYear) query.fiscalYear = fiscalYear;
+
+    // When proposalId is provided (e.g. Proposal Details dialog), filter by workflowRef or legacy proposalId
+    if (proposalId) {
+      let workflowId = proposalId;
+      if (typeof proposalId === 'string' && mongoose.Types.ObjectId.isValid(proposalId)) {
+        try {
+          workflowId = new mongoose.Types.ObjectId(proposalId);
+        } catch (_) {}
+      }
+      try {
+        query.$or = [{ workflowRef: workflowId }];
+        const Proposal = require('../models/Proposal');
+        const legacy = await Proposal.findOne({ workflowRef: workflowId }).select('_id').lean();
+        if (legacy?._id) {
+          query.$or.push({ proposalId: legacy._id });
+        }
+      } catch (_e) {
+        query.proposalId = workflowId;
+      }
+    }
+
+    if (fiscalYear) query.fiscalYear = String(fiscalYear);
     if (budgetType) query.budgetType = budgetType;
     if (processBy) query.processBy = processBy;
     if (region) query.region = region;
     if (status) query.status = status;
-    const personnel = await PersonnelServices.find(query).lean();
+    if (division) query.division = division;
+
+    let personnel = await PersonnelServices.find(query).lean();
+
+    // If proposalId but no results, try workflowRef/proposalId only (in case fiscalYear/budgetType/division format differs)
+    if (proposalId && personnel.length === 0 && query.$or) {
+      const simpleQuery = { $or: query.$or };
+      personnel = await PersonnelServices.find(simpleQuery).lean();
+    }
+
+    // Fallback: unlinked personnel (no workflowRef) with same fiscalYear + budgetType + division
+    if (proposalId && personnel.length === 0 && (fiscalYear || budgetType)) {
+      const conditions = [
+        { $or: [{ workflowRef: null }, { workflowRef: { $exists: false } }] }
+      ];
+      if (fiscalYear) {
+        conditions.push({ $or: [{ fiscalYear: String(fiscalYear) }, { fiscalYear: Number(fiscalYear) }, { fiscal_year: Number(fiscalYear) }] });
+      }
+      if (budgetType) {
+        conditions.push({ budgetType: new RegExp(`^${String(budgetType).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
+      }
+      if (division) conditions.push({ division: new RegExp(`^${String(division).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
+
+      let fallbackPersonnel = await PersonnelServices.find({ $and: conditions }).lean();
+      if (fallbackPersonnel.length === 0 && division) {
+        conditions.pop();
+        fallbackPersonnel = await PersonnelServices.find({ $and: conditions }).lean();
+      }
+      if (fallbackPersonnel.length === 0 && budgetType) {
+        conditions = conditions.filter((c) => !c.budgetType);
+        if (conditions.length > 0) {
+          fallbackPersonnel = await PersonnelServices.find({ $and: conditions }).lean();
+        }
+      }
+      if (fallbackPersonnel.length > 0) {
+        personnel = fallbackPersonnel;
+      }
+    }
+
     res.status(200).json(personnel);
   } catch (error) {
     console.error("Error fetching personnel by params:", error);

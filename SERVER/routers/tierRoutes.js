@@ -7,6 +7,7 @@ const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
 const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
 
 const {
+  getFinalizedData,
   getTierData,
   saveTierData,
   generateTierPDF,
@@ -14,8 +15,9 @@ const {
 
 router.use(tokenMiddleware);
 
-router.get('/tier/data', getTierData);
-router.post('/tier/data', saveTierData);
-router.post('/tier/generate-pdf', generateTierPDF);
+router.get('/finalized-data', getFinalizedData);
+router.get('/data', getTierData);
+router.post('/data', saveTierData);
+router.post('/generate-pdf', generateTierPDF);
 
 module.exports = router;

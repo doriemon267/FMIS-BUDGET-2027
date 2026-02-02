@@ -226,30 +226,56 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
   useEffect(() => {
     const fetchOrganizationStructure = async () => {
       try {
+        // Use structure=old so we get departments, departmentsWithDivisions, and mappings (regionId/departmentId) for Department/Division/Section combos
         const response = await api.get(
-          "/api/hierarchical-rbac/organization-structure"
+          "/api/hierarchical-rbac/organization-structure",
+          { params: { structure: "old" } }
         );
         if (response.data?.data) {
-          setOrganizationStructure(response.data.data);
+          const data = response.data.data;
+          setOrganizationStructure(data);
 
-          // Set department options based on active region
+          const allDepts = data?.availableUnits?.departments || [];
+          const allMappings = data?.mappings || [];
+          const regions = data?.availableUnits?.regions || [];
+
           if (activeRegion) {
-            const regionMappings =
-              response.data.data?.mappings?.filter(
-                (mapping) => mapping.regionId === activeRegion._id
-              ) || [];
-            const departmentIds = regionMappings.map(
-              (mapping) => mapping.departmentId
-            );
+            // Resolve regionId: prefer _id/id, else find by region name from availableUnits.regions
+            let regionId =
+              activeRegion._id != null
+                ? String(activeRegion._id)
+                : activeRegion.id != null
+                  ? String(activeRegion.id)
+                  : null;
+            if (!regionId && (activeRegion.Region || activeRegion.name || activeRegion.regionName)) {
+              const regionName = activeRegion.Region || activeRegion.name || activeRegion.regionName;
+              const matchedRegion = regions.find(
+                (r) =>
+                  String(r.name || "").toLowerCase() === String(regionName).toLowerCase() ||
+                  String(r.regionName || "").toLowerCase() === String(regionName).toLowerCase()
+              );
+              if (matchedRegion && (matchedRegion.id != null || matchedRegion._id != null)) {
+                regionId = String(matchedRegion.id ?? matchedRegion._id);
+              }
+            }
+            const regionMappings = regionId
+              ? allMappings.filter(
+                  (mapping) => mapping.regionId != null && String(mapping.regionId) === regionId
+                )
+              : [];
+            const departmentIds = regionMappings.map((mapping) => mapping.departmentId);
             const depts =
-              response.data.data?.availableUnits?.departments?.filter((dept) =>
-                departmentIds.includes(dept.id)
-              ) || [];
-            setDepartmentOptions(depts);
+              departmentIds.length > 0
+                ? allDepts.filter((dept) =>
+                    departmentIds.some(
+                      (id) => id != null && dept.id != null && String(id) === String(dept.id)
+                    )
+                  )
+                : [];
+            // If no departments for this region (e.g. no mappings), show all departments so user can still select
+            setDepartmentOptions(depts.length > 0 ? depts : allDepts);
           } else {
-            setDepartmentOptions(
-              response.data.data.availableUnits?.departments || []
-            );
+            setDepartmentOptions(allDepts);
           }
         }
       } catch (error) {
@@ -263,20 +289,42 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
 
   // Update department options when activeRegion changes
   useEffect(() => {
-    if (organizationStructure && activeRegion) {
-            const regionMappings =
-              organizationStructure?.mappings?.filter(
-          (mapping) => mapping.regionId === activeRegion._id
-        ) || [];
-      const departmentIds = regionMappings.map(
-        (mapping) => mapping.departmentId
+    if (!organizationStructure || !activeRegion) return;
+    const allDepts = organizationStructure?.availableUnits?.departments || [];
+    const allMappings = organizationStructure?.mappings || [];
+    const regions = organizationStructure?.availableUnits?.regions || [];
+    let regionId =
+      activeRegion._id != null
+        ? String(activeRegion._id)
+        : activeRegion.id != null
+          ? String(activeRegion.id)
+          : null;
+    if (!regionId && (activeRegion.Region || activeRegion.name || activeRegion.regionName)) {
+      const regionName = activeRegion.Region || activeRegion.name || activeRegion.regionName;
+      const matchedRegion = regions.find(
+        (r) =>
+          String(r.name || "").toLowerCase() === String(regionName).toLowerCase() ||
+          String(r.regionName || "").toLowerCase() === String(regionName).toLowerCase()
       );
-      const depts =
-        organizationStructure?.availableUnits?.departments?.filter((dept) =>
-          departmentIds.includes(dept.id)
-        ) || [];
-      setDepartmentOptions(depts);
+      if (matchedRegion && (matchedRegion.id != null || matchedRegion._id != null)) {
+        regionId = String(matchedRegion.id ?? matchedRegion._id);
+      }
     }
+    const regionMappings = regionId
+      ? allMappings.filter(
+          (mapping) => mapping.regionId != null && String(mapping.regionId) === regionId
+        )
+      : [];
+    const departmentIds = regionMappings.map((mapping) => mapping.departmentId);
+    const depts =
+      departmentIds.length > 0
+        ? allDepts.filter((dept) =>
+            departmentIds.some(
+              (id) => id != null && dept.id != null && String(id) === String(dept.id)
+            )
+          )
+        : [];
+    setDepartmentOptions(depts.length > 0 ? depts : allDepts);
   }, [activeRegion, organizationStructure]);
 
   // When Department/Division changes, fetch divisions based on selected Department
@@ -354,22 +402,45 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
   // Handle default Region value changes - fetch departments
   useEffect(() => {
     const regionValue = watch("Region");
-    if (regionValue && organizationStructure) {
-      const regionId = regionValue?._id || regionValue;
-      const regionName = regionValue?.regionName || regionValue;
-      const regionMappings =
-        organizationStructure?.mappings?.filter(
-          (mapping) => mapping.regionId === regionId || mapping.regionName === regionName
-        ) || [];
-      const departmentIds = regionMappings.map(
-        (mapping) => mapping.departmentId
+    if (!regionValue || !organizationStructure) return;
+    const allDepts = organizationStructure?.availableUnits?.departments || [];
+    const allMappings = organizationStructure?.mappings || [];
+    const regions = organizationStructure?.availableUnits?.regions || [];
+    let regionId =
+      regionValue?._id != null
+        ? String(regionValue._id)
+        : regionValue?.id != null
+          ? String(regionValue.id)
+          : null;
+    const regionName =
+      typeof regionValue === "string"
+        ? regionValue
+        : regionValue?.regionName || regionValue?.name || regionValue?.Region;
+    if (!regionId && regionName && regions.length > 0) {
+      const matchedRegion = regions.find(
+        (r) =>
+          String(r.name || "").toLowerCase() === String(regionName).toLowerCase() ||
+          String(r.regionName || "").toLowerCase() === String(regionName).toLowerCase()
       );
-      const depts =
-        organizationStructure?.availableUnits?.departments?.filter((dept) =>
-          departmentIds.includes(dept.id)
-        ) || [];
-      setDepartmentOptions(depts);
+      if (matchedRegion && (matchedRegion.id != null || matchedRegion._id != null)) {
+        regionId = String(matchedRegion.id ?? matchedRegion._id);
+      }
     }
+    const regionMappings = regionId
+      ? allMappings.filter(
+          (mapping) => mapping.regionId != null && String(mapping.regionId) === regionId
+        )
+      : [];
+    const departmentIds = regionMappings.map((mapping) => mapping.departmentId);
+    const depts =
+      departmentIds.length > 0
+        ? allDepts.filter((dept) =>
+            departmentIds.some(
+              (id) => id != null && dept.id != null && String(id) === String(dept.id)
+            )
+          )
+        : [];
+    setDepartmentOptions(depts.length > 0 ? depts : allDepts);
   }, [watch("Region"), organizationStructure]);
 
   // Handle default Department value changes - fetch divisions

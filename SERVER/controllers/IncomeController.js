@@ -404,16 +404,22 @@ exports.getIncomeByParams = async (req, res) => {
     // ✅ Primary filter: if proposalId is provided, use it
     if (proposalId) {
       // Accept either legacy Proposal _id or NewProposalWorkflow _id
-      // If the provided id is a workflow id, include workflowRef match and resolve legacy proposal id for proposalId match
+      // Normalize to ObjectId so query matches workflowRef field type
+      let workflowId = proposalId;
+      if (typeof proposalId === 'string' && mongoose.Types.ObjectId.isValid(proposalId)) {
+        try {
+          workflowId = new mongoose.Types.ObjectId(proposalId);
+        } catch (_) {}
+      }
       try {
-        baseQuery.$or = [{ workflowRef: proposalId }];
-        const legacy = await Proposal.findOne({ workflowRef: proposalId }).select('_id').lean();
+        baseQuery.$or = [{ workflowRef: workflowId }];
+        const legacy = await Proposal.findOne({ workflowRef: workflowId }).select('_id').lean();
         if (legacy?._id) {
           baseQuery.$or.push({ proposalId: legacy._id });
         }
       } catch (_e) {
         // Fallback: direct proposalId match (legacy)
-        baseQuery.proposalId = proposalId;
+        baseQuery.proposalId = workflowId;
       }
     } else {
       // Fallback: use individual parameters
@@ -450,65 +456,88 @@ exports.getIncomeByParams = async (req, res) => {
     }
 
     let income = await Income.find(query).populate('incomecategory').lean();
-    
-    // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's CURRENT organizational assignment
-    const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
-    const userIdString = userId ? String(userId) : undefined;
-    const userRoles = req.user?.Roles || [];
-    
-    const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
-    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
-    
-    // SUPER_ADMIN: Filter by createdBy (self-created records only)
-    if (isSuperAdmin && userIdString) {
-      const filteredIncome = income.filter(inc => {
-        const createdByMatch = (
-          String(inc.createdBy || inc.userId || '') === userIdString ||
-          String(inc.userId || '') === userIdString
-        );
-        return createdByMatch;
-      });
-      if (filteredIncome.length > 0) {
-        income = filteredIncome;
+
+    // Fallback: when viewing a proposal but no records by workflowRef/proposalId, try unlinked
+    // records (no workflowRef) with same fiscalYear + budgetType + division so older data can show
+    if (proposalId && income.length === 0 && (req.query.fiscalYear || req.query.budgetType)) {
+      const fallbackQuery = {
+        $or: [{ workflowRef: null }, { workflowRef: { $exists: false } }],
+        ...(req.query.fiscalYear && { fiscalYear: req.query.fiscalYear }),
+        ...(req.query.budgetType && { budgetType: req.query.budgetType }),
+      };
+      if (req.query.division) {
+        const div = String(req.query.division).trim();
+        fallbackQuery.division = div;
       }
-    } else if (!isSuperAdmin && !isBudgetManager && userIdString) {
-      try {
-        const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
-        const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
-          .populate('departmentId', 'Department DepartmentName department')
-          .populate('regionId', 'Region RegionName region')
-          .lean();
-        
-        if (userAssignment) {
-          const assignedDepartment = userAssignment.departmentId?.Department || 
-                                    userAssignment.departmentId?.DepartmentName ||
-                                    userAssignment.departmentId?.department;
-          const assignedRegion = userAssignment.regionId?.Region ||
-                                userAssignment.regionId?.RegionName ||
-                                userAssignment.regionId?.region;
-          const assignedDivision = userAssignment.divisionName;
-          
-          const filteredIncome = income.filter(inc => {
-            if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
-              return inc.division === assignedDivision;
-            }
-            if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
-              return inc.department === assignedDepartment;
-            }
-            if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
-              return inc.region === assignedRegion;
-            }
-            if (userAssignment.assignmentLevel === 'FULL') {
-              return true;
-            }
-            return false;
-          });
-          
-          // Always apply filter - don't show data from other responsibility centers
+      const fallbackIncome = await Income.find(fallbackQuery).populate('incomecategory').lean();
+      if (fallbackIncome.length > 0) {
+        income = fallbackIncome;
+      }
+    }
+
+    // When proposalId is provided we're viewing a specific proposal (e.g. Proposal Details dialog).
+    // Return all income linked to that proposal; access is already controlled by who can open the proposal.
+    const isProposalContext = Boolean(proposalId);
+    
+    if (!isProposalContext) {
+      // RESPONSIBILITY CENTER FILTERING: Only when NOT scoped to a single proposal
+      const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
+      const userIdString = userId ? String(userId) : undefined;
+      const userRoles = req.user?.Roles || [];
+      
+      const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
+      const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+      
+      // SUPER_ADMIN: Filter by createdBy (self-created records only)
+      if (isSuperAdmin && userIdString) {
+        const filteredIncome = income.filter(inc => {
+          const createdByMatch = (
+            String(inc.createdBy || inc.userId || '') === userIdString ||
+            String(inc.userId || '') === userIdString
+          );
+          return createdByMatch;
+        });
+        if (filteredIncome.length > 0) {
           income = filteredIncome;
         }
-      } catch (err) {
-        console.error('[ORG_FILTER] Error in getIncomeByParams:', err.message);
+      } else if (!isSuperAdmin && !isBudgetManager && userIdString) {
+        try {
+          const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+          const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
+            .populate('departmentId', 'Department DepartmentName department')
+            .populate('regionId', 'Region RegionName region')
+            .lean();
+          
+          if (userAssignment) {
+            const assignedDepartment = userAssignment.departmentId?.Department || 
+                                      userAssignment.departmentId?.DepartmentName ||
+                                      userAssignment.departmentId?.department;
+            const assignedRegion = userAssignment.regionId?.Region ||
+                                  userAssignment.regionId?.RegionName ||
+                                  userAssignment.regionId?.region;
+            const assignedDivision = userAssignment.divisionName;
+            
+            const filteredIncome = income.filter(inc => {
+              if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
+                return inc.division === assignedDivision;
+              }
+              if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
+                return inc.department === assignedDepartment;
+              }
+              if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
+                return inc.region === assignedRegion;
+              }
+              if (userAssignment.assignmentLevel === 'FULL') {
+                return true;
+              }
+              return false;
+            });
+            
+            income = filteredIncome;
+          }
+        } catch (err) {
+          console.error('[ORG_FILTER] Error in getIncomeByParams:', err.message);
+        }
       }
     }
     

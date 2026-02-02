@@ -59,8 +59,21 @@ import { displayUacs } from '../utils/uacsDisplayHelper';
 
 // Brand colors aligned to Transactions Processing UI
 const BRAND_COLORS = {
-  darkGreen: "#375e38", // primary header/table color from screenshot
+  darkGreen: "#375e38",
   deepGreen: "#2d5016",
+};
+
+// Enhanced table styles for Proposal Details tabs
+const TABLE_HEADER_ROW = {
+  bgcolor: BRAND_COLORS.deepGreen,
+  "& .MuiTableCell-root": { color: "white", fontWeight: 600, fontSize: "0.8125rem", py: 1.25, borderBottom: "none" },
+};
+const TABLE_CONTAINER = {
+  borderRadius: 2,
+  boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+  overflow: "hidden",
+  border: "1px solid",
+  borderColor: "divider",
 };
 
 // Workflow constants based on the provided specification
@@ -429,6 +442,15 @@ const NewProposalWorkflowPage = () => {
 
     const userRoles = currentUser?.Roles || [];
     const status = selectedProposal.status;
+    const statusUpper = String(status || '').toUpperCase();
+
+    // SUPER ADMIN: editable in all statuses EXCEPT Finalized
+    const isSuperAdmin = userRoles.some((r) =>
+      ['SUPER_ADMIN', 'SUPER ADMIN', 'SUPERADMIN'].includes(String(r || ''))
+    );
+    if (isSuperAdmin) {
+      return statusUpper !== 'FINALIZED';
+    }
 
     // Allow the owner (Budget Preparer) to edit while Draft/Returned
     if (
@@ -564,34 +586,38 @@ const NewProposalWorkflowPage = () => {
     setProposalEditDirty(false);
 
     try {
-      // Resolve region name for Personnel Services filtering
-      const regionName = activeRegion && typeof activeRegion === 'object'
-        ? (activeRegion.regionName || activeRegion.Region || activeRegion.name)
-        : activeRegion;
-
       const queryParams = {
         proposalId: proposal._id,
         _t: Date.now(), // Cache buster - force fresh data
+        ...(proposal.fiscalYear != null && { fiscalYear: String(proposal.fiscalYear) }),
+        ...(proposal.budgetType && { budgetType: proposal.budgetType }),
+        ...((proposal.division || proposal.responsibilityCenter) && {
+          division: proposal.division || proposal.responsibilityCenter,
+        }),
       };
 
-      // Add region to personnel query for SUPER_ADMIN filtering
-      const personnelParams = {
-        ...queryParams,
-        ...(regionName && { region: regionName }),
-      };
-
+      // Use same params for all - do NOT add region filter when viewing proposal details
+      // (region filter would exclude records and show empty tables)
       const [incomeRes, personnelRes, mooeRes, capitalRes] = await Promise.all([
         api.get("/income/getByParams", { params: queryParams }),
-        api.get("/api/personnel/getByParams", { params: personnelParams }),
+        api.get("/personnel/getByParams", { params: queryParams }),
         api.get("/mooe/getByParams", { params: queryParams }),
         api.get("/capital-outlay/getByParams", { params: queryParams }),
       ]);
 
+      // Normalize: backend may return array directly or { data: [] }
+      const toArray = (res) => {
+        const raw = res?.data;
+        if (Array.isArray(raw)) return raw;
+        if (raw && Array.isArray(raw.data)) return raw.data;
+        return [];
+      };
+
       const details = {
-        income: incomeRes.data || [],
-        personnel: personnelRes.data || [],
-        mooe: mooeRes.data || [],
-        capitalOutlay: capitalRes.data || [],
+        income: toArray(incomeRes),
+        personnel: toArray(personnelRes),
+        mooe: toArray(mooeRes),
+        capitalOutlay: toArray(capitalRes),
       };
 
       setProposalDetails(details);
@@ -1130,35 +1156,36 @@ const NewProposalWorkflowPage = () => {
         setDetailsLoading(true);
         setDetailsTab("income");
         try {
-          // Resolve region name for Personnel Services filtering
-          const regionName = activeRegion && typeof activeRegion === 'object'
-            ? (activeRegion.regionName || activeRegion.Region || activeRegion.name)
-            : activeRegion;
-
           const queryParams = {
             proposalId: updatedProposal._id,
             _t: Date.now(),
-          };
-
-          // Add region to personnel query for SUPER_ADMIN filtering
-          const personnelParams = {
-            ...queryParams,
-            ...(regionName && { region: regionName }),
+            ...(updatedProposal.fiscalYear != null && { fiscalYear: String(updatedProposal.fiscalYear) }),
+            ...(updatedProposal.budgetType && { budgetType: updatedProposal.budgetType }),
+            ...((updatedProposal.division || updatedProposal.responsibilityCenter) && {
+              division: updatedProposal.division || updatedProposal.responsibilityCenter,
+            }),
           };
 
           const [incomeRes, personnelRes, mooeRes, capitalRes] =
             await Promise.all([
               api.get("/income/getByParams", { params: queryParams }),
-              api.get("/api/personnel/getByParams", { params: personnelParams }),
+              api.get("/personnel/getByParams", { params: queryParams }),
               api.get("/mooe/getByParams", { params: queryParams }),
               api.get("/capital-outlay/getByParams", { params: queryParams }),
             ]);
 
+          const toArray = (res) => {
+            const raw = res?.data;
+            if (Array.isArray(raw)) return raw;
+            if (raw && Array.isArray(raw.data)) return raw.data;
+            return [];
+          };
+
           const details = {
-            income: incomeRes.data || [],
-            personnel: personnelRes.data || [],
-            mooe: mooeRes.data || [],
-            capitalOutlay: capitalRes.data || [],
+            income: toArray(incomeRes),
+            personnel: toArray(personnelRes),
+            mooe: toArray(mooeRes),
+            capitalOutlay: toArray(capitalRes),
           };
 
           setProposalDetails(details);
@@ -2890,6 +2917,10 @@ const NewProposalWorkflowPage = () => {
                     <Typography variant="body1" sx={{ fontWeight: 600 }}>
                       {selectedProposal?.responsibilityCenter ||
                         selectedProposal?.division ||
+                        proposalDetails?.income?.[0]?.division ||
+                        proposalDetails?.income?.[0]?.region ||
+                        proposalDetails?.personnel?.[0]?.division ||
+                        proposalDetails?.mooe?.[0]?.division ||
                         "N/A"}
                     </Typography>
                   </Grid>
@@ -3396,7 +3427,7 @@ const NewProposalWorkflowPage = () => {
                                     <TableContainer sx={{ mt: 1 }}>
                                       <Table size="small">
                                         <TableHead>
-                                          <TableRow sx={{ bgcolor: "#f5f5f5" }}>
+                                          <TableRow sx={TABLE_HEADER_ROW}>
                                             <TableCell
                                               sx={{ fontWeight: "bold" }}
                                             >
@@ -3566,15 +3597,41 @@ const NewProposalWorkflowPage = () => {
                       })()}
                     </>
                   ) : (
-                    <Box sx={{ textAlign: "center", py: 4 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        No income data available
-                      </Typography>
-                    </Box>
+                    <>
+                      <Box sx={{ mb: 2 }}>
+                        <ProposalAttachments
+                          proposal={selectedProposal}
+                          moduleName="income"
+                          userInfo={currentUser}
+                          onChange={() => handleViewDetails(selectedProposal)}
+                        />
+                      </Box>
+                      <TableContainer sx={TABLE_CONTAINER}>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow sx={TABLE_HEADER_ROW}>
+                              <TableCell sx={{ fontWeight: "bold" }}>Item</TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>Category</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Amount</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Total</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            <TableRow>
+                              <TableCell colSpan={4} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
+                                <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.9rem" }}>
+                                  No income data available
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </>
                   ))}
 
-                {/* Attachments (Income) */}
-                {detailsTab === "income" && (
+                {/* Attachments (Income) - when has data, shown inside tab content above */}
+                {detailsTab === "income" && proposalDetails?.income?.length > 0 && (
                   <Box sx={{ mt: 2, mb: 2 }}>
                     <ProposalAttachments
                       proposal={selectedProposal}
@@ -3588,7 +3645,7 @@ const NewProposalWorkflowPage = () => {
                 {/* PS-Permanent Tab */}
                 {detailsTab === "ps-permanent" && (() => {
                   const permanentPersonnel = proposalDetails?.personnel?.filter(
-                    person => person.statusOfAppointment === 'PERMANENT' || person.statusOfAppointment === 'Permanent'
+                    person => String(person.statusOfAppointment || '').toUpperCase() === 'PERMANENT'
                   ) || [];
                   
                   const paginatedPermanentPersonnel = permanentPersonnel.slice(
@@ -3607,10 +3664,10 @@ const NewProposalWorkflowPage = () => {
                           onChange={() => handleViewDetails(selectedProposal)}
                         />
                       </Box>
-                      <TableContainer>
+                      <TableContainer sx={TABLE_CONTAINER}>
                         <Table size="small">
                           <TableHead>
-                            <TableRow sx={{ bgcolor: "#f5f5f5" }}>
+                            <TableRow sx={TABLE_HEADER_ROW}>
                               <TableCell sx={{ width: 50 }}></TableCell>
                               <TableCell sx={{ fontWeight: "bold" }}>
                                 Employee Name
@@ -3902,18 +3959,51 @@ const NewProposalWorkflowPage = () => {
                       />
                     </>
                   ) : (
-                    <Box sx={{ textAlign: "center", py: 4 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        No permanent personnel services data available
-                      </Typography>
-                    </Box>
+                    <>
+                      <Box sx={{ mb: 2 }}>
+                        <ProposalAttachments
+                          proposal={selectedProposal}
+                          moduleName="personnel"
+                          userInfo={currentUser}
+                          onChange={() => handleViewDetails(selectedProposal)}
+                        />
+                      </Box>
+                      <TableContainer sx={TABLE_CONTAINER}>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow sx={TABLE_HEADER_ROW}>
+                              <TableCell sx={{ width: 50 }}></TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>Employee Name</TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>Position</TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>SG</TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>STEP</TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>JG</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Monthly Salary</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Annual Salary</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>PERA</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>RATA</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Total</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            <TableRow>
+                              <TableCell colSpan={11} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
+                                <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.9rem" }}>
+                                  No permanent personnel services data available
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </>
                   );
                 })()}
 
                 {/* PS-Casual Tab */}
                 {detailsTab === "ps-casual" && (() => {
                   const casualPersonnel = proposalDetails?.personnel?.filter(
-                    person => person.statusOfAppointment === 'CASUAL'
+                    person => String(person.statusOfAppointment || '').toUpperCase() === 'CASUAL'
                   ) || [];
                   
                   const paginatedCasualPersonnel = casualPersonnel.slice(
@@ -3932,10 +4022,10 @@ const NewProposalWorkflowPage = () => {
                           onChange={() => handleViewDetails(selectedProposal)}
                         />
                       </Box>
-                      <TableContainer>
+                      <TableContainer sx={TABLE_CONTAINER}>
                         <Table size="small">
                           <TableHead>
-                            <TableRow sx={{ bgcolor: "#f5f5f5" }}>
+                            <TableRow sx={TABLE_HEADER_ROW}>
                               <TableCell sx={{ width: 50 }}></TableCell>
                               <TableCell sx={{ fontWeight: "bold" }}>
                                 Employee Name
@@ -4227,11 +4317,44 @@ const NewProposalWorkflowPage = () => {
                       />
                     </>
                   ) : (
-                    <Box sx={{ textAlign: "center", py: 4 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        No casual personnel services data available
-                      </Typography>
-                    </Box>
+                    <>
+                      <Box sx={{ mb: 2 }}>
+                        <ProposalAttachments
+                          proposal={selectedProposal}
+                          moduleName="personnel"
+                          userInfo={currentUser}
+                          onChange={() => handleViewDetails(selectedProposal)}
+                        />
+                      </Box>
+                      <TableContainer sx={TABLE_CONTAINER}>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow sx={TABLE_HEADER_ROW}>
+                              <TableCell sx={{ width: 50 }}></TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>Employee Name</TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>Position</TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>SG</TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>STEP</TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>JG</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Monthly Salary</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Annual Salary</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>PERA</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>RATA</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Total</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            <TableRow>
+                              <TableCell colSpan={11} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
+                                <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.9rem" }}>
+                                  No casual personnel services data available
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </>
                   );
                 })()}
 
@@ -4257,10 +4380,10 @@ const NewProposalWorkflowPage = () => {
                           onChange={() => handleViewDetails(selectedProposal)}
                         />
                       </Box>
-                      <TableContainer>
+                      <TableContainer sx={TABLE_CONTAINER}>
                         <Table size="small">
                           <TableHead>
-                            <TableRow sx={{ bgcolor: "#f5f5f5" }}>
+                            <TableRow sx={TABLE_HEADER_ROW}>
                               <TableCell sx={{ width: 50 }}></TableCell>
                               <TableCell sx={{ fontWeight: "bold" }}>
                                 Employee Name
@@ -4552,11 +4675,44 @@ const NewProposalWorkflowPage = () => {
                       />
                     </>
                   ) : (
-                    <Box sx={{ textAlign: "center", py: 4 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        No personnel services charged to income available
-                      </Typography>
-                    </Box>
+                    <>
+                      <Box sx={{ mb: 2 }}>
+                        <ProposalAttachments
+                          proposal={selectedProposal}
+                          moduleName="personnel"
+                          userInfo={currentUser}
+                          onChange={() => handleViewDetails(selectedProposal)}
+                        />
+                      </Box>
+                      <TableContainer sx={TABLE_CONTAINER}>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow sx={TABLE_HEADER_ROW}>
+                              <TableCell sx={{ width: 50 }}></TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>Employee Name</TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>Position</TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>SG</TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>STEP</TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>JG</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Monthly Salary</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Annual Salary</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>PERA</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>RATA</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Total</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            <TableRow>
+                              <TableCell colSpan={11} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
+                                <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.9rem" }}>
+                                  No personnel services charged to income available
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </>
                   );
                 })()}
 
@@ -4638,7 +4794,7 @@ const NewProposalWorkflowPage = () => {
                                   <TableContainer sx={{ mt: 1 }}>
                                     <Table size="small">
                                       <TableHead>
-                                        <TableRow sx={{ bgcolor: "#f5f5f5" }}>
+                                        <TableRow sx={TABLE_HEADER_ROW}>
                                           <TableCell
                                             sx={{ fontWeight: "bold" }}
                                           >
@@ -5074,11 +5230,39 @@ const NewProposalWorkflowPage = () => {
                       </Box>
                     </>
                   ) : (
-                    <Box sx={{ textAlign: "center", py: 4 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        No MOOE data available
-                      </Typography>
-                    </Box>
+                    <>
+                      <Box sx={{ mb: 2 }}>
+                        <ProposalAttachments
+                          proposal={selectedProposal}
+                          moduleName="mooe"
+                          userInfo={currentUser}
+                          onChange={() => handleViewDetails(selectedProposal)}
+                        />
+                      </Box>
+                      <TableContainer sx={TABLE_CONTAINER}>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow sx={TABLE_HEADER_ROW}>
+                              <TableCell sx={{ fontWeight: "bold" }}>Subline Item</TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>Accounting Title</TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>UACS Code</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Income</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Subsidy</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Total</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            <TableRow>
+                              <TableCell colSpan={6} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
+                                <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.9rem" }}>
+                                  No MOOE data available
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </>
                   ))}
 
                 {/* Capital Outlay Tab */}
@@ -5200,7 +5384,7 @@ const NewProposalWorkflowPage = () => {
                                   <TableContainer sx={{ mt: 1 }}>
                                     <Table size="small">
                                       <TableHead>
-                                        <TableRow sx={{ bgcolor: "#f5f5f5" }}>
+                                        <TableRow sx={TABLE_HEADER_ROW}>
                                           <TableCell
                                             sx={{ fontWeight: "bold" }}
                                           >
@@ -5459,11 +5643,39 @@ const NewProposalWorkflowPage = () => {
                       </Box>
                     </>
                   ) : (
-                    <Box sx={{ textAlign: "center", py: 4 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        No capital outlay data available
-                      </Typography>
-                    </Box>
+                    <>
+                      <Box sx={{ mb: 2 }}>
+                        <ProposalAttachments
+                          proposal={selectedProposal}
+                          moduleName="capital"
+                          userInfo={currentUser}
+                          onChange={() => handleViewDetails(selectedProposal)}
+                        />
+                      </Box>
+                      <TableContainer sx={TABLE_CONTAINER}>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow sx={TABLE_HEADER_ROW}>
+                              <TableCell sx={{ fontWeight: "bold" }}>Subline Item</TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>Accounting Title</TableCell>
+                              <TableCell sx={{ fontWeight: "bold" }}>UACS Code</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Income</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Subsidy</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Total</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            <TableRow>
+                              <TableCell colSpan={6} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
+                                <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.9rem" }}>
+                                  No capital outlay data available
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </>
                   ))}
               </Box>
             </>
@@ -5547,7 +5759,7 @@ const NewProposalWorkflowPage = () => {
               <TableContainer sx={{ maxHeight: 600 }}>
                 <Table stickyHeader>
                   <TableHead>
-                    <TableRow sx={{ bgcolor: "#f5f5f5" }}>
+                    <TableRow sx={TABLE_HEADER_ROW}>
                       <TableCell
                         sx={{
                           fontWeight: "bold",

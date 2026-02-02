@@ -83,15 +83,21 @@ capitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl
 
     // ✅ Primary filter: if proposalId is provided, accept either legacy Proposal _id or NewProposalWorkflow _id
     if (proposalId) {
+      let workflowId = proposalId;
+      if (typeof proposalId === 'string' && require('mongoose').Types.ObjectId.isValid(proposalId)) {
+        try {
+          workflowId = new require('mongoose').Types.ObjectId(proposalId);
+        } catch (_) {}
+      }
       try {
-        query.$or = [{ workflowRef: proposalId }];
+        query.$or = [{ workflowRef: workflowId }];
         const Proposal = require('../models/Proposal');
-        const legacy = await Proposal.findOne({ workflowRef: proposalId }).select('_id').lean();
+        const legacy = await Proposal.findOne({ workflowRef: workflowId }).select('_id').lean();
         if (legacy?._id) {
           query.$or.push({ proposalId: legacy._id });
         }
       } catch (_e) {
-        query.proposalId = proposalId; // fallback as legacy Proposal id
+        query.proposalId = workflowId;
       }
     } else {
       // Fallback: use individual parameters
@@ -105,56 +111,72 @@ capitalOutlayRouter.get("/capital-outlay/getByParams", submissionWorkflowControl
     }
     
     let capitalOutlay = await CapitalOutlay.find(query).populate('category', 'categoryName').lean();
+
+    // Fallback: unlinked records (no workflowRef) with same fiscalYear + budgetType + division
+    if (proposalId && capitalOutlay.length === 0 && (req.query.fiscalYear || req.query.budgetType)) {
+      const fallbackQuery = {
+        $or: [{ workflowRef: null }, { workflowRef: { $exists: false } }],
+        ...(req.query.fiscalYear && { fiscalYear: req.query.fiscalYear }),
+        ...(req.query.budgetType && { budgetType: req.query.budgetType }),
+        ...(req.query.division && { division: req.query.division }),
+      };
+      const fallbackCO = await CapitalOutlay.find(fallbackQuery).populate('category', 'categoryName').lean();
+      if (fallbackCO.length > 0) {
+        capitalOutlay = fallbackCO;
+      }
+    }
     
-    // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's CURRENT organizational assignment
-    const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
-    const userIdString = userId ? String(userId) : undefined;
-    const userRoles = req.user?.Roles || [];
+    // When proposalId is provided we're viewing a specific proposal (e.g. Proposal Details dialog).
+    // Return all Capital Outlay linked to that proposal; access is already controlled by who can open the proposal.
+    const isProposalContext = Boolean(proposalId);
     
-    const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
-    const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
-    
-    // SUPER_ADMIN: Filter by createdBy (self-created records only)
-    if (isSuperAdmin && userIdString) {
-      // Allow SUPER_ADMIN to see all records (removed restriction)
-    } else if (!isSuperAdmin && !isBudgetManager && userIdString) {
-      try {
-        const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
-        const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
-          .populate('departmentId', 'Department DepartmentName department')
-          .populate('regionId', 'Region RegionName region')
-          .lean();
-        
-        if (userAssignment) {
-          const assignedDepartment = userAssignment.departmentId?.Department || 
-                                    userAssignment.departmentId?.DepartmentName ||
-                                    userAssignment.departmentId?.department;
-          const assignedRegion = userAssignment.regionId?.Region ||
-                                userAssignment.regionId?.RegionName ||
-                                userAssignment.regionId?.region;
-          const assignedDivision = userAssignment.divisionName;
+    if (!isProposalContext) {
+      // RESPONSIBILITY CENTER FILTERING: Only when NOT scoped to a single proposal
+      const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
+      const userIdString = userId ? String(userId) : undefined;
+      const userRoles = req.user?.Roles || [];
+      
+      const isSuperAdmin = userRoles.some(r => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
+      const isBudgetManager = userRoles.some(r => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(r));
+      
+      if (!isSuperAdmin && !isBudgetManager && userIdString) {
+        try {
+          const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+          const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
+            .populate('departmentId', 'Department DepartmentName department')
+            .populate('regionId', 'Region RegionName region')
+            .lean();
           
-          const filteredOutlay = capitalOutlay.filter(co => {
-            if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
-              return co.division === assignedDivision;
-            }
-            if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
-              return co.department === assignedDepartment;
-            }
-            if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
-              return co.region === assignedRegion;
-            }
-            if (userAssignment.assignmentLevel === 'FULL') {
-              return true;
-            }
-            return false;
-          });
-          
-          // Always apply filter - don't show data from other responsibility centers
-          capitalOutlay = filteredOutlay;
+          if (userAssignment) {
+            const assignedDepartment = userAssignment.departmentId?.Department || 
+                                      userAssignment.departmentId?.DepartmentName ||
+                                      userAssignment.departmentId?.department;
+            const assignedRegion = userAssignment.regionId?.Region ||
+                                  userAssignment.regionId?.RegionName ||
+                                  userAssignment.regionId?.region;
+            const assignedDivision = userAssignment.divisionName;
+            
+            const filteredOutlay = capitalOutlay.filter(co => {
+              if (assignedDivision && userAssignment.assignmentLevel === 'DIVISION') {
+                return co.division === assignedDivision;
+              }
+              if (assignedDepartment && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'OFFICE')) {
+                return co.department === assignedDepartment;
+              }
+              if (assignedRegion && userAssignment.assignmentLevel === 'REGION') {
+                return co.region === assignedRegion;
+              }
+              if (userAssignment.assignmentLevel === 'FULL') {
+                return true;
+              }
+              return false;
+            });
+            
+            capitalOutlay = filteredOutlay;
+          }
+        } catch (err) {
+          console.error('[ORG_FILTER] Error in capital-outlay/getByParams:', err.message);
         }
-      } catch (err) {
-        console.error('[ORG_FILTER] Error in capital-outlay/getByParams:', err.message);
       }
     }
     

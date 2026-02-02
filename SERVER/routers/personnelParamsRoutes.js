@@ -13,8 +13,8 @@ const personnelParamsRouter = Router();
 personnelParamsRouter.use(tokenMiddleware);
 // Get personnel by parameters - with submission workflow control
 personnelParamsRouter.get("/getpersonnels/byParams", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), getPersonnelByParams);
-// Legacy route for backward compatibility - with submission workflow control
-personnelParamsRouter.get("/api/personnel/getByParams", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), getPersonnelByParams);
+// Personnel getByParams - path is relative to /api mount, so use /personnel/getByParams (not /api/personnel/getByParams)
+personnelParamsRouter.get("/personnel/getByParams", submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }), getPersonnelByParams);
 // Bulk update personnel entries
-personnelParamsRouter.put("/api/personnel/bulk-update", submissionWorkflowControl('update', { strictMode: true, enableConsolidation: true }), enforceAccessRestrictions({ checkBudgetType: true, checkFiscalYear: true, checkReadOnly: true }), bulkUpdatePersonnel);
+personnelParamsRouter.put("/personnel/bulk-update", submissionWorkflowControl('update', { strictMode: true, enableConsolidation: true }), enforceAccessRestrictions({ checkBudgetType: true, checkFiscalYear: true, checkReadOnly: true }), bulkUpdatePersonnel);
 module.exports = personnelParamsRouter;
