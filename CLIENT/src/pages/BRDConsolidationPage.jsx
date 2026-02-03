@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Container,
   Paper,
   Grid,
   Card,
   CardContent,
-  CardHeader,
   Typography,
   Box,
   Tab,
@@ -13,9 +13,6 @@ import {
   CircularProgress,
   Alert,
   Chip,
-  List,
-  ListItem,
-  ListItemText,
   Collapse,
   IconButton,
   Table,
@@ -26,6 +23,12 @@ import {
   TableRow,
   TablePagination,
   Button,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Skeleton,
+  Tooltip,
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
@@ -33,9 +36,19 @@ import {
   LocationOn as LocationOnIcon,
   StorageRounded as StorageRoundedIcon,
   Edit as EditIcon,
+  Refresh as RefreshIcon,
+  Business as BusinessIcon,
+  Visibility as VisibilityIcon,
 } from '@mui/icons-material';
 import api from '../config/api';
 import OrganizationalInfoEditor from '../components/OrganizationalInfoEditor';
+
+/** Format date for display */
+function formatDate(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+}
 
 /**
  * BRD Consolidation Page
@@ -58,7 +71,12 @@ function TabPanel(props) {
   );
 }
 
+// Shared table layout styles for consistency
+const tableHeaderCell = { fontWeight: 700, whiteSpace: 'nowrap', py: 1.5, px: 2 };
+const tableBodyCell = { py: 1.25, px: 2 };
+
 export default function BRDConsolidationPage() {
+  const navigate = useNavigate();
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -76,6 +94,11 @@ export default function BRDConsolidationPage() {
   const [availableFiscalYears, setAvailableFiscalYears] = useState([]);
   const [editorOpen, setEditorOpen] = useState(false);
   const [selectedConsolidationId, setSelectedConsolidationId] = useState(null);
+
+  const handleViewProposal = (proposalId) => (e) => {
+    e?.stopPropagation?.();
+    if (proposalId) navigate(`/allproposal?tab=all-proposals&proposalId=${proposalId}`);
+  };
 
   // Handle opening the organizational info editor
   const handleEditOrgInfo = (consolidationId) => {
@@ -100,13 +123,13 @@ export default function BRDConsolidationPage() {
     const initializeFiscalYears = async () => {
       try {
         const summaryRes = await api.get('/api/allproposal/consolidation/summary');
-        if (summaryRes.data.data && summaryRes.data.data.byFiscalYear) {
-          const years = Object.keys(summaryRes.data.data.byFiscalYear)
+        const data = summaryRes.data?.data;
+        if (data?.byFiscalYear && typeof data.byFiscalYear === 'object') {
+          const years = Object.keys(data.byFiscalYear)
             .map(Number)
+            .filter((n) => !Number.isNaN(n))
             .sort((a, b) => b - a);
           setAvailableFiscalYears(years);
-          
-          // Set default to first available year with data
           if (years.length > 0) {
             setFiscalYear(years[0]);
           }
@@ -115,7 +138,6 @@ export default function BRDConsolidationPage() {
         console.error('Error fetching available fiscal years:', err);
       }
     };
-    
     initializeFiscalYears();
   }, []);
 
@@ -133,19 +155,20 @@ export default function BRDConsolidationPage() {
       const summaryRes = await api.get('/api/allproposal/consolidation/summary', {
         params: { fiscalYear }
       });
-      setSummary(summaryRes.data.data);
+      setSummary(summaryRes.data?.data ?? null);
 
-      // Fetch regional structure
+      // Fetch regional structure (only non–Central Office regions)
       const regionalRes = await api.get('/api/allproposal/consolidation/regions', {
         params: { fiscalYear }
       });
-      setRegionalStructure(regionalRes.data.data);
+      const regionalData = Array.isArray(regionalRes.data?.data) ? regionalRes.data.data : [];
+      setRegionalStructure(regionalData.filter((r) => (r.region || '').trim() !== 'Central Office'));
 
-      // Fetch central office structure
+      // Fetch central office structure (Central Office only)
       const coRes = await api.get('/api/allproposal/consolidation/central-office', {
         params: { fiscalYear }
       });
-      setCentralOfficeStructure(coRes.data.data);
+      setCentralOfficeStructure(Array.isArray(coRes.data?.data) ? coRes.data.data : []);
     } catch (err) {
       console.error('Error fetching consolidation data:', err);
       setError(err.response?.data?.message || 'Failed to fetch consolidation data');
@@ -184,119 +207,124 @@ export default function BRDConsolidationPage() {
     setPageCO(0);
   };
 
-  if (loading) {
+  if (error) {
     return (
       <Container maxWidth="xl" sx={{ py: 4 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
-          <CircularProgress />
-        </Box>
+        <Alert
+          severity="error"
+          action={
+            <Button color="inherit" size="small" onClick={() => { setError(null); fetchConsolidationData(); }}>
+              Retry
+            </Button>
+          }
+        >
+          {error}
+        </Alert>
       </Container>
     );
   }
 
-  if (error) {
-    return (
-      <Container maxWidth="xl" sx={{ py: 4 }}>
-        <Alert severity="error">{error}</Alert>
-      </Container>
-    );
-  }
+  const fallbackYears = [2024, 2025, 2026, 2027, 2028];
+  const fiscalYearOptions = availableFiscalYears.length > 0 ? availableFiscalYears : fallbackYears;
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
       {/* Page Header */}
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Box sx={{ mb: 3, display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700, mb: 1, display: 'flex', alignItems: 'center' }}>
-            <StorageRoundedIcon sx={{ mr: 2, fontSize: 32 }} />
-            BRD Level Consolidation Structure
+          <Typography variant="h4" sx={{ fontWeight: 700, mb: 0.5, display: 'flex', alignItems: 'center' }}>
+            <StorageRoundedIcon sx={{ mr: 1.5, fontSize: 32, color: 'primary.main' }} />
+            BRD Level Consolidation
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            Organize proposals by Region/Division and Central Office/Department
+            Proposals by Region/Division (Regional) and Central Office/Department (CO)
           </Typography>
         </Box>
-        
-        {/* Fiscal Year Filter */}
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            Fiscal Year:
-          </Typography>
-          <select
-            value={fiscalYear}
-            onChange={(e) => setFiscalYear(parseInt(e.target.value))}
-            style={{
-              padding: '8px 12px',
-              borderRadius: '4px',
-              border: '1px solid #ccc',
-              fontSize: '14px',
-              cursor: 'pointer',
-              backgroundColor: '#fff',
-              minWidth: '120px'
-            }}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <InputLabel id="fiscal-year-label">Fiscal Year</InputLabel>
+            <Select
+              labelId="fiscal-year-label"
+              label="Fiscal Year"
+              value={fiscalYear}
+              onChange={(e) => setFiscalYear(Number(e.target.value))}
+            >
+              {fiscalYearOptions.map((year) => (
+                <MenuItem key={year} value={year}>{year}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <IconButton
+            onClick={() => fetchConsolidationData()}
+            disabled={loading}
+            title="Refresh data"
+            sx={{ bgcolor: 'action.hover' }}
           >
-            {availableFiscalYears.length > 0 ? (
-              availableFiscalYears.map(year => (
-                <option key={year} value={year}>{year}</option>
-              ))
-            ) : (
-              // Fallback to last 5 years if no data yet
-              [2024, 2025, 2026, 2027, 2028].map(year => (
-                <option key={year} value={year}>{year}</option>
-              ))
-            )}
-          </select>
+            <RefreshIcon />
+          </IconButton>
         </Box>
       </Box>
 
+      {loading && (
+        <Box sx={{ mb: 3 }}>
+          <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 1 }} />
+          <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+            <Skeleton variant="rectangular" width="25%" height={100} sx={{ borderRadius: 1 }} />
+            <Skeleton variant="rectangular" width="25%" height={100} sx={{ borderRadius: 1 }} />
+            <Skeleton variant="rectangular" width="25%" height={100} sx={{ borderRadius: 1 }} />
+            <Skeleton variant="rectangular" width="25%" height={100} sx={{ borderRadius: 1 }} />
+          </Box>
+        </Box>
+      )}
+
+      {!loading && (
+        <>
       {/* Summary Cards */}
       {summary && (
-        <Grid container spacing={2} sx={{ mb: 4 }}>
+        <Grid container spacing={2} sx={{ mb: 3 }}>
           <Grid item xs={12} sm={6} md={3}>
-            <Card sx={{ backgroundColor: '#e3f2fd', minHeight: 120, display: 'flex', flexDirection: 'column' }}>
+            <Card sx={{ minHeight: 120, display: 'flex', flexDirection: 'column', boxShadow: 2, borderRadius: 2 }}>
               <CardContent sx={{ textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <Typography color="textSecondary" gutterBottom>
+                <Typography variant="overline" color="text.secondary" gutterBottom>
                   Total Proposals
                 </Typography>
-                <Typography variant="h4" sx={{ fontWeight: 700, color: '#1976d2' }}>
+                <Typography variant="h4" sx={{ fontWeight: 700, color: 'primary.main' }}>
                   {summary.totalProposals}
                 </Typography>
               </CardContent>
             </Card>
           </Grid>
-
           <Grid item xs={12} sm={6} md={3}>
-            <Card sx={{ backgroundColor: '#f3e5f5', minHeight: 120, display: 'flex', flexDirection: 'column' }}>
+            <Card sx={{ minHeight: 120, display: 'flex', flexDirection: 'column', boxShadow: 2, borderRadius: 2 }}>
               <CardContent sx={{ textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <Typography color="textSecondary" gutterBottom>
+                <Typography variant="overline" color="text.secondary" gutterBottom>
                   Total Amount
                 </Typography>
-                <Typography variant="h6" sx={{ fontWeight: 700, color: '#7b1fa2' }}>
+                <Typography variant="h6" sx={{ fontWeight: 700, color: 'secondary.main' }}>
                   ₱{(summary.totalAmount || 0).toLocaleString('en-PH', { maximumFractionDigits: 0 })}
                 </Typography>
               </CardContent>
             </Card>
           </Grid>
-
           <Grid item xs={12} sm={6} md={3}>
-            <Card sx={{ backgroundColor: '#e8f5e9', minHeight: 120, display: 'flex', flexDirection: 'column' }}>
+            <Card sx={{ minHeight: 120, display: 'flex', flexDirection: 'column', boxShadow: 2, borderRadius: 2 }}>
               <CardContent sx={{ textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <Typography color="textSecondary" gutterBottom>
-                  Regions
+                <Typography variant="overline" color="text.secondary" gutterBottom sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+                  <LocationOnIcon sx={{ fontSize: 16 }} /> Regions
                 </Typography>
-                <Typography variant="h4" sx={{ fontWeight: 700, color: '#388e3c' }}>
+                <Typography variant="h4" sx={{ fontWeight: 700, color: 'success.main' }}>
                   {summary.regionsCount}
                 </Typography>
               </CardContent>
             </Card>
           </Grid>
-
           <Grid item xs={12} sm={6} md={3}>
-            <Card sx={{ backgroundColor: '#fff3e0', minHeight: 120, display: 'flex', flexDirection: 'column' }}>
+            <Card sx={{ minHeight: 120, display: 'flex', flexDirection: 'column', boxShadow: 2, borderRadius: 2 }}>
               <CardContent sx={{ textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <Typography color="textSecondary" gutterBottom>
-                  Departments (CO)
+                <Typography variant="overline" color="text.secondary" gutterBottom sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+                  <BusinessIcon sx={{ fontSize: 16 }} /> Central Office
                 </Typography>
-                <Typography variant="h4" sx={{ fontWeight: 700, color: '#f57c00' }}>
+                <Typography variant="h4" sx={{ fontWeight: 700, color: 'warning.main' }}>
                   {summary.departmentsCount}
                 </Typography>
               </CardContent>
@@ -306,34 +334,44 @@ export default function BRDConsolidationPage() {
       )}
 
       {/* Tabs Section */}
-      <Paper>
+      <Paper sx={{ boxShadow: 2, borderRadius: 2, overflow: 'hidden' }}>
         <Tabs
           value={tabValue}
           onChange={handleTabChange}
           indicatorColor="primary"
           textColor="primary"
           variant="fullWidth"
+          sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 48 }}
         >
-          <Tab label={`Regional Structure (${regionalStructure.length} regions)`} id="consolidation-tab-0" />
-          <Tab label={`Central Office (${centralOfficeStructure.length} departments)`} id="consolidation-tab-1" />
+          <Tab
+            icon={<LocationOnIcon />}
+            iconPosition="start"
+            label={`Regional (${regionalStructure.length})`}
+            id="consolidation-tab-0"
+          />
+          <Tab
+            icon={<BusinessIcon />}
+            iconPosition="start"
+            label={`Central Office (${centralOfficeStructure.length})`}
+            id="consolidation-tab-1"
+          />
         </Tabs>
 
-        {/* Regional Structure Tab */}
+        {/* Regional Structure Tab — only non–Central Office regions */}
         <TabPanel value={tabValue} index={0}>
           {regionalStructure.length === 0 ? (
-            <Alert severity="info">No regional proposals in consolidation</Alert>
+            <Alert severity="info" icon={<LocationOnIcon />}>
+              No regional proposals in consolidation for this fiscal year. Records from Central Office appear under the Central Office tab.
+            </Alert>
           ) : (
-            <TableContainer>
-              <Table>
-                <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 700 }}>Region</TableCell>
-                    <TableCell align="center" sx={{ fontWeight: 700 }}>
-                      Divisions
-                    </TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700 }}>
-                      Total Proposals
-                    </TableCell>
+            <TableContainer sx={{ overflow: 'auto' }}>
+              <Table size="medium" sx={{ minWidth: 560 }}>
+                <TableHead>
+                  <TableRow sx={{ backgroundColor: 'grey.100' }}>
+                    <TableCell sx={{ ...tableHeaderCell, width: '40%' }}>Region</TableCell>
+                    <TableCell align="center" sx={{ ...tableHeaderCell, width: '20%' }}>Divisions</TableCell>
+                    <TableCell align="right" sx={{ ...tableHeaderCell, width: '20%' }}>Total Proposals</TableCell>
+                    <TableCell align="right" sx={{ ...tableHeaderCell, width: '20%' }}>Total Amount</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -343,9 +381,9 @@ export default function BRDConsolidationPage() {
                       <React.Fragment key={idx}>
                         <TableRow
                           onClick={() => handleRegionToggle(region.region)}
-                          sx={{ cursor: 'pointer', '&:hover': { backgroundColor: '#f9f9f9' } }}
+                          sx={{ cursor: 'pointer', '&:hover': { backgroundColor: 'action.hover' } }}
                         >
-                          <TableCell>
+                          <TableCell sx={tableBodyCell}>
                             <Box sx={{ display: 'flex', alignItems: 'center' }}>
                               <IconButton
                                 size="small"
@@ -356,52 +394,47 @@ export default function BRDConsolidationPage() {
                               >
                                 <ExpandMoreIcon />
                               </IconButton>
-                              <LocationOnIcon sx={{ mr: 1, color: '#1976d2' }} />
+                              <LocationOnIcon sx={{ mr: 1, color: 'primary.main' }} />
                               <Typography sx={{ fontWeight: 600 }}>{region.region}</Typography>
                             </Box>
                           </TableCell>
-                          <TableCell align="center">
+                          <TableCell align="center" sx={tableBodyCell}>
                             <Chip label={region.divisionCount} size="small" color="primary" variant="outlined" />
                           </TableCell>
-                          <TableCell align="right">
+                          <TableCell align="right" sx={tableBodyCell}>
                             <Chip
                               label={region.divisions.reduce((sum, d) => sum + d.proposalCount, 0)}
                               size="small"
                               color="primary"
                             />
                           </TableCell>
+                          <TableCell align="right" sx={tableBodyCell}>
+                            ₱{region.divisions.reduce((sum, d) => sum + (d.totalAmount || 0), 0).toLocaleString('en-PH', { maximumFractionDigits: 0 })}
+                          </TableCell>
                         </TableRow>
 
                         {/* Division Details */}
                         <TableRow>
-                          <TableCell colSpan={3} sx={{ p: 0 }}>
+                          <TableCell colSpan={4} sx={{ p: 0 }}>
                             <Collapse in={expandedRegion === region.region} timeout="auto" unmountOnExit>
-                              <Box sx={{ p: 2, backgroundColor: '#fafafa' }}>
-                                <Table size="small">
+                              <Box sx={{ p: 2, backgroundColor: 'grey.50' }}>
+                                <Table size="small" sx={{ minWidth: 520 }}>
                                   <TableHead>
-                                    <TableRow sx={{ backgroundColor: '#eeeeee' }}>
-                                      <TableCell sx={{ pl: 4, fontWeight: 600 }}>Division</TableCell>
-                                      <TableCell align="right" sx={{ fontWeight: 600 }}>
-                                        Proposals
-                                      </TableCell>
-                                      <TableCell align="right" sx={{ fontWeight: 600 }}>
-                                        Total Amount
-                                      </TableCell>
-                                      <TableCell align="center" sx={{ fontWeight: 600, width: '80px' }}>
-                                        Actions
-                                      </TableCell>
+                                    <TableRow sx={{ backgroundColor: 'grey.200' }}>
+                                      <TableCell sx={{ ...tableHeaderCell, pl: 4 }}>Division</TableCell>
+                                      <TableCell align="right" sx={tableHeaderCell}>Proposals</TableCell>
+                                      <TableCell align="right" sx={tableHeaderCell}>Total Amount</TableCell>
+                                      <TableCell align="center" sx={{ ...tableHeaderCell, width: 80 }}>Actions</TableCell>
                                     </TableRow>
                                   </TableHead>
                                   <TableBody>
                                     {region.divisions.map((division, divIdx) => (
                                       <React.Fragment key={divIdx}>
-                                        <TableRow sx={{ backgroundColor: '#fff', '&:hover': { backgroundColor: '#f5f5f5' } }}>
+                                        <TableRow sx={{ backgroundColor: '#fff', '&:hover': { backgroundColor: 'action.hover' } }}>
                                           <TableCell
-                                            sx={{ pl: 6, cursor: 'pointer', userSelect: 'none' }}
+                                            sx={{ ...tableBodyCell, pl: 5, cursor: 'pointer', userSelect: 'none' }}
                                             onClick={() => setExpandedDivision(
-                                              expandedDivision === `${region.region}-${division.division}` 
-                                                ? null 
-                                                : `${region.region}-${division.division}`
+                                              expandedDivision === `${region.region}-${division.division}` ? null : `${region.region}-${division.division}`
                                             )}
                                           >
                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -409,70 +442,76 @@ export default function BRDConsolidationPage() {
                                                 sx={{
                                                   transform: expandedDivision === `${region.region}-${division.division}` ? 'rotate(180deg)' : 'none',
                                                   transition: 'transform 0.2s',
-                                                  visibility: division.proposals && division.proposals.length > 0 ? 'visible' : 'hidden'
+                                                  visibility: division.proposals?.length > 0 ? 'visible' : 'hidden'
                                                 }}
                                               />
                                               {division.division}
                                             </Box>
                                           </TableCell>
-                                          <TableCell align="right">{division.proposalCount}</TableCell>
-                                          <TableCell align="right">
+                                          <TableCell align="right" sx={tableBodyCell}>{division.proposalCount}</TableCell>
+                                          <TableCell align="right" sx={tableBodyCell}>
                                             ₱{(division.totalAmount || 0).toLocaleString('en-PH', { maximumFractionDigits: 0 })}
                                           </TableCell>
-                                          <TableCell align="center">
+                                          <TableCell align="center" sx={tableBodyCell}>
                                             {division.consolidationId && (
                                               <IconButton
                                                 size="small"
                                                 color="primary"
                                                 title="Edit organizational information"
-                                                onClick={() => handleEditOrgInfo(division.consolidationId)}
+                                                onClick={(e) => { e.stopPropagation(); handleEditOrgInfo(division.consolidationId); }}
                                               >
                                                 <EditIcon fontSize="small" />
                                               </IconButton>
                                             )}
                                           </TableCell>
                                         </TableRow>
-                                        
-                                        {/* Proposals under this division */}
                                         <TableRow>
-                                          <TableCell colSpan={3} sx={{ p: 0 }}>
+                                          <TableCell colSpan={4} sx={{ p: 0, borderBottom: 'none' }}>
                                             <Collapse in={expandedDivision === `${region.region}-${division.division}`} timeout="auto" unmountOnExit>
-                                              <Box sx={{ p: 2, backgroundColor: '#f5f5f5' }}>
-                                                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+                                              <Box sx={{ py: 1.5, px: 2, backgroundColor: 'grey.100' }}>
+                                                <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600, color: 'text.secondary' }}>
                                                   Proposals ({division.proposalCount})
                                                 </Typography>
-                                                <Table size="small">
-                                                  <TableHead>
-                                                    <TableRow sx={{ backgroundColor: '#e0e0e0' }}>
-                                                      <TableCell sx={{ pl: 8, fontWeight: 600 }}>Proposal Title</TableCell>
-                                                      <TableCell sx={{ fontWeight: 600 }}>Budget Type</TableCell>
-                                                      <TableCell align="right" sx={{ fontWeight: 600 }}>Amount</TableCell>
-                                                    </TableRow>
-                                                  </TableHead>
-                                                  <TableBody>
-                                                    {division.proposals && division.proposals.map((proposal, propIdx) => (
-                                                      <TableRow key={propIdx} sx={{ backgroundColor: '#fff' }}>
-                                                        <TableCell sx={{ pl: 8 }}>
-                                                          {proposal.title || 'Untitled'}
-                                                        </TableCell>
-                                                        <TableCell>
-                                                          <span style={{ 
-                                                            backgroundColor: '#e3f2fd', 
-                                                            padding: '4px 8px', 
-                                                            borderRadius: '4px',
-                                                            fontSize: '12px',
-                                                            fontWeight: 500
-                                                          }}>
-                                                            {proposal.budgetType || 'N/A'}
-                                                          </span>
-                                                        </TableCell>
-                                                        <TableCell align="right">
-                                                          ₱{(proposal.amount || 0).toLocaleString('en-PH', { maximumFractionDigits: 0 })}
-                                                        </TableCell>
+                                                <TableContainer sx={{ overflow: 'auto' }}>
+                                                  <Table size="small" sx={{ minWidth: 900 }}>
+                                                    <TableHead>
+                                                      <TableRow sx={{ backgroundColor: 'grey.300' }}>
+                                                        <TableCell sx={{ ...tableHeaderCell, pl: 6, minWidth: 200 }}>Proposal Title</TableCell>
+                                                        <TableCell sx={{ ...tableHeaderCell, minWidth: 90 }}>Budget Type</TableCell>
+                                                        <TableCell align="center" sx={{ ...tableHeaderCell, minWidth: 80 }}>Fiscal Year</TableCell>
+                                                        <TableCell align="right" sx={{ ...tableHeaderCell, minWidth: 120 }}>Amount</TableCell>
+                                                        <TableCell sx={{ ...tableHeaderCell, minWidth: 110 }}>Date Consolidated</TableCell>
+                                                        <TableCell sx={{ ...tableHeaderCell, minWidth: 90 }}>Status</TableCell>
+                                                        <TableCell align="center" sx={{ ...tableHeaderCell, width: 72 }}>Actions</TableCell>
                                                       </TableRow>
-                                                    ))}
-                                                  </TableBody>
-                                                </Table>
+                                                    </TableHead>
+                                                    <TableBody>
+                                                      {division.proposals?.map((proposal, propIdx) => (
+                                                        <TableRow key={propIdx} sx={{ backgroundColor: '#fff' }}>
+                                                          <TableCell sx={{ ...tableBodyCell, pl: 6 }}>{proposal.title || 'Untitled'}</TableCell>
+                                                          <TableCell sx={tableBodyCell}>
+                                                            <Chip label={proposal.budgetType || 'N/A'} size="small" color="primary" variant="outlined" />
+                                                          </TableCell>
+                                                          <TableCell align="center" sx={tableBodyCell}>{proposal.fiscalYear ?? '—'}</TableCell>
+                                                          <TableCell align="right" sx={tableBodyCell}>
+                                                            ₱{(proposal.amount || 0).toLocaleString('en-PH', { maximumFractionDigits: 0 })}
+                                                          </TableCell>
+                                                          <TableCell sx={tableBodyCell}>{formatDate(proposal.consolidatedAt)}</TableCell>
+                                                          <TableCell sx={tableBodyCell}>
+                                                            <Chip label={proposal.status || 'ACTIVE'} size="small" variant="filled" color={proposal.status === 'ACTIVE' ? 'success' : 'default'} />
+                                                          </TableCell>
+                                                          <TableCell align="center" sx={tableBodyCell}>
+                                                            <Tooltip title="View proposal">
+                                                              <IconButton size="small" color="primary" onClick={handleViewProposal(proposal.proposalId)}>
+                                                                <VisibilityIcon fontSize="small" />
+                                                              </IconButton>
+                                                            </Tooltip>
+                                                          </TableCell>
+                                                        </TableRow>
+                                                      ))}
+                                                    </TableBody>
+                                                  </Table>
+                                                </TableContainer>
                                               </Box>
                                             </Collapse>
                                           </TableCell>
@@ -503,25 +542,21 @@ export default function BRDConsolidationPage() {
           />
         </TabPanel>
 
-        {/* Central Office Tab */}
+        {/* Central Office Tab — only Central Office records */}
         <TabPanel value={tabValue} index={1}>
           {centralOfficeStructure.length === 0 ? (
-            <Alert severity="info">No Central Office proposals in consolidation</Alert>
+            <Alert severity="info" icon={<BusinessIcon />}>
+              No Central Office proposals in consolidation for this fiscal year. Regional records appear under the Regional tab.
+            </Alert>
           ) : (
-            <TableContainer>
-              <Table>
-                <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 700 }}>Department</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700 }}>
-                      Proposals
-                    </TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700 }}>
-                      Total Amount
-                    </TableCell>
-                    <TableCell align="center" sx={{ fontWeight: 700, width: '80px' }}>
-                      Actions
-                    </TableCell>
+            <TableContainer sx={{ overflow: 'auto' }}>
+              <Table size="medium" sx={{ minWidth: 560 }}>
+                <TableHead>
+                  <TableRow sx={{ backgroundColor: 'grey.100' }}>
+                    <TableCell sx={{ ...tableHeaderCell, width: '40%' }}>Department</TableCell>
+                    <TableCell align="right" sx={{ ...tableHeaderCell, width: '15%' }}>Proposals</TableCell>
+                    <TableCell align="right" sx={{ ...tableHeaderCell, width: '25%' }}>Total Amount</TableCell>
+                    <TableCell align="center" sx={{ ...tableHeaderCell, width: '20%' }}>Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -531,87 +566,90 @@ export default function BRDConsolidationPage() {
                       <React.Fragment key={idx}>
                         <TableRow
                           onClick={() => handleDeptToggle(dept.department)}
-                          sx={{ cursor: 'pointer', '&:hover': { backgroundColor: '#f9f9f9' } }}
+                          sx={{ cursor: 'pointer', '&:hover': { backgroundColor: 'action.hover' } }}
                         >
-                          <TableCell>
+                          <TableCell sx={tableBodyCell}>
                             <Box sx={{ display: 'flex', alignItems: 'center' }}>
                               <IconButton
                                 size="small"
                                 sx={{
                                   transform: expandedDept === dept.department ? 'rotate(180deg)' : 'none',
                                   transition: 'transform 0.3s',
-                                  visibility: dept.proposals && dept.proposals.length > 0 ? 'visible' : 'hidden'
+                                  visibility: dept.proposals?.length > 0 ? 'visible' : 'hidden'
                                 }}
                               >
                                 <ExpandMoreIcon />
                               </IconButton>
-                              <FolderOpenIcon sx={{ mr: 1, color: '#f57c00' }} />
+                              <FolderOpenIcon sx={{ mr: 1, color: 'warning.main' }} />
                               <Typography sx={{ fontWeight: 600 }}>{dept.department}</Typography>
                             </Box>
                           </TableCell>
-                          <TableCell align="right">
+                          <TableCell align="right" sx={tableBodyCell}>
                             <Chip label={dept.proposalCount} size="small" color="warning" />
                           </TableCell>
-                          <TableCell align="right">
+                          <TableCell align="right" sx={tableBodyCell}>
                             ₱{(dept.totalAmount || 0).toLocaleString('en-PH', { maximumFractionDigits: 0 })}
                           </TableCell>
-                          <TableCell align="center">
+                          <TableCell align="center" sx={tableBodyCell}>
                             {dept.consolidationId && (
                               <IconButton
                                 size="small"
                                 color="primary"
                                 title="Edit organizational information"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEditOrgInfo(dept.consolidationId);
-                                }}
+                                onClick={(e) => { e.stopPropagation(); handleEditOrgInfo(dept.consolidationId); }}
                               >
                                 <EditIcon fontSize="small" />
                               </IconButton>
                             )}
                           </TableCell>
                         </TableRow>
-                        
-                        {/* Proposals under this department */}
                         <TableRow>
-                          <TableCell colSpan={3} sx={{ p: 0 }}>
+                          <TableCell colSpan={4} sx={{ p: 0, borderBottom: 'none' }}>
                             <Collapse in={expandedDept === dept.department} timeout="auto" unmountOnExit>
-                              <Box sx={{ p: 2, backgroundColor: '#f5f5f5' }}>
-                                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+                              <Box sx={{ py: 1.5, px: 2, backgroundColor: 'grey.50' }}>
+                                <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600, color: 'text.secondary' }}>
                                   Proposals ({dept.proposalCount})
                                 </Typography>
-                                <Table size="small">
-                                  <TableHead>
-                                    <TableRow sx={{ backgroundColor: '#e0e0e0' }}>
-                                      <TableCell sx={{ pl: 4, fontWeight: 600 }}>Proposal Title</TableCell>
-                                      <TableCell sx={{ fontWeight: 600 }}>Budget Type</TableCell>
-                                      <TableCell align="right" sx={{ fontWeight: 600 }}>Amount</TableCell>
-                                    </TableRow>
-                                  </TableHead>
-                                  <TableBody>
-                                    {dept.proposals && dept.proposals.map((proposal, propIdx) => (
-                                      <TableRow key={propIdx} sx={{ backgroundColor: '#fff' }}>
-                                        <TableCell sx={{ pl: 4 }}>
-                                          {proposal.title || 'Untitled'}
-                                        </TableCell>
-                                        <TableCell>
-                                          <span style={{ 
-                                            backgroundColor: '#fff3e0', 
-                                            padding: '4px 8px', 
-                                            borderRadius: '4px',
-                                            fontSize: '12px',
-                                            fontWeight: 500
-                                          }}>
-                                            {proposal.budgetType || 'N/A'}
-                                          </span>
-                                        </TableCell>
-                                        <TableCell align="right">
-                                          ₱{(proposal.amount || 0).toLocaleString('en-PH', { maximumFractionDigits: 0 })}
-                                        </TableCell>
+                                <TableContainer sx={{ overflow: 'auto' }}>
+                                  <Table size="small" sx={{ minWidth: 900 }}>
+                                    <TableHead>
+                                      <TableRow sx={{ backgroundColor: 'grey.300' }}>
+                                        <TableCell sx={{ ...tableHeaderCell, pl: 4, minWidth: 200 }}>Proposal Title</TableCell>
+                                        <TableCell sx={{ ...tableHeaderCell, minWidth: 90 }}>Budget Type</TableCell>
+                                        <TableCell align="center" sx={{ ...tableHeaderCell, minWidth: 80 }}>Fiscal Year</TableCell>
+                                        <TableCell align="right" sx={{ ...tableHeaderCell, minWidth: 120 }}>Amount</TableCell>
+                                        <TableCell sx={{ ...tableHeaderCell, minWidth: 110 }}>Date Consolidated</TableCell>
+                                        <TableCell sx={{ ...tableHeaderCell, minWidth: 90 }}>Status</TableCell>
+                                        <TableCell align="center" sx={{ ...tableHeaderCell, width: 72 }}>Actions</TableCell>
                                       </TableRow>
-                                    ))}
-                                  </TableBody>
-                                </Table>
+                                    </TableHead>
+                                    <TableBody>
+                                      {dept.proposals?.map((proposal, propIdx) => (
+                                        <TableRow key={propIdx} sx={{ backgroundColor: '#fff' }}>
+                                          <TableCell sx={{ ...tableBodyCell, pl: 4 }}>{proposal.title || 'Untitled'}</TableCell>
+                                          <TableCell sx={tableBodyCell}>
+                                            <Chip label={proposal.budgetType || 'N/A'} size="small" color="warning" variant="outlined" />
+                                          </TableCell>
+                                          <TableCell align="center" sx={tableBodyCell}>{proposal.fiscalYear ?? '—'}</TableCell>
+                                          <TableCell align="right" sx={tableBodyCell}>
+                                            ₱{(proposal.amount || 0).toLocaleString('en-PH', { maximumFractionDigits: 0 })}
+                                          </TableCell>
+                                          <TableCell sx={tableBodyCell}>{formatDate(proposal.consolidatedAt)}</TableCell>
+                                          <TableCell sx={tableBodyCell}>
+                                            <Chip label={proposal.status || 'ACTIVE'} size="small" variant="filled" color={proposal.status === 'ACTIVE' ? 'success' : 'default'} />
+                                          </TableCell>
+                                          <TableCell align="center" sx={tableBodyCell}>
+                                            <Tooltip title="View proposal">
+                                              <IconButton size="small" color="primary" onClick={handleViewProposal(proposal.proposalId)}>
+                                                <VisibilityIcon fontSize="small" />
+                                              </IconButton>
+                                            </Tooltip>
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                    </TableBody>
+                                  </Table>
+                                </TableContainer>
                               </Box>
                             </Collapse>
                           </TableCell>
@@ -637,7 +675,7 @@ export default function BRDConsolidationPage() {
 
       {/* Summary Stats */}
       {summary && (
-        <Paper sx={{ p: 3, mt: 4, backgroundColor: '#f9f9f9' }}>
+        <Paper sx={{ p: 3, mt: 4, backgroundColor: 'grey.50' }}>
           <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
             Model Type Distribution
           </Typography>
@@ -658,6 +696,8 @@ export default function BRDConsolidationPage() {
             ))}
           </Grid>
         </Paper>
+      )}
+        </>
       )}
 
       {/* Organizational Info Editor Modal */}

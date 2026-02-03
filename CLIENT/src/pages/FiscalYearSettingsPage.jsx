@@ -15,7 +15,11 @@ import {
   Alert,
   Divider,
   useTheme,
-  alpha
+  alpha,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText
 } from "@mui/material";
 import {
   MdCalendarToday,
@@ -30,19 +34,42 @@ import {
   AiOutlineEye,
   AiOutlineDownload,
   AiOutlineReload,
-  AiOutlinePlus
+  AiOutlinePlus,
+  AiOutlineDelete
 } from "react-icons/ai";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "react-hot-toast";
 import AddSettingsDialog_Enhanced from "../components/settings/AddSettingsDialog_Enhanced";
+import AddRegionExtensionDialog from "../components/settings/AddRegionExtensionDialog";
 import ProposalActionsButton from "../global/components/ProposalActionsButton";
 import CustomPage from "../global/components/CustomPage";
 import api from "../config/api";
 
 const FiscalYearSettingsPage = () => {
   const theme = useTheme();
+  const queryClient = useQueryClient();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedData, setSelectedData] = useState(null);
+  const [extensionDialogOpen, setExtensionDialogOpen] = useState(false);
+  const [rowForExtension, setRowForExtension] = useState(null);
+  const [extensionMenuAnchor, setExtensionMenuAnchor] = useState(null);
+  const [extensionMenuRow, setExtensionMenuRow] = useState(null);
   // Periods are simplified to a single window; no separate manage dialog
+
+  const removeExtensionMutation = useMutation({
+    mutationFn: async ({ settingsId, extensionId }) => {
+      await api.delete(`/settings/${settingsId}/region-extension/${extensionId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(["settings"]);
+      toast.success("Region extension removed.");
+      setExtensionMenuAnchor(null);
+      setExtensionMenuRow(null);
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || "Failed to remove extension.");
+    }
+  });
 
   // Fetch settings data for summary cards
   const { data: settingsData, isLoading: settingsLoading, refetch, error } = useQuery({
@@ -94,6 +121,17 @@ const FiscalYearSettingsPage = () => {
     refetch(); // Refresh data after dialog closes
   };
 
+  const handleOpenExtensionDialog = (row) => {
+    setRowForExtension(row);
+    setExtensionDialogOpen(true);
+  };
+
+  const handleCloseExtensionDialog = () => {
+    setExtensionDialogOpen(false);
+    setRowForExtension(null);
+    refetch();
+  };
+
   // No-op: periods management removed in simplified flow
 
   const handleExport = () => {
@@ -122,6 +160,20 @@ const FiscalYearSettingsPage = () => {
                 }}
               >
                 <AiOutlineEdit />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Tooltip title="Add region due date extension (same FY & budget type, extended due date for specific region)">
+            <span>
+              <IconButton
+                size="small"
+                onClick={() => handleOpenExtensionDialog(row)}
+                sx={{
+                  color: theme.palette.secondary.main,
+                  '&:hover': { backgroundColor: alpha(theme.palette.secondary.main, 0.1) }
+                }}
+              >
+                <AiOutlinePlus />
               </IconButton>
             </span>
           </Tooltip>
@@ -222,6 +274,71 @@ const FiscalYearSettingsPage = () => {
           variant="outlined"
         />
       )
+    },
+    regionDueDateExtensions: {
+      type: "custom",
+      label: "Region extensions",
+      show: true,
+      customRender: (row) => {
+        const exts = row.regionDueDateExtensions || [];
+        if (exts.length === 0) {
+          return (
+            <Typography variant="caption" color="text.secondary">—</Typography>
+          );
+        }
+        return (
+          <>
+            <Tooltip
+              title={
+                <Stack spacing={0.5} sx={{ py: 0.5 }}>
+                  {exts.map((ext, i) => (
+                    <Typography key={i} variant="caption" component="div">
+                      {ext.label || `${ext.regions?.length || 0} region(s)`}: due {ext.dueDate ? new Date(ext.dueDate).toLocaleDateString() : "—"}
+                    </Typography>
+                  ))}
+                  <Typography variant="caption" color="text.secondary">Click chip to remove an extension</Typography>
+                </Stack>
+              }
+            >
+              <Chip
+                label={`${exts.length} extension(s)`}
+                size="small"
+                color="secondary"
+                variant="outlined"
+                onClick={(e) => {
+                  setExtensionMenuAnchor(e.currentTarget);
+                  setExtensionMenuRow(row);
+                }}
+                sx={{ cursor: "pointer" }}
+              />
+            </Tooltip>
+            <Menu
+              anchorEl={extensionMenuAnchor}
+              open={Boolean(extensionMenuAnchor) && extensionMenuRow?._id === row._id}
+              onClose={() => { setExtensionMenuAnchor(null); setExtensionMenuRow(null); }}
+              anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+            >
+              {extensionMenuRow?._id === row._id && exts.map((ext, i) => (
+                <MenuItem
+                  key={ext._id || i}
+                  onClick={() => {
+                    if (ext._id) {
+                      removeExtensionMutation.mutate({ settingsId: row._id, extensionId: ext._id });
+                    }
+                  }}
+                  disabled={!ext._id || removeExtensionMutation.isPending}
+                >
+                  <ListItemIcon><AiOutlineDelete fontSize="small" /></ListItemIcon>
+                  <ListItemText
+                    primary={ext.label || `${ext.regions?.length || 0} region(s)`}
+                    secondary={ext.dueDate ? new Date(ext.dueDate).toLocaleDateString() : "—"}
+                  />
+                </MenuItem>
+              ))}
+            </Menu>
+          </>
+        );
+      }
     },
   };
 
@@ -462,6 +579,16 @@ const FiscalYearSettingsPage = () => {
           open={isAddDialogOpen}
           onCloseDialog={handleCloseAddDialog}
           row={selectedData}
+        />
+      )}
+
+      {/* Add region due date extension (same FY + budget type, different region extended due date) */}
+      {extensionDialogOpen && rowForExtension && (
+        <AddRegionExtensionDialog
+          open={extensionDialogOpen}
+          onClose={handleCloseExtensionDialog}
+          settingsRow={rowForExtension}
+          onSuccess={() => refetch()}
         />
       )}
 

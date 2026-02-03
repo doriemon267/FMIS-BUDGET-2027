@@ -223,8 +223,14 @@ const getProposalsInFolder = async (consolidationPath) => {
   }
 };
 
+/** Normalize region for comparison — treat "Central Office" as CO regardless of flag */
+const isCentralOfficeRecord = (record) =>
+  record.isCentralOffice === true ||
+  (record.region && String(record.region).trim().toLowerCase() === 'central office');
+
 /**
  * Get all regions with their divisions and proposal counts
+ * Excludes Central Office; only regional (non-CO) records appear here.
  */
 const getRegionStructure = async (fiscalYear = null) => {
   try {
@@ -238,42 +244,53 @@ const getRegionStructure = async (fiscalYear = null) => {
       query.fiscalYear = fiscalYear;
     }
 
-    const regionalRecords = await BRDConsolidation.find(query).lean();
+    let regionalRecords = await BRDConsolidation.find(query).lean();
+    // Exclude any record that is effectively Central Office (e.g. region name "Central Office")
+    regionalRecords = regionalRecords.filter((r) => !isCentralOfficeRecord(r));
 
-    // Group by region -> division -> proposals
+    // Group by region -> division -> proposals (use fallbacks for missing region/division)
     const structure = {};
     regionalRecords.forEach(record => {
-      if (!structure[record.region]) {
-        structure[record.region] = {
-          region: record.region,
+      const regionKey = record.region && String(record.region).trim() ? record.region : 'Unassigned Region';
+      const divisionKey = record.division && String(record.division).trim() ? record.division : 'Unassigned Division';
+      if (!structure[regionKey]) {
+        structure[regionKey] = {
+          region: regionKey,
           divisions: {}
         };
       }
 
-      if (!structure[record.region].divisions[record.division]) {
-        structure[record.region].divisions[record.division] = {
-          division: record.division,
-          consolidationId: null, // Will be set from first record
+      if (!structure[regionKey].divisions[divisionKey]) {
+        structure[regionKey].divisions[divisionKey] = {
+          division: divisionKey,
+          consolidationId: null,
           proposalCount: 0,
           totalAmount: 0,
           proposals: []
         };
       }
 
-      // Store consolidationId for the division (from first record in this division)
-      if (!structure[record.region].divisions[record.division].consolidationId) {
-        structure[record.region].divisions[record.division].consolidationId = record._id.toString();
+      if (!structure[regionKey].divisions[divisionKey].consolidationId) {
+        structure[regionKey].divisions[divisionKey].consolidationId = record._id.toString();
       }
 
-      structure[record.region].divisions[record.division].proposalCount++;
-      structure[record.region].divisions[record.division].totalAmount += record.financialSummary?.totalAmount || 0;
-      structure[record.region].divisions[record.division].proposals.push({
+      structure[regionKey].divisions[divisionKey].proposalCount++;
+      structure[regionKey].divisions[divisionKey].totalAmount += record.proposalAmount || 0;
+      structure[regionKey].divisions[divisionKey].proposals.push({
         proposalId: record.proposalId,
         title: record.proposalTitle,
-        amount: record.financialSummary?.totalAmount || 0,
+        amount: record.proposalAmount || 0,
         modelType: record.modelType,
         budgetType: record.modelType,
-        consolidationId: record._id.toString()
+        consolidationId: record._id.toString(),
+        fiscalYear: record.fiscalYear,
+        consolidatedAt: record.consolidatedAt,
+        updatedAt: record.updatedAt,
+        status: record.status,
+        consolidationPath: record.consolidationPath,
+        region: record.region,
+        division: record.division,
+        department: record.department
       });
     });
 
@@ -294,48 +311,55 @@ const getRegionStructure = async (fiscalYear = null) => {
 
 /**
  * Get Central Office department structure
+ * Includes only records that are Central Office (by flag or region name "Central Office").
  */
 const getCentralOfficeStructure = async (fiscalYear = null) => {
   try {
     console.log('[BRD_CONSOLIDATION] Fetching Central Office structure');
 
-    const query = {
-      status: 'ACTIVE',
-      isCentralOffice: true
-    };
+    const query = { status: 'ACTIVE' };
     if (fiscalYear) {
       query.fiscalYear = fiscalYear;
     }
 
-    const records = await BRDConsolidation.find(query).lean();
+    let records = await BRDConsolidation.find(query).lean();
+    // Include only Central Office: isCentralOffice true OR region is "Central Office"
+    records = records.filter((r) => isCentralOfficeRecord(r));
 
-    // Group by department
+    // Group by department (use 'Unassigned Department' when missing)
     const departments = {};
     records.forEach(record => {
-      if (!departments[record.department]) {
-        departments[record.department] = {
-          department: record.department,
-          consolidationId: null, // Will be set from first record
+      const deptKey = record.department && String(record.department).trim() ? record.department : 'Unassigned Department';
+      if (!departments[deptKey]) {
+        departments[deptKey] = {
+          department: deptKey,
+          consolidationId: null,
           proposalCount: 0,
           totalAmount: 0,
           proposals: []
         };
       }
-
-      // Store consolidationId for the department (from first record in this department)
-      if (!departments[record.department].consolidationId) {
-        departments[record.department].consolidationId = record._id.toString();
+      if (!departments[deptKey].consolidationId) {
+        departments[deptKey].consolidationId = record._id.toString();
       }
-
-      departments[record.department].proposalCount++;
-      departments[record.department].totalAmount += record.financialSummary?.totalAmount || 0;
-      departments[record.department].proposals.push({
+      const amount = record.proposalAmount || 0;
+      departments[deptKey].proposalCount++;
+      departments[deptKey].totalAmount += amount;
+      departments[deptKey].proposals.push({
         proposalId: record.proposalId,
         title: record.proposalTitle,
-        amount: record.financialSummary?.totalAmount || 0,
+        amount,
         modelType: record.modelType,
         budgetType: record.modelType,
-        consolidationId: record._id.toString()
+        consolidationId: record._id.toString(),
+        fiscalYear: record.fiscalYear,
+        consolidatedAt: record.consolidatedAt,
+        updatedAt: record.updatedAt,
+        status: record.status,
+        consolidationPath: record.consolidationPath,
+        region: record.region,
+        division: record.division,
+        department: record.department
       });
     });
 
@@ -371,13 +395,15 @@ const getConsolidationSummary = async (fiscalYear = null) => {
 
     const records = await BRDConsolidation.find(query).lean();
 
+    const regionalRecords = records.filter((r) => !isCentralOfficeRecord(r));
+    const coRecords = records.filter((r) => isCentralOfficeRecord(r));
     const summary = {
       totalProposals: records.length,
       totalAmount: records.reduce((sum, r) => sum + (r.proposalAmount || 0), 0),
-      regionalProposals: records.filter(r => !r.isCentralOffice).length,
-      centralOfficeProposals: records.filter(r => r.isCentralOffice).length,
-      regionsCount: new Set(records.filter(r => !r.isCentralOffice).map(r => r.region)).size,
-      departmentsCount: new Set(records.filter(r => r.isCentralOffice).map(r => r.department)).size,
+      regionalProposals: regionalRecords.length,
+      centralOfficeProposals: coRecords.length,
+      regionsCount: new Set(regionalRecords.map((r) => r.region)).size,
+      departmentsCount: new Set(coRecords.map((r) => (r.department && String(r.department).trim()) ? r.department : 'Unassigned Department')).size,
       byModelType: {},
       byRegion: {},
       byFiscalYear: {}
@@ -395,9 +421,9 @@ const getConsolidationSummary = async (fiscalYear = null) => {
       summary.byModelType[modelType] = (summary.byModelType[modelType] || 0) + 1;
     });
 
-    // Count by region
+    // Count by region (Central Office vs regional)
     records.forEach(record => {
-      const region = record.isCentralOffice ? 'Central Office' : record.region;
+      const region = isCentralOfficeRecord(record) ? 'Central Office' : record.region;
       summary.byRegion[region] = (summary.byRegion[region] || 0) + 1;
     });
 
@@ -458,7 +484,7 @@ const updateOrganizationalInfo = async (consolidationId, { division, department,
         const newDivision = division || doc.division;
         const newDepartment = department || doc.department;
         const newPath = isCentralOffice || updateData.isCentralOffice 
-          ? `CentralOffice/${newDepartment}`
+          ? `Central Office/${newDepartment}`
           : `${doc.region}/${newDivision}`;
         updateData.consolidationPath = newPath;
         console.log(`[BRD_CONSOLIDATION] Updated path: ${updateData.consolidationPath}`);

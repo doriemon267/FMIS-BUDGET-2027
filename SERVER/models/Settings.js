@@ -12,6 +12,17 @@ const budgetPeriodSchema = new mongoose.Schema(
   { _id: true }
 );
 
+// Optional extended due date for specific region(s) (same FY + budget type)
+const regionDueDateExtensionSchema = new mongoose.Schema(
+  {
+    regions: { type: [String], required: true }, // region IDs or names that get this extended due date
+    dueDate: { type: Date, required: true },
+    label: { type: String }, // optional label e.g. "Extension for Region X"
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: true }
+);
+
 const settingsSchema = new mongoose.Schema(
   {
     fiscalYear: { type: String, required: true },
@@ -25,6 +36,9 @@ const settingsSchema = new mongoose.Schema(
     
     // Budget periods with versioning (NEW)
     budgetPeriods: [budgetPeriodSchema],
+    
+    // Extended due dates for specific regions (same FY + budget type)
+    regionDueDateExtensions: [regionDueDateExtensionSchema],
     
     // Backward compatibility fields (deprecated but kept for migration)
     startDate: { type: Date },

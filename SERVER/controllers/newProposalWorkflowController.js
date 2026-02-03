@@ -872,48 +872,40 @@ exports.createProposal = async (req, res) => {
     }
 
     // ============ DUE DATE VALIDATION ============
-    // Check if the fiscal year settings allow proposal creation (due date not passed)
+    // Check if the fiscal year settings allow proposal creation (due date not passed).
+    // Uses region-specific due date extension if one exists for the proposal's region.
     const isSuperAdmin = userRole === 'SUPER ADMIN' || userRole === 'SUPER_ADMIN';
     
-    // Find the fiscal year settings for this fiscal year and budget type
     const fiscalYearSettings = await Settings.findOne({
       fiscalYear: String(fiscalYear),
       budgetType: normalizedModelType,
       isActive: true
-    });
+    }).lean();
 
     if (fiscalYearSettings) {
       const now = new Date();
-      
-      // Check budget periods (new structure)
-      if (fiscalYearSettings.budgetPeriods && fiscalYearSettings.budgetPeriods.length > 0) {
-        // Find an active period where due date hasn't passed
-        const activePeriod = fiscalYearSettings.budgetPeriods.find(period => {
-          const periodDueDate = new Date(period.dueDate);
-          return period.isActive && periodDueDate >= now;
+      // Build list of region identifiers for matching region-specific extensions (id and/or name)
+      const regionIdentifiers = [];
+      if (region != null) {
+        if (typeof region === 'object') {
+          const r = region;
+          if (r._id) regionIdentifiers.push(String(r._id));
+          if (r.id) regionIdentifiers.push(String(r.id));
+          if (r.Region) regionIdentifiers.push(String(r.Region));
+          if (r.RegionName) regionIdentifiers.push(String(r.RegionName));
+          if (r.regionName) regionIdentifiers.push(String(r.regionName));
+        } else {
+          regionIdentifiers.push(String(region));
+        }
+      }
+      const { getEffectiveDueDateForRegion } = require('../utils/settingsUtils');
+      const { dueDate: effectiveDueDate } = getEffectiveDueDateForRegion(fiscalYearSettings, regionIdentifiers.length ? regionIdentifiers : null);
+
+      if (effectiveDueDate && effectiveDueDate < now && !isSuperAdmin) {
+        return res.status(403).json({
+          success: false,
+          message: `The submission period for FY ${fiscalYear} (${normalizedModelType}) has ended. Due date was ${effectiveDueDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}. Please contact your administrator to extend the deadline.`
         });
-        
-        if (!activePeriod && !isSuperAdmin) {
-          // Find the latest due date to show in the message
-          const latestDueDate = fiscalYearSettings.budgetPeriods
-            .map(p => new Date(p.dueDate))
-            .sort((a, b) => b - a)[0];
-          
-          return res.status(403).json({
-            success: false,
-            message: `The submission period for FY ${fiscalYear} (${normalizedModelType}) has ended. Due date was ${latestDueDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}. Please contact your administrator to extend the deadline.`
-          });
-        }
-      } 
-      // Legacy due date field (backward compatibility)
-      else if (fiscalYearSettings.dueDate) {
-        const dueDate = new Date(fiscalYearSettings.dueDate);
-        if (dueDate < now && !isSuperAdmin) {
-          return res.status(403).json({
-            success: false,
-            message: `The submission period for FY ${fiscalYear} (${normalizedModelType}) has ended. Due date was ${dueDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}. Please contact your administrator to extend the deadline.`
-          });
-        }
       }
     }
     // ============ END DUE DATE VALIDATION ============

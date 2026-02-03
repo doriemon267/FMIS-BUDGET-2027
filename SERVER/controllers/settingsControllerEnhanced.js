@@ -30,6 +30,7 @@ exports.createSettingsWithRegions = async (req, res) => {
       budgetType,
       applicableRegions = ["All"],
       budgetPeriods = [],
+      regionDueDateExtensions = [],
       isActive = true,
     } = req.body;
 
@@ -115,12 +116,21 @@ exports.createSettingsWithRegions = async (req, res) => {
       createdAt: new Date(),
     }));
 
+    // Process region due date extensions if provided
+    const processedExtensions = (Array.isArray(regionDueDateExtensions) ? regionDueDateExtensions : []).map((ext) => ({
+      regions: Array.isArray(ext.regions) ? ext.regions : [],
+      dueDate: ext.dueDate ? new Date(ext.dueDate) : null,
+      label: ext.label || null,
+      createdAt: new Date(),
+    })).filter((ext) => ext.regions.length > 0 && ext.dueDate);
+
     // Create settings
     const newSettings = new Settings({
       fiscalYear,
       budgetType,
       applicableRegions,
       budgetPeriods: processedPeriods,
+      regionDueDateExtensions: processedExtensions,
       compensationSettingsId, // Always null - by design - NO compensation auto-creation
       isActive,
       // For backward compatibility, set first period dates
@@ -536,6 +546,7 @@ exports.updateSettings = async (req, res) => {
       budgetType,
       budgetPeriods,
       applicableRegions,
+      regionDueDateExtensions,
       isActive,
       ...otherSettings
     } = req.body;
@@ -589,6 +600,16 @@ exports.updateSettings = async (req, res) => {
     if (budgetType !== undefined) toUpdate.budgetType = budgetType;
     if (applicableRegions !== undefined) toUpdate.applicableRegions = applicableRegions;
     if (isActive !== undefined) toUpdate.isActive = isActive;
+
+    // Handle region due date extensions (same FY + budget type, extended due date per region)
+    if (regionDueDateExtensions !== undefined && Array.isArray(regionDueDateExtensions)) {
+      toUpdate.regionDueDateExtensions = regionDueDateExtensions.map((ext) => ({
+        regions: Array.isArray(ext.regions) ? ext.regions : [],
+        dueDate: ext.dueDate ? new Date(ext.dueDate) : null,
+        label: ext.label || null,
+        createdAt: ext.createdAt ? new Date(ext.createdAt) : new Date(),
+      })).filter((ext) => ext.regions.length > 0 && ext.dueDate);
+    }
     
     // Handle budgetPeriods update - this is the new structure
     if (budgetPeriods !== undefined && Array.isArray(budgetPeriods)) {
@@ -654,6 +675,72 @@ exports.deleteSettings = async (req, res) => {
   } catch (error) {
     console.error("Error in deleteSettings:", error.stack);
     res.status(500).json({ message: "Server error", error });
+  }
+};
+
+/**
+ * Add a region due date extension to an existing settings document (same FY + budget type, extended due date for specific region(s))
+ */
+exports.addRegionDueDateExtension = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { regions = [], dueDate, label } = req.body;
+    if (!Array.isArray(regions) || regions.length === 0 || !dueDate) {
+      return res.status(400).json({
+        message: "regions (array) and dueDate are required for a region extension.",
+      });
+    }
+    const settings = await Settings.findById(id);
+    if (!settings) {
+      return res.status(404).json({ message: "Settings not found." });
+    }
+    const extensions = settings.regionDueDateExtensions || [];
+    const newExt = {
+      regions,
+      dueDate: new Date(dueDate),
+      label: label || null,
+      createdAt: new Date(),
+    };
+    extensions.push(newExt);
+    settings.regionDueDateExtensions = extensions;
+    await settings.save();
+    const updated = await Settings.findById(id).populate("compensationSettingsId");
+    res.status(200).json({
+      message: "Region due date extension added successfully.",
+      settings: updated,
+    });
+  } catch (error) {
+    console.error("Error in addRegionDueDateExtension:", error.stack);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+/**
+ * Remove a region due date extension by its _id (subdocument id)
+ */
+exports.removeRegionDueDateExtension = async (req, res) => {
+  try {
+    const { id, extensionId } = req.params;
+    const settings = await Settings.findById(id);
+    if (!settings) {
+      return res.status(404).json({ message: "Settings not found." });
+    }
+    const extensions = settings.regionDueDateExtensions || [];
+    const idx = extensions.findIndex((e) => String(e._id) === String(extensionId));
+    if (idx === -1) {
+      return res.status(404).json({ message: "Region extension not found." });
+    }
+    extensions.splice(idx, 1);
+    settings.regionDueDateExtensions = extensions;
+    await settings.save();
+    const updated = await Settings.findById(id).populate("compensationSettingsId");
+    res.status(200).json({
+      message: "Region due date extension removed successfully.",
+      settings: updated,
+    });
+  } catch (error) {
+    console.error("Error in removeRegionDueDateExtension:", error.stack);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 

@@ -143,8 +143,44 @@ function getCompensationField(settings, fieldName, defaultValue = 0) {
   return value !== null && value !== undefined ? value : defaultValue;
 }
 
+/**
+ * Get the effective due date for a given region from settings.
+ * If settings have regionDueDateExtensions and the region matches one, returns that extension's due date.
+ * Otherwise returns the main due date (from active budget period or legacy dueDate).
+ * 
+ * @param {Object} settings - Settings document (plain object or mongoose doc)
+ * @param {String|Array<String>} regionIdOrNameOrList - Region ID(s) or name(s) for matching (one string or array of possible values)
+ * @returns {{ dueDate: Date | null, isExtension: boolean }}
+ */
+function getEffectiveDueDateForRegion(settings, regionIdOrNameOrList) {
+  if (!settings) return { dueDate: null, isExtension: false };
+  const list = Array.isArray(regionIdOrNameOrList)
+    ? regionIdOrNameOrList.map((x) => (x != null ? String(x).trim() : "")).filter(Boolean)
+    : [regionIdOrNameOrList != null ? String(regionIdOrNameOrList).trim() : ""].filter(Boolean);
+  const extensions = settings.regionDueDateExtensions || [];
+  for (const ext of extensions) {
+    const regions = (ext.regions || []).map((r) => String(r).trim());
+    const matches = list.length > 0 && list.some((v) => regions.includes(v));
+    if (matches && ext.dueDate) {
+      return { dueDate: new Date(ext.dueDate), isExtension: true };
+    }
+  }
+  // Default: active budget period or legacy dueDate
+  if (settings.budgetPeriods && settings.budgetPeriods.length > 0) {
+    const activePeriod = settings.budgetPeriods.find((p) => p.isActive) || settings.budgetPeriods[0];
+    if (activePeriod && activePeriod.dueDate) {
+      return { dueDate: new Date(activePeriod.dueDate), isExtension: false };
+    }
+  }
+  if (settings.dueDate) {
+    return { dueDate: new Date(settings.dueDate), isExtension: false };
+  }
+  return { dueDate: null, isExtension: false };
+}
+
 module.exports = {
   getActiveSettingsWithCompensation,
   getAllSettingsWithCompensation,
   getCompensationField,
+  getEffectiveDueDateForRegion,
 };

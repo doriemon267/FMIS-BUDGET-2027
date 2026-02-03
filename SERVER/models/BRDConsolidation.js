@@ -117,6 +117,7 @@ brdConsolidationSchema.index({ region: 1, department: 1 });
 brdConsolidationSchema.index({ fiscalYear: 1, region: 1 });
 brdConsolidationSchema.index({ isCentralOffice: 1 });
 brdConsolidationSchema.index({ status: 1 });
+brdConsolidationSchema.index({ status: 1, fiscalYear: 1, isCentralOffice: 1 });
 
 // Pre-save middleware to update timestamp
 brdConsolidationSchema.pre('save', function(next) {

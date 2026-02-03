@@ -15,6 +15,8 @@ const {
   getSettingsByRegion,
   getActiveSettingsWithPeriods,
   updateCompensationSettings,
+  addRegionDueDateExtension,
+  removeRegionDueDateExtension,
   // STANDALONE COMPENSATION ENDPOINTS
   createCompensationSettings,
   getCompensationSettings,
@@ -108,6 +110,10 @@ settingsRouter.post("/settings/:id/extend-period", extendBudgetPeriod);
 
 // Activate a specific budget period (manual activation)
 settingsRouter.patch("/settings/:id/activate-period", activateBudgetPeriod);
+
+// Region-specific due date extensions (same FY + budget type, extended due date for specific region(s))
+settingsRouter.post("/settings/:id/region-extension", addRegionDueDateExtension);
+settingsRouter.delete("/settings/:id/region-extension/:extensionId", removeRegionDueDateExtension);
 
 // Update compensation settings separately
 settingsRouter.put("/settings/:id/compensation", updateCompensationSettings);
