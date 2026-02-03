@@ -361,6 +361,40 @@ const getNotificationRecipients = async (action, proposal, currentUserRole, curr
 };
 
 /**
+ * Resolve display name for the current user (full name for emails/notifications).
+ * Tries req.user fields first, then User model, then HierarchicalUserAssignment.
+ * @param {Object} req - Express request (req.user may have name, particular, FirstName, LastName, email)
+ * @param {string} userIdString - User ID string for DB fallback
+ * @returns {Promise<string>} Display name (never "Unknown User" if DB has a name)
+ */
+const resolveUserDisplayName = async (req, userIdString) => {
+  const u = req && req.user;
+  if (u) {
+    const fromReq =
+      (typeof u.name === 'string' && u.name.trim()) ||
+      (typeof u.particular === 'string' && u.particular.trim()) ||
+      (typeof u.Name === 'string' && u.Name.trim()) ||
+      (typeof u.FirstName === 'string' && typeof u.LastName === 'string'
+        ? `${u.FirstName} ${u.LastName}`.trim()
+        : '') ||
+      (typeof u.email === 'string' && u.email.trim());
+    if (fromReq && !/^\d+$/.test(fromReq)) return fromReq.trim();
+    if (fromReq) { /* fall through to DB for numeric-only id */ }
+  }
+  try {
+    const userDoc = await User.findOne({ userId: userIdString }).select('name').lean();
+    if (userDoc && userDoc.name && String(userDoc.name).trim()) return String(userDoc.name).trim();
+  } catch (e) { /* ignore */ }
+  try {
+    const hua = await HierarchicalUserAssignment.findOne({ userId: userIdString }).select('userName').lean();
+    if (hua && hua.userName && String(hua.userName).trim()) return String(hua.userName).trim();
+  } catch (e) { /* ignore */ }
+  // If we only have numeric id or email from req, use it as last resort; otherwise Unknown User
+  const fallback = u && (typeof u.name === 'string' && u.name.trim()) ? u.name.trim() : (u && typeof u.email === 'string' && u.email.trim() ? u.email.trim() : null);
+  return fallback && !/^\d+$/.test(fallback) ? fallback : 'Unknown User';
+};
+
+/**
  * Helper function to create workflow notifications
  * @param {string} action - The workflow action performed
  * @param {Object} proposal - The proposal object
@@ -417,11 +451,10 @@ const createWorkflowNotification = async (action, proposal, recipientUserIds, cu
 
   // BULLETPROOF: Ensure all message components are valid strings, never ObjectIDs
   const safeName = String(currentUserName || 'Unknown User').trim();
-  const safeRole = String(currentUserRole || 'User').trim();
   const safeTitle = String(proposal.title || 'Untitled Proposal').trim();
   const safeTargetRole = targetRole ? ' to ' + String(targetRole).trim() : '';
   
-  let notificationMessage = `${safeName} (${safeRole}) ${verb} the proposal "${safeTitle}"${safeTargetRole}.`;
+  let notificationMessage = `${safeName} ${verb} the proposal "${safeTitle}"${safeTargetRole}.`;
   
     if (comment && isReturnAction) {
       const safeComment = String(comment).trim();
@@ -609,7 +642,6 @@ const sendWorkflowEmails = async (action, proposal, recipientUserIds, currentUse
     if (action === 'forward-to-manager') targetRole = 'Budget Manager';
 
     const safeName = String(currentUserName || 'Unknown User').trim();
-    const safeRole = String(currentUserRole || 'User').trim();
     const safeTitle = String(proposal.title || 'Untitled Proposal').trim();
     const safeTargetRole = targetRole ? ' to ' + String(targetRole).trim() : '';
 
@@ -672,7 +704,7 @@ const sendWorkflowEmails = async (action, proposal, recipientUserIds, currentUse
     console.log('[sendWorkflowEmails] Final values - Department:', department, 'Division:', division);
 
     let emailBody = `Dear Recipient,\n\n`;
-    emailBody += `${safeName} (${safeRole}) has ${verb} the proposal "${safeTitle}"${safeTargetRole}.\n\n`;
+    emailBody += `${safeName} has ${verb} the proposal "${safeTitle}"${safeTargetRole}.\n\n`;
     emailBody += `Proposal Details:\n`;
     emailBody += `- Title: ${safeTitle}\n`;
     emailBody += `- Fiscal Year: ${proposal.fiscalYear || 'N/A'}\n`;
@@ -687,53 +719,76 @@ const sendWorkflowEmails = async (action, proposal, recipientUserIds, currentUse
     emailBody += `Note: This is an automated message. Please do not reply to this email.\n`;
     emailBody += `Best regards,\nFMIS - BUDGET System`;
 
-    // HTML version of the email
+    // HTML version of the email (enhanced UI)
+    const safeTargetRoleHtml = safeTargetRole ? ` <span style="color:#6b7280;">${safeTargetRole}</span>` : '';
+    const feedbackHtml = comment && isReturnAction
+      ? `<div class="feedback-box">
+          <p style="margin-top: 0; font-weight: 600; color: #92400e;">Feedback</p>
+          <p style="margin: 8px 0; color: #78350f;">${String(comment).trim()}</p>
+        </div>`
+      : '';
     let htmlBody = `
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { font-family: Arial, sans-serif; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background-color: #375e38; color: white; padding: 15px; border-radius: 5px 5px 0 0; }
-    .content { background-color: #f9fafb; padding: 20px; border-radius: 0 0 5px 5px; }
-    .details-box { background-color: white; padding: 15px; border-left: 4px solid #375e38; margin: 15px 0; }
-    .detail-row { margin: 8px 0; }
-    .detail-label { font-weight: bold; color: #375e38; }
-    .feedback-box { background-color: #fef3c7; padding: 15px; border-radius: 5px; margin: 15px 0; border-left: 4px solid #f59e0b; }
-    .footer { margin-top: 20px; padding-top: 15px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; }
-    .signature { color: #375e38; font-weight: bold; margin-top: 15px; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1f2937; margin: 0; padding: 0; background-color: #f3f4f6; }
+    .wrapper { max-width: 600px; margin: 0 auto; padding: 24px 16px; }
+    .card { background: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.07); overflow: hidden; }
+    .header { background: linear-gradient(135deg, #2d5a2d 0%, #375e38 50%, #3d6b3d 100%); color: #fff; padding: 24px 28px; }
+    .header h1 { margin: 0; font-size: 1.35rem; font-weight: 600; letter-spacing: 0.02em; }
+    .header .sub { margin-top: 4px; font-size: 0.85rem; opacity: 0.9; }
+    .content { padding: 28px; line-height: 1.6; }
+    .greeting { font-size: 1rem; color: #374151; margin-bottom: 16px; }
+    .message { font-size: 1rem; color: #1f2937; margin-bottom: 24px; }
+    .message .name { font-weight: 600; color: #375e38; }
+    .message .verb { font-weight: 600; color: #1f2937; }
+    .message .title { font-weight: 600; color: #1e40af; }
+    .details-box { background: #f8faf8; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin: 20px 0; border-left: 4px solid #375e38; }
+    .details-box .heading { margin: 0 0 14px 0; font-size: 0.9rem; font-weight: 600; color: #375e38; text-transform: uppercase; letter-spacing: 0.04em; }
+    .detail-row { display: flex; margin: 10px 0; font-size: 0.95rem; }
+    .detail-label { font-weight: 600; color: #4b5563; min-width: 110px; }
+    .detail-value { color: #1f2937; }
+    .action-cta { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 16px; margin: 20px 0; }
+    .action-cta p { margin: 0; font-size: 0.95rem; color: #1e40af; font-weight: 500; }
+    .footer { margin-top: 24px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 0.8rem; color: #6b7280; }
+    .footer .note { color: #b91c1c; margin: 8px 0; }
+    .signature { color: #375e38; font-weight: 600; margin-top: 12px; font-size: 0.9rem; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <h2 style="margin: 0;">FMIS - OSBPIS Notification</h2>
-    </div>
-    <div class="content">
-      <p>Dear Recipient,</p>
-      <p>${safeName} (<strong>${safeRole}</strong>) has <strong>${verb}</strong> the proposal "<strong>${safeTitle}</strong>"${safeTargetRole}.</p>
-      
-      <div class="details-box">
-        <p style="margin-top: 0; color: #375e38; font-weight: bold;">Proposal Details:</p>
-        <div class="detail-row"><span class="detail-label">Title:</span> ${safeTitle}</div>
-        <div class="detail-row"><span class="detail-label">Fiscal Year:</span> ${proposal.fiscalYear || 'N/A'}</div>
-        <div class="detail-row"><span class="detail-label">Budget Type:</span> ${proposal.modelType || 'N/A'}</div>
-        <div class="detail-row"><span class="detail-label">Region:</span> ${regionName}</div>
-        <div class="detail-row"><span class="detail-label">Department:</span> ${department}</div>
-        <div class="detail-row"><span class="detail-label">Division:</span> ${division}</div>
+  <div class="wrapper">
+    <div class="card">
+      <div class="header">
+        <h1>FMIS - OSBPIS Notification</h1>
+        <div class="sub">Budget Proposal Workflow</div>
       </div>
-      
-      ${comment && isReturnAction ? `<div class="feedback-box">
-        <p style="margin-top: 0; font-weight: bold;">Feedback:</p>
-        <p style="margin: 8px 0;">${String(comment).trim()}</p>
-      </div>` : ''}
-      
-      <p style="margin-top: 20px;"><strong>Action Required:</strong> Please log in to the system to view and process this proposal.</p>
-      
-      <div class="footer">
-        <p style="margin: 8px 0; color: #ef4444;"><strong>⚠️ Note:</strong> This is an automated message. Please do not reply to this email.</p>
-        <p class="signature">FMIS - NIA</p>
+      <div class="content">
+        <p class="greeting">Dear Recipient,</p>
+        <p class="message"><span class="name">${safeName}</span> has <span class="verb">${verb}</span> the proposal "<span class="title">${safeTitle}</span>"${safeTargetRoleHtml}.</p>
+        
+        <div class="details-box">
+          <p class="heading">Proposal Details</p>
+          <div class="detail-row"><span class="detail-label">Title:</span><span class="detail-value"> ${safeTitle}</span></div>
+          <div class="detail-row"><span class="detail-label">Fiscal Year:</span><span class="detail-value"> ${proposal.fiscalYear || 'N/A'}</span></div>
+          <div class="detail-row"><span class="detail-label">Budget Type:</span><span class="detail-value"> ${proposal.modelType || 'N/A'}</span></div>
+          <div class="detail-row"><span class="detail-label">Region:</span><span class="detail-value"> ${regionName}</span></div>
+          <div class="detail-row"><span class="detail-label">Department:</span><span class="detail-value"> ${department}</span></div>
+          <div class="detail-row"><span class="detail-label">Division:</span><span class="detail-value"> ${division}</span></div>
+        </div>
+        
+        ${feedbackHtml}
+        
+        <div class="action-cta">
+          <p>Action Required: Please log in to the system to view and process this proposal.</p>
+        </div>
+        
+        <div class="footer">
+          <p class="note">This is an automated message. Please do not reply to this email.</p>
+          <p class="signature">FMIS - NIA</p>
+        </div>
       </div>
     </div>
   </div>
@@ -1507,7 +1562,7 @@ exports.performAction = async (req, res) => {
     const userRole = getUserRole(req);
     const userId = req.user.id;
     const userIdString = String(userId);
-    const userName = req.user.name || req.user.email;
+    const userName = await resolveUserDisplayName(req, userIdString);
 
     console.log('[PERFORM_ACTION] User:', { userRole, userId, userName });
     console.log('[PERFORM_ACTION] Request:', { proposalId: id, action, comment });

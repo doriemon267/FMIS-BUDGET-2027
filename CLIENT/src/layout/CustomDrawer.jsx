@@ -136,18 +136,18 @@ const CustomDrawer = ({ collapsed = false }) => {
                 isAllow: isBudgetPlanningAnalyst || isBudgetOfficer || isOverallApprover || isSuperAdmin(currentUser),
                 icon: <BiData />,
               },
-              {
-                link: "/nep-ceiling",
-                name: "NEP Ceiling Management",
-                isAllow: isBudgetOfficer || isOverallApprover || isSuperAdmin(currentUser),
-                icon: <FaChartBar />,
-              },
               // {
-              //   link: "/tier-comparison",
-              //   name: "Tier Comparison",
-              //   isAllow: isBudgetPlanningAnalyst || isBudgetOfficer || isOverallApprover || isSuperAdmin(currentUser),
+              //   link: "/nep-ceiling",
+              //   name: "NEP Ceiling Management",
+              //   isAllow: isBudgetOfficer || isOverallApprover || isSuperAdmin(currentUser),
               //   icon: <FaChartBar />,
               // },
+              {
+                link: "/tier",
+                name: "Tier",
+                isAllow: isBudgetPlanningAnalyst || isBudgetOfficer || isOverallApprover || isSuperAdmin(currentUser),
+                icon: <FaChartBar />,
+              },
               // {
               //   link: "/myProposals",
               //   name: "My Proposals",
@@ -210,12 +210,6 @@ const CustomDrawer = ({ collapsed = false }) => {
                 link: "/comparative-report",
                 name: "Comparative Budget Report",
                 isAllow: hasPermission(currentUser, "ViewReports"),
-                icon: <FaChartBar />,
-              },
-              {
-                link: "/tier",
-                name: "Tier",
-                isAllow: isSuperAdmin(currentUser),
                 icon: <FaChartBar />,
               },
               // {

@@ -11,6 +11,7 @@ const {
   getTierData,
   saveTierData,
   generateTierPDF,
+  generateTierExcel,
 } = require('../controllers/tierController');
 
 router.use(tokenMiddleware);
@@ -19,5 +20,6 @@ router.get('/finalized-data', getFinalizedData);
 router.get('/data', getTierData);
 router.post('/data', saveTierData);
 router.post('/generate-pdf', generateTierPDF);
+router.post('/export-excel', generateTierExcel);
 
 module.exports = router;

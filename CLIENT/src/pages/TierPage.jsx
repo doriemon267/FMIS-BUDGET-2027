@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import api from "../config/api";
 import { useRegion } from "../context/RegionContext";
 import {
@@ -14,15 +15,25 @@ import {
   Snackbar,
   Alert,
   Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  IconButton,
 } from "@mui/material";
 import TierTable from "../components/tier/TierTable";
 import { useUser } from "../context/UserContext";
 import SaveIcon from '@mui/icons-material/Save';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import TableChartIcon from '@mui/icons-material/TableChart';
+import CloseIcon from '@mui/icons-material/Close';
 
 const TierPage = () => {
   const { currentUser } = useUser();
   const { activeRegion } = useRegion();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const appliedUrlParamsRef = useRef(false);
+  const pendingDepartmentParamRef = useRef(null);
+  const pendingDivisionParamRef = useRef(null);
   const [activeFiscalYear, setActiveFiscalYear] = useState("");
   const [regions, setRegions] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -36,6 +47,9 @@ const TierPage = () => {
   const [lastSavedJson, setLastSavedJson] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
   const [tableKey, setTableKey] = useState(Date.now());
 
   useEffect(() => {
@@ -56,15 +70,19 @@ const TierPage = () => {
   }, [tierData, lastSavedJson]);
 
   useEffect(() => {
+    const fyFromUrl = searchParams.get("fiscalYear");
     const fetchActiveSettings = async () => {
       try {
         const activeResponse = await api.get("/settings/active");
         if (activeResponse.data) {
-          const fiscalYear = activeResponse.data.fiscalYear || "";
-          setActiveFiscalYear(fiscalYear);
+          const fiscalYear = fyFromUrl || activeResponse.data.fiscalYear || "";
+          setActiveFiscalYear(String(fiscalYear));
+        } else if (fyFromUrl) {
+          setActiveFiscalYear(fyFromUrl);
         }
       } catch (error) {
         console.error("Error fetching active settings:", error);
+        if (fyFromUrl) setActiveFiscalYear(fyFromUrl);
       }
     };
 
@@ -79,7 +97,56 @@ const TierPage = () => {
 
     fetchActiveSettings();
     fetchRegions();
-  }, []);
+  }, [searchParams]);
+
+  // Apply scope from URL params when coming from New Proposal Workflow (e.g. "Open Tier")
+  useEffect(() => {
+    if (appliedUrlParamsRef.current || regions.length === 0) return;
+    const regionParam = searchParams.get("region");
+    const departmentParam = searchParams.get("department");
+    const divisionParam = searchParams.get("division");
+    if (!regionParam && !departmentParam && !divisionParam) return;
+    appliedUrlParamsRef.current = true;
+    if (regionParam) {
+      const found = regions.find(
+        (r) => String(r._id) === String(regionParam) || String(r.Region) === regionParam
+      );
+      if (found) setSelectedRegion(found._id);
+      else setSelectedRegion(regionParam);
+    }
+    if (departmentParam) pendingDepartmentParamRef.current = departmentParam;
+    if (divisionParam) pendingDivisionParamRef.current = divisionParam;
+    const next = new URLSearchParams(searchParams);
+    next.delete("fiscalYear");
+    next.delete("region");
+    next.delete("department");
+    next.delete("division");
+    if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true });
+  }, [regions, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (departments.length === 0) return;
+    const departmentParam = pendingDepartmentParamRef.current;
+    if (!departmentParam) return;
+    const found = departments.find(
+      (d) => String(d._id) === String(departmentParam) || String(d.Department) === departmentParam || String(d.name) === departmentParam
+    );
+    pendingDepartmentParamRef.current = null;
+    if (found) setSelectedDepartment(found._id);
+    else setSelectedDepartment(departmentParam);
+  }, [departments]);
+
+  useEffect(() => {
+    if (divisions.length === 0) return;
+    const divisionParam = pendingDivisionParamRef.current;
+    if (!divisionParam) return;
+    const found = divisions.find(
+      (d) => String(d._id) === String(divisionParam) || String(d.name) === divisionParam
+    );
+    pendingDivisionParamRef.current = null;
+    if (found) setSelectedDivision(found._id || found.name);
+    else setSelectedDivision(divisionParam);
+  }, [divisions]);
 
   useEffect(() => {
     if (selectedRegion && selectedRegion !== 'ALL') {
@@ -125,16 +192,32 @@ const TierPage = () => {
 
     setIsSaving(true);
     try {
-      // Build normalizedItems from displayedItems (preferred) or raw items
-      const normalizedItems = {};
+      // Build normalizedItems array from displayedItems (preferred) or raw items
       const source = tierData.displayedItems || tierData.items || {};
-
-      Object.entries(source).forEach(([key, v]) => {
-        // v could be { tier1, tier2, category } (displayedItems) or raw stored values
-        normalizedItems[key] = {
-          ...v,
+      
+      // Transform object to array format expected by backend
+      // Key format: "CategoryName-lineItemId" (e.g. "Personnel Services-1.a", "Salaries and Wages-1.a", "Capital Outlay-5-02-01-010")
+      const itemsArray = Object.entries(source).map(([key, v]) => {
+        // Use full key as lineItemId (unique string; backend accepts String)
+        const lineItemId = key;
+        
+        // Map to backend enum: Personnel | MOOE | Capital Outlay (subcategories map to parent)
+        let category = v.category || '';
+        if (category === 'Capital Outlay') {
+          category = 'Capital Outlay';
+        } else if (category === 'Maintenance and Other Operating Expenses') {
+          category = 'MOOE';
+        } else {
+          // All personnel subcategories (Personnel Services, Salaries and Wages, Other Compensation, etc.)
+          category = 'Personnel';
+        }
+        
+        return {
+          lineItemId,
+          category,
           tier1: Number(v.tier1) || 0,
           tier2: Number(v.tier2) || 0,
+          description: v.description || key,
         };
       });
 
@@ -143,11 +226,11 @@ const TierPage = () => {
         region: selectedRegion,
         department: selectedDepartment,
         division: selectedDivision,
-        items: normalizedItems,
+        items: itemsArray,
       };
 
       await api.post('/tier/data', saveData);
-      setLastSavedJson(JSON.stringify({ items: normalizedItems }));
+      setLastSavedJson(JSON.stringify({ items: source }));
       setIsDirty(false);
       setSnackbar({ open: true, message: 'Tier data saved successfully', severity: 'success' });
     } catch (error) {
@@ -158,9 +241,21 @@ const TierPage = () => {
     }
   }; 
 
-  const handleGeneratePDF = async () => {
-    if (!tierData || !activeFiscalYear) return;
+  const getRegionDisplayName = () =>
+    !selectedRegion || selectedRegion === 'ALL' ? 'All' : (regions.find(r => r._id === selectedRegion || String(r._id) === String(selectedRegion))?.Region ?? selectedRegion);
+  const getDepartmentDisplayName = () => {
+    if (!selectedDepartment) return 'All';
+    const dept = departments.find(d => d._id === selectedDepartment || String(d._id) === String(selectedDepartment));
+    return dept ? (dept.Department || dept.name) : selectedDepartment;
+  };
+  const getDivisionDisplayName = () =>
+    !selectedDivision ? 'All' : (divisions.find(d => d.name === selectedDivision || d._id === selectedDivision)?.name ?? selectedDivision);
 
+  const handleViewPDF = async () => {
+    if (!tierData?.reportSummary || !activeFiscalYear) {
+      setSnackbar({ open: true, message: 'Load tier data first, then view PDF.', severity: 'warning' });
+      return;
+    }
     setIsGeneratingPdf(true);
     try {
       setSnackbar({ open: true, message: 'Generating PDF...', severity: 'info' });
@@ -169,23 +264,66 @@ const TierPage = () => {
         region: selectedRegion,
         department: selectedDepartment,
         division: selectedDivision,
-        tierData: tierData
+        regionName: getRegionDisplayName(),
+        departmentName: getDepartmentDisplayName(),
+        divisionName: getDivisionDisplayName(),
+        reportSummary: tierData.reportSummary,
       }, { responseType: 'blob' });
 
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      if (pdfBlobUrl) window.URL.revokeObjectURL(pdfBlobUrl);
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      setPdfBlobUrl(url);
+      setPdfViewerOpen(true);
+      setSnackbar({ open: true, message: 'PDF ready. View in window below.', severity: 'success' });
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      setSnackbar({ open: true, message: 'Error generating PDF. Please try again.', severity: 'error' });
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  const handleClosePdfViewer = () => {
+    setPdfViewerOpen(false);
+    if (pdfBlobUrl) {
+      window.URL.revokeObjectURL(pdfBlobUrl);
+      setPdfBlobUrl(null);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (!tierData?.reportSummary || !activeFiscalYear) {
+      setSnackbar({ open: true, message: 'Load tier data first, then export Excel.', severity: 'warning' });
+      return;
+    }
+    setIsExportingExcel(true);
+    try {
+      setSnackbar({ open: true, message: 'Generating Excel...', severity: 'info' });
+      const response = await api.post('/tier/export-excel', {
+        fiscalYear: activeFiscalYear,
+        region: selectedRegion,
+        department: selectedDepartment,
+        division: selectedDivision,
+        regionName: getRegionDisplayName(),
+        departmentName: getDepartmentDisplayName(),
+        divisionName: getDivisionDisplayName(),
+        reportSummary: tierData.reportSummary,
+      }, { responseType: 'blob' });
+
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `Tier_Report_${activeFiscalYear}_${selectedRegion || 'All'}.pdf`);
+      link.setAttribute('download', `Tier_Report_${activeFiscalYear}_${getRegionDisplayName()}_${getDepartmentDisplayName()}_${getDivisionDisplayName()}.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.remove();
-
-      setSnackbar({ open: true, message: 'PDF generated and downloaded', severity: 'success' });
+      window.URL.revokeObjectURL(url);
+      setSnackbar({ open: true, message: 'Excel report downloaded.', severity: 'success' });
     } catch (error) {
-      console.error('Error generating PDF:', error);
-      setSnackbar({ open: true, message: 'Error generating PDF report. Please try again.', severity: 'error' });
+      console.error('Error exporting Excel:', error);
+      setSnackbar({ open: true, message: 'Error exporting Excel. Please try again.', severity: 'error' });
     } finally {
-      setIsGeneratingPdf(false);
+      setIsExportingExcel(false);
     }
   }; 
 
@@ -293,11 +431,21 @@ const TierPage = () => {
             variant="contained"
             color="secondary"
             startIcon={<PictureAsPdfIcon />}
-            onClick={handleGeneratePDF}
-            disabled={!tierData || isGeneratingPdf}
-            sx={{ minWidth: 140 }}
+            onClick={handleViewPDF}
+            disabled={!tierData?.reportSummary || isGeneratingPdf}
+            sx={{ minWidth: 130 }}
           >
-            {isGeneratingPdf ? 'Generating...' : 'Generate PDF'}
+            {isGeneratingPdf ? 'Generating...' : 'View PDF'}
+          </Button>
+          <Button
+            variant="outlined"
+            color="primary"
+            startIcon={<TableChartIcon />}
+            onClick={handleExportExcel}
+            disabled={!tierData?.reportSummary || isExportingExcel}
+            sx={{ minWidth: 130 }}
+          >
+            {isExportingExcel ? 'Exporting...' : 'Export Excel'}
           </Button>
         </Box>
       </Box>
@@ -327,6 +475,39 @@ const TierPage = () => {
           onTierDataChange={setTierData}
         />
       )}
+
+      <Dialog
+        open={pdfViewerOpen}
+        onClose={handleClosePdfViewer}
+        maxWidth={false}
+        fullWidth
+        PaperProps={{
+          sx: {
+            width: '95vw',
+            maxWidth: '95vw',
+            height: '92vh',
+            maxHeight: '92vh',
+            borderRadius: 2,
+            margin: 0,
+          },
+        }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid', borderColor: 'divider', py: 1.5 }}>
+          <Typography variant="h6">Tier Report (PDF)</Typography>
+          <IconButton aria-label="close" onClick={handleClosePdfViewer} size="small">
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ p: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          {pdfBlobUrl && (
+            <iframe
+              title="Tier Report PDF"
+              src={pdfBlobUrl}
+              style={{ width: '100%', height: '100%', border: 'none', minHeight: 480 }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Snackbar
         open={snackbar.open}

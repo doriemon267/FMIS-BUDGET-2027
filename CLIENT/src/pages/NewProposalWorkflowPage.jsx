@@ -43,6 +43,7 @@ import {
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
   Visibility as ViewIcon,
+  TableChart as TableChartIcon,
 } from "@mui/icons-material";
 import SearchIcon from "@mui/icons-material/Search";
 import RefreshIcon from "@mui/icons-material/Refresh";
@@ -1286,6 +1287,31 @@ const NewProposalWorkflowPage = () => {
       icon: <ExpandMoreIcon />,
       color: "#d97706",
     });
+
+    // OPEN TIER: for BRD-level users when proposal is at BRD or finalized (so they can fill/update Tier for this scope)
+    const brdOrFinalizedStatuses = [
+      "FORWARDED_TO_BRD_ANALYST",
+      "Forwarded to Budget Planning Analyst",
+      "FORWARDED_TO_BRD_OFFICER",
+      "Forwarded to Budget Officer",
+      "FORWARDED_TO_BRD_MANAGER",
+      "Forwarded to Overall Budget Approver",
+      "Forwarded to Manager",
+      "FINALIZED",
+      "Finalized",
+    ];
+    const isBRDOrFinalized = brdOrFinalizedStatuses.some((s) => String(currentStatus) === s);
+    const isBRDStaffForTier = userRoles.some((r) =>
+      ["BUDGET_PLANNING_ANALYST", "BUDGET PLANNING ANALYST", "BUDGET_OFFICER", "BUDGET OFFICER", "BUDGET_MANAGER", "BUDGET MANAGER", "SUPER_ADMIN", "SUPER ADMIN"].includes(String(r))
+    );
+    if (isBRDStaffForTier && isBRDOrFinalized) {
+      actions.push({
+        label: "Open Tier",
+        value: "open-tier",
+        icon: <TableChartIcon />,
+        color: "#2d5016",
+      });
+    }
 
     // Check for SUPER_ADMIN
     const isSuperAdmin = userRoles.some((r) => 
@@ -2627,6 +2653,15 @@ const NewProposalWorkflowPage = () => {
                                               await handleViewAuditTrail(
                                                 proposal
                                               );
+                                            } else if (
+                                              action.value === "open-tier"
+                                            ) {
+                                              const params = new URLSearchParams();
+                                              if (proposal.fiscalYear != null) params.set("fiscalYear", String(proposal.fiscalYear));
+                                              if (proposal.region) params.set("region", String(proposal.region));
+                                              if (proposal.department) params.set("department", String(proposal.department));
+                                              if (proposal.division || proposal.responsibilityCenter) params.set("division", String(proposal.division || proposal.responsibilityCenter));
+                                              navigate(`/tier?${params.toString()}`);
                                             } else {
                                               setActionDialogOpen(true);
                                             }
@@ -3020,6 +3055,39 @@ const NewProposalWorkflowPage = () => {
                       })}
                     </Typography>
                   </Grid>
+                  {(() => {
+                    const st = selectedProposal?.status;
+                    const brdOrFinal = [
+                      "FORWARDED_TO_BRD_ANALYST", "Forwarded to Budget Planning Analyst",
+                      "FORWARDED_TO_BRD_OFFICER", "Forwarded to Budget Officer",
+                      "FORWARDED_TO_BRD_MANAGER", "Forwarded to Overall Budget Approver", "Forwarded to Manager",
+                      "FINALIZED", "Finalized",
+                    ].some((s) => String(st) === s);
+                    const isBRD = currentUser?.Roles?.some((r) =>
+                      ["BUDGET_PLANNING_ANALYST", "BUDGET PLANNING ANALYST", "BUDGET_OFFICER", "BUDGET OFFICER", "BUDGET_MANAGER", "BUDGET MANAGER", "SUPER_ADMIN", "SUPER ADMIN"].includes(String(r))
+                    );
+                    if (!brdOrFinal || !isBRD) return null;
+                    const tierParams = new URLSearchParams();
+                    if (selectedProposal?.fiscalYear != null) tierParams.set("fiscalYear", String(selectedProposal.fiscalYear));
+                    if (selectedProposal?.region) tierParams.set("region", String(selectedProposal.region));
+                    if (selectedProposal?.department) tierParams.set("department", String(selectedProposal.department));
+                    if (selectedProposal?.division || selectedProposal?.responsibilityCenter) tierParams.set("division", String(selectedProposal.division || selectedProposal.responsibilityCenter));
+                    return (
+                      <Grid item xs={12}>
+                        <Alert severity="info" sx={{ mt: 1 }}>
+                          For this proposal&apos;s scope, you can fill or update <strong>Tier</strong> (Tier 1 / Tier 2). The Tier you save is what gets passed to Budget Officer until Budget Manager finalizes.
+                          <Button
+                            size="small"
+                            variant="contained"
+                            sx={{ ml: 2, mt: 0.5 }}
+                            onClick={() => navigate(`/tier?${tierParams.toString()}`)}
+                          >
+                            Open Tier
+                          </Button>
+                        </Alert>
+                      </Grid>
+                    );
+                  })()}
                   <Grid item xs={12} md={6}>
                     <Typography
                       variant="body2"

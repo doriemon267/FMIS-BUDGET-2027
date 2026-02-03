@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const TierItemSchema = new mongoose.Schema({
   lineItemId: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: String,
     required: true,
   },
   description: {
