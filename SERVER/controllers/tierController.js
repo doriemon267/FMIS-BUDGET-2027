@@ -41,6 +41,7 @@ const getFinalizedData = async (req, res) => {
       if (mongoose.Types.ObjectId.isValid(region)) {
         query.region = new mongoose.Types.ObjectId(region);
       } else {
+        // Try to find region by name/string
         const Region = require('../models/Region');
         const regionDoc = await Region.findOne({
           $or: [
@@ -49,15 +50,21 @@ const getFinalizedData = async (req, res) => {
             { name: region },
           ],
         });
-        if (regionDoc) query.region = regionDoc._id;
-        else query.region = region; // allow string match if stored as string
+        if (regionDoc) {
+          query.region = regionDoc._id;
+        } else {
+          // If no match found, log warning and skip region filter
+          console.warn(`Region not found for value: ${region}, proceeding without region filter`);
+        }
       }
     }
 
     if (department) query.department = department;
     if (division) query.division = division;
 
+    console.log('getFinalizedData query:', JSON.stringify(query, null, 2));
     const proposals = await NewProposalWorkflow.find(query).lean();
+    console.log(`getFinalizedData found ${proposals.length} proposals`);
 
     const projectedCorporateIncome = proposals.reduce(
       (sum, p) => sum + (Number(p.projectedCorporateIncome) || 0),

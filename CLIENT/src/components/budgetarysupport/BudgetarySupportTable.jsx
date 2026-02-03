@@ -953,18 +953,21 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
 
     const maintenanceAndOperating = maintenanceAndOperatingIncome + maintenanceAndOperatingSubsidy;
 
-    // B.2 CAPITAL OUTLAYS - Use TOTAL expenses from capitalOutlayData, NOT just subsidies
-    let capitalOutlays = 0;
+    // B.2 CAPITAL OUTLAYS - Split income vs subsidy like MOOE (only PROJECTED SUBSIDY when subsidy is actually entered)
+    let capitalOutlaysIncome = 0;
+    let capitalOutlaysSubsidy = 0;
     if (capitalOutlayData && Array.isArray(capitalOutlayData)) {
       const allItems = capitalOutlayData.flatMap((regionData) => regionData.items || []);
       const filteredCapitalOutlay = hasAssignmentFilters
         ? allItems.filter((item) => matchesAssignmentScope(item))
         : allItems;
       
-      capitalOutlays = filteredCapitalOutlay.reduce((sum, item) => {
-        return sum + toNumber(item?.totalCost || item?.cost || item?.amount || item?.expense || 0);
-      }, 0);
+      filteredCapitalOutlay.forEach((item) => {
+        capitalOutlaysIncome += toNumber(item?.income || 0);
+        capitalOutlaysSubsidy += toNumber(item?.subsidy || item?.subsidy_amount || 0);
+      });
     }
+    const capitalOutlays = capitalOutlaysIncome + capitalOutlaysSubsidy;
 
     // Operating Requirements Total
     const operatingRequirements = personalServices + maintenanceAndOperatingIncome + maintenanceAndOperatingSubsidy + capitalOutlays;
@@ -1026,6 +1029,8 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
       maintenanceAndOperatingIncome,
       maintenanceAndOperatingSubsidy,
       capitalOutlays,
+      capitalOutlaysIncome,
+      capitalOutlaysSubsidy,
       operatingRequirements,
       chargedToIncomeAmount,
       chargedToIncomeSubsidy
@@ -1093,8 +1098,8 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
       {
         'Description': 'B.2 CAPITAL OUTLAYS',
         'Projected Corporate Income': parseFloat(coIncomeFromRegion || 0),
-        'Projected Subsidy': parseFloat(useOfFundsBreakdown.capitalOutlays || 0),
-        'Proposed Budget': parseFloat((Number(coIncomeFromRegion) + Number(useOfFundsBreakdown.capitalOutlays)) || 0),
+        'Projected Subsidy': parseFloat(useOfFundsBreakdown.capitalOutlaysSubsidy || 0),
+        'Proposed Budget': parseFloat((Number(coIncomeFromRegion) + Number(useOfFundsBreakdown.capitalOutlaysSubsidy || 0)) || 0),
         'Fiscal Year': fiscalYear,
         'Budget Type': budgetType,
         'Region': selectedRegion || '',
@@ -1170,11 +1175,11 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
   
   const totalCorporateIncomeUses = corporateIncomeFromMOOE + corporateIncomeFromCapitalOutlay + Number(useOfFundsBreakdown.chargedToIncomeAmount || 0);
 
-  // Prefer provided projectedSubsidy when truthy; otherwise fall back to subsidy-only needs (PS + MOOE subsidy + CO)
+  // Prefer provided projectedSubsidy when truthy; otherwise fall back to subsidy-only needs (PS + MOOE subsidy + CO subsidy)
   const calculatedSubsidyNeed =
     (Number(useOfFundsBreakdown.personalServices || 0) - Number(useOfFundsBreakdown.chargedToIncomeAmount || 0)) +
     Number(useOfFundsBreakdown.maintenanceAndOperatingSubsidy || 0) +
-    Number(useOfFundsBreakdown.capitalOutlays || 0);
+    Number(useOfFundsBreakdown.capitalOutlaysSubsidy || 0);
   
   // IMPORTANT: Always use calculated value for both SOURCES and USES to keep them in sync
   // This ensures that when line items are updated, both sides reflect the same total
@@ -1689,7 +1694,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                 </TableCell>
               </TableRow>
 
-              {/* B.2 CAPITAL OUTLAYS - Has both CORPORATE INCOME and SUBSIDY */}
+              {/* B.2 CAPITAL OUTLAYS - PROJECTED CORPORATE INCOME from income; PROJECTED SUBSIDY only when subsidy entered */}
               <TableRow sx={{ 
                 backgroundColor: '#f9f9f9',
                 '&:hover': { backgroundColor: '#f0f4f8' }
@@ -1707,12 +1712,12 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                   <Typography variant="body2" sx={{ fontWeight: 500, color: '#2e7d32', letterSpacing: 0.2 }}>
-                    ₱{Number(useOfFundsBreakdown.capitalOutlays || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₱{Number(useOfFundsBreakdown.capitalOutlaysSubsidy || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ pr: 3, py: 2, fontSize: compactView ? '0.95rem' : '1rem', verticalAlign: 'middle' }}>
                   <Typography variant="body2" sx={{ fontWeight: 500, color: '#1976d2', letterSpacing: 0.2 }}>
-                    ₱{(corporateIncomeFromCapitalOutlay + Number(useOfFundsBreakdown.capitalOutlays || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₱{(corporateIncomeFromCapitalOutlay + Number(useOfFundsBreakdown.capitalOutlaysSubsidy || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </TableCell>
               </TableRow>

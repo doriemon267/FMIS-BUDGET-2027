@@ -82,7 +82,7 @@ const TierPage = () => {
   }, []);
 
   useEffect(() => {
-    if (selectedRegion) {
+    if (selectedRegion && selectedRegion !== 'ALL') {
       const fetchDepartments = async () => {
         try {
           const response = await api.get(`/departments?region=${selectedRegion}`);
@@ -92,8 +92,9 @@ const TierPage = () => {
         }
       };
       fetchDepartments();
+    } else {
+      setDepartments([]);
     }
-    // Reset dependent selections when region changes
     setSelectedDepartment("");
     setSelectedDivision("");
   }, [selectedRegion]);
@@ -203,11 +204,9 @@ const TierPage = () => {
           Tier
         </Typography>
         <Typography variant="body1">
-          View and manage Tier data by Region/Department/Division. Data appears when Initial proposals for the selected scope have been finalized (New Proposal Workflow). Fiscal year is from current settings.
+          View and manage Tier data by Region/Department/Division. 
         </Typography>
-        <Typography variant="body2" sx={{ opacity: 0.9, mt: 1 }}>
-          PROJECTED CORPORATE INCOME and TIER 1 (from PROJECTED SUBSIDY) are read-only from finalized data. Only TIER 2 is editable. TOTAL = TIER 1 + TIER 2; PROPOSED BUDGET = PROJECTED CORPORATE INCOME + TOTAL.
-        </Typography>
+      
       </Paper>
 
       <Box sx={{ mb: 3, display: "flex", gap: 2 }}>
@@ -219,8 +218,11 @@ const TierPage = () => {
             label="Region"
             onChange={(e) => setSelectedRegion(e.target.value || "")}
           >
+            <MenuItem value="ALL">
+              <em>ALL</em> — Consolidate all regions
+            </MenuItem>
             {regions.map((region) => (
-              <MenuItem key={region._id || region.Region} value={region.Region || ""}>
+              <MenuItem key={region._id || region.Region} value={region._id || ""}>
                 {region.Region || "Unnamed Region"}
               </MenuItem>
             ))}
@@ -233,7 +235,7 @@ const TierPage = () => {
             value={selectedDepartment || ""}
             label="Department"
             onChange={(e) => setSelectedDepartment(e.target.value || "")}
-            disabled={!selectedRegion}
+            disabled={!selectedRegion || selectedRegion === 'ALL'}
           >
             {departments.map((dept) => (
               <MenuItem key={dept._id || dept.Department} value={dept._id || ""}>
@@ -249,7 +251,7 @@ const TierPage = () => {
             value={selectedDivision || ""}
             label="Division"
             onChange={(e) => setSelectedDivision(e.target.value || "")}
-            disabled={!selectedDepartment}
+            disabled={!selectedDepartment || selectedRegion === 'ALL'}
           >
             {divisions.map((div) => (
               <MenuItem key={div._id || div.name} value={div.name || ""}>
@@ -301,17 +303,17 @@ const TierPage = () => {
       </Box>
 
       {!activeFiscalYear ? (
-        <Box
-          sx={{
-            p: 3,
-            textAlign: "center",
-            backgroundColor: "#f5f5f5",
-            borderRadius: 1,
-          }}
-        >
+        <Box sx={{ p: 3, textAlign: "center", backgroundColor: "#f5f5f5", borderRadius: 1 }}>
           <CircularProgress sx={{ mb: 2 }} />
+          <Typography variant="body2" color="textSecondary">Loading Tier data...</Typography>
+        </Box>
+      ) : !selectedRegion ? (
+        <Box sx={{ p: 4, textAlign: "center", backgroundColor: "#f5f5f5", borderRadius: 1 }}>
+          <Typography variant="body1" color="textSecondary" gutterBottom>
+            Select Region to view Tier data
+          </Typography>
           <Typography variant="body2" color="textSecondary">
-            Loading Tier data...
+            Please select a Region (and optionally Department/Division) from the filters above to display the Tier table.
           </Typography>
         </Box>
       ) : (
@@ -319,6 +321,7 @@ const TierPage = () => {
           key={tableKey}
           fiscalYear={activeFiscalYear}
           region={selectedRegion}
+          regionName={selectedRegion !== 'ALL' && regions?.find(r => r._id === selectedRegion || String(r._id) === String(selectedRegion))?.Region}
           department={selectedDepartment}
           division={selectedDivision}
           onTierDataChange={setTierData}
