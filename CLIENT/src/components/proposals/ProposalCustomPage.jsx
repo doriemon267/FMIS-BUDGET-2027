@@ -630,134 +630,192 @@ const ProposalCustomPage = ({
 
   const budgetSummary = useMemo(() => {
     try {
-      // Use the selected fiscal year for filtering (fall back to active fiscal year if not set)
       const fiscalYearToUse = selectedFiscalYear || activeFiscalYear;
 
-      // Filter data by fiscal year
-      const filteredPersonnelData = Array.isArray(personnelData)
-        ? personnelData.filter((p) => p && p.fiscalYear === fiscalYearToUse)
-        : [];
-      const filteredMooeData = Array.isArray(mooeData)
-        ? mooeData.filter((p) => p && p.fiscalYear === fiscalYearToUse)
-        : [];
-      const filteredCapitalOutlayData = Array.isArray(capitalOutlayData)
-        ? capitalOutlayData.filter((p) => p && p.fiscalYear === fiscalYearToUse)
-        : [];
+      const parseNumeric = (value) => {
+        if (value === undefined || value === null || value === "") {
+          return 0;
+        }
+        if (typeof value === "number") {
+          return Number.isFinite(value) ? value : 0;
+        }
+        const cleaned = String(value).replace(/,/g, "").trim();
+        const parsed = Number(cleaned);
+        return Number.isFinite(parsed) ? parsed : 0;
+      };
 
-      // Calculate personnel total with proper type conversion
-      const personnelTotal = Array.isArray(filteredPersonnelData)
-        ? filteredPersonnelData.reduce((sum, p) => {
-            if (!p) return sum;
+      const includeByStatus = (status) => {
+        if (!status) return true;
+        return isEligibleForSubmission(status) || status === "Submitted";
+      };
 
-            return (
-              sum +
-              (Number(p.annualSalary) || 0) +
-              (Number(p.RATA) || 0) +
-              (Number(p.PERA) || 0) +
-              (Number(p.uniformALLOWANCE) || 0) +
-              (Number(p.productivityIncentive) || 0) +
-              (Number(p.medical) || 0) +
-              (Number(p.childrenAllowance) || 0) +
-              (Number(p.meal) || 0) +
-              (Number(p.cashGift) || 0) +
-              (Number(p.subsistenceAllowanceMDS) || 0) +
-              (Number(p.subsistenceAllowanceST) || 0) +
-              (Number(p.midyearBonus) || 0) +
-              (Number(p.yearEndBonus) || 0) +
-              (Number(p.gsisPremium) || 0) +
-              (Number(p.philhealthPremium) || 0) +
-              (Number(p.pagibigPremium) || 0) +
-              (Number(p.employeeCompensation) || 0) +
-              (Number(p.loyaltyAward) || 0) +
-              (Number(p.overtimePay) || 0) +
-              (Number(p.earnedLeaves) || 0) +
-              (Number(p.retirementBenefits) || 0) +
-              (Number(p.terminalLeave) || 0) +
-              (Number(p.courtAppearance) || 0)
+      const matchesRegion = (entry) =>
+        !regionFilter || entry?.region === regionFilter;
+      const matchesFiscalYear = (entry) =>
+        entry?.fiscalYear === fiscalYearToUse;
+
+      const filterByScope = (dataset) =>
+        Array.isArray(dataset)
+          ? dataset.filter(
+              (entry) => entry && matchesFiscalYear(entry) && matchesRegion(entry)
+            )
+          : [];
+
+      const collectLeafRecords = (entries) => {
+        if (!Array.isArray(entries)) return [];
+        const stack = entries.map((entry) => ({
+          node: entry,
+          status: entry?.status,
+        }));
+        const leaves = [];
+
+        while (stack.length) {
+          const current = stack.pop();
+          if (!current?.node) continue;
+
+          const { node, status } = current;
+
+          const childCandidates = [
+            ...(Array.isArray(node.children) ? node.children : []),
+            ...(Array.isArray(node.items) ? node.items : []),
+            ...(Array.isArray(node.entries) ? node.entries : []),
+            ...(Array.isArray(node.subItems) ? node.subItems : []),
+          ].filter(Boolean);
+
+          if (childCandidates.length > 0) {
+            childCandidates.forEach((child) =>
+              stack.push({
+                node: child,
+                status: child?.status ?? status,
+              })
             );
-          }, 0)
-        : 0;
+            continue;
+          }
 
-      // Calculate regular MOOE total with proper type conversion
-      const mooeRegularTotal = Array.isArray(filteredMooeData)
-        ? filteredMooeData.reduce((sum, p) => {
-            if (!p) return sum;
-            return sum + (Number(p.amount) || 0);
-          }, 0)
-        : 0;
+          leaves.push({
+            node,
+            status: node?.status ?? status,
+          });
+        }
 
-      // Calculate IAs O&M Cost total (ALWAYS include if present)
+        return leaves;
+      };
+
+      const pickNumber = (entry, keys) => {
+        if (!entry) return 0;
+        for (const key of keys) {
+          if (entry[key] !== undefined && entry[key] !== null && entry[key] !== "") {
+            return parseNumeric(entry[key]);
+          }
+        }
+        return 0;
+      };
+
+      const sumFromLeaves = (leaves, keys) =>
+        leaves.reduce((sum, leaf) => {
+          if (!includeByStatus(leaf.status)) {
+            return sum;
+          }
+          return sum + pickNumber(leaf.node, keys);
+        }, 0);
+
+      const incomeKeys = [
+        "income",
+        "corporateIncome",
+        "incomeAmount",
+        "projectedCorporateIncome",
+        "regionalIncome",
+      ];
+      const subsidyKeys = [
+        "subsidy",
+        "subsidyAmount",
+        "subsidy_amount",
+        "totalSubsidy",
+        "projectedSubsidy",
+        "subsidyValue",
+      ];
+
+      const filteredPersonnelData = filterByScope(personnelData);
+      const filteredMooeData = filterByScope(mooeData);
+      const filteredCapitalOutlayData = filterByScope(capitalOutlayData);
+
+      const personnelTotal = filteredPersonnelData.reduce((sum, p) => {
+        if (!includeByStatus(p.status)) {
+          return sum;
+        }
+
+        return (
+          sum +
+          parseNumeric(p.annualSalary) +
+          parseNumeric(p.RATA) +
+          parseNumeric(p.PERA) +
+          parseNumeric(p.uniformALLOWANCE) +
+          parseNumeric(p.productivityIncentive) +
+          parseNumeric(p.medical) +
+          parseNumeric(p.childrenAllowance) +
+          parseNumeric(p.meal) +
+          parseNumeric(p.cashGift) +
+          parseNumeric(p.subsistenceAllowanceMDS) +
+          parseNumeric(p.subsistenceAllowanceST) +
+          parseNumeric(p.midyearBonus) +
+          parseNumeric(p.yearEndBonus) +
+          parseNumeric(p.gsisPremium) +
+          parseNumeric(p.philhealthPremium) +
+          parseNumeric(p.pagibigPremium) +
+          parseNumeric(p.employeeCompensation) +
+          parseNumeric(p.loyaltyAward) +
+          parseNumeric(p.overtimePay) +
+          parseNumeric(p.earnedLeaves) +
+          parseNumeric(p.retirementBenefits) +
+          parseNumeric(p.terminalLeave) +
+          parseNumeric(p.courtAppearance)
+        );
+      }, 0);
+
+      const mooeRegularTotal = filteredMooeData.reduce((sum, item) => {
+        if (!includeByStatus(item.status)) {
+          return sum;
+        }
+        return sum + parseNumeric(item.amount);
+      }, 0);
+
       const iasOMCostTotal = iasOMCostData
-        ? (Number(iasOMCostData.nis) || 0) +
-          (Number(iasOMCostData.cis) || 0) +
-          (Number(iasOMCostData.nisSubsidy) || 0) +
-          (Number(iasOMCostData.cisSubsidy) || 0)
+        ? parseNumeric(iasOMCostData.nis) +
+          parseNumeric(iasOMCostData.cis) +
+          parseNumeric(iasOMCostData.nisSubsidy) +
+          parseNumeric(iasOMCostData.cisSubsidy)
         : 0;
 
-      // Total MOOE is regular MOOE plus IAs O&M Cost
       const mooeTotal = mooeRegularTotal + iasOMCostTotal;
 
-      // Calculate Capital Outlay total with proper type conversion
-      const capitalOutlayTotal = Array.isArray(filteredCapitalOutlayData)
-        ? filteredCapitalOutlayData.reduce((sum, p) => {
-            if (!p) return sum;
-            return sum + (Number(p.cost) || 0);
-          }, 0)
-        : 0;
+      const capitalOutlayTotal = filteredCapitalOutlayData.reduce((sum, item) => {
+        if (!includeByStatus(item.status)) {
+          return sum;
+        }
+        return sum + parseNumeric(item.cost);
+      }, 0);
 
-      // Calculate MOOE income total
-      const mooeIncomeTotal = Array.isArray(filteredMooeData)
-        ? filteredMooeData.reduce((sum, item) => {
-            if (!item) return sum;
-            return sum + (parseFloat(item.income) || 0);
-          }, 0)
-        : 0;
+      const mooeLeaves = collectLeafRecords(filteredMooeData);
+      const capitalLeaves = collectLeafRecords(filteredCapitalOutlayData);
 
-      // Calculate Capital Outlay income total
-      const capitalOutlayIncomeTotal = Array.isArray(filteredCapitalOutlayData)
-        ? filteredCapitalOutlayData.reduce((sum, item) => {
-            if (!item) return sum;
-            return sum + (parseFloat(item.income) || 0);
-          }, 0)
-        : 0;
+      const mooeIncomeTotal = sumFromLeaves(mooeLeaves, incomeKeys);
+      const mooeSubsidyTotal = sumFromLeaves(mooeLeaves, subsidyKeys);
 
-      // Calculate combined income total from MOOE and Capital Outlay
+      const capitalOutlayIncomeTotal = sumFromLeaves(capitalLeaves, incomeKeys);
+      const capitalOutlaySubsidyTotal = sumFromLeaves(capitalLeaves, subsidyKeys);
+
       const combinedIncomeTotal = mooeIncomeTotal + capitalOutlayIncomeTotal;
-
-      // Use the incomeGrandTotal from IncomeTable
-      const incomeTotal = incomeGrandTotal || 0;
-      // Calculate total expenses (MOOE + Capital Outlay)
-      const expensesTotal = mooeTotal + capitalOutlayTotal;
-
-      // Check if income is balanced (Corporate Income vs MOOE+CapitalOutlay income)
-      const isIncomeBalanced =
-        Math.abs(incomeTotal - combinedIncomeTotal) < 0.01;
-
-      const mooeSubsidyTotal = Array.isArray(filteredMooeData)
-        ? filteredMooeData.reduce((sum, item) => {
-            if (!item) return sum;
-            const subsidyValue = Number(item.subsidy) || 0;
-            return sum + subsidyValue;
-          }, 0)
-        : 0;
-
-      const capitalOutlaySubsidyTotal = Array.isArray(filteredCapitalOutlayData)
-        ? filteredCapitalOutlayData.reduce((sum, item) => {
-            if (!item) return sum;
-            const subsidyValue = Number(item.subsidy) || 0;
-            return sum + subsidyValue;
-          }, 0)
-        : 0;
-
       const combinedSubsidyTotal = mooeSubsidyTotal + capitalOutlaySubsidyTotal;
 
-      // Check if subsidy is balanced (Budgetary Support should equal Combined Subsidy)
+      const incomeTotal = parseNumeric(incomeGrandTotal) || 0;
+      const expensesTotal = mooeTotal + capitalOutlayTotal;
       const budgetarySupportTotal =
         calculateTotalBudget.budgetarySupportTotal || 0;
+
+      const isIncomeBalanced =
+        Math.abs(incomeTotal - combinedIncomeTotal) < 0.01;
       const isSubsidyBalanced =
         Math.abs(budgetarySupportTotal - combinedSubsidyTotal) < 0.01;
-
-      // Check if budget is balanced (expenses vs income)
       const isBalanced = Math.abs(expensesTotal - incomeTotal) < 0.01;
 
       return {
@@ -799,12 +857,13 @@ const ProposalCustomPage = ({
     personnelData,
     mooeData,
     capitalOutlayData,
-    incomeData,
     incomeGrandTotal,
     selectedFiscalYear,
     activeFiscalYear,
     iasOMCostData,
     calculateTotalBudget,
+    regionFilter,
+    isEligibleForSubmission,
   ]);
 
   // Enhancement Functions (defined after all hooks to ensure proper dependency access)

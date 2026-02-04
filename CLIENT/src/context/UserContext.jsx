@@ -95,7 +95,12 @@ const UserProvider = ({ children }) => {
   const handleLogout = async () => {
     await authApi.get("/logout");
     setCurrentUser(null);
-    window.location.href = env("CLIENT_URL_DEV") + "/login";
+    if (IS_PRODUCTION) {
+      const returnUrl = env("BUDGET_CLIENT_URL_PROD") ? `${env("BUDGET_CLIENT_URL_PROD")}/dashboard` : window.location.origin + "/dashboard";
+      window.location.href = `${env("LOGIN_REDIRECT_URL")}?ReturnUrl=${encodeURIComponent(returnUrl)}`;
+    } else {
+      window.location.href = env("CLIENT_URL_DEV") + "/login";
+    }
   };
 
   // --- MAIN INITIALIZATION ---

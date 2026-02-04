@@ -1,389 +1,263 @@
-// LinkTo.js
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ListItem,
   ListItemIcon,
   ListItemText,
   Collapse,
   List,
+  Badge,
   Tooltip,
-  Paper,
-  Box,
-  ClickAwayListener,
 } from "@mui/material";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { IoMdArrowDropdown, IoMdArrowDropup } from "react-icons/io";
+import { FaChevronRight } from "react-icons/fa";
+import { useDrawer } from "../../context/DrawerContext";
 
-const LinkTo = ({ 
-  icon, 
-  name = "", 
-  link = "", 
-  subLinks, 
-  isAllow, 
+const LinkTo = ({
+  icon,
+  name = "",
+  link = "",
+  subLinks = [],
+  isAllow = false,
+  notificationValue = 0,
   collapsed = false,
 }) => {
   const location = useLocation();
-  const isActive = location.pathname === link; // Check if the current path matches the link
-  const [open, setOpen] = useState(false); // State to manage sub-link visibility
-  const [hoverMenuOpen, setHoverMenuOpen] = useState(false); // State for hover menu in collapsed mode
-  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
-  const closeTimerRef = useRef(null);
-  const menuId = link || name;
+  const navigate = useNavigate();
+  const { toggleDrawer, setCollapsed, expandedMenuKey, setExpandedMenuKey } = useDrawer();
+  const [open, setOpen] = useState(false);
+  const isMdScreen = window.matchMedia("(max-width: 1200px)").matches;
 
-  const handleToggle = () => setOpen(!open);
-  const handleCollapsedToggle = (event) => {
-    if (!collapsed || !subLinks) return;
-    if (hoverMenuOpen) {
-      setHoverMenuOpen(false);
-    } else {
-      handleMouseEnter(event);
-    }
-  };
+  const isActive = location.pathname === link;
 
-  const handleMouseEnter = (event) => {
-    if (collapsed && subLinks) {
-      if (closeTimerRef.current) {
-        clearTimeout(closeTimerRef.current);
-        closeTimerRef.current = null;
-      }
-      window.dispatchEvent(new CustomEvent("sidebar-hover", { detail: menuId }));
-      const rect = event.currentTarget.getBoundingClientRect();
-      const windowHeight = window.innerHeight;
-      const windowWidth = window.innerWidth;
-      const menuHeight = subLinks.length * 48 + 60; // Approximate height
-      const menuWidth = 260;
-      const preferredLeft = rect.right + 12;
+  // Allowed children
+  const allowedSubLinks = useMemo(() => {
+    if (isAllow) return subLinks;
+    return subLinks.filter((s) => s.isAllow);
+  }, [subLinks, isAllow]);
 
-      // Adjust position if menu would go off-screen
-      let topPosition = rect.top;
-      if (topPosition + menuHeight > windowHeight) {
-        topPosition = Math.max(10, windowHeight - menuHeight);
-      }
-      let leftPosition = preferredLeft;
-      if (leftPosition + menuWidth > windowWidth) {
-        leftPosition = Math.max(10, rect.left - menuWidth - 12);
-      }
+  // Promote single child to parent
+  const promoteChild =
+    !isAllow && allowedSubLinks.length === 1 && subLinks.length > 0;
 
-      setMenuPosition({ top: topPosition, left: leftPosition });
-      setHoverMenuOpen(true);
-    }
-  };
-  
-  const handleMouseLeave = () => {
-    if (collapsed) {
-      if (closeTimerRef.current) {
-        clearTimeout(closeTimerRef.current);
-      }
-      closeTimerRef.current = setTimeout(() => {
-        setHoverMenuOpen(false);
-      }, 120);
-    }
-  };
+  const promotedLink = promoteChild ? allowedSubLinks[0] : null;
+
+  // Decide if parent renders at all
+  const shouldRender =
+    isAllow || allowedSubLinks.length > 0 || (!subLinks.length && isAllow);
 
   useEffect(() => {
-    if (subLinks) {
-      const subActive = subLinks.find((l) => l.link === location.pathname);
-      if (subActive) setOpen(true);
+    if (!promoteChild && allowedSubLinks.length > 0) {
+      const activeChild = allowedSubLinks.find(
+        (l) => l.link === location.pathname,
+      );
+      if (activeChild) setOpen(true);
     }
     return () => setOpen(false);
-  }, [subLinks, location]);
+  }, [allowedSubLinks, location, promoteChild]);
 
   useEffect(() => {
-    setHoverMenuOpen(false);
-  }, [location.pathname]);
+    if (expandedMenuKey === name) {
+      setOpen(true);
+      setExpandedMenuKey?.(null);
+    }
+  }, [expandedMenuKey, name]);
 
-  useEffect(() => {
-    const handleOtherHover = (event) => {
-      if (event.detail !== menuId) {
-        setHoverMenuOpen(false);
+  if (!shouldRender) return null;
+
+  const itemSx = {
+    bgcolor: "transparent",
+    borderTop: "1px solid rgba(250,250,250,0.1)",
+    borderBottom: "1px solid rgba(250,250,250,0.1)",
+    "&:hover": { bgcolor: "rgba(250,250,250,.2)" },
+    ...(collapsed && { justifyContent: "center", minHeight: 48 }),
+  };
+
+  const tooltipSx = {
+    tooltip: {
+      sx: {
+        bgcolor: "rgba(0, 0, 0, 0.9)",
+        fontSize: "0.875rem",
+        fontWeight: 500,
+        "& .MuiTooltip-arrow": { color: "rgba(0, 0, 0, 0.9)" },
+      },
+    },
+  };
+
+  /* ===============================
+     COLLAPSED: ICON + TOOLTIP + SUBMENU INDICATOR (click expands drawer instead of floating menu)
+     =============================== */
+  if (collapsed) {
+    const label = promoteChild && promotedLink ? promotedLink.name : name;
+    const to = promoteChild && promotedLink ? promotedLink.link : link;
+    const hasDirectLink = Boolean(to);
+    const hasSubMenu = allowedSubLinks.length > 0;
+    const active =
+      (promoteChild && promotedLink && location.pathname === promotedLink.link) ||
+      (!promoteChild && link && location.pathname === link) ||
+      (!promoteChild && hasSubMenu && allowedSubLinks.some((s) => s.link === location.pathname));
+
+    const handleCollapsedClick = (e) => {
+      if (hasSubMenu) {
+        e.preventDefault();
+        setExpandedMenuKey?.(name);
+        setCollapsed?.(false);
+      } else if (hasDirectLink && isMdScreen) {
+        setTimeout(() => toggleDrawer(), 300);
       }
     };
-    window.addEventListener("sidebar-hover", handleOtherHover);
-    return () => window.removeEventListener("sidebar-hover", handleOtherHover);
-  }, [menuId]);
 
-  const renderListItem = () => (
-    <ListItem
-      component={link ? Link : "div"} // Use Link for navigation if link is provided
-      to={link}
-      onClick={
-        subLinks
-          ? collapsed
-            ? handleCollapsedToggle
-            : handleToggle
-          : undefined
-      }
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={collapsed && subLinks ? undefined : handleMouseLeave}
-      sx={{
-        bgcolor: isActive ? "rgba(250,250,250,0.28)" : "transparent",
-        "&:hover": {
-          bgcolor: "rgba(250,250,250,0.22)",
-        },
-        justifyContent: collapsed ? "center" : "flex-start",
-        px: collapsed ? 1 : 2,
-        py: collapsed ? 2 : 1.5,
-        borderRadius: collapsed ? "12px" : "8px",
-        mx: collapsed ? 1 : 0,
-        transition: "all 0.2s ease",
-        position: "relative",
-        borderLeft: isActive && !collapsed ? "3px solid rgba(255,255,255,0.6)" : "3px solid transparent",
-      }}
-    >
-      <ListItemIcon
+    const content = (
+      <ListItem
+        component={hasDirectLink && !hasSubMenu ? Link : "div"}
+        {...(hasDirectLink && !hasSubMenu && { to })}
+        onClick={hasSubMenu ? handleCollapsedClick : undefined}
         sx={{
-          color: "white",
-          minWidth: collapsed ? "auto" : 56,
-          justifyContent: "center",
-          fontSize: collapsed ? "1.8rem" : "1.3rem",
-          transition: "all 0.2s ease",
+          ...itemSx,
+          bgcolor: active ? "rgba(250,250,250,.2)" : "transparent",
+          cursor: hasSubMenu ? "pointer" : undefined,
           position: "relative",
-          "&:hover": {
-            transform: collapsed ? "scale(1.1)" : "scale(1.05)",
-            color: "#e8f5e8",
-          }
         }}
       >
-        {React.cloneElement(icon, { size: collapsed ? 28 : 22 })}
-        {/* Small indicator for items with submenus when collapsed */}
-        {collapsed && subLinks && (
-          <Box
-            sx={{
+        <ListItemIcon sx={{ color: "white", minWidth: 0, justifyContent: "center" }}>
+          {promoteChild && promotedLink ? promotedLink.icon || icon : icon}
+        </ListItemIcon>
+        {hasSubMenu && (
+          <FaChevronRight
+            style={{
               position: "absolute",
-              top: -2,
-              right: -2,
-              width: 8,
-              height: 8,
-              bgcolor: "#4caf50",
-              borderRadius: "50%",
-              border: "1px solid white",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+              right: 6,
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: "rgba(255,255,255,0.7)",
+              fontSize: "0.7rem",
             }}
           />
         )}
-      </ListItemIcon>
-      {!collapsed && (
-        <>
-          <ListItemText
-            primary={name}
-            sx={{
-              color: "white",
-              "& .MuiListItemText-primary": {
-                fontSize: "0.95rem",
-                fontWeight: 500,
-              }
-            }}
+        {notificationValue > 0 && (
+          <Badge
+            badgeContent={notificationValue}
+            color="error"
+            sx={{ position: "absolute", top: 4, right: 4 }}
           />
-          {subLinks && (
-            !open ? (
-              <IoMdArrowDropdown style={{ color: "white", fontSize: "1.2rem" }} />
-            ) : (
-              <IoMdArrowDropup style={{ color: "white", fontSize: "1.2rem" }} />
-            )
-          )}
-        </>
-      )}
-    </ListItem>
-  );
+        )}
+      </ListItem>
+    );
+    return (
+      <Tooltip
+        title={hasSubMenu ? `${label}` : label}
+        placement="right"
+        arrow
+        componentsProps={tooltipSx}
+      >
+        <span style={{ display: "block" }}>{content}</span>
+      </Tooltip>
+    );
+  }
 
-  // Render hover submenu for collapsed state
-  const renderHoverSubmenu = () => (
-    <Paper
-      sx={{
-        position: "fixed",
-        left: menuPosition.left,
-        top: menuPosition.top,
-        zIndex: 1300,
-        minWidth: 220,
-        maxWidth: 300,
-        bgcolor: "rgba(55,94,56,0.95)",
-        backdropFilter: "blur(8px)",
-        border: "1px solid rgba(255,255,255,0.1)",
-        borderRadius: 2,
-        boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
-        py: 1,
-        maxHeight: "calc(100vh - 20px)",
-        overflowY: "auto",
-        animation: "slideIn 0.2s ease-out",
-        "@keyframes slideIn": {
-          from: {
-            opacity: 0,
-            transform: "translateX(-10px)",
-          },
-          to: {
-            opacity: 1,
-            transform: "translateX(0)",
-          },
-        },
-      }}
-      onMouseEnter={() => {
-        if (closeTimerRef.current) {
-          clearTimeout(closeTimerRef.current);
-          closeTimerRef.current = null;
-        }
-        setHoverMenuOpen(true);
-      }}
-      onMouseLeave={handleMouseLeave}
-    >
-      <Box sx={{ px: 2, py: 1, borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          {React.cloneElement(icon, { size: 18, color: "white" })}
-          <Box sx={{ color: "white", fontWeight: 600, fontSize: "0.9rem" }}>
-            {name}
-          </Box>
-        </Box>
-      </Box>
-      <List sx={{ py: 0 }}>
-        {subLinks?.filter(subLink => subLink.isAllow !== false).map((subLink) => (
-          <ListItem
-            key={subLink.link}
-            component={Link}
-            to={subLink.link}
-            onClick={() => setHoverMenuOpen(false)}
-            sx={{
-              "&:hover": {
-                bgcolor: "rgba(250,250,250,.2)",
-              },
-              bgcolor:
-                location.pathname === subLink.link
-                  ? "rgba(250,250,250,.2)"
-                  : "transparent",
-              py: 1,
-              px: 2,
-            }}
-          >
-            <ListItemIcon
-              sx={{
-                color: "white",
-                minWidth: 40,
-                fontSize: "1rem",
-              }}
-            >
-              {React.cloneElement(subLink.icon, { size: 16 })}
-            </ListItemIcon>
-            <ListItemText
-              primary={subLink.name}
-              sx={{
-                color: "white",
-                "& .MuiListItemText-primary": {
-                  fontSize: "0.85rem",
-                  fontWeight: 400,
-                }
-              }}
-            />
-          </ListItem>
-        ))}
-      </List>
-    </Paper>
-  );
+  /* ===============================
+     SINGLE CHILD BECOMES PARENT
+     =============================== */
+  if (promoteChild && promotedLink) {
+    return (
+      <ListItem
+        component={Link}
+        to={promotedLink.link}
+        onClick={() => isMdScreen && setTimeout(() => toggleDrawer(), 300)}
+        sx={{
+          ...itemSx,
+          bgcolor:
+            location.pathname === promotedLink.link
+              ? "rgba(250,250,250,.2)"
+              : "transparent",
+        }}
+      >
+        <ListItemIcon sx={{ color: "white" }}>
+          {promotedLink.icon || icon}
+        </ListItemIcon>
+        <ListItemText primary={promotedLink.name} sx={{ color: "white" }} />
+
+        {notificationValue > 0 && (
+          <Badge
+            badgeContent={notificationValue}
+            color="error"
+            sx={{ mr: 1 }}
+          />
+        )}
+      </ListItem>
+    );
+  }
+
+  /* ===============================
+     NORMAL PARENT WITH DROPDOWN
+     =============================== */
+  const effectiveOpen = open || (expandedMenuKey === name);
 
   return (
     <>
-      {isAllow ? (
-        <Box sx={{ position: "relative" }}>
-          {collapsed && subLinks ? (
-            <ClickAwayListener onClickAway={() => setHoverMenuOpen(false)}>
-              <Box>
-                <Tooltip
-                  title={`${name} (hover for submenu)`}
-                  placement="right"
-                  arrow
-                  componentsProps={{
-                    tooltip: {
-                      sx: {
-                        bgcolor: 'rgba(0, 0, 0, 0.9)',
-                        fontSize: '0.875rem',
-                        fontWeight: 500,
-                        '& .MuiTooltip-arrow': {
-                          color: 'rgba(0, 0, 0, 0.9)',
-                        },
-                      },
-                    },
-                  }}
-                >
-                  {renderListItem()}
-                </Tooltip>
-                {hoverMenuOpen && renderHoverSubmenu()}
-              </Box>
-            </ClickAwayListener>
-          ) : collapsed ? (
-            <Tooltip
-              title={name}
-              placement="right"
-              arrow
-              componentsProps={{
-                tooltip: {
-                  sx: {
-                    bgcolor: 'rgba(0, 0, 0, 0.9)',
-                    fontSize: '0.875rem',
-                    fontWeight: 500,
-                    '& .MuiTooltip-arrow': {
-                      color: 'rgba(0, 0, 0, 0.9)',
-                    },
-                  },
-                },
-              }}
-            >
-              {renderListItem()}
-            </Tooltip>
-          ) : (
-            renderListItem()
-          )}
-        </Box>
-      ) : undefined}
+      <ListItem
+        component={link && !subLinks.length ? Link : "div"}
+        to={link}
+        onClick={(e) => {
+          if (subLinks.length) {
+            e.preventDefault();
+            setOpen((prev) => !prev);
+          } else if (isMdScreen) {
+            setTimeout(() => toggleDrawer(), 300);
+          }
+        }}
+        sx={{
+          ...itemSx,
+          bgcolor: isActive ? "rgba(250,250,250,.2)" : "transparent",
+        }}
+      >
+        <ListItemIcon sx={{ color: "white" }}>{icon}</ListItemIcon>
+        <ListItemText primary={name} sx={{ color: "white" }} />
 
-      {subLinks && !collapsed && (
-        <Collapse 
-          in={open} 
-          timeout="auto" 
-          unmountOnExit 
-          sx={{ 
-            ml: 2
-          }}
-        >
+        {notificationValue > 0 && (
+          <Badge
+            badgeContent={notificationValue}
+            color="error"
+            sx={{ mr: 1 }}
+          />
+        )}
+
+        {subLinks.length > 0 &&
+          (effectiveOpen ? (
+            <IoMdArrowDropup style={{ color: "white" }} />
+          ) : (
+            <IoMdArrowDropdown style={{ color: "white" }} />
+          ))}
+      </ListItem>
+
+      {subLinks.length > 0 && (
+        <Collapse in={effectiveOpen} timeout="auto" unmountOnExit sx={{ ml: 3 }}>
           <List component="div" disablePadding>
-            {subLinks.filter(subLink => subLink.isAllow !== false).map((subLink) =>
-              isAllow || subLink.isAllow ? (
-                <ListItem
-                  key={subLink.link}
-                  component={Link}
-                  to={subLink.link}
-                  onClick={() => {}}
-                  sx={{
-                    "&:hover": {
-                      bgcolor: "rgba(250,250,250,.2)",
-                    },
-                    borderLeft: "1px solid rgba(250,250,250,0.3)",
-                    bgcolor:
-                      location.pathname === subLink.link
-                        ? "rgba(250,250,250,.2)"
-                        : "transparent",
-                    py: 1,
-                    transition: 'all 200ms ease',
-                  }}
-                >
-                  <ListItemIcon
-                    sx={{
-                      color: "white",
-                      minWidth: 48,
-                      fontSize: "1.1rem",
-                    }}
-                  >
-                    {React.cloneElement(subLink.icon, { size: 18 })}
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={subLink.name}
-                    sx={{
-                      color: "white",
-                      "& .MuiListItemText-primary": {
-                        fontSize: "0.875rem",
-                        fontWeight: 400,
-                      }
-                    }}
-                  />
-                </ListItem>
-              ) : undefined
-            )}
+            {allowedSubLinks.map((subLink) => (
+              <ListItem
+                key={subLink.link}
+                component={Link}
+                to={subLink.link}
+                onClick={() => {
+                  setExpandedMenuKey?.(null);
+                  isMdScreen && setTimeout(() => toggleDrawer(), 300);
+                }}
+                sx={{
+                  borderTop: "1px solid rgba(250,250,250,0.1)",
+                  borderLeft: "1px solid rgba(250,250,250,0.1)",
+                  "&:hover": { bgcolor: "rgba(250,250,250,.2)" },
+                  bgcolor:
+                    location.pathname === subLink.link
+                      ? "rgba(250,250,250,.2)"
+                      : "transparent",
+                }}
+              >
+                <ListItemIcon sx={{ color: "white" }}>
+                  {subLink.icon}
+                </ListItemIcon>
+                <ListItemText primary={subLink.name} sx={{ color: "white" }} />
+              </ListItem>
+            ))}
           </List>
         </Collapse>
       )}

@@ -1,17 +1,11 @@
 /**
  * WorkflowNotifications - Clean, Simple Notification System for New Proposal Workflow
- * 
- * Features:
- * - Real-time polling for new notifications
- * - Clean message display (no ObjectID issues)
- * - Mark as read/unread
- * - Delete notifications
- * - Mute/Unmute by proposal
- * - Toast notifications on new messages
- * - Persistent dialog for all notifications
+ *
+ * Uses WorkflowNotificationContext for data and polling (single source of truth).
+ * No duplicate API calls: polling is done only in the context (every 30s).
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Badge,
   IconButton,
@@ -31,7 +25,6 @@ import {
   InputAdornment,
 } from '@mui/material';
 import {
-  NotificationsNone as NotificationsNoneIcon,
   Close as CloseIcon,
   Delete as DeleteIcon,
   VolumeOff as MuteIcon,
@@ -40,110 +33,47 @@ import {
 } from '@mui/icons-material';
 import { GrNotification } from 'react-icons/gr';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-toastify';
-import api from '../../config/api';
+import { useWorkflowNotifications } from '../../context/WorkflowNotificationContext';
 import { useUser } from '../../context/UserContext';
 
 const WorkflowNotifications = () => {
   const navigate = useNavigate();
   const { currentUser } = useUser();
+  const {
+    notifications,
+    unreadCount,
+    isLoading: loading,
+    handleMarkAsRead,
+    handleDelete,
+    handleMuteProposal,
+    handleMarkAllAsRead,
+  } = useWorkflowNotifications();
 
-  // State
-  const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
   const [mutedProposals, setMutedProposals] = useState(new Set());
-  const pollIntervalRef = useRef(null);
 
-  // Fetch notifications from API
-  const fetchNotifications = useCallback(async () => {
-    try {
-      const response = await api.get('/api/notifications');
-      if (response.data?.success) {
-        const newNotifs = response.data.data || [];
-        setNotifications(newNotifs);
-        
-        // Log for debugging
-        // console.log('[WorkflowNotifications] Fetched', newNotifs.length, 'notifications');
-      }
-    } catch (error) {
-      console.error('[WorkflowNotifications] Error fetching:', error);
-    }
-  }, []);
-
-  // Initialize polling on mount
+  // Sync muted proposals from user preferences
   useEffect(() => {
-    fetchNotifications();
-    
-    // Poll every 30 seconds for new notifications
-    pollIntervalRef.current = setInterval(() => {
-      fetchNotifications();
-    }, 30000);
-
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
-    };
-  }, [fetchNotifications]);
-
-  // Mark as read
-  const handleMarkAsRead = useCallback(async (notificationId) => {
     try {
-      await api.post('/api/notifications/mark-read', {
-        ids: [notificationId]
-      });
-      setNotifications(prev =>
-        prev.map(n =>
-          n._id === notificationId
-            ? { ...n, status: 'READ' }
-            : n
-        )
-      );
-    } catch (error) {
-      console.error('Error marking as read:', error);
-      toast.error('Failed to mark notification as read');
+      const muted = (currentUser?.notificationPreferences?.mutedProposals || []).map(String);
+      setMutedProposals(new Set(muted));
+    } catch {
+      setMutedProposals(new Set());
     }
-  }, []);
+  }, [currentUser]);
 
-  // Delete notification
-  const handleDelete = useCallback(async (notificationId) => {
-    try {
-      await api.delete(`/notifications/${notificationId}`);
-      setNotifications(prev => prev.filter(n => n._id !== notificationId));
-      toast.success('Notification deleted');
-    } catch (error) {
-      console.error('Error deleting notification:', error);
-      toast.error('Failed to delete notification');
-    }
-  }, []);
-
-  // Mute proposal notifications
-  const handleMuteProposal = useCallback(async (proposalId, isMuting) => {
-    try {
-      await api.post('/api/notifications/mute', {
-        proposalId,
-        mute: isMuting
-      });
-      
-      if (isMuting) {
-        setMutedProposals(prev => new Set([...prev, proposalId]));
-      } else {
-        setMutedProposals(prev => {
-          const next = new Set(prev);
-          next.delete(proposalId);
-          return next;
-        });
-      }
-      
-      toast.success(isMuting ? 'Notifications muted' : 'Notifications unmuted');
-    } catch (error) {
-      console.error('Error toggling mute:', error);
-      toast.error('Failed to toggle mute');
-    }
-  }, []);
+  // Update local muted set when user mutes/unmutes (context doesn't expose muted list)
+  const onMuteProposal = useCallback((proposalId, isMuting) => {
+    handleMuteProposal(proposalId, isMuting);
+    setMutedProposals((prev) => {
+      const next = new Set(prev);
+      if (isMuting) next.add(proposalId);
+      else next.delete(proposalId);
+      return next;
+    });
+  }, [handleMuteProposal]);
 
   // Navigate to proposal
   const handleNotificationClick = (notification) => {
@@ -186,8 +116,7 @@ const WorkflowNotifications = () => {
     return msg.includes(searchFilter.toLowerCase()) || title.includes(searchFilter.toLowerCase());
   });
 
-  // Count unread
-  const unreadCount = notifications.filter(n => n.status === 'UNREAD').length;
+  // unreadCount comes from context
 
   // Get icon based on notification type
   const getNotificationIcon = (type) => {
@@ -511,7 +440,7 @@ const WorkflowNotifications = () => {
                             size="small"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleMuteProposal(
+                              onMuteProposal(
                                 notification.metadata.proposalId,
                                 !mutedProposals.has(notification.metadata.proposalId)
                               );
@@ -537,12 +466,7 @@ const WorkflowNotifications = () => {
           <Button onClick={() => setDialogOpen(false)}>Close</Button>
           <Button
             variant="contained"
-            onClick={() => {
-              // Mark all as read
-              notifications
-                .filter(n => n.status === 'UNREAD')
-                .forEach(n => handleMarkAsRead(n._id));
-            }}
+            onClick={handleMarkAllAsRead}
             disabled={unreadCount === 0}
             sx={{
               bgcolor: '#375e38',

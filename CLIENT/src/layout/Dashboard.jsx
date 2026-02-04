@@ -33,6 +33,7 @@ import ActiveRegionDisplay from "../components/common/ActiveRegionDisplay";
 import { useRegion } from "../context/RegionContext";
 import AppTrayLauncher from "../global/components/floating_apps/AppTrayLauncher";
 import { ErrorBoundary } from 'react-error-boundary';
+import { DrawerProvider, useDrawer } from "../context/DrawerContext";
 
 const drawerWidth = 280;
 const collapsedDrawerWidth = 80;
@@ -45,11 +46,8 @@ const blink = keyframes`
 
 const DashboardContent = () => {
   const nav = useNavigate();
-  const [open, setOpen] = useState(true);
-  const [collapsed, setCollapsed] = useState(false);
+  const { open, setOpen, toggleDrawer, collapsed, toggleCollapsed } = useDrawer();
   const isMdScreen = useMediaQuery((theme) => theme.breakpoints.down("lg"));
-  const toggleDrawer = () => setOpen(!open);
-  const toggleCollapsed = () => setCollapsed(!collapsed);
 
   // fetch active settings
   const { data: activeSettings, isLoading } = useQuery({
@@ -314,5 +312,7 @@ const DashboardContent = () => {
 };
 
 export default () => (
-  <DashboardContent />
+  <DrawerProvider>
+    <DashboardContent />
+  </DrawerProvider>
 );

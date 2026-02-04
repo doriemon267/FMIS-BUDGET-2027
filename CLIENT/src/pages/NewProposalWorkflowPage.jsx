@@ -2494,7 +2494,7 @@ const NewProposalWorkflowPage = () => {
                             >
                               <Typography
                                 variant="body2"
-                                sx={{ fontWeight: 600, color: "#1976d2" }}
+                                sx={{ fontWeight: 600, color: "#020b15" }}
                               >
                                 ₱
                                 {(proposal.projectedCorporateIncome || 0).toLocaleString(
@@ -2516,7 +2516,7 @@ const NewProposalWorkflowPage = () => {
                             >
                               <Typography
                                 variant="body2"
-                                sx={{ fontWeight: 600, color: "#d32f2f" }}
+                                sx={{ fontWeight: 600, color: "#020b15" }}
                               >
                                 ₱
                                 {getDisplayAmounts(proposal).projectedSubsidy.toLocaleString("en-US", {
@@ -2537,7 +2537,7 @@ const NewProposalWorkflowPage = () => {
                                 variant="body2"
                                 sx={{
                                   fontWeight: "bold",
-                                  color: "#2d5016",
+                                  color: "#020b15",
                                   fontSize: "0.95rem",
                                 }}
                               >
@@ -2999,7 +2999,7 @@ const NewProposalWorkflowPage = () => {
                     </Typography>
                     <Typography
                       variant="body1"
-                      sx={{ fontWeight: 600, color: "#1976d2" }}
+                      sx={{ fontWeight: 600, color: "#020b15" }}
                     >
                       ₱
                       {(
@@ -3022,7 +3022,7 @@ const NewProposalWorkflowPage = () => {
                     </Typography>
                     <Typography
                       variant="body1"
-                      sx={{ fontWeight: 600, color: "#d32f2f" }}
+                      sx={{ fontWeight: 600, color: "#020b15" }}
                     >
                       ₱
                       {(
@@ -3045,7 +3045,7 @@ const NewProposalWorkflowPage = () => {
                       variant="body1"
                       sx={{
                         fontWeight: "bold",
-                        color: "#2d5016",
+                        color: "#020b15",
                         fontSize: "1.1rem",
                       }}
                     >
