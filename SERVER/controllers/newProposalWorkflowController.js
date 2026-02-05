@@ -907,6 +907,23 @@ exports.createProposal = async (req, res) => {
           message: `The submission period for FY ${fiscalYear} (${normalizedModelType}) has ended. Due date was ${effectiveDueDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}. Please contact your administrator to extend the deadline.`
         });
       }
+    } else {
+      // No matching settings for this FY+budgetType - check if ANY active fiscal year is expired.
+      // Prevents bypass by creating for FY/types without settings when current FY has expired.
+      if (!isSuperAdmin) {
+        const activeSettings = await Settings.findOne({ isActive: true }).lean();
+        if (activeSettings) {
+          const { getEffectiveDueDateForRegion } = require('../utils/settingsUtils');
+          const { dueDate: activeDueDate } = getEffectiveDueDateForRegion(activeSettings, null);
+          const now = new Date();
+          if (activeDueDate && activeDueDate < now) {
+            return res.status(403).json({
+              success: false,
+              message: `The current fiscal year has expired. Submissions are closed. Please contact your administrator to update the due date or create a new fiscal year.`
+            });
+          }
+        }
+      }
     }
     // ============ END DUE DATE VALIDATION ============
 
@@ -1142,11 +1159,9 @@ exports.getProposals = async (req, res) => {
         query.status = { $ne: 'DRAFT' };  // Use DRAFT enum
         break;
       case 'monitoring':
-          // Monitoring tab for Budget Manager: show all proposals except drafts, including all workflow statuses
-          if (userRole === 'BUDGET MANAGER') {
-                  // Show all non-DRAFT statuses. Using a list of enums was brittle, because the DB might
-                  // store different human-readable strings or variants. Query for everything except DRAFT
-                  // so Budget Manager's Monitoring tab shows Finalized and all BRD-level statuses.
+          // Monitoring tab for Budget Manager and SUPER ADMIN: show all proposals except drafts
+          if (userRole === 'BUDGET MANAGER' || userRole === 'SUPER ADMIN') {
+                  // Show all non-DRAFT statuses. SUPER ADMIN sees same view as Budget Manager.
                   query.status = { $ne: 'DRAFT' };
           } else {
             return res.json({
@@ -1177,7 +1192,7 @@ exports.getProposals = async (req, res) => {
       .skip(skip)
       .limit(limitNum)
       .populate('region', 'Region regionName RegionName');
-    if (view === 'monitoring' && userRole === 'BUDGET MANAGER') {
+    if (view === 'monitoring' && (userRole === 'BUDGET MANAGER' || userRole === 'SUPER ADMIN')) {
       console.log('[MONITORING] Query:', query);
       console.log('[MONITORING] Found proposals:', newProposals.length);
       if (newProposals.length > 0) {
@@ -1339,7 +1354,7 @@ exports.getProposals = async (req, res) => {
 
     // Metrics aggregation for monitoring view
     let metrics = undefined;
-    if (view === 'monitoring' && userRole === 'BUDGET MANAGER') {
+    if (view === 'monitoring' && (userRole === 'BUDGET MANAGER' || userRole === 'SUPER ADMIN')) {
       // Normalize statuses for metrics (map either human-readable or enum codes to consistent enum keys)
       const humanToEnumStatusMap = {
         'Draft': 'DRAFT',

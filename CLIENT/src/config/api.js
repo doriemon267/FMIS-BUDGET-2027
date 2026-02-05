@@ -22,10 +22,10 @@ export function setDevUser(user) {
 const fetchCsrfToken = async () => {
   if (_csrfToken) return _csrfToken;
   try {
-    // CSRF endpoint is served by the main API server (same origin as protected routes)
-    const csrfBase = IS_PRODUCTION ? env("BUDGET_SERVER_URL_PROD") : env("SERVER_URL_DEV");
-    if (!csrfBase) return null;
-    const resp = await axios.get(`${csrfBase}${apiPrefix}/csrf-token`, { withCredentials: true });
+    // Use same origin as api (/) so cookie works - BUDGET_SERVER_URL_PROD causes cross-origin cookie issues
+    const csrfBase = IS_PRODUCTION ? "" : env("SERVER_URL_DEV");
+    const url = csrfBase ? `${csrfBase}${apiPrefix}/csrf-token` : `${apiPrefix}/csrf-token`;
+    const resp = await axios.get(url, { withCredentials: true });
     _csrfToken = resp.data && resp.data.csrfToken;
     return _csrfToken;
   } catch (err) {

@@ -84,13 +84,17 @@ module.exports = async (req, res, next) => {
       }
     }
 
+    // Normalize email from API (pwedeng iba-ibang field name: email, Email, userEmail, UserEmail, etc.)
+    const email = userData.email ?? userData.Email ?? userData.userEmail ?? userData.UserEmail ?? userData.mail ?? null;
+
     req.user = {
       ...userData,
       id: userId,
       userId: userId,
       Roles: roles,
       particular: `${userData.FirstName || ''} ${userData.LastName || ''}`.trim() || userId,
-      particularID: userId
+      particularID: userId,
+      email: email
     };
 
     const identity = await resolveUserIdentity({ req });

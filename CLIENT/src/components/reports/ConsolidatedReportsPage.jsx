@@ -104,6 +104,7 @@ const ConsolidatedReportsPage = () => {
   });
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [selectedRegions, setSelectedRegions] = useState([]);
+  const [selectedCurrentRegion, setSelectedCurrentRegion] = useState(""); // single region when consolidationType === "current"
   const [consolidationType, setConsolidationType] = useState("current"); // current, all, custom
 
   // Fetch active settings
@@ -123,21 +124,29 @@ const ConsolidatedReportsPage = () => {
       return response.data?.regions || [];
     },
     onSuccess: (data) => {
-      // console.log('Available regions fetched:', data);
+      // When regions first load and we're on "current", default to active region or first region
+      if (data?.length && consolidationType === "current" && !selectedCurrentRegion) {
+        const name = activeRegion?.name || activeRegion?.Region;
+        const match = data.find(r => (r.name || r.Region) === name) ? name : (data[0]?.name || data[0]?.Region || "");
+        setSelectedCurrentRegion(match);
+      }
     },
     onError: (err) => {
       console.error('Error fetching available regions:', err);
     }
   });
 
+  // Resolve which single region to use for "current" (dropdown selection or active region)
+  const effectiveCurrentRegion = selectedCurrentRegion || activeRegion?.name || (regions?.length ? regions[0]?.name : "");
+
   // Fetch consolidated data
   const { data: consolidatedData, isLoading: consolidatedLoading } = useQuery({
-    queryKey: ["consolidatedReports", activeRegion?.name, selectedRegions, consolidationType, activeSettings?.fiscalYear, activeSettings?.budgetType],
+    queryKey: ["consolidatedReports", effectiveCurrentRegion, selectedRegions, consolidationType, activeSettings?.fiscalYear, activeSettings?.budgetType],
     queryFn: async () => {
       try {
         let regionsToFetch;
         if (consolidationType === "current") {
-          regionsToFetch = [activeRegion?.name].filter(Boolean);
+          regionsToFetch = [effectiveCurrentRegion].filter(Boolean);
         } else if (consolidationType === "all") {
           regionsToFetch = null; // Don't filter by regions - get all data
         } else {
@@ -244,8 +253,8 @@ const ConsolidatedReportsPage = () => {
     enabled: (() => {
       const enabled = Boolean(
         activeSettings && (
-          (consolidationType === "current" && activeRegion) || 
-          (consolidationType === "all") || // No need to check regions for "all"
+          (consolidationType === "current" && effectiveCurrentRegion) ||
+          (consolidationType === "all") ||
           (consolidationType === "custom" && selectedRegions.length > 0)
         )
       );
@@ -369,10 +378,20 @@ const ConsolidatedReportsPage = () => {
 
   // Handle consolidation type change
   const handleConsolidationTypeChange = (event) => {
-    setConsolidationType(event.target.value);
-    if (event.target.value !== "custom") {
+    const value = event.target.value;
+    setConsolidationType(value);
+    if (value !== "custom") {
       setSelectedRegions([]);
     }
+    if (value === "current" && regions?.length && !selectedCurrentRegion) {
+      const name = activeRegion?.name || activeRegion?.Region;
+      const match = regions.find(r => (r.name || r.Region) === name);
+      setSelectedCurrentRegion(match ? (match.name || match.Region) : (regions[0]?.name || regions[0]?.Region || ""));
+    }
+  };
+
+  const handleCurrentRegionChange = (event) => {
+    setSelectedCurrentRegion(event.target.value);
   };
 
   // Export functionality
@@ -439,13 +458,13 @@ const ConsolidatedReportsPage = () => {
           BUDGET PROPOSAL FOR FISCAL YEAR {activeSettings?.fiscalYear || new Date().getFullYear()}
         </Typography>
         <Typography variant="subtitle1" color="text.secondary" sx={{ textAlign: "center", mt: 2 }}>
-          {consolidationType === "current" && activeRegion 
-            ? `MOOE data for ${activeRegion.name}` 
-            : consolidationType === "all" 
-            ? "Consolidated MOOE data from all regions" 
+          {consolidationType === "current" && effectiveCurrentRegion
+            ? `MOOE data for ${effectiveCurrentRegion}`
+            : consolidationType === "all"
+            ? "Consolidated MOOE data from all regions"
             : consolidationType === "custom" && selectedRegions.length > 0
             ? `MOOE data for selected regions: ${selectedRegions.join(", ")}`
-            : "Comprehensive consolidation of MOOE data"}
+            : "Select a region or consolidation type above"}
         </Typography>
       </Paper>
 
@@ -466,6 +485,28 @@ const ConsolidatedReportsPage = () => {
               </Select>
             </FormControl>
           </Grid>
+
+          {consolidationType === "current" && (
+            <Grid item xs={12} md={3}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Region</InputLabel>
+                <Select
+                  value={selectedCurrentRegion || effectiveCurrentRegion || ""}
+                  onChange={handleCurrentRegionChange}
+                  label="Region"
+                >
+                  {(regions || []).map((region) => {
+                    const name = region.name || region.Region || "";
+                    return (
+                      <MenuItem key={region.id || region._id || name} value={name}>
+                        {name}
+                      </MenuItem>
+                    );
+                  })}
+                </Select>
+              </FormControl>
+            </Grid>
+          )}
 
           {consolidationType === "custom" && (
             <Grid item xs={12} md={3}>

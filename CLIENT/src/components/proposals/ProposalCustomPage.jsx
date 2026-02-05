@@ -122,7 +122,7 @@ const ProposalCustomPage = ({
   const [selectedFiscalYear, setSelectedFiscalYear] = useState("");
   const [activeBudgetType, setActiveBudgetType] = useState("");
   const [activeDueDate, setActiveDueDate] = useState(null);
-  const [isDueDatePassed, setIsDueDatePassed] = useState(false);
+  const [isDueDatePassed, setIsDueDatePassed] = useState(true); // Conservative: block until API confirms due date is valid
   const [budgetDeficit, setBudgetDeficit] = useState(null);
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -1355,29 +1355,33 @@ const ProposalCustomPage = ({
   // Add this useEffect to fetch the active fiscal year and budget type
   useEffect(() => {
     const fetchActiveSettings = async () => {
-      // Fetch active settings
+      // Region identifier for effective due date (considers region-specific extensions)
+      const regionId = activeRegion?.id || activeRegion?._id || activeRegion?.name || activeRegion?.regionName || activeRegion?.Region;
+      const params = regionId ? { region: regionId } : {};
+
       try {
-        const activeResponse = await api.get("/settings/active");
+        const activeResponse = await api.get("/settings/active", { params });
         if (activeResponse.data) {
           const fiscalYear = activeResponse.data.fiscalYear || "";
           setActiveFiscalYear(fiscalYear);
           setSelectedFiscalYear(fiscalYear); // Set selected fiscal year to active by default
           setActiveBudgetType(activeResponse.data.budgetType || "");
-          
-          // Check due date from budget periods or legacy dueDate field
+
+          // Prefer effectiveDueDate (region-aware) when region has extension; else main due date
           let dueDate = null;
-          const budgetPeriods = activeResponse.data.budgetPeriods;
-          if (budgetPeriods && budgetPeriods.length > 0) {
-            // Find active period's due date
-            const activePeriod = budgetPeriods.find(p => p.isActive);
-            if (activePeriod?.dueDate) {
-              dueDate = new Date(activePeriod.dueDate);
+          if (activeResponse.data.effectiveDueDate) {
+            dueDate = new Date(activeResponse.data.effectiveDueDate);
+          } else {
+            const budgetPeriods = activeResponse.data.budgetPeriods;
+            if (budgetPeriods && budgetPeriods.length > 0) {
+              const activePeriod = budgetPeriods.find(p => p.isActive);
+              if (activePeriod?.dueDate) dueDate = new Date(activePeriod.dueDate);
             }
-          } else if (activeResponse.data.dueDate) {
-            // Legacy due date field
-            dueDate = new Date(activeResponse.data.dueDate);
+            if (!dueDate && activeResponse.data.dueDate) {
+              dueDate = new Date(activeResponse.data.dueDate);
+            }
           }
-          
+
           if (dueDate) {
             setActiveDueDate(dueDate);
             setIsDueDatePassed(new Date() > dueDate);
@@ -1419,7 +1423,7 @@ const ProposalCustomPage = ({
     };
 
     fetchActiveSettings();
-  }, []);
+  }, [activeRegion?.id, activeRegion?._id, activeRegion?.name, activeRegion?.Region]);
 
   // Add event listener for capital outlay data changes
   useEffect(() => {
@@ -1991,7 +1995,8 @@ const ProposalCustomPage = ({
                   !newProposalData.title ||
                   !activeFiscalYear ||
                   !activeRegion ||
-                  !privacyNoticeAccepted
+                  !privacyNoticeAccepted ||
+                  (isDueDatePassed && !isSuperAdmin)
                 }
               >
                 {createProposalMutation.isLoading ? (

@@ -42,9 +42,11 @@ const AppTrayLauncher = () => {
       }
       if (!raw) return [];
       const parsed = JSON.parse(raw);
-      return Array.isArray(parsed)
+      const list = Array.isArray(parsed)
         ? parsed.map((p) => ({ id: p.id, defaultPosition: p.defaultPosition, minimized: !!p.minimized, key: p.key, title: appConfig[p.id]?.title, component: appConfig[p.id]?.component }))
         : [];
+      // Filter out chat (hidden for now)
+      return list.filter((p) => p.id !== 'chat');
     } catch (e) {
       console.warn("[AppTrayLauncher] failed to read persisted open apps", e);
       return [];
@@ -146,8 +148,7 @@ const AppTrayLauncher = () => {
             e.preventDefault(); handleAppOpen('clock'); break;
           case 'a':
             e.preventDefault(); handleAppOpen('calendar'); break;
-          case 'm':
-            e.preventDefault(); handleAppOpen('chat'); break;
+          // case 'm': handleAppOpen('chat'); break; // Chat hidden for now
           default:
             break;
         }

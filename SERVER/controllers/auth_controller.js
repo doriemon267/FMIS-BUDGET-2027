@@ -42,12 +42,14 @@ exports.login = async (req, res) => {
       { expiresIn: tokenExpiration },
     );
 
-    res.cookie("jwtToken", jwtToken, {
+    const cookieOpts = {
       httpOnly: true,
       secure: true,
       sameSite: "None",
       maxAge: cookieExpiration,
-    });
+    };
+    if (process.env.COOKIE_DOMAIN) cookieOpts.domain = process.env.COOKIE_DOMAIN;
+    res.cookie("jwtToken", jwtToken, cookieOpts);
 
     res.sendStatus(200);
   } catch (e) {
@@ -70,9 +72,13 @@ exports.getUser = async (req, res) => {
       roles = assignedRoles.roles.map((role) => role.name);
     }
 
-    user.Roles = roles;
+    const userResponse = {
+      ...user,
+      Roles: roles,
+      email: user.email ?? user.userEmail ?? user.Email ?? user.UserEmail ?? user.mail ?? null,
+    };
 
-    res.json({ user });
+    res.json({ user: userResponse });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Server error" });
@@ -80,11 +86,9 @@ exports.getUser = async (req, res) => {
 };
 
 exports.logout = (req, res) => {
-  res.clearCookie("jwtToken", {
-    httpOnly: true,
-    secure: true,
-    sameSite: "None",
-  });
+  const clearOpts = { httpOnly: true, secure: true, sameSite: "None" };
+  if (process.env.COOKIE_DOMAIN) clearOpts.domain = process.env.COOKIE_DOMAIN;
+  res.clearCookie("jwtToken", clearOpts);
 
   res.status(200).json({ message: "Logged out successfully" });
 };

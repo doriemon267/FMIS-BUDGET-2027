@@ -20,7 +20,7 @@ import {
 import env from "../utils/env";
 import IS_PRODUCTION from "../utils/IS_PRODUCTION";
 import { useEffect, useState } from "react";
-import api from "../config/api";
+import { authApi } from "../config/api";
 
 // Animation variants
 const appBarVariants = {
@@ -95,17 +95,24 @@ export default function HomePage() {
   const [hasUser, setHasUser] = useState(false);
   useEffect(() => {
     (async () => {
-      const res = await api.get("/get-user");
-      // console.log(res.data.user);
-      if (res.data.user) setHasUser(true);
-      else setHasUser(false);
+      try {
+        const res = await authApi.get("/get-user");
+        setHasUser(!!res?.data?.user);
+      } catch {
+        setHasUser(false);
+      }
     })();
   }, []);
 
   const handleNavigateToLogin = () => {
-    const currentUrl = window.location.origin + "/dashboard"; // or window.location.href if you want the exact page
+    const currentUrl = window.location.origin + "/dashboard";
+    let base = env("LOGIN_REDIRECT_URL");
+    // Huwag gamitin ang /Manage - dapat Account/Login para sa tamang login flow
+    if (base && /\/Manage$/i.test(base)) {
+      base = "https://accounts.nia.gov.ph/Account/Login";
+    }
     const loginUrl = IS_PRODUCTION
-      ? `${env("LOGIN_REDIRECT_URL")}?ReturnUrl=${encodeURIComponent(currentUrl)}`
+      ? `${base || "https://accounts.nia.gov.ph/Account/Login"}?ReturnUrl=${encodeURIComponent(currentUrl)}`
       : `${env("CLIENT_URL_DEV")}/login`;
 
     location.href = loginUrl;

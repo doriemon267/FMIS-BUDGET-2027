@@ -33,6 +33,12 @@ const AddRegionExtensionDialog = ({ open, onClose, settingsRow, onSuccess }) => 
   const queryClient = useQueryClient();
   const [selectedRegions, setSelectedRegions] = useState([]);
 
+  // Regions already assigned to extensions (for display and to avoid duplicates)
+  const regionsInExtensions = React.useMemo(() => {
+    const exts = settingsRow?.regionDueDateExtensions || [];
+    return new Set(exts.flatMap((e) => (e.regions || []).map((r) => String(r))));
+  }, [settingsRow?.regionDueDateExtensions]);
+
   const { data: regionsData = [] } = useQuery({
     queryKey: ["regions"],
     queryFn: async () => {
@@ -114,6 +120,21 @@ const AddRegionExtensionDialog = ({ open, onClose, settingsRow, onSuccess }) => 
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           Set an extended due date for specific region(s). Submissions from these regions will use this date instead of the main cutoff.
         </Typography>
+
+        {regionsInExtensions.size > 0 && (
+          <Box sx={{ mb: 2, p: 1.5, bgcolor: "action.hover", borderRadius: 1 }}>
+            <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" sx={{ mb: 0.5 }}>
+              Regions already in extensions
+            </Typography>
+            <Typography variant="body2">
+              {regionsData
+                .filter((r) => regionsInExtensions.has(String(r.id)))
+                .map((r) => r.name)
+                .join(", ") || Array.from(regionsInExtensions).join(", ")}
+            </Typography>
+          </Box>
+        )}
+
         <Box component="form" onSubmit={handleSubmit((data) => mutation.mutate(data))} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
           <FormControl fullWidth error={selectedRegions.length === 0 && mutation.isError}>
             <InputLabel>Regions</InputLabel>
@@ -124,12 +145,15 @@ const AddRegionExtensionDialog = ({ open, onClose, settingsRow, onSuccess }) => 
               renderValue={(v) => v.map((id) => regionsData.find((r) => r.id === id)?.name || id).join(", ")}
               label="Regions"
             >
-              {regionsData.filter((r) => r.id !== "All").map((region) => (
-                <MenuItem key={region.id} value={region.id}>
-                  <Checkbox checked={selectedRegions.indexOf(region.id) > -1} />
-                  <ListItemText primary={region.name} />
-                </MenuItem>
-              ))}
+              {regionsData.filter((r) => r.id !== "All").map((region) => {
+                const alreadyInExtension = regionsInExtensions.has(String(region.id));
+                return (
+                  <MenuItem key={region.id} value={region.id} disabled={alreadyInExtension}>
+                    <Checkbox checked={selectedRegions.indexOf(region.id) > -1} disabled={alreadyInExtension} />
+                    <ListItemText primary={region.name} secondary={alreadyInExtension ? "Already in extension" : null} />
+                  </MenuItem>
+                );
+              })}
             </Select>
             {selectedRegions.length === 0 && (
               <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>

@@ -4,6 +4,18 @@ const Region = require('../models/Region');
 const User = require('../models/User');
 const { sendNotificationEmail } = require('../utils/emailNotification');
 
+/** Escape for HTML text content (defense-in-depth before sanitize-html) */
+const escapeHtml = (str) => {
+  if (str == null) return '';
+  const s = String(str);
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+};
+
 const normalizeRecipientId = (val) => {
   if (!val || typeof val !== 'string') return null;
   if (val.includes('@')) return null; // skip emails
@@ -79,6 +91,9 @@ exports.createNotification = async (notificationData) => {
         } else if (!notificationTypeEnabled) {
           console.log('[Notification Email Debug] Workflow notifications disabled for userId:', notificationData.userId);
         } else {
+          const safeTitle = escapeHtml(notificationData.title || 'FMIS - OSBPIS Notification');
+          const safeMessage = escapeHtml(notificationData.message || '');
+          const md = notificationData.metadata || {};
           const html = `
             <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:600px;margin:auto;font-family:Arial,sans-serif;background:#f9f9f9;\">
               <tr>
@@ -86,7 +101,7 @@ exports.createNotification = async (notificationData) => {
                   <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\">
                     <tr>
                       <td style=\"background-color:#375e38;color:#fff;padding:18px 24px;font-size:1.3em;font-weight:bold;\">
-                        ${notificationData.title || 'FMIS - OSBPIS Notification'}
+                        ${safeTitle}
                       </td>
                     </tr>
                   </table>
@@ -94,16 +109,16 @@ exports.createNotification = async (notificationData) => {
               </tr>
               <tr><td style=\"padding:24px;background:#fff;\">
                 <p>Dear Recipient,</p>
-                <p>${notificationData.message || ''}</p>
+                <p>${safeMessage}</p>
                 <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#fafafa;border-left:4px solid #375e38;margin:18px 0 18px 0;\">
                   <tr><td style=\"padding:16px;\">
                     <span style=\"font-weight:bold;color:#375e38;\">Proposal Details:</span><br>
-                    <span style=\"font-weight:bold;\">Title:</span> ${notificationData.metadata?.title || ''}<br>
-                    <span style=\"font-weight:bold;\">Fiscal Year:</span> ${notificationData.metadata?.fiscalYear || ''}<br>
-                    <span style=\"font-weight:bold;\">Budget Type:</span> ${notificationData.metadata?.budgetType || ''}<br>
-                    <span style=\"font-weight:bold;\">Region:</span> ${notificationData.metadata?.region || ''}<br>
-                    <span style=\"font-weight:bold;\">Department:</span> ${notificationData.metadata?.department || ''}<br>
-                    <span style=\"font-weight:bold;\">Division:</span> ${notificationData.metadata?.division || ''}
+                    <span style=\"font-weight:bold;\">Title:</span> ${escapeHtml(md.title || '')}<br>
+                    <span style=\"font-weight:bold;\">Fiscal Year:</span> ${escapeHtml(md.fiscalYear || '')}<br>
+                    <span style=\"font-weight:bold;\">Budget Type:</span> ${escapeHtml(md.budgetType || '')}<br>
+                    <span style=\"font-weight:bold;\">Region:</span> ${escapeHtml(md.region || '')}<br>
+                    <span style=\"font-weight:bold;\">Department:</span> ${escapeHtml(md.department || '')}<br>
+                    <span style=\"font-weight:bold;\">Division:</span> ${escapeHtml(md.division || '')}
                   </td></tr>
                 </table>
                 <p style=\"margin:18px 0 0 0;\"><span style=\"font-weight:bold;color:#375e38;\">Action Required:</span> Please log in to the system to view and process this proposal.</p>
@@ -427,15 +442,18 @@ exports.createNotifications = async (notificationsData, options = {}) => {
         
         if (email) {
           try {
+            const safeTitleBulk = escapeHtml(n.title || 'FMIS - OSBPIS Notification');
+            const safeMessageBulk = escapeHtml(n.message || '');
+            const safeLink = n.relatedLink && /^\/[a-zA-Z0-9\/\-_.?=&]*$/.test(String(n.relatedLink)) ? String(n.relatedLink) : '';
             const html = `
               <div style=\"max-width:600px;margin:auto;font-family:Arial,sans-serif;\">
                 <div style=\"background-color:#375e38;color:#fff;padding:20px 24px;border-radius:8px 8px 0 0;\">
-                  <h2 style=\"margin:0;font-size:1.5em;\">${n.title || 'FMIS - OSBPIS Notification'}</h2>
+                  <h2 style=\"margin:0;font-size:1.5em;\">${safeTitleBulk}</h2>
                 </div>
                 <div style=\"background:#fff;padding:24px;border-radius:0 0 8px 8px;box-shadow:0 2px 8px rgba(55,94,56,0.08);\">
                   <p>Dear Recipient,</p>
-                  <p>${n.message || ''}</p>
-                  ${n.relatedLink ? `<a href='https://your-app.com${n.relatedLink}' style='color:#375e38;text-decoration:underline;font-weight:bold;'>View Proposal</a>` : ''}
+                  <p>${safeMessageBulk}</p>
+                  ${safeLink ? `<a href='https://your-app.com${safeLink}' style='color:#375e38;text-decoration:underline;font-weight:bold;'>View Proposal</a>` : ''}
                   <div style=\"margin:16px 0;\">
                     <span style=\"color:#375e38;font-weight:bold;\">&#9888; Action Required:</span>
                     <span> Please log in to the system to view and process this proposal.</span>

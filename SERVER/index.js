@@ -118,9 +118,11 @@ console.warn = (...args) => {
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
 const helmet = require('helmet');
+const mongoSanitize = require('express-mongo-sanitize');
 const csurf = require('csurf');
 const http = require("http");
 const socketIo = require("socket.io");
@@ -647,6 +649,8 @@ app.use(
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(cookieParser());
+// NoSQL injection prevention: strip $ and . from req.body, req.query, req.params
+app.use(mongoSanitize());
 // Security headers
 app.use(helmet());
 
@@ -678,8 +682,8 @@ const csrfCookieOptions = {
 if (process.env.COOKIE_DOMAIN) csrfCookieOptions.domain = process.env.COOKIE_DOMAIN;
 const _csrfProtection = csurf({ cookie: csrfCookieOptions });
 
-// CSRF: Exempt all /api routes so SPA works when cookie is not sent across proxy/origin (e.g. budget.nia.gov.ph vs API).
-// All /api routes remain protected by tokenMiddleware (check_token_prod/check_token_dev) on their routers.
+// CSRF: Exempt all /api routes (incl. csrf-token). API routes are protected by tokenMiddleware.
+// csurf cookie fails with cross-origin (budget.nia.gov.ph vs budget-server); use simple token instead.
 app.use((req, res, next) => {
   if (req.path.startsWith(apiPrefix)) return next();
   const exemptPaths = ["/login", "/webhook", "/health"];
@@ -687,10 +691,13 @@ app.use((req, res, next) => {
   return _csrfProtection(req, res, next);
 });
 
-app.get(`${apiPrefix}/csrf-token`, (req, res) => {
+// Simple token - no csurf cookie (avoids cross-origin/cookie issues). API routes don't validate CSRF.
+app.get(`${apiPrefix}/csrf-token`, (_req, res) => {
   try {
-    res.json({ csrfToken: req.csrfToken() });
+    const token = crypto.randomBytes(32).toString('hex');
+    res.json({ csrfToken: token });
   } catch (err) {
+    console.warn('[csrf-token]', err?.message || err);
     res.status(500).json({ error: 'Unable to generate CSRF token' });
   }
 });

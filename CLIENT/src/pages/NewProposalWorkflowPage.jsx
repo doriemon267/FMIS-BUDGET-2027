@@ -226,6 +226,11 @@ const NewProposalWorkflowPage = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [showAllRegions, setShowAllRegions] = useState(false);
 
+  // SUPER ADMIN: default to "show all regions" so they see proposals without selecting a region
+  useEffect(() => {
+    if (isSuperAdmin) setShowAllRegions(true);
+  }, [isSuperAdmin]);
+
   // Edit mode and change tracking for reviewers - now for items
   const [editableItems, setEditableItems] = useState({
     income: [],
@@ -2043,7 +2048,7 @@ const NewProposalWorkflowPage = () => {
           {tabs[activeTab].value === "monitoring" && monitoringMetrics && (!monitoringMetrics.total || Object.keys(monitoringMetrics.byStatus || {}).length === 0) && (
             <Box sx={{ p: 3, display: "flex", justifyContent: "center", alignItems: "center" }}>
               <Typography sx={{ color: "#6e6e6e", fontSize: "1rem" }}>
-                No monitored proposals — ensure you're signed in as a Budget Manager and that there are proposals that are not Draft.
+                No monitored proposals — ensure you're signed in as a Budget Manager or SUPER ADMIN and that there are proposals that are not Draft.
               </Typography>
             </Box>
           )}
@@ -2051,7 +2056,7 @@ const NewProposalWorkflowPage = () => {
           {tabs[activeTab].value === "monitoring" && monitoringMetrics && (monitoringMetrics.total > 0) && (!proposals || proposals.length === 0) && (
             <Box sx={{ p: 2, display: 'flex', gap: 2, alignItems: 'center', justifyContent: 'center' }}>
               <Typography sx={{ color: '#6e6e6e', fontSize: '0.95rem' }}>
-                May nakitang {monitoringMetrics.total} na naka-monitor na proposal pero hindi ito lumalabas sa table. Siguruhing naka-sign in bilang Budget Manager at piliin ang tamang region. I-click ang "Refresh" para subukang muli.
+                May nakitang {monitoringMetrics.total} na naka-monitor na proposal pero hindi ito lumalabas sa table. Siguruhing naka-sign in bilang Budget Manager o SUPER ADMIN at piliin ang tamang region. I-click ang "Refresh" para subukang muli.
               </Typography>
               <Button size='small' variant='outlined' startIcon={<RefreshIcon />} onClick={() => fetchProposals({ forceAllRegions: showAllRegions })}>
                 Refresh
@@ -2180,7 +2185,7 @@ const NewProposalWorkflowPage = () => {
                 flexWrap: "wrap",
               }}
             >
-              {tabs[activeTab].value === "monitoring" && isBudgetManager && (
+              {(tabs[activeTab].value === "monitoring" || tabs[activeTab].value === "all-proposals") && (isBudgetManager || isSuperAdmin) && (
                 <FormControlLabel
                   control={
                     <Switch
@@ -2198,8 +2203,8 @@ const NewProposalWorkflowPage = () => {
                 />
               )}
 
-              {/* Monitoring badge showing which region is being used */}
-              {tabs[activeTab].value === "monitoring" && (
+              {/* Region badge - show on monitoring and all-proposals for BRD/SUPER ADMIN */}
+              {(tabs[activeTab].value === "monitoring" || tabs[activeTab].value === "all-proposals") && (isBudgetManager || isSuperAdmin) ? (
                 <Chip
                   label={showAllRegions ? 'Showing: All regions' : `Region: ${resolvedRegionString}`}
                   size="small"
@@ -2210,7 +2215,7 @@ const NewProposalWorkflowPage = () => {
                     ml: 1,
                   }}
                 />
-              )}
+              ) : null}
 
               <Chip
                 label={`${filteredProposals.length} Result${

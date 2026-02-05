@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box,
-  Card,
-  CardContent,
   Typography,
   Grid,
   Select,
@@ -22,14 +20,18 @@ import {
   Chip,
   IconButton,
   Tooltip,
-  Container
+  Breadcrumbs,
+  Link,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
-  Download as DownloadIcon,
-  CompareArrows as CompareIcon
+  GetApp as GetAppIcon,
+  CompareArrows as CompareIcon,
+  Home as HomeIcon,
+  Assessment as AssessmentIcon,
 } from '@mui/icons-material';
-import { toast } from 'react-toastify';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import api from '../config/api';
 import { useRegion } from '../context/RegionContext';
 
@@ -149,199 +151,221 @@ const ComparativeReportPage = () => {
   };
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-      <Paper elevation={3} sx={{ p: 4, backgroundColor: '#fafafa' }}>
-        {/* Header Section */}
-        <Box sx={{ mb: 4 }}>
-          <Typography variant="h4" gutterBottom sx={{ color: '#1976d2', fontWeight: 'bold' }}>
-            📊 Comparative Budget Report
-          </Typography>
-          <Typography variant="body1" paragraph sx={{ color: '#666' }}>
-            Compare current proposals with historical GAA data across regions.
-          </Typography>
-        </Box>
-      <Box sx={{ p: 3 }}>
-        {/* Controls */}
-        <Card sx={{ mb: 3 }}>
-          <CardContent>
-            <Grid container spacing={3} alignItems="center">
-              <Grid item xs={12} md={3}>
-                <FormControl fullWidth>
-                  <InputLabel>Region</InputLabel>
-                  <Select
-                    value={selectedRegionForReport}
-                    onChange={(e) => setSelectedRegionForReport(e.target.value)}
-                    label="Region"
-                  >
-                    {regions.map((region) => (
-                      <MenuItem key={region} value={region}>
-                        {region}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
+    <Box sx={{ p: 3 }}>
+      <ToastContainer position="top-right" autoClose={3000} />
 
-              <Grid item xs={12} md={3}>
-                <FormControl fullWidth>
-                  <InputLabel>Current Fiscal Year</InputLabel>
-                  <Select
-                    value={currentFiscalYear}
-                    onChange={(e) => setCurrentFiscalYear(e.target.value)}
-                    label="Current Fiscal Year"
-                  >
-                    <MenuItem value="2024">2024</MenuItem>
-                    <MenuItem value="2025">2025</MenuItem>
-                    <MenuItem value="2026">2026</MenuItem>
-                    <MenuItem value="2027">2027</MenuItem>
-                    <MenuItem value="2028">2028</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
+      {/* Breadcrumbs */}
+      <Breadcrumbs aria-label="breadcrumb" sx={{ mb: 2 }}>
+        <Link
+          underline="hover"
+          sx={{ display: 'flex', alignItems: 'center' }}
+          color="inherit"
+          href="/dashboard"
+        >
+          <HomeIcon sx={{ mr: 0.5 }} fontSize="inherit" />
+          Dashboard
+        </Link>
+        <Typography sx={{ display: 'flex', alignItems: 'center' }} color="text.primary">
+          <AssessmentIcon sx={{ mr: 0.5 }} fontSize="inherit" />
+          Comparative Report
+        </Typography>
+      </Breadcrumbs>
 
-              <Grid item xs={12} md={6}>
-                <Box sx={{ display: 'flex', gap: 2 }}>
-                  <Button
-                    variant="contained"
-                    onClick={fetchComparativeReport}
-                    disabled={loading || !selectedRegionForReport || !currentFiscalYear}
-                    startIcon={loading ? <CircularProgress size={20} /> : <CompareIcon />}
-                  >
-                    {loading ? 'Generating...' : 'Generate Report'}
-                  </Button>
-
-                  <Button
-                    variant="outlined"
-                    onClick={exportToCSV}
-                    disabled={!reportData}
-                    startIcon={<DownloadIcon />}
-                  >
-                    Export CSV
-                  </Button>
-
-                  <Tooltip title="Refresh data">
-                    <IconButton onClick={() => {
-                      fetchRegions();
-                      fetchCurrentFiscalYear();
-                    }}>
-                      <RefreshIcon />
-                    </IconButton>
-                  </Tooltip>
-                </Box>
-              </Grid>
-            </Grid>
-          </CardContent>
-        </Card>
-
-        {/* Error Display */}
-        {error && (
-          <Alert severity="error" sx={{ mb: 3 }}>
-            {error}
-          </Alert>
-        )}
-
-        {/* Report Table */}
-        {reportData && (
-          <Card>
-            <CardContent>
-              <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant="h6" component="div">
-                  Comparative Report for {selectedRegionForReport} - FY {currentFiscalYear}
-                </Typography>
-                <Chip
-                  label={`Generated: ${new Date().toLocaleDateString()}`}
-                  variant="outlined"
-                />
-              </Box>
-
-              <TableContainer component={Paper} sx={{ maxHeight: 600 }}>
-                <Table stickyHeader size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell
-                        sx={{
-                          fontWeight: 'bold',
-                          backgroundColor: 'primary.main',
-                          color: 'primary.contrastText',
-                          minWidth: 300
-                        }}
-                      >
-                        PARTICULAR
-                      </TableCell>
-                      {Object.keys(reportData[0] || {}).filter(key => key !== 'particular' && key !== 'isHeader').map((header) => (
-                        <TableCell
-                          key={header}
-                          align="right"
-                          sx={{
-                            fontWeight: 'bold',
-                            backgroundColor: 'primary.main',
-                            color: 'primary.contrastText',
-                            minWidth: 120,
-                            fontSize: '0.75rem'
-                          }}
-                        >
-                          {header}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {reportData.map((row, index) => (
-                      <TableRow
-                        key={index}
-                        sx={{
-                          backgroundColor: row.isHeader ? 'grey.100' : 'inherit',
-                          '&:hover': { backgroundColor: 'action.hover' }
-                        }}
-                      >
-                        <TableCell
-                          sx={{
-                            fontWeight: row.isHeader ? 'bold' : 'normal',
-                            paddingLeft: row.isHeader ? 2 : 3
-                          }}
-                        >
-                          {row.particular}
-                        </TableCell>
-                        {Object.keys(row).filter(key => key !== 'particular' && key !== 'isHeader').map((header) => (
-                          <TableCell
-                            key={header}
-                            align="right"
-                            sx={{
-                              fontWeight: row.isHeader ? 'bold' : 'normal',
-                              fontSize: '0.875rem'
-                            }}
-                          >
-                            {row.isHeader ? '' : formatCurrency(row[header])}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* No Data Message */}
-        {!reportData && !loading && !error && (
-          <Card>
-            <CardContent>
-              <Box sx={{ textAlign: 'center', py: 4 }}>
-                <CompareIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-                <Typography variant="h6" color="text.secondary">
-                  No Report Generated
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Select a region and fiscal year, then click "Generate Report" to view comparative data.
-                </Typography>
-              </Box>
-            </CardContent>
-          </Card>
-        )}
-        </Box>
+      {/* Header - NIA branding (same as other reports) */}
+      <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
+        <Typography variant="h4" gutterBottom sx={{ color: '#375e38', fontWeight: 'bold', textAlign: 'center' }}>
+          NATIONAL IRRIGATION ADMINISTRATION
+        </Typography>
+        <Typography variant="h5" gutterBottom sx={{ color: '#375e38', fontWeight: 'bold', textAlign: 'center' }}>
+          COMPARATIVE BUDGET REPORT
+        </Typography>
+        <Typography variant="h6" gutterBottom sx={{ color: '#375e38', textAlign: 'center' }}>
+          BUDGET PROPOSAL FOR FISCAL YEAR {currentFiscalYear || new Date().getFullYear()}
+        </Typography>
+        <Typography variant="subtitle1" color="text.secondary" sx={{ textAlign: 'center', mt: 2 }}>
+          {selectedRegionForReport
+            ? `Compare current proposals with historical GAA for ${selectedRegionForReport}`
+            : 'Select a region and fiscal year, then generate the report'}
+        </Typography>
       </Paper>
-    </Container>
+
+      {/* Controls */}
+      <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} md={3}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Region</InputLabel>
+              <Select
+                value={selectedRegionForReport}
+                onChange={(e) => setSelectedRegionForReport(e.target.value)}
+                label="Region"
+              >
+                {regions.map((region) => (
+                  <MenuItem key={region} value={region}>
+                    {region}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12} md={3}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Current Fiscal Year</InputLabel>
+              <Select
+                value={currentFiscalYear}
+                onChange={(e) => setCurrentFiscalYear(e.target.value)}
+                label="Current Fiscal Year"
+              >
+                <MenuItem value="2024">2024</MenuItem>
+                <MenuItem value="2025">2025</MenuItem>
+                <MenuItem value="2026">2026</MenuItem>
+                <MenuItem value="2027">2027</MenuItem>
+                <MenuItem value="2028">2028</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button
+                variant="outlined"
+                onClick={fetchComparativeReport}
+                disabled={loading || !selectedRegionForReport || !currentFiscalYear}
+                startIcon={loading ? <CircularProgress size={20} /> : <CompareIcon />}
+                size="small"
+              >
+                {loading ? 'Generating...' : 'Generate Report'}
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={exportToCSV}
+                disabled={!reportData}
+                startIcon={<GetAppIcon />}
+                size="small"
+              >
+                Export CSV
+              </Button>
+              <Tooltip title="Refresh data">
+                <IconButton
+                  size="small"
+                  onClick={() => {
+                    fetchRegions();
+                    fetchCurrentFiscalYear();
+                  }}
+                >
+                  <RefreshIcon />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          </Grid>
+        </Grid>
+      </Paper>
+
+      {/* Error Display */}
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
+
+      {/* Report Table */}
+      {reportData && (
+        <Paper elevation={1}>
+          <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid', borderColor: 'divider' }}>
+            <Typography variant="h6" component="div" sx={{ color: '#375e38', fontWeight: 'bold' }}>
+              Comparative Report for {selectedRegionForReport} - FY {currentFiscalYear}
+            </Typography>
+            <Chip label={`Generated: ${new Date().toLocaleDateString()}`} variant="outlined" size="small" />
+          </Box>
+          <TableContainer sx={{ maxHeight: 'calc(100vh - 400px)' }}>
+            <Table stickyHeader size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell
+                    sx={{
+                      fontWeight: 'bold',
+                      backgroundColor: '#375e38',
+                      color: '#fff',
+                      minWidth: 300,
+                      padding: '8px 12px',
+                      border: '1px solid #fff',
+                      fontSize: '0.875rem',
+                    }}
+                  >
+                    PARTICULAR
+                  </TableCell>
+                  {Object.keys(reportData[0] || {}).filter(key => key !== 'particular' && key !== 'isHeader').map((header) => (
+                    <TableCell
+                      key={header}
+                      align="right"
+                      sx={{
+                        fontWeight: 'bold',
+                        backgroundColor: '#375e38',
+                        color: '#fff',
+                        minWidth: 120,
+                        padding: '8px 12px',
+                        border: '1px solid #fff',
+                        fontSize: '0.875rem',
+                      }}
+                    >
+                      {header}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {reportData.map((row, index) => (
+                  <TableRow
+                    key={index}
+                    sx={{
+                      backgroundColor: row.isHeader ? 'grey.100' : 'inherit',
+                      '&:hover': { backgroundColor: 'action.hover' },
+                    }}
+                  >
+                    <TableCell
+                      sx={{
+                        fontWeight: row.isHeader ? 'bold' : 'normal',
+                        paddingLeft: row.isHeader ? 2 : 3,
+                        padding: '8px 12px',
+                      }}
+                    >
+                      {row.particular}
+                    </TableCell>
+                    {Object.keys(row).filter(key => key !== 'particular' && key !== 'isHeader').map((header) => (
+                      <TableCell
+                        key={header}
+                        align="right"
+                        sx={{
+                          fontWeight: row.isHeader ? 'bold' : 'normal',
+                          fontSize: '0.875rem',
+                          padding: '8px 12px',
+                        }}
+                      >
+                        {row.isHeader ? '' : formatCurrency(row[header])}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Paper>
+      )}
+
+      {/* No Data Message */}
+      {!reportData && !loading && !error && (
+        <Paper elevation={1} sx={{ p: 4 }}>
+          <Box sx={{ textAlign: 'center', py: 4 }}>
+            <CompareIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+            <Typography variant="h6" color="text.secondary">
+              No Report Generated
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              Select a region and fiscal year, then click &quot;Generate Report&quot; to view comparative data.
+            </Typography>
+          </Box>
+        </Paper>
+      )}
+    </Box>
   );
 };
 

@@ -41,6 +41,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-hot-toast";
 import AddSettingsDialog_Enhanced from "../components/settings/AddSettingsDialog_Enhanced";
 import AddRegionExtensionDialog from "../components/settings/AddRegionExtensionDialog";
+import EditRegionExtensionDialog from "../components/settings/EditRegionExtensionDialog";
 import ProposalActionsButton from "../global/components/ProposalActionsButton";
 import CustomPage from "../global/components/CustomPage";
 import api from "../config/api";
@@ -54,6 +55,8 @@ const FiscalYearSettingsPage = () => {
   const [rowForExtension, setRowForExtension] = useState(null);
   const [extensionMenuAnchor, setExtensionMenuAnchor] = useState(null);
   const [extensionMenuRow, setExtensionMenuRow] = useState(null);
+  const [editExtensionDialogOpen, setEditExtensionDialogOpen] = useState(false);
+  const [extensionToEdit, setExtensionToEdit] = useState(null);
   // Periods are simplified to a single window; no separate manage dialog
 
   const removeExtensionMutation = useMutation({
@@ -296,7 +299,7 @@ const FiscalYearSettingsPage = () => {
                       {ext.label || `${ext.regions?.length || 0} region(s)`}: due {ext.dueDate ? new Date(ext.dueDate).toLocaleDateString() : "—"}
                     </Typography>
                   ))}
-                  <Typography variant="caption" color="text.secondary">Click chip to remove an extension</Typography>
+                  <Typography variant="caption" color="text.secondary">Click chip to edit or remove extensions</Typography>
                 </Stack>
               }
             >
@@ -319,21 +322,41 @@ const FiscalYearSettingsPage = () => {
               anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
             >
               {extensionMenuRow?._id === row._id && exts.map((ext, i) => (
-                <MenuItem
-                  key={ext._id || i}
-                  onClick={() => {
-                    if (ext._id) {
-                      removeExtensionMutation.mutate({ settingsId: row._id, extensionId: ext._id });
-                    }
-                  }}
-                  disabled={!ext._id || removeExtensionMutation.isPending}
-                >
-                  <ListItemIcon><AiOutlineDelete fontSize="small" /></ListItemIcon>
-                  <ListItemText
-                    primary={ext.label || `${ext.regions?.length || 0} region(s)`}
-                    secondary={ext.dueDate ? new Date(ext.dueDate).toLocaleDateString() : "—"}
-                  />
-                </MenuItem>
+                <React.Fragment key={ext._id || i}>
+                  <MenuItem
+                    onClick={() => {
+                      if (ext._id) {
+                        setExtensionToEdit(ext);
+                        setRowForExtension(row);
+                        setEditExtensionDialogOpen(true);
+                        setExtensionMenuAnchor(null);
+                        setExtensionMenuRow(null);
+                      }
+                    }}
+                    disabled={!ext._id}
+                  >
+                    <ListItemIcon><AiOutlineEdit fontSize="small" /></ListItemIcon>
+                    <ListItemText
+                      primary={`Edit: ${ext.label || `${ext.regions?.length || 0} region(s)`}`}
+                      secondary={ext.dueDate ? new Date(ext.dueDate).toLocaleDateString() : "—"}
+                    />
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => {
+                      if (ext._id) {
+                        removeExtensionMutation.mutate({ settingsId: row._id, extensionId: ext._id });
+                      }
+                    }}
+                    disabled={!ext._id || removeExtensionMutation.isPending}
+                  >
+                    <ListItemIcon><AiOutlineDelete fontSize="small" /></ListItemIcon>
+                    <ListItemText
+                      primary={`Delete: ${ext.label || `${ext.regions?.length || 0} region(s)`}`}
+                      secondary={ext.dueDate ? new Date(ext.dueDate).toLocaleDateString() : "—"}
+                    />
+                  </MenuItem>
+                  {i < exts.length - 1 && <Divider component="li" />}
+                </React.Fragment>
               ))}
             </Menu>
           </>
@@ -588,6 +611,22 @@ const FiscalYearSettingsPage = () => {
           open={extensionDialogOpen}
           onClose={handleCloseExtensionDialog}
           settingsRow={rowForExtension}
+          onSuccess={() => refetch()}
+        />
+      )}
+
+      {/* Edit region due date extension */}
+      {editExtensionDialogOpen && rowForExtension && extensionToEdit && (
+        <EditRegionExtensionDialog
+          open={editExtensionDialogOpen}
+          onClose={() => {
+            setEditExtensionDialogOpen(false);
+            setExtensionToEdit(null);
+            setRowForExtension(null);
+            refetch();
+          }}
+          settingsRow={rowForExtension}
+          extensionToEdit={extensionToEdit}
           onSuccess={() => refetch()}
         />
       )}

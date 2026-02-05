@@ -1,7 +1,26 @@
 const nodemailer = require('nodemailer');
 const sanitizeHtml = require('sanitize-html');
 
-// Configure sanitizer options for email content
+// Strip CRLF and control chars to prevent email header injection
+function safeHeaderValue(value) {
+  if (value == null || typeof value !== 'string') return '';
+  return value.replace(/[\r\n\x00-\x1f]/g, '').trim();
+}
+
+// Basic email format check (local@domain, reasonable length)
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function isValidEmailFormat(str) {
+  return typeof str === 'string' && str.length <= 254 && EMAIL_REGEX.test(str);
+}
+
+// Normalize recipient: single email, no header-injection chars
+function normalizeTo(to) {
+  const s = safeHeaderValue(String(to));
+  const first = s.split(',')[0].trim();
+  return first || s;
+}
+
+// Configure sanitizer options for email content (no script/style; strict schemes)
 const sanitizeOptions = {
   allowedTags: [
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'br', 'strong', 'b', 'em', 'i', 'u', 'a', 'ul', 'ol', 'li',
@@ -12,10 +31,10 @@ const sanitizeOptions = {
     'a': ['href', 'title', 'style'],
     'img': ['src', 'alt', 'title', 'width', 'height', 'style']
   },
-  allowedSchemes: ['http', 'https', 'mailto', 'data'],
+  allowedSchemes: ['http', 'https', 'mailto'],
   allowProtocolRelative: true,
   selfClosing: ['br', 'hr'],
-  allowVulnerableTags: true
+  allowVulnerableTags: false
 };
 
 // Configure transporter - supports both Gmail and generic SMTP
@@ -78,6 +97,13 @@ function sendNotificationEmail(to, subject, text, html, maxRetries = 3) {
     throw new Error('No email sender configured in environment variables.');
   }
 
+  // Prevent header injection: sanitize to and subject (no CRLF / control chars)
+  const safeTo = normalizeTo(to);
+  const safeSubject = safeHeaderValue(subject);
+  if (!safeTo || !isValidEmailFormat(safeTo)) {
+    throw new Error('Invalid recipient: empty or invalid email address.');
+  }
+
   // Format: "Name <email@domain.com>"
   const from = fromName ? `${fromName} <${fromEmail}>` : fromEmail;
 
@@ -89,9 +115,9 @@ function sendNotificationEmail(to, subject, text, html, maxRetries = 3) {
 
   const mailOptions = {
     from,
-    to,
-    subject,
-    text,
+    to: safeTo,
+    subject: safeSubject || 'Notification',
+    text: typeof text === 'string' ? text : '',
     html: sanitizedHtml
   };
 
@@ -99,10 +125,10 @@ function sendNotificationEmail(to, subject, text, html, maxRetries = 3) {
   const sendWithRetry = async (attempt = 1) => {
     try {
       const result = await transporter.sendMail(mailOptions);
-      console.log(`[Email] Successfully sent to ${to} on attempt ${attempt}`);
+      console.log(`[Email] Successfully sent to ${safeTo} on attempt ${attempt}`);
       return result;
     } catch (error) {
-      console.warn(`[Email] Attempt ${attempt} failed for ${to}:`, error.message);
+      console.warn(`[Email] Attempt ${attempt} failed for ${safeTo}:`, error.message);
       
       if (attempt < maxRetries) {
         // Exponential backoff: wait 2^attempt seconds
@@ -111,7 +137,7 @@ function sendNotificationEmail(to, subject, text, html, maxRetries = 3) {
         await new Promise(resolve => setTimeout(resolve, delay));
         return sendWithRetry(attempt + 1);
       } else {
-        console.error(`[Email] All ${maxRetries} attempts failed for ${to}`);
+        console.error(`[Email] All ${maxRetries} attempts failed for ${safeTo}`);
         throw new Error(`Email delivery failed after ${maxRetries} attempts: ${error.message}`);
       }
     }

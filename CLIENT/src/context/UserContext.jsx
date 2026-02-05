@@ -1,9 +1,11 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { authApi, setDevUser } from "../config/api";
 import Loading from "../global/components/Loading";
+import InactivityWarningDialog from "../components/InactivityWarningDialog";
 import env from "../utils/env";
 import IS_PRODUCTION from "../utils/IS_PRODUCTION"; // Import mo ito ulit
+import useInactivityLogout from "../hooks/useInactivityLogout";
 
 const UserContext = createContext({
   currentUser: null,
@@ -18,6 +20,9 @@ const UserContext = createContext({
 const UserProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showInactivityWarning, setShowInactivityWarning] = useState(false);
+  const closeWarningRef = useRef(null);
+  const inactivityResetRef = useRef(null);
   const nav = useNavigate();
 
   // --- HELPER: Enrichment Logic ---
@@ -93,11 +98,23 @@ const UserProvider = ({ children }) => {
   };
 
   const handleLogout = async () => {
-    await authApi.get("/logout");
+    try {
+      await authApi.get("/logout");
+    } catch (e) {
+      console.warn("Backend logout error:", e);
+    }
     setCurrentUser(null);
     if (IS_PRODUCTION) {
-      const returnUrl = env("BUDGET_CLIENT_URL_PROD") ? `${env("BUDGET_CLIENT_URL_PROD")}/dashboard` : window.location.origin + "/dashboard";
-      window.location.href = `${env("LOGIN_REDIRECT_URL")}?ReturnUrl=${encodeURIComponent(returnUrl)}`;
+      // Use NIA SSO logoff URL (same as LogoutDialog) - hindi lang redirect sa login
+      const clientId = env("CLIENT_ID");
+      const budgetUrl = env("BUDGET_CLIENT_URL_PROD") || window.location.origin;
+      const currentUrl = `${budgetUrl}/dashboard`;
+      const returnUrl = encodeURIComponent(
+        `https://accounts.nia.gov.ph/Account/Login?ReturnUrl=${encodeURIComponent(currentUrl)}`
+      );
+      const particularID = currentUser?.particularID || "";
+      const logoffUrl = `https://accounts.nia.gov.ph/account/logoff?clientId=${clientId}&owner=${particularID}&returnUrl=${returnUrl}`;
+      window.location.href = logoffUrl;
     } else {
       window.location.href = env("CLIENT_URL_DEV") + "/login";
     }
@@ -136,6 +153,26 @@ const UserProvider = ({ children }) => {
     return workflowRoles.includes(role);
   };
 
+  // Close warning modal when hook resets due to activity
+  closeWarningRef.current = () => setShowInactivityWarning(false);
+
+  // Auto-logout kapag walang activity sa loob ng 5 minuto (may warning 1 min bago)
+  useInactivityLogout({
+    onLogout: handleLogout,
+    onWarning: (reset) => {
+      inactivityResetRef.current = reset;
+      setShowInactivityWarning(true);
+    },
+    closeWarningRef,
+    enabled: !!currentUser,
+  });
+
+  const handleStayLoggedIn = () => {
+    inactivityResetRef.current?.();
+    inactivityResetRef.current = null;
+    setShowInactivityWarning(false);
+  };
+
   const value = {
     currentUser,
     setCurrentUser: handleSetUserInitialization,
@@ -147,7 +184,15 @@ const UserProvider = ({ children }) => {
 
   if (isLoading) return <Loading />;
 
-  return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
+  return (
+    <UserContext.Provider value={value}>
+      {children}
+      <InactivityWarningDialog
+        open={showInactivityWarning}
+        onStayLoggedIn={handleStayLoggedIn}
+      />
+    </UserContext.Provider>
+  );
 };
 
 export default UserProvider;

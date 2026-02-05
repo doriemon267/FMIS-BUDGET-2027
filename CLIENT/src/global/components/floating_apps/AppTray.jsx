@@ -68,11 +68,11 @@ const AppTray = ({ onAppOpen, openAppIds = [], activeAppId = null, onCloseAll, o
       if (disabled && disabled.length > 0) {
         return apps.filter(a => !disabled.includes(a.id));
       }
-      // Default: show only five apps requested
-      const defaultFive = ['calc','todo','clock','calendar','chat'];
+      // Default: show apps (chat hidden for now - add 'chat' for future use)
+      const defaultFive = ['calc','todo','clock','calendar'];
       return apps.filter(a => defaultFive.includes(a.id));
     } catch (e) {
-      const fallbackFive = ['calc','todo','clock','calendar','chat'];
+      const fallbackFive = ['calc','todo','clock','calendar'];
       return apps.filter(a => fallbackFive.includes(a.id));
     }
   }, [apps]);

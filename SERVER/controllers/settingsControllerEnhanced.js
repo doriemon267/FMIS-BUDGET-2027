@@ -523,13 +523,27 @@ exports.getCompensationOnlySettings = async (req, res) => {
 
 exports.getActiveSettings = async (req, res) => {
   try {
+    const { region } = req.query;
     const activeSettings = await Settings.findOne({ isActive: true }).populate(
       "compensationSettingsId"
     );
     if (!activeSettings) {
       return res.status(404).json({ message: "No active fiscal year found." });
     }
-    res.status(200).json(activeSettings);
+    const payload = activeSettings.toObject ? activeSettings.toObject() : activeSettings;
+
+    // When region is provided, compute effective due date (considers region-specific extensions)
+    if (region) {
+      const { getEffectiveDueDateForRegion } = require("../utils/settingsUtils");
+      const { dueDate: effectiveDueDate, isExtension } = getEffectiveDueDateForRegion(
+        activeSettings,
+        [String(region)]
+      );
+      payload.effectiveDueDate = effectiveDueDate ? effectiveDueDate.toISOString() : null;
+      payload.effectiveIsExtension = isExtension || false;
+    }
+
+    res.status(200).json(payload);
   } catch (error) {
     console.error("Error in getActiveSettings:", error.stack);
     res.status(500).json({ message: "Server error", error });
@@ -711,6 +725,44 @@ exports.addRegionDueDateExtension = async (req, res) => {
     });
   } catch (error) {
     console.error("Error in addRegionDueDateExtension:", error.stack);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+/**
+ * Update a region due date extension by its _id (subdocument id)
+ */
+exports.updateRegionDueDateExtension = async (req, res) => {
+  try {
+    const { id, extensionId } = req.params;
+    const { regions, dueDate, label } = req.body;
+    const settings = await Settings.findById(id);
+    if (!settings) {
+      return res.status(404).json({ message: "Settings not found." });
+    }
+    const extensions = settings.regionDueDateExtensions || [];
+    const idx = extensions.findIndex((e) => String(e._id) === String(extensionId));
+    if (idx === -1) {
+      return res.status(404).json({ message: "Region extension not found." });
+    }
+    if (Array.isArray(regions) && regions.length > 0) {
+      extensions[idx].regions = regions;
+    }
+    if (dueDate !== undefined) {
+      extensions[idx].dueDate = new Date(dueDate);
+    }
+    if (label !== undefined) {
+      extensions[idx].label = label || null;
+    }
+    settings.regionDueDateExtensions = extensions;
+    await settings.save();
+    const updated = await Settings.findById(id).populate("compensationSettingsId");
+    res.status(200).json({
+      message: "Region due date extension updated successfully.",
+      settings: updated,
+    });
+  } catch (error) {
+    console.error("Error in updateRegionDueDateExtension:", error.stack);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
