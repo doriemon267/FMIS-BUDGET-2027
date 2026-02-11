@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const assignedRole = require("../models/assigned_role");
+const User = require("../models/User");
 
 exports.login = async (req, res) => {
   const { username, password, rememberMe } = req.body;
@@ -62,25 +63,63 @@ exports.getUser = async (req, res) => {
   try {
     const user = req.user;
 
+    console.log("[AUTH][GET-USER] Incoming user from token middleware:", {
+      id: user?.particularID ?? user?.id ?? user?._id ?? null,
+      username: user?.username ?? user?.UserName ?? null,
+      region: user?.region ?? user?.Region ?? null,
+    });
+
     // Fetch assigned roles
     let roles = [];
     const assignedRoles = await assignedRole
       .findOne({ user: user.particularID })
       .populate({ path: "roles", select: "name" });
 
+    if (!assignedRoles) {
+      console.log("[AUTH][GET-USER] No assigned roles found for user", {
+        userParticularID: user?.particularID,
+      });
+    }
+
     if (assignedRoles) {
       roles = assignedRoles.roles.map((role) => role.name);
     }
 
+    console.log("[AUTH][GET-USER] Resolved roles for user:", roles);
+
+    const niaEmail =
+      user.email ??
+      user.userEmail ??
+      user.Email ??
+      user.UserEmail ??
+      user.mail ??
+      null;
+
     const userResponse = {
       ...user,
       Roles: roles,
-      email: user.email ?? user.userEmail ?? user.Email ?? user.UserEmail ?? user.mail ?? null,
+      email: niaEmail,
     };
+
+    // Sync NIA Email to User collection so workflow notifications use user.Email (NIA) instead of HUA email
+    if (niaEmail && user.particularID) {
+      try {
+        await User.findOneAndUpdate(
+          { userId: String(user.particularID) },
+          { $set: { email: niaEmail } }
+        );
+      } catch (e) {
+        if (process.env.DEBUG_LOGS === "true") {
+          console.debug("[AUTH][GET-USER] User email sync skip:", e?.message);
+        }
+      }
+    }
+
+    console.log("[AUTH][GET-USER] Sending user response payload (safe fields only).");
 
     res.json({ user: userResponse });
   } catch (e) {
-    console.error(e);
+    console.error("[AUTH][GET-USER] Error while resolving user:", e);
     res.status(500).json({ error: "Server error" });
   }
 };

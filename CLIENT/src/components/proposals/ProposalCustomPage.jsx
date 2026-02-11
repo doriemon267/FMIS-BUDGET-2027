@@ -1846,7 +1846,7 @@ const ProposalCustomPage = ({
                 })
               }
             />
-            <TextField
+            {/* <TextField
               margin="dense"
               label="Projected Corporate Income (optional)"
               type="number"
@@ -1879,7 +1879,7 @@ const ProposalCustomPage = ({
               placeholder="0.00"
               helperText="Optional: estimate of subsidy. You can leave this blank; you may encode details later."
               inputProps={{ step: "0.01", min: "0" }}
-            />
+            /> */}
             <Box sx={{ mt: 2, display: "flex", gap: 1, flexWrap: "wrap" }}>
               <Chip
                 icon={<CalendarTodayIcon />}
@@ -1924,7 +1924,7 @@ const ProposalCustomPage = ({
                 label={
                   <Typography
                     variant="body2"
-                    sx={{ textAlign: "justify", lineHeight: 1.6 }}
+                    sx={{ textAlign: "justify", lineHeight: 1.6, color: "red"}}
                   >
                     I certify that the attached or uploaded digital document is
                     a true and faithful copy of the original, and that all

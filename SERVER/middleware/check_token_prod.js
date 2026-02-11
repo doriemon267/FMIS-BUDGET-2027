@@ -85,7 +85,14 @@ module.exports = async (req, res, next) => {
     }
 
     // Normalize email from API (pwedeng iba-ibang field name: email, Email, userEmail, UserEmail, etc.)
-    const email = userData.email ?? userData.Email ?? userData.userEmail ?? userData.UserEmail ?? userData.mail ?? null;
+    let email = userData.email ?? userData.Email ?? userData.userEmail ?? userData.UserEmail ?? userData.mail ?? null;
+
+    // Kung walang hiwalay na email pero ang userId ay "909549mund.m.edra@gmail.com", kunin ang email part para sa UI
+    if (!email && typeof userId === 'string' && userId.includes('@')) {
+      const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
+      const match = userId.match(emailRegex);
+      if (match) email = match[1];
+    }
 
     req.user = {
       ...userData,

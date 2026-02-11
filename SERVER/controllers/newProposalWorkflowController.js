@@ -583,38 +583,40 @@ const sendWorkflowEmails = async (action, proposal, recipientUserIds, currentUse
 
     console.log('[sendWorkflowEmails] Attempting to send emails to recipients:', recipientUserIds);
 
-    // Get user emails from the HierarchicalUserAssignment collection
-    const users = await HierarchicalUserAssignment.find({ userId: { $in: recipientUserIds } }).select('email userName userId');
-    console.log('[sendWorkflowEmails] Found users:', users.length, 'out of', recipientUserIds.length, 'recipients');
-    
-    if (users.length === 0) {
-      console.warn('[sendWorkflowEmails] No users found in HierarchicalUserAssignment with provided userId list');
-      console.warn('[sendWorkflowEmails] Searched for userIds:', recipientUserIds);
-      return;
-    }
-    
-    // Get user email preferences
-    const userPrefs = await User.find({ userId: { $in: recipientUserIds } }).select('userId emailPreferences');
+    // Prefer User.email (NIA Email synced on get-user); fallback to HierarchicalUserAssignment.email
+    const userDocs = await User.find({ userId: { $in: recipientUserIds } }).select('userId email emailPreferences').lean();
+    const huaDocs = await HierarchicalUserAssignment.find({ userId: { $in: recipientUserIds } }).select('email userName userId').lean();
+
     const prefsMap = {};
-    userPrefs.forEach(u => {
+    userDocs.forEach(u => {
       prefsMap[u.userId] = u.emailPreferences;
     });
-    
+
     const emailMap = {};
-    users.forEach(user => {
-      // Check email preferences before including in email map
-      const prefs = prefsMap[user.userId] || {};
+    for (const uid of recipientUserIds) {
+      const prefs = prefsMap[uid] || {};
       const emailEnabled = prefs.enabled !== false;
       const proposalMuted = proposal && prefs.mutedProposals && prefs.mutedProposals.includes(proposal._id || proposal.id);
       const notificationTypeEnabled = prefs.notificationTypes?.workflow !== false;
-      
-      if (emailEnabled && !proposalMuted && notificationTypeEnabled && user.email) {
-        emailMap[user.userId] = user.email;
-        console.log('[sendWorkflowEmails] Mapped userId:', user.userId, '-> email:', user.email);
-      } else {
-        console.log('[sendWorkflowEmails] Skipped userId:', user.userId, 'emailEnabled:', emailEnabled, 'muted:', proposalMuted, 'typeEnabled:', notificationTypeEnabled);
+      if (!emailEnabled || proposalMuted || notificationTypeEnabled === false) {
+        console.log('[sendWorkflowEmails] Skipped userId:', uid, 'emailEnabled:', emailEnabled, 'muted:', proposalMuted, 'typeEnabled:', notificationTypeEnabled);
+        continue;
       }
-    });
+      const fromUser = userDocs.find(u => String(u.userId) === String(uid));
+      const fromHua = huaDocs.find(u => String(u.userId) === String(uid));
+      const email = (fromUser && fromUser.email) || (fromHua && fromHua.email) || null;
+      if (email) {
+        emailMap[uid] = email;
+        console.log('[sendWorkflowEmails] Mapped userId:', uid, '-> email:', email, fromUser ? '(User/NIA)' : '(HUA fallback)');
+      } else {
+        console.warn('[sendWorkflowEmails] No email for userId:', uid);
+      }
+    }
+
+    if (Object.keys(emailMap).length === 0) {
+      console.warn('[sendWorkflowEmails] No recipients with valid email (User or HUA)');
+      return;
+    }
 
     // Prepare email subject and body
     const isReturnAction = action.includes('return');
@@ -1854,6 +1856,7 @@ exports.updateProposal = async (req, res) => {
     const userRole = getUserRole(req);
     const userId = req.user.id;
     const userName = req.user.name || req.user.email;
+    
 
     const proposal = await NewProposalWorkflow.findById(id);
     if (!proposal) {

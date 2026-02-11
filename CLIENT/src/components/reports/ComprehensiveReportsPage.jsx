@@ -446,15 +446,15 @@ const PDFReport = ({ reportData, filters }) => {
           
           {/* Column-wise Totals */}
           <View style={pdfStyles.summaryRow}>
-            <Text style={pdfStyles.summaryLabel}>Total Income:</Text>
+            <Text style={pdfStyles.summaryLabel}>Projected Corporate Income:</Text>
             <Text style={pdfStyles.summaryValue}>{formatPDFCurrency(overallTotals.totalIncome)}</Text>
           </View>
           <View style={pdfStyles.summaryRow}>
-            <Text style={pdfStyles.summaryLabel}>Total Subsidy:</Text>
+            <Text style={pdfStyles.summaryLabel}>Projected Subsidy:</Text>
             <Text style={pdfStyles.summaryValue}>{formatPDFCurrency(overallTotals.totalSubsidy)}</Text>
           </View>
           <Text style={pdfStyles.grandTotal}>
-            TOTAL AMOUNT: {formatPDFCurrency(overallTotals.totalAmount)}
+            PROPOSED BUDGET: {formatPDFCurrency(overallTotals.totalAmount)}
           </Text>
         </View>
         
@@ -466,9 +466,9 @@ const PDFReport = ({ reportData, filters }) => {
               <View style={pdfStyles.tableHeader}>
                 <Text style={{ width: '15%', padding: pdfTheme.spacing.xs }}>Code</Text>
                 <Text style={{ width: '45%', padding: pdfTheme.spacing.xs }}>Section Name</Text>
-                <Text style={{ width: '15%', padding: pdfTheme.spacing.xs, textAlign: 'right' }}>Income</Text>
-                <Text style={{ width: '15%', padding: pdfTheme.spacing.xs, textAlign: 'right' }}>Subsidy</Text>
-                <Text style={{ width: '10%', padding: pdfTheme.spacing.xs, textAlign: 'right' }}>Total</Text>
+                <Text style={{ width: '15%', padding: pdfTheme.spacing.xs, textAlign: 'right' }}>Projected Corporate Income</Text>
+                <Text style={{ width: '15%', padding: pdfTheme.spacing.xs, textAlign: 'right' }}>Projected Subsidy</Text>
+                <Text style={{ width: '10%', padding: pdfTheme.spacing.xs, textAlign: 'right' }}>Proposed Budget</Text>
               </View>
               {overallTotals.sections.map((section, idx) => (
                 <View key={idx} style={[pdfStyles.tableRow, idx % 2 !== 0 && pdfStyles.tableRowOdd]}>
@@ -530,7 +530,7 @@ const PDFReport = ({ reportData, filters }) => {
             }
             
             if (isIncomeSection) {
-              headers = ["Income Category", "Description", "Amount"];
+              headers = ["Income Category", "Description", "Proposed Budget"];
               widths = [40, 35, 25];
               rows = Object.values(section.categories || {}).map(catData => [
                 truncateText(catData.name || 'N/A', 30), 
@@ -538,7 +538,7 @@ const PDFReport = ({ reportData, filters }) => {
                 formatPDFCurrency(catData.total)
               ]);
             } else if (isBudgetarySupport) {
-              headers = ["Category", "Description", "Amount"];
+              headers = ["Category", "Description", "Proposed Budget"];
               widths = [40, 35, 25];
               rows = [];
               
@@ -571,7 +571,7 @@ const PDFReport = ({ reportData, filters }) => {
                 }
               });
             } else if (isDetailedExpense) {
-              headers = ["Category", "Description", "Income", "Subsidy", "Amount"];
+              headers = ["Category", "Description", "Projected Corporate Income", "Projected Subsidy", "Proposed Budget"];
               widths = [30, 25, 15, 15, 15];
               rows = [];
               
@@ -681,6 +681,7 @@ const ComprehensiveReportsPage = () => {
   const [availableBudgetTypes, setAvailableBudgetTypes] = useState([]);
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [error, setError] = useState(null);
   const [loadingInitialData, setLoadingInitialData] = useState(true);
   const [selectedFiscalYear, setSelectedFiscalYear] = useState("");
@@ -936,6 +937,38 @@ const ComprehensiveReportsPage = () => {
     budgetType: selectedBudgetType,
   });
 
+  const handlePreviewPdf = async () => {
+    setPdfLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams({
+        fiscalYear: selectedFiscalYear,
+        budgetType: selectedBudgetType,
+      });
+
+      if (selectedRegion && selectedRegion !== "all") {
+        params.append("regions", selectedRegion);
+      }
+
+      const response = await api.get(
+        `/api/comprehensive-reports/comprehensive-pdf?${params.toString()}`,
+        { responseType: "blob" }
+      );
+
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      window.open(url);
+    } catch (err) {
+      console.error("Error generating PDF preview:", err);
+      setError(
+        err?.response?.data?.message ||
+          "Failed to generate PDF preview. Please try again."
+      );
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       {/* --- UI CONTROLS (Header, Filters, Buttons) --- */}
@@ -952,8 +985,41 @@ const ComprehensiveReportsPage = () => {
             <Grid item xs={12} sm={6} md={3}><FormControl fullWidth><InputLabel>Region</InputLabel><Select value={selectedRegion} onChange={(e) => setSelectedRegion(e.target.value)} label="Region"><MenuItem value="all">All Regions</MenuItem>{availableRegions.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}</Select></FormControl></Grid>
             <Grid item xs={12} sm={6} md={2}><FormControl fullWidth><InputLabel>Fiscal Year</InputLabel><Select value={selectedFiscalYear} onChange={(e) => setSelectedFiscalYear(e.target.value)} label="Fiscal Year">{getFilteredOptions(availableFiscalYears, 'fiscalYear').map((y) => <MenuItem key={y} value={y}>{y}</MenuItem>)}</Select></FormControl></Grid>
             <Grid item xs={12} sm={6} md={2}><FormControl fullWidth><InputLabel>Budget Type</InputLabel><Select value={selectedBudgetType} onChange={(e) => setSelectedBudgetType(e.target.value)} label="Budget Type">{getFilteredOptions(availableBudgetTypes, 'budgetType').map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}</Select></FormControl></Grid>
-            <Grid item xs={12} sm={6} md={2}><Button variant="contained" fullWidth onClick={fetchReportData} disabled={loading} startIcon={loading ? <CircularProgress size={20} /> : <Summarize />} sx={{ py: 1.5 }}>{loading ? "Generating..." : "Generate"}</Button></Grid>
-            {reportData && (<Grid item xs={12} sm={12} md={3}><PDFDownloadLink document={<PDFReport reportData={reportData} filters={getReportFilters()} />} fileName={`Comprehensive_Report_${selectedFiscalYear}_${selectedBudgetType}.pdf`} style={{ textDecoration: 'none' }}>{({ loading: pdfLoading }) => (<Button variant="contained" color="secondary" fullWidth disabled={pdfLoading} startIcon={pdfLoading ? <CircularProgress size={20} /> : <FileDownload />} sx={{ py: 1.5 }}>{pdfLoading ? "Creating PDF..." : "Export to PDF"}</Button>)}</PDFDownloadLink></Grid>)}
+            <Grid item xs={12} sm={6} md={2}>
+              <Button
+                variant="contained"
+                fullWidth
+                onClick={fetchReportData}
+                disabled={loading}
+                startIcon={
+                  loading ? <CircularProgress size={20} /> : <Summarize />
+                }
+                sx={{ py: 1.5 }}
+              >
+                {loading ? "Generating..." : "Generate"}
+              </Button>
+            </Grid>
+            {reportData && (
+              <Grid item xs={12} sm={12} md={3}>
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  fullWidth
+                  onClick={handlePreviewPdf}
+                  disabled={pdfLoading}
+                  startIcon={
+                    pdfLoading ? (
+                      <CircularProgress size={20} />
+                    ) : (
+                      <FileDownload />
+                    )
+                  }
+                  sx={{ py: 1.5 }}
+                >
+                  {pdfLoading ? "Creating PDF..." : "Preview PDF"}
+                </Button>
+              </Grid>
+            )}
           </Grid>
         </CardContent>
       </Card>
@@ -967,8 +1033,12 @@ const ComprehensiveReportsPage = () => {
           {reportData.sections.map((section) => {
             const isIncomeSection = section.sectionCode === "A.1";
             const isBudgetarySupport = section.sectionCode === "A.2";
+            const isPersonnelServices = section.sectionCode === "B.1.1";
             const isDetailedExpense = section.sectionCode === "B.1.2" || section.sectionCode === "B.2";
             const isMooE = section.sectionCode === "B.1.2";
+            const colIncome = "Projected Corporate Income";
+            const colSubsidy = "Projected Subsidy";
+            const colBudget = "Proposed Budget";
 
             return (
               <Paper key={section.sectionCode} elevation={2} sx={{ mb: 3, p: { xs: 2, md: 3 } }}>
@@ -988,63 +1058,75 @@ const ComprehensiveReportsPage = () => {
                 
                 {section.consolidatedData && (() => {
                   if (isIncomeSection) {
+                    const cats = Object.values(section.categories || {});
                     return (
-                      <List>
-                        {Object.values(section.categories || {}).map((catData, idx) => (
-                          <ListItem key={idx} divider>
-                            <ListItemText primary={catData.name} secondary={catData.description} />
-                            <Typography variant="body1" fontWeight="bold">{formatCurrency(catData.total)}</Typography>
-                          </ListItem>
+                      <Stack>
+                        <Stack direction="row" sx={{ borderBottom: 2, borderColor: 'primary.main', pb: 1, mb: 1, fontWeight: 'bold' }}>
+                          <Typography sx={{ width: '25%' }}>Category</Typography>
+                          <Typography sx={{ width: '25%' }}>Description</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{colIncome}</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{colSubsidy}</Typography>
+                          <Typography sx={{ width: '16%', textAlign: 'right' }}>{colBudget}</Typography>
+                        </Stack>
+                        {cats.map((catData, idx) => (
+                          <Stack key={idx} direction="row" sx={{ py: 1, borderBottom: '1px solid #eee' }}>
+                            <Typography sx={{ width: '25%' }}>{catData.name}</Typography>
+                            <Typography sx={{ width: '25%', color: 'text.secondary' }}>{catData.description || '-'}</Typography>
+                            <Typography sx={{ width: '17%', textAlign: 'right' }}>{formatCurrency(catData.totalIncome)}</Typography>
+                            <Typography sx={{ width: '17%', textAlign: 'right' }}>{formatCurrency(catData.totalSubsidy)}</Typography>
+                            <Typography sx={{ width: '16%', textAlign: 'right', fontWeight: 'medium' }}>{formatCurrency(catData.total)}</Typography>
+                          </Stack>
                         ))}
-                      </List>
+                        <Stack direction="row" sx={{ py: 1.5, mt: 1, borderTop: 2, borderColor: 'primary.main', fontWeight: 'bold', bgcolor: alpha(theme.palette.primary.main, 0.08) }}>
+                          <Typography sx={{ width: '50%' }}>Total</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{formatCurrency(section.sectionTotalIncome)}</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{formatCurrency(section.sectionTotalSubsidy)}</Typography>
+                          <Typography sx={{ width: '16%', textAlign: 'right' }}>{formatCurrency(section.sectionTotal)}</Typography>
+                        </Stack>
+                      </Stack>
                     );
                   } 
                   
                   // Handle BUDGETARY SUPPORT section (A.2)
                   else if (isBudgetarySupport) {
-                    // Show only a single total row for Budgetary Support (A.2)
                     const mainCategory = Object.values(section.categories || {})[0] || {};
                     return (
                       <Stack>
                         <Stack direction="row" sx={{ borderBottom: 2, borderColor: 'primary.main', pb: 1, mb: 1, fontWeight: 'bold' }}>
                           <Typography sx={{ width: '40%' }}>Category</Typography>
                           <Typography sx={{ width: '35%' }}>Description</Typography>
-                          <Typography sx={{ width: '25%', textAlign: 'right' }}>Amount</Typography>
+                          <Typography sx={{ width: '25%', textAlign: 'right' }}>{colBudget}</Typography>
                         </Stack>
                         <Stack direction="row" sx={{ py: 1, fontWeight: 'bold', bgcolor: alpha(theme.palette.primary.main, 0.05) }}>
                           <Typography sx={{ width: '40%' }}>{mainCategory.name || 'Budgetary Support'}</Typography>
                           <Typography sx={{ width: '35%' }}>{mainCategory.description || 'Total government funding across all budget categories'}</Typography>
                           <Typography sx={{ width: '25%', textAlign: 'right' }}>{formatCurrency(mainCategory.totalSubsidy || mainCategory.total || section.sectionTotal || 0)}</Typography>
                         </Stack>
+                        <Stack direction="row" sx={{ py: 1.5, mt: 1, borderTop: 2, borderColor: 'primary.main', fontWeight: 'bold', bgcolor: alpha(theme.palette.primary.main, 0.08) }}>
+                          <Typography sx={{ width: '75%' }}>Total</Typography>
+                          <Typography sx={{ width: '25%', textAlign: 'right' }}>{formatCurrency(section.sectionTotal)}</Typography>
+                        </Stack>
                       </Stack>
                     );
                   }
                   
-                  // FIX: Pinag-isang table para sa MOOE at Capital Outlays
-                  else if (isDetailedExpense) {
-                    // Step 1: I-proseso at i-flat ang data para maging isang listahan ng rows.
+                  // B.1.1 Personnel Services - table with Projected Corporate Income, Projected Subsidy, Proposed Budget
+                  else if (isPersonnelServices) {
                     const allRows = [];
                     Object.values(section.categories || {}).forEach(catData => {
-                      // Add category row
                       allRows.push({ type: 'category', ...catData });
-                      let itemsArray = Array.isArray(catData.items) ? catData.items : (catData.items ? Object.values(catData.items) : []);
-                      if (isMooE) { itemsArray = itemsArray.filter(item => item && item.amount > 0); }
-                      // Add item rows
+                      const itemsArray = Array.isArray(catData.items) ? catData.items : (catData.items ? Object.values(catData.items) : []);
                       itemsArray.forEach(item => allRows.push({ type: 'item', ...item }));
                     });
-
                     return (
                       <Stack>
-                        {/* Step 2: I-render ang iisang table header. */}
                         <Stack direction="row" sx={{ borderBottom: 2, borderColor: 'primary.main', pb: 1, mb: 1, fontWeight: 'bold' }}>
                           <Typography sx={{ width: '25%' }}>Category</Typography>
                           <Typography sx={{ width: '25%' }}>Description</Typography>
-                          <Typography sx={{ width: '17%', textAlign: 'right' }}>Income</Typography>
-                          <Typography sx={{ width: '17%', textAlign: 'right' }}>Subsidy</Typography>
-                          <Typography sx={{ width: '16%', textAlign: 'right' }}>Amount</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{colIncome}</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{colSubsidy}</Typography>
+                          <Typography sx={{ width: '16%', textAlign: 'right' }}>{colBudget}</Typography>
                         </Stack>
-                        
-                        {/* Step 3: I-map ang mga na-prosesong rows */}
                         {allRows.map((row, idx) => {
                           if (row.type === 'category') {
                             return (
@@ -1055,7 +1137,62 @@ const ComprehensiveReportsPage = () => {
                                 <Typography sx={{ width: '16%', textAlign: 'right' }}>{formatCurrency(row.total)}</Typography>
                               </Stack>
                             );
-                          } else { // row.type === 'item'
+                          }
+                          return (
+                            <Stack key={idx} direction="row" sx={{ py: 0.5, borderBottom: '1px solid #f0f0f0' }}>
+                              <Typography sx={{ width: '25%', pl: 2, fontStyle: 'italic', color: 'text.secondary' }}></Typography>
+                              <Typography variant="body2" sx={{ width: '25%' }}>{row.name}</Typography>
+                              <Typography variant="body2" sx={{ width: '17%', textAlign: 'right' }}>{formatCurrency(row.income)}</Typography>
+                              <Typography variant="body2" sx={{ width: '17%', textAlign: 'right' }}>{formatCurrency(row.subsidy)}</Typography>
+                              <Typography variant="body2" sx={{ width: '16%', textAlign: 'right', fontWeight: 'medium' }}>{formatCurrency(row.amount)}</Typography>
+                            </Stack>
+                          );
+                        })}
+                        <Stack direction="row" sx={{ py: 1.5, mt: 1, borderTop: 2, borderColor: 'primary.main', fontWeight: 'bold', bgcolor: alpha(theme.palette.primary.main, 0.08) }}>
+                          <Typography sx={{ width: '50%' }}>Total</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{formatCurrency(section.sectionTotalIncome)}</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{formatCurrency(section.sectionTotalSubsidy)}</Typography>
+                          <Typography sx={{ width: '16%', textAlign: 'right' }}>{formatCurrency(section.sectionTotal)}</Typography>
+                        </Stack>
+                      </Stack>
+                    );
+                  }
+                  
+                  // MOOE at Capital Outlays
+                  else if (isDetailedExpense) {
+                    // Step 1: I-proseso at i-flat ang data para maging isang listahan ng rows.
+                    const allRows = [];
+                    Object.values(section.categories || {}).forEach(catData => {
+                      // Add category row
+                      allRows.push({ type: 'category', ...catData });
+                      let itemsArray = Array.isArray(catData.items) ? catData.items : (catData.items ? Object.values(catData.items) : []);
+                      if (isDetailedExpense) { itemsArray = itemsArray.filter(item => item && (item.amount || 0) > 0); }
+                      // Add item rows
+                      itemsArray.forEach(item => allRows.push({ type: 'item', ...item }));
+                    });
+
+                    return (
+                      <Stack>
+                        {/* Step 2: I-render ang iisang table header. */}
+                        <Stack direction="row" sx={{ borderBottom: 2, borderColor: 'primary.main', pb: 1, mb: 1, fontWeight: 'bold' }}>
+                          <Typography sx={{ width: '25%' }}>Category</Typography>
+                          <Typography sx={{ width: '25%' }}>Description</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{colIncome}</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{colSubsidy}</Typography>
+                          <Typography sx={{ width: '16%', textAlign: 'right' }}>{colBudget}</Typography>
+                        </Stack>
+                        
+                        {allRows.map((row, idx) => {
+                          if (row.type === 'category') {
+                            return (
+                              <Stack key={idx} direction="row" sx={{ py: 1, fontWeight: 'bold', bgcolor: alpha(theme.palette.primary.main, 0.05) }}>
+                                <Typography sx={{ width: '50%' }}>{row.name}</Typography>
+                                <Typography sx={{ width: '17%', textAlign: 'right' }}>{formatCurrency(row.totalIncome)}</Typography>
+                                <Typography sx={{ width: '17%', textAlign: 'right' }}>{formatCurrency(row.totalSubsidy)}</Typography>
+                                <Typography sx={{ width: '16%', textAlign: 'right' }}>{formatCurrency(row.total)}</Typography>
+                              </Stack>
+                            );
+                          } else {
                             return (
                               <Stack key={idx} direction="row" sx={{ py: 0.5, borderBottom: '1px solid #f0f0f0' }}>
                                 <Typography sx={{ width: '25%', pl: 2, fontStyle: 'italic', color: 'text.secondary' }}></Typography>
@@ -1067,6 +1204,12 @@ const ComprehensiveReportsPage = () => {
                             );
                           }
                         })}
+                        <Stack direction="row" sx={{ py: 1.5, mt: 1, borderTop: 2, borderColor: 'primary.main', fontWeight: 'bold', bgcolor: alpha(theme.palette.primary.main, 0.08) }}>
+                          <Typography sx={{ width: '50%' }}>Total</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{formatCurrency(Object.values(section.categories || {}).reduce((s, c) => s + (parseFloat(c.totalIncome) || 0), 0))}</Typography>
+                          <Typography sx={{ width: '17%', textAlign: 'right' }}>{formatCurrency(Object.values(section.categories || {}).reduce((s, c) => s + (parseFloat(c.totalSubsidy) || 0), 0))}</Typography>
+                          <Typography sx={{ width: '16%', textAlign: 'right' }}>{formatCurrency(section.sectionTotal)}</Typography>
+                        </Stack>
                       </Stack>
                     );
                   } 
@@ -1090,6 +1233,26 @@ const ComprehensiveReportsPage = () => {
               </Paper>
             );
           })}
+          {/* Grand Total (Pangkalahatang Kabuuan) - Income, Subsidy, Proposed Budget */}
+          {reportData?.summary && (
+            <Paper elevation={3} sx={{ p: 3, mt: 3, background: `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.secondary.dark} 100%)`, color: 'white', borderRadius: '16px' }}>
+              <Typography variant="h5" fontWeight="bold" sx={{ mb: 2 }}>Pangkalahatang Kabuuan (Grand Total)</Typography>
+              <Stack spacing={1.5}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="body1">Projected Corporate Income</Typography>
+                  <Typography variant="h6" fontWeight="bold">{formatCurrency(reportData.summary.totalIncome)}</Typography>
+                </Stack>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="body1">Projected Subsidy</Typography>
+                  <Typography variant="h6" fontWeight="bold">{formatCurrency(reportData.summary.totalSubsidy)}</Typography>
+                </Stack>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ borderTop: '2px solid rgba(255,255,255,0.3)', pt: 1.5, mt: 0.5 }}>
+                  <Typography variant="body1" fontWeight="bold">Proposed Budget</Typography>
+                  <Typography variant="h5" fontWeight="bold">{formatCurrency(reportData.summary.grandTotal)}</Typography>
+                </Stack>
+              </Stack>
+            </Paper>
+          )}
           {/* ================================================================= */}
           {/* END OF UI FIX                                                   */}
           {/* ================================================================= */}

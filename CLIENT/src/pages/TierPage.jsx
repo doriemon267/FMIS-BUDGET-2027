@@ -19,6 +19,12 @@ import {
   DialogTitle,
   DialogContent,
   IconButton,
+  Drawer,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemSecondaryAction,
+  TextField,
 } from "@mui/material";
 import TierTable from "../components/tier/TierTable";
 import { useUser } from "../context/UserContext";
@@ -26,6 +32,8 @@ import SaveIcon from '@mui/icons-material/Save';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import CloseIcon from '@mui/icons-material/Close';
+import HistoryIcon from '@mui/icons-material/History';
+import RestoreIcon from '@mui/icons-material/Restore';
 
 const TierPage = () => {
   const { currentUser } = useUser();
@@ -51,23 +59,37 @@ const TierPage = () => {
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
   const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
   const [tableKey, setTableKey] = useState(Date.now());
+  const lastSavedJsonRef = useRef(null);
+  const tierDataPrevRef = useRef(null);
+  const [revisionsDrawerOpen, setRevisionsDrawerOpen] = useState(false);
+  const [revisions, setRevisions] = useState([]);
+  const [revisionsLoading, setRevisionsLoading] = useState(false);
+  const [restoringId, setRestoringId] = useState(null);
+  const [revisionComment, setRevisionComment] = useState('');
 
+  // Compute dirty state without causing setState loops: only set lastSavedJson once when tierData first arrives
   useEffect(() => {
     if (!tierData) {
       setIsDirty(false);
       return;
     }
-
-    // If we don't have a known lastSavedJson yet, treat the initial displayed data as baseline (not dirty)
-    if (!lastSavedJson) {
-      setLastSavedJson(JSON.stringify(tierData));
+    const json = JSON.stringify(tierData);
+    if (lastSavedJsonRef.current === null) {
+      lastSavedJsonRef.current = json;
+      setLastSavedJson(json);
       setIsDirty(false);
+      tierDataPrevRef.current = json;
       return;
     }
+    setIsDirty(json !== lastSavedJsonRef.current);
+    tierDataPrevRef.current = json;
+  }, [tierData]);
 
-    const json = JSON.stringify(tierData);
-    setIsDirty(json !== lastSavedJson);
-  }, [tierData, lastSavedJson]);
+  // Keep lastSavedJson in sync when user saves (so next comparison uses updated baseline)
+  useEffect(() => {
+    if (lastSavedJson != null && lastSavedJson === lastSavedJsonRef.current) return;
+    if (lastSavedJson != null) lastSavedJsonRef.current = lastSavedJson;
+  }, [lastSavedJson]);
 
   useEffect(() => {
     const fyFromUrl = searchParams.get("fiscalYear");
@@ -227,19 +249,77 @@ const TierPage = () => {
         department: selectedDepartment,
         division: selectedDivision,
         items: itemsArray,
+        ...(revisionComment.trim() && { revisionComment: revisionComment.trim() }),
       };
 
       await api.post('/tier/data', saveData);
-      setLastSavedJson(JSON.stringify({ items: source }));
+      const saved = JSON.stringify({ items: source });
+      setLastSavedJson(saved);
+      lastSavedJsonRef.current = saved;
       setIsDirty(false);
       setSnackbar({ open: true, message: 'Tier data saved successfully', severity: 'success' });
+      setRevisionComment('');
     } catch (error) {
       console.error('Error saving tier data:', error);
       setSnackbar({ open: true, message: 'Error saving tier data. Please try again.', severity: 'error' });
     } finally {
       setIsSaving(false);
     }
-  }; 
+  };
+
+  const fetchRevisions = async () => {
+    if (!activeFiscalYear || !selectedRegion || selectedRegion === 'ALL') return;
+    setRevisionsLoading(true);
+    try {
+      const params = new URLSearchParams({
+        fiscalYear: activeFiscalYear,
+        region: selectedRegion,
+      });
+      if (selectedDepartment) params.set('department', selectedDepartment);
+      if (selectedDivision) params.set('division', selectedDivision);
+      const res = await api.get(`/api/tier/revisions?${params.toString()}`);
+      setRevisions(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      console.error('Error fetching revisions:', err);
+      setRevisions([]);
+      setSnackbar({ open: true, message: 'Failed to load version history', severity: 'error' });
+    } finally {
+      setRevisionsLoading(false);
+    }
+  };
+
+  const handleOpenRevisions = () => {
+    setRevisionsDrawerOpen(true);
+    fetchRevisions();
+  };
+
+  const handleRestoreRevision = async (revisionId) => {
+    setRestoringId(revisionId);
+    try {
+      await api.post(`/api/tier/revisions/${revisionId}/restore`, { saveAsNewRevision: true });
+      setSnackbar({ open: true, message: 'Revision restored. Refreshing table.', severity: 'success' });
+      setRevisionsDrawerOpen(false);
+      setTableKey(Date.now());
+      setTierData(null);
+      lastSavedJsonRef.current = null;
+      setLastSavedJson(null);
+    } catch (err) {
+      console.error('Error restoring revision:', err);
+      setSnackbar({ open: true, message: err?.response?.data?.message || 'Failed to restore revision', severity: 'error' });
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
+  const formatRevisionDate = (dateStr) => {
+    if (!dateStr) return '—';
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleString('en-PH', { dateStyle: 'short', timeStyle: 'short' });
+    } catch (_) {
+      return dateStr;
+    }
+  };
 
   const getRegionDisplayName = () =>
     !selectedRegion || selectedRegion === 'ALL' ? 'All' : (regions.find(r => r._id === selectedRegion || String(r._id) === String(selectedRegion))?.Region ?? selectedRegion);
@@ -352,53 +432,62 @@ const TierPage = () => {
           <InputLabel id="region-select-label">Region</InputLabel>
           <Select
             labelId="region-select-label"
-            value={selectedRegion || ""}
+            value={String(selectedRegion ?? "")}
             label="Region"
             onChange={(e) => setSelectedRegion(e.target.value || "")}
           >
             <MenuItem value="ALL">
               <em>ALL</em> — Consolidate all regions
             </MenuItem>
-            {regions.map((region) => (
-              <MenuItem key={region._id || region.Region} value={region._id || ""}>
-                {region.Region || "Unnamed Region"}
-              </MenuItem>
-            ))}
+            {regions.map((region, idx) => {
+              const val = region._id != null ? String(region._id) : (region.Region || `region-${idx}`);
+              return (
+                <MenuItem key={val} value={val}>
+                  {region.Region || "Unnamed Region"}
+                </MenuItem>
+              );
+            })}
           </Select>
         </FormControl>
         <FormControl sx={{ minWidth: 200 }}>
           <InputLabel id="department-select-label">Department</InputLabel>
           <Select
             labelId="department-select-label"
-            value={selectedDepartment || ""}
+            value={String(selectedDepartment ?? "")}
             label="Department"
             onChange={(e) => setSelectedDepartment(e.target.value || "")}
             disabled={!selectedRegion || selectedRegion === 'ALL'}
           >
-            {departments.map((dept) => (
-              <MenuItem key={dept._id || dept.Department} value={dept._id || ""}>
-                {dept.Department || dept.name || "Unnamed Department"}
-              </MenuItem>
-            ))}
+            {departments.map((dept, idx) => {
+              const val = dept._id != null ? String(dept._id) : (dept.Department || dept.name || `dept-${idx}`);
+              return (
+                <MenuItem key={val} value={val}>
+                  {dept.Department || dept.name || "Unnamed Department"}
+                </MenuItem>
+              );
+            })}
           </Select>
         </FormControl>
         <FormControl sx={{ minWidth: 200 }}>
           <InputLabel id="division-select-label">Division</InputLabel>
           <Select
             labelId="division-select-label"
-            value={selectedDivision || ""}
+            value={String(selectedDivision ?? "")}
             label="Division"
             onChange={(e) => setSelectedDivision(e.target.value || "")}
             disabled={!selectedDepartment || selectedRegion === 'ALL'}
           >
-            {divisions.map((div) => (
-              <MenuItem key={div._id || div.name} value={div.name || ""}>
-                {div.name || "Unnamed Division"}
-              </MenuItem>
-            ))}
+            {divisions.map((div, idx) => {
+              const val = div.name != null && div.name !== "" ? String(div.name) : (div._id != null ? String(div._id) : `div-${idx}`);
+              return (
+                <MenuItem key={val} value={val}>
+                  {div.name || "Unnamed Division"}
+                </MenuItem>
+              );
+            })}
           </Select>
         </FormControl>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           <Chip label={isDirty ? 'Unsaved changes' : 'All changes saved'} color={isDirty ? 'warning' : 'success'} />
           <Button
             variant="contained"
@@ -410,7 +499,23 @@ const TierPage = () => {
           >
             {isSaving ? 'Saving...' : 'Save'}
           </Button>
-
+          <TextField
+            size="small"
+            placeholder="Revision note (optional)"
+            value={revisionComment}
+            onChange={(e) => setRevisionComment(e.target.value)}
+            sx={{ minWidth: 200, maxWidth: 280 }}
+          />
+          <Button
+            variant="outlined"
+            color="primary"
+            startIcon={<HistoryIcon />}
+            onClick={handleOpenRevisions}
+            disabled={!activeFiscalYear || !selectedRegion || selectedRegion === 'ALL'}
+            sx={{ minWidth: 140 }}
+          >
+            Version history
+          </Button>
           <Button
             variant="outlined"
             color="inherit"
@@ -419,6 +524,8 @@ const TierPage = () => {
               if (!confirm('Reset all Tier inputs? This cannot be undone.')) return;
               setTableKey(Date.now());
               setTierData(null);
+              lastSavedJsonRef.current = null;
+              setLastSavedJson(null);
               setIsDirty(false);
               setSnackbar({ open: true, message: 'Inputs reset', severity: 'info' });
             }}
@@ -508,6 +615,68 @@ const TierPage = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      <Drawer
+        anchor="right"
+        open={revisionsDrawerOpen}
+        onClose={() => setRevisionsDrawerOpen(false)}
+        PaperProps={{ sx: { width: 380, maxWidth: '100%' } }}
+      >
+        <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: 1, borderColor: 'divider' }}>
+          <Typography variant="h6">Tier version history</Typography>
+          <IconButton size="small" onClick={() => setRevisionsDrawerOpen(false)} aria-label="close">
+            <CloseIcon />
+          </IconButton>
+        </Box>
+        <Box sx={{ overflow: 'auto', flex: 1 }}>
+          {revisionsLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress size={32} />
+            </Box>
+          ) : revisions.length === 0 ? (
+            <Typography variant="body2" color="text.secondary" sx={{ p: 3 }}>
+              No revisions yet. Each time you save, the previous version is stored here.
+            </Typography>
+          ) : (
+            <List dense>
+              {revisions.map((rev) => (
+                <ListItem key={rev._id} divider>
+                  <ListItemText
+                    primary={`Version ${rev.version}`}
+                    secondary={
+                      <>
+                        <Typography component="span" variant="body2" color="text.secondary">
+                          {formatRevisionDate(rev.createdAt)}
+                        </Typography>
+                        {rev.comment && (
+                          <Typography component="span" variant="body2" display="block" sx={{ mt: 0.5 }}>
+                            {rev.comment}
+                          </Typography>
+                        )}
+                        {rev.createdBy && (
+                          <Typography component="span" variant="caption" display="block" color="text.secondary">
+                            {rev.createdBy.name || rev.createdBy.username || '—'}
+                          </Typography>
+                        )}
+                      </>
+                    }
+                  />
+                  <ListItemSecondaryAction>
+                    <Button
+                      size="small"
+                      startIcon={<RestoreIcon />}
+                      onClick={() => handleRestoreRevision(rev._id)}
+                      disabled={restoringId != null}
+                    >
+                      {restoringId === rev._id ? 'Restoring...' : 'Restore'}
+                    </Button>
+                  </ListItemSecondaryAction>
+                </ListItem>
+              ))}
+            </List>
+          )}
+        </Box>
+      </Drawer>
 
       <Snackbar
         open={snackbar.open}

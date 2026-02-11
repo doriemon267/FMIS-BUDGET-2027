@@ -1,4 +1,5 @@
 import {
+  Box,
   Dialog,
   DialogActions,
   DialogContent,
@@ -15,10 +16,32 @@ import CustomButton from "../global/components/CustomButton";
 import IS_PRODUCTION from "../utils/IS_PRODUCTION"; // make sure this exists
 import env from "../utils/env";
 
+// Kapag particularID ay "909549mund.m.edra@gmail.com", i-split sa id at email
+const parseParticularIdAndEmail = (particularID, emailFromUser) => {
+  const raw = String(particularID || "");
+  if (emailFromUser) {
+    const idPart = raw.includes(emailFromUser) ? raw.replace(emailFromUser, "").trim() : raw;
+    return { idPart: idPart || raw, emailPart: emailFromUser };
+  }
+  const emailRegex = /^(.+?)([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})$/;
+  const match = raw.match(emailRegex);
+  if (match) {
+    const idPart = match[1].trim();
+    if (idPart.length > 1) return { idPart, emailPart: match[2] };
+  }
+  if (raw.includes("@")) return { idPart: "", emailPart: raw };
+  return { idPart: raw, emailPart: null };
+};
+
 const LogoutDialog = ({ handleCloseMenu }) => {
   const { logout, currentUser } = useUser();
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const email = currentUser?.email ?? currentUser?.Email;
+  const { idPart, emailPart } = parseParticularIdAndEmail(
+    currentUser?.particularID,
+    email
+  );
 
   const handleOpen = () => setIsOpen(true);
   const handleClose = () => {
@@ -59,9 +82,16 @@ const LogoutDialog = ({ handleCloseMenu }) => {
         <ListItemIcon>
           <LuLogOut />
         </ListItemIcon>
-        <Typography sx={{ textAlign: "center" }}>
-          Logout: {currentUser.particularID}
-        </Typography>
+        <Box sx={{ display: "block", width: "100%" }}>
+          <Typography component="span" display="block">
+            Logout: {idPart}
+          </Typography>
+          {emailPart && (
+            <Typography variant="body2" sx={{ mt: 0.25 }} component="span" display="block">
+              ({emailPart})
+            </Typography>
+          )}
+        </Box>
       </MenuItem>
 
       <Dialog

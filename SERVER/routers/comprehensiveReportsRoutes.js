@@ -11,7 +11,8 @@ const {
   getAvailableRegionsComprehensive,
   getAvailableFiscalYears,
   getAvailableBudgetTypes,
-  getActiveSettings
+  getActiveSettings,
+  getComprehensiveReportPdf
 } = require('../controllers/comprehensiveReportsController');
 // Apply authentication middleware to all routes in this router
 router.use(tokenMiddleware);
@@ -21,4 +22,5 @@ router.get('/available-regions-comprehensive', getAvailableRegionsComprehensive)
 router.get('/available-fiscal-years', getAvailableFiscalYears);
 router.get('/available-budget-types', getAvailableBudgetTypes);
 router.get('/active-settings', getActiveSettings);
+router.get('/comprehensive-pdf', getComprehensiveReportPdf);
 module.exports = router;

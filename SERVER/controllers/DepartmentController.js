@@ -6,9 +6,18 @@ exports.getAllDepartment = async (req, res) => {
     const { region } = req.query;
 
     if (region) {
-      // First find the region by name to get its _id
       const Region = require('../models/Region');
-      const regionDoc = await Region.findOne({ Region: region });
+      let regionDoc = null;
+      if (typeof region === 'string' && mongoose.Types.ObjectId.isValid(region)) {
+        try {
+          if (String(new mongoose.Types.ObjectId(region)) === region) {
+            regionDoc = await Region.findById(region);
+          }
+        } catch (_) { /* not a valid ObjectId string */ }
+      }
+      if (!regionDoc) {
+        regionDoc = await Region.findOne({ Region: region });
+      }
 
       if (!regionDoc) {
         return res.status(404).json({ error: 'Region not found' });

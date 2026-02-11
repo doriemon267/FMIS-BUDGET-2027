@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Tier = require('../models/Tier');
+const TierRevision = require('../models/TierRevision');
 const PersonnelServices = require('../models/PersonnelServices');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const mooeProposals = require('../models/mooeProposals');
@@ -164,21 +165,47 @@ const getTierData = async (req, res) => {
 
 const saveTierData = async (req, res) => {
   try {
-    const { fiscalYear, region, department, division, items } = req.body;
-    let queryConditions = { fiscalYear, region, department, division };
+    const { fiscalYear, region, department, division, items, revisionComment } = req.body;
+    const queryConditions = {
+      fiscalYear: String(fiscalYear),
+      region: String(region || ''),
+      department: String(department || ''),
+      division: String(division || ''),
+    };
 
-    // Convert user ID to ObjectId if it's a string
     const userId = req.user?.id || req.user?._id;
-    const userObjectId = mongoose.Types.ObjectId.isValid(userId) 
-      ? new mongoose.Types.ObjectId(userId) 
+    const userObjectId = mongoose.Types.ObjectId.isValid(userId)
+      ? new mongoose.Types.ObjectId(userId)
       : null;
 
     let tierDoc = await Tier.findOne(queryConditions);
 
+    if (tierDoc && Array.isArray(tierDoc.items) && tierDoc.items.length > 0) {
+      const nextVersion = await TierRevision.findOne(queryConditions)
+        .sort({ version: -1 })
+        .select('version')
+        .lean()
+        .then((r) => (r ? (r.version || 0) + 1 : 1))
+        .catch(() => 1);
+
+      await TierRevision.create({
+        ...queryConditions,
+        version: nextVersion,
+        comment: revisionComment || `Saved revision v${nextVersion}`,
+        items: tierDoc.items.map((i) => ({
+          lineItemId: i.lineItemId,
+          description: i.description,
+          category: i.category,
+          tier1: i.tier1,
+          tier2: i.tier2,
+        })),
+        createdBy: userObjectId,
+      });
+    }
+
     if (tierDoc) {
-      // Update existing items or add new ones
-      items.forEach(newItem => {
-        const existingItem = tierDoc.items.find(i => i.lineItemId.toString() === newItem.lineItemId.toString());
+      items.forEach((newItem) => {
+        const existingItem = tierDoc.items.find((i) => String(i.lineItemId) === String(newItem.lineItemId));
         if (existingItem) {
           existingItem.tier1 = newItem.tier1;
           existingItem.tier2 = newItem.tier2;
@@ -195,10 +222,9 @@ const saveTierData = async (req, res) => {
       });
       if (userObjectId) tierDoc.updatedBy = userObjectId;
     } else {
-      // Create a new Tier document
       tierDoc = new Tier({
         ...queryConditions,
-        items: items.map(item => ({
+        items: items.map((item) => ({
           lineItemId: item.lineItemId,
           category: item.category,
           tier1: item.tier1 || 0,
@@ -211,9 +237,132 @@ const saveTierData = async (req, res) => {
 
     const savedTier = await tierDoc.save();
     res.status(200).json(savedTier);
-
   } catch (error) {
     console.error('Error in saveTierData:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+/**
+ * GET /api/tier/revisions?fiscalYear=&region=&department=&division=
+ * List revisions for the given scope (newest first).
+ */
+const getRevisions = async (req, res) => {
+  try {
+    const { fiscalYear, region, department, division } = req.query;
+    if (!fiscalYear || !region) {
+      return res.status(400).json({ message: 'fiscalYear and region are required.' });
+    }
+    const query = {
+      fiscalYear: String(fiscalYear),
+      region: String(region),
+      department: String(department || ''),
+      division: String(division || ''),
+    };
+    const list = await TierRevision.find(query)
+      .sort({ version: -1 })
+      .limit(100)
+      .select('version comment createdAt createdBy')
+      .populate('createdBy', 'username name email')
+      .lean();
+    res.json(list);
+  } catch (error) {
+    console.error('Error in getRevisions:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+/**
+ * GET /api/tier/revisions/:id
+ * Get a single revision by _id (full items).
+ */
+const getRevisionById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid revision id.' });
+    }
+    const rev = await TierRevision.findById(id).lean();
+    if (!rev) return res.status(404).json({ message: 'Revision not found.' });
+    res.json(rev);
+  } catch (error) {
+    console.error('Error in getRevisionById:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+/**
+ * POST /api/tier/revisions/:id/restore
+ * Copy this revision's items to Tier (current) and optionally create a new revision entry "Restored from vX".
+ */
+const restoreRevision = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { saveAsNewRevision = true } = req.body || {};
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid revision id.' });
+    }
+    const rev = await TierRevision.findById(id).lean();
+    if (!rev) return res.status(404).json({ message: 'Revision not found.' });
+
+    const queryConditions = {
+      fiscalYear: rev.fiscalYear,
+      region: rev.region,
+      department: rev.department || '',
+      division: rev.division || '',
+    };
+    const userId = req.user?.id || req.user?._id;
+    const userObjectId = mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : null;
+
+    let tierDoc = await Tier.findOne(queryConditions);
+    if (!tierDoc) {
+      tierDoc = new Tier({
+        ...queryConditions,
+        items: rev.items.map((i) => ({
+          lineItemId: i.lineItemId,
+          category: i.category,
+          tier1: i.tier1 || 0,
+          tier2: i.tier2 || 0,
+          description: i.description || '',
+        })),
+        createdBy: userObjectId,
+      });
+    } else {
+      tierDoc.items = rev.items.map((i) => ({
+        lineItemId: i.lineItemId,
+        description: i.description,
+        category: i.category,
+        tier1: i.tier1 || 0,
+        tier2: i.tier2 || 0,
+      }));
+      if (userObjectId) tierDoc.updatedBy = userObjectId;
+    }
+    await tierDoc.save();
+
+    if (saveAsNewRevision) {
+      const nextVersion = await TierRevision.findOne(queryConditions)
+        .sort({ version: -1 })
+        .select('version')
+        .lean()
+        .then((r) => (r ? (r.version || 0) + 1 : 1))
+        .catch(() => 1);
+      await TierRevision.create({
+        ...queryConditions,
+        version: nextVersion,
+        comment: `Restored from revision v${rev.version}`,
+        items: tierDoc.items.map((i) => ({
+          lineItemId: i.lineItemId,
+          description: i.description,
+          category: i.category,
+          tier1: i.tier1,
+          tier2: i.tier2,
+        })),
+        createdBy: userObjectId,
+      });
+    }
+    res.status(200).json({ success: true, tier: tierDoc, restoredFromVersion: rev.version });
+  } catch (error) {
+    console.error('Error in restoreRevision:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -467,6 +616,9 @@ module.exports = {
   getFinalizedData,
   getTierData,
   saveTierData,
+  getRevisions,
+  getRevisionById,
+  restoreRevision,
   generateTierPDF,
   generateTierExcel,
 };

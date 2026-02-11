@@ -426,7 +426,7 @@ const App = () => {
         <Route
           path="/comprehensive-reports"
           element={
-            <ProtectedRoute requiredPermissions={["ViewReports"]} requiredWorkflowRoles={["superAdmin", "budgetAnalyst"]}>
+            <ProtectedRoute requiredPermissions={["ViewReports"]} requiredWorkflowRoles={["superAdmin", "budgetAnalyst", "preparer"]}>
               <ComprehensiveReportsPage />
             </ProtectedRoute>
           }

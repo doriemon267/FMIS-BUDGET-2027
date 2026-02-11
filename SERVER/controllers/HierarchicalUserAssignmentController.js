@@ -179,11 +179,22 @@ const lookupUserFromMainDB = async (req, res) => {
         budgetRoles.push('BUDGET_PREPARER');
         // Don't change primaryRole if it's already set to higher role
       }
-      
-      // If no specific budget roles found, default to BUDGET_PREPARER
-      if (budgetRoles.length === 0) {
-        budgetRoles.push('BUDGET_PREPARER');
-      }
+
+      // IMPORTANT:
+      // ❌ Huwag nang mag-auto-assign ng default budget role (BUDGET_PREPARER)
+      //     kapag wala talagang tugmang role sa `assigned_roles`.
+      //     Ito ang nagdudulot na may lumalabas na role sa UI na hindi naman
+      //     existing sa fmis_main.assigned_roles.
+      //
+      // ✅ Bagong behavior:
+      //     - Kapag walang na-detect na 6-step workflow role, iwanan ang
+      //       `budgetRoles` na empty array.
+      //     - Sa UI, makikita pa rin ang "FMIS Main System Roles" (raw roles),
+      //       pero ang "Determined Budget Roles" / selectable workflow roles
+      //       ay magiging blank maliban kung may totoong mapping.
+      //
+      // Kung kailangan ng fallback sa hinaharap, dapat ito ay i-configure
+      // nang malinaw at hindi basta-basta nag-a-assign ng role na wala sa DB.
     }
 
   if (DEBUG) console.debug(`📋 Determined budgetRoles for user ${userId}:`, budgetRoles, `primaryRole: ${primaryRole}`);

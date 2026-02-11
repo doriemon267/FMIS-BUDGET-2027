@@ -49,8 +49,23 @@ const parseAmountFromInput = (str) => {
   return isNaN(parsed) ? '' : parsed;
 };
 
-const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, descriptionKey, secondaryDescriptionKey, itemTier1 = 0, itemCorporateIncome = 0 }) => {
+// Allow only digits and at most one decimal point — for live typing (no format so cursor doesn't jump)
+const sanitizeNumericInput = (str) => {
+  if (str === '' || str === undefined) return '';
+  const s = String(str).replace(/,/g, '').replace(/[^0-9.]/g, '');
+  const i = s.indexOf('.');
+  if (i === -1) return s;
+  return s.slice(0, i + 1) + s.slice(i + 1).replace(/\./g, '');
+};
+
+const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, descriptionKey, secondaryDescriptionKey, itemTier1 = 0, itemCorporateIncome = 0, disableTier2Balance = false }) => {
   const lineItemId = `${name}-${item.uacsCode || item._id || item.key || item.name || rowIndex}`;
+
+  // While focused: show raw string (no format) so cursor doesn't jump and user can clear to empty
+  const [tier1Focused, setTier1Focused] = useState(false);
+  const [tier2Focused, setTier2Focused] = useState(false);
+  const [tier1Raw, setTier1Raw] = useState('');
+  const [tier2Raw, setTier2Raw] = useState('');
 
   const getOriginalTiersLocal = (i) => {
     const t1Props = ['tier1','tier_1','tierOne','tier_one','t1','tier1Amount','tier_1_amount','subsidyTier1','subsidy_tier1'];
@@ -71,12 +86,11 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
   const rowTotal = (orig.total !== undefined && orig.total > 0) ? orig.total : (baseTier1 + baseTier2) || (Number(itemTier1) || 0);
   const displayTier1 = baseTier1;
   const displayTier2 = baseTier2;
-  const totalValue = displayTier1 + displayTier2;
 
-  const tier1Display = entered.hasOwnProperty('tier1')
+  const tier1DisplayFormatted = entered.hasOwnProperty('tier1')
     ? (entered.tier1 === '' ? '' : formatAmountForInput(entered.tier1))
     : formatAmountForInput(displayTier1) || '0.00';
-  const tier2Display = entered.hasOwnProperty('tier2')
+  const tier2DisplayFormatted = entered.hasOwnProperty('tier2')
     ? (entered.tier2 === '' ? '' : formatAmountForInput(entered.tier2))
     : (orig.tier2 !== undefined && orig.tier2 !== '' ? formatAmountForInput(orig.tier2) : '');
 
@@ -87,8 +101,47 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
   };
   const handleTier2Change = (value) => {
     const num = value === '' ? 0 : Number(value);
-    const tier1 = Math.max(0, rowTotal - num);
-    handleTierInputChange(lineItemId, { tier2: value === '' ? '' : num, tier1 }, name);
+    if (disableTier2Balance) {
+      handleTierInputChange(lineItemId, { tier2: value === '' ? '' : num }, name);
+    } else {
+      const tier1 = Math.max(0, rowTotal - num);
+      handleTierInputChange(lineItemId, { tier2: value === '' ? '' : num, tier1 }, name);
+    }
+  };
+
+  const tier1Value = tier1Focused ? tier1Raw : tier1DisplayFormatted;
+  const tier2Value = tier2Focused ? tier2Raw : tier2DisplayFormatted;
+  const parsedT1Raw = tier1Focused ? parseAmountFromInput(tier1Raw) : null;
+  const parsedT2Raw = tier2Focused ? parseAmountFromInput(tier2Raw) : null;
+  const t1ForTotal = tier1Focused ? (parsedT1Raw === '' ? 0 : Number(parsedT1Raw)) : displayTier1;
+  const t2ForTotal = tier2Focused ? (parsedT2Raw === '' ? 0 : Number(parsedT2Raw)) : displayTier2;
+  const totalValueLive = t1ForTotal + t2ForTotal;
+
+  const onTier1Focus = () => {
+    setTier1Focused(true);
+    const fromEntered = entered.hasOwnProperty('tier1');
+    const raw = fromEntered
+      ? (entered.tier1 === '' ? '' : String(entered.tier1))
+      : (displayTier1 === 0 ? '' : String(displayTier1));
+    setTier1Raw(raw);
+  };
+  const onTier2Focus = () => {
+    setTier2Focused(true);
+    const fromEntered = entered.hasOwnProperty('tier2');
+    const raw = fromEntered
+      ? (entered.tier2 === '' ? '' : String(entered.tier2))
+      : (displayTier2 === 0 ? '' : String(displayTier2));
+    setTier2Raw(raw);
+  };
+  const onTier1Blur = () => {
+    setTier1Focused(false);
+    const parsed = parseAmountFromInput(tier1Raw);
+    handleTier1Change(parsed === '' ? '' : parsed);
+  };
+  const onTier2Blur = () => {
+    setTier2Focused(false);
+    const parsed = parseAmountFromInput(tier2Raw);
+    handleTier2Change(parsed === '' ? '' : parsed);
   };
 
   const cellSx = { width: COL.tier1, minWidth: COL.tier1, maxWidth: COL.tier1 };
@@ -105,15 +158,12 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
           type="text"
           inputProps={{ inputMode: 'decimal' }}
           InputProps={{ startAdornment: <InputAdornment position="start">₱</InputAdornment> }}
-          value={tier1Display}
+          value={tier1Value}
+          onFocus={onTier1Focus}
+          onBlur={onTier1Blur}
           onChange={(e) => {
-            const v = e.target.value;
-            const parsed = parseAmountFromInput(v);
-            handleTier1Change(parsed === '' ? '' : parsed);
-          }}
-          onBlur={(e) => {
-            const parsed = parseAmountFromInput(e.target.value);
-            handleTier1Change(parsed === '' ? '' : parsed);
+            const v = sanitizeNumericInput(e.target.value);
+            setTier1Raw(v);
           }}
           sx={{ '& .MuiInputBase-input': { textAlign: 'right' } }}
         />
@@ -125,21 +175,18 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
           type="text"
           inputProps={{ inputMode: 'decimal' }}
           InputProps={{ startAdornment: <InputAdornment position="start">₱</InputAdornment> }}
-          value={tier2Display}
+          value={tier2Value}
+          onFocus={onTier2Focus}
+          onBlur={onTier2Blur}
           onChange={(e) => {
-            const v = e.target.value;
-            const parsed = parseAmountFromInput(v);
-            handleTier2Change(parsed === '' ? '' : parsed);
-          }}
-          onBlur={(e) => {
-            const parsed = parseAmountFromInput(e.target.value);
-            handleTier2Change(parsed === '' ? '' : parsed);
+            const v = sanitizeNumericInput(e.target.value);
+            setTier2Raw(v);
           }}
           sx={{ '& .MuiInputBase-input': { textAlign: 'right' } }}
         />
       </TableCell>
-      <TableCell align="right" sx={{ width: COL.total, minWidth: COL.total }}>{formatCurrency(totalValue)}</TableCell>
-      <TableCell align="right" sx={{ width: COL.proposedBudget, minWidth: COL.proposedBudget }}>{formatCurrency(totalValue)}</TableCell>
+      <TableCell align="right" sx={{ width: COL.total, minWidth: COL.total }}>{formatCurrency(totalValueLive)}</TableCell>
+      <TableCell align="right" sx={{ width: COL.proposedBudget, minWidth: COL.proposedBudget }}>{formatCurrency(totalValueLive)}</TableCell>
     </TableRow>
   );
 };
@@ -189,6 +236,7 @@ const CollapsibleUsesRow = ({ name, items, allTierInputs, handleTierInputChange,
                       secondaryDescriptionKey={secondaryDescriptionKey}
                       itemTier1={itemTier1Map[getLineItemId(name, item, idx)] ?? 0}
                       itemCorporateIncome={getItemCorporateIncome ? getItemCorporateIncome(item) : 0}
+                      disableTier2Balance={name === 'Personnel Services'}
                     />
                   ))}
                 </TableBody>
@@ -254,7 +302,14 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
       },
       {
         queryKey: ['mooe', baseParams],
-        queryFn: () => api.get('/mooe', { params: baseParams }).then(res => res.data.entries),
+        queryFn: async () => {
+          try {
+            const res = await api.get('/mooe/getByParams', { params: baseParams });
+            return Array.isArray(res.data) ? res.data : [];
+          } catch (_err) {
+            return [];
+          }
+        },
         enabled: hasRequiredParams,
       },
       {

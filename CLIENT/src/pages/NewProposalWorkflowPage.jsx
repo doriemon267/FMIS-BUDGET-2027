@@ -76,6 +76,46 @@ const TABLE_CONTAINER = {
   border: "1px solid",
   borderColor: "divider",
 };
+// PS tabs: allow horizontal scroll when table is wide; min widths so all columns display
+const TABLE_CONTAINER_PS = {
+  ...TABLE_CONTAINER,
+  overflowX: "auto",
+  overflow: "auto",
+};
+const PS_TABLE_MIN_WIDTH = 1800;
+const PS_HEADER_CELL = {
+  expand: { width: 50, minWidth: 50 },
+  name: { minWidth: 160 },
+  position: { minWidth: 160 },
+  sg: { minWidth: 56 },
+  step: { minWidth: 56 },
+  jg: { minWidth: 56 },
+  amount: { minWidth: 130 },
+};
+
+// Sum Other Compensation and Government Share from personnel row (for PS tab display)
+const getOtherCompensation = (p) =>
+  (Number(p?.uniformALLOWANCE) || 0) +
+  (Number(p?.productivityIncentive) || 0) +
+  (Number(p?.medical) || 0) +
+  (Number(p?.childrenAllowance) || 0) +
+  (Number(p?.meal) || 0) +
+  (Number(p?.cashGift) || 0) +
+  (Number(p?.subsistenceAllowanceMDS) || 0) +
+  (Number(p?.subsistenceAllowanceST) || 0) +
+  (Number(p?.midyearBonus) || 0) +
+  (Number(p?.yearEndBonus) || 0) +
+  (Number(p?.loyaltyAward) || 0) +
+  (Number(p?.overtimePay) || 0) +
+  (Number(p?.earnedLeaves) || 0) +
+  (Number(p?.retirementBenefits) || 0) +
+  (Number(p?.terminalLeave) || 0) +
+  (Number(p?.courtAppearance) || 0);
+const getGovernmentShare = (p) =>
+  (Number(p?.gsisPremium) || 0) +
+  (Number(p?.philhealthPremium) || 0) +
+  (Number(p?.pagibigPremium) || 0) +
+  (Number(p?.employeeCompensation) || 0);
 
 // Workflow constants based on the provided specification
 const WORKFLOW_ROLES = {
@@ -3328,7 +3368,7 @@ const NewProposalWorkflowPage = () => {
 
               {/* Tab Content */}
               <Box
-                sx={{ p: 3, minHeight: 300, maxHeight: 500, overflow: "auto" }}
+                sx={{ p: 3, minHeight: 300, maxHeight: 500, overflow: "auto", overflowX: "auto" }}
               >
                 {/* Income Tab */}
                 {detailsTab === "income" &&
@@ -3737,41 +3777,23 @@ const NewProposalWorkflowPage = () => {
                           onChange={() => handleViewDetails(selectedProposal)}
                         />
                       </Box>
-                      <TableContainer sx={TABLE_CONTAINER}>
-                        <Table size="small">
+                      <TableContainer sx={TABLE_CONTAINER_PS}>
+                        <Table size="small" sx={{ minWidth: PS_TABLE_MIN_WIDTH }}>
                           <TableHead>
                             <TableRow sx={TABLE_HEADER_ROW}>
-                              <TableCell sx={{ width: 50 }}></TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>
-                                Employee Name
-                              </TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>
-                                Position
-                              </TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>
-                                SG
-                              </TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>
-                                STEP
-                              </TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>
-                                JG
-                              </TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                Monthly Salary
-                              </TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                Annual Salary
-                              </TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                PERA
-                              </TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                RATA
-                              </TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                Total
-                              </TableCell>
+                              <TableCell sx={{ ...PS_HEADER_CELL.expand }}></TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.name }}>Employee Name</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.position }}>Position</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.sg }}>SG</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.step }}>STEP</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.jg }}>JG</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Monthly Salary</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Annual Salary</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PERA</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>RATA</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Other Compensation</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Government Share</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Total</TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
@@ -3829,97 +3851,19 @@ const NewProposalWorkflowPage = () => {
                                       {item.gradelevel_JG || "N/A"}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {canUserEdit() ? (
-                                        <TextField
-                                          type="text"
-                                          size="small"
-                                          value={(editedItem?.monthlySalary || 0).toLocaleString("en-US", {
-                                            minimumFractionDigits: 2,
-                                          })}
-                                          onChange={(e) => {
-                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
-                                            if (!isNaN(numValue)) {
-                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "monthlySalary");
-                                            }
-                                          }}
-                                          inputProps={{
-                                            style: { textAlign: "right" },
-                                          }}
-                                          sx={{
-                                            width: 120,
-                                            "& .MuiOutlinedInput-root": {
-                                              bgcolor: isChanged ? "#fff9e6" : "white",
-                                              borderColor: isChanged ? "#ffc107" : undefined,
-                                            },
-                                          }}
-                                        />
-                                      ) : (
-                                        `₱${(item.monthlySalary || 0).toLocaleString("en-US", {
-                                          minimumFractionDigits: 2,
-                                        })}`
-                                      )}
+                                      {`₱${(item.monthlySalary || 0).toLocaleString("en-US", {
+                                        minimumFractionDigits: 2,
+                                      })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {canUserEdit() ? (
-                                        <TextField
-                                          type="text"
-                                          size="small"
-                                          value={(editedItem?.annualSalary || 0).toLocaleString("en-US", {
-                                            minimumFractionDigits: 2,
-                                          })}
-                                          onChange={(e) => {
-                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
-                                            if (!isNaN(numValue)) {
-                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "annualSalary");
-                                            }
-                                          }}
-                                          inputProps={{
-                                            style: { textAlign: "right" },
-                                          }}
-                                          sx={{
-                                            width: 120,
-                                            "& .MuiOutlinedInput-root": {
-                                              bgcolor: isChanged ? "#fff9e6" : "white",
-                                              borderColor: isChanged ? "#ffc107" : undefined,
-                                            },
-                                          }}
-                                        />
-                                      ) : (
-                                        `₱${(item.annualSalary || (item.monthlySalary || 0) * 12).toLocaleString("en-US", {
-                                          minimumFractionDigits: 2,
-                                        })}`
-                                      )}
+                                      {`₱${(item.annualSalary || (item.monthlySalary || 0) * 12).toLocaleString("en-US", {
+                                        minimumFractionDigits: 2,
+                                      })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {canUserEdit() ? (
-                                        <TextField
-                                          type="text"
-                                          size="small"
-                                          value={(editedItem?.PERA || 0).toLocaleString("en-US", {
-                                            minimumFractionDigits: 2,
-                                          })}
-                                          onChange={(e) => {
-                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
-                                            if (!isNaN(numValue)) {
-                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "PERA");
-                                            }
-                                          }}
-                                          inputProps={{
-                                            style: { textAlign: "right" },
-                                          }}
-                                          sx={{
-                                            width: 120,
-                                            "& .MuiOutlinedInput-root": {
-                                              bgcolor: isChanged ? "#fff9e6" : "white",
-                                              borderColor: isChanged ? "#ffc107" : undefined,
-                                            },
-                                          }}
-                                        />
-                                      ) : (
-                                        `₱${(item.PERA || 0).toLocaleString("en-US", {
-                                          minimumFractionDigits: 2,
-                                        })}`
-                                      )}
+                                      {`₱${(item.PERA || 0).toLocaleString("en-US", {
+                                        minimumFractionDigits: 2,
+                                      })}`}
                                     </TableCell>
                                     <TableCell align="right">
                                       {canUserEdit() ? (
@@ -3952,40 +3896,19 @@ const NewProposalWorkflowPage = () => {
                                         })}`
                                       )}
                                     </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${getOtherCompensation(item).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${getGovernmentShare(item).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                    </TableCell>
                                     <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                      {canUserEdit() ? (
-                                        <TextField
-                                          type="text"
-                                          size="small"
-                                          value={(editedItem?.Total || 0).toLocaleString("en-US", {
-                                            minimumFractionDigits: 2,
-                                            maximumFractionDigits: 2,
-                                          })}
-                                          onChange={(e) => {
-                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
-                                            if (!isNaN(numValue)) {
-                                              handleEditItemAmount("personnel", globalIndex, numValue);
-                                            }
-                                          }}
-                                          inputProps={{
-                                            style: { textAlign: "right" },
-                                          }}
-                                          sx={{
-                                            width: 120,
-                                            "& .MuiOutlinedInput-root": {
-                                              bgcolor: isChanged ? "#fff9e6" : "white",
-                                              borderColor: isChanged ? "#ffc107" : undefined,
-                                            },
-                                          }}
-                                        />
-                                      ) : (
-                                        `₱${(item.Total || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`
-                                      )}
+                                      {`₱${(item.Total || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
                                     </TableCell>
                                   </TableRow>
                                   {isExpanded && (
                                     <TableRow>
-                                      <TableCell colSpan={11} sx={{ bgcolor: "#fafafa", p: 3 }}>
+                                      <TableCell colSpan={13} sx={{ bgcolor: "#fafafa", p: 3 }}>
                                         <Grid container spacing={2}>
                                           <Grid item xs={12}>
                                             <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 2, color: "#2d5016" }}>
@@ -4041,26 +3964,28 @@ const NewProposalWorkflowPage = () => {
                           onChange={() => handleViewDetails(selectedProposal)}
                         />
                       </Box>
-                      <TableContainer sx={TABLE_CONTAINER}>
-                        <Table size="small">
+                      <TableContainer sx={TABLE_CONTAINER_PS}>
+                        <Table size="small" sx={{ minWidth: PS_TABLE_MIN_WIDTH }}>
                           <TableHead>
                             <TableRow sx={TABLE_HEADER_ROW}>
-                              <TableCell sx={{ width: 50 }}></TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>Employee Name</TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>Position</TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>SG</TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>STEP</TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>JG</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Monthly Salary</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Annual Salary</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>PERA</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>RATA</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Total</TableCell>
+                              <TableCell sx={{ ...PS_HEADER_CELL.expand }}></TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.name }}>Employee Name</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.position }}>Position</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.sg }}>SG</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.step }}>STEP</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.jg }}>JG</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Monthly Salary</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Annual Salary</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PERA</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>RATA</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Other Compensation</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Government Share</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Total</TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
                             <TableRow>
-                              <TableCell colSpan={11} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
+                              <TableCell colSpan={13} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
                                 <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.9rem" }}>
                                   No permanent personnel services data available
                                 </Typography>
@@ -4095,41 +4020,23 @@ const NewProposalWorkflowPage = () => {
                           onChange={() => handleViewDetails(selectedProposal)}
                         />
                       </Box>
-                      <TableContainer sx={TABLE_CONTAINER}>
-                        <Table size="small">
+                      <TableContainer sx={TABLE_CONTAINER_PS}>
+                        <Table size="small" sx={{ minWidth: PS_TABLE_MIN_WIDTH }}>
                           <TableHead>
                             <TableRow sx={TABLE_HEADER_ROW}>
-                              <TableCell sx={{ width: 50 }}></TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>
-                                Employee Name
-                              </TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>
-                                Position
-                              </TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>
-                                SG
-                              </TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>
-                                STEP
-                              </TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>
-                                JG
-                              </TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                Monthly Salary
-                              </TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                Annual Salary
-                              </TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                PERA
-                              </TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                RATA
-                              </TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                Total
-                              </TableCell>
+                              <TableCell sx={{ ...PS_HEADER_CELL.expand }}></TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.name }}>Employee Name</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.position }}>Position</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.sg }}>SG</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.step }}>STEP</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.jg }}>JG</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Monthly Salary</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Annual Salary</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PERA</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>RATA</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Other Compensation</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Government Share</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Total</TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
@@ -4187,97 +4094,19 @@ const NewProposalWorkflowPage = () => {
                                       {item.gradelevel_JG || "N/A"}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {canUserEdit() ? (
-                                        <TextField
-                                          type="text"
-                                          size="small"
-                                          value={(editedItem?.monthlySalary || 0).toLocaleString("en-US", {
-                                            minimumFractionDigits: 2,
-                                          })}
-                                          onChange={(e) => {
-                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
-                                            if (!isNaN(numValue)) {
-                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "monthlySalary");
-                                            }
-                                          }}
-                                          inputProps={{
-                                            style: { textAlign: "right" },
-                                          }}
-                                          sx={{
-                                            width: 120,
-                                            "& .MuiOutlinedInput-root": {
-                                              bgcolor: isChanged ? "#fff9e6" : "white",
-                                              borderColor: isChanged ? "#ffc107" : undefined,
-                                            },
-                                          }}
-                                        />
-                                      ) : (
-                                        `₱${(item.monthlySalary || 0).toLocaleString("en-US", {
-                                          minimumFractionDigits: 2,
-                                        })}`
-                                      )}
+                                      {`₱${(item.monthlySalary || 0).toLocaleString("en-US", {
+                                        minimumFractionDigits: 2,
+                                      })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {canUserEdit() ? (
-                                        <TextField
-                                          type="text"
-                                          size="small"
-                                          value={(editedItem?.annualSalary || 0).toLocaleString("en-US", {
-                                            minimumFractionDigits: 2,
-                                          })}
-                                          onChange={(e) => {
-                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
-                                            if (!isNaN(numValue)) {
-                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "annualSalary");
-                                            }
-                                          }}
-                                          inputProps={{
-                                            style: { textAlign: "right" },
-                                          }}
-                                          sx={{
-                                            width: 120,
-                                            "& .MuiOutlinedInput-root": {
-                                              bgcolor: isChanged ? "#fff9e6" : "white",
-                                              borderColor: isChanged ? "#ffc107" : undefined,
-                                            },
-                                          }}
-                                        />
-                                      ) : (
-                                        `₱${(item.annualSalary || (item.monthlySalary || 0) * 12).toLocaleString("en-US", {
-                                          minimumFractionDigits: 2,
-                                        })}`
-                                      )}
+                                      {`₱${(item.annualSalary || (item.monthlySalary || 0) * 12).toLocaleString("en-US", {
+                                        minimumFractionDigits: 2,
+                                      })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {canUserEdit() ? (
-                                        <TextField
-                                          type="text"
-                                          size="small"
-                                          value={(editedItem?.PERA || 0).toLocaleString("en-US", {
-                                            minimumFractionDigits: 2,
-                                          })}
-                                          onChange={(e) => {
-                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
-                                            if (!isNaN(numValue)) {
-                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "PERA");
-                                            }
-                                          }}
-                                          inputProps={{
-                                            style: { textAlign: "right" },
-                                          }}
-                                          sx={{
-                                            width: 120,
-                                            "& .MuiOutlinedInput-root": {
-                                              bgcolor: isChanged ? "#fff9e6" : "white",
-                                              borderColor: isChanged ? "#ffc107" : undefined,
-                                            },
-                                          }}
-                                        />
-                                      ) : (
-                                        `₱${(item.PERA || 0).toLocaleString("en-US", {
-                                          minimumFractionDigits: 2,
-                                        })}`
-                                      )}
+                                      {`₱${(item.PERA || 0).toLocaleString("en-US", {
+                                        minimumFractionDigits: 2,
+                                      })}`}
                                     </TableCell>
                                     <TableCell align="right">
                                       {canUserEdit() ? (
@@ -4310,40 +4139,19 @@ const NewProposalWorkflowPage = () => {
                                         })}`
                                       )}
                                     </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${getOtherCompensation(item).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${getGovernmentShare(item).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                    </TableCell>
                                     <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                      {canUserEdit() ? (
-                                        <TextField
-                                          type="text"
-                                          size="small"
-                                          value={(editedItem?.Total || 0).toLocaleString("en-US", {
-                                            minimumFractionDigits: 2,
-                                            maximumFractionDigits: 2,
-                                          })}
-                                          onChange={(e) => {
-                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
-                                            if (!isNaN(numValue)) {
-                                              handleEditItemAmount("personnel", globalIndex, numValue);
-                                            }
-                                          }}
-                                          inputProps={{
-                                            style: { textAlign: "right" },
-                                          }}
-                                          sx={{
-                                            width: 120,
-                                            "& .MuiOutlinedInput-root": {
-                                              bgcolor: isChanged ? "#fff9e6" : "white",
-                                              borderColor: isChanged ? "#ffc107" : undefined,
-                                            },
-                                          }}
-                                        />
-                                      ) : (
-                                        `₱${(item.Total || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`
-                                      )}
+                                      {`₱${(item.Total || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
                                     </TableCell>
                                   </TableRow>
                                   {isExpanded && (
                                     <TableRow>
-                                      <TableCell colSpan={11} sx={{ bgcolor: "#fafafa", p: 3 }}>
+                                      <TableCell colSpan={13} sx={{ bgcolor: "#fafafa", p: 3 }}>
                                         <Grid container spacing={2}>
                                           <Grid item xs={12}>
                                             <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 2, color: "#2d5016" }}>
@@ -4399,26 +4207,28 @@ const NewProposalWorkflowPage = () => {
                           onChange={() => handleViewDetails(selectedProposal)}
                         />
                       </Box>
-                      <TableContainer sx={TABLE_CONTAINER}>
-                        <Table size="small">
+                      <TableContainer sx={TABLE_CONTAINER_PS}>
+                        <Table size="small" sx={{ minWidth: PS_TABLE_MIN_WIDTH }}>
                           <TableHead>
                             <TableRow sx={TABLE_HEADER_ROW}>
-                              <TableCell sx={{ width: 50 }}></TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>Employee Name</TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>Position</TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>SG</TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>STEP</TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>JG</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Monthly Salary</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Annual Salary</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>PERA</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>RATA</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Total</TableCell>
+                              <TableCell sx={{ ...PS_HEADER_CELL.expand }}></TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.name }}>Employee Name</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.position }}>Position</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.sg }}>SG</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.step }}>STEP</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.jg }}>JG</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Monthly Salary</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Annual Salary</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PERA</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>RATA</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Other Compensation</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Government Share</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Total</TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
                             <TableRow>
-                              <TableCell colSpan={11} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
+                              <TableCell colSpan={13} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
                                 <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.9rem" }}>
                                   No casual personnel services data available
                                 </Typography>
@@ -4453,41 +4263,23 @@ const NewProposalWorkflowPage = () => {
                           onChange={() => handleViewDetails(selectedProposal)}
                         />
                       </Box>
-                      <TableContainer sx={TABLE_CONTAINER}>
-                        <Table size="small">
+                      <TableContainer sx={TABLE_CONTAINER_PS}>
+                        <Table size="small" sx={{ minWidth: PS_TABLE_MIN_WIDTH }}>
                           <TableHead>
                             <TableRow sx={TABLE_HEADER_ROW}>
-                              <TableCell sx={{ width: 50 }}></TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>
-                                Employee Name
-                              </TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>
-                                Position
-                              </TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>
-                                SG
-                              </TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>
-                                STEP
-                              </TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>
-                                JG
-                              </TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                Monthly Salary
-                              </TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                Annual Salary
-                              </TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                PERA
-                              </TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                RATA
-                              </TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                Total
-                              </TableCell>
+                              <TableCell sx={{ ...PS_HEADER_CELL.expand }}></TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.name }}>Employee Name</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.position }}>Position</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.sg }}>SG</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.step }}>STEP</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.jg }}>JG</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Monthly Salary</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Annual Salary</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PERA</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>RATA</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Other Compensation</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Government Share</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Total</TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
@@ -4545,97 +4337,19 @@ const NewProposalWorkflowPage = () => {
                                       {item.gradelevel_JG || "N/A"}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {canUserEdit() ? (
-                                        <TextField
-                                          type="text"
-                                          size="small"
-                                          value={(editedItem?.monthlySalary || 0).toLocaleString("en-US", {
-                                            minimumFractionDigits: 2,
-                                          })}
-                                          onChange={(e) => {
-                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
-                                            if (!isNaN(numValue)) {
-                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "monthlySalary");
-                                            }
-                                          }}
-                                          inputProps={{
-                                            style: { textAlign: "right" },
-                                          }}
-                                          sx={{
-                                            width: 120,
-                                            "& .MuiOutlinedInput-root": {
-                                              bgcolor: isChanged ? "#fff9e6" : "white",
-                                              borderColor: isChanged ? "#ffc107" : undefined,
-                                            },
-                                          }}
-                                        />
-                                      ) : (
-                                        `₱${(item.monthlySalary || 0).toLocaleString("en-US", {
-                                          minimumFractionDigits: 2,
-                                        })}`
-                                      )}
+                                      {`₱${(item.monthlySalary || 0).toLocaleString("en-US", {
+                                        minimumFractionDigits: 2,
+                                      })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {canUserEdit() ? (
-                                        <TextField
-                                          type="text"
-                                          size="small"
-                                          value={(editedItem?.annualSalary || 0).toLocaleString("en-US", {
-                                            minimumFractionDigits: 2,
-                                          })}
-                                          onChange={(e) => {
-                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
-                                            if (!isNaN(numValue)) {
-                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "annualSalary");
-                                            }
-                                          }}
-                                          inputProps={{
-                                            style: { textAlign: "right" },
-                                          }}
-                                          sx={{
-                                            width: 120,
-                                            "& .MuiOutlinedInput-root": {
-                                              bgcolor: isChanged ? "#fff9e6" : "white",
-                                              borderColor: isChanged ? "#ffc107" : undefined,
-                                            },
-                                          }}
-                                        />
-                                      ) : (
-                                        `₱${(item.annualSalary || (item.monthlySalary || 0) * 12).toLocaleString("en-US", {
-                                          minimumFractionDigits: 2,
-                                        })}`
-                                      )}
+                                      {`₱${(item.annualSalary || (item.monthlySalary || 0) * 12).toLocaleString("en-US", {
+                                        minimumFractionDigits: 2,
+                                      })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {canUserEdit() ? (
-                                        <TextField
-                                          type="text"
-                                          size="small"
-                                          value={(editedItem?.PERA || 0).toLocaleString("en-US", {
-                                            minimumFractionDigits: 2,
-                                          })}
-                                          onChange={(e) => {
-                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
-                                            if (!isNaN(numValue)) {
-                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "PERA");
-                                            }
-                                          }}
-                                          inputProps={{
-                                            style: { textAlign: "right" },
-                                          }}
-                                          sx={{
-                                            width: 120,
-                                            "& .MuiOutlinedInput-root": {
-                                              bgcolor: isChanged ? "#fff9e6" : "white",
-                                              borderColor: isChanged ? "#ffc107" : undefined,
-                                            },
-                                          }}
-                                        />
-                                      ) : (
-                                        `₱${(item.PERA || 0).toLocaleString("en-US", {
-                                          minimumFractionDigits: 2,
-                                        })}`
-                                      )}
+                                      {`₱${(item.PERA || 0).toLocaleString("en-US", {
+                                        minimumFractionDigits: 2,
+                                      })}`}
                                     </TableCell>
                                     <TableCell align="right">
                                       {canUserEdit() ? (
@@ -4668,40 +4382,19 @@ const NewProposalWorkflowPage = () => {
                                         })}`
                                       )}
                                     </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${getOtherCompensation(item).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${getGovernmentShare(item).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                    </TableCell>
                                     <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                      {canUserEdit() ? (
-                                        <TextField
-                                          type="text"
-                                          size="small"
-                                          value={(editedItem?.Total || 0).toLocaleString("en-US", {
-                                            minimumFractionDigits: 2,
-                                            maximumFractionDigits: 2,
-                                          })}
-                                          onChange={(e) => {
-                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
-                                            if (!isNaN(numValue)) {
-                                              handleEditItemAmount("personnel", globalIndex, numValue);
-                                            }
-                                          }}
-                                          inputProps={{
-                                            style: { textAlign: "right" },
-                                          }}
-                                          sx={{
-                                            width: 120,
-                                            "& .MuiOutlinedInput-root": {
-                                              bgcolor: isChanged ? "#fff9e6" : "white",
-                                              borderColor: isChanged ? "#ffc107" : undefined,
-                                            },
-                                          }}
-                                        />
-                                      ) : (
-                                        `₱${(item.Total || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`
-                                      )}
+                                      {`₱${(item.Total || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
                                     </TableCell>
                                   </TableRow>
                                   {isExpanded && (
                                     <TableRow>
-                                      <TableCell colSpan={11} sx={{ bgcolor: "#fafafa", p: 3 }}>
+                                      <TableCell colSpan={13} sx={{ bgcolor: "#fafafa", p: 3 }}>
                                         <Grid container spacing={2}>
                                           <Grid item xs={12}>
                                             <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 2, color: "#2d5016" }}>
@@ -4757,26 +4450,28 @@ const NewProposalWorkflowPage = () => {
                           onChange={() => handleViewDetails(selectedProposal)}
                         />
                       </Box>
-                      <TableContainer sx={TABLE_CONTAINER}>
-                        <Table size="small">
+                      <TableContainer sx={TABLE_CONTAINER_PS}>
+                        <Table size="small" sx={{ minWidth: PS_TABLE_MIN_WIDTH }}>
                           <TableHead>
                             <TableRow sx={TABLE_HEADER_ROW}>
-                              <TableCell sx={{ width: 50 }}></TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>Employee Name</TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>Position</TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>SG</TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>STEP</TableCell>
-                              <TableCell sx={{ fontWeight: "bold" }}>JG</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Monthly Salary</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Annual Salary</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>PERA</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>RATA</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: "bold" }}>Total</TableCell>
+                              <TableCell sx={{ ...PS_HEADER_CELL.expand }}></TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.name }}>Employee Name</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.position }}>Position</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.sg }}>SG</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.step }}>STEP</TableCell>
+                              <TableCell sx={{ fontWeight: "bold", ...PS_HEADER_CELL.jg }}>JG</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Monthly Salary</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Annual Salary</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PERA</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>RATA</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Other Compensation</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Government Share</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Total</TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
                             <TableRow>
-                              <TableCell colSpan={11} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
+                              <TableCell colSpan={13} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
                                 <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.9rem" }}>
                                   No personnel services charged to income available
                                 </Typography>
@@ -6166,7 +5861,7 @@ const NewProposalWorkflowPage = () => {
                         borderRight: "1px solid #ddd",
                       }}
                     >
-                      User / Role
+                      User
                     </th>
                     <th
                       style={{
@@ -6243,9 +5938,9 @@ const NewProposalWorkflowPage = () => {
                         <div style={{ fontWeight: 600 }}>
                           {change.performedBy || "System"}
                         </div>
-                        <div style={{ color: "#666" }}>
+                        {/* <div style={{ color: "#666" }}>
                           {change.role?.replace(/_/g, " ") || "N/A"}
-                        </div>
+                        </div> */}
                       </td>
                       <td
                         style={{

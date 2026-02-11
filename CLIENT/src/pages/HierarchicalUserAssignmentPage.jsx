@@ -40,7 +40,8 @@ import {
   Assignment as AssignmentIcon,
   AccountTree as HierarchyIcon,
   Info as InfoIcon,
-  Warning as WarningIcon
+  Warning as WarningIcon,
+  CheckCircle as CheckIcon
 } from '@mui/icons-material';
 // Session validity determined by server-side session cookie; no client-side JWT checks
 
@@ -116,6 +117,9 @@ const HierarchicalUserAssignmentPage = () => {
 
   // Ref to track current lookup value for auto-lookup
   const currentLookupValue = React.useRef('');
+
+  // Track if "Central Office" is selected for Budget Planning Analyst
+  const [hasCentralOfficeSelected, setHasCentralOfficeSelected] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -1020,84 +1024,22 @@ const HierarchicalUserAssignmentPage = () => {
                     return option.label || '';
                   }}
                   value={USER_ROLES.filter(r => formData.userRoles.includes(r.value)) || []}
-                  onChange={(event, newValue) => {
-                    if (newValue && newValue.length > 0) {
-                      // Set userRoles to the selected role values
-                      const selectedRoleValues = newValue.map(role => role.value);
-                      handleFormChange('userRoles', selectedRoleValues);
-                      
-                      // Set primary userRole to the first selected role
-                      handleFormChange('userRole', selectedRoleValues[0]);
-                      
-                      // Auto-update permissions based on primary role
-                      const primaryRole = selectedRoleValues[0];
-                      const rolePerms = {
-                        CreateProposals: true,
-                        EditOwnProposals: true,
-                        EditAllProposals: false,
-                        DeleteProposals: false,
-                        ApproveProposals: false,
-                        ViewReports: true,
-                        ManageUsers: false,
-                        ManageSettings: false
-                      };
-                      
-                      // Set permissions based on primary role
-                      if (primaryRole === 'BUDGET_APPROVER') {
-                        rolePerms.EditOwnProposals = true;
-                        rolePerms.EditAllProposals = true;
-                        rolePerms.ApproveProposals = true;
-                      } else if (primaryRole === 'BUDGET_REVIEWER') {
-                        rolePerms.EditOwnProposals = true;
-                        rolePerms.EditAllProposals = true;
-                      } else if (primaryRole === 'BUDGET_PREPARER') {
-                        rolePerms.CreateProposals = true;
-                        rolePerms.EditOwnProposals = true;
-                      } else if (primaryRole === 'BUDGET_PLANNING_ANALYST' || primaryRole === 'BUDGET_OFFICER' || primaryRole === 'OVERALL_BUDGET_APPROVER') {
-                        rolePerms.EditAllProposals = true;
-                        rolePerms.ApproveProposals = true;
-                        if (primaryRole === 'OVERALL_BUDGET_APPROVER') {
-                          rolePerms.ManageSettings = true;
-                        }
-                      } else if (primaryRole === 'SUPER_ADMIN') {
-                        rolePerms.CreateProposals = true;
-                        rolePerms.EditOwnProposals = true;
-                        rolePerms.EditAllProposals = true;
-                        rolePerms.DeleteProposals = true;
-                        rolePerms.ApproveProposals = true;
-                        rolePerms.ViewReports = true;
-                        rolePerms.ManageUsers = true;
-                        rolePerms.ManageSettings = true;
-                      }
-                      
-                      handleFormChange('rolePermissions', rolePerms);
-                    } else {
-                      // No roles selected
-                      handleFormChange('userRoles', []);
-                      handleFormChange('userRole', '');
-                      handleFormChange('rolePermissions', {
-                        CreateProposals: true,
-                        EditOwnProposals: true,
-                        EditAllProposals: false,
-                        DeleteProposals: false,
-                        ApproveProposals: false,
-                        ViewReports: true,
-                        ManageUsers: false,
-                        ManageSettings: false
-                      });
-                    }
+                  // IMPORTANT: Roles are now strictly sourced from fmis_main.assigned_roles
+                  // and are no longer editable here. Any changes must be done in FMIS main.
+                  onChange={() => {
+                    // Intentionally left blank to prevent client-side role editing.
                   }}
                   renderInput={(params) => (
                     <TextField
                       {...params}
-                      label="User Roles (Multiple Selection)"
-                      placeholder={formData.userRoles.length > 0 ? "Roles selected from FMIS lookup" : "Select one or more roles"}
+                      label="User Roles (Multiple Selection - From FMIS Main)"
+                      placeholder={formData.userRoles.length > 0 ? "Roles loaded from FMIS main (read-only)" : "No budget roles detected from FMIS main"}
                       helperText={
                         isLookingUpUser 
                           ? "Looking up roles from FMIS..." 
                           : formData.userRoles.length > 0 
-                            ? `${formData.userRoles.length} role(s) auto-selected from FMIS. Primary: ${formData.userRole?.replace(/_/g, ' ') || 'None'}`
-                            : 'Select one or more roles (will be auto-filled from FMIS lookup)'
+                            ? `${formData.userRoles.length} role(s) detected from FMIS main. Primary: ${formData.userRole?.replace(/_/g, ' ') || 'None'} (read-only)`
+                            : 'Walang na-detect na budget workflow role para sa user na ito sa FMIS main.'
                       }
                       required
                       InputProps={{
@@ -1136,7 +1078,8 @@ const HierarchicalUserAssignmentPage = () => {
                   }
                   noOptionsText="No roles available"
                   fullWidth
-                  disabled={isLookingUpUser}
+                  // Completely disable manual editing; roles are controlled by FMIS main
+                  disabled
                 />
               </Grid>
 
@@ -1186,12 +1129,16 @@ const HierarchicalUserAssignmentPage = () => {
                         onClick={() => {
                           handleFormChange('isNIAWide', true);
                           handleFormChange('assignedRegions', []);
+                          setHasCentralOfficeSelected(false);
                         }}
                         sx={{ flex: 1 }}
                       >
                         <Box sx={{ textAlign: 'left' }}>
                           <Typography variant="body2" fontWeight="bold">
-                            ✓ NIA-Wide / All Regions
+                            {formData.isNIAWide && (
+                              <CheckIcon sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'middle' }} />
+                            )}
+                            NIA-Wide / All Regions
                           </Typography>
                           <Typography variant="caption">
                             Access proposals from all regions
@@ -1208,7 +1155,10 @@ const HierarchicalUserAssignmentPage = () => {
                       >
                         <Box sx={{ textAlign: 'left' }}>
                           <Typography variant="body2" fontWeight="bold">
-                            ✓ Specific Regions
+                            {!formData.isNIAWide && (
+                              <CheckIcon sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'middle' }} />
+                            )}
+                            Specific Regions
                           </Typography>
                           <Typography variant="caption">
                             Select specific regions only
@@ -1275,6 +1225,19 @@ const HierarchicalUserAssignmentPage = () => {
                             return option.region || option.Region || option.officeName || option.id;
                           });
                           handleFormChange('assignedRegions', regionValues);
+
+                          // Detect if "Central Office" is among the selected regions
+                          const centralSelected = newValue.some(option => {
+                            const labelSource =
+                              option.region ||
+                              option.Region ||
+                              option.officeName ||
+                              option.name ||
+                              '';
+                            const label = String(labelSource).toLowerCase();
+                            return label.includes('central') && label.includes('office');
+                          });
+                          setHasCentralOfficeSelected(centralSelected);
                         }}
                         renderInput={(params) => (
                           <TextField
@@ -1314,15 +1277,94 @@ const HierarchicalUserAssignmentPage = () => {
                       )}
                     </Grid>
                   )}
+
+                  {/* Central Office → Department & Division selection (for BPA only) */}
+                  {!formData.isNIAWide && hasCentralOfficeSelected && (
+                    <>
+                      <Grid item xs={12}>
+                        <Autocomplete
+                          options={organizationStructure?.availableUnits?.offices || []}
+                          getOptionLabel={(option) => {
+                            if (typeof option === 'string') return option;
+                            if (option.Department) return option.Department;
+                            if (option.name) return option.name;
+                            return option.officeName || '';
+                          }}
+                          value={(() => {
+                            const offices = organizationStructure?.availableUnits?.offices || [];
+                            return offices.find(o => o.id === formData.officeId) || null;
+                          })()}
+                          onChange={(_event, newValue) => {
+                            const officeId = (typeof newValue === 'object' && newValue?.id) ? newValue.id : '';
+                            handleFormChange('officeId', officeId);
+                            handleFormChange('responsibilityCenterName', '');
+                          }}
+                          renderInput={(params) => (
+                            <TextField
+                              {...params}
+                              label="Department (Central Office)"
+                              placeholder="Pumili ng Department..."
+                              fullWidth
+                            />
+                          )}
+                          noOptionsText="No departments found"
+                          fullWidth
+                        />
+                      </Grid>
+                      <Grid item xs={12}>
+                        <Autocomplete
+                          disabled={!formData.officeId}
+                          options={organizationStructure?.availableUnits?.responsibilityCenters
+                            ?.filter(rc => {
+                              if (!formData.officeId) return false;
+                              return String(rc.officeId || '') === String(formData.officeId || '');
+                            }) || []}
+                          getOptionLabel={(option) => {
+                            if (typeof option === 'string') return option;
+                            return option.name || '';
+                          }}
+                          value={organizationStructure?.availableUnits?.responsibilityCenters
+                            ?.find(rc => {
+                              return (
+                                rc.name === formData.responsibilityCenterName &&
+                                String(rc.officeId || '') === String(formData.officeId || '')
+                              );
+                            }) || null}
+                          onChange={(_event, newValue) => {
+                            const centerName = (typeof newValue === 'object' && newValue?.name) ? newValue.name : '';
+                            handleFormChange('responsibilityCenterName', centerName);
+                          }}
+                          renderInput={(params) => (
+                            <TextField
+                              {...params}
+                              label="Division (Central Office)"
+                              placeholder="Pumili ng Division..."
+                              fullWidth
+                              helperText={!formData.officeId
+                                ? 'Pumili muna ng Department bago pumili ng Division.'
+                                : ''}
+                            />
+                          )}
+                          noOptionsText={!formData.officeId
+                            ? "Please select a Department first"
+                            : "No divisions found for selected department"}
+                          fullWidth
+                        />
+                      </Grid>
+                    </>
+                  )}
                 </>
               )}
 
-              <Grid item xs={12}>
-                <Autocomplete
-                  options={ACCESS_LEVELS}
-                  getOptionLabel={(option) => option.label || ''}
-                  value={ACCESS_LEVELS.find(level => level.value === formData.assignmentLevel) || ACCESS_LEVELS[1]}
-                  onChange={(event, newValue) => {
+              {/* Hide generic assignment level selector for BUDGET_PLANNING_ANALYST.
+                  BPA uses region + (optional) Central Office Dept/Division instead. */}
+              {formData.userRole !== 'BUDGET_PLANNING_ANALYST' && (
+                <Grid item xs={12}>
+                  <Autocomplete
+                    options={ACCESS_LEVELS}
+                    getOptionLabel={(option) => option.label || ''}
+                    value={ACCESS_LEVELS.find(level => level.value === formData.assignmentLevel) || ACCESS_LEVELS[1]}
+                    onChange={(event, newValue) => {
                     const newLevel = newValue?.value || 'OFFICE';
                     const oldLevel = formData.assignmentLevel;
                     handleFormChange('assignmentLevel', newLevel);
@@ -1469,8 +1511,9 @@ const HierarchicalUserAssignmentPage = () => {
                   </Grid>
                 )}
               </Grid>
+              )}
 
-              {(formData.assignmentLevel === 'OFFICE' || formData.assignmentLevel === 'RESPONSIBILITY_CENTER') && (
+              {formData.userRole !== 'BUDGET_PLANNING_ANALYST' && (formData.assignmentLevel === 'OFFICE' || formData.assignmentLevel === 'RESPONSIBILITY_CENTER') && (
                 <Grid item xs={12}>
                   <Autocomplete
                     options={organizationStructure?.availableUnits?.offices || []}
@@ -1553,7 +1596,7 @@ const HierarchicalUserAssignmentPage = () => {
                 </Grid>
               )}
 
-              {formData.assignmentLevel === 'RESPONSIBILITY_CENTER' && (
+              {formData.userRole !== 'BUDGET_PLANNING_ANALYST' && formData.assignmentLevel === 'RESPONSIBILITY_CENTER' && (
                 <Grid item xs={12}>
                   <Autocomplete
                     disabled={!formData.officeId}
@@ -1606,7 +1649,7 @@ const HierarchicalUserAssignmentPage = () => {
                         placeholder="Search responsibility centers..."
                         fullWidth
                         helperText={!formData.officeId 
-                          ? 'Please select an Office first to view available Responsibility Centers' 
+                          ? 'Please select an Office first to view Responsibility Centers' 
                           : ''}
                       />
                     )}

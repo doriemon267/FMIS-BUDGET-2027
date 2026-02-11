@@ -1,9 +1,20 @@
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const PersonnelServices = require('../models/PersonnelServices');
 const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const Income = require('../models/Income');
 const Region = require('../models/Region');
 const Settings = require('../models/Settings');
+const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+let MuhammaraRecipe;
+try {
+  // Lazy-load muhammara so the rest of the app still works even if it's not installed yet
+  MuhammaraRecipe = require('muhammara').Recipe;
+} catch (e) {
+  MuhammaraRecipe = null;
+}
 // Define the comprehensive budget structure
 const COMPREHENSIVE_BUDGET_STRUCTURE = {
   "A": {
@@ -111,75 +122,122 @@ const PERSONNEL_SERVICES_STRUCTURE = {
     }
   }
 };
+const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, preparerScope }) => {
+  // Build base query
+  const query = {};
+  if (regions) {
+    const regionList = Array.isArray(regions) ? regions : [regions];
+    query.region = { $in: regionList };
+  }
+  if (fiscalYear) query.fiscalYear = fiscalYear;
+  if (budgetType) query.budgetType = budgetType;
+
+  // Preparer scope: restrict to Division or Department
+  if (preparerScope) {
+    const level = String(preparerScope.assignmentLevel || '').toUpperCase();
+    if (level === 'DIVISION' && preparerScope.division) {
+      query.division = preparerScope.division;
+    } else if ((level === 'DEPARTMENT' || level === 'OFFICE') && preparerScope.department) {
+      query.department = preparerScope.department;
+    }
+  }
+
+  // Fetch data from all sources concurrently
+  const [incomeData, psData, mooeData, coData] = await Promise.all([
+    Income.find(query).lean(),
+    PersonnelServices.find(query).lean(),
+    MooeProposal.find(query).lean(),
+    CapitalOutlay.find(query).populate('category').lean()
+  ]);
+
+  // Initialize comprehensive report structure
+  const reportData = {
+    summary: {
+      reportTitle: "COMPREHENSIVE BUDGET REPORT",
+      fiscalYear: fiscalYear || "All Years",
+      budgetType: budgetType || "All Types",
+      regions: regions ? (Array.isArray(regions) ? regions : [regions]) : ["All Regions"],
+      generatedDate: new Date().toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      totalRegions: 0,
+      totalEmployees: 0,
+      grandTotal: 0,
+      totalIncome: 0,
+      totalSubsidy: 0
+    },
+    sections: []
+  };
+
+  const addSectionTotals = (section) => {
+    reportData.summary.grandTotal += section.sectionTotal || 0;
+    reportData.summary.totalIncome += Number(section.sectionTotalIncome) || 0;
+    reportData.summary.totalSubsidy += Number(section.sectionTotalSubsidy) || 0;
+  };
+
+  // Process Corporate Income data
+  if (Array.isArray(incomeData) && incomeData.length > 0) {
+    const incomeSection = await processCorporateIncomeData(incomeData, query);
+    reportData.sections.push(incomeSection);
+    addSectionTotals(incomeSection);
+  }
+  // Process Personnel Services data
+  if (Array.isArray(psData) && psData.length > 0) {
+    const psSection = await processPersonnelServicesData(psData, query);
+    reportData.sections.push(psSection);
+    reportData.summary.totalEmployees = psSection.totalEmployees;
+    addSectionTotals(psSection);
+  }
+  // Process MOOE data
+  if (Array.isArray(mooeData) && mooeData.length > 0) {
+    const mooeSection = await processMOOEData(mooeData, query);
+    reportData.sections.push(mooeSection);
+    addSectionTotals(mooeSection);
+  }
+  // Process Capital Outlay data
+  if (Array.isArray(coData) && coData.length > 0) {
+    const coSection = await processCapitalOutlayData(coData, query);
+    reportData.sections.push(coSection);
+    addSectionTotals(coSection);
+  }
+  // Get unique regions count
+  const allRegions = new Set();
+  [...incomeData, ...psData, ...mooeData, ...coData].forEach(item => {
+    if (item.region) allRegions.add(item.region);
+  });
+  reportData.summary.totalRegions = allRegions.size;
+
+  return reportData;
+};
+
 const getComprehensiveReportData = async (req, res) => {
   try {
     const { regions, fiscalYear, budgetType } = req.query;
-    // Build base query
-    const query = {};
-    if (regions) {
-      const regionList = Array.isArray(regions) ? regions : [regions];
-      query.region = { $in: regionList };
+    let preparerScope = null;
+    const userRoles = req.user?.Roles || [];
+    const isPreparer = userRoles.some(r => (r && String(r).replace(/\s+/g, '_')) === 'BUDGET_PREPARER') ||
+      userRoles.some(r => (r && String(r).replace(/\s+/g, ' ').trim()) === 'BUDGET PREPARER');
+    if (isPreparer && req.user?.id) {
+      const userIdString = String(req.user.id);
+      const hua = await HierarchicalUserAssignment.findOne({ userId: userIdString, isActive: true })
+        .populate('departmentId', 'Department departmentName DepartmentName')
+        .lean();
+      if (hua) {
+        const assignedDepartment = hua.departmentId?.Department || hua.departmentId?.departmentName || hua.departmentId?.DepartmentName || '';
+        const assignedDivision = hua.divisionName || '';
+        preparerScope = {
+          division: assignedDivision,
+          department: assignedDepartment,
+          assignmentLevel: hua.assignmentLevel || ''
+        };
+      }
     }
-    if (fiscalYear) query.fiscalYear = fiscalYear;
-    if (budgetType) query.budgetType = budgetType;
-    // Fetch data from all sources concurrently
-    const [incomeData, psData, mooeData, coData] = await Promise.all([
-      Income.find(query).lean(),
-      PersonnelServices.find(query).lean(),
-      MooeProposal.find(query).lean(),
-      CapitalOutlay.find(query).populate('category').lean()
-    ]);
-    // Initialize comprehensive report structure
-    const reportData = {
-      summary: {
-        reportTitle: "COMPREHENSIVE BUDGET REPORT",
-        fiscalYear: fiscalYear || "All Years",
-        budgetType: budgetType || "All Types",
-        regions: regions ? (Array.isArray(regions) ? regions : [regions]) : ["All Regions"],
-        generatedDate: new Date().toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
-        }),
-        totalRegions: 0,
-        totalEmployees: 0,
-        grandTotal: 0
-      },
-      sections: []
-    };
-    // Process Corporate Income data
-    if (Array.isArray(incomeData) && incomeData.length > 0) {
-      const incomeSection = await processCorporateIncomeData(incomeData, query);
-      reportData.sections.push(incomeSection);
-      reportData.summary.grandTotal += incomeSection.sectionTotal;
-    }
-    // Process Personnel Services data
-    if (Array.isArray(psData) && psData.length > 0) {
-      const psSection = await processPersonnelServicesData(psData, query);
-      reportData.sections.push(psSection);
-      reportData.summary.totalEmployees = psSection.totalEmployees;
-      reportData.summary.grandTotal += psSection.sectionTotal;
-    }
-    // Process MOOE data
-    if (Array.isArray(mooeData) && mooeData.length > 0) {
-      const mooeSection = await processMOOEData(mooeData, query);
-      reportData.sections.push(mooeSection);
-      reportData.summary.grandTotal += mooeSection.sectionTotal;
-    }
-    // Process Capital Outlay data
-    if (Array.isArray(coData) && coData.length > 0) {
-      const coSection = await processCapitalOutlayData(coData, query);
-      reportData.sections.push(coSection);
-      reportData.summary.grandTotal += coSection.sectionTotal;
-    }
-    // Get unique regions count
-    const allRegions = new Set();
-    [...incomeData, ...psData, ...mooeData, ...coData].forEach(item => {
-      if (item.region) allRegions.add(item.region);
-    });
-    reportData.summary.totalRegions = allRegions.size;
+    const reportData = await buildComprehensiveReportData({ regions, fiscalYear, budgetType, preparerScope });
+
     res.status(200).json({
       success: true,
       data: reportData
@@ -221,16 +279,19 @@ const processCorporateIncomeData = async (incomeData, query) => {
       consolidatedCategories[category].regions.add(income.region || 'Unspecified');
       sectionTotal += amount;
     });
-    // Convert Set to Array for JSON serialization
+    // Add totalIncome/totalSubsidy for report columns (A.1 = all income)
     Object.values(consolidatedCategories).forEach(category => {
       category.regions = Array.from(category.regions);
+      category.totalIncome = category.total;
+      category.totalSubsidy = 0;
     });
-    // Return consolidated structure - no individual items, just totals
     return {
       sectionCode: "A.1",
       sectionName: "CORPORATE INCOME",
       sectionDescription: "Total agency income from various sources and categories",
       sectionTotal,
+      sectionTotalIncome: sectionTotal,
+      sectionTotalSubsidy: 0,
       totalEntries,
       totalRegions: regionSet.size,
       consolidatedData: true,
@@ -274,6 +335,8 @@ const processCorporateIncomeData = async (incomeData, query) => {
       sectionName: "CORPORATE INCOME",
       sectionDescription: "Total agency income from various sources and categories",
       sectionTotal,
+      sectionTotalIncome: sectionTotal,
+      sectionTotalSubsidy: 0,
       totalEntries,
       totalRegions: regionSet.size,
       regions: Object.values(grouped)
@@ -290,45 +353,49 @@ const processPersonnelServicesData = async (psData, query) => {
   if (consolidateRegions) {
     // Consolidate by categories across all regions (NOT by region)
     const consolidatedCategories = {};
+    let sectionTotalIncome = 0;
+    let sectionTotalSubsidy = 0;
     psData.forEach((employee) => {
       regionSet.add(employee.region || 'Unspecified');
       totalEmployees++;
+      const empTotal = Number(employee.Total) || 0;
+      const chargedIncome = Number(employee.chargedToIncomeAmount) || 0;
+      const subsidyPortion = Math.max(0, empTotal - chargedIncome);
+      const ratioIncome = empTotal > 0 ? chargedIncome / empTotal : 0;
+      const ratioSubsidy = empTotal > 0 ? subsidyPortion / empTotal : 1;
       // Process each category in the structure
       Object.entries(PERSONNEL_SERVICES_STRUCTURE["B.1.1"].categories).forEach(([categoryKey, categoryData]) => {
         if (!consolidatedCategories[categoryKey]) {
           consolidatedCategories[categoryKey] = {
             name: categoryData.name,
             items: {},
-            total: 0
+            total: 0,
+            totalIncome: 0,
+            totalSubsidy: 0
           };
         }
         const category = consolidatedCategories[categoryKey];
-        // Process each item in the category
         Object.entries(categoryData.items).forEach(([itemKey, itemData]) => {
           if (!category.items[itemKey]) {
             category.items[itemKey] = {
               name: itemData.name,
-              amount: 0
+              amount: 0,
+              income: 0,
+              subsidy: 0
             };
           }
-          // Calculate amount based on field mapping
           let amount = 0;
           if (itemData.field) {
-            // Special handling for Salaries and Wages based on statusOfAppointment
             if (categoryKey === '1' && itemKey === 'a') {
-              // Salaries - Regular (Authorized Positions) = Permanent only
               if (employee.statusOfAppointment === 'PERMANENT') {
                 amount = Number(employee.annualSalary) || 0;
               }
             } else if (categoryKey === '1' && itemKey === 'b') {
-              // Casual Personnel = Casual only
               if (employee.statusOfAppointment === 'CASUAL') {
                 amount = Number(employee.annualSalary) || 0;
               }
             } else {
-              // Regular field mapping for other items
               if (itemData.field.includes(',')) {
-                // Handle combined fields (like midyearBonus,yearEndBonus)
                 const fields = itemData.field.split(',');
                 amount = fields.reduce((sum, field) => sum + (Number(employee[field.trim()]) || 0), 0);
               } else {
@@ -337,19 +404,27 @@ const processPersonnelServicesData = async (psData, query) => {
             }
           }
           category.items[itemKey].amount += amount;
+          category.items[itemKey].income += amount * ratioIncome;
+          category.items[itemKey].subsidy += amount * ratioSubsidy;
           category.total += amount;
         });
       });
-      // Calculate employee total
-      const employeeTotal = Number(employee.Total) || 0;
-      sectionTotal += employeeTotal;
+      sectionTotal += empTotal;
+      sectionTotalIncome += chargedIncome;
+      sectionTotalSubsidy += subsidyPortion;
     });
-    // Return consolidated structure - no region grouping
+    // Derive category totalIncome/totalSubsidy from items
+    Object.values(consolidatedCategories).forEach(cat => {
+      cat.totalIncome = Object.values(cat.items).reduce((s, item) => s + (Number(item.income) || 0), 0);
+      cat.totalSubsidy = Object.values(cat.items).reduce((s, item) => s + (Number(item.subsidy) || 0), 0);
+    });
     return {
       sectionCode: "B.1.1",
       sectionName: "Personnel Services",
       sectionDescription: "Personnel-related expenditures including salaries, allowances, and benefits",
       sectionTotal,
+      sectionTotalIncome,
+      sectionTotalSubsidy,
       totalEmployees,
       totalRegions: regionSet.size,
       consolidatedData: true,
@@ -440,9 +515,13 @@ const processMOOEData = async (mooeData, query) => {
   // Check if we should consolidate all regions
   const consolidateRegions = !query.regions || query.regions === 'all';
   if (consolidateRegions) {
-    // TRUE Consolidation - sum amounts by category only
+    // TRUE Consolidation - sum amounts by category only; exclude 0 value (only include amount > 0)
     const consolidatedCategories = {};
     mooeData.forEach((proposal) => {
+      const income = Number(proposal.income) || 0;
+      const subsidy = Number(proposal.subsidy) || 0;
+      const amount = income + subsidy;
+      if (amount <= 0) return;
       regionSet.add(proposal.region || 'Unspecified');
       totalEntries++;
       const category = proposal.accountingTitle || 'Uncategorized';
@@ -456,10 +535,6 @@ const processMOOEData = async (mooeData, query) => {
           regions: new Set()
         };
       }
-      // Calculate amount = income + subsidy
-      const income = Number(proposal.income) || 0;
-      const subsidy = Number(proposal.subsidy) || 0;
-      const amount = income + subsidy;
       consolidatedCategories[category].total += amount;
       consolidatedCategories[category].totalIncome += income;
       consolidatedCategories[category].totalSubsidy += subsidy;
@@ -467,25 +542,36 @@ const processMOOEData = async (mooeData, query) => {
       consolidatedCategories[category].regions.add(proposal.region || 'Unspecified');
       sectionTotal += amount;
     });
+    // Remove categories with total 0
+    Object.keys(consolidatedCategories).forEach(key => {
+      if (consolidatedCategories[key].total === 0) delete consolidatedCategories[key];
+    });
     // Convert Set to Array for JSON serialization
     Object.values(consolidatedCategories).forEach(category => {
       category.regions = Array.from(category.regions);
     });
-    // Return consolidated structure - no individual items, just totals
+    const sectionTotalIncome = Object.values(consolidatedCategories).reduce((s, c) => s + (Number(c.totalIncome) || 0), 0);
+    const sectionTotalSubsidy = Object.values(consolidatedCategories).reduce((s, c) => s + (Number(c.totalSubsidy) || 0), 0);
     return {
       sectionCode: "B.1.2",
       sectionName: "MAINTENANCE AND OTHER OPERATING EXPENSES",
       sectionDescription: "Operating expenses for maintenance and other operational requirements",
       sectionTotal,
+      sectionTotalIncome,
+      sectionTotalSubsidy,
       totalEntries,
       totalRegions: regionSet.size,
       consolidatedData: true,
       categories: consolidatedCategories
     };
   } else {
-    // Group by region (existing logic for specific region)
+    // Group by region (existing logic for specific region); exclude 0 value
     const grouped = {};
     mooeData.forEach((proposal) => {
+      const income = Number(proposal.income) || 0;
+      const subsidy = Number(proposal.subsidy) || 0;
+      const amount = income + subsidy;
+      if (amount <= 0) return;
       const region = proposal.region || 'Unspecified';
       regionSet.add(region);
       totalEntries++;
@@ -505,10 +591,6 @@ const processMOOEData = async (mooeData, query) => {
           total: 0
         };
       }
-      // Calculate amount = income + subsidy
-      const income = Number(proposal.income) || 0;
-      const subsidy = Number(proposal.subsidy) || 0;
-      const amount = income + subsidy;
       grouped[region].categories[category].items.push({
         title: proposal.sublineItem || proposal.accountingTitle || 'N/A',
         uacsCode: proposal.uacsCode,
@@ -538,12 +620,15 @@ const processCapitalOutlayData = async (coData, query) => {
   // Check if we should consolidate all regions
   const consolidateRegions = !query.regions || query.regions === 'all';
   if (consolidateRegions) {
-    // TRUE Consolidation - sum amounts by category only
+    // TRUE Consolidation - sum amounts by category only; exclude 0 value (only include amount > 0)
     const consolidatedCategories = {};
     coData.forEach((proposal) => {
+      const income = Number(proposal.income) || 0;
+      const subsidy = Number(proposal.subsidy) || 0;
+      const amount = income + subsidy;
+      if (amount <= 0) return;
       regionSet.add(proposal.region || 'Unspecified');
       totalEntries++;
-      // Get category name from populated category or use accountingTitle
       const categoryName = proposal.category?.name || proposal.accountingTitle || 'Uncategorized';
       if (!consolidatedCategories[categoryName]) {
         consolidatedCategories[categoryName] = {
@@ -555,10 +640,6 @@ const processCapitalOutlayData = async (coData, query) => {
           regions: new Set()
         };
       }
-      // Calculate amount = income + subsidy
-      const income = Number(proposal.income) || 0;
-      const subsidy = Number(proposal.subsidy) || 0;
-      const amount = income + subsidy;
       consolidatedCategories[categoryName].total += amount;
       consolidatedCategories[categoryName].totalIncome += income;
       consolidatedCategories[categoryName].totalSubsidy += subsidy;
@@ -566,25 +647,35 @@ const processCapitalOutlayData = async (coData, query) => {
       consolidatedCategories[categoryName].regions.add(proposal.region || 'Unspecified');
       sectionTotal += amount;
     });
-    // Convert Set to Array for JSON serialization
+    // Remove categories with total 0
+    Object.keys(consolidatedCategories).forEach(key => {
+      if (consolidatedCategories[key].total === 0) delete consolidatedCategories[key];
+    });
     Object.values(consolidatedCategories).forEach(category => {
       category.regions = Array.from(category.regions);
     });
-    // Return consolidated structure - no individual items, just totals
+    const sectionTotalIncome = Object.values(consolidatedCategories).reduce((s, c) => s + (Number(c.totalIncome) || 0), 0);
+    const sectionTotalSubsidy = Object.values(consolidatedCategories).reduce((s, c) => s + (Number(c.totalSubsidy) || 0), 0);
     return {
       sectionCode: "B.2",
       sectionName: "CAPITAL OUTLAYS",
       sectionDescription: "Capital expenditures for infrastructure, equipment, and other capital investments",
       sectionTotal,
+      sectionTotalIncome,
+      sectionTotalSubsidy,
       totalEntries,
       totalRegions: regionSet.size,
       consolidatedData: true,
       categories: consolidatedCategories
     };
   } else {
-    // Group by region (existing logic for specific region)
+    // Group by region (existing logic for specific region); exclude 0 value
     const grouped = {};
     coData.forEach((proposal) => {
+      const income = Number(proposal.income) || 0;
+      const subsidy = Number(proposal.subsidy) || 0;
+      const amount = income + subsidy;
+      if (amount <= 0) return;
       const region = proposal.region || 'Unspecified';
       regionSet.add(region);
       totalEntries++;
@@ -596,7 +687,6 @@ const processCapitalOutlayData = async (coData, query) => {
         };
       }
       grouped[region].totalEntries++;
-      // Get category name from populated category or use accountingTitle
       const categoryName = proposal.category?.name || proposal.accountingTitle || 'Uncategorized';
       if (!grouped[region].categories[categoryName]) {
         grouped[region].categories[categoryName] = {
@@ -605,10 +695,6 @@ const processCapitalOutlayData = async (coData, query) => {
           total: 0
         };
       }
-      // Calculate amount = income + subsidy
-      const income = Number(proposal.income) || 0;
-      const subsidy = Number(proposal.subsidy) || 0;
-      const amount = income + subsidy;
       grouped[region].categories[categoryName].items.push({
         title: proposal.particulars || proposal.sublineItem || 'N/A',
         uacsCode: proposal.uacsCode,
@@ -628,6 +714,293 @@ const processCapitalOutlayData = async (coData, query) => {
       totalRegions: regionSet.size,
       regions: Object.values(grouped)
     };
+  }
+};
+
+const getComprehensiveReportPdf = async (req, res) => {
+  try {
+    if (!MuhammaraRecipe) {
+      return res.status(500).json({
+        success: false,
+        message: 'PDF generation library (muhammara) is not installed on the server.'
+      });
+    }
+
+    const { regions, fiscalYear, budgetType } = req.query;
+    let preparerScope = null;
+    const userRoles = req.user?.Roles || [];
+    const isPreparer = userRoles.some(r => (r && String(r).replace(/\s+/g, '_')) === 'BUDGET_PREPARER') ||
+      userRoles.some(r => (r && String(r).replace(/\s+/g, ' ').trim()) === 'BUDGET PREPARER');
+    if (isPreparer && req.user?.id) {
+      const userIdString = String(req.user.id);
+      const hua = await HierarchicalUserAssignment.findOne({ userId: userIdString, isActive: true })
+        .populate('departmentId', 'Department departmentName DepartmentName')
+        .lean();
+      if (hua) {
+        preparerScope = {
+          division: hua.divisionName || '',
+          department: hua.departmentId?.Department || hua.departmentId?.departmentName || hua.departmentId?.DepartmentName || '',
+          assignmentLevel: hua.assignmentLevel || ''
+        };
+      }
+    }
+    const reportData = await buildComprehensiveReportData({
+      regions,
+      fiscalYear,
+      budgetType,
+      preparerScope,
+    });
+
+    if (!reportData || !reportData.summary) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to generate comprehensive report PDF',
+        error: 'Report data or summary is missing',
+      });
+    }
+
+    // Create temp file path for PDF output
+    const tmpFilePath = path.join(
+      os.tmpdir(),
+      `comprehensive_report_${Date.now()}.pdf`
+    );
+
+    // Create PDF using Muhammara Recipe, writing directly to file
+    const pdfDoc = new MuhammaraRecipe('new', tmpFilePath, {
+      version: 1.6,
+      author: 'FMIS-BUDGET',
+      title: 'Comprehensive Budget Report',
+      subject: 'Comprehensive Budget Report',
+    });
+
+    const PAGE_HEIGHT = 842; // A4 in points
+    const MARGIN_TOP = 40;
+    const MARGIN_BOTTOM = 40;
+    const LINE_HEIGHT = 16;
+
+    let currentY = MARGIN_TOP;
+
+    const startNewPage = () => {
+      pdfDoc.endPage();
+      pdfDoc.createPage('A4');
+      currentY = MARGIN_TOP;
+    };
+
+    // First page
+    pdfDoc.createPage('A4');
+
+    const safeStr = (v) => (v != null && v !== '') ? String(v) : '';
+    const regionsStr = reportData.summary.regions != null
+      ? (Array.isArray(reportData.summary.regions) ? reportData.summary.regions.join(', ') : String(reportData.summary.regions))
+      : '';
+
+    // Header
+    pdfDoc
+      .text(safeStr(reportData.summary.reportTitle) || 'COMPREHENSIVE BUDGET REPORT', 40, currentY, {
+        fontSize: 18,
+        bold: true
+      });
+    currentY += LINE_HEIGHT * 2;
+
+    pdfDoc
+      .text(`Fiscal Year: ${safeStr(reportData.summary.fiscalYear)}`, 40, currentY, { fontSize: 12 })
+      .text(`Budget Type: ${safeStr(reportData.summary.budgetType)}`, 260, currentY, { fontSize: 12 });
+    currentY += LINE_HEIGHT;
+    pdfDoc
+      .text(`Regions: ${regionsStr}`, 40, currentY, { fontSize: 12 });
+    currentY += LINE_HEIGHT;
+    pdfDoc.text(`Generated: ${safeStr(reportData.summary.generatedDate)}`, 40, currentY, {
+      fontSize: 10,
+      color: '#666666'
+    });
+    currentY += LINE_HEIGHT * 2;
+
+    // Summary box
+    pdfDoc
+      .rectangle(35, currentY - 10, 540, 80, {
+        stroke: '#1976d2',
+        lineWidth: 1
+      })
+      .text(`Total Regions: ${Number(reportData.summary.totalRegions) || 0}`, 45, currentY, { fontSize: 11 })
+      .text(
+        `Total Employees: ${Number(reportData.summary.totalEmployees) || 0}`,
+        260,
+        currentY,
+        { fontSize: 11 }
+      );
+    currentY += LINE_HEIGHT;
+    const grandTotalNum = Number(reportData.summary.grandTotal) || 0;
+    pdfDoc.text(
+      `Grand Total: ${grandTotalNum.toLocaleString('en-PH', {
+        style: 'currency',
+        currency: 'PHP'
+      })}`,
+      45,
+      currentY,
+      { fontSize: 12, bold: true }
+    );
+    currentY += LINE_HEIGHT * 3;
+
+    // Section summary header
+    pdfDoc.text('Section Summary', 40, currentY, {
+      fontSize: 14,
+      bold: true
+    });
+    currentY += LINE_HEIGHT * 1.5;
+
+    // Table header
+    pdfDoc
+      .text('Code', 40, currentY, { bold: true })
+      .text('Section', 90, currentY, { bold: true })
+      .text('Amount (PHP)', 400, currentY, { bold: true });
+    currentY += LINE_HEIGHT;
+
+    // Horizontal line under header
+    pdfDoc
+      .rectangle(40, currentY - 4, 500, 0.5, {
+        stroke: '#000000',
+        lineWidth: 0.5
+      });
+    currentY += LINE_HEIGHT / 2;
+
+    // Section rows
+    reportData.sections.forEach((section) => {
+      if (currentY > PAGE_HEIGHT - MARGIN_BOTTOM) {
+        startNewPage();
+      }
+
+      const sectionTotalNum = Number(section.sectionTotal) || 0;
+      pdfDoc
+        .text(String(section.sectionCode || ''), 40, currentY, { fontSize: 10 })
+        .text(String(section.sectionName || ''), 90, currentY, {
+          fontSize: 10
+        })
+        .text(
+          sectionTotalNum.toLocaleString('en-PH', {
+            style: 'currency',
+            currency: 'PHP'
+          }),
+          400,
+          currentY,
+          { fontSize: 10 }
+        );
+      currentY += LINE_HEIGHT;
+    });
+
+    // Per-section simple breakdown tables on following pages
+    reportData.sections.forEach((section) => {
+      if (!section.categories) return;
+
+      if (currentY > PAGE_HEIGHT - MARGIN_BOTTOM * 2) {
+        startNewPage();
+      } else {
+        currentY += LINE_HEIGHT * 1.5;
+      }
+
+      pdfDoc.text(
+        `${section.sectionCode || ''} - ${section.sectionName || ''}`,
+        40,
+        currentY,
+        {
+          fontSize: 13,
+          bold: true
+        }
+      );
+      currentY += LINE_HEIGHT;
+
+      if (section.sectionDescription) {
+        pdfDoc.text(section.sectionDescription, 40, currentY, {
+          fontSize: 10
+        });
+        currentY += LINE_HEIGHT * 1.2;
+      }
+
+      // Table header for categories
+      pdfDoc
+        .text('Category', 40, currentY, { bold: true, fontSize: 10 })
+        .text('Description', 220, currentY, { bold: true, fontSize: 10 })
+        .text('Amount (PHP)', 430, currentY, { bold: true, fontSize: 10 });
+      currentY += LINE_HEIGHT;
+
+      pdfDoc.rectangle(40, currentY - 4, 500, 0.5, {
+        stroke: '#000000',
+        lineWidth: 0.5
+      });
+      currentY += LINE_HEIGHT / 2;
+
+      Object.values(section.categories || {}).forEach((category) => {
+        if (currentY > PAGE_HEIGHT - MARGIN_BOTTOM) {
+          startNewPage();
+        }
+
+        const amountNum = Number(
+          category.total ??
+          category.totalSubsidy ??
+          category.totalIncome
+        ) || 0;
+
+        pdfDoc
+          .text(String(category.name || ''), 40, currentY, { fontSize: 9 })
+          .text(String(category.description || ''), 220, currentY, {
+            fontSize: 9
+          })
+          .text(
+            amountNum.toLocaleString('en-PH', {
+              style: 'currency',
+              currency: 'PHP'
+            }),
+            430,
+            currentY,
+            { fontSize: 9 }
+          );
+        currentY += LINE_HEIGHT;
+      });
+    });
+
+    // Close last page and finalize PDF, then stream file to response
+    pdfDoc.endPage().endPDF((err) => {
+      if (err) {
+        console.error('Error finalizing PDF:', err);
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to generate comprehensive report PDF',
+          error: err.message || String(err),
+        });
+      }
+      if (res.headersSent) return;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader(
+        'Content-Disposition',
+        `inline; filename=Comprehensive_Report_${String(fiscalYear || 'AllYears')}_${String(budgetType || 'AllTypes')}.pdf`
+      );
+
+      const readStream = fs.createReadStream(tmpFilePath);
+      readStream.on('error', (streamErr) => {
+        console.error('Error streaming comprehensive report PDF:', streamErr);
+        if (!res.headersSent) {
+          res.status(500).json({
+            success: false,
+            message: 'Failed to stream comprehensive report PDF',
+            error: streamErr.message,
+          });
+        }
+      });
+
+      res.on('finish', () => {
+        fs.unlink(tmpFilePath, () => {});
+      });
+
+      readStream.pipe(res);
+    });
+  } catch (error) {
+    console.error('Error generating comprehensive report PDF:', error);
+    if (!res.headersSent) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to generate comprehensive report PDF',
+        error: error.message || String(error),
+      });
+    }
   }
 };
 // Get available regions from all data sources
@@ -726,5 +1099,6 @@ module.exports = {
   getAvailableRegionsComprehensive,
   getAvailableFiscalYears,
   getAvailableBudgetTypes,
-  getActiveSettings
+  getActiveSettings,
+  getComprehensiveReportPdf
 };

@@ -49,14 +49,14 @@ const InactivityWarningDialog = ({ open, onStayLoggedIn }) => {
         }}
       >
         <MdWarningAmber size={28} />
-        Malapit nang mag-logout
+        You’re about to be logged out.
       </DialogTitle>
       <DialogContent>
         <Typography variant="body1">
-          Walang aktibidad sa loob ng ilang minuto. Malulog-out ka sa loob ng 1 minuto kung walang gagawin.
+          No activity detected for several minutes. You will be logged out in 1 minute if no action is taken.
         </Typography>
         <Typography variant="body2" sx={{ mt: 1.5, color: "text.secondary" }}>
-          I-click ang &quot;Manatiling naka-log in&quot; para magpatuloy.
+          Click the &quot;Stay logged in&quot; to continue.
         </Typography>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -65,7 +65,7 @@ const InactivityWarningDialog = ({ open, onStayLoggedIn }) => {
           onClick={onStayLoggedIn}
           sx={{ bgcolor: "primary.main", ":hover": { bgcolor: "primary.dark" } }}
         >
-          Manatiling naka-log in
+          Stay logged in
         </CustomButton>
       </DialogActions>
     </Dialog>
