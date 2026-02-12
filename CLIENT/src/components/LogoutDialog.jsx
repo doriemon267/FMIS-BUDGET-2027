@@ -33,7 +33,7 @@ const parseParticularIdAndEmail = (particularID, emailFromUser) => {
   return { idPart: raw, emailPart: null };
 };
 
-const LogoutDialog = ({ handleCloseMenu }) => {
+const LogoutDialog = ({ handleCloseMenu, compact }) => {
   const { logout, currentUser } = useUser();
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -82,16 +82,20 @@ const LogoutDialog = ({ handleCloseMenu }) => {
         <ListItemIcon>
           <LuLogOut />
         </ListItemIcon>
-        <Box sx={{ display: "block", width: "100%" }}>
-          <Typography component="span" display="block">
-            Logout: {idPart}
-          </Typography>
-          {emailPart && (
-            <Typography variant="body2" sx={{ mt: 0.25 }} component="span" display="block">
-              ({emailPart})
+        {compact ? (
+          <Typography variant="body2">Logout</Typography>
+        ) : (
+          <Box sx={{ display: "block", width: "100%" }}>
+            <Typography component="span" display="block">
+              Logout: {idPart}
             </Typography>
-          )}
-        </Box>
+            {emailPart && (
+              <Typography variant="body2" sx={{ mt: 0.25 }} component="span" display="block">
+                ({emailPart})
+              </Typography>
+            )}
+          </Box>
+        )}
       </MenuItem>
 
       <Dialog

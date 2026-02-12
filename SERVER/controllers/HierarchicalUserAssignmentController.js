@@ -9,6 +9,7 @@ const DepartmentDivisionMapping = require('../models/OrganizationStructure');
 const Region = require('../models/Region');
 const Department = require('../models/Department');
 const { hasFullAccess } = require('../middleware/securityMiddleware');
+const User = require('../models/User');
 const mongoose = require('mongoose');
 const { mainConnection } = require('../config/mongo_db');
 
@@ -120,13 +121,63 @@ const lookupUserFromMainDB = async (req, res) => {
     const userInfo = {
       userId: userData.user,
       userName: userData.fullName || userData.userName || userData.name,
-      // Note: Email is not stored in assigned_roles collection, so we don't return it
-      // email: userData.email || userData.userEmail,
+      // Email is not stored in assigned_roles; we'll try to enrich it from the budget DB's User collection below.
       roles: roleNames, // Return actual role names, not just IDs
       department: userData.department || userData.departmentName,
       division: userData.division || userData.divisionName,
       region: userData.region || userData.regionName
     };
+
+    // 🔍 Try to enrich with the canonical email from the User collection (budget DB)
+    try {
+      const identifiers = [];
+      const pushId = (v) => {
+        if (v !== undefined && v !== null && String(v).trim() !== '') {
+          identifiers.push(String(v).trim());
+        }
+      };
+      // From assigned_roles
+      pushId(userData.user);
+      // From request param (in case of type differences)
+      pushId(userId);
+
+      if (identifiers.length > 0) {
+        const stringIds = Array.from(new Set(identifiers.map((v) => String(v))));
+        const numericIds = Array.from(
+          new Set(
+            stringIds
+              .map((v) => {
+                const n = Number(v);
+                return Number.isNaN(n) ? null : n;
+              })
+              .filter((v) => v !== null)
+          )
+        );
+        const allIds = [...stringIds, ...numericIds];
+
+        const userDoc = await User.findOne({
+          userId: { $in: allIds }
+        }).lean();
+
+        const niaEmail =
+          userDoc?.email ||
+          userDoc?.Email ||
+          userDoc?.userEmail ||
+          userDoc?.UserEmail ||
+          null;
+
+        if (niaEmail) {
+          userInfo.email = niaEmail;
+        }
+      }
+    } catch (emailErr) {
+      if (DEBUG) {
+        console.debug(
+          'ℹ️ Failed to enrich user email from User collection in lookupUserFromMainDB:',
+          emailErr?.message
+        );
+      }
+    }
 
     // Determine the appropriate budget role based on user's main roles
     // Following the 6-step workflow hierarchy, but now supporting MULTIPLE LEGITIMATE ROLES
@@ -349,10 +400,53 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       hasExplicit: hasExplicitWorkflowRoles
     });
     
+    // Try to override email with the canonical value from User collection when available
+    let resolvedEmail = email;
+    try {
+      const idCandidates = [];
+      const pushId = (v) => {
+        if (v !== undefined && v !== null && String(v).trim() !== '') {
+          idCandidates.push(String(v).trim());
+        }
+      };
+      pushId(userId);
+      const stringIds = Array.from(new Set(idCandidates.map((v) => String(v))));
+      const numericIds = Array.from(
+        new Set(
+          stringIds
+            .map((v) => {
+              const n = Number(v);
+              return Number.isNaN(n) ? null : n;
+            })
+            .filter((v) => v !== null)
+        )
+      );
+      const allIds = [...stringIds, ...numericIds];
+      if (allIds.length > 0) {
+        const userDoc = await User.findOne({ userId: { $in: allIds } }).lean();
+        const canonicalEmail =
+          userDoc?.email ||
+          userDoc?.Email ||
+          userDoc?.userEmail ||
+          userDoc?.UserEmail ||
+          null;
+        if (canonicalEmail) {
+          resolvedEmail = canonicalEmail;
+        }
+      }
+    } catch (emailResolveErr) {
+      if (DEBUG) {
+        console.debug(
+          'ℹ️ Failed to resolve canonical email in createOrUpdateHierarchicalAssignment:',
+          emailResolveErr?.message
+        );
+      }
+    }
+
     const assignmentPayload = {
       userId,
       userName,
-      email,
+      email: resolvedEmail,
       // NEW: Support multiple roles from FMIS main system
       userRoles: req.body.userRoles || [], // Array of roles from FMIS main
       // Keep backward compatibility - primary role (highest in hierarchy)
@@ -529,7 +623,7 @@ const getHierarchicalAssignment = async (req, res) => {
         code: 'ACCESS_DENIED'
       });
     }
-    const assignment = await HierarchicalUserAssignment
+    let assignment = await HierarchicalUserAssignment
       .findOne({ userId, isActive: true })
       .populate('regionId', 'Region regionName RegionName _id')
       .populate('departmentId', 'Department departmentName DepartmentName _id')
@@ -561,6 +655,41 @@ const getHierarchicalAssignment = async (req, res) => {
     // Get consolidation information
     const assignmentDoc = await HierarchicalUserAssignment.findOne({ userId, isActive: true });
     const consolidationInfo = assignmentDoc.getConsolidationTarget();
+    
+    // Ensure assignment email stays in sync with the latest NIA user email.
+    // This is a second safety net in case auth_controller sync didn't catch
+    // some legacy userId formats.
+    try {
+      const userDoc = await User.findOne({
+        userId: {
+          $in: [
+            String(userId),
+            Number(userId),
+          ].filter(v => v !== undefined && v !== null && String(v).trim() !== '' && !Number.isNaN(v))
+        }
+      }).lean();
+
+      const latestEmail =
+        userDoc?.email ||
+        userDoc?.Email ||
+        userDoc?.userEmail ||
+        userDoc?.UserEmail ||
+        null;
+
+      if (latestEmail && latestEmail !== assignment.email) {
+        // Update in-memory assignment (for current response)
+        assignment.email = latestEmail;
+        // Persist to DB without blocking the main response flow
+        HierarchicalUserAssignment.updateOne(
+          { userId },
+          { $set: { email: latestEmail } }
+        ).catch(err => {
+          console.warn('Failed to sync HierarchicalUserAssignment email:', err.message);
+        });
+      }
+    } catch (syncErr) {
+      console.warn('Email sync check failed in getHierarchicalAssignment:', syncErr.message);
+    }
     
     // If userName is missing, try to look it up
     let userName = assignment.userName;

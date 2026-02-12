@@ -102,12 +102,69 @@ exports.getUser = async (req, res) => {
     };
 
     // Sync NIA Email to User collection so workflow notifications use user.Email (NIA) instead of HUA email
-    if (niaEmail && user.particularID) {
+    // and also keep HierarchicalUserAssignment email in sync whenever the user logs in.
+    if (niaEmail) {
       try {
-        await User.findOneAndUpdate(
-          { userId: String(user.particularID) },
-          { $set: { email: niaEmail } }
+        // Collect all possible identifiers that might have been used as userId
+        const candidateIds = [];
+        const pushIf = (v) => {
+          if (v !== undefined && v !== null && String(v).trim() !== "") {
+            candidateIds.push(String(v).trim());
+          }
+        };
+
+        pushIf(user.particularID);
+        pushIf(user.particularId);
+        pushIf(user.Id);
+        pushIf(user.id);
+        pushIf(user.userId);
+        pushIf(
+          Array.isArray(user.Username) && user.Username.length > 0
+            ? user.Username[0]
+            : user.Username
         );
+        pushIf(user.username);
+
+        if (candidateIds.length > 0) {
+          // Build both string and numeric variants to handle schemas
+          // where userId may be stored as Number instead of String.
+          const stringIds = Array.from(
+            new Set(candidateIds.map((v) => String(v)))
+          );
+          const numericIds = Array.from(
+            new Set(
+              stringIds
+                .map((v) => {
+                  const n = Number(v);
+                  return Number.isNaN(n) ? null : n;
+                })
+                .filter((v) => v !== null)
+            )
+          );
+          const allIds = [...stringIds, ...numericIds];
+
+          // Update main User collection (any document whose userId matches one of the candidate IDs)
+          await User.updateMany(
+            { userId: { $in: allIds } },
+            { $set: { email: niaEmail } }
+          );
+
+          // Also update any existing hierarchical assignment record(s) for this user
+          try {
+            const HierarchicalUserAssignment = require("../models/HierarchicalUserAssignment");
+            await HierarchicalUserAssignment.updateMany(
+              { userId: { $in: allIds } },
+              { $set: { email: niaEmail } }
+            );
+          } catch (huaErr) {
+            if (process.env.DEBUG_LOGS === "true") {
+              console.debug(
+                "[AUTH][GET-USER] HierarchicalUserAssignment email sync skip:",
+                huaErr?.message
+              );
+            }
+          }
+        }
       } catch (e) {
         if (process.env.DEBUG_LOGS === "true") {
           console.debug("[AUTH][GET-USER] User email sync skip:", e?.message);

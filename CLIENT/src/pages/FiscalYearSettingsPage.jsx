@@ -88,6 +88,26 @@ const FiscalYearSettingsPage = () => {
     },
   });
 
+  // Regions list for resolving extension region IDs to names
+  const { data: regionsData = [] } = useQuery({
+    queryKey: ["regions"],
+    queryFn: async () => {
+      const response = await api.get("/api/regions");
+      return (response.data || []).map((r) => ({
+        id: r._id || r.Region,
+        name: r.Region
+      }));
+    },
+  });
+
+  const getRegionNames = (regionIds) => {
+    if (!Array.isArray(regionIds) || regionIds.length === 0) return [];
+    return regionIds.map((id) => {
+      const r = regionsData.find((reg) => String(reg.id) === String(id));
+      return r ? r.name : id;
+    });
+  };
+
   // Enhanced validation: allow same year with different budget type, but not same year and same budget type
   const handleOpenAddDialog = (data = null) => {
     if (!data) {
@@ -294,11 +314,15 @@ const FiscalYearSettingsPage = () => {
             <Tooltip
               title={
                 <Stack spacing={0.5} sx={{ py: 0.5 }}>
-                  {exts.map((ext, i) => (
-                    <Typography key={i} variant="caption" component="div">
-                      {ext.label || `${ext.regions?.length || 0} region(s)`}: due {ext.dueDate ? new Date(ext.dueDate).toLocaleDateString() : "—"}
-                    </Typography>
-                  ))}
+                  {exts.map((ext, i) => {
+                    const regionNames = getRegionNames(ext.regions);
+                    const regionLabel = regionNames.length > 0 ? regionNames.join(", ") : `${ext.regions?.length || 0} region(s)`;
+                    return (
+                      <Typography key={i} variant="caption" component="div">
+                        {ext.label ? `${ext.label} (${regionLabel})` : regionLabel}: due {ext.dueDate ? new Date(ext.dueDate).toLocaleDateString() : "—"}
+                      </Typography>
+                    );
+                  })}
                   <Typography variant="caption" color="text.secondary">Click chip to edit or remove extensions</Typography>
                 </Stack>
               }
@@ -321,43 +345,48 @@ const FiscalYearSettingsPage = () => {
               onClose={() => { setExtensionMenuAnchor(null); setExtensionMenuRow(null); }}
               anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
             >
-              {extensionMenuRow?._id === row._id && exts.map((ext, i) => (
-                <React.Fragment key={ext._id || i}>
-                  <MenuItem
-                    onClick={() => {
-                      if (ext._id) {
-                        setExtensionToEdit(ext);
-                        setRowForExtension(row);
-                        setEditExtensionDialogOpen(true);
-                        setExtensionMenuAnchor(null);
-                        setExtensionMenuRow(null);
-                      }
-                    }}
-                    disabled={!ext._id}
-                  >
-                    <ListItemIcon><AiOutlineEdit fontSize="small" /></ListItemIcon>
-                    <ListItemText
-                      primary={`Edit: ${ext.label || `${ext.regions?.length || 0} region(s)`}`}
-                      secondary={ext.dueDate ? new Date(ext.dueDate).toLocaleDateString() : "—"}
-                    />
-                  </MenuItem>
-                  <MenuItem
-                    onClick={() => {
-                      if (ext._id) {
-                        removeExtensionMutation.mutate({ settingsId: row._id, extensionId: ext._id });
-                      }
-                    }}
-                    disabled={!ext._id || removeExtensionMutation.isPending}
-                  >
-                    <ListItemIcon><AiOutlineDelete fontSize="small" /></ListItemIcon>
-                    <ListItemText
-                      primary={`Delete: ${ext.label || `${ext.regions?.length || 0} region(s)`}`}
-                      secondary={ext.dueDate ? new Date(ext.dueDate).toLocaleDateString() : "—"}
-                    />
-                  </MenuItem>
-                  {i < exts.length - 1 && <Divider component="li" />}
-                </React.Fragment>
-              ))}
+              {extensionMenuRow?._id === row._id && exts.map((ext, i) => {
+                const regionNames = getRegionNames(ext.regions);
+                const regionDisplay = regionNames.length > 0 ? regionNames.join(", ") : `${ext.regions?.length || 0} region(s)`;
+                const primaryLabel = ext.label ? `${ext.label} (${regionDisplay})` : regionDisplay;
+                return (
+                  <React.Fragment key={ext._id || i}>
+                    <MenuItem
+                      onClick={() => {
+                        if (ext._id) {
+                          setExtensionToEdit(ext);
+                          setRowForExtension(row);
+                          setEditExtensionDialogOpen(true);
+                          setExtensionMenuAnchor(null);
+                          setExtensionMenuRow(null);
+                        }
+                      }}
+                      disabled={!ext._id}
+                    >
+                      <ListItemIcon><AiOutlineEdit fontSize="small" /></ListItemIcon>
+                      <ListItemText
+                        primary={`Edit: ${primaryLabel}`}
+                        secondary={ext.dueDate ? new Date(ext.dueDate).toLocaleDateString() : "—"}
+                      />
+                    </MenuItem>
+                    <MenuItem
+                      onClick={() => {
+                        if (ext._id) {
+                          removeExtensionMutation.mutate({ settingsId: row._id, extensionId: ext._id });
+                        }
+                      }}
+                      disabled={!ext._id || removeExtensionMutation.isPending}
+                    >
+                      <ListItemIcon><AiOutlineDelete fontSize="small" /></ListItemIcon>
+                      <ListItemText
+                        primary={`Delete: ${primaryLabel}`}
+                        secondary={ext.dueDate ? new Date(ext.dueDate).toLocaleDateString() : "—"}
+                      />
+                    </MenuItem>
+                    {i < exts.length - 1 && <Divider component="li" />}
+                  </React.Fragment>
+                );
+              })}
             </Menu>
           </>
         );

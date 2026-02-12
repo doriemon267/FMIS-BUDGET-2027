@@ -10,6 +10,7 @@ const {
   getFinalizedData,
   getTierData,
   saveTierData,
+  getCurrentVersion,
   getRevisions,
   getRevisionById,
   restoreRevision,
@@ -22,6 +23,7 @@ router.use(tokenMiddleware);
 router.get('/finalized-data', getFinalizedData);
 router.get('/data', getTierData);
 router.post('/data', saveTierData);
+router.get('/current-version', getCurrentVersion);
 router.get('/revisions', getRevisions);
 router.get('/revisions/:id', getRevisionById);
 router.post('/revisions/:id/restore', restoreRevision);

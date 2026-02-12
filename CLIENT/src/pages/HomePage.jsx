@@ -4,8 +4,10 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
   Container,
   Grid,
+  Link,
   Toolbar,
   Typography,
   useTheme,
@@ -14,6 +16,8 @@ import { motion } from "framer-motion";
 import {
   FaCalculator,
   FaCashRegister,
+  FaCheckCircle,
+  FaExternalLinkAlt,
   FaFileInvoiceDollar,
   FaMoneyBillWave,
 } from "react-icons/fa";
@@ -118,31 +122,39 @@ export default function HomePage() {
     location.href = loginUrl;
   };
 
-  // Feature data with react-icons
+  // Feature data with react-icons, dashboard links, and background image positions
   const features = [
     {
       title: "Budget System",
       description:
         "Plan, allocate, and monitor budgets effectively across departments.",
       icon: <FaCalculator style={{ fontSize: 40, color: "#fff" }} />,
+      dashboardUrl: "https://budget.nia.gov.ph/dashboard",
+      bgPosition: "top left",
     },
     {
       title: "Disbursement Voucher System",
       description:
         "Streamline the process of creating and approving disbursement vouchers.",
       icon: <FaFileInvoiceDollar style={{ fontSize: 40, color: "#fff" }} />,
+      dashboardUrl: "https://dv.nia.gov.ph/dashboard",
+      bgPosition: "top center",
     },
     {
       title: "Cash System",
       description:
         "Manage cash inflows and outflows efficiently to maintain financial stability.",
       icon: <FaCashRegister style={{ fontSize: 40, color: "#fff" }} />,
+      dashboardUrl: "https://cash.nia.gov.ph/dashboard",
+      bgPosition: "center",
     },
     {
       title: "Billing & Collection System",
       description:
         "Streamline billing and collection processes for efficient financial management.",
       icon: <FaMoneyBillWave style={{ fontSize: 40, color: "#fff" }} />,
+      dashboardUrl: "https://bc.nia.gov.ph/dashboard",
+      bgPosition: "bottom right",
     },
   ];
 
@@ -173,7 +185,7 @@ export default function HomePage() {
           }}
         >
           <Toolbar sx={{ justifyContent: "space-between" }}>
-            <Box sx={{ display: "flex", alignItems: "center" }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
               <img
                 src="/2020-nia-logo.svg"
                 alt="NIA Logo"
@@ -222,6 +234,19 @@ export default function HomePage() {
                 </motion.div>
               </Box>
             </Box>
+            {hasUser && (
+              <Chip
+                icon={<FaCheckCircle style={{ fontSize: 16, color: "inherit" }} />}
+                label="Logged in"
+                size="small"
+                sx={{
+                  bgcolor: "rgba(76, 175, 80, 0.9)",
+                  color: "#fff",
+                  fontWeight: 600,
+                  "& .MuiChip-icon": { color: "inherit" },
+                }}
+              />
+            )}
           </Toolbar>
         </AppBar>
       </motion.div>
@@ -376,15 +401,17 @@ export default function HomePage() {
                 >
                   <Card
                     sx={{
-                      background:
-                        "linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05))",
+                      backgroundImage: `linear-gradient(rgba(0,0,0,0.65), rgba(0,0,0,0.5)), url('/homepage.jpg')`,
+                      backgroundSize: "cover",
+                      backgroundPosition: item.bgPosition || "center",
                       backdropFilter: "blur(12px)",
                       color: "#fff",
                       padding: 3,
                       borderRadius: "20px",
-                      border: "1px solid rgba(255,255,255,0.2)",
-                      boxShadow: "0px 8px 30px rgba(0,0,0,0.2)",
+                      border: "1px solid rgba(255,255,255,0.25)",
+                      boxShadow: "0px 8px 30px rgba(0,0,0,0.3)",
                       transition: "all 0.3s ease",
+                      overflow: "hidden",
                     }}
                   >
                     <CardContent sx={{ textAlign: "center" }}>
@@ -427,6 +454,27 @@ export default function HomePage() {
                           {item.description}
                         </Typography>
                       </motion.div>
+                      {item.dashboardUrl && (
+                        <Link
+                          href={item.dashboardUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          underline="none"
+                          sx={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 0.5,
+                            mt: 2,
+                            color: "primary.light",
+                            fontWeight: 600,
+                            fontSize: "0.875rem",
+                            "&:hover": { color: "primary.main" },
+                          }}
+                        >
+                          Go to Dashboard
+                          <FaExternalLinkAlt style={{ fontSize: 12 }} />
+                        </Link>
+                      )}
                     </CardContent>
                   </Card>
                 </motion.div>

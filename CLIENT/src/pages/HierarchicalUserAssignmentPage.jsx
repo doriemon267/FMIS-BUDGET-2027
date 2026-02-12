@@ -1602,13 +1602,11 @@ const HierarchicalUserAssignmentPage = () => {
                     disabled={!formData.officeId}
                     options={organizationStructure?.availableUnits?.responsibilityCenters
                       ?.filter(rc => {
-                        if (!formData.officeId) return false; // Don't show any responsibility centers if no office is selected
-                        
-                        // Convert both to strings for comparison
+                        // Kapag may napiling Office → limit by officeId
+                        // Kapag legacy data at walang officeId → ipakita lahat para pwedeng magpili ulit.
+                        if (!formData.officeId) return true;
                         const rcOfficeId = String(rc.officeId || '');
                         const selectedOfficeId = String(formData.officeId || '');
-                        
-                        // Direct comparison - both should be composite IDs for split departments
                         return rcOfficeId === selectedOfficeId;
                       }) || []}
                     getOptionLabel={(option) => {
@@ -1622,20 +1620,32 @@ const HierarchicalUserAssignmentPage = () => {
                       }
                       return option.name || '';
                     }}
-                    value={organizationStructure?.availableUnits?.responsibilityCenters
-                      ?.find(rc => {
-                        const selectedOfficeId = String(formData.officeId || '');
-                        return (
-                          rc.name === formData.responsibilityCenterName &&
-                          String(rc.officeId || '') === selectedOfficeId
-                        );
-                      }) || null}
+                    value={(() => {
+                      const centers = organizationStructure?.availableUnits?.responsibilityCenters || [];
+                      const selectedOfficeId = String(formData.officeId || '');
+
+                      // 1) Subukan muna: match by name + officeId (pinaka-strikto, para sa bagong data)
+                      let match = centers.find(rc =>
+                        rc.name === formData.responsibilityCenterName &&
+                        String(rc.officeId || '') === selectedOfficeId
+                      );
+
+                      // 2) Fallback: kung wala, match by name lang (para sa lumang records na walang officeId / ibang format)
+                      if (!match && formData.responsibilityCenterName) {
+                        match = centers.find(rc => rc.name === formData.responsibilityCenterName);
+                      }
+
+                      return match || null;
+                    })()}
                     isOptionEqualToValue={(option, value) => {
                       if (!option || !value) return false;
-                      return (
-                        String(option.name || '') === String(value.name || '') &&
-                        String(option.officeId || '') === String(value.officeId || '')
-                      );
+                      const sameName = String(option.name || '') === String(value.name || '');
+                      const sameOffice =
+                        String(option.officeId || '') === String(value.officeId || '');
+                      // Kapag walang officeId info (legacy), sapat na ang name;
+                      // kung meron, gamitin pareho para maiwasan maling match.
+                      if (!formData.officeId) return sameName;
+                      return sameName && sameOffice;
                     }}
                     onChange={(event, newValue) => {
                       // Handle both object (selected option) and string (free text) cases
@@ -1961,6 +1971,17 @@ const HierarchicalUserAssignmentPage = () => {
                                   };
                                   
                                   setFormData(formFields);
+                                  
+                                  // Ensure Central Office Department/Division fields appear correctly when editing BPA
+                                  if ((formFields.userRole === 'BUDGET_PLANNING_ANALYST') || (inferredRole === 'BUDGET PLANNING ANALYST')) {
+                                    const hasCentral =
+                                      !!formFields.officeId &&
+                                      !!formFields.responsibilityCenterName;
+                                    setHasCentralOfficeSelected(hasCentral);
+                                  } else {
+                                    // For non-BPA, do not show Central Office-specific controls
+                                    setHasCentralOfficeSelected(false);
+                                  }
                                   
                                   // console.log('📝 Edit form populated:', {
                                     // userId: formFields.userId,

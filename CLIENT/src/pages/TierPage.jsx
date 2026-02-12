@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import api from "../config/api";
 import { useRegion } from "../context/RegionContext";
@@ -19,7 +19,6 @@ import {
   DialogTitle,
   DialogContent,
   IconButton,
-  Drawer,
   List,
   ListItem,
   ListItemText,
@@ -32,6 +31,7 @@ import SaveIcon from '@mui/icons-material/Save';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import CloseIcon from '@mui/icons-material/Close';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import HistoryIcon from '@mui/icons-material/History';
 import RestoreIcon from '@mui/icons-material/Restore';
 
@@ -66,6 +66,7 @@ const TierPage = () => {
   const [revisionsLoading, setRevisionsLoading] = useState(false);
   const [restoringId, setRestoringId] = useState(null);
   const [revisionComment, setRevisionComment] = useState('');
+  const [currentVersion, setCurrentVersion] = useState(null);
 
   // Compute dirty state without causing setState loops: only set lastSavedJson once when tierData first arrives
   useEffect(() => {
@@ -90,6 +91,26 @@ const TierPage = () => {
     if (lastSavedJson != null && lastSavedJson === lastSavedJsonRef.current) return;
     if (lastSavedJson != null) lastSavedJsonRef.current = lastSavedJson;
   }, [lastSavedJson]);
+
+  const fetchCurrentVersion = useCallback(async () => {
+    if (!activeFiscalYear || !selectedRegion || selectedRegion === 'ALL') {
+      setCurrentVersion(null);
+      return;
+    }
+    try {
+      const params = new URLSearchParams({ fiscalYear: activeFiscalYear, region: selectedRegion });
+      if (selectedDepartment) params.set('department', selectedDepartment);
+      if (selectedDivision) params.set('division', selectedDivision);
+      const res = await api.get(`/api/tier/current-version?${params.toString()}`);
+      setCurrentVersion(res.data?.version ?? null);
+    } catch (_err) {
+      setCurrentVersion(null);
+    }
+  }, [activeFiscalYear, selectedRegion, selectedDepartment, selectedDivision]);
+
+  useEffect(() => {
+    fetchCurrentVersion();
+  }, [fetchCurrentVersion]);
 
   useEffect(() => {
     const fyFromUrl = searchParams.get("fiscalYear");
@@ -259,6 +280,7 @@ const TierPage = () => {
       setIsDirty(false);
       setSnackbar({ open: true, message: 'Tier data saved successfully', severity: 'success' });
       setRevisionComment('');
+      try { await fetchCurrentVersion(); } catch (_) { /* ignore */ }
     } catch (error) {
       console.error('Error saving tier data:', error);
       setSnackbar({ open: true, message: 'Error saving tier data. Please try again.', severity: 'error' });
@@ -303,6 +325,7 @@ const TierPage = () => {
       setTierData(null);
       lastSavedJsonRef.current = null;
       setLastSavedJson(null);
+      try { await fetchCurrentVersion(); } catch (_) { /* ignore */ }
     } catch (err) {
       console.error('Error restoring revision:', err);
       setSnackbar({ open: true, message: err?.response?.data?.message || 'Failed to restore revision', severity: 'error' });
@@ -348,6 +371,7 @@ const TierPage = () => {
         departmentName: getDepartmentDisplayName(),
         divisionName: getDivisionDisplayName(),
         reportSummary: tierData.reportSummary,
+        version: currentVersion,
       }, { responseType: 'blob' });
 
       if (pdfBlobUrl) window.URL.revokeObjectURL(pdfBlobUrl);
@@ -388,6 +412,7 @@ const TierPage = () => {
         departmentName: getDepartmentDisplayName(),
         divisionName: getDivisionDisplayName(),
         reportSummary: tierData.reportSummary,
+        version: currentVersion,
       }, { responseType: 'blob' });
 
       const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
@@ -488,6 +513,9 @@ const TierPage = () => {
           </Select>
         </FormControl>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          {currentVersion != null && (
+            <Chip label={`Version ${currentVersion}`} color="primary" variant="outlined" size="small" />
+          )}
           <Chip label={isDirty ? 'Unsaved changes' : 'All changes saved'} color={isDirty ? 'warning' : 'success'} />
           <Button
             variant="contained"
@@ -599,11 +627,22 @@ const TierPage = () => {
           },
         }}
       >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid', borderColor: 'divider', py: 1.5 }}>
-          <Typography variant="h6">Tier Report (PDF)</Typography>
-          <IconButton aria-label="close" onClick={handleClosePdfViewer} size="small">
-            <CloseIcon />
-          </IconButton>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid', borderColor: 'divider', py: 1.5, backgroundColor: '#1976d2', color: 'white' }}>
+          <Typography variant="h6" component="span">Tier Report (PDF)</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<OpenInNewIcon />}
+              onClick={() => pdfBlobUrl && window.open(pdfBlobUrl, '_blank', 'width=1200,height=800')}
+              sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.7)', '&:hover': { borderColor: 'white', backgroundColor: 'rgba(255,255,255,0.1)' } }}
+            >
+              Buksan sa bagong tab
+            </Button>
+            <IconButton aria-label="close" onClick={handleClosePdfViewer} size="small" sx={{ color: 'white' }}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
         </DialogTitle>
         <DialogContent sx={{ p: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           {pdfBlobUrl && (
@@ -616,26 +655,30 @@ const TierPage = () => {
         </DialogContent>
       </Dialog>
 
-      <Drawer
-        anchor="right"
+      <Dialog
         open={revisionsDrawerOpen}
         onClose={() => setRevisionsDrawerOpen(false)}
-        PaperProps={{ sx: { width: 380, maxWidth: '100%' } }}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 2 } }}
       >
-        <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: 1, borderColor: 'divider' }}>
-          <Typography variant="h6">Tier version history</Typography>
-          <IconButton size="small" onClick={() => setRevisionsDrawerOpen(false)} aria-label="close">
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: 1, borderColor: 'divider', py: 1.5 }}>
+          <Box>
+            <Typography variant="h6">Version history</Typography>
+            <Typography variant="caption" color="text.secondary">Only the latest 3 versions are kept.</Typography>
+          </Box>
+          <IconButton onClick={() => setRevisionsDrawerOpen(false)} aria-label="close" size="small">
             <CloseIcon />
           </IconButton>
-        </Box>
-        <Box sx={{ overflow: 'auto', flex: 1 }}>
+        </DialogTitle>
+        <DialogContent sx={{ p: 0, overflow: 'auto', maxHeight: '70vh' }}>
           {revisionsLoading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
               <CircularProgress size={32} />
             </Box>
           ) : revisions.length === 0 ? (
             <Typography variant="body2" color="text.secondary" sx={{ p: 3 }}>
-              No revisions yet. Each time you save, the previous version is stored here.
+              No revisions yet. Each time you save, the previous version is stored here. Only the latest 3 versions are kept.
             </Typography>
           ) : (
             <List dense>
@@ -675,8 +718,8 @@ const TierPage = () => {
               ))}
             </List>
           )}
-        </Box>
-      </Drawer>
+        </DialogContent>
+      </Dialog>
 
       <Snackbar
         open={snackbar.open}

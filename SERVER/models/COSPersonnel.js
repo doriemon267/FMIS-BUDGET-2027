@@ -47,6 +47,7 @@ const COSPersonnelSchema = new mongoose.Schema(
     employeeFullName: {
       type: String,
       required: true,
+    uppercase: true,
     },
     employeeNumber: {
       type: String,

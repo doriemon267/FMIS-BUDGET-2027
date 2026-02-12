@@ -636,10 +636,9 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
       displayedItems[id] = { tier1: displayTier1, tier2: displayTier2, category: name };
     };
 
-    // personnel categories
+    // personnel: use 'Personnel Services' so key matches table (CollapsibleUsesRow name="Personnel Services")
     personnelData.forEach(category => {
-      const catName = category.name || category.key || 'Personnel Services';
-      (category.items || []).forEach(item => processAndCollect(catName, item));
+      (category.items || []).forEach(item => processAndCollect('Personnel Services', item));
     });
 
     // mooe groups (keep parent 'Maintenance and Other Operating Expenses')
@@ -663,10 +662,10 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
     personnelData.forEach(category => {
       const catName = category.name || category.key || 'Personnel Services';
       (category.items || []).forEach(item => {
-        const id = getLineItemId(catName, item);
+        const id = getLineItemId('Personnel Services', item);
         const d = disp[id] || {};
-        const tier1 = Number(d.tier1) || 0;
-        const tier2 = Number(d.tier2) || 0;
+        const tier1 = Number(d.tier1) ?? 0;
+        const tier2 = Number(d.tier2) ?? 0;
         const total = tier1 + tier2;
         const totalPS = usesOfFunds['Personnel Services']?.total || 0;
         const corpPS = usesCorporateIncome?.['Personnel Services'] || 0;
@@ -684,12 +683,15 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
       });
     });
 
+    // MOOE: only include line items with total value > 0
     Object.values(groupedMooeData).forEach(group => {
       group.forEach(item => {
         const id = getLineItemId('Maintenance and Other Operating Expenses', item);
         const d = disp[id] || {};
         const tier1 = Number(d.tier1) || 0;
         const tier2 = Number(d.tier2) || 0;
+        const total = tier1 + tier2;
+        if (total <= 0) return;
         rows.push({
           category: 'Maintenance and Other Operating Expenses',
           subCategory: item.sublineItem || '—',
@@ -697,16 +699,19 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
           corporateIncome: Number(item?.income) || 0,
           tier1,
           tier2,
-          total: tier1 + tier2,
+          total,
         });
       });
     });
 
+    // Capital Outlay: only include line items with total value > 0
     capitalOutlayData.forEach(item => {
       const id = getLineItemId('Capital Outlay', item);
       const d = disp[id] || {};
       const tier1 = Number(d.tier1) || 0;
       const tier2 = Number(d.tier2) || 0;
+      const total = tier1 + tier2;
+      if (total <= 0) return;
       rows.push({
         category: 'Capital Outlay',
         subCategory: item.category?.categoryName || '—',
@@ -714,7 +719,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
         corporateIncome: Number(item?.income) || 0,
         tier1,
         tier2,
-        total: tier1 + tier2,
+        total,
       });
     });
 

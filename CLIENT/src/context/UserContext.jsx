@@ -10,6 +10,8 @@ import useInactivityLogout from "../hooks/useInactivityLogout";
 const UserContext = createContext({
   currentUser: null,
   setCurrentUser: async () => {},
+  // New helper: explicitly refetch the latest user profile (roles, hierarchical access, email, etc.)
+  refetchUserProfile: async () => {},
   isLoading: false,
   error: null,
   logout: async () => {},
@@ -175,7 +177,10 @@ const UserProvider = ({ children }) => {
 
   const value = {
     currentUser,
+    // Backward-compatible setter (used by existing screens)
     setCurrentUser: handleSetUserInitialization,
+    // Explicit refetch used by some admin/config pages (e.g. hierarchical assignments)
+    refetchUserProfile: handleSetUserInitialization,
     logout: handleLogout,
     isLoading,
     workflowRoles,
