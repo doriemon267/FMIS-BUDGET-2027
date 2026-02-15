@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import api from "../config/api";
 import { useRegion } from "../context/RegionContext";
 import {
@@ -24,6 +25,12 @@ import {
   ListItemText,
   ListItemSecondaryAction,
   TextField,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from "@mui/material";
 import TierTable from "../components/tier/TierTable";
 import { useUser } from "../context/UserContext";
@@ -34,8 +41,10 @@ import CloseIcon from '@mui/icons-material/Close';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import HistoryIcon from '@mui/icons-material/History';
 import RestoreIcon from '@mui/icons-material/Restore';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 
 const TierPage = () => {
+  const queryClient = useQueryClient();
   const { currentUser } = useUser();
   const { activeRegion } = useRegion();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -67,6 +76,19 @@ const TierPage = () => {
   const [restoringId, setRestoringId] = useState(null);
   const [revisionComment, setRevisionComment] = useState('');
   const [currentVersion, setCurrentVersion] = useState(null);
+  const [viewRevisionOpen, setViewRevisionOpen] = useState(false);
+  const [viewRevisionDetail, setViewRevisionDetail] = useState(null);
+  const [viewRevisionLoading, setViewRevisionLoading] = useState(false);
+
+  // Budget Officer and Budget Manager: view only. Budget Planning Analyst (and Super Admin) can edit/save.
+  const roles = currentUser?.Roles ?? currentUser?.workflowRoles ?? (currentUser?.hierarchicalAccess?.workflowRoles ?? []);
+  const roleList = Array.isArray(roles) ? roles : [roles];
+  const norm = (r) => String(r || '').toUpperCase().replace(/\s+/g, '_');
+  const isAnalyst = roleList.some((r) => ['BUDGET_PLANNING_ANALYST', 'BUDGET PLANNING ANALYST', 'BUDGETANALYST', 'budgetAnalyst'].includes(norm(r)));
+  const isOfficer = roleList.some((r) => ['BUDGET_OFFICER', 'BUDGET OFFICER'].includes(norm(r)));
+  const isManager = roleList.some((r) => ['BUDGET_MANAGER', 'BUDGET MANAGER', 'OVERALL_BUDGET_APPROVER'].includes(norm(r)));
+  const isSuperAdmin = roleList.some((r) => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(norm(r)));
+  const isTierViewOnly = (isOfficer || isManager) && !isAnalyst && !isSuperAdmin;
 
   // Compute dirty state without causing setState loops: only set lastSavedJson once when tierData first arrives
   useEffect(() => {
@@ -315,12 +337,40 @@ const TierPage = () => {
     fetchRevisions();
   };
 
+  const handleViewRevision = async (revisionId) => {
+    setViewRevisionOpen(true);
+    setViewRevisionDetail(null);
+    setViewRevisionLoading(true);
+    try {
+      const res = await api.get(`/api/tier/revisions/${revisionId}`);
+      setViewRevisionDetail(res.data);
+    } catch (err) {
+      console.error('Error fetching revision:', err);
+      setSnackbar({ open: true, message: err?.response?.data?.message || 'Failed to load revision', severity: 'error' });
+      setViewRevisionOpen(false);
+    } finally {
+      setViewRevisionLoading(false);
+    }
+  };
+
+  const handleCloseViewRevision = () => {
+    setViewRevisionOpen(false);
+    setViewRevisionDetail(null);
+  };
+
   const handleRestoreRevision = async (revisionId) => {
     setRestoringId(revisionId);
     try {
-      await api.post(`/api/tier/revisions/${revisionId}/restore`, { saveAsNewRevision: true });
+      const res = await api.post(`/api/tier/revisions/${revisionId}/restore`, { saveAsNewRevision: true });
       setSnackbar({ open: true, message: 'Revision restored. Refreshing table.', severity: 'success' });
       setRevisionsDrawerOpen(false);
+      setViewRevisionOpen(false);
+      setViewRevisionDetail(null);
+      // Set cache directly from restore response so table shows the exact restored data
+      const restoredItems = Array.isArray(res?.data?.tier?.items) ? res.data.tier.items : [];
+      const savedItemsKey = ['tierSavedItems', activeFiscalYear, selectedRegion, selectedDepartment || '', selectedDivision || ''];
+      queryClient.setQueryData(savedItemsKey, { items: restoredItems });
+      queryClient.invalidateQueries({ queryKey: ['tierSavedItems'] });
       setTableKey(Date.now());
       setTierData(null);
       lastSavedJsonRef.current = null;
@@ -342,6 +392,12 @@ const TierPage = () => {
     } catch (_) {
       return dateStr;
     }
+  };
+
+  const formatCurrency = (val) => {
+    const n = Number(val);
+    if (isNaN(n)) return '₱0.00';
+    return `₱${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const getRegionDisplayName = () =>
@@ -513,54 +569,63 @@ const TierPage = () => {
           </Select>
         </FormControl>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          {isTierViewOnly && (
+            <Chip label="View only (Budget Officer / Manager)" color="default" variant="outlined" size="small" />
+          )}
           {currentVersion != null && (
             <Chip label={`Version ${currentVersion}`} color="primary" variant="outlined" size="small" />
           )}
-          <Chip label={isDirty ? 'Unsaved changes' : 'All changes saved'} color={isDirty ? 'warning' : 'success'} />
-          <Button
-            variant="contained"
-            color="success"
-            startIcon={<SaveIcon />}
-            onClick={handleSave}
-            disabled={isSaving || !tierData || !isDirty}
-            sx={{ minWidth: 120 }}
-          >
-            {isSaving ? 'Saving...' : 'Save'}
-          </Button>
-          <TextField
-            size="small"
-            placeholder="Revision note (optional)"
-            value={revisionComment}
-            onChange={(e) => setRevisionComment(e.target.value)}
-            sx={{ minWidth: 200, maxWidth: 280 }}
-          />
-          <Button
-            variant="outlined"
-            color="primary"
-            startIcon={<HistoryIcon />}
-            onClick={handleOpenRevisions}
-            disabled={!activeFiscalYear || !selectedRegion || selectedRegion === 'ALL'}
-            sx={{ minWidth: 140 }}
-          >
-            Version history
-          </Button>
-          <Button
-            variant="outlined"
-            color="inherit"
-            onClick={() => {
-              if (!tierData) return;
-              if (!confirm('Reset all Tier inputs? This cannot be undone.')) return;
-              setTableKey(Date.now());
-              setTierData(null);
-              lastSavedJsonRef.current = null;
-              setLastSavedJson(null);
-              setIsDirty(false);
-              setSnackbar({ open: true, message: 'Inputs reset', severity: 'info' });
-            }}
-            sx={{ minWidth: 120 }}
-          >
-            Reset
-          </Button>
+          {!isTierViewOnly && (
+            <Chip label={isDirty ? 'Unsaved changes' : 'All changes saved'} color={isDirty ? 'warning' : 'success'} />
+          )}
+          {!isTierViewOnly && (
+            <>
+              <Button
+                variant="contained"
+                color="success"
+                startIcon={<SaveIcon />}
+                onClick={handleSave}
+                disabled={isSaving || !tierData || !isDirty}
+                sx={{ minWidth: 120 }}
+              >
+                {isSaving ? 'Saving...' : 'Save'}
+              </Button>
+              <TextField
+                size="small"
+                placeholder="Revision note (optional)"
+                value={revisionComment}
+                onChange={(e) => setRevisionComment(e.target.value)}
+                sx={{ minWidth: 200, maxWidth: 280 }}
+              />
+              <Button
+                variant="outlined"
+                color="primary"
+                startIcon={<HistoryIcon />}
+                onClick={handleOpenRevisions}
+                disabled={!activeFiscalYear || !selectedRegion || selectedRegion === 'ALL'}
+                sx={{ minWidth: 140 }}
+              >
+                Version history
+              </Button>
+              <Button
+                variant="outlined"
+                color="inherit"
+                onClick={() => {
+                  if (!tierData) return;
+                  if (!confirm('Reset all Tier inputs? This cannot be undone.')) return;
+                  setTableKey(Date.now());
+                  setTierData(null);
+                  lastSavedJsonRef.current = null;
+                  setLastSavedJson(null);
+                  setIsDirty(false);
+                  setSnackbar({ open: true, message: 'Inputs reset', severity: 'info' });
+                }}
+                sx={{ minWidth: 120 }}
+              >
+                Reset
+              </Button>
+            </>
+          )}
 
           <Button
             variant="contained"
@@ -600,15 +665,23 @@ const TierPage = () => {
           </Typography>
         </Box>
       ) : (
-        <TierTable
-          key={tableKey}
-          fiscalYear={activeFiscalYear}
-          region={selectedRegion}
-          regionName={selectedRegion !== 'ALL' && regions?.find(r => r._id === selectedRegion || String(r._id) === String(selectedRegion))?.Region}
-          department={selectedDepartment}
-          division={selectedDivision}
-          onTierDataChange={setTierData}
-        />
+        <>
+          {!isTierViewOnly && (
+            <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Chip size="small" label="Modified rows are highlighted" sx={{ backgroundColor: 'warning.light', fontWeight: 500 }} />
+            </Box>
+          )}
+          <TierTable
+            key={tableKey}
+            fiscalYear={activeFiscalYear}
+            region={selectedRegion}
+            regionName={selectedRegion !== 'ALL' && regions?.find(r => r._id === selectedRegion || String(r._id) === String(selectedRegion))?.Region}
+            department={selectedDepartment}
+            division={selectedDivision}
+            onTierDataChange={setTierData}
+            readOnly={isTierViewOnly}
+          />
+        </>
       )}
 
       <Dialog
@@ -665,7 +738,9 @@ const TierPage = () => {
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: 1, borderColor: 'divider', py: 1.5 }}>
           <Box>
             <Typography variant="h6">Version history</Typography>
-            <Typography variant="caption" color="text.secondary">Only the latest 3 versions are kept.</Typography>
+            <Typography variant="caption" color="text.secondary" display="block">
+              Only the latest 3 saves are kept. Version number = save count. <strong>Restore</strong> = ilalagay sa table ang <strong>exact data ng version na iyon</strong> (hindi babalik sa &quot;original&quot; o pinakauna — makikita mo kung ano ang na-save sa version na pinili mo).
+            </Typography>
           </Box>
           <IconButton onClick={() => setRevisionsDrawerOpen(false)} aria-label="close" size="small">
             <CloseIcon />
@@ -678,33 +753,44 @@ const TierPage = () => {
             </Box>
           ) : revisions.length === 0 ? (
             <Typography variant="body2" color="text.secondary" sx={{ p: 3 }}>
-              No revisions yet. Each time you save, the previous version is stored here. Only the latest 3 versions are kept.
+              No revisions yet. Each time you save, that version is stored here (latest 3 only). Add a revision note when saving so you can tell them apart when restoring.
             </Typography>
           ) : (
             <List dense>
-              {revisions.map((rev) => (
+              {revisions.map((rev, index) => (
                 <ListItem key={rev._id} divider>
                   <ListItemText
-                    primary={`Version ${rev.version}`}
+                    primary={
+                      <Typography variant="subtitle1" fontWeight={600}>
+                        {rev.comment && rev.comment.trim() ? rev.comment : `Saved revision v${rev.version}`}
+                      </Typography>
+                    }
                     secondary={
                       <>
                         <Typography component="span" variant="body2" color="text.secondary">
+                          Version {rev.version}
+                          {index === 0 && ' (newest)'}
+                          {' · '}
                           {formatRevisionDate(rev.createdAt)}
                         </Typography>
-                        {rev.comment && (
-                          <Typography component="span" variant="body2" display="block" sx={{ mt: 0.5 }}>
-                            {rev.comment}
-                          </Typography>
-                        )}
                         {rev.createdBy && (
-                          <Typography component="span" variant="caption" display="block" color="text.secondary">
-                            {rev.createdBy.name || rev.createdBy.username || '—'}
+                          <Typography component="span" variant="caption" display="block" color="text.secondary" sx={{ mt: 0.25 }}>
+                            By {rev.createdBy.name || rev.createdBy.username || '—'}
                           </Typography>
                         )}
                       </>
                     }
                   />
-                  <ListItemSecondaryAction>
+                  <ListItemSecondaryAction sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<VisibilityIcon />}
+                      onClick={() => handleViewRevision(rev._id)}
+                      disabled={viewRevisionLoading}
+                    >
+                      View
+                    </Button>
                     <Button
                       size="small"
                       startIcon={<RestoreIcon />}
@@ -718,6 +804,77 @@ const TierPage = () => {
               ))}
             </List>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* View revision dialog — view contents before restoring */}
+      <Dialog
+        open={viewRevisionOpen}
+        onClose={handleCloseViewRevision}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 2 } }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: 1, borderColor: 'divider', py: 1.5 }}>
+          <Typography variant="h6">View revision</Typography>
+          <IconButton onClick={handleCloseViewRevision} aria-label="close" size="small">
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          {viewRevisionLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress size={32} />
+            </Box>
+          ) : viewRevisionDetail ? (
+            <>
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="subtitle1" fontWeight={600}>
+                  {viewRevisionDetail.comment && viewRevisionDetail.comment.trim() ? viewRevisionDetail.comment : `Saved revision v${viewRevisionDetail.version}`}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Version {viewRevisionDetail.version} · {formatRevisionDate(viewRevisionDetail.createdAt)}
+                  {viewRevisionDetail.createdBy && ` · By ${viewRevisionDetail.createdBy.name || viewRevisionDetail.createdBy.username || '—'}`}
+                </Typography>
+              </Box>
+              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>Line items (Tier 1 / Tier 2)</Typography>
+              <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 360, overflow: 'auto' }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 600 }}>Line item</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 600 }}>Tier 1</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 600 }}>Tier 2</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 600 }}>Total</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {(Array.isArray(viewRevisionDetail.items) ? viewRevisionDetail.items : []).map((it, i) => {
+                      const t1 = Number(it.tier1) || 0;
+                      const t2 = Number(it.tier2) || 0;
+                      return (
+                        <TableRow key={it.lineItemId || i}>
+                          <TableCell sx={{ maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis' }} title={it.lineItemId}>{it.lineItemId || it.description || '—'}</TableCell>
+                          <TableCell align="right">{formatCurrency(t1)}</TableCell>
+                          <TableCell align="right">{formatCurrency(t2)}</TableCell>
+                          <TableCell align="right">{formatCurrency(t1 + t2)}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              {(!viewRevisionDetail.items || viewRevisionDetail.items.length === 0) && (
+                <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>No line items in this revision.</Typography>
+              )}
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 }}>
+                <Button variant="outlined" onClick={handleCloseViewRevision}>Close</Button>
+                <Button variant="contained" color="primary" startIcon={<RestoreIcon />} onClick={() => handleRestoreRevision(viewRevisionDetail._id)} disabled={restoringId != null}>
+                  {restoringId === viewRevisionDetail._id ? 'Restoring...' : 'Restore this version'}
+                </Button>
+              </Box>
+            </>
+          ) : null}
         </DialogContent>
       </Dialog>
 

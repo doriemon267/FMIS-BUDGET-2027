@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useQueries } from '@tanstack/react-query';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import api from '../../config/api';
 import {
   Box,
@@ -58,7 +58,7 @@ const sanitizeNumericInput = (str) => {
   return s.slice(0, i + 1) + s.slice(i + 1).replace(/\./g, '');
 };
 
-const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, descriptionKey, secondaryDescriptionKey, itemTier1 = 0, itemCorporateIncome = 0, disableTier2Balance = false }) => {
+const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, descriptionKey, secondaryDescriptionKey, itemTier1 = 0, itemCorporateIncome = 0, disableTier2Balance = false, readOnly = false }) => {
   const lineItemId = `${name}-${item.uacsCode || item._id || item.key || item.name || rowIndex}`;
 
   // While focused: show raw string (no format) so cursor doesn't jump and user can clear to empty
@@ -95,11 +95,13 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
     : (orig.tier2 !== undefined && orig.tier2 !== '' ? formatAmountForInput(orig.tier2) : '');
 
   const handleTier1Change = (value) => {
+    if (readOnly) return;
     const num = value === '' ? 0 : Number(value);
     const tier2 = Math.max(0, rowTotal - num);
     handleTierInputChange(lineItemId, { tier1: value === '' ? '' : num, tier2 }, name);
   };
   const handleTier2Change = (value) => {
+    if (readOnly) return;
     const num = value === '' ? 0 : Number(value);
     if (disableTier2Balance) {
       handleTierInputChange(lineItemId, { tier2: value === '' ? '' : num }, name);
@@ -147,8 +149,18 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
   const cellSx = { width: COL.tier1, minWidth: COL.tier1, maxWidth: COL.tier1 };
   const cellSx2 = { width: COL.tier2, minWidth: COL.tier2, maxWidth: COL.tier2 };
 
+  // Highlight row when current values differ from original (indicator for "changed")
+  const origT1 = orig.tier1 !== undefined ? Number(orig.tier1) : (Number(itemTier1) || 0);
+  const origT2 = orig.tier2 !== undefined ? Number(orig.tier2) : 0;
+  const hasEntry = entered.hasOwnProperty('tier1') || entered.hasOwnProperty('tier2');
+  const differs = (a, b) => Math.round((Number(a) || 0) * 100) !== Math.round((Number(b) || 0) * 100);
+  const isChanged = hasEntry && (differs(baseTier1, origT1) || differs(baseTier2, origT2));
+
   return (
-    <TableRow>
+    <TableRow
+      sx={isChanged ? { backgroundColor: 'warning.light' } : undefined}
+      title={isChanged ? 'Modified from original' : undefined}
+    >
       <TableCell sx={{ paddingLeft: '32px', pl: 4, verticalAlign: 'middle' }}>{item[descriptionKey] || item[secondaryDescriptionKey] || 'No Description'}</TableCell>
       <TableCell align="right" sx={{ width: COL.corporateIncome, minWidth: COL.corporateIncome }}>{formatCurrency(Number(itemCorporateIncome) || 0)}</TableCell>
       <TableCell align="right" sx={cellSx}>
@@ -156,12 +168,12 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
           size="small"
           fullWidth
           type="text"
-          inputProps={{ inputMode: 'decimal' }}
-          InputProps={{ startAdornment: <InputAdornment position="start">₱</InputAdornment> }}
+          inputProps={{ inputMode: readOnly ? undefined : 'decimal', readOnly: !!readOnly }}
+          InputProps={{ startAdornment: <InputAdornment position="start">₱</InputAdornment>, readOnly: !!readOnly }}
           value={tier1Value}
-          onFocus={onTier1Focus}
-          onBlur={onTier1Blur}
-          onChange={(e) => {
+          onFocus={readOnly ? undefined : onTier1Focus}
+          onBlur={readOnly ? undefined : onTier1Blur}
+          onChange={readOnly ? undefined : (e) => {
             const v = sanitizeNumericInput(e.target.value);
             setTier1Raw(v);
           }}
@@ -173,12 +185,12 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
           size="small"
           fullWidth
           type="text"
-          inputProps={{ inputMode: 'decimal' }}
-          InputProps={{ startAdornment: <InputAdornment position="start">₱</InputAdornment> }}
+          inputProps={{ inputMode: readOnly ? undefined : 'decimal', readOnly: !!readOnly }}
+          InputProps={{ startAdornment: <InputAdornment position="start">₱</InputAdornment>, readOnly: !!readOnly }}
           value={tier2Value}
-          onFocus={onTier2Focus}
-          onBlur={onTier2Blur}
-          onChange={(e) => {
+          onFocus={readOnly ? undefined : onTier2Focus}
+          onBlur={readOnly ? undefined : onTier2Blur}
+          onChange={readOnly ? undefined : (e) => {
             const v = sanitizeNumericInput(e.target.value);
             setTier2Raw(v);
           }}
@@ -191,7 +203,7 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
   );
 };
 
-const CollapsibleUsesRow = ({ name, items, allTierInputs, handleTierInputChange, totals, descriptionKey, secondaryDescriptionKey, itemTier1Map = {}, corporateIncome = 0, getItemCorporateIncome }) => {
+const CollapsibleUsesRow = ({ name, items, allTierInputs, handleTierInputChange, totals, descriptionKey, secondaryDescriptionKey, itemTier1Map = {}, corporateIncome = 0, getItemCorporateIncome, readOnly = false }) => {
   const [open, setOpen] = useState(false);
   const getLineItemId = (n, i, idx) => `${n}-${i.uacsCode || i._id || i.key || i.name || idx}`;
 
@@ -237,6 +249,7 @@ const CollapsibleUsesRow = ({ name, items, allTierInputs, handleTierInputChange,
                       itemTier1={itemTier1Map[getLineItemId(name, item, idx)] ?? 0}
                       itemCorporateIncome={getItemCorporateIncome ? getItemCorporateIncome(item) : 0}
                       disableTier2Balance={name === 'Personnel Services'}
+                      readOnly={readOnly}
                     />
                   ))}
                 </TableBody>
@@ -249,10 +262,11 @@ const CollapsibleUsesRow = ({ name, items, allTierInputs, handleTierInputChange,
   );
 };
 
-function TierTable({ fiscalYear, region, regionName, department, division, onTierDataChange }) {
+function TierTable({ fiscalYear, region, regionName, department, division, onTierDataChange, readOnly = false }) {
   const [tierInputs, setTierInputs] = useState({});
   const [mooeOpen, setMooeOpen] = useState(false);
   const [incomeOpen, setIncomeOpen] = useState(false);
+  const initializedScopeRef = useRef(null);
 
   // When region is "ALL", omit region filter to consolidate all regions.
   // effectiveRegion (ObjectId) for finalized data; regionName (string) for Capital Outlay & Income (DB stores region as string)
@@ -274,6 +288,42 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
   }, [fiscalYear, effectiveRegion, department, division]);
 
   const hasRequiredParams = !!fiscalYear && !!region;
+  const scopeKey = `${fiscalYear}|${region}|${department || ''}|${division || ''}`;
+
+  // Load saved Tier items (current version) so table shows saved values, not only "original" from API
+  const savedItemsQuery = useQuery({
+    queryKey: ['tierSavedItems', fiscalYear, region, department, division],
+    queryFn: () =>
+      api
+        .get('/api/tier/saved-items', {
+          params: { fiscalYear, region, department: department || '', division: division || '' },
+        })
+        .then((r) => r.data),
+    enabled: hasRequiredParams && !!region && region !== 'ALL',
+  });
+
+  // Initialize tierInputs from saved items when they load (so we show current version, not original)
+  useEffect(() => {
+    const items = savedItemsQuery.data?.items;
+    if (!Array.isArray(items) || items.length === 0) {
+      if (savedItemsQuery.isFetched) {
+        initializedScopeRef.current = scopeKey;
+        setTierInputs({});
+      }
+      return;
+    }
+    if (initializedScopeRef.current === scopeKey) return;
+    initializedScopeRef.current = scopeKey;
+    const next = {};
+    items.forEach((it) => {
+      next[it.lineItemId] = {
+        tier1: it.tier1,
+        tier2: it.tier2,
+        ...(it.category && { category: it.category }),
+      };
+    });
+    setTierInputs(next);
+  }, [savedItemsQuery.data, savedItemsQuery.isFetched, scopeKey]);
 
   // BRD-level or finalized Initial proposals (PROJECTED CORPORATE INCOME and PROJECTED SUBSIDY → TIER 1). Tier is available once proposal is at BRD level so Tier saved here is what Budget Planning Analyst passes to Budget Officer until Budget Manager finalizes.
   const [finalizedQuery] = useQueries({
@@ -387,6 +437,35 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
       return acc;
     }, {});
   }, [mooeData]);
+
+  // MOOE: only items with value (tier1 + tier2 > 0) for display — "huwag isali ang mga walang value". Keeps { item, originalIdx } so lineItemId matches tierInputs.
+  const filteredGroupedMooeData = useMemo(() => {
+    const getLineItemId = (name, item, rowIndex) => `${name}-${item.uacsCode || item._id || item.key || item.name || rowIndex}`;
+    const getOrig = (i) => {
+      const t1Props = ['tier1','tier_1','tierOne','t1'];
+      const t2Props = ['tier2','tier_2','tierTwo','t2'];
+      let o1, o2;
+      for (const p of t1Props) if (Object.prototype.hasOwnProperty.call(i, p)) { o1 = Number(i[p]) || 0; break; }
+      for (const p of t2Props) if (Object.prototype.hasOwnProperty.call(i, p)) { o2 = Number(i[p]) || 0; break; }
+      if (o1 !== undefined || o2 !== undefined) return { tier1: o1 || 0, tier2: o2 || 0 };
+      return { tier1: 0, tier2: 0 };
+    };
+    const result = {};
+    Object.entries(groupedMooeData).forEach(([subline, sublineItems]) => {
+      const kept = sublineItems
+        .map((item, idx) => ({ item, originalIdx: idx }))
+        .filter(({ item, originalIdx }) => {
+          const id = getLineItemId('Maintenance and Other Operating Expenses', item, originalIdx);
+          const entered = tierInputs[id] || {};
+          const orig = getOrig(item);
+          const t1 = entered.hasOwnProperty('tier1') ? (entered.tier1 === '' ? 0 : Number(entered.tier1)) : orig.tier1;
+          const t2 = entered.hasOwnProperty('tier2') ? (entered.tier2 === '' ? 0 : Number(entered.tier2)) : orig.tier2;
+          return (Number(t1) || 0) + (Number(t2) || 0) > 0;
+        });
+      if (kept.length > 0) result[subline] = kept;
+    });
+    return result;
+  }, [groupedMooeData, tierInputs]);
 
   // Flatten personnel categories into items for rendering / processing.
   const personnelItems = useMemo(() => {
@@ -548,12 +627,13 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
       uses['Personnel Services'].total += displayTotal;
     });
 
-    // MOOE - create a parent 'Maintenance and Other Operating Expenses' and compute its totals; keep sublines grouped in UI
+    // MOOE - only include items with value (tier1 + tier2 > 0) in totals
     const mooeParent = 'Maintenance and Other Operating Expenses';
     if (!uses[mooeParent]) uses[mooeParent] = { tier1: 0, tier2: 0, total: 0 };
     Object.values(groupedMooeData).forEach(group => {
       group.forEach(item => {
         const { displayTier1, displayTier2, displayTotal } = processItem(mooeParent, item);
+        if (displayTotal <= 0) return;
         uses[mooeParent].tier1 += displayTier1;
         uses[mooeParent].tier2 += displayTier2;
         uses[mooeParent].total += displayTotal;
@@ -610,10 +690,12 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
 
   const allData = useMemo(() => {
     const displayedItems = {};
-    const getLineItemId = (name, item) => `${name}-${item.uacsCode || item._id || item.key || item.name}`;
+    // Must match SubRow/CollapsibleUsesRow: same id = same row so save/restore works
+    const getLineItemId = (name, item, rowIndex) => `${name}-${item.uacsCode || item._id || item.key || item.name || rowIndex}`;
 
-    const processAndCollect = (name, item) => {
-      const id = getLineItemId(name, item);
+    const processAndCollect = (name, item, rowIndex, options = {}) => {
+      const { onlyIfHasValue = false } = options; // for MOOE: only add to displayedItems when tier1+tier2 > 0
+      const id = getLineItemId(name, item, rowIndex);
       const entered = tierInputs[id] || {};
       const orig = (function(i) {
         const t1Props = ['tier1','tier_1','tierOne','tier_one','t1','tier1Amount','tier_1_amount','subsidyTier1','subsidy_tier1'];
@@ -633,60 +715,59 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
       const displayTier1 = enteredTier1 !== undefined ? (enteredTier1 === '' ? 0 : Number(enteredTier1)) : (orig.tier1 !== undefined ? orig.tier1 : fallbackTier1);
       const displayTier2 = enteredTier2 !== undefined ? (enteredTier2 === '' ? 0 : Number(enteredTier2)) : (orig.tier2 !== undefined ? orig.tier2 : 0);
 
+      if (onlyIfHasValue && (Number(displayTier1) || 0) + (Number(displayTier2) || 0) <= 0) return;
       displayedItems[id] = { tier1: displayTier1, tier2: displayTier2, category: name };
     };
 
-    // personnel: use 'Personnel Services' so key matches table (CollapsibleUsesRow name="Personnel Services")
-    personnelData.forEach(category => {
-      (category.items || []).forEach(item => processAndCollect('Personnel Services', item));
+    // Personnel: same order as CollapsibleUsesRow (personnelItems.map) so lineItemId matches
+    personnelItems.forEach((item, idx) => processAndCollect('Personnel Services', item, idx));
+
+    // MOOE: only include items with value (huwag isali ang mga walang value)
+    Object.entries(groupedMooeData).forEach(([subline, sublineItems]) => {
+      sublineItems.forEach((item, idx) => processAndCollect('Maintenance and Other Operating Expenses', item, idx, { onlyIfHasValue: true }));
     });
 
-    // mooe groups (keep parent 'Maintenance and Other Operating Expenses')
-    Object.values(groupedMooeData).forEach(group => group.forEach(item => processAndCollect('Maintenance and Other Operating Expenses', item)));
-
-    // capital outlay
-    capitalOutlayData.forEach(item => processAndCollect('Capital Outlay', item));
+    // Capital Outlay: same as table (capitalOutlayData.map(item, idx))
+    capitalOutlayData.forEach((item, idx) => processAndCollect('Capital Outlay', item, idx));
 
     return {
         items: tierInputs,
         displayedItems,
     };
-  }, [tierInputs, personnelData, groupedMooeData, capitalOutlayData, itemTier1Map]);
+  }, [tierInputs, personnelItems, groupedMooeData, capitalOutlayData, itemTier1Map]);
 
-  // Build line items for report (PDF/Excel): category, description, corporateIncome, tier1, tier2, total
+  // Build line items for report (PDF/Excel): use same getLineItemId(name, item, rowIndex) as allData so keys match
   const reportLineItems = useMemo(() => {
     const rows = [];
-    const getLineItemId = (name, item) => `${name}-${item.uacsCode || item._id || item.key || item.name}`;
+    const getLineItemId = (name, item, rowIndex) => `${name}-${item.uacsCode || item._id || item.key || item.name || rowIndex}`;
     const disp = allData.displayedItems || {};
 
-    personnelData.forEach(category => {
-      const catName = category.name || category.key || 'Personnel Services';
-      (category.items || []).forEach(item => {
-        const id = getLineItemId('Personnel Services', item);
-        const d = disp[id] || {};
-        const tier1 = Number(d.tier1) ?? 0;
-        const tier2 = Number(d.tier2) ?? 0;
-        const total = tier1 + tier2;
-        const totalPS = usesOfFunds['Personnel Services']?.total || 0;
-        const corpPS = usesCorporateIncome?.['Personnel Services'] || 0;
-        const itemAmount = Number(item.amount) || Number(item.total) || 0;
-        const corporateIncome = totalPS > 0 ? (itemAmount / totalPS) * corpPS : 0;
-        rows.push({
-          category: 'Personnel Services',
-          subCategory: catName,
-          description: item.name || item.employeeFullName || '—',
-          corporateIncome,
-          tier1,
-          tier2,
-          total,
-        });
+    personnelItems.forEach((item, idx) => {
+      const id = getLineItemId('Personnel Services', item, idx);
+      const d = disp[id] || {};
+      const tier1 = Number(d.tier1) ?? 0;
+      const tier2 = Number(d.tier2) ?? 0;
+      const total = tier1 + tier2;
+      const totalPS = usesOfFunds['Personnel Services']?.total || 0;
+      const corpPS = usesCorporateIncome?.['Personnel Services'] || 0;
+      const itemAmount = Number(item.amount) || Number(item.total) || 0;
+      const corporateIncome = totalPS > 0 ? (itemAmount / totalPS) * corpPS : 0;
+      const catName = item.categoryName || item.category?.name || 'Personnel Services';
+      rows.push({
+        category: 'Personnel Services',
+        subCategory: catName,
+        description: item.name || item.employeeFullName || '—',
+        corporateIncome,
+        tier1,
+        tier2,
+        total,
       });
     });
 
-    // MOOE: only include line items with total value > 0
-    Object.values(groupedMooeData).forEach(group => {
-      group.forEach(item => {
-        const id = getLineItemId('Maintenance and Other Operating Expenses', item);
+    // MOOE: only include line items with total value > 0; same iteration as table (per-group idx)
+    Object.entries(groupedMooeData).forEach(([subline, sublineItems]) => {
+      sublineItems.forEach((item, idx) => {
+        const id = getLineItemId('Maintenance and Other Operating Expenses', item, idx);
         const d = disp[id] || {};
         const tier1 = Number(d.tier1) || 0;
         const tier2 = Number(d.tier2) || 0;
@@ -694,7 +775,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
         if (total <= 0) return;
         rows.push({
           category: 'Maintenance and Other Operating Expenses',
-          subCategory: item.sublineItem || '—',
+          subCategory: item.sublineItem || subline || '—',
           description: item.accountingTitle || item.sublineItem || item.uacsCode || '—',
           corporateIncome: Number(item?.income) || 0,
           tier1,
@@ -705,8 +786,8 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
     });
 
     // Capital Outlay: only include line items with total value > 0
-    capitalOutlayData.forEach(item => {
-      const id = getLineItemId('Capital Outlay', item);
+    capitalOutlayData.forEach((item, idx) => {
+      const id = getLineItemId('Capital Outlay', item, idx);
       const d = disp[id] || {};
       const tier1 = Number(d.tier1) || 0;
       const tier2 = Number(d.tier2) || 0;
@@ -724,7 +805,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
     });
 
     return rows;
-  }, [personnelData, groupedMooeData, capitalOutlayData, itemTier1Map, usesCorporateIncome, usesOfFunds, allData.displayedItems]);
+  }, [personnelItems, groupedMooeData, capitalOutlayData, usesCorporateIncome, usesOfFunds, allData.displayedItems]);
 
   useEffect(() => {
     if (onTierDataChange) {
@@ -873,7 +954,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
             </TableRow>
 
             <TableRow>
-              <TableCell>Budgetary Support (Tier 1 from finalized subsidy; Tier 2 editable)</TableCell>
+              <TableCell>Budgetary Support</TableCell>
               <TableCell align="right">{formatCurrency(0)}</TableCell>
               <TableCell align="right">{formatCurrency(sourcesOfFunds.budgetarySupport.tier1)}</TableCell>
               <TableCell align="right">{formatCurrency(sourcesOfFunds.budgetarySupport.tier2)}</TableCell>
@@ -904,6 +985,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
               descriptionKey="name"
               itemTier1Map={itemTier1Map || {}}
               corporateIncome={usesCorporateIncome?.['Personnel Services'] ?? 0}
+              readOnly={readOnly}
               getItemCorporateIncome={(item) => {
                 // Distribute corporate income proportionally based on item amount
                 const totalPS = usesOfFunds['Personnel Services']?.total || 0;
@@ -949,22 +1031,23 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
                           <col style={{ width: COL.proposedBudget }} />
                         </colgroup>
                         <TableBody>
-                          {Object.entries(groupedMooeData).map(([subline, sublineItems]) => (
+                          {Object.entries(filteredGroupedMooeData).map(([subline, entries]) => (
                             <React.Fragment key={subline}>
                               <TableRow>
                                 <TableCell colSpan={6} style={{ fontWeight: 'bold' }}>{subline}</TableCell>
                               </TableRow>
-                              {sublineItems.map((item, idx) => (
+                              {entries.map(({ item, originalIdx }) => (
                                 <SubRow
-                                  key={item.uacsCode || item._id || idx}
-                                  rowIndex={idx}
+                                  key={item.uacsCode || item._id || originalIdx}
+                                  rowIndex={originalIdx}
                                   item={item}
                                   name="Maintenance and Other Operating Expenses"
                                   allTierInputs={tierInputs}
                                   handleTierInputChange={handleTierInputChange}
                                   descriptionKey="accountingTitle"
-                                  itemTier1={(itemTier1Map || {})[`Maintenance and Other Operating Expenses-${item.uacsCode || item._id || item.key || item.name || idx}`] ?? 0}
+                                  itemTier1={(itemTier1Map || {})[`Maintenance and Other Operating Expenses-${item.uacsCode || item._id || item.key || item.name || originalIdx}`] ?? 0}
                                   itemCorporateIncome={Number(item?.income) || 0}
+                                  readOnly={readOnly}
                                 />
                               ))}
                             </React.Fragment>
@@ -987,6 +1070,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
               secondaryDescriptionKey="accountingTitle"
               itemTier1Map={itemTier1Map || {}}
               corporateIncome={usesCorporateIncome?.['Capital Outlay'] ?? 0}
+              readOnly={readOnly}
               getItemCorporateIncome={(item) => Number(item?.income) || 0}
             />
 

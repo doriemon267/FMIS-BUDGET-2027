@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 
-const INACTIVITY_MS = 15 * 60 * 1000; // 15 minutes
-const WARNING_BEFORE_MS = 1 * 60 * 1000; // 1 minute warning before logout
+const INACTIVITY_MS = 10 * 60 * 1000; // 15 minutes
+const WARNING_BEFORE_MS = 5 * 60 * 1000; // 1 minute warning before logout
 const ACTIVITY_EVENTS = [
   "mousedown",
   "mousemove",

@@ -164,6 +164,32 @@ const getTierData = async (req, res) => {
   }
 };
 
+/**
+ * GET /api/tier/saved-items?fiscalYear=&region=&department=&division=
+ * Returns the saved Tier document's items (lineItemId, tier1, tier2) so the client
+ * can show the current version's values instead of "original" API values.
+ */
+const getTierSavedItems = async (req, res) => {
+  try {
+    const { fiscalYear, region, department, division } = req.query;
+    if (!fiscalYear || !region) {
+      return res.status(400).json({ message: 'fiscalYear and region are required.' });
+    }
+    const queryConditions = {
+      fiscalYear: String(fiscalYear),
+      region: String(region),
+      department: String(department || ''),
+      division: String(division || ''),
+    };
+    const tierDoc = await Tier.findOne(queryConditions).select('items').lean();
+    const items = Array.isArray(tierDoc?.items) ? tierDoc.items : [];
+    res.json({ items });
+  } catch (error) {
+    console.error('Error in getTierSavedItems:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 const saveTierData = async (req, res) => {
   try {
     const { fiscalYear, region, department, division, items, revisionComment } = req.body;
@@ -338,7 +364,7 @@ const getRevisionById = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: 'Invalid revision id.' });
     }
-    const rev = await TierRevision.findById(id).lean();
+    const rev = await TierRevision.findById(id).populate('createdBy', 'name username email').lean();
     if (!rev) return res.status(404).json({ message: 'Revision not found.' });
     res.json(rev);
   } catch (error) {
@@ -384,13 +410,18 @@ const restoreRevision = async (req, res) => {
         createdBy: userObjectId,
       });
     } else {
-      tierDoc.items = rev.items.map((i) => ({
-        lineItemId: i.lineItemId,
-        description: i.description,
-        category: i.category,
-        tier1: i.tier1 || 0,
-        tier2: i.tier2 || 0,
-      }));
+      // Replace items with the chosen revision's data (so table shows that version, not "original")
+      const restoredItems = Array.isArray(rev.items) && rev.items.length > 0
+        ? rev.items.map((i) => ({
+            lineItemId: i.lineItemId,
+            description: i.description || '',
+            category: i.category,
+            tier1: Number(i.tier1) || 0,
+            tier2: Number(i.tier2) || 0,
+          }))
+        : [];
+      tierDoc.items = restoredItems;
+      tierDoc.markModified('items');
       if (userObjectId) tierDoc.updatedBy = userObjectId;
     }
     await tierDoc.save();
@@ -722,6 +753,7 @@ const generateTierExcel = async (req, res) => {
 module.exports = {
   getFinalizedData,
   getTierData,
+  getTierSavedItems,
   saveTierData,
   getCurrentVersion,
   getRevisions,

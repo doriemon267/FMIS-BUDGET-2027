@@ -9,6 +9,7 @@ const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
 const {
   getFinalizedData,
   getTierData,
+  getTierSavedItems,
   saveTierData,
   getCurrentVersion,
   getRevisions,
@@ -22,6 +23,7 @@ router.use(tokenMiddleware);
 
 router.get('/finalized-data', getFinalizedData);
 router.get('/data', getTierData);
+router.get('/saved-items', getTierSavedItems);
 router.post('/data', saveTierData);
 router.get('/current-version', getCurrentVersion);
 router.get('/revisions', getRevisions);
