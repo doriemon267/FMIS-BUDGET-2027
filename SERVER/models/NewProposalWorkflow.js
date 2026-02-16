@@ -112,6 +112,15 @@ const newProposalWorkflowSchema = new mongoose.Schema({
     comment: {
       type: String
     },
+    // Optional: snapshot of Tier version used when this action was performed
+    // This links the workflow step to the specific Tier revision (Tier 1 / Tier 2 split)
+    tierVersion: {
+      type: Number
+    },
+    tierRevisionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TierRevision'
+    },
     timestamp: {
       type: Date,
       default: Date.now

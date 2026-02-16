@@ -566,6 +566,37 @@ const createWorkflowNotification = async (action, proposal, recipientUserIds, cu
 };
 
 /**
+ * Simple helper endpoint: check if there are any FINALIZED proposals
+ * Optionally filtered by fiscalYear. Used by frontend to decide when to
+ * show NEP Ceiling Management menu for BRD-level users.
+ */
+exports.hasFinalizedProposals = async (req, res) => {
+  try {
+    const { fiscalYear } = req.query;
+    const query = { status: 'FINALIZED' };
+    if (fiscalYear !== undefined && fiscalYear !== null && fiscalYear !== '') {
+      const fyNum = Number(fiscalYear);
+      if (!Number.isNaN(fyNum)) {
+        query.fiscalYear = fyNum;
+      }
+    }
+    const count = await NewProposalWorkflow.countDocuments(query);
+    return res.json({
+      success: true,
+      hasFinalized: count > 0,
+      count,
+    });
+  } catch (err) {
+    console.error('[hasFinalizedProposals] Error:', err.message || err);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to check finalized proposals',
+      error: err.message,
+    });
+  }
+};
+
+/**
  * Helper function to send email notifications to workflow recipients
  * @param {string} action - The workflow action performed
  * @param {Object} proposal - The proposal object
@@ -1564,6 +1595,8 @@ exports.getProposalById = async (req, res) => {
 };
 
 // Perform action on proposal
+const TierRevision = require('../models/TierRevision');
+
 exports.performAction = async (req, res) => {
   try {
     const { id } = req.params;
@@ -1705,13 +1738,44 @@ exports.performAction = async (req, res) => {
     }
     
     proposal.workflowHistory = proposal.workflowHistory || [];
+
+    // Attach current Tier version (if any) for this proposal's scope so we know
+    // exactly which Tier 1 / Tier 2 split was in effect when this action ran.
+    let tierHistoryFields = {};
+    try {
+      const fiscalYearStr = String(proposal.fiscalYear);
+      const regionStr = proposal.region ? String(proposal.region) : '';
+      const departmentStr = String(proposal.department || '');
+      const divisionStr = String(proposal.division || '');
+
+      const latestTierRevision = await TierRevision.findOne({
+        fiscalYear: fiscalYearStr,
+        region: regionStr,
+        department: departmentStr,
+        division: divisionStr,
+      })
+        .sort({ version: -1 })
+        .select('_id version')
+        .lean();
+
+      if (latestTierRevision) {
+        tierHistoryFields = {
+          tierVersion: latestTierRevision.version || 0,
+          tierRevisionId: latestTierRevision._id,
+        };
+      }
+    } catch (tierErr) {
+      console.warn('[PERFORM_ACTION] Failed to resolve Tier revision for history entry:', tierErr.message);
+    }
+
     proposal.workflowHistory.push({
       action,
       fromStatus: oldStatus,
       toStatus: newWorkflowStatus,
       performedBy: userId,
       performedByName: userName,
-      comment: comment || ''
+      comment: comment || '',
+      ...tierHistoryFields,
     });
 
     await proposal.save();

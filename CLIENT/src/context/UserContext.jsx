@@ -84,10 +84,11 @@ const UserProvider = ({ children }) => {
 
   // --- REDIRECT LOGIC HELPER ---
   const redirectToLogin = () => {
-    const currentUrl = window.location.origin + "/dashboard";
+    // Return URL: after login, come back to budget (dashboard)
+    const returnUrl = (env("CLIENT_URL_DEV") || window.location.origin) + "/dashboard";
     const loginUrl = IS_PRODUCTION
-      ? `${env("LOGIN_REDIRECT_URL")}?ReturnUrl=${encodeURIComponent(currentUrl)}`
-      : `${env("CLIENT_URL_DEV")}/login`;
+      ? `${env("LOGIN_REDIRECT_URL")}?ReturnUrl=${encodeURIComponent(returnUrl)}`
+      : `${env("AUTH_CLIENT_URL_DEV") || env("CLIENT_URL_DEV")}/login?redirect=${encodeURIComponent(returnUrl)}`;
     window.location.href = loginUrl;
   };
 
@@ -118,7 +119,7 @@ const UserProvider = ({ children }) => {
       const logoffUrl = `https://accounts.nia.gov.ph/account/logoff?clientId=${clientId}&owner=${particularID}&returnUrl=${returnUrl}`;
       window.location.href = logoffUrl;
     } else {
-      window.location.href = env("CLIENT_URL_DEV") + "/login";
+      window.location.href = (env("AUTH_CLIENT_URL_DEV") || env("CLIENT_URL_DEV")) + "/login";
     }
   };
 

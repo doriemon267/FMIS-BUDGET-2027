@@ -113,11 +113,11 @@ export default function HomePage() {
     let base = env("LOGIN_REDIRECT_URL");
     // Huwag gamitin ang /Manage - dapat Account/Login para sa tamang login flow
     if (base && /\/Manage$/i.test(base)) {
-      base = "https://accounts.nia.gov.ph/Account/Login";
+      base = "https://.nia.gov.ph/Account/Login";
     }
     const loginUrl = IS_PRODUCTION
       ? `${base || "https://accounts.nia.gov.ph/Account/Login"}?ReturnUrl=${encodeURIComponent(currentUrl)}`
-      : `${env("CLIENT_URL_DEV")}/login`;
+      : `${env("LOGIN_REDIRECT_URL_DEV")}/login`;
 
     location.href = loginUrl;
   };

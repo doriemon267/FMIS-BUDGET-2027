@@ -326,6 +326,7 @@ const allowedSocketOrigins = [
   process.env.CLIENT2,
   process.env.CLIENT3,
   "http://localhost:3005",
+  "http://budget.fmis.local:3005",
   "https://budget.nia.gov.ph",
   "https://budget-server.nia.gov.ph"
 ].filter(Boolean);
@@ -617,10 +618,11 @@ app.use(
       const isAllowed = allowedOrigins.includes(origin);
       const isNia = origin.endsWith(".nia.gov.ph") || origin === "https://nia.gov.ph";
       const isLocal = origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1");
+      const isFmisLocal = origin && origin.includes("fmis.local");
 
-      console.log(`CORS check: isAllowed=${isAllowed}, isNia=${isNia}, isLocal=${isLocal}`);
+      console.log(`CORS check: isAllowed=${isAllowed}, isNia=${isNia}, isLocal=${isLocal}, isFmisLocal=${isFmisLocal}`);
 
-      if (isAllowed || isNia || isLocal) {
+      if (isAllowed || isNia || isLocal || isFmisLocal) {
         console.log("CORS: Origin allowed.");
         return callback(null, true);
       }

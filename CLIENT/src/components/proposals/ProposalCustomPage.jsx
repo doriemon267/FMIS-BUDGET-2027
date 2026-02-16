@@ -123,6 +123,9 @@ const ProposalCustomPage = ({
   const [activeBudgetType, setActiveBudgetType] = useState("");
   const [activeDueDate, setActiveDueDate] = useState(null);
   const [isDueDatePassed, setIsDueDatePassed] = useState(true); // Conservative: block until API confirms due date is valid
+  const [regionCeilingAmount, setRegionCeilingAmount] = useState(null);
+  const [divisionCeilingAmount, setDivisionCeilingAmount] = useState(null);
+  const [divisionCeilingInfo, setDivisionCeilingInfo] = useState(null); // { division, department, ceilingAmount }
   const [budgetDeficit, setBudgetDeficit] = useState(null);
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -144,6 +147,105 @@ const ProposalCustomPage = ({
       budgetType,
     };
   }
+
+  // Fetch NEP ceiling for current region/fiscal year (for display/validation)
+  // Also fetch division/department-specific ceiling if proposal exists
+  const fetchRegionCeiling = useCallback(async () => {
+    try {
+      const regionName =
+        activeRegion?.name ||
+        activeRegion?.regionName ||
+        activeRegion?.Region ||
+        null;
+      const fy = selectedFiscalYear || activeFiscalYear;
+      // Only relevant when budget type is NEP and region/fiscalYear are known
+      if (!regionName || !fy || (activeBudgetType || "").toUpperCase() !== "NEP") {
+        setRegionCeilingAmount(null);
+        setDivisionCeilingAmount(null);
+        setDivisionCeilingInfo(null);
+        return;
+      }
+      const res = await api.get(
+        `/api/budget-ceiling/${Number(fy)}/${encodeURIComponent(regionName)}`,
+        { params: { budgetPhase: "NEP" } }
+      );
+      if (res.data?.success && res.data?.data) {
+        const ceilingDoc = res.data.data;
+        // Region-level total ceiling (for reference)
+        const totalCeiling =
+          typeof ceilingDoc.totalBudgetPool === "number"
+            ? ceilingDoc.totalBudgetPool
+            : Array.isArray(ceilingDoc.allocations)
+            ? ceilingDoc.allocations.reduce(
+                (sum, a) => sum + (Number(a.ceilingAmount) || 0),
+                0
+              )
+            : null;
+        setRegionCeilingAmount(totalCeiling);
+
+        // Try to find division/department-specific ceiling
+        // First, try to get division/department from current proposal
+        let proposalDivision = null;
+        let proposalDepartment = null;
+        if (currentProposalId) {
+          try {
+            const proposalRes = await api.get(`/api/allproposal/proposals/${currentProposalId}`);
+            if (proposalRes.data?.success && proposalRes.data?.data) {
+              proposalDivision = proposalRes.data.data.division || null;
+              proposalDepartment = proposalRes.data.data.department || null;
+            }
+          } catch (proposalErr) {
+            console.warn("Could not fetch proposal details for ceiling matching:", proposalErr?.message);
+          }
+        }
+        // Fallback: use user's hierarchical access division/department
+        if (!proposalDivision && currentUser?.hierarchicalAccess?.accessibleDivisions?.length > 0) {
+          proposalDivision = currentUser.hierarchicalAccess.accessibleDivisions[0]?.name || null;
+        }
+        if (!proposalDepartment && currentUser?.hierarchicalAccess?.accessibleDepartments?.length > 0) {
+          proposalDepartment = currentUser.hierarchicalAccess.accessibleDepartments[0]?.name || null;
+        }
+
+        // Match allocation by division (preferred) or department
+        if (Array.isArray(ceilingDoc.allocations) && ceilingDoc.allocations.length > 0) {
+          let matchedAllocation = null;
+          if (proposalDivision) {
+            matchedAllocation = ceilingDoc.allocations.find(
+              (a) => String(a.division || "").trim() === String(proposalDivision).trim()
+            );
+          }
+          if (!matchedAllocation && proposalDepartment) {
+            matchedAllocation = ceilingDoc.allocations.find(
+              (a) => String(a.department || "").trim() === String(proposalDepartment).trim()
+            );
+          }
+          if (matchedAllocation && typeof matchedAllocation.ceilingAmount === "number") {
+            setDivisionCeilingAmount(matchedAllocation.ceilingAmount);
+            setDivisionCeilingInfo({
+              division: matchedAllocation.division || proposalDivision,
+              department: matchedAllocation.department || proposalDepartment,
+              ceilingAmount: matchedAllocation.ceilingAmount,
+            });
+          } else {
+            setDivisionCeilingAmount(null);
+            setDivisionCeilingInfo(null);
+          }
+        } else {
+          setDivisionCeilingAmount(null);
+          setDivisionCeilingInfo(null);
+        }
+      } else {
+        setRegionCeilingAmount(null);
+        setDivisionCeilingAmount(null);
+        setDivisionCeilingInfo(null);
+      }
+    } catch (err) {
+      console.error("Failed to fetch region ceiling:", err?.message || err);
+      setRegionCeilingAmount(null);
+      setDivisionCeilingAmount(null);
+      setDivisionCeilingInfo(null);
+    }
+  }, [activeRegion, activeFiscalYear, selectedFiscalYear, activeBudgetType, currentProposalId, currentUser]);
 
   // Fetch all budget data for the active/selected filters
   async function fetchAllData() {
@@ -191,6 +293,11 @@ const ProposalCustomPage = ({
       fetchAllData();
     }
   }, [selectedFiscalYear, activeFiscalYear, activeBudgetType, activeRegionKey]);
+
+  // Keep region-level NEP ceiling in sync when filters change
+  useEffect(() => {
+    fetchRegionCeiling();
+  }, [fetchRegionCeiling]);
 
   // State for the new proposal form
   const [newProposalData, setNewProposalData] = useState({
@@ -595,16 +702,26 @@ const ProposalCustomPage = ({
       const budgetarySupportTotal =
         mooeSubsidyTotal + capitalOutlaySubsidyTotal;
 
+      // If NEP with a known division/department ceiling, enforce that grand total cannot exceed the ceiling
+      // Prefer division-specific ceiling over region-level ceiling
+      // (used for display/validation only; backend should also enforce separately if needed)
+      const rawGrandTotal =
+        personnelTotal + mooeTotal + capitalOutlayTotal + budgetarySupportTotal;
+      let grandTotal = rawGrandTotal;
+      if ((activeBudgetType || "").toUpperCase() === "NEP") {
+        if (divisionCeilingAmount != null && typeof divisionCeilingAmount === "number") {
+          grandTotal = Math.min(rawGrandTotal, Number(divisionCeilingAmount));
+        } else if (regionCeilingAmount != null && typeof regionCeilingAmount === "number") {
+          grandTotal = Math.min(rawGrandTotal, Number(regionCeilingAmount));
+        }
+      }
+
       return {
         personnelTotal,
         mooeTotal, // <-- now always includes IAs O&M
         capitalOutlayTotal,
         budgetarySupportTotal,
-        grandTotal:
-          personnelTotal +
-          mooeTotal +
-          capitalOutlayTotal +
-          budgetarySupportTotal,
+        grandTotal,
       };
     } catch (error) {
       console.error("Error calculating total budget:", error);
@@ -1892,9 +2009,38 @@ const ProposalCustomPage = ({
                 label={`Budget Type: ${
                   activeBudgetType || newProposalData.modelType || "Initial"
                 }`}
-                color="primary"
+                color={
+                  (activeBudgetType || newProposalData.modelType || "Initial") === "NEP"
+                    ? "warning"
+                    : (activeBudgetType || newProposalData.modelType || "Initial") === "GAA"
+                    ? "success"
+                    : "primary"
+                }
                 size="small"
               />
+              {regionCeilingAmount != null && (activeBudgetType || "").toUpperCase() === "NEP" && (
+                <Chip
+                  label={`Region NEP Ceiling: ₱${Number(regionCeilingAmount || 0).toLocaleString(
+                    "en-PH",
+                    { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+                  )}`}
+                  color="secondary"
+                  size="small"
+                  variant="outlined"
+                  sx={{ fontWeight: 400 }}
+                />
+              )}
+              {divisionCeilingInfo != null && (activeBudgetType || "").toUpperCase() === "NEP" && (
+                <Chip
+                  label={`${divisionCeilingInfo.division || divisionCeilingInfo.department || "Your"} NEP Ceiling: ₱${Number(divisionCeilingInfo.ceilingAmount || 0).toLocaleString(
+                    "en-PH",
+                    { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+                  )}`}
+                  color="warning"
+                  size="small"
+                  sx={{ fontWeight: 600 }}
+                />
+              )}
             </Box>
 
             {/* Privacy Notice / Certification */}
@@ -2336,6 +2482,21 @@ const ProposalCustomPage = ({
               </Box>
             </AccordionSummary>
             <AccordionDetails sx={{ pt: 0, pb: 1.5, px: 1.5 }}>
+              {/* NEP Ceiling Warning */}
+              {divisionCeilingInfo != null &&
+                (activeBudgetType || "").toUpperCase() === "NEP" &&
+                calculateTotalBudget.grandTotal > (divisionCeilingInfo.ceilingAmount || 0) && (
+                  <Alert severity="error" sx={{ mb: 1.5 }}>
+                    <Typography variant="body2" fontWeight="bold">
+                      ⚠️ Budget Exceeds NEP Ceiling
+                    </Typography>
+                    <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
+                      Your proposal total ({formatCurrency(calculateTotalBudget.grandTotal)}) exceeds the NEP ceiling for{" "}
+                      {divisionCeilingInfo.division || divisionCeilingInfo.department || "your division"} (
+                      {formatCurrency(divisionCeilingInfo.ceilingAmount)}). Please adjust your budget to stay within the ceiling.
+                    </Typography>
+                  </Alert>
+                )}
               {/* Budget Overview Row */}
               <Box sx={{ mb: 1.5 }}>
                 <Typography

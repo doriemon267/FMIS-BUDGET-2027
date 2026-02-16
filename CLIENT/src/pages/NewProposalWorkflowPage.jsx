@@ -5598,6 +5598,16 @@ const NewProposalWorkflowPage = () => {
                       >
                         TIME
                       </TableCell>
+                      <TableCell
+                        sx={{
+                          fontWeight: "bold",
+                          color: "#333",
+                          fontSize: "0.85rem",
+                          letterSpacing: "0.5px",
+                        }}
+                      >
+                        TIER VERSION
+                      </TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -5672,6 +5682,13 @@ const NewProposalWorkflowPage = () => {
                                   }
                                 )
                               : "-"}
+                          </TableCell>
+                          <TableCell
+                            sx={{ py: 1.5, fontSize: "0.85rem", color: "#333" }}
+                          >
+                            {typeof entry.tierVersion === "number" && entry.tierVersion > 0
+                              ? `v${entry.tierVersion}`
+                              : "—"}
                           </TableCell>
                         </TableRow>
                       ))}

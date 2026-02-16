@@ -2,7 +2,7 @@ import { TbCategory } from "react-icons/tb";
 import { BiChild } from "react-icons/bi";
 import { AiFillMedicineBox } from "react-icons/ai";
 import { FaFileUpload } from "react-icons/fa";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Box, Divider, List, Toolbar, Typography } from "@mui/material";
 import DisplayRoles from "../global/components/DisplayRoles";
 import LinkTo from "../global/components/LinkTo";
@@ -39,8 +39,10 @@ import {
 import { hasPermission } from "../utils/permissions";
 import { useUser } from "../context/UserContext";
 import IS_PRODUCTION from "../utils/IS_PRODUCTION";
+import api from "../config/api";
 const CustomDrawer = ({ collapsed = false }) => {
   const [openSettings, setOpenSettings] = useState(false);
+  const [hasFinalizedProposals, setHasFinalizedProposals] = useState(false);
   const { currentUser } = useUser();
   // Simple role flags - check both primary roles and workflow roles
   const roles = (currentUser?.Roles || []).map(String);
@@ -68,11 +70,50 @@ const CustomDrawer = ({ collapsed = false }) => {
   const isReviewer = roles.includes("BUDGET REVIEWER");
   const isBudgetPlanningAnalyst = roles.includes("BUDGET PLANNING ANALYST");
   // Determine if this user is BRD-level (Budget and Revenue Division) either by hierarchical access or by job role
-  const isBRDLevel = currentUser?.hierarchicalAccess?.scope === 'BUDGET_AND_REVENUE_DIVISION' || currentUser?.hierarchicalAccess?.assignmentLevel === 'BUDGET_AND_REVENUE_DIVISION' || roles.some(r => String(r).toUpperCase().includes('BRD'));
-  
+  const isBRDLevel =
+    currentUser?.hierarchicalAccess?.scope === "BUDGET_AND_REVENUE_DIVISION" ||
+    currentUser?.hierarchicalAccess?.assignmentLevel === "BUDGET_AND_REVENUE_DIVISION" ||
+    roles.some((r) => String(r).toUpperCase().includes("BRD"));
+
   // BUDGET_PLANNING_ANALYST should have same access as APPROVER for menus
   const isBudgetPlanningAnalystOrApprover = isBudgetPlanningAnalyst || isApprover;
-  const fmisUrl = process.env.NODE_ENV === 'production' ? 'https://fmis.nia.gov.ph/dashboard' : 'https://main.fmis.local/dashboard';
+  const fmisUrl =
+    process.env.NODE_ENV === "production"
+      ? "https://fmis.nia.gov.ph/dashboard"
+      : "https://main.fmis.local/dashboard";
+
+  // Show NEP Ceiling menu only when there are FINALIZED proposals (for active fiscal year)
+  useEffect(() => {
+    let isMounted = true;
+    const fetchHasFinalized = async () => {
+      try {
+        const settingsRes = await api.get("/settings/active");
+        const fiscalYear = settingsRes?.data?.fiscalYear;
+        const params = fiscalYear ? { fiscalYear } : {};
+        const res = await api.get("/api/allproposal/proposals/has-finalized", {
+          params,
+        });
+        if (!isMounted) return;
+        if (res?.data?.success) {
+          setHasFinalizedProposals(!!res.data.hasFinalized);
+        } else {
+          setHasFinalizedProposals(false);
+        }
+      } catch (err) {
+        console.error(
+          "Failed to check finalized proposals for NEP Ceiling menu:",
+          err?.message || err
+        );
+        if (isMounted) setHasFinalizedProposals(false);
+      }
+    };
+
+    fetchHasFinalized();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
   return (
     <Box
       sx={{
@@ -136,12 +177,16 @@ const CustomDrawer = ({ collapsed = false }) => {
                 isAllow: isBudgetPlanningAnalyst || isBudgetOfficer || isOverallApprover || isSuperAdmin(currentUser),
                 icon: <BiData />,
               },
-              // {
-              //   link: "/nep-ceiling",
-              //   name: "NEP Ceiling Management",
-              //   isAllow: isBudgetOfficer || isOverallApprover || isSuperAdmin(currentUser),
-              //   icon: <FaChartBar />,
-              // },
+              {
+                link: "/nep-ceiling",
+                name: "NEP Ceiling Management",
+                // Visible only when there are finalized proposals for the active fiscal year,
+                // and user is BRD decision-maker (Budget Officer / Manager / Super Admin)
+                isAllow:
+                  hasFinalizedProposals &&
+                  (isBudgetOfficer || isOverallApprover || isSuperAdmin(currentUser)),
+                icon: <FaChartBar />,
+              },
               {
                 link: "/tier",
                 name: "Tier",
@@ -408,7 +453,7 @@ const CustomDrawer = ({ collapsed = false }) => {
           link={
             IS_PRODUCTION
               ? "https://fmis.nia.gov.ph/dashboard"
-              : "http://localhost:3000/dashboard"
+              : "https://main.fmis.local/dashboard"
           }
         />
 

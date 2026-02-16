@@ -6,6 +6,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3005,
+    host: true, // Listen on all interfaces so http://budget.fmis.local:3005 works (hosts: 127.0.0.1 budget.fmis.local)
+    allowedHosts: ["budget.fmis.local", "localhost", "127.0.0.1"],
     // Pwedeng i-enable ang https dito kung kailangan sa local dev
   },
   build: {
