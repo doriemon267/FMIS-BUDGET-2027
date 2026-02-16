@@ -61,7 +61,15 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception thrown:', err);
+  console.error('❌ Uncaught Exception thrown:');
+  console.error('   Message:', err?.message || '(no message)');
+  console.error('   Stack:', err?.stack || '(no stack trace)');
+  console.error('   Error object:', err);
+  // Log full error details for debugging
+  if (err && typeof err === 'object') {
+    console.error('   Error keys:', Object.keys(err));
+    console.error('   Error details:', JSON.stringify(err, null, 2));
+  }
   // Optional: process.exit(1) if you want it to restart, but for now let's just log
 });
 // Note: No re-declaration of SUPPRESS_NODE_DEPRECATION_WARNINGS here; handled above
@@ -656,6 +664,13 @@ app.use(mongoSanitize());
 // Security headers
 app.use(helmet());
 
+// Rate limiting
+const { apiLimiter, authLimiter, uploadLimiter, proposalLimiter } = require('./middleware/rateLimiter');
+app.use(`${apiPrefix}/`, apiLimiter); // Apply to all API routes
+
+// Audit logging middleware
+const { logWorkflowAction } = require('./middleware/auditLogger');
+
 // Legacy URL compatibility: rewrite non-/api requests to /api
 // Exclusions include static uploads, socket.io, and root path.
 app.use((req, res, next) => {
@@ -694,6 +709,10 @@ app.use((req, res, next) => {
 });
 
 // Simple token - no csurf cookie (avoids cross-origin/cookie issues). API routes don't validate CSRF.
+// CSRF token endpoint (if CSRF protection is enabled)
+// Uncomment and configure if needed:
+// const { getCsrfToken } = require('./middleware/csrfProtection');
+// app.get(`${apiPrefix}/csrf-token`, getCsrfToken, (_req, res) => {
 app.get(`${apiPrefix}/csrf-token`, (_req, res) => {
   try {
     const token = crypto.randomBytes(32).toString('hex');
@@ -889,6 +908,8 @@ app.use(`${apiPrefix}/budget-officer-edits`, budgetOfficerEditRouter);
 app.use(`${apiPrefix}/my-proposals`, myProposalsRoutes);
 // Workflow-specific endpoints
 app.use(`${apiPrefix}/workflow`, require("./routers/proposalWorkflowRoutes"));
+// Workflow Templates Routes
+app.use(`${apiPrefix}/workflow-templates`, require("./routers/workflowTemplateRoutes"));
 // 🔄 Submission Workflow Routes - Controls data visibility based on submission status
 const submissionWorkflowRoutes = require("./routers/submissionWorkflowRoutes");
 app.use(`${apiPrefix}/submission-workflow`, submissionWorkflowRoutes);
@@ -921,7 +942,11 @@ app.use(apiPrefix, loyaltyPayRouter);
 app.use(`${apiPrefix}/reports`, reportsRouter); // Mount with /reports prefix
 app.use(apiPrefix, cosPersonnelRouter);
 app.use(`${apiPrefix}/proposalSummary`, proposalSummaryRoutes);
-app.use(`${apiPrefix}/allproposal`, newProposalWorkflowRoutes);
+app.use(`${apiPrefix}/allproposal`, logWorkflowAction, newProposalWorkflowRoutes);
+
+// Comment/Annotation routes
+const commentRoutes = require('./routers/commentRoutes');
+app.use(`${apiPrefix}`, commentRoutes);
 // MSSQL routes (optional): mount when MSSQL is configured
 // Dedicated route for SalaryTable MSSQL table (mount before generic mssql routes)
 app.use(`${apiPrefix}/mssql/salarytable`, mssqlSalaryTableRoutes);
@@ -983,6 +1008,9 @@ app.use(`${apiPrefix}/chat`, require("./routers/chatRoutes"));
 // app.use(userOrgAssignmentRouter);
 const userProfileRouter = require("./routers/UserProfileRoutes");
 app.use(apiPrefix, userProfileRouter);
+// User Preferences Routes
+const userPreferencesRoutes = require("./routers/userPreferencesRoutes");
+app.use(`${apiPrefix}/user`, userPreferencesRoutes);
 const budgetManagerOrgRoutes = require("./routers/budgetManagerOrgRoutes");
 app.use(apiPrefix, budgetManagerOrgRoutes);
 // 🏢 Hierarchical RBAC Routes - Enhanced organizational access control with Division → Department → Region consolidation

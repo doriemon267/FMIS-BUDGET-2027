@@ -8,15 +8,22 @@ export const useThemeContext = () => useContext(ThemeContext);
 
 export const ThemeProvider = ({ children }) => {
   // Check if dark mode is stored in localStorage
-  const [mode, setMode] = useState(() => {
+  const [mode, setModeState] = useState(() => {
     const savedMode = localStorage.getItem('themeMode');
     return savedMode || 'light';
   });
 
+  const setMode = (newMode) => {
+    if (newMode === 'light' || newMode === 'dark') {
+      setModeState(newMode);
+      localStorage.setItem('themeMode', newMode);
+    }
+  };
+
   // Update theme mode and save to localStorage
   const toggleTheme = () => {
     const newMode = mode === 'light' ? 'dark' : 'light';
-    setMode(newMode);
+    setModeState(newMode);
     localStorage.setItem('themeMode', newMode);
   };
 
@@ -24,7 +31,7 @@ export const ThemeProvider = ({ children }) => {
   const theme = getTheme(mode);
 
   return (
-    <ThemeContext.Provider value={{ mode, toggleTheme }}>
+    <ThemeContext.Provider value={{ mode, setMode, toggleTheme }}>
       <MuiThemeProvider theme={theme}>
         {children}
       </MuiThemeProvider>

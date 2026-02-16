@@ -66,6 +66,11 @@ import CustomSnackbar from "../../global/components/CustomSnackbar";
 import { FaProjectDiagram } from "react-icons/fa";
 import BudgetarySupportTable from "../budgetarysupport/BudgetarySupportTable";
 import { toast } from "react-toastify";
+import logger from "../../utils/logger";
+import { handleApiError } from "../../utils/errorHandler";
+import { useDebouncedCallback } from "../../hooks/useDebounce";
+import { TableSkeleton } from "../common/LoadingSkeleton";
+import ErrorAlert from "../common/ErrorAlert";
 import LockIcon from "@mui/icons-material/Lock";
 import CompareArrowsIcon from "@mui/icons-material/CompareArrows";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
@@ -127,6 +132,7 @@ const ProposalCustomPage = ({
   const [divisionCeilingAmount, setDivisionCeilingAmount] = useState(null);
   const [divisionCeilingInfo, setDivisionCeilingInfo] = useState(null); // { division, department, ceilingAmount }
   const [budgetDeficit, setBudgetDeficit] = useState(null);
+  const [currentProposalId, setCurrentProposalId] = useState(null);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -195,7 +201,7 @@ const ProposalCustomPage = ({
               proposalDepartment = proposalRes.data.data.department || null;
             }
           } catch (proposalErr) {
-            console.warn("Could not fetch proposal details for ceiling matching:", proposalErr?.message);
+            logger.warn("Could not fetch proposal details for ceiling matching", proposalErr);
           }
         }
         // Fallback: use user's hierarchical access division/department
@@ -240,7 +246,7 @@ const ProposalCustomPage = ({
         setDivisionCeilingInfo(null);
       }
     } catch (err) {
-      console.error("Failed to fetch region ceiling:", err?.message || err);
+      logger.error("Failed to fetch region ceiling", err);
       setRegionCeilingAmount(null);
       setDivisionCeilingAmount(null);
       setDivisionCeilingInfo(null);
@@ -270,7 +276,7 @@ const ProposalCustomPage = ({
       setIasOMCostData(iasOMRes.data || null);
 
     } catch (error) {
-      console.error("Error fetching all data:", error);
+      logger.error("Error fetching all data", error);
       // Only show error if it's not a 404 for ias-om-cost which is expected for new regions
       if (error.response?.status !== 404) {
         toast.error("Failed to fetch budget data");
@@ -308,7 +314,6 @@ const ProposalCustomPage = ({
     modelType: "Initial", // Will be auto-overridden by active settings
   });
   const [isCreateDialogOpen, setCreateDialogOpen] = useState(false);
-  const [currentProposalId, setCurrentProposalId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [privacyNoticeAccepted, setPrivacyNoticeAccepted] = useState(false);
 
@@ -491,7 +496,7 @@ const ProposalCustomPage = ({
             setCurrentProposalId(storedWorkflowRef);
           } else {
             // Proposal not found - clear storage
-            // console.log(
+            // Removed console.log - use logger.debug() if needed
               // "[ProposalCustomPage] Stored proposal not found, clearing reference"
             // );
             sessionStorage.removeItem("activeWorkflowRef");
@@ -724,7 +729,7 @@ const ProposalCustomPage = ({
         grandTotal,
       };
     } catch (error) {
-      console.error("Error calculating total budget:", error);
+      logger.error("Error calculating total budget", error);
       return {
         personnelTotal: 0,
         mooeTotal: 0,
@@ -952,7 +957,7 @@ const ProposalCustomPage = ({
         isBalanced,
       };
     } catch (error) {
-      console.error("Error calculating budget summary:", error);
+      logger.error("Error calculating budget summary", error);
       return {
         personnelTotal: 0,
         mooeTotal: 0,
@@ -1151,7 +1156,7 @@ const ProposalCustomPage = ({
           severity: "success",
         });
       } catch (error) {
-        console.error("Bulk action error:", error);
+        handleApiError(error, toast, 'Bulk action');
         setSnackbar({
           open: true,
           message: "Failed to update selected proposals",
@@ -1237,7 +1242,7 @@ const ProposalCustomPage = ({
         severity: "success",
       });
     } catch (error) {
-      console.error("PDF export error:", error);
+      handleApiError(error, toast, 'PDF export');
       setSnackbar({
         open: true,
         message: "Failed to generate PDF report",
@@ -1329,7 +1334,7 @@ const ProposalCustomPage = ({
         severity: "success",
       });
     } catch (error) {
-      console.error("Excel export error:", error);
+      handleApiError(error, toast, 'Excel export');
       setSnackbar({
         open: true,
         message: "Failed to generate Excel report",
@@ -1507,10 +1512,10 @@ const ProposalCustomPage = ({
             setIsDueDatePassed(false);
           }
         } else {
-          console.warn("No active settings data returned from API");
+          logger.warn("No active settings data returned from API");
         }
       } catch (activeError) {
-        console.error("Error fetching active settings:", activeError);
+        logger.error("Error fetching active settings", activeError);
         toast.error("Failed to fetch active fiscal year settings");
       }
 
@@ -1523,14 +1528,14 @@ const ProposalCustomPage = ({
           // Make sure we have at least the active fiscal year in the list
           setAvailableFiscalYears(yearsData);
         } else {
-          console.warn("No fiscal years data returned or data is not an array");
+          logger.warn("No fiscal years data returned or data is not an array");
           // If we don't get a valid response, at least include the active fiscal year
           if (activeFiscalYear) {
             setAvailableFiscalYears([activeFiscalYear]);
           }
         }
       } catch (fiscalYearsError) {
-        console.error("Error fetching fiscal years:", fiscalYearsError);
+        logger.error("Error fetching fiscal years", fiscalYearsError);
         // Don't show a toast for this error since we already have the active fiscal year
         // Just make sure we have the active fiscal year in the list
         if (activeFiscalYear) {

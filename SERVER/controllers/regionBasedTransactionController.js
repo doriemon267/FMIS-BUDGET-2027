@@ -97,7 +97,8 @@ const validateRegionTransaction = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Region is required for validation',
-        code: 'REGION_REQUIRED'
+        code: 'REGION_REQUIRED',
+        recommendations: ['Include a valid region in the request body for validation.']
       });
     }
     // Check if user has full access
@@ -129,7 +130,11 @@ const validateRegionTransaction = async (req, res) => {
         region,
         operation,
         allowedRegions,
-        code: 'REGION_ACCESS_DENIED'
+        code: 'REGION_ACCESS_DENIED',
+        recommendations: [
+          'Use one of your assigned regions: ' + (allowedRegions.length ? allowedRegions.join(', ') : 'none assigned'),
+          'Contact your administrator to request access to this region'
+        ]
       });
     }
     // Check operation permissions
@@ -154,7 +159,11 @@ const validateRegionTransaction = async (req, res) => {
         region,
         operation,
         code: 'OPERATION_PERMISSION_DENIED',
-        rolePermissions: permissions
+        rolePermissions: permissions,
+        recommendations: [
+          'Your role may not allow this operation in this region',
+          'Contact your administrator to request the required permission'
+        ]
       });
     }
     return res.status(200).json({
@@ -171,7 +180,8 @@ const validateRegionTransaction = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Error validating region transaction',
-      error: error.message
+      error: error.message,
+      recommendations: ['Check server logs; retry or contact support if the issue persists.']
     });
   }
 };

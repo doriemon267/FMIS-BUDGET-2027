@@ -34,6 +34,7 @@ import { useRegion } from "../context/RegionContext";
 import AppTrayLauncher from "../global/components/floating_apps/AppTrayLauncher";
 import { ErrorBoundary } from 'react-error-boundary';
 import { DrawerProvider, useDrawer } from "../context/DrawerContext";
+import ThemeSync from "../components/common/ThemeSync";
 
 const drawerWidth = 280;
 const collapsedDrawerWidth = 80;
@@ -102,6 +103,7 @@ const DashboardContent = () => {
 
   return (
     <Box sx={{ display: "flex" }}>
+      <ThemeSync />
       <CssBaseline />
       <AppBar
         position="fixed"

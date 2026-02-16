@@ -7,8 +7,16 @@ import IS_PRODUCTION from "../utils/IS_PRODUCTION";
 const REQUEST_TIMEOUT = Number(env("REQUEST_TIMEOUT_MS")) || 30000; // default 30s
 const apiPrefix = "/api";
 
+// Get base URL and ensure it doesn't end with /api to prevent double prefix
+const getBaseURL = () => {
+  const base = IS_PRODUCTION ? "/" : env("SERVER_URL_DEV");
+  if (!base || base === "/") return "/";
+  // Remove trailing /api if present to prevent double prefix
+  return base.replace(/\/api\/?$/, "") || "/";
+};
+
 const api = axios.create({
-  baseURL: IS_PRODUCTION ? "/" : env("SERVER_URL_DEV"),
+  baseURL: getBaseURL(),
   withCredentials: true,
 });
 
@@ -43,8 +51,10 @@ api.interceptors.request.use(
         return url;
       }
       if (url.startsWith("/uploads")) return url;
-      if (url.startsWith(apiPrefix)) return url;
-      const normalized = url.startsWith("/") ? url : `/${url}`;
+      // Remove any existing /api prefix to prevent double /api/api/
+      let cleanUrl = url.startsWith(apiPrefix) ? url.substring(apiPrefix.length) : url;
+      // Ensure it starts with /
+      const normalized = cleanUrl.startsWith("/") ? cleanUrl : `/${cleanUrl}`;
       return `${apiPrefix}${normalized}`;
     };
 

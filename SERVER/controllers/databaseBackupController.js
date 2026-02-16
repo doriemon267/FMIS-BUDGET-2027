@@ -8,6 +8,7 @@ const archiver = require('archiver');
 const { runManualCleanup, getStorageStats, checkBackupHealth } = require('../utils/backupCleanup');
 const progressTracker = require('../utils/backupProgress');
 const { getBackupFilePath, ensureBackupDirectory, getBackupStoragePath } = require('../utils/backupPaths');
+const { generateBackupReport } = require('../utils/backupVerification');
 // Store active backup processes
 const activeBackups = new Map();
 const scheduledJobs = new Map();
@@ -580,6 +581,52 @@ const initializeScheduledJobs = async () => {
   }
 };
 
+/**
+ * Verify backup integrity and return report with recommendations (data/API only).
+ * GET /backup/verify/:id returns report.summary.recommendations for clients to display or log.
+ */
+const verifyBackup = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const backup = await DatabaseBackup.findById(id);
+    if (!backup) {
+      return res.status(404).json({
+        success: false,
+        message: 'Backup not found'
+      });
+    }
+    if (backup.status !== 'completed' || !backup.filePath) {
+      return res.status(400).json({
+        success: false,
+        message: 'Backup is not completed or has no file path',
+        recommendations: ['Create a new backup and verify again.']
+      });
+    }
+    if (!fs.existsSync(backup.filePath)) {
+      return res.status(404).json({
+        success: false,
+        message: 'Backup file not found on disk',
+        recommendations: ['Backup record exists but file is missing. Create a new backup.']
+      });
+    }
+    const report = await generateBackupReport(backup.filePath);
+    return res.status(200).json({
+      success: true,
+      data: report,
+      summary: report.summary,
+      recommendations: report.summary?.recommendations || []
+    });
+  } catch (error) {
+    console.error('Error verifying backup:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to verify backup',
+      error: error.message,
+      recommendations: ['Check server logs; consider recreating the backup.']
+    });
+  }
+};
+
 module.exports = {
   createBackup,
   scheduleBackup,
@@ -592,5 +639,6 @@ module.exports = {
   getBackupStatus,
   cleanupBackups,
   getStorageStatistics,
+  verifyBackup,
   initializeScheduledJobs
 };

@@ -57,6 +57,12 @@ import { useWorkflowRef } from "../hooks/useWorkflowRef";
 import { prettyRole } from '../utils/role-utils';
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { displayUacs } from '../utils/uacsDisplayHelper';
+import logger from '../utils/logger';
+import { handleApiError } from '../utils/errorHandler';
+import { useDebouncedCallback } from '../hooks/useDebounce';
+import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
+import { TableSkeleton } from '../components/common/LoadingSkeleton';
+import ErrorAlert from '../components/common/ErrorAlert';
 
 // Brand colors aligned to Transactions Processing UI
 const BRAND_COLORS = {
@@ -326,7 +332,7 @@ const NewProposalWorkflowPage = () => {
         });
         setDiscountSettings(response.data || null);
       } catch (error) {
-        console.warn("⚠️ Unable to load discount settings:", error?.message || error);
+        logger.warn("Unable to load discount settings", error);
         setDiscountSettings(null);
       }
     };
@@ -349,6 +355,28 @@ const NewProposalWorkflowPage = () => {
   // Search and filter
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  
+  // Debounced search handler
+  const debouncedSearch = useDebouncedCallback((query) => {
+    // Trigger refetch with new search query
+    if (query !== searchQuery) {
+      fetchProposals({ forceAllRegions: showAllRegions });
+    }
+  }, 300);
+  
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    'ctrl+k': (e) => {
+      e.preventDefault();
+      // Focus search input
+      const searchInput = document.querySelector('input[placeholder*="Search"]');
+      if (searchInput) searchInput.focus();
+    },
+    'ctrl+r': (e) => {
+      e.preventDefault();
+      fetchProposals({ forceAllRegions: showAllRegions });
+    },
+  });
 
   // Determine user's workflow role
   const userWorkflowRole =
@@ -390,9 +418,7 @@ const NewProposalWorkflowPage = () => {
         region: showAllRegions ? undefined : resolvedRegion,
         view: activeTabView,
       };
-      // console.debug('[getProposals] Request params:', params);
       const response = await api.get(WORKFLOW_API_BASE, { params });
-      // console.debug('[getProposals] Received proposals count:', (response.data.proposals || []).length);
       return response.data;
     },
     staleTime: 5000, // Consider data stale after 5 seconds
@@ -436,7 +462,6 @@ const NewProposalWorkflowPage = () => {
           (event.query.queryKey?.[0] === 'proposals' || 
            event.query.queryKey?.[0] === 'allProposals' ||
            event.query.queryKey?.[0] === 'personnelServices')) {
-        // console.debug('[ProposalPage] Detected query invalidation, triggering refetch');
         refetchProposals();
       }
     });
@@ -677,7 +702,7 @@ const NewProposalWorkflowPage = () => {
         }
       } catch (err) {
         // If full proposal fetch fails, keep the selected proposal as-is
-        console.warn('Failed to fetch full proposal details for attachments', err?.message || err);
+        logger.warn('Failed to fetch full proposal details for attachments', err);
       }
 
       setEditableItems({
@@ -687,8 +712,7 @@ const NewProposalWorkflowPage = () => {
         capitalOutlay: JSON.parse(JSON.stringify(details.capitalOutlay)),
       });
     } catch (error) {
-      console.error("Error fetching proposal details:", error);
-      toast.error("Failed to load proposal details");
+      handleApiError(error, toast, 'Loading proposal details');
     } finally {
       setDetailsLoading(false);
     }
@@ -717,8 +741,7 @@ const NewProposalWorkflowPage = () => {
         toast.error("Failed to fetch audit trail");
       }
     } catch (error) {
-      console.error("Error fetching audit trail:", error);
-      toast.error("Failed to load audit trail");
+      handleApiError(error, toast, 'Loading audit trail');
     } finally {
       setAuditTrailLoading(false);
     }
@@ -954,8 +977,7 @@ const NewProposalWorkflowPage = () => {
       
       queryClient.invalidateQueries({ queryKey: ["workflowNotifications"] });
     } catch (error) {
-      console.error("Error performing action:", error);
-      toast.error("Failed to perform action");
+      handleApiError(error, toast, 'Performing workflow action');
     } finally {
       setActionLoading(false);
     }
@@ -1184,7 +1206,7 @@ const NewProposalWorkflowPage = () => {
           { projectedSubsidy: calculatedSubsidy }
         );
       } catch (error) {
-        console.warn("Failed to update projected subsidy:", error);
+        logger.warn("Failed to update projected subsidy", error);
       }
 
       await fetchProposals({ forceAllRegions: showAllRegions });
@@ -1242,15 +1264,13 @@ const NewProposalWorkflowPage = () => {
             capitalOutlay: JSON.parse(JSON.stringify(details.capitalOutlay)),
           });
         } catch (error) {
-          console.error("Error refreshing proposal details:", error);
+          logger.error("Error refreshing proposal details", error);
         } finally {
           setDetailsLoading(false);
         }
       }
     } catch (error) {
-      console.error("Error saving changes:", error);
-      console.error("Error response:", error.response?.data);
-      toast.error(error.response?.data?.message || "Failed to save changes");
+      handleApiError(error, toast, 'Saving changes');
     } finally {
       setDetailsLoading(false);
     }
@@ -2119,7 +2139,11 @@ const NewProposalWorkflowPage = () => {
             <TextField
               placeholder="Search by center, division, type, or status..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setSearchQuery(value);
+                debouncedSearch(value);
+              }}
               size="small"
               sx={{
                 flex: 1,
@@ -2273,19 +2297,8 @@ const NewProposalWorkflowPage = () => {
             </Box>
             {/* Content (includes Monitoring metrics if active) */}
             {loading ? (
-              <Box
-                sx={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  p: 6,
-                }}
-              >
-                <CircularProgress sx={{ color: "#2d5016", mb: 2 }} />
-                <Typography variant="body2" color="text.secondary">
-                  Loading proposals...
-                </Typography>
+              <Box sx={{ p: 3 }}>
+                <TableSkeleton rows={10} columns={6} />
               </Box>
             ) : filteredProposals.length === 0 ? (
               <Box
@@ -2973,7 +2986,7 @@ const NewProposalWorkflowPage = () => {
                 p: 6,
               }}
             >
-              <CircularProgress sx={{ color: "#2d5016" }} />
+              <CircularProgress sx={{ color: "#2d5016" }} size={20} />
             </Box>
           ) : (
             <>

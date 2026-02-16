@@ -18,7 +18,8 @@ const {
   downloadBackup,
   getBackupStatus,
   cleanupBackups,
-  getStorageStatistics
+  getStorageStatistics,
+  verifyBackup
 } = require('../controllers/databaseBackupController');
 // Apply authentication to all database backup routes
 router.use(tokenMiddleware);
@@ -44,4 +45,6 @@ router.get('/backup/status', getBackupStatus);
 router.post('/backup/cleanup', cleanupBackups);
 // Get storage statistics
 router.get('/backup/storage-stats', getStorageStatistics);
+// Verify backup integrity (returns report with summary.recommendations)
+router.get('/backup/verify/:id', verifyBackup);
 module.exports = router;

@@ -34,6 +34,9 @@ import { toast } from "react-toastify";
 import api from "../config/api";
 import { useLocation, useNavigate } from "react-router-dom";
 import { prettyRole } from '../utils/role-utils';
+import BulkOperationsToolbar from '../components/common/BulkOperationsToolbar';
+import logger from '../utils/logger';
+import { handleApiError } from '../utils/errorHandler';
 
 const AllProposalsPage = () => {
   const tableRef = useRef(null);
@@ -264,7 +267,7 @@ const AllProposalsPage = () => {
   };
 
   // Bulk approve selected proposals (Budget Officer only)
-  const handleBulkApprove = async () => {
+  const handleBulkApprove = async (comment = '') => {
     if (selectedProposals.length === 0) {
       toast.error('Please select proposals to approve.');
       return;
@@ -280,11 +283,11 @@ const AllProposalsPage = () => {
     try {
       setBulkApproving(true);
 
-      const comment = `Bulk approved ${selectedProposals.length} proposals on ${new Date().toLocaleString()}`;
+      const approvalComment = comment || `Bulk approved ${selectedProposals.length} proposals on ${new Date().toLocaleString()}`;
 
       const response = await api.post('/api/workflow/bulk-approve', {
         proposalIds: selectedProposals,
-        comment
+        comment: approvalComment
       });
 
       if (response.data.success) {
@@ -295,8 +298,74 @@ const AllProposalsPage = () => {
         throw new Error(response.data.message || 'Bulk approval failed');
       }
     } catch (error) {
-      console.error('Bulk approval error:', error);
-      toast.error(error.response?.data?.message || error.message || 'Failed to bulk approve proposals');
+      logger.error('Bulk approval error:', error);
+      handleApiError(error, toast, 'Bulk approval');
+    } finally {
+      setBulkApproving(false);
+    }
+  };
+
+  // Bulk reject handler
+  const handleBulkReject = async (comment = '') => {
+    if (selectedProposals.length === 0) {
+      toast.error('Please select proposals to reject.');
+      return;
+    }
+
+    try {
+      setBulkApproving(true);
+      const rejectComment = comment || `Bulk rejected ${selectedProposals.length} proposals on ${new Date().toLocaleString()}`;
+      
+      // Add reject logic here when endpoint is available
+      toast.info('Bulk reject functionality coming soon');
+      setSelectedProposals([]);
+    } catch (error) {
+      logger.error('Bulk reject error:', error);
+      toast.error(error.response?.data?.message || error.message || 'Failed to bulk reject proposals');
+    } finally {
+      setBulkApproving(false);
+    }
+  };
+
+  // Bulk delete handler
+  const handleBulkDelete = async (comment = '') => {
+    if (selectedProposals.length === 0) {
+      toast.error('Please select proposals to delete.');
+      return;
+    }
+
+    try {
+      setBulkApproving(true);
+      const deleteComment = comment || `Bulk deleted ${selectedProposals.length} proposals on ${new Date().toLocaleString()}`;
+      
+      // Add delete logic here when endpoint is available
+      toast.info('Bulk delete functionality coming soon');
+      setSelectedProposals([]);
+    } catch (error) {
+      logger.error('Bulk delete error:', error);
+      toast.error(error.response?.data?.message || error.message || 'Failed to bulk delete proposals');
+    } finally {
+      setBulkApproving(false);
+    }
+  };
+
+  // Bulk submit handler
+  const handleBulkSubmit = async (comment = '') => {
+    if (selectedProposals.length === 0) {
+      toast.error('Please select proposals to submit.');
+      return;
+    }
+
+    try {
+      setBulkApproving(true);
+      const submitComment = comment || `Bulk submitted ${selectedProposals.length} proposals on ${new Date().toLocaleString()}`;
+      
+      // Add submit logic here when endpoint is available
+      toast.info('Bulk submit functionality coming soon');
+      setSelectedProposals([]);
+    } catch (error) {
+      logger.error('Bulk submit error:', error);
+      toast.error(error.response?.data?.message || error.message || 'Failed to bulk submit proposals');
     } finally {
       setBulkApproving(false);
     }
@@ -774,31 +843,47 @@ const AllProposalsPage = () => {
         // For AllProposals, don't group by default - show individual entries
         // Users can see aggregated data through the totals row
         return (
-          <ProposalCustomPage
-            tableRef={tableRef}
-            dataListName="proposals"
-            schema={proposalSchema}
-            hasEdit={false}
-            hasDelete={false}
-            hasAdd={false}
-            additionalMenuOptions={[ViewButton]}
-            refreshData={refreshData}
-            title="All Proposals"
-            description="View and manage budget proposals based on your role"
-            apiPath="/api/my-proposals/all"
-            apiParams={{ 
-              includeFinalized,
-              processBy: currentUser?.Username,
-              region: currentUser?.Region,
-              fiscalYear: activeSettings?.fiscalYear,
-              budgetType: activeSettings?.budgetType
-            }}
-            groupBy={null} // No grouping - show individual entries
-            showTotals={true}
-            totalsData={stats}
-            selectedRows={selectedProposals}
-            onRowSelectionChange={handleRowSelectionChange}
-          />
+          <>
+            {selectedProposals.length > 0 && (
+              <BulkOperationsToolbar
+                selectedCount={selectedProposals.length}
+                totalCount={stats?.totalProposals || 0}
+                onBulkApprove={handleBulkApprove}
+                onBulkReject={handleBulkReject}
+                onBulkDelete={handleBulkDelete}
+                onBulkSubmit={handleBulkSubmit}
+                onClearSelection={() => setSelectedProposals([])}
+                isLoading={bulkApproving}
+                allowedActions={['approve', 'reject', 'delete', 'submit']}
+                requireComment={true}
+              />
+            )}
+            <ProposalCustomPage
+              tableRef={tableRef}
+              dataListName="proposals"
+              schema={proposalSchema}
+              hasEdit={false}
+              hasDelete={false}
+              hasAdd={false}
+              additionalMenuOptions={[ViewButton]}
+              refreshData={refreshData}
+              title="All Proposals"
+              description="View and manage budget proposals based on your role"
+              apiPath="/api/my-proposals/all"
+              apiParams={{ 
+                includeFinalized,
+                processBy: currentUser?.Username,
+                region: currentUser?.Region,
+                fiscalYear: activeSettings?.fiscalYear,
+                budgetType: activeSettings?.budgetType
+              }}
+              groupBy={null} // No grouping - show individual entries
+              showTotals={true}
+              totalsData={stats}
+              selectedRows={selectedProposals}
+              onRowSelectionChange={handleRowSelectionChange}
+            />
+          </>
         );
       })()}
       

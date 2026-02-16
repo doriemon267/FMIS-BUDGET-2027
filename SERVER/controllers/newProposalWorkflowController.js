@@ -402,6 +402,8 @@ const resolveUserDisplayName = async (req, userIdString) => {
  * @param {string} currentUserName - Name of the user performing the action
  * @param {string} comment - Optional comment/message from the action
  */
+const { sendWorkflowEmail } = require('./emailNotificationController');
+
 const createWorkflowNotification = async (action, proposal, recipientUserIds, currentUserName, comment, currentUserRole) => {
   try {
     console.log('[createWorkflowNotification] Starting with', recipientUserIds.length, 'recipients');
@@ -1878,6 +1880,9 @@ exports.performAction = async (req, res) => {
         if (recipientUserIds.length > 0) {
           console.log('[PERFORM_ACTION] Creating notifications for action:', action);
           await createWorkflowNotification(action, proposal, recipientUserIds, userName, comment, userRole);
+          
+          // Email notifications are already handled by sendWorkflowEmails function
+          // which is called separately and respects user email preferences
           console.log('[PERFORM_ACTION] Notifications created successfully');
           
           // Send email notifications

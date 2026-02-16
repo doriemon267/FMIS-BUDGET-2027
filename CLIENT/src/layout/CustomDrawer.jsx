@@ -40,6 +40,7 @@ import { hasPermission } from "../utils/permissions";
 import { useUser } from "../context/UserContext";
 import IS_PRODUCTION from "../utils/IS_PRODUCTION";
 import api from "../config/api";
+import logger from "../utils/logger";
 const CustomDrawer = ({ collapsed = false }) => {
   const [openSettings, setOpenSettings] = useState(false);
   const [hasFinalizedProposals, setHasFinalizedProposals] = useState(false);
@@ -90,7 +91,7 @@ const CustomDrawer = ({ collapsed = false }) => {
         const settingsRes = await api.get("/settings/active");
         const fiscalYear = settingsRes?.data?.fiscalYear;
         const params = fiscalYear ? { fiscalYear } : {};
-        const res = await api.get("/api/allproposal/proposals/has-finalized", {
+        const res = await api.get("/allproposal/proposals/has-finalized", {
           params,
         });
         if (!isMounted) return;
@@ -100,9 +101,9 @@ const CustomDrawer = ({ collapsed = false }) => {
           setHasFinalizedProposals(false);
         }
       } catch (err) {
-        console.error(
-          "Failed to check finalized proposals for NEP Ceiling menu:",
-          err?.message || err
+        logger.error(
+          "Failed to check finalized proposals for NEP Ceiling menu",
+          err
         );
         if (isMounted) setHasFinalizedProposals(false);
       }

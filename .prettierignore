@@ -1,0 +1,70 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# Build outputs
+dist/
+build/
+*.min.js
+*.min.css
+
+# Generated files
+*.log
+*.cache
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Assets
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+*.woff
+*.woff2
+*.ttf
+*.eot
+
+# Documentation (optional - can format if needed)
+*.md
+
+# Server specific
+SERVER/uploads/
+SERVER/logs/
+SERVER/backups/
+
+# Client specific
+CLIENT/dist/
+CLIENT/build/
+CLIENT/.vite/
+
+# Scripts (optional - can format if needed)
+SCRIPTS/
+*.sh
+*.bat
+
+# Database
+*.db
+*.sqlite
+*.sql
+
+# Archives
+*.zip
+*.tar
+*.gz

@@ -16,9 +16,11 @@ import {
   ViewModule as BarcodeIcon,
   HelpOutline as HelpIcon,
   Print as PrintIcon,
+  Tune as PreferencesIcon,
 } from "@mui/icons-material";
-import React from "react";
+import React, { useState } from "react";
 import LogoutDialog from "../../components/LogoutDialog";
+import UserPreferencesDialog from "../../components/settings/UserPreferencesDialog";
 import { useUser } from "../../context/UserContext";
 
 const formatDisplayName = (user) => {
@@ -47,9 +49,14 @@ const UserAvatarMenu = () => {
   const displayName = formatDisplayName(currentUser);
 
   const [anchorElUser, setAnchorElUser] = React.useState(null);
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
 
   const handleOpenUserMenu = (event) => setAnchorElUser(event.currentTarget);
   const handleCloseUserMenu = () => setAnchorElUser(null);
+  const handleOpenPreferences = () => {
+    setPreferencesOpen(true);
+    handleCloseUserMenu();
+  };
 
   const handleLinkClick = (href) => {
     window.open(href, "_blank", "noopener,noreferrer");
@@ -121,6 +128,15 @@ const UserAvatarMenu = () => {
 
         <Divider />
 
+        <MenuItem onClick={handleOpenPreferences}>
+          <ListItemIcon>
+            <PreferencesIcon fontSize="small" />
+          </ListItemIcon>
+          <Typography variant="body2">Preferences</Typography>
+        </MenuItem>
+
+        <Divider />
+
         {HELP_LINKS.map(({ label, href, icon: Icon }) => (
           <MenuItem key={label} onClick={() => handleLinkClick(href)}>
             <ListItemIcon>
@@ -134,6 +150,8 @@ const UserAvatarMenu = () => {
 
         <LogoutDialog handleCloseMenu={handleCloseUserMenu} compact />
       </Menu>
+
+      <UserPreferencesDialog open={preferencesOpen} onClose={() => setPreferencesOpen(false)} />
     </Box>
   );
 };

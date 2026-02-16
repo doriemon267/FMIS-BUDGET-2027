@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Grid,
@@ -18,6 +18,9 @@ import {
 } from '@mui/material';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../config/api';
+import { StatCardSkeleton } from '../components/common/LoadingSkeleton';
+import { handleApiError } from '../utils/errorHandler';
+import logger from '../utils/logger';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import AssessmentIcon from '@mui/icons-material/Assessment';
@@ -26,9 +29,16 @@ import PendingActionsIcon from '@mui/icons-material/PendingActions';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
+import ErrorAlert from '../components/common/ErrorAlert';
 import { useThemeContext } from '../context/ThemeContext';
 import { useUser } from '../context/UserContext';
 import { useRegion } from '../context/RegionContext';
+import WorkflowTemplateSelector from '../components/workflow/WorkflowTemplateSelector';
+import DashboardAnalytics from '../components/dashboard/DashboardAnalytics';
+import InAppHelp from '../components/common/InAppHelp';
+import DeadlineReminder from '../components/common/DeadlineReminder';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 
 // Reusable Stat Card Component
 const StatCard = ({ title, value, color, icon: Icon, isLoading, subtitle, filled = true }) => {
@@ -170,6 +180,17 @@ const HomePage = () => {
   const { activeRegion } = useRegion();
   const queryClient = useQueryClient();
   const isDarkMode = mode === 'dark';
+  
+  // Theme colors aligned with muiTheme.js
+  const THEME_COLORS = {
+    primary: '#264524',      // Dark green
+    secondary: '#375e38',    // Medium green
+    deepGreen: '#2d5016',   // Deep green
+    success: '#2e7d32',      // Success green
+    warning: '#f57c00',      // Orange for pending
+    error: '#c62828',        // Red for rejected/returned
+    info: '#1976d2',         // Blue for info
+  };
   const userRoles = Array.isArray(currentUser?.Roles)
     ? currentUser.Roles
     : currentUser?.Roles
@@ -223,7 +244,7 @@ const HomePage = () => {
 
   const displayInfo = getDisplayInfo();
 
-  const { data: stats, isLoading } = useQuery({
+  const { data: stats, isLoading, error: statsError } = useQuery({
     queryKey: ['dashboardStats', regionName, userAccessLevel],
     queryFn: async () => {
       const res = await api.get(`/stats/overview?region=${regionName || ''}`);
@@ -232,6 +253,9 @@ const HomePage = () => {
     refetchInterval: 30000, // Less frequent updates
     staleTime: 10000,
     enabled: !!regionName,
+    onError: (error) => {
+      handleApiError(error, toast, 'Loading dashboard stats');
+    },
   });
 
   // Fallback values if data is not yet loaded
@@ -239,11 +263,45 @@ const HomePage = () => {
   const pendingProposals = stats?.pendingProposals || 0;
   const approvedProposals = stats?.approvedProposals || 0;
   const rejectedProposals = stats?.rejectedProposals || 0;
+  
+  // Breakdown data
+  const legacyBreakdown = stats?.breakdown?.legacy || {};
+  const newWorkflowBreakdown = stats?.breakdown?.newWorkflow || {};
+  const fiscalYear = stats?.fiscalYear || new Date().getFullYear();
 
   // Calculate completion percentage
   const completionRate = totalProposals > 0 ? ((approvedProposals / totalProposals) * 100).toFixed(1) : 0;
 
+  const [templateSelectorOpen, setTemplateSelectorOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+
+  // Fetch active settings for template selector
+  const { data: activeSettings } = useQuery({
+    queryKey: ['activeSettings'],
+    queryFn: async () => {
+      const res = await api.get('/settings/active');
+      return res.data;
+    },
+  });
+
   const handleCreateProposal = () => navigate('/proposal');
+  
+  const handleCreateFromTemplate = () => {
+    setTemplateSelectorOpen(true);
+  };
+
+  const handleSelectTemplate = async (template) => {
+    try {
+      const response = await api.post(`/api/workflow-templates/${template._id}/create-proposal`);
+      if (response.data.success) {
+        toast.success('Proposal created from template successfully!');
+        navigate(`/allproposal?proposalId=${response.data.proposal._id}`);
+        setTemplateSelectorOpen(false);
+      }
+    } catch (error) {
+      handleApiError(error, toast, 'Creating proposal from template');
+    }
+  };
   const handleViewProposals = () => navigate('/myProposals');
   const handleGenerateReports = () => navigate('/consolidated-reports');
   const handleViewAllProposals = () => navigate('/allproposal');
@@ -253,26 +311,48 @@ const HomePage = () => {
 
   const statusBreakdown = [
     {
-      label: 'Pending',
+      label: 'Pending Review',
       value: pendingProposals,
-      color: '#d97706',
+      color: THEME_COLORS.warning,
     },
     {
-      label: 'Approved',
+      label: 'Approved/Finalized',
       value: approvedProposals,
-      color: '#16a34a',
+      color: THEME_COLORS.success,
     },
     {
-      label: 'Rejected',
+      label: 'Rejected/Returned',
       value: rejectedProposals,
-      color: '#dc2626',
+      color: THEME_COLORS.error,
     },
   ];
 
+  // Analytics data for DashboardAnalytics (derived from stats)
+  const analyticsData = {
+    trends: [
+      {
+        date: String(fiscalYear),
+        total: totalProposals,
+        approved: approvedProposals,
+        pending: pendingProposals,
+      },
+    ],
+    statusDistribution: statusBreakdown.map((s) => ({ name: s.label, value: s.value })),
+    budgetTypeDistribution: [
+      legacyBreakdown.total > 0 && { name: 'Legacy System', value: legacyBreakdown.total },
+      newWorkflowBreakdown.total > 0 && { name: 'New Workflow', value: newWorkflowBreakdown.total },
+    ].filter(Boolean),
+  };
+
   const actionChips = [
     {
-      label: `Access: ${displayInfo.level}`,
+      label: `Fiscal Year: ${fiscalYear}`,
       color: 'primary',
+      variant: 'outlined',
+    },
+    {
+      label: `Access: ${displayInfo.level}`,
+      color: 'secondary',
       variant: 'outlined',
     },
     {
@@ -299,7 +379,7 @@ const HomePage = () => {
               borderRadius: 3,
               background: isDarkMode
                 ? 'linear-gradient(135deg, #0f172a 0%, #0b3d2e 100%)'
-                : 'linear-gradient(135deg, #0f5132 0%, #1b5e20 40%, #2e7d32 100%)',
+                : `linear-gradient(135deg, ${THEME_COLORS.deepGreen} 0%, ${THEME_COLORS.primary} 40%, ${THEME_COLORS.secondary} 100%)`,
               color: 'white',
               overflow: 'hidden',
             }}
@@ -347,14 +427,40 @@ const HomePage = () => {
                 </Stack>
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
                   {isPreparer && (
-                    <Button
-                      variant='contained'
-                      color='secondary'
-                      onClick={handleCreateProposal}
-                      sx={{ minWidth: 180, textTransform: 'none', fontWeight: 600 }}
-                    >
-                      New Proposal
-                    </Button>
+                    <>
+                      <Button
+                        variant='contained'
+                        onClick={handleCreateProposal}
+                        sx={{
+                          minWidth: 180,
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          bgcolor: THEME_COLORS.secondary,
+                          '&:hover': {
+                            bgcolor: THEME_COLORS.primary,
+                          },
+                        }}
+                      >
+                        New Proposal
+                      </Button>
+                      <Button
+                        variant='outlined'
+                        onClick={handleCreateFromTemplate}
+                        sx={{
+                          minWidth: 180,
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          borderColor: THEME_COLORS.secondary,
+                          color: THEME_COLORS.secondary,
+                          '&:hover': {
+                            borderColor: THEME_COLORS.primary,
+                            bgcolor: alpha(THEME_COLORS.primary, 0.1),
+                          },
+                        }}
+                      >
+                        From Template
+                      </Button>
+                    </>
                   )}
                   <Button
                     variant='outlined'
@@ -400,7 +506,7 @@ const HomePage = () => {
                     value={Number(completionRate)}
                     size={90}
                     thickness={4}
-                    sx={{ color: '#a7ffeb' }}
+                    sx={{ color: isDarkMode ? '#4caf50' : '#a7ffeb' }}
                   />
                   <Box>
                     <Typography variant='h3' fontWeight={700}>
@@ -427,51 +533,62 @@ const HomePage = () => {
             <Typography variant='h6' fontWeight='bold' sx={{ mb: 2 }}>
               📊 Key Metrics
             </Typography>
-            <Grid container spacing={{ xs: 2, md: 3 }}>
-              <Grid item xs={12} sm={6} md={3}>
-                <StatCard
-                  title='Total Proposals'
-                  value={totalProposals}
-                  color='#1e88e5'
-                  icon={TrendingUpIcon}
-                  isLoading={isLoading}
-                  filled
+            {isLoading ? (
+              <StatCardSkeleton count={4} />
+            ) : statsError ? (
+              <Box sx={{ p: 2 }}>
+                <ErrorAlert
+                  error={statsError}
+                  onRetry={() => queryClient.refetchQueries(['dashboardStats'])}
                 />
+              </Box>
+            ) : (
+              <Grid container spacing={{ xs: 2, md: 3 }}>
+                <Grid item xs={12} sm={6} md={3}>
+                  <StatCard
+                    title='Total Proposals'
+                    value={totalProposals}
+                    color={THEME_COLORS.primary}
+                    icon={TrendingUpIcon}
+                    isLoading={false}
+                    filled
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <StatCard
+                    title='Pending Review'
+                    value={pendingProposals}
+                    color={THEME_COLORS.warning}
+                    icon={PendingActionsIcon}
+                    isLoading={false}
+                    subtitle={`${totalProposals > 0 ? ((pendingProposals / totalProposals) * 100).toFixed(1) : 0}% of total`}
+                    filled
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <StatCard
+                    title='Approved/Finalized'
+                    value={approvedProposals}
+                    color={THEME_COLORS.success}
+                    icon={CheckCircleIcon}
+                    isLoading={false}
+                    subtitle={`${totalProposals > 0 ? ((approvedProposals / totalProposals) * 100).toFixed(1) : 0}% of total`}
+                    filled
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <StatCard
+                    title='Rejected/Returned'
+                    value={rejectedProposals}
+                    color={THEME_COLORS.error}
+                    icon={CancelIcon}
+                    isLoading={false}
+                    subtitle={`${totalProposals > 0 ? ((rejectedProposals / totalProposals) * 100).toFixed(1) : 0}% of total`}
+                    filled
+                  />
+                </Grid>
               </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <StatCard
-                  title='Pending'
-                  value={pendingProposals}
-                  color='#f9a825'
-                  icon={PendingActionsIcon}
-                  isLoading={isLoading}
-                  subtitle={`${totalProposals > 0 ? ((pendingProposals / totalProposals) * 100).toFixed(1) : 0}% of total`}
-                  filled
-                />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <StatCard
-                  title='Approved'
-                  value={approvedProposals}
-                  color='#2e7d32'
-                  icon={CheckCircleIcon}
-                  isLoading={isLoading}
-                  subtitle={`${totalProposals > 0 ? ((approvedProposals / totalProposals) * 100).toFixed(1) : 0}% of total`}
-                  filled
-                />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <StatCard
-                  title='Rejected'
-                  value={rejectedProposals}
-                  color='#c62828'
-                  icon={CancelIcon}
-                  isLoading={isLoading}
-                  subtitle={`${totalProposals > 0 ? ((rejectedProposals / totalProposals) * 100).toFixed(1) : 0}% of total`}
-                  filled
-                />
-              </Grid>
-            </Grid>
+            )}
           </Box>
 
           {/* Health + Context */}
@@ -479,24 +596,39 @@ const HomePage = () => {
             <Grid item xs={12} md={7}>
               <Paper
                 elevation={isDarkMode ? 5 : 1}
-                sx={{ p: { xs: 2.5, md: 3 }, borderRadius: 3 }}
+                sx={{
+                  p: { xs: 2.5, md: 3 },
+                  borderRadius: 3,
+                  border: `1px solid ${alpha(THEME_COLORS.primary, 0.1)}`,
+                }}
               >
                 <Stack direction='row' justifyContent='space-between' alignItems='center' sx={{ mb: 2 }}>
-                  <Typography variant='h6' fontWeight={600}>
+                  <Typography variant='h6' fontWeight={600} sx={{ color: THEME_COLORS.primary }}>
                     Submission Health
                   </Typography>
-                  <Button size='small' onClick={handleViewAllProposals} sx={{ textTransform: 'none' }}>
+                  <Button
+                    size='small'
+                    onClick={handleViewAllProposals}
+                    sx={{
+                      textTransform: 'none',
+                      color: THEME_COLORS.secondary,
+                      fontWeight: 600,
+                      '&:hover': {
+                        bgcolor: alpha(THEME_COLORS.secondary, 0.1),
+                      },
+                    }}
+                  >
                     View All
                   </Button>
                 </Stack>
-                <Stack spacing={2}>
+                <Stack spacing={2.5}>
                   {statusBreakdown.map((status) => (
                     <Box key={status.label}>
-                      <Stack direction='row' justifyContent='space-between' alignItems='center'>
-                        <Typography variant='body2' color='text.secondary'>
+                      <Stack direction='row' justifyContent='space-between' alignItems='center' sx={{ mb: 0.5 }}>
+                        <Typography variant='body2' fontWeight={500} color='text.primary'>
                           {status.label}
                         </Typography>
-                        <Typography variant='body2' fontWeight={600}>
+                        <Typography variant='body1' fontWeight={700} sx={{ color: status.color }}>
                           {status.value}
                         </Typography>
                       </Stack>
@@ -504,28 +636,81 @@ const HomePage = () => {
                         variant='determinate'
                         value={totalProposals ? (status.value / totalProposals) * 100 : 0}
                         sx={{
-                          height: 10,
-                          borderRadius: 10,
+                          height: 12,
+                          borderRadius: 6,
                           bgcolor: alpha(status.color, 0.15),
-                          '& .MuiLinearProgress-bar': { bgcolor: status.color },
-                          mt: 1,
+                          '& .MuiLinearProgress-bar': {
+                            bgcolor: status.color,
+                            borderRadius: 6,
+                          },
                         }}
                       />
+                      {totalProposals > 0 && (
+                        <Typography variant='caption' color='text.secondary' sx={{ mt: 0.5, display: 'block' }}>
+                          {((status.value / totalProposals) * 100).toFixed(1)}% of total proposals
+                        </Typography>
+                      )}
                     </Box>
                   ))}
                 </Stack>
+                {(legacyBreakdown.total > 0 || newWorkflowBreakdown.total > 0) && (
+                  <>
+                    <Divider sx={{ my: 2.5 }} />
+                    <Typography variant='caption' fontWeight={600} color='text.secondary' sx={{ mb: 1.5, display: 'block' }}>
+                      System Breakdown
+                    </Typography>
+                    <Stack spacing={1.5}>
+                      {legacyBreakdown.total > 0 && (
+                        <Box>
+                          <Stack direction='row' justifyContent='space-between' alignItems='center'>
+                            <Typography variant='body2' color='text.secondary'>
+                              Legacy System
+                            </Typography>
+                            <Typography variant='body2' fontWeight={600}>
+                              {legacyBreakdown.total} proposals
+                            </Typography>
+                          </Stack>
+                        </Box>
+                      )}
+                      {newWorkflowBreakdown.total > 0 && (
+                        <Box>
+                          <Stack direction='row' justifyContent='space-between' alignItems='center'>
+                            <Typography variant='body2' color='text.secondary'>
+                              New Workflow System
+                            </Typography>
+                            <Typography variant='body2' fontWeight={600} sx={{ color: THEME_COLORS.success }}>
+                              {newWorkflowBreakdown.total} proposals
+                            </Typography>
+                          </Stack>
+                        </Box>
+                      )}
+                    </Stack>
+                  </>
+                )}
               </Paper>
             </Grid>
 
             <Grid item xs={12} md={5}>
               <Paper
                 elevation={isDarkMode ? 5 : 1}
-                sx={{ p: { xs: 2.5, md: 3 }, borderRadius: 3, height: '100%' }}
+                sx={{
+                  p: { xs: 2.5, md: 3 },
+                  borderRadius: 3,
+                  height: '100%',
+                  border: `1px solid ${alpha(THEME_COLORS.primary, 0.1)}`,
+                }}
               >
-                <Typography variant='h6' fontWeight={600} sx={{ mb: 2 }}>
+                <Typography variant='h6' fontWeight={600} sx={{ mb: 2, color: THEME_COLORS.primary }}>
                   Access & Region Context
                 </Typography>
                 <Stack spacing={2}>
+                  <Box>
+                    <Typography variant='caption' color='text.secondary'>Fiscal Year</Typography>
+                    <Typography variant='body1' fontWeight={600}>
+                      {fiscalYear}
+                    </Typography>
+                  </Box>
+                  <Divider />
                   <Box>
                     <Typography variant='caption' color='text.secondary'>Active Region</Typography>
                     <Typography variant='body1' fontWeight={600}>
@@ -543,11 +728,25 @@ const HomePage = () => {
                     </Typography>
                   </Box>
                   <Divider />
+                  {newWorkflowBreakdown.total > 0 && (
+                    <>
+                      <Box>
+                        <Typography variant='caption' color='text.secondary'>New Workflow System</Typography>
+                        <Typography variant='body2' fontWeight={600} color={THEME_COLORS.success}>
+                          {newWorkflowBreakdown.total} proposals
+                        </Typography>
+                        <Typography variant='caption' color='text.secondary'>
+                          {newWorkflowBreakdown.finalized || 0} finalized
+                        </Typography>
+                      </Box>
+                      <Divider />
+                    </>
+                  )}
                   <Box>
                     <Typography variant='caption' color='text.secondary'>Upcoming Actions</Typography>
                     <Typography variant='body2'>
                       {pendingProposals > 0
-                        ? 'Review pending submissions to keep the pipeline moving.'
+                        ? `Review ${pendingProposals} pending submission${pendingProposals > 1 ? 's' : ''} to keep the pipeline moving.`
                         : 'All caught up! No pending items at the moment.'}
                     </Typography>
                   </Box>
@@ -555,6 +754,35 @@ const HomePage = () => {
               </Paper>
             </Grid>
           </Grid>
+
+          {/* Submission deadline reminder */}
+          {activeSettings?.dueDate && (
+            <Box sx={{ mb: 1 }}>
+              <DeadlineReminder
+                deadline={activeSettings.dueDate}
+                label="Budget submission"
+                showIcon={true}
+              />
+            </Box>
+          )}
+
+          {/* Analytics section */}
+          <Box>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+              <Typography variant='h6' fontWeight='bold'>
+                📊 Analytics
+              </Typography>
+              <Button
+                size="small"
+                startIcon={<HelpOutlineIcon />}
+                onClick={() => setHelpOpen(true)}
+                sx={{ textTransform: 'none' }}
+              >
+                Help
+              </Button>
+            </Stack>
+            <DashboardAnalytics data={analyticsData} />
+          </Box>
 
           {/* Quick Actions */}
           <Box>
@@ -569,7 +797,7 @@ const HomePage = () => {
                     title='Create New Proposal'
                     description='Start a new budget proposal submission'
                     icon={AddCircleOutlineIcon}
-                    color={theme.palette.primary.main}
+                    color={THEME_COLORS.primary}
                     onClick={handleCreateProposal}
                     buttonText='Get Started'
                   />
@@ -582,7 +810,7 @@ const HomePage = () => {
                     title='My Proposals'
                     description='View and manage your submitted proposals'
                     icon={ListAltIcon}
-                    color={theme.palette.secondary.main}
+                    color={THEME_COLORS.secondary}
                     onClick={handleViewProposals}
                     buttonText='View Proposals'
                   />
@@ -595,7 +823,7 @@ const HomePage = () => {
                     title='New Proposal Workflow'
                     description='Use the new 6-step proposal workflow system'
                     icon={ListAltIcon}
-                    color='#ff9800'
+                    color={THEME_COLORS.warning}
                     onClick={() => navigate('/allproposal')}
                     buttonText='Open Workflow'
                   />
@@ -607,7 +835,7 @@ const HomePage = () => {
                   title='Generate Reports'
                   description='Create customized reports and export data'
                   icon={AssessmentIcon}
-                  color='#10b981'
+                  color={THEME_COLORS.success}
                   onClick={handleGenerateReports}
                   buttonText='Generate Reports'
                 />
@@ -618,7 +846,7 @@ const HomePage = () => {
                 title='Employee List'
                 description='Manage and review employees'
                 icon={ListAltIcon}
-                color='#2e7d32'
+                color={THEME_COLORS.secondary}
                 onClick={() => navigate('/employee')}
                 buttonText='Open Employees'
               />
@@ -629,7 +857,7 @@ const HomePage = () => {
                 title='Employee Benefits'
                 description='Access benefits and allowances modules'
                 icon={ListAltIcon}
-                color='#1e88e5'
+                color={THEME_COLORS.info}
                 onClick={() => navigate('/employeeBenefits')}
                 buttonText='Open Benefits'
               />
@@ -638,6 +866,16 @@ const HomePage = () => {
           </Box>
         </Stack>
       </Container>
+
+      <WorkflowTemplateSelector
+        open={templateSelectorOpen}
+        onClose={() => setTemplateSelectorOpen(false)}
+        onSelectTemplate={handleSelectTemplate}
+        fiscalYear={activeSettings?.fiscalYear}
+        budgetType={activeSettings?.budgetType}
+      />
+
+      <InAppHelp open={helpOpen} onClose={() => setHelpOpen(false)} context="dashboard" />
     </>
   );
 };

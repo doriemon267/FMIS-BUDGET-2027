@@ -36,9 +36,8 @@ export const WorkflowNotificationProvider = ({ children }) => {
     queryKey: ['workflowNotifications'],
     queryFn: async () => {
       try {
-        const response = await api.get('/api/notifications');
+        const response = await api.get('/notifications');
         const data = response.data?.data || [];
-        // console.log('[WorkflowNotificationContext] Fetched', data.length, 'notifications');
         return data;
       } catch (err) {
         console.error('[WorkflowNotificationContext] Fetch error:', err);
@@ -62,7 +61,7 @@ export const WorkflowNotificationProvider = ({ children }) => {
   // Mark as read mutation
   const markAsReadMutation = useMutation({
     mutationFn: async (ids) => {
-      const response = await api.post('/api/notifications/mark-read', { ids });
+      const response = await api.post('/notifications/mark-read', { ids });
       return response.data;
     },
     onSuccess: () => {
@@ -108,7 +107,7 @@ export const WorkflowNotificationProvider = ({ children }) => {
   // Mute proposal notifications
   const muteProposalMutation = useMutation({
     mutationFn: async ({ proposalId, mute }) => {
-      const response = await api.post('/api/notifications/mute', {
+      const response = await api.post('/notifications/mute', {
         proposalId,
         mute
       });
