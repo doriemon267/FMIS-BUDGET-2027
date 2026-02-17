@@ -46,6 +46,7 @@ import api from '../config/api';
 import { useRegion } from '../context/RegionContext';
 import IncomeReportSummary from '../components/reports/IncomeReportSummary';
 import EnhancedPDFPreviewDialog from '../components/EnhancedPDFPreviewDialog';
+import ReportPageLayout from '../components/reports/ReportPageLayout';
 // Import xlsx with named exports
 import * as XLSX from 'xlsx';
 
@@ -419,24 +420,17 @@ const ConsolidatedCorporateIncomePage = () => {
   };
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-      <Paper elevation={3} sx={{ p: 4, backgroundColor: '#fafafa' }}>
-        {/* Header Section */}
-        <Box sx={{ mb: 4 }}>
-          <Typography variant="h4" gutterBottom sx={{ color: '#1976d2', fontWeight: 'bold' }}>
-            📊 Consolidated Corporate Income Report
-          </Typography>
-          <Typography variant="body1" paragraph sx={{ color: '#666' }}>
-            Comprehensive income analysis across all regions with detailed breakdown by categories and subcategories.
-          </Typography>
-        </Box>
-
-        <Divider sx={{ my: 3 }} />
-
-        {/* Control Panel */}
-        <Card sx={{ mb: 3, backgroundColor: '#f8f9fa' }} elevation={2}>
+    <ReportPageLayout
+      title="CONSOLIDATED CORPORATE INCOME REPORT"
+      subtitle="Comprehensive income analysis across all regions with detailed breakdown by categories and subcategories."
+      showNiaBranding={true}
+      breadcrumbLabel="Consolidated Corporate Income"
+      fiscalYear={fiscalYear || new Date().getFullYear().toString()}
+    >
+      <Paper elevation={2} sx={{ p: 3, mb: 3, bgcolor: 'background.paper' }}>
+        <Card sx={{ mb: 3, bgcolor: 'grey.50' }} elevation={0} variant="outlined">
           <CardContent>
-            <Typography variant="h6" gutterBottom sx={{ color: '#1976d2', mb: 2 }}>
+            <Typography variant="h6" gutterBottom color="primary" sx={{ mb: 2 }}>
               Report Configuration
             </Typography>
             
@@ -587,7 +581,7 @@ const ConsolidatedCorporateIncomePage = () => {
             <CardContent>
               {/* Report Header */}
               <Box sx={{ mb: 3, textAlign: 'center' }}>
-                <Typography variant="h5" gutterBottom sx={{ color: '#1976d2', fontWeight: 'bold' }}>
+                <Typography variant="h5" gutterBottom color="primary" fontWeight="bold">
                   Corporate Income Analysis - FY {reportData.fiscalYear} ({reportData.budgetType})
                 </Typography>
                 
@@ -996,7 +990,7 @@ const ConsolidatedCorporateIncomePage = () => {
         selectedRegions={selectedRegions}
         showPercentages={showPercentages}
       />
-    </Container>
+    </ReportPageLayout>
   );
 };
 

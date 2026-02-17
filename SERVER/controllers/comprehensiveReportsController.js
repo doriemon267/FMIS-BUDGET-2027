@@ -122,7 +122,7 @@ const PERSONNEL_SERVICES_STRUCTURE = {
     }
   }
 };
-const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, preparerScope }) => {
+const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, preparerScope, groupBy, offices, responsibilityCenters }) => {
   // Build base query
   const query = {};
   if (regions) {
@@ -131,6 +131,16 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
   }
   if (fiscalYear) query.fiscalYear = fiscalYear;
   if (budgetType) query.budgetType = budgetType;
+
+  // View by Office (department) or Responsibility Center (division)
+  if (groupBy === 'office' && offices && offices.length > 0) {
+    const officeList = Array.isArray(offices) ? offices : [offices];
+    query.department = { $in: officeList };
+  }
+  if (groupBy === 'responsibilityCenter' && responsibilityCenters && responsibilityCenters.length > 0) {
+    const rcList = Array.isArray(responsibilityCenters) ? responsibilityCenters : [responsibilityCenters];
+    query.division = { $in: rcList };
+  }
 
   // Preparer scope: restrict to Division or Department
   if (preparerScope) {
@@ -153,7 +163,7 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
   // Initialize comprehensive report structure
   const reportData = {
     summary: {
-      reportTitle: "COMPREHENSIVE BUDGET REPORT",
+      reportTitle: "BUDGET SUMMARY REPORT",
       fiscalYear: fiscalYear || "All Years",
       budgetType: budgetType || "All Types",
       regions: regions ? (Array.isArray(regions) ? regions : [regions]) : ["All Regions"],
@@ -216,7 +226,9 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
 
 const getComprehensiveReportData = async (req, res) => {
   try {
-    const { regions, fiscalYear, budgetType } = req.query;
+    const { regions, fiscalYear, budgetType, groupBy, offices, responsibilityCenters } = req.query;
+    const officesParam = offices ? (Array.isArray(offices) ? offices : [offices]) : [];
+    const responsibilityCentersParam = responsibilityCenters ? (Array.isArray(responsibilityCenters) ? responsibilityCenters : [responsibilityCenters]) : [];
     let preparerScope = null;
     const userRoles = req.user?.Roles || [];
     const isPreparer = userRoles.some(r => (r && String(r).replace(/\s+/g, '_')) === 'BUDGET_PREPARER') ||
@@ -236,7 +248,15 @@ const getComprehensiveReportData = async (req, res) => {
         };
       }
     }
-    const reportData = await buildComprehensiveReportData({ regions, fiscalYear, budgetType, preparerScope });
+    const reportData = await buildComprehensiveReportData({
+      regions,
+      fiscalYear,
+      budgetType,
+      preparerScope,
+      groupBy: groupBy || 'region',
+      offices: officesParam,
+      responsibilityCenters: responsibilityCentersParam
+    });
 
     res.status(200).json({
       success: true,
@@ -726,7 +746,9 @@ const getComprehensiveReportPdf = async (req, res) => {
       });
     }
 
-    const { regions, fiscalYear, budgetType } = req.query;
+    const { regions, fiscalYear, budgetType, groupBy, offices, responsibilityCenters } = req.query;
+    const officesParam = offices ? (Array.isArray(offices) ? offices : [offices]) : [];
+    const responsibilityCentersParam = responsibilityCenters ? (Array.isArray(responsibilityCenters) ? responsibilityCenters : [responsibilityCenters]) : [];
     let preparerScope = null;
     const userRoles = req.user?.Roles || [];
     const isPreparer = userRoles.some(r => (r && String(r).replace(/\s+/g, '_')) === 'BUDGET_PREPARER') ||
@@ -749,6 +771,9 @@ const getComprehensiveReportPdf = async (req, res) => {
       fiscalYear,
       budgetType,
       preparerScope,
+      groupBy: groupBy || 'region',
+      offices: officesParam,
+      responsibilityCenters: responsibilityCentersParam
     });
 
     if (!reportData || !reportData.summary) {
@@ -765,164 +790,166 @@ const getComprehensiveReportPdf = async (req, res) => {
       `comprehensive_report_${Date.now()}.pdf`
     );
 
-    // Create PDF using Muhammara Recipe, writing directly to file
+    // Create PDF using Muhammara Recipe — A4 landscape, form holder, black text, optional logo
     const pdfDoc = new MuhammaraRecipe('new', tmpFilePath, {
       version: 1.6,
       author: 'FMIS-BUDGET',
-      title: 'Comprehensive Budget Report',
-      subject: 'Comprehensive Budget Report',
+      title: 'Budget Summary Report',
+      subject: 'Budget Summary Report',
     });
 
-    const PAGE_HEIGHT = 842; // A4 in points
-    const MARGIN_TOP = 40;
-    const MARGIN_BOTTOM = 40;
-    const LINE_HEIGHT = 16;
+    // A4 landscape: 842 x 595 points
+    const PAGE_WIDTH = 842;
+    const PAGE_HEIGHT = 595;
+    const MARGIN = 36;
+    const MARGIN_TOP = 44;
+    const MARGIN_BOTTOM = 44;
+    const LINE_HEIGHT = 14;
+    const CONTENT_LEFT = 50;
+    const CONTENT_WIDTH = PAGE_WIDTH - 100;
+    const TABLE_AMOUNT_X = PAGE_WIDTH - 160;
 
     let currentY = MARGIN_TOP;
 
     const startNewPage = () => {
       pdfDoc.endPage();
-      pdfDoc.createPage('A4');
+      pdfDoc.createPage('A4', 90);
       currentY = MARGIN_TOP;
+      drawFormHolder();
     };
 
-    // First page
-    pdfDoc.createPage('A4');
+    const textOpt = (opts = {}) => ({ color: '#000000', ...opts });
+
+    const drawFormHolder = () => {
+      pdfDoc.rectangle(MARGIN, MARGIN, PAGE_WIDTH - MARGIN * 2, PAGE_HEIGHT - MARGIN * 2, {
+        stroke: '#000000',
+        lineWidth: 1.5
+      });
+    };
+
+    // First page — A4 landscape (createPage('A4', 90) swaps to 842x595)
+    pdfDoc.createPage('A4', 90);
+    drawFormHolder();
 
     const safeStr = (v) => (v != null && v !== '') ? String(v) : '';
     const regionsStr = reportData.summary.regions != null
       ? (Array.isArray(reportData.summary.regions) ? reportData.summary.regions.join(', ') : String(reportData.summary.regions))
       : '';
 
-    // Header
-    pdfDoc
-      .text(safeStr(reportData.summary.reportTitle) || 'COMPREHENSIVE BUDGET REPORT', 40, currentY, {
-        fontSize: 18,
-        bold: true
-      });
-    currentY += LINE_HEIGHT * 2;
+    let logoPath = path.join(__dirname, '../assets/logo.png');
+    if (!fs.existsSync(logoPath)) {
+      const clientLogo = path.join(__dirname, '../../CLIENT/public/logo.png');
+      if (fs.existsSync(clientLogo)) logoPath = clientLogo;
+    }
+    const hasLogo = fs.existsSync(logoPath);
+
+    if (hasLogo) {
+      try {
+        pdfDoc.image(logoPath, CONTENT_LEFT, currentY, { width: 44, height: 44 });
+      } catch (e) {
+        console.warn('PDF logo load failed:', e.message);
+      }
+    }
+
+    const titleText = safeStr(reportData.summary.reportTitle) || 'BUDGET SUMMARY REPORT';
+    const titleX = hasLogo ? CONTENT_LEFT + 60 : CONTENT_LEFT;
+    pdfDoc.text(titleText, titleX, currentY, textOpt({ fontSize: 16, bold: true }));
+    currentY += LINE_HEIGHT * 1.8;
 
     pdfDoc
-      .text(`Fiscal Year: ${safeStr(reportData.summary.fiscalYear)}`, 40, currentY, { fontSize: 12 })
-      .text(`Budget Type: ${safeStr(reportData.summary.budgetType)}`, 260, currentY, { fontSize: 12 });
+      .text(`Fiscal Year: ${safeStr(reportData.summary.fiscalYear)}`, CONTENT_LEFT, currentY, textOpt({ fontSize: 11 }))
+      .text(`Budget Type: ${safeStr(reportData.summary.budgetType)}`, 320, currentY, textOpt({ fontSize: 11 }));
     currentY += LINE_HEIGHT;
-    pdfDoc
-      .text(`Regions: ${regionsStr}`, 40, currentY, { fontSize: 12 });
+    pdfDoc.text(`Regions: ${regionsStr}`, CONTENT_LEFT, currentY, textOpt({ fontSize: 11 }));
     currentY += LINE_HEIGHT;
-    pdfDoc.text(`Generated: ${safeStr(reportData.summary.generatedDate)}`, 40, currentY, {
-      fontSize: 10,
-      color: '#666666'
-    });
-    currentY += LINE_HEIGHT * 2;
+    pdfDoc.text(`Generated: ${safeStr(reportData.summary.generatedDate)}`, CONTENT_LEFT, currentY, textOpt({ fontSize: 10, color: '#333333' }));
+    currentY += LINE_HEIGHT * 1.5;
 
-    // Summary box
+    const boxLeft = CONTENT_LEFT;
+    const boxWidth = CONTENT_WIDTH - (boxLeft - CONTENT_LEFT);
     pdfDoc
-      .rectangle(35, currentY - 10, 540, 80, {
-        stroke: '#1976d2',
+      .rectangle(boxLeft, currentY - 8, boxWidth, 72, {
+        stroke: '#000000',
         lineWidth: 1
       })
-      .text(`Total Regions: ${Number(reportData.summary.totalRegions) || 0}`, 45, currentY, { fontSize: 11 })
+      .text(`Total Regions: ${Number(reportData.summary.totalRegions) || 0}`, boxLeft + 12, currentY, textOpt({ fontSize: 11 }))
       .text(
         `Total Employees: ${Number(reportData.summary.totalEmployees) || 0}`,
-        260,
+        boxLeft + 320,
         currentY,
-        { fontSize: 11 }
+        textOpt({ fontSize: 11 })
       );
     currentY += LINE_HEIGHT;
     const grandTotalNum = Number(reportData.summary.grandTotal) || 0;
     pdfDoc.text(
-      `Grand Total: ${grandTotalNum.toLocaleString('en-PH', {
-        style: 'currency',
-        currency: 'PHP'
-      })}`,
-      45,
+      `Grand Total: ${grandTotalNum.toLocaleString('en-PH', { style: 'currency', currency: 'PHP' })}`,
+      boxLeft + 12,
       currentY,
-      { fontSize: 12, bold: true }
+      textOpt({ fontSize: 12, bold: true })
     );
-    currentY += LINE_HEIGHT * 3;
+    currentY += LINE_HEIGHT * 2.2;
 
-    // Section summary header
-    pdfDoc.text('Section Summary', 40, currentY, {
-      fontSize: 14,
-      bold: true
-    });
-    currentY += LINE_HEIGHT * 1.5;
+    pdfDoc.text('Section Summary', CONTENT_LEFT, currentY, textOpt({ fontSize: 13, bold: true }));
+    currentY += LINE_HEIGHT * 1.2;
 
-    // Table header
     pdfDoc
-      .text('Code', 40, currentY, { bold: true })
-      .text('Section', 90, currentY, { bold: true })
-      .text('Amount (PHP)', 400, currentY, { bold: true });
+      .text('Code', CONTENT_LEFT, currentY, textOpt({ bold: true, fontSize: 10 }))
+      .text('Section', CONTENT_LEFT + 70, currentY, textOpt({ bold: true, fontSize: 10 }))
+      .text('Amount (PHP)', TABLE_AMOUNT_X, currentY, textOpt({ bold: true, fontSize: 10 }));
     currentY += LINE_HEIGHT;
 
-    // Horizontal line under header
-    pdfDoc
-      .rectangle(40, currentY - 4, 500, 0.5, {
-        stroke: '#000000',
-        lineWidth: 0.5
-      });
+    pdfDoc.rectangle(CONTENT_LEFT, currentY - 4, TABLE_AMOUNT_X - CONTENT_LEFT + 100, 0.5, {
+      stroke: '#000000',
+      lineWidth: 0.5
+    });
     currentY += LINE_HEIGHT / 2;
 
-    // Section rows
     reportData.sections.forEach((section) => {
       if (currentY > PAGE_HEIGHT - MARGIN_BOTTOM) {
         startNewPage();
       }
-
       const sectionTotalNum = Number(section.sectionTotal) || 0;
       pdfDoc
-        .text(String(section.sectionCode || ''), 40, currentY, { fontSize: 10 })
-        .text(String(section.sectionName || ''), 90, currentY, {
-          fontSize: 10
-        })
+        .text(String(section.sectionCode || ''), CONTENT_LEFT, currentY, textOpt({ fontSize: 10 }))
+        .text(String(section.sectionName || ''), CONTENT_LEFT + 70, currentY, textOpt({ fontSize: 10 }))
         .text(
-          sectionTotalNum.toLocaleString('en-PH', {
-            style: 'currency',
-            currency: 'PHP'
-          }),
-          400,
+          sectionTotalNum.toLocaleString('en-PH', { style: 'currency', currency: 'PHP' }),
+          TABLE_AMOUNT_X,
           currentY,
-          { fontSize: 10 }
+          textOpt({ fontSize: 10 })
         );
       currentY += LINE_HEIGHT;
     });
 
-    // Per-section simple breakdown tables on following pages
     reportData.sections.forEach((section) => {
       if (!section.categories) return;
 
       if (currentY > PAGE_HEIGHT - MARGIN_BOTTOM * 2) {
         startNewPage();
       } else {
-        currentY += LINE_HEIGHT * 1.5;
+        currentY += LINE_HEIGHT * 1.2;
       }
 
       pdfDoc.text(
         `${section.sectionCode || ''} - ${section.sectionName || ''}`,
-        40,
+        CONTENT_LEFT,
         currentY,
-        {
-          fontSize: 13,
-          bold: true
-        }
+        textOpt({ fontSize: 12, bold: true })
       );
       currentY += LINE_HEIGHT;
 
       if (section.sectionDescription) {
-        pdfDoc.text(section.sectionDescription, 40, currentY, {
-          fontSize: 10
-        });
-        currentY += LINE_HEIGHT * 1.2;
+        pdfDoc.text(section.sectionDescription, CONTENT_LEFT, currentY, textOpt({ fontSize: 10 }));
+        currentY += LINE_HEIGHT * 1.1;
       }
 
-      // Table header for categories
       pdfDoc
-        .text('Category', 40, currentY, { bold: true, fontSize: 10 })
-        .text('Description', 220, currentY, { bold: true, fontSize: 10 })
-        .text('Amount (PHP)', 430, currentY, { bold: true, fontSize: 10 });
+        .text('Category', CONTENT_LEFT, currentY, textOpt({ bold: true, fontSize: 10 }))
+        .text('Description', CONTENT_LEFT + 200, currentY, textOpt({ bold: true, fontSize: 10 }))
+        .text('Amount (PHP)', TABLE_AMOUNT_X, currentY, textOpt({ bold: true, fontSize: 10 }));
       currentY += LINE_HEIGHT;
 
-      pdfDoc.rectangle(40, currentY - 4, 500, 0.5, {
+      pdfDoc.rectangle(CONTENT_LEFT, currentY - 4, TABLE_AMOUNT_X - CONTENT_LEFT + 100, 0.5, {
         stroke: '#000000',
         lineWidth: 0.5
       });
@@ -932,26 +959,17 @@ const getComprehensiveReportPdf = async (req, res) => {
         if (currentY > PAGE_HEIGHT - MARGIN_BOTTOM) {
           startNewPage();
         }
-
         const amountNum = Number(
-          category.total ??
-          category.totalSubsidy ??
-          category.totalIncome
+          category.total ?? category.totalSubsidy ?? category.totalIncome
         ) || 0;
-
         pdfDoc
-          .text(String(category.name || ''), 40, currentY, { fontSize: 9 })
-          .text(String(category.description || ''), 220, currentY, {
-            fontSize: 9
-          })
+          .text(String(category.name || ''), CONTENT_LEFT, currentY, textOpt({ fontSize: 9 }))
+          .text(String(category.description || ''), CONTENT_LEFT + 200, currentY, textOpt({ fontSize: 9 }))
           .text(
-            amountNum.toLocaleString('en-PH', {
-              style: 'currency',
-              currency: 'PHP'
-            }),
-            430,
+            amountNum.toLocaleString('en-PH', { style: 'currency', currency: 'PHP' }),
+            TABLE_AMOUNT_X,
             currentY,
-            { fontSize: 9 }
+            textOpt({ fontSize: 9 })
           );
         currentY += LINE_HEIGHT;
       });
@@ -1094,9 +1112,54 @@ const getActiveSettings = async (req, res) => {
     });
   }
 };
+
+const getAvailableOfficesComprehensive = async (req, res) => {
+  try {
+    const { region, fiscalYear } = req.query;
+    const baseQuery = {};
+    if (region && region !== 'all') baseQuery.region = region;
+    if (fiscalYear) baseQuery.fiscalYear = fiscalYear;
+    const [incomeDepts, psDepts, mooeDepts, coDepts] = await Promise.all([
+      Income.distinct('department', baseQuery),
+      PersonnelServices.distinct('department', baseQuery),
+      MooeProposal.distinct('department', baseQuery),
+      CapitalOutlay.distinct('department', baseQuery)
+    ]);
+    const all = new Set([...incomeDepts, ...psDepts, ...mooeDepts, ...coDepts]);
+    const offices = Array.from(all).filter(Boolean).map(String).filter(s => s.trim() !== '').sort();
+    res.status(200).json({ success: true, offices });
+  } catch (error) {
+    console.error('Error fetching available offices:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch available offices', error: error.message });
+  }
+};
+
+const getAvailableResponsibilityCentersComprehensive = async (req, res) => {
+  try {
+    const { region, fiscalYear } = req.query;
+    const baseQuery = {};
+    if (region && region !== 'all') baseQuery.region = region;
+    if (fiscalYear) baseQuery.fiscalYear = fiscalYear;
+    const [incomeDiv, psDiv, mooeDiv, coDiv] = await Promise.all([
+      Income.distinct('division', baseQuery),
+      PersonnelServices.distinct('division', baseQuery),
+      MooeProposal.distinct('division', baseQuery),
+      CapitalOutlay.distinct('division', baseQuery)
+    ]);
+    const all = new Set([...incomeDiv, ...psDiv, ...mooeDiv, ...coDiv]);
+    const responsibilityCenters = Array.from(all).filter(Boolean).map(String).filter(s => s.trim() !== '').sort();
+    res.status(200).json({ success: true, responsibilityCenters });
+  } catch (error) {
+    console.error('Error fetching available responsibility centers:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch responsibility centers', error: error.message });
+  }
+};
+
 module.exports = {
   getComprehensiveReportData,
   getAvailableRegionsComprehensive,
+  getAvailableOfficesComprehensive,
+  getAvailableResponsibilityCentersComprehensive,
   getAvailableFiscalYears,
   getAvailableBudgetTypes,
   getActiveSettings,

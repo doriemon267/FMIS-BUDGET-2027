@@ -34,6 +34,7 @@ import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import api from '../config/api';
 import { useRegion } from '../context/RegionContext';
+import ReportPageLayout from '../components/reports/ReportPageLayout';
 
 const ComparativeReportPage = () => {
   const { selectedRegion } = useRegion();
@@ -151,45 +152,18 @@ const ComparativeReportPage = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      <ToastContainer position="top-right" autoClose={3000} />
-
-      {/* Breadcrumbs */}
-      <Breadcrumbs aria-label="breadcrumb" sx={{ mb: 2 }}>
-        <Link
-          underline="hover"
-          sx={{ display: 'flex', alignItems: 'center' }}
-          color="inherit"
-          href="/dashboard"
-        >
-          <HomeIcon sx={{ mr: 0.5 }} fontSize="inherit" />
-          Dashboard
-        </Link>
-        <Typography sx={{ display: 'flex', alignItems: 'center' }} color="text.primary">
-          <AssessmentIcon sx={{ mr: 0.5 }} fontSize="inherit" />
-          Comparative Report
-        </Typography>
-      </Breadcrumbs>
-
-      {/* Header - NIA branding (same as other reports) */}
-      <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h4" gutterBottom sx={{ color: '#375e38', fontWeight: 'bold', textAlign: 'center' }}>
-          NATIONAL IRRIGATION ADMINISTRATION
-        </Typography>
-        <Typography variant="h5" gutterBottom sx={{ color: '#375e38', fontWeight: 'bold', textAlign: 'center' }}>
-          COMPARATIVE BUDGET REPORT
-        </Typography>
-        <Typography variant="h6" gutterBottom sx={{ color: '#375e38', textAlign: 'center' }}>
-          BUDGET PROPOSAL FOR FISCAL YEAR {currentFiscalYear || new Date().getFullYear()}
-        </Typography>
-        <Typography variant="subtitle1" color="text.secondary" sx={{ textAlign: 'center', mt: 2 }}>
-          {selectedRegionForReport
+    <ReportPageLayout
+        title="COMPARATIVE BUDGET REPORT"
+        subtitle={
+          selectedRegionForReport
             ? `Compare current proposals with historical GAA for ${selectedRegionForReport}`
-            : 'Select a region and fiscal year, then generate the report'}
-        </Typography>
-      </Paper>
-
-      {/* Controls */}
+            : 'Select a region and fiscal year, then generate the report'
+        }
+        showNiaBranding={true}
+        breadcrumbLabel="Comparative Budget Report"
+        fiscalYear={currentFiscalYear || new Date().getFullYear()}
+      >
+      <ToastContainer position="top-right" autoClose={3000} />
       <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
         <Grid container spacing={2} alignItems="center">
           <Grid item xs={12} md={3}>
@@ -365,7 +339,7 @@ const ComparativeReportPage = () => {
           </Box>
         </Paper>
       )}
-    </Box>
+    </ReportPageLayout>
   );
 };
 

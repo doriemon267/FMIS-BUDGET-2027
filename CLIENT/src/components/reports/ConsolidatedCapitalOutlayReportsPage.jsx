@@ -44,6 +44,7 @@ import { ToastContainer, toast } from "react-toastify";
 import api from "../../config/api";
 import "react-toastify/dist/ReactToastify.css";
 import { NumericFormat } from "react-number-format";
+import ReportPageLayout from "./ReportPageLayout";
 
 import SearchIcon from "@mui/icons-material/Search";
 import FilterListIcon from "@mui/icons-material/FilterList";
@@ -322,38 +323,22 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
   const isLoading = consolidatedLoading;
 
   return (
-    <Box sx={{ p: 3 }}>
+    <ReportPageLayout
+      title="CONSOLIDATED CAPITAL OUTLAY"
+      subtitle={
+        consolidationType === "current" && activeRegion
+          ? `Capital Outlay data for ${activeRegion.name || activeRegion.Region}`
+          : consolidationType === "all"
+          ? "Consolidated Capital Outlay data from all regions"
+          : consolidationType === "custom" && selectedRegions.length > 0
+          ? `Capital Outlay data for selected regions: ${selectedRegions.join(", ")}`
+          : "Comprehensive consolidation of Capital Outlay data"
+      }
+      showNiaBranding={true}
+      breadcrumbLabel="Consolidated Capital Outlay Reports"
+      fiscalYear={activeSettings?.fiscalYear || new Date().getFullYear()}
+    >
       <ToastContainer position="top-right" autoClose={3000} />
-      <Breadcrumbs aria-label="breadcrumb" sx={{ mb: 2 }}>
-        <Link underline="hover" sx={{ display: 'flex', alignItems: 'center' }} color="inherit" href="/dashboard">
-          <HomeIcon sx={{ mr: 0.5 }} fontSize="inherit" />
-          Dashboard
-        </Link>
-        <Typography sx={{ display: 'flex', alignItems: 'center' }} color="text.primary">
-          <AssessmentIcon sx={{ mr: 0.5 }} fontSize="inherit" />
-          Consolidated Capital Outlay Reports
-        </Typography>
-      </Breadcrumbs>
-      <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h4" gutterBottom sx={{ color: "#375e38", fontWeight: "bold", textAlign: "center" }}>
-          NATIONAL IRRIGATION ADMINISTRATION
-        </Typography>
-        <Typography variant="h5" gutterBottom sx={{ color: "#375e38", fontWeight: "bold", textAlign: "center" }}>
-          CONSOLIDATED CAPITAL OUTLAY
-        </Typography>
-        <Typography variant="h6" gutterBottom sx={{ color: "#375e38", textAlign: "center" }}>
-          BUDGET PROPOSAL FOR FISCAL YEAR {activeSettings?.fiscalYear || new Date().getFullYear()}
-        </Typography>
-        <Typography variant="subtitle1" color="text.secondary" sx={{ textAlign: "center", mt: 2 }}>
-          {consolidationType === "current" && activeRegion
-            ? `Capital Outlay data for ${activeRegion.name}`
-            : consolidationType === "all"
-            ? "Consolidated Capital Outlay data from all regions"
-            : consolidationType === "custom" && selectedRegions.length > 0
-            ? `Capital Outlay data for selected regions: ${selectedRegions.join(", ")}`
-            : "Comprehensive consolidation of Capital Outlay data"}
-        </Typography>
-      </Paper>
       <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
         <Grid container spacing={2} alignItems="center">
           <Grid item xs={12} md={3}>
@@ -709,7 +694,7 @@ const ConsolidatedCapitalOutlayReportsPage = () => {
           <Button onClick={() => setExportDialogOpen(false)}>Cancel</Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </ReportPageLayout>
   );
 };
 

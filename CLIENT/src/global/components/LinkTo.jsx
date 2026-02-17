@@ -30,11 +30,10 @@ const LinkTo = ({
 
   const isActive = location.pathname === link;
 
-  // Allowed children
+  // Allowed children: always respect each subLink's isAllow so BRD-only items stay hidden for non-BRD
   const allowedSubLinks = useMemo(() => {
-    if (isAllow) return subLinks;
-    return subLinks.filter((s) => s.isAllow);
-  }, [subLinks, isAllow]);
+    return subLinks.filter((s) => Boolean(s.isAllow));
+  }, [subLinks]);
 
   // Promote single child to parent
   const promoteChild =

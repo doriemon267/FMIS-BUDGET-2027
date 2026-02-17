@@ -247,12 +247,13 @@ const HomePage = () => {
   const { data: stats, isLoading, error: statsError } = useQuery({
     queryKey: ['dashboardStats', regionName, userAccessLevel],
     queryFn: async () => {
-      const res = await api.get(`/stats/overview?region=${regionName || ''}`);
+      const regionParam = regionName ? encodeURIComponent(regionName) : '';
+      const res = await api.get(`/stats/overview${regionParam ? `?region=${regionParam}` : ''}`);
       return res.data;
     },
     refetchInterval: 30000, // Less frequent updates
     staleTime: 10000,
-    enabled: !!regionName,
+    enabled: true, // Always fetch; server accepts region name or empty (uses hierarchicalFilters)
     onError: (error) => {
       handleApiError(error, toast, 'Loading dashboard stats');
     },
@@ -303,7 +304,7 @@ const HomePage = () => {
     }
   };
   const handleViewProposals = () => navigate('/myProposals');
-  const handleGenerateReports = () => navigate('/consolidated-reports');
+  const handleGenerateReports = () => navigate('/comprehensive-reports');
   const handleViewAllProposals = () => navigate('/allproposal');
   const handleRefreshStats = async () => {
     await queryClient.invalidateQueries(['dashboardStats', regionName, userAccessLevel]);
@@ -820,7 +821,7 @@ const HomePage = () => {
               {isPreparer && (
                 <Grid item xs={12} sm={6} md={4}>
                   <ActionCard
-                    title='New Proposal Workflow'
+                    title='Proposal Workflow'
                     description='Use the new 6-step proposal workflow system'
                     icon={ListAltIcon}
                     color={THEME_COLORS.warning}

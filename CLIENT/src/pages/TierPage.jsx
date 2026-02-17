@@ -773,9 +773,9 @@ const TierPage = () => {
                           {' · '}
                           {formatRevisionDate(rev.createdAt)}
                         </Typography>
-                        {rev.createdBy && (
+                        {(rev.createdBy || rev.createdByName) && (
                           <Typography component="span" variant="caption" display="block" color="text.secondary" sx={{ mt: 0.25 }}>
-                            By {rev.createdBy.name || rev.createdBy.username || '—'}
+                            By {rev.createdBy ? (rev.createdBy.name || rev.createdBy.username) : rev.createdByName || '—'}
                           </Typography>
                         )}
                       </>
@@ -834,7 +834,7 @@ const TierPage = () => {
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Version {viewRevisionDetail.version} · {formatRevisionDate(viewRevisionDetail.createdAt)}
-                  {viewRevisionDetail.createdBy && ` · By ${viewRevisionDetail.createdBy.name || viewRevisionDetail.createdBy.username || '—'}`}
+                  {((viewRevisionDetail.createdBy || viewRevisionDetail.createdByName)) && ` · By ${viewRevisionDetail.createdBy ? (viewRevisionDetail.createdBy.name || viewRevisionDetail.createdBy.username) : viewRevisionDetail.createdByName || '—'}`}
                 </Typography>
               </Box>
               <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>Line items (Tier 1 / Tier 2)</Typography>

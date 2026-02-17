@@ -295,6 +295,11 @@ mongoose.connection.once("open", async () => {
   }
 });
 const app = express();
+
+// Trust first proxy (nginx, load balancer, etc.) so express-rate-limit can use
+// X-Forwarded-For correctly and avoid ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
+app.set('trust proxy', 1);
+
 const apiPrefix = "/api";
 // Ensure uploads folder exists for attachments
 try {

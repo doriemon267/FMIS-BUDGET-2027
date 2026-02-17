@@ -18,7 +18,8 @@ import {
   Refresh as RefreshIcon, GetApp as GetAppIcon, Visibility as VisibilityIcon,
   TrendingUp as TrendingUpIcon, AccountBalance as AccountBalanceIcon,
   Info as InfoIcon, CheckCircle as CheckCircleIcon, Warning as WarningIcon,
-  ExpandMore as ExpandMoreIcon, Add as AddIcon
+  ExpandMore as ExpandMoreIcon, Add as AddIcon, Search as SearchIcon,
+  Summarize as SummarizeIcon
 } from "@mui/icons-material";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -568,7 +569,8 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
       }
     }
 
-    if (hasIsfCategory && applyDiscount && discountSettings?.region === regionFilter) {
+    // Discount row: we already fetched settings for regionFilter, so if applyDiscount is true show discount
+    if (hasIsfCategory && applyDiscount) {
       const discountAmount = discountType === "percentage" ?
         currentAccountTotal * (discountValue / 100) :
         Math.min(discountValue, currentAccountTotal);
@@ -934,27 +936,29 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
             >
               Clear Changes
             </Button>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={autoSave}
-                  onChange={(e) => {
-                    if (locked) return;
-                    setAutoSave(e.target.checked);
-                    toast.info(`Auto-save ${e.target.checked ? 'enabled' : 'disabled'}`, { autoClose: 3000 });
-                  }}
-                  color="primary"
-                />
-              }
-              label={
-                <Box display="flex" alignItems="center" gap={1}>
-                  <SaveIcon fontSize="small" color={autoSave ? "primary" : "disabled"} />
-                  <Typography variant="body2" color={autoSave ? "primary" : "text.secondary"}>
-                    Auto-save {autoSave ? "(ON)" : "(OFF)"}
-                  </Typography>
-                </Box>
-              }
-            />
+            <Tooltip title={autoSave ? "When ON, each amount saves when you leave the field (blur). No timer." : "When ON, amounts save on blur per cell."}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={autoSave}
+                    onChange={(e) => {
+                      if (locked) return;
+                      setAutoSave(e.target.checked);
+                      toast.info(`Auto-save ${e.target.checked ? 'ON: amounts save when you leave each field' : 'OFF'}`);
+                    }}
+                    color="primary"
+                  />
+                }
+                label={
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <SaveIcon fontSize="small" color={autoSave ? "primary" : "disabled"} />
+                    <Typography variant="body2" color={autoSave ? "primary" : "text.secondary"}>
+                      Auto-save {autoSave ? "(ON)" : "(OFF)"}
+                    </Typography>
+                  </Box>
+                }
+              />
+            </Tooltip>
             {lastSaved && (
               <Chip
                 icon={<CheckCircleIcon />}
@@ -986,13 +990,15 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
                 <VisibilityIcon />
               </IconButton>
             </Tooltip>
-            <Button
-              variant="outlined"
-              startIcon={<SettingsIcon />}
-              onClick={handleOpenDiscountSettings}
-            >
-              Discount Settings
-            </Button>
+            <Tooltip title={applyDiscount ? `${discountType === 'percentage' ? discountValue + '%' : formatNumber(discountValue)} discount applied` : 'No discount applied'}>
+              <Button
+                variant="outlined"
+                startIcon={<SettingsIcon />}
+                onClick={handleOpenDiscountSettings}
+              >
+                Discount {applyDiscount ? (discountType === 'percentage' ? `(${discountValue}%)` : `(₱${formatNumber(discountValue)})`) : ''}
+              </Button>
+            </Tooltip>
           </Box>
         </Box>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
@@ -1034,7 +1040,7 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
               InputProps={{
                 startAdornment: (
                   <Box sx={{ mr: 1, display: 'flex', alignItems: 'center' }}>
-                    <InfoIcon fontSize="small" color="action" />
+                    <SearchIcon fontSize="small" color="action" />
                   </Box>
                 ),
               }}
@@ -1058,7 +1064,17 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
       {showSummaryCard && (
         <Fade in={showSummaryCard}>
           <Card sx={{ mb: 3, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-            <CardContent sx={{ py: 2 }}>
+            <CardContent sx={{ py: 2, position: 'relative' }}>
+              <Tooltip title={showSummaryCard ? 'Hide summary' : 'Show summary'}>
+                <IconButton
+                  size="small"
+                  onClick={() => setShowSummaryCard(false)}
+                  sx={{ position: 'absolute', top: 8, right: 8, color: 'rgba(255,255,255,0.8)' }}
+                  aria-label="Hide summary card"
+                >
+                  <SummarizeIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
               <Grid container spacing={3} alignItems="center">
                 <Grid item xs={12} md={3}>
                   <Box display="flex" alignItems="center" gap={1}>
@@ -1121,6 +1137,16 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
           </Card>
         </Fade>
       )}
+      {!showSummaryCard && (
+        <Button
+          size="small"
+          startIcon={<SummarizeIcon />}
+          onClick={() => setShowSummaryCard(true)}
+          sx={{ mb: 2 }}
+        >
+          Show summary
+        </Button>
+      )}
       <Zoom in={true}>
         <Paper elevation={3} sx={{ width: '100%', overflow: 'hidden', borderRadius: 2, boxShadow: '0 8px 32px rgba(0,0,0,0.1)' }}>
           {isLoading ? (
@@ -1158,9 +1184,29 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {Object.entries(groupedItems)
-                    .filter(([categoryName]) => !searchTerm || categoryName.toLowerCase().includes(searchTerm.toLowerCase()))
-                    .map(([categoryName, category]) => {
+                  {(() => {
+                    const filteredEntries = Object.entries(groupedItems).filter(
+                      ([categoryName]) => !searchTerm || categoryName.toLowerCase().includes(searchTerm.toLowerCase())
+                    );
+                    if (filteredEntries.length === 0) {
+                      return (
+                        <TableRow>
+                          <TableCell colSpan={3} align="center" sx={{ py: 4 }}>
+                            <Typography color="text.secondary">
+                              {searchTerm
+                                ? 'No categories match your search. Try a different term or clear the search.'
+                                : 'No income categories or data for this scope. Check fiscal year, budget type, and region, or refresh.'}
+                            </Typography>
+                            {searchTerm && (
+                              <Button size="small" onClick={() => setSearchTerm('')} sx={{ mt: 1 }}>
+                                Clear search
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }
+                    return filteredEntries.map(([categoryName, category]) => {
                       const isExpanded = expandedCategories[categoryName] !== false;
                       const hasSubcategories = category.subcategories && category.subcategories.length > 0;
 
@@ -1231,8 +1277,11 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
                                       size="small"
                                       value={amount}
                                       onChange={(e) => !locked && handleSubcategoryAmountChange(category.categoryId, cleanSubcategoryName, e.target.value)}
-                                      onBlur={() => !locked && autoSave && userModifiedFields[key] && amount && parseFloat(amount) > 0 &&
-                                        handleSaveSubcategoryAmount(category, cleanSubcategoryName)}
+                                      onBlur={() => {
+                                        if (locked || !autoSave || !userModifiedFields[key] || !amount || parseFloat(amount) <= 0) return;
+                                        if (savingKeys.has(key)) return; // avoid double-save
+                                        handleSaveSubcategoryAmount(category, cleanSubcategoryName);
+                                      }}
                                       InputProps={{
                                         inputComponent: NumberFormatCustom,
                                         inputProps: { style: { textAlign: 'right' } }
@@ -1295,7 +1344,8 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
                           )}
                         </React.Fragment>
                       );
-                    })}
+                    });
+                  })()}
                 </TableBody>
                 <TableFooter>
                   <TableRow>

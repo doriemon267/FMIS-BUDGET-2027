@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Proposal = require("../models/Proposal");
 const PersonnelService = require('../models/PersonnelServices');
 const MOOEProposal = require("../models/mooeProposals");
@@ -5,6 +6,7 @@ const CapitalOutlay = require("../models/CapitalOutlay");
 const BudgetarySupport = require("../models/BudgetarySupport");
 const Settings = require("../models/Settings");
 const NewProposalWorkflow = require("../models/NewProposalWorkflow");
+const { resolveRegionToObjectId } = require('../utils/regionUtils');
 
 // Get overview statistics for the dashboard
 exports.getOverviewStats = async (req, res) => {
@@ -23,10 +25,18 @@ exports.getOverviewStats = async (req, res) => {
     }
     
     // Allow explicit region query param to further narrow within user's scope
-    const region = req.query.region;
-    if (region) {
-      // For NewProposalWorkflow, region might be ObjectId or string
-      baseFilter.region = region;
+    const regionParam = req.query.region;
+    if (regionParam) {
+      baseFilter.region = regionParam;
+    }
+    
+    // Legacy models (PersonnelServices, MOOE, CapitalOutlay, BudgetarySupport) use region as string (name).
+    // NewProposalWorkflow uses region as ObjectId only. Never pass a string to avoid "Cast to ObjectId" error.
+    const regionObjectId = await resolveRegionToObjectId(baseFilter.region);
+    const workflowFilter = { ...baseFilter };
+    delete workflowFilter.region; // remove so we never pass string to NewProposalWorkflow
+    if (regionObjectId) {
+      workflowFilter.region = regionObjectId;
     }
     
     // Build status-specific filters for legacy models
@@ -37,14 +47,14 @@ exports.getOverviewStats = async (req, res) => {
     // Build workflow status filters for NewProposalWorkflow
     // Pending = not FINALIZED and not in RETURNED states
     const workflowPendingFilter = {
-      ...baseFilter,
+      ...workflowFilter,
       status: {
         $nin: ["FINALIZED", "RETURNED_TO_PREPARER", "RETURNED_TO_REVIEWER", "RETURNED_TO_APPROVER", "RETURNED_TO_PLANNING_ANALYST", "RETURNED_TO_OFFICER"]
       }
     };
-    const workflowFinalizedFilter = { ...baseFilter, status: "FINALIZED" };
+    const workflowFinalizedFilter = { ...workflowFilter, status: "FINALIZED" };
     const workflowReturnedFilter = {
-      ...baseFilter,
+      ...workflowFilter,
       status: { $in: ["RETURNED_TO_PREPARER", "RETURNED_TO_REVIEWER", "RETURNED_TO_APPROVER", "RETURNED_TO_PLANNING_ANALYST", "RETURNED_TO_OFFICER"] }
     };
     
@@ -88,8 +98,8 @@ exports.getOverviewStats = async (req, res) => {
       MOOEProposal.countDocuments(rejectedFilter),
       CapitalOutlay.countDocuments(rejectedFilter),
       BudgetarySupport.countDocuments(rejectedFilter),
-      // NewProposalWorkflow counts
-      NewProposalWorkflow.countDocuments(baseFilter),
+      // NewProposalWorkflow counts (use workflowFilter so region is ObjectId)
+      NewProposalWorkflow.countDocuments(workflowFilter),
       NewProposalWorkflow.countDocuments(workflowPendingFilter),
       NewProposalWorkflow.countDocuments(workflowFinalizedFilter),
       NewProposalWorkflow.countDocuments(workflowReturnedFilter)

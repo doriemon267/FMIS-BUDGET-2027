@@ -76,6 +76,14 @@ const CustomDrawer = ({ collapsed = false }) => {
     currentUser?.hierarchicalAccess?.assignmentLevel === "BUDGET_AND_REVENUE_DIVISION" ||
     roles.some((r) => String(r).toUpperCase().includes("BRD"));
 
+  // Only BRD-level roles and Super Admin may see: BRD Consolidation, NEP Ceiling, Tier
+  const canSeeBRDOnlyMenus =
+    isBRDLevel ||
+    isBudgetPlanningAnalyst ||
+    isBudgetOfficer ||
+    isOverallApprover ||
+    isSuperAdmin(currentUser);
+
   // BUDGET_PLANNING_ANALYST should have same access as APPROVER for menus
   const isBudgetPlanningAnalystOrApprover = isBudgetPlanningAnalyst || isApprover;
   const fmisUrl =
@@ -175,23 +183,19 @@ const CustomDrawer = ({ collapsed = false }) => {
               {
                 link: "/brd-consolidation",
                 name: "BRD Consolidation Structure",
-                isAllow: isBudgetPlanningAnalyst || isBudgetOfficer || isOverallApprover || isSuperAdmin(currentUser),
+                isAllow: canSeeBRDOnlyMenus,
                 icon: <BiData />,
               },
               {
                 link: "/nep-ceiling",
                 name: "NEP Ceiling Management",
-                // Visible only when there are finalized proposals for the active fiscal year,
-                // and user is BRD decision-maker (Budget Officer / Manager / Super Admin)
-                isAllow:
-                  hasFinalizedProposals &&
-                  (isBudgetOfficer || isOverallApprover || isSuperAdmin(currentUser)),
+                isAllow: canSeeBRDOnlyMenus && hasFinalizedProposals,
                 icon: <FaChartBar />,
               },
               {
                 link: "/tier",
                 name: "Tier",
-                isAllow: isBudgetPlanningAnalyst || isBudgetOfficer || isOverallApprover || isSuperAdmin(currentUser),
+                isAllow: canSeeBRDOnlyMenus,
                 icon: <FaChartBar />,
               },
               // {
@@ -217,46 +221,45 @@ const CustomDrawer = ({ collapsed = false }) => {
             collapsed={collapsed}
             iconRight={<FaChevronCircleDown />}
             subLinks={[
-              // {
-              //   link: "/createProposal2",
-              //   name: "Proposal Summary",
-              //   icon: <FaChartBar />,
-              // },
-              {
-                link: "/consolidated-corporate-income",
-                name: "Consolidated Corporate Income",
-                isAllow: hasPermission(currentUser, "ViewReports"),
-                icon: <FaRegMoneyBillAlt />,
-              },
-              {
-                link: "/consolidated-reports",
-                name: "Consolidated MOOE",
-                isAllow: hasPermission(currentUser, "ViewReports"),
-                icon: <TbReportAnalytics />,
-              },
-              {
-                link: "/consolidated-capital-outlay-reports",
-                name: "Consolidated Capital Outlay Reports",
-                isAllow: hasPermission(currentUser, "ViewReports"),
-                icon: <FaRegMoneyBillAlt />,
-              },
-              {
-                link: "/consolidated-personnel-services-reports",
-                name: "Consolidated Personnel Services Reports",
-                isAllow: hasPermission(currentUser, "ViewReports"),
-                icon: <FiUsers />,
-              },
+              // Non-BRD users: only Comprehensive Reports
+              // BRD users: all reports
+              ...(isBRDLevel || isBudgetPlanningAnalyst || isBudgetOfficer || isOverallApprover || isSuperAdmin(currentUser) ? [
+                {
+                  link: "/consolidated-corporate-income",
+                  name: "Consolidated Corporate Income",
+                  isAllow: hasPermission(currentUser, "ViewReports"),
+                  icon: <FaRegMoneyBillAlt />,
+                },
+                {
+                  link: "/consolidated-reports",
+                  name: "Consolidated MOOE",
+                  isAllow: hasPermission(currentUser, "ViewReports"),
+                  icon: <TbReportAnalytics />,
+                },
+                {
+                  link: "/consolidated-capital-outlay-reports",
+                  name: "Consolidated Capital Outlay Reports",
+                  isAllow: hasPermission(currentUser, "ViewReports"),
+                  icon: <FaRegMoneyBillAlt />,
+                },
+                {
+                  link: "/consolidated-personnel-services-reports",
+                  name: "Consolidated Personnel Services Reports",
+                  isAllow: hasPermission(currentUser, "ViewReports"),
+                  icon: <FiUsers />,
+                },
+                {
+                  link: "/comparative-report",
+                  name: "Comparative Budget Report",
+                  isAllow: hasPermission(currentUser, "ViewReports"),
+                  icon: <FaChartBar />,
+                },
+              ] : []),
               {
                 link: "/comprehensive-reports",
-                name: "Comprehensive Budget Report",
+                name: "Budget Summary Report",
                 isAllow: hasPermission(currentUser, "ViewReports"),
                 icon: <FaRegChartBar />,
-              },
-              {
-                link: "/comparative-report",
-                name: "Comparative Budget Report",
-                isAllow: hasPermission(currentUser, "ViewReports"),
-                icon: <FaChartBar />,
               },
               // {
               //   link: "/corporate-income-upload",

@@ -9,6 +9,8 @@ const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
 const {
   getComprehensiveReportData,
   getAvailableRegionsComprehensive,
+  getAvailableOfficesComprehensive,
+  getAvailableResponsibilityCentersComprehensive,
   getAvailableFiscalYears,
   getAvailableBudgetTypes,
   getActiveSettings,
@@ -19,6 +21,8 @@ router.use(tokenMiddleware);
 // Routes for comprehensive reports
 router.get('/comprehensive-data', getComprehensiveReportData);
 router.get('/available-regions-comprehensive', getAvailableRegionsComprehensive);
+router.get('/available-offices-comprehensive', getAvailableOfficesComprehensive);
+router.get('/available-responsibility-centers-comprehensive', getAvailableResponsibilityCentersComprehensive);
 router.get('/available-fiscal-years', getAvailableFiscalYears);
 router.get('/available-budget-types', getAvailableBudgetTypes);
 router.get('/active-settings', getActiveSettings);

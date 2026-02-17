@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Tier = require('../models/Tier');
 const TierRevision = require('../models/TierRevision');
+const User = require('../models/User');
 const PersonnelServices = require('../models/PersonnelServices');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const mooeProposals = require('../models/mooeProposals');
@@ -22,6 +23,41 @@ const BRD_OR_FINALIZED_STATUSES = [
   'FORWARDED_TO_BRD_OFFICER',
   'FORWARDED_TO_BRD_MANAGER',
 ];
+
+/**
+ * Resolve createdBy (User _id) and createdByName from req.user.
+ * req.user.id may be SSO userId string (not MongoDB ObjectId); we look up User by userId when possible.
+ */
+const resolveCreatedBy = async (req) => {
+  const uid = req.user?.id ?? req.user?.userId ?? req.user?._id ?? req.user?.Id;
+  const displayName = req.user?.particular ?? req.user?.name ?? (req.user?.FirstName && req.user?.LastName ? `${req.user.FirstName} ${req.user.LastName}`.trim() : null) ?? req.user?.Username?.[0] ?? (uid != null ? String(uid) : '');
+  let userObjectId = null;
+  if (uid != null && uid !== '') {
+    const uidStr = String(uid).trim();
+    if (mongoose.Types.ObjectId.isValid(uidStr) && uidStr.length === 24) {
+      userObjectId = new mongoose.Types.ObjectId(uidStr);
+    }
+    if (!userObjectId) {
+      try {
+        const userDoc = await User.findOne({ userId: uidStr }).select('_id name').lean();
+        if (userDoc) {
+          userObjectId = userDoc._id;
+          return { createdBy: userObjectId, createdByName: userDoc.name || displayName || '' };
+        }
+      } catch (e) {
+        if (process.env.DEBUG_LOGS === 'true') console.debug('TierRevision resolveCreatedBy User lookup failed:', e?.message);
+      }
+    } else {
+      try {
+        const userDoc = await User.findById(userObjectId).select('name').lean();
+        if (userDoc) return { createdBy: userObjectId, createdByName: userDoc.name || displayName || '' };
+      } catch (e) {
+        if (process.env.DEBUG_LOGS === 'true') console.debug('TierRevision resolveCreatedBy User findById failed:', e?.message);
+      }
+    }
+  }
+  return { createdBy: userObjectId, createdByName: displayName || '' };
+};
 
 const getFinalizedData = async (req, res) => {
   try {
@@ -200,10 +236,7 @@ const saveTierData = async (req, res) => {
       division: String(division || ''),
     };
 
-    const userId = req.user?.id || req.user?._id;
-    const userObjectId = mongoose.Types.ObjectId.isValid(userId)
-      ? new mongoose.Types.ObjectId(userId)
-      : null;
+    const { createdBy: userObjectId, createdByName } = await resolveCreatedBy(req);
 
     let tierDoc = await Tier.findOne(queryConditions);
 
@@ -227,6 +260,7 @@ const saveTierData = async (req, res) => {
           tier2: i.tier2,
         })),
         createdBy: userObjectId,
+        createdByName: createdByName || undefined,
       });
       await pruneRevisionsForScope(queryConditions.fiscalYear, queryConditions.region, queryConditions.department, queryConditions.division);
     }
@@ -344,7 +378,7 @@ const getRevisions = async (req, res) => {
     const list = await TierRevision.find(query)
       .sort({ version: -1 })
       .limit(MAX_REVISIONS_TO_KEEP)
-      .select('version comment createdAt createdBy')
+      .select('version comment createdAt createdBy createdByName')
       .populate('createdBy', 'username name email')
       .lean();
     res.json(list);
@@ -393,8 +427,7 @@ const restoreRevision = async (req, res) => {
       department: rev.department || '',
       division: rev.division || '',
     };
-    const userId = req.user?.id || req.user?._id;
-    const userObjectId = mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : null;
+    const { createdBy: userObjectId, createdByName } = await resolveCreatedBy(req);
 
     let tierDoc = await Tier.findOne(queryConditions);
     if (!tierDoc) {
@@ -445,6 +478,7 @@ const restoreRevision = async (req, res) => {
           tier2: i.tier2,
         })),
         createdBy: userObjectId,
+        createdByName: createdByName || undefined,
       });
       await pruneRevisionsForScope(queryConditions.fiscalYear, queryConditions.region, queryConditions.department, queryConditions.division);
     }

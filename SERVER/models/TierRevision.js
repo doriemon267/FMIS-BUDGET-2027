@@ -17,6 +17,7 @@ const TierRevisionSchema = new mongoose.Schema({
   comment: { type: String, default: '' },
   items: [TierRevisionItemSchema],
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdByName: { type: String, default: '' }, // display name when createdBy not in User collection (e.g. SSO)
 }, {
   timestamps: true,
   strict: false,

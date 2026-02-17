@@ -2,7 +2,31 @@
  * Utility functions for handling region-related operations
  * Completely dynamic - no hardcoded values
  */
+const mongoose = require('mongoose');
 const Region = require('../models/Region');
+
+/**
+ * Resolve region param (name like "CENTRAL OFFICE" or ObjectId string) to MongoDB ObjectId.
+ * Use when querying models that store region as ObjectId (e.g. NewProposalWorkflow).
+ * @param {string|mongoose.Types.ObjectId} region - Region name or 24-char hex ObjectId string
+ * @returns {Promise<mongoose.Types.ObjectId|null>} - ObjectId or null if not found/invalid
+ */
+async function resolveRegionToObjectId(region) {
+  if (!region || (typeof region !== 'string' && !(region instanceof mongoose.Types.ObjectId))) return null;
+  const str = String(region).trim();
+  if (!str) return null;
+  if (mongoose.Types.ObjectId.isValid(str) && str.length === 24) {
+    return new mongoose.Types.ObjectId(str);
+  }
+  const doc = await Region.findOne({
+    $or: [
+      { Region: new RegExp(`^${str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+      { regionName: new RegExp(`^${str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+      { name: new RegExp(`^${str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+    ],
+  }).select('_id').lean();
+  return doc ? doc._id : null;
+}
 // Cache for regions to avoid repeated database calls
 let cachedRegions = null;
 // Function to get all regions from database
@@ -68,5 +92,6 @@ module.exports = {
   regionsMatch,
   getAllRegionInfo,
   getAllRegions,
-  normalizeRegionName
+  normalizeRegionName,
+  resolveRegionToObjectId,
 };
