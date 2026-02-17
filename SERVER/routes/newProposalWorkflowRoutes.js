@@ -3,6 +3,7 @@ const router = express.Router();
 const newProposalWorkflowController = require('../controllers/newProposalWorkflowController');
 const consolidationController = require('../controllers/consolidationController');
 const checkToken = require('../middleware/checkToken');
+const { logUserActivity } = require('../middleware/userLogs');
 const multer = require('multer');
 const path = require('path');
 
@@ -74,7 +75,7 @@ router.get('/uploads/:filename', (req, res) => {
 });
 
 // Routes for proposal management
-router.post('/proposals', newProposalWorkflowController.createProposal);
+router.post('/proposals', logUserActivity({ action: 'CREATE', resource: 'Proposal' }), newProposalWorkflowController.createProposal);
 router.get('/proposals', newProposalWorkflowController.getProposals);
 router.get('/proposals/my-proposals', newProposalWorkflowController.getMyProposals);
 router.get('/proposals/pending-review', newProposalWorkflowController.getPendingReview);
@@ -82,7 +83,7 @@ router.get('/proposals/pending-review', newProposalWorkflowController.getPending
 router.get('/proposals/has-finalized', newProposalWorkflowController.hasFinalizedProposals);
 // Specific routes with parameters must come BEFORE generic /:id routes
 router.get('/proposals/:id/audit-trail', newProposalWorkflowController.getAuditTrail);
-router.post('/proposals/:id/action', newProposalWorkflowController.performAction);
+router.post('/proposals/:id/action', logUserActivity({ action: 'UPDATE', resource: 'Proposal', getResourceId: (req) => req.params.id, getDetails: (req) => ({ subAction: 'workflow-action', action: req.body?.action }) }), newProposalWorkflowController.performAction);
 // NEW: Get proposal totals by workflow ref (for BudgetarySupportTable)
 router.get('/proposals/:workflowRefId/totals', newProposalWorkflowController.getProposalTotalsByWorkflowRef);
 
@@ -93,8 +94,8 @@ router.get('/proposals/:id/attachments', newProposalWorkflowController.getAttach
 
 // Generic routes AFTER specific ones
 router.get('/proposals/:id', newProposalWorkflowController.getProposalById);
-router.put('/proposals/:id', newProposalWorkflowController.updateProposal);
-router.delete('/proposals/:id', newProposalWorkflowController.deleteProposal);
+router.put('/proposals/:id', logUserActivity({ action: 'UPDATE', resource: 'Proposal', getResourceId: (req) => req.params.id }), newProposalWorkflowController.updateProposal);
+router.delete('/proposals/:id', logUserActivity({ action: 'DELETE', resource: 'Proposal', getResourceId: (req) => req.params.id }), newProposalWorkflowController.deleteProposal);
 
 // BRD Consolidation Routes
 router.get('/consolidation/folders', consolidationController.getFolders);

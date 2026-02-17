@@ -65,6 +65,7 @@ const formatCurrency = (amount) => {
 const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
   const [loading, setLoading] = useState(false);
   const [ceiling, setCeiling] = useState(null);
+  const [finalizedSummary, setFinalizedSummary] = useState(null);
   const [editingAllocation, setEditingAllocation] = useState(null);
   const [editValues, setEditValues] = useState({});
   const [budgetPoolDialogOpen, setBudgetPoolDialogOpen] = useState(false);
@@ -94,9 +95,35 @@ const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
     }
   }, [fiscalYear, region, regionName]);
 
+  // Fetch finalized Initial proposals count for this region (so user sees something before initializing)
+  const fetchFinalizedSummary = useCallback(async () => {
+    if (!fiscalYear || !region) return;
+    try {
+      const res = await api.get('/api/budget-ceiling/finalized-initial', {
+        params: { region, fiscalYear }
+      });
+      if (res.data?.success && res.data?.data) {
+        setFinalizedSummary(res.data.data.summary || { totalProposals: (res.data.data.proposals || []).length });
+      } else {
+        setFinalizedSummary({ totalProposals: 0 });
+      }
+    } catch (err) {
+      console.error('Error fetching finalized proposals:', err);
+      setFinalizedSummary({ totalProposals: 0 });
+    }
+  }, [fiscalYear, region]);
+
   useEffect(() => {
     fetchCeiling();
   }, [fetchCeiling]);
+
+  useEffect(() => {
+    if (!ceiling && region && fiscalYear) {
+      fetchFinalizedSummary();
+    } else {
+      setFinalizedSummary(null);
+    }
+  }, [ceiling, region, fiscalYear, fetchFinalizedSummary]);
 
   // Initialize ceiling from finalized Initial proposals
   const handleInitializeCeiling = async () => {
@@ -341,10 +368,26 @@ const CeilingManagement = ({ fiscalYear, region, regionName, onRefresh }) => {
             No budget ceiling has been configured yet for this fiscal year and region.
           </Typography>
           
-          <Typography sx={{ color: '#888', fontSize: '0.85rem', mb: 4, maxWidth: 500, mx: 'auto' }}>
+          <Typography sx={{ color: '#888', fontSize: '0.85rem', mb: 2, maxWidth: 500, mx: 'auto' }}>
             Initialize from finalized Initial proposals to start setting NEP budget ceilings. 
             This will aggregate all approved Initial proposal amounts per division.
           </Typography>
+
+          {/* Finalized proposals count so user sees something (e.g. Super Admin) */}
+          {finalizedSummary != null && (
+            <Alert severity={finalizedSummary.totalProposals > 0 ? 'success' : 'info'} sx={{ mb: 3, maxWidth: 420, mx: 'auto' }}>
+              <strong>
+                {finalizedSummary.totalProposals > 0
+                  ? `${finalizedSummary.totalProposals} finalized Initial proposal(s) in this region.`
+                  : 'No finalized Initial proposals in this region.'}
+              </strong>
+              {finalizedSummary.totalProposals === 0 && (
+                <Typography component="span" display="block" sx={{ mt: 0.5, fontSize: '0.9rem' }}>
+                  Switch region above (e.g. Central Office) or finalize proposals in All Proposals first.
+                </Typography>
+              )}
+            </Alert>
+          )}
           
           {/* Feature highlights */}
           <Box sx={{ 

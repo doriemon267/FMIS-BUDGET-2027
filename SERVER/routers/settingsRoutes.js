@@ -32,6 +32,7 @@ const check_token_dev = require("../middleware/check_token_dev");
 const check_token_prod = require("../middleware/check_token_prod");
 const IS_PRODUCTION = require("../utils/IS_PRODUCTION");
 const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
+const { logUserActivity } = require("../middleware/userLogs");
 // Apply authentication to all settings routes
 settingsRouter.use(tokenMiddleware);
 
@@ -43,24 +44,24 @@ settingsRouter.use(tokenMiddleware);
 // ⚠️ PLACED FIRST: Specific routes must come before generic /settings/:id
 
 // Create standalone compensation settings (NOT tied to any fiscal year)
-settingsRouter.post("/compensation", createCompensationSettings);
+settingsRouter.post("/compensation", logUserActivity({ action: 'CREATE', resource: 'CompensationSettings' }), createCompensationSettings);
 
 // Get all available compensation settings
 settingsRouter.get("/compensation", getCompensationSettings);
 
 // Update standalone compensation settings
-settingsRouter.put("/compensation/:id", updateCompensationSettingsStandalone);
+settingsRouter.put("/compensation/:id", logUserActivity({ action: 'UPDATE', resource: 'CompensationSettings', getResourceId: (req) => req.params.id }), updateCompensationSettingsStandalone);
 
 // Get all fiscal years linked to a specific compensation
 settingsRouter.get("/compensation/:compensationId/linked-fiscal-years", getLinkedFiscalYears);
 
 // ==================== SPECIFIC SETTINGS ROUTES (must come before generic /settings/:id) ====================
 
-// Link compensation to a fiscal year (assign after creation)
-settingsRouter.put("/settings/:id/link-compensation", linkCompensationToSettings);
+// Link compensation to a fiscal year (assign after creation) – used by Compensation Management
+settingsRouter.put("/settings/:id/link-compensation", logUserActivity({ action: 'UPDATE', resource: 'Settings', getResourceId: (req) => req.params.id, getDetails: () => ({ subAction: 'link-compensation' }) }), linkCompensationToSettings);
 
 // Remove compensation link from fiscal year (set to null)
-settingsRouter.delete("/settings/:id/compensation-link", unlinkCompensationFromSettings);
+settingsRouter.delete("/settings/:id/compensation-link", logUserActivity({ action: 'UPDATE', resource: 'Settings', getResourceId: (req) => req.params.id, getDetails: () => ({ subAction: 'unlink-compensation' }) }), unlinkCompensationFromSettings);
 
 // Get settings with compensation data only (for Compensation Settings page)
 settingsRouter.get("/settings/compensation-only", getCompensationOnlySettings);
@@ -68,9 +69,9 @@ settingsRouter.get("/settings/compensation-only", getCompensationOnlySettings);
 // Get active fiscal year settings
 settingsRouter.get("/settings/active", getActiveSettings);
 
-// Advanced (compensation) settings
+// Advanced (compensation) settings – used by Compensation Management / CompensationSettingsForm
 settingsRouter.get("/settings/advanced/:fiscalYear", getAdvancedSettings);
-settingsRouter.put("/settings/advanced/:fiscalYear", updateAdvancedSettings);
+settingsRouter.put("/settings/advanced/:fiscalYear", logUserActivity({ action: 'UPDATE', resource: 'Settings', getResourceId: (req) => req.params.fiscalYear, getDetails: () => ({ subAction: 'advanced-compensation' }) }), updateAdvancedSettings);
 
 // Get all fiscal years from settings (with budgetType and _id)
 settingsRouter.get("/settings/fiscal-years", async (req, res) => {
@@ -101,21 +102,21 @@ settingsRouter.get("/settings/by-region/:region", getSettingsByRegion);
 settingsRouter.get("/settings/active/with-periods", getActiveSettingsWithPeriods);
 
 // Set a specific fiscal year as active
-settingsRouter.patch("/settings/:id/activate", setActiveFiscalYear);
+settingsRouter.patch("/settings/:id/activate", logUserActivity({ action: 'UPDATE', resource: 'Settings', getResourceId: (req) => req.params.id, getDetails: () => ({ subAction: 'activate' }) }), setActiveFiscalYear);
 
-// Create settings with regions and multiple budget periods
-settingsRouter.post("/settings/enhanced/create", createSettingsWithRegions);
+// Create settings with regions and multiple budget periods (used by /fysettings)
+settingsRouter.post("/settings/enhanced/create", logUserActivity({ action: 'CREATE', resource: 'Settings' }), createSettingsWithRegions);
 
 // Extend a budget period (add new phase/period)
-settingsRouter.post("/settings/:id/extend-period", extendBudgetPeriod);
+settingsRouter.post("/settings/:id/extend-period", logUserActivity({ action: 'UPDATE', resource: 'Settings', getResourceId: (req) => req.params.id, getDetails: () => ({ subAction: 'extend-period' }) }), extendBudgetPeriod);
 
 // Activate a specific budget period (manual activation)
-settingsRouter.patch("/settings/:id/activate-period", activateBudgetPeriod);
+settingsRouter.patch("/settings/:id/activate-period", logUserActivity({ action: 'UPDATE', resource: 'Settings', getResourceId: (req) => req.params.id, getDetails: () => ({ subAction: 'activate-period' }) }), activateBudgetPeriod);
 
 // Region-specific due date extensions (same FY + budget type, extended due date for specific region(s))
-settingsRouter.post("/settings/:id/region-extension", addRegionDueDateExtension);
-settingsRouter.put("/settings/:id/region-extension/:extensionId", updateRegionDueDateExtension);
-settingsRouter.delete("/settings/:id/region-extension/:extensionId", removeRegionDueDateExtension);
+settingsRouter.post("/settings/:id/region-extension", logUserActivity({ action: 'CREATE', resource: 'Settings', getResourceId: (req) => req.params.id, getDetails: () => ({ subAction: 'region-extension' }) }), addRegionDueDateExtension);
+settingsRouter.put("/settings/:id/region-extension/:extensionId", logUserActivity({ action: 'UPDATE', resource: 'Settings', getResourceId: (req) => req.params.id, getDetails: () => ({ subAction: 'region-extension' }) }), updateRegionDueDateExtension);
+settingsRouter.delete("/settings/:id/region-extension/:extensionId", logUserActivity({ action: 'DELETE', resource: 'Settings', getResourceId: (req) => req.params.id, getDetails: () => ({ subAction: 'region-extension' }) }), removeRegionDueDateExtension);
 
 // Update compensation settings separately
 settingsRouter.put("/settings/:id/compensation", updateCompensationSettings);
@@ -127,12 +128,12 @@ settingsRouter.put("/settings/:id/compensation", updateCompensationSettings);
 settingsRouter.get("/settings", getAllSettings);
 
 // Create new settings
-settingsRouter.post("/settings", createSettings);
+settingsRouter.post("/settings", logUserActivity({ action: 'CREATE', resource: 'Settings' }), createSettings);
 
 // Update an existing settings entry
-settingsRouter.put("/settings/:id", updateSettings);
+settingsRouter.put("/settings/:id", logUserActivity({ action: 'UPDATE', resource: 'Settings', getResourceId: (req) => req.params.id }), updateSettings);
 
 // Delete a settings entry
-settingsRouter.delete("/settings/:id", deleteSettings);
+settingsRouter.delete("/settings/:id", logUserActivity({ action: 'DELETE', resource: 'Settings', getResourceId: (req) => req.params.id }), deleteSettings);
 
 module.exports = settingsRouter;

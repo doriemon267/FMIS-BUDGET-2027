@@ -73,12 +73,14 @@ export const RegionProvider = ({ children }) => {
           return; // Exit early, no need to call API
         }
 
-        // If the user has FULL access or BRD-level access, fetch all available regions
+        // If the user has FULL access, BRD-level access, or is Super Admin, fetch all available regions
+        const isSuperAdmin = currentUser.Roles?.some((r) => String(r).toUpperCase().replace(/\s/g, '') === 'SUPERADMIN' || String(r).toUpperCase() === 'SUPER ADMIN');
         const userScope = currentUser.hierarchicalAccess?.scope || currentUser.hierarchicalAccess?.assignmentLevel || 'REGION';
         if (
+          isSuperAdmin ||
           userScope === 'FULL' ||
           userScope === 'BUDGET_AND_REVENUE_DIVISION' ||
-          currentUser.Roles?.some(r => String(r).toUpperCase().includes('BRD'))
+          currentUser.Roles?.some((r) => String(r).toUpperCase().includes('BRD'))
         ) {
           try {
             const res = await api.get('/api/regions');
@@ -92,19 +94,25 @@ export const RegionProvider = ({ children }) => {
             }));
             setAvailableRegions(regions);
 
+            let regionSet = false;
             const savedRegion = localStorage.getItem('activeRegion');
             if (savedRegion) {
               try {
                 const parsed = JSON.parse(savedRegion);
-                // verify region exists
-                const verified = regions.find(r => r._id === parsed._id || r.name === parsed.name || r.Region === parsed.Region || r.regionName === parsed.regionName);
+                const verified = regions.find((r) => r._id === parsed._id || r.name === parsed.name || r.Region === parsed.Region || r.regionName === parsed.regionName);
                 if (verified) {
                   setActiveRegion(verified);
                   localStorage.setItem('activeRegion', JSON.stringify(verified));
+                  regionSet = true;
                 }
               } catch (e) {}
             }
-            // Do not automatically pick a default region to force selection if none saved
+            // Super Admin: if no saved region (or invalid), auto-select first so they can see NEP Ceiling / finalized data
+            if (isSuperAdmin && !regionSet && regions.length > 0) {
+              const first = regions[0];
+              setActiveRegion(first);
+              localStorage.setItem('activeRegion', JSON.stringify(first));
+            }
             setLoading(false);
             return;
           } catch (err) {

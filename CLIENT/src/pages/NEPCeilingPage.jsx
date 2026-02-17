@@ -9,6 +9,10 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   Divider,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   Home as HomeIcon,
@@ -18,6 +22,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
 import { useRegion } from '../context/RegionContext';
+import { isSuperAdmin } from '../utils/checkRole';
 import CeilingManagement from '../components/workflow/CeilingManagement';
 import BudgetComparisonView from '../components/workflow/BudgetComparisonView';
 
@@ -41,7 +46,7 @@ const BRAND_COLORS = {
 const NEPCeilingPage = () => {
   const navigate = useNavigate();
   const { currentUser } = useUser();
-  const { activeRegion } = useRegion();
+  const { activeRegion, availableRegions, changeActiveRegion } = useRegion();
   const [activeView, setActiveView] = useState('ceiling'); // 'ceiling' | 'comparison'
 
   // Resolve region
@@ -56,14 +61,16 @@ const NEPCeilingPage = () => {
   // Current fiscal year (could be made dynamic)
   const currentFiscalYear = new Date().getFullYear();
 
-  // Check if user is BRD staff
-  const isBRDStaff = currentUser?.Roles?.some((role) =>
-    [
-      'BUDGET_OFFICER', 'BUDGET OFFICER',
-      'BUDGET_MANAGER', 'BUDGET MANAGER',
-      'SUPER_ADMIN', 'SUPER ADMIN',
-    ].includes(role)
-  );
+  // Check if user is BRD staff (includes Super Admin so they can see finalized proposals on NEP Ceiling)
+  const isBRDStaff =
+    isSuperAdmin(currentUser) ||
+    currentUser?.Roles?.some((role) =>
+      [
+        'BUDGET_OFFICER', 'BUDGET OFFICER',
+        'BUDGET_MANAGER', 'BUDGET MANAGER',
+        'SUPER_ADMIN', 'SUPER ADMIN',
+      ].includes(role)
+    );
 
   const handleViewChange = (event, newView) => {
     if (newView !== null) {

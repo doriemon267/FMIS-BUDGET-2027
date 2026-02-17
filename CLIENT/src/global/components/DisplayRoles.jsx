@@ -3,19 +3,24 @@ import { Box, IconButton, Collapse, List, ListItem, Tooltip } from "@mui/materia
 import { FaUserCircle } from "react-icons/fa";
 import { IoMdArrowDropdown, IoMdArrowDropup } from "react-icons/io";
 import { useUser } from "../../context/UserContext";
+import { budgetRolesOnly } from "../../utils/role-utils";
 
 const DisplayRoles = ({ collapsed = false }) => {
   const { currentUser } = useUser();
   const [open, setOpen] = React.useState(false);
 
+  const allRoles = currentUser?.Roles ?? [];
+  const roles = budgetRolesOnly(allRoles);
+  const displayList = roles.length > 0 ? roles : ["User"];
+
   const handleClick = () => {
     setOpen(!open);
   };
 
-  const isOneRole = currentUser.Roles.length === 1;
-  const displayRole = currentUser.Roles[0]?.toLowerCase()?.includes("super")
+  const isOneRole = displayList.length === 1;
+  const displayRole = displayList[0]?.toLowerCase()?.includes("super")
     ? "ADMIN"
-    : currentUser.Roles[0] || "User";
+    : displayList[0] || "User";
 
   const renderContent = () => (
     <Box
@@ -87,15 +92,11 @@ const DisplayRoles = ({ collapsed = false }) => {
               component="nav"
               sx={{ borderBottom: 1, borderColor: "secondary.main" }}
             >
-              {currentUser.Roles.length > 0 ? (
-                currentUser.Roles.map((role, index) => (
-                  <ListItem key={index} sx={{ fontWeight: 600 }}>
-                    {role.toLowerCase().includes("super") ? "Admin" : role}
-                  </ListItem>
-                ))
-              ) : (
-                <ListItem key={1}>User</ListItem>
-              )}
+              {displayList.map((role, index) => (
+                <ListItem key={index} sx={{ fontWeight: 600 }}>
+                  {role.toLowerCase().includes("super") ? "Admin" : role}
+                </ListItem>
+              ))}
             </List>
           </Collapse>
         </Box>

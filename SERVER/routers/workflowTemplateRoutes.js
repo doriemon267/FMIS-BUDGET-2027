@@ -10,6 +10,7 @@ const check_token_dev = require('../middleware/check_token_dev');
 const check_token_prod = require('../middleware/check_token_prod');
 const IS_PRODUCTION = require('../utils/IS_PRODUCTION');
 const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
+const { logUserActivity } = require('../middleware/userLogs');
 
 // Apply authentication to all routes
 router.use(tokenMiddleware);
@@ -40,19 +41,19 @@ router.get('/:id', getTemplate);
  * POST /api/workflow-templates
  * Create new template
  */
-router.post('/', createTemplate);
+router.post('/', logUserActivity({ action: 'CREATE', resource: 'WorkflowTemplate' }), createTemplate);
 
 /**
  * PUT /api/workflow-templates/:id
  * Update template
  */
-router.put('/:id', updateTemplate);
+router.put('/:id', logUserActivity({ action: 'UPDATE', resource: 'WorkflowTemplate', getResourceId: (req) => req.params.id }), updateTemplate);
 
 /**
  * DELETE /api/workflow-templates/:id
  * Delete template (soft delete)
  */
-router.delete('/:id', deleteTemplate);
+router.delete('/:id', logUserActivity({ action: 'DELETE', resource: 'WorkflowTemplate', getResourceId: (req) => req.params.id }), deleteTemplate);
 
 /**
  * POST /api/workflow-templates/:id/create-proposal

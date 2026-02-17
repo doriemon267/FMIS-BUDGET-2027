@@ -25,16 +25,17 @@ const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
  * 3. Generate NEP proposals from Initial proposals
  */
 
-// Middleware to check if user is BRD staff (Officer or Manager)
+// Middleware to check if user is BRD staff (Officer, Manager, or Super Admin)
 const isBRDStaff = (req, res, next) => {
-  const userRoles = req.user?.Roles || [];
+  const userRoles = (req.user?.Roles || []).map(String);
   const allowedRoles = [
     'BUDGET_OFFICER', 'BUDGET OFFICER',
     'BUDGET_MANAGER', 'BUDGET MANAGER',
     'SUPER_ADMIN', 'SUPER ADMIN'
   ];
-  
-  const hasAccess = userRoles.some(role => allowedRoles.includes(role));
+  const isSuperAdmin = userRoles.some((r) => /SUPER\s*ADMIN/i.test(r.replace(/\s/g, ' ')));
+  const hasAccess =
+    isSuperAdmin || userRoles.some((role) => allowedRoles.includes(role));
   if (!hasAccess) {
     return res.status(403).json({
       success: false,

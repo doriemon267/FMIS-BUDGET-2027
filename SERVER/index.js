@@ -1016,6 +1016,9 @@ app.use(apiPrefix, userProfileRouter);
 // User Preferences Routes
 const userPreferencesRoutes = require("./routers/userPreferencesRoutes");
 app.use(`${apiPrefix}/user`, userPreferencesRoutes);
+// User Activity Logs (immutable, snapshot support) – read-only API
+const userActivityLogRoutes = require("./routers/userActivityLogRoutes");
+app.use(`${apiPrefix}/user-activity-logs`, userActivityLogRoutes);
 const budgetManagerOrgRoutes = require("./routers/budgetManagerOrgRoutes");
 app.use(apiPrefix, budgetManagerOrgRoutes);
 // 🏢 Hierarchical RBAC Routes - Enhanced organizational access control with Division → Department → Region consolidation

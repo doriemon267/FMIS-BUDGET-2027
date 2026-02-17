@@ -661,6 +661,12 @@ exports.updateSettings = async (req, res) => {
       runValidators: true,
     }).populate("compensationSettingsId");
 
+    // User activity log snapshot (before/after) for audit
+    try {
+      const { setSnapshot } = require("../middleware/userLogs");
+      setSnapshot(req, existing, updatedSettings);
+    } catch (_) { /* ignore */ }
+
     // ✅ STRICT SEPARATION: Compensation-related updates are handled in updateCompensationSettings
     // No meal/medical allowance updates happen here - only in the dedicated Compensation Settings endpoint
     

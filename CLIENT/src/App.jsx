@@ -58,6 +58,7 @@ import TierComparisonPage from "./pages/TierComparisonPage";
 import ComparativeReportPage from "./pages/ComparativeReportPage";
 import NEPCeilingPage from "./pages/NEPCeilingPage";
 import TierPage from "./pages/TierPage";
+import UserActivityLogsPage from "./pages/UserActivityLogsPage";
 const App = () => {
   return (
     <Routes>
@@ -439,6 +440,14 @@ const App = () => {
               requiredWorkflowRoles={["superAdmin"]}
             >
               <DatabaseBackupPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/user-activity-logs"
+          element={
+            <ProtectedRoute requiredWorkflowRoles={["superAdmin"]}>
+              <UserActivityLogsPage />
             </ProtectedRoute>
           }
         />

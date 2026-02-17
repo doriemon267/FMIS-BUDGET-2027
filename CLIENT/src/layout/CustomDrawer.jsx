@@ -427,6 +427,13 @@ const CustomDrawer = ({ collapsed = false }) => {
                 icon: <IoSettingsOutline />,
               },
 
+              {
+                link: "/user-activity-logs",
+                name: "User Activity Logs",
+                isAllow: isSuperAdmin(currentUser),
+                icon: <MdHistory />,
+              },
+
               // {
               //   link: "/database-backup",
               //   name: "Database Backup",

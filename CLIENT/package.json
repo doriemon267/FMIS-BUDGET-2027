@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "test": "vitest",
     "preview": "vite preview",
+    "start:dist": "vite preview --port 3005",
     "format": "prettier --write \"src/**/*.{js,jsx,json,css,scss,md}\"",
     "format:check": "prettier --check \"src/**/*.{js,jsx,json,css,scss,md}\""
   },
