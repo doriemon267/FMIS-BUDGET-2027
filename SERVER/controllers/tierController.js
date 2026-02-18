@@ -10,6 +10,50 @@ const PDFDocument = require('pdfkit');
 const { Writable } = require('stream');
 
 /**
+ * Normalize tier scope so save and getRevisions match whether user filtered by Region only, Department, or Division.
+ * Resolves region/department/division IDs to canonical names; query logic then matches both name and any stored IDs.
+ */
+const normalizeTierScope = async (fiscalYear, region, department, division) => {
+  const fy = String(fiscalYear || '');
+  let regionVal = String(region || '');
+  let dept = String(department ?? '');
+  let div = String(division ?? '');
+
+  try {
+    const Region = require('../models/Region');
+    let regionDoc = null;
+    if (regionVal && mongoose.Types.ObjectId.isValid(regionVal) && regionVal.length === 24) {
+      regionDoc = await Region.findById(regionVal).select('Region').lean();
+    }
+    if (!regionDoc && regionVal) {
+      regionDoc = await Region.findOne({
+        $or: [{ Region: regionVal }, { regionName: regionVal }, { name: regionVal }],
+      }).select('Region').lean();
+    }
+    if (regionDoc && regionDoc.Region) regionVal = String(regionDoc.Region);
+  } catch (e) {
+    if (process.env.DEBUG_LOGS === 'true') console.debug('normalizeTierScope region lookup failed:', e?.message);
+  }
+
+  try {
+    const Department = require('../models/Department');
+    if (dept && mongoose.Types.ObjectId.isValid(dept) && dept.length === 24) {
+      const deptDoc = await Department.findById(dept).select('Department').lean();
+      if (deptDoc && deptDoc.Department) dept = String(deptDoc.Department);
+    } else if (dept) {
+      const deptDoc = await Department.findOne({
+        $or: [{ Department: dept }, { Department: new RegExp(`^${String(dept).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }],
+      }).select('Department').lean();
+      if (deptDoc && deptDoc.Department) dept = String(deptDoc.Department);
+    }
+  } catch (e) {
+    if (process.env.DEBUG_LOGS === 'true') console.debug('normalizeTierScope department lookup failed:', e?.message);
+  }
+
+  return { fiscalYear: fy, region: regionVal, department: dept, division: div };
+};
+
+/**
  * GET /api/tier/finalized-data
  * Returns PROJECTED CORPORATE INCOME and PROJECTED SUBSIDY (→ TIER 1) from Initial proposals at BRD level or finalized.
  * Tier is available once the proposal reaches BRD (Budget Planning Analyst → Budget Officer → Budget Manager) so that
@@ -204,6 +248,7 @@ const getTierData = async (req, res) => {
  * GET /api/tier/saved-items?fiscalYear=&region=&department=&division=
  * Returns the saved Tier document's items (lineItemId, tier1, tier2) so the client
  * can show the current version's values instead of "original" API values.
+ * Uses same region-matching as getRevisions (ID + name) so we find Tier saved with either.
  */
 const getTierSavedItems = async (req, res) => {
   try {
@@ -211,15 +256,63 @@ const getTierSavedItems = async (req, res) => {
     if (!fiscalYear || !region) {
       return res.status(400).json({ message: 'fiscalYear and region are required.' });
     }
-    const queryConditions = {
-      fiscalYear: String(fiscalYear),
-      region: String(region),
-      department: String(department || ''),
-      division: String(division || ''),
-    };
-    const tierDoc = await Tier.findOne(queryConditions).select('items').lean();
+    const scope = await normalizeTierScope(fiscalYear, region, department, division);
+    const rawRegion = String(region || '');
+    const regionValues = [scope.region].filter(Boolean);
+    if (rawRegion && !regionValues.includes(rawRegion)) regionValues.push(rawRegion);
+    try {
+      const Region = require('../models/Region');
+      if (rawRegion && mongoose.Types.ObjectId.isValid(rawRegion) && rawRegion.length === 24) {
+        const regionById = await Region.findById(rawRegion).select('Region').lean();
+        if (regionById && regionById.Region && !regionValues.includes(regionById.Region)) {
+          regionValues.push(String(regionById.Region));
+        }
+      }
+      if (scope.region) {
+        const regionIds = await Region.find({ Region: scope.region }).select('_id').lean();
+        (regionIds || []).forEach((r) => {
+          const idStr = String(r._id);
+          if (idStr && !regionValues.includes(idStr)) regionValues.push(idStr);
+        });
+      }
+    } catch (e) { /* ignore */ }
+    const regionFilter = regionValues.length === 0
+      ? { region: scope.region || rawRegion }
+      : regionValues.length === 1 ? { region: regionValues[0] } : { region: { $in: regionValues } };
+
+    let departmentFilter = { department: scope.department };
+    if (scope.department) {
+      try {
+        const Department = require('../models/Department');
+        const deptIds = await Department.find({ Department: scope.department }).select('_id').lean();
+        const ids = (deptIds || []).map((d) => String(d._id)).filter(Boolean);
+        if (ids.length) departmentFilter = { $or: [{ department: scope.department }, { department: { $in: ids } }] };
+      } catch (e) { /* ignore */ }
+    }
+    const fiscalYearStr = String(scope.fiscalYear || '');
+    let queryConditions = { fiscalYear: fiscalYearStr, ...regionFilter, ...departmentFilter, division: scope.division };
+    let tierDoc = await Tier.findOne(queryConditions).select('items').lean();
+    if (!tierDoc && fiscalYearStr) {
+      const fyNum = Number(fiscalYearStr);
+      if (Number.isFinite(fyNum)) {
+        tierDoc = await Tier.findOne({
+          $or: [{ fiscalYear: fiscalYearStr }, { fiscalYear: fyNum }],
+          ...regionFilter,
+          ...departmentFilter,
+          division: scope.division,
+        }).select('items').lean();
+      }
+    }
     const items = Array.isArray(tierDoc?.items) ? tierDoc.items : [];
-    res.json({ items });
+    // Find the version number of the data currently in Tier (latest TierRevision for this scope)
+    let version = 0;
+    if (tierDoc) {
+      try {
+        const latestRev = await TierRevision.findOne(queryConditions).sort({ version: -1 }).select('version').lean();
+        if (latestRev) version = latestRev.version || 0;
+      } catch (e) { /* ignore */ }
+    }
+    res.json({ items, version });
   } catch (error) {
     console.error('Error in getTierSavedItems:', error);
     res.status(500).json({ message: error.message });
@@ -229,44 +322,45 @@ const getTierSavedItems = async (req, res) => {
 const saveTierData = async (req, res) => {
   try {
     const { fiscalYear, region, department, division, items, revisionComment } = req.body;
-    const queryConditions = {
-      fiscalYear: String(fiscalYear),
-      region: String(region || ''),
-      department: String(department || ''),
-      division: String(division || ''),
-    };
+    const queryConditions = await normalizeTierScope(fiscalYear, region, department, division);
 
     const { createdBy: userObjectId, createdByName } = await resolveCreatedBy(req);
 
     let tierDoc = await Tier.findOne(queryConditions);
 
-    if (tierDoc && Array.isArray(tierDoc.items) && tierDoc.items.length > 0) {
-      const nextVersion = await TierRevision.findOne(queryConditions)
-        .sort({ version: -1 })
-        .select('version')
-        .lean()
-        .then((r) => (r ? (r.version || 0) + 1 : 1))
-        .catch(() => 1);
+    const VALID_CATEGORIES = ['Personnel', 'MOOE', 'Capital Outlay'];
+    const itemsToSave = Array.isArray(items) ? items : [];
+    const revisionItems = itemsToSave.map((item) => {
+      let cat = item.category;
+      if (!VALID_CATEGORIES.includes(cat)) cat = 'MOOE';
+      return {
+        lineItemId: item.lineItemId,
+        description: item.description || '',
+        category: cat,
+        tier1: item.tier1 || 0,
+        tier2: item.tier2 || 0,
+      };
+    });
 
-      await TierRevision.create({
-        ...queryConditions,
-        version: nextVersion,
-        comment: revisionComment || `Saved revision v${nextVersion}`,
-        items: tierDoc.items.map((i) => ({
-          lineItemId: i.lineItemId,
-          description: i.description,
-          category: i.category,
-          tier1: i.tier1,
-          tier2: i.tier2,
-        })),
-        createdBy: userObjectId,
-        createdByName: createdByName || undefined,
-      });
-      await pruneRevisionsForScope(queryConditions.fiscalYear, queryConditions.region, queryConditions.department, queryConditions.division);
-    }
+    const nextVersion = await TierRevision.findOne(queryConditions)
+      .sort({ version: -1 })
+      .select('version')
+      .lean()
+      .then((r) => (r ? (r.version || 0) + 1 : 1))
+      .catch(() => 1);
+
+    await TierRevision.create({
+      ...queryConditions,
+      version: nextVersion,
+      comment: revisionComment || `Saved revision v${nextVersion}`,
+      items: revisionItems,
+      createdBy: userObjectId,
+      createdByName: createdByName || undefined,
+    });
+    await pruneRevisionsForScope(queryConditions.fiscalYear, queryConditions.region, queryConditions.department, queryConditions.division);
 
     if (tierDoc) {
-      items.forEach((newItem) => {
+      itemsToSave.forEach((newItem) => {
         const existingItem = tierDoc.items.find((i) => String(i.lineItemId) === String(newItem.lineItemId));
         if (existingItem) {
           existingItem.tier1 = newItem.tier1;
@@ -286,7 +380,7 @@ const saveTierData = async (req, res) => {
     } else {
       tierDoc = new Tier({
         ...queryConditions,
-        items: items.map((item) => ({
+        items: itemsToSave.map((item) => ({
           lineItemId: item.lineItemId,
           category: item.category,
           tier1: item.tier1 || 0,
@@ -298,7 +392,7 @@ const saveTierData = async (req, res) => {
     }
 
     const savedTier = await tierDoc.save();
-    res.status(200).json(savedTier);
+    res.status(200).json({ ...savedTier.toObject(), version: nextVersion });
   } catch (error) {
     console.error('Error in saveTierData:', error);
     res.status(500).json({ message: error.message });
@@ -309,15 +403,59 @@ const MAX_REVISIONS_TO_KEEP = 3;
 
 /**
  * Get current (latest) version number for a scope. Returns 0 if no revisions.
+ * Uses same region-matching as getRevisions (ID + name) so we find docs stored with either.
  */
 const getCurrentVersionForScope = async (fiscalYear, region, department, division) => {
-  const query = {
-    fiscalYear: String(fiscalYear),
-    region: String(region || ''),
-    department: String(department || ''),
-    division: String(division || ''),
-  };
-  const latest = await TierRevision.findOne(query).sort({ version: -1 }).select('version').lean();
+  const scope = await normalizeTierScope(fiscalYear, region, department, division);
+  const rawRegion = String(region || '');
+  const regionValues = [scope.region].filter(Boolean);
+  if (rawRegion && !regionValues.includes(rawRegion)) regionValues.push(rawRegion);
+  try {
+    const Region = require('../models/Region');
+    if (rawRegion && mongoose.Types.ObjectId.isValid(rawRegion) && rawRegion.length === 24) {
+      const regionById = await Region.findById(rawRegion).select('Region').lean();
+      if (regionById && regionById.Region && !regionValues.includes(regionById.Region)) {
+        regionValues.push(String(regionById.Region));
+      }
+    }
+    if (scope.region) {
+      const regionIds = await Region.find({ Region: scope.region }).select('_id').lean();
+      (regionIds || []).forEach((r) => {
+        const idStr = String(r._id);
+        if (idStr && !regionValues.includes(idStr)) regionValues.push(idStr);
+      });
+    }
+  } catch (e) { /* ignore */ }
+  const regionFilter = regionValues.length === 0
+    ? { region: scope.region || rawRegion }
+    : regionValues.length === 1 ? { region: regionValues[0] } : { region: { $in: regionValues } };
+
+  let departmentFilter = { department: scope.department };
+  if (scope.department) {
+    try {
+      const Department = require('../models/Department');
+      const deptIds = await Department.find({ Department: scope.department }).select('_id').lean();
+      const ids = (deptIds || []).map((d) => String(d._id)).filter(Boolean);
+      if (ids.length) departmentFilter = { $or: [{ department: scope.department }, { department: { $in: ids } }] };
+    } catch (e) { /* ignore */ }
+  }
+  const fiscalYearStr = String(scope.fiscalYear || '');
+  let query = { fiscalYear: fiscalYearStr, ...regionFilter, ...departmentFilter, division: scope.division };
+  let latest = await TierRevision.findOne(query).sort({ version: -1 }).select('version').lean();
+  if (!latest && fiscalYearStr) {
+    const fyNum = Number(fiscalYearStr);
+    if (Number.isFinite(fyNum)) {
+      latest = await TierRevision.findOne({
+        $or: [{ fiscalYear: fiscalYearStr }, { fiscalYear: fyNum }],
+        ...regionFilter,
+        ...departmentFilter,
+        division: scope.division,
+      }).sort({ version: -1 }).select('version').lean();
+    }
+  }
+  if (!latest) {
+    latest = await TierRevision.findOne(regionFilter).sort({ version: -1 }).select('version').lean();
+  }
   return latest ? (latest.version || 0) : 0;
 };
 
@@ -369,18 +507,127 @@ const getRevisions = async (req, res) => {
     if (!fiscalYear || !region) {
       return res.status(400).json({ message: 'fiscalYear and region are required.' });
     }
-    const query = {
-      fiscalYear: String(fiscalYear),
-      region: String(region),
-      department: String(department || ''),
-      division: String(division || ''),
-    };
-    const list = await TierRevision.find(query)
+    const rawRegion = String(region || '');
+    const rawDepartment = String(department ?? '');
+    const rawDivision = String(division ?? '');
+    const scope = await normalizeTierScope(fiscalYear, region, department, division);
+
+    // Region: match normalized name OR any Region _id with that name OR exact value from client.
+    // TierRevision stores region as Region name (from normalizeTierScope on save). If client sends region ID,
+    // we must include both ID and name in regionValues so we find documents stored with name.
+    const regionValues = [scope.region].filter(Boolean);
+    if (rawRegion && !regionValues.includes(rawRegion)) regionValues.push(rawRegion);
+    try {
+      const Region = require('../models/Region');
+      // When client sends region ID, resolve to name so we match docs stored with region name
+      if (rawRegion && mongoose.Types.ObjectId.isValid(rawRegion) && rawRegion.length === 24) {
+        const regionById = await Region.findById(rawRegion).select('Region').lean();
+        if (regionById && regionById.Region && !regionValues.includes(regionById.Region)) {
+          regionValues.push(String(regionById.Region));
+        }
+      }
+      if (scope.region && Region.find) {
+        const regionIds = await Region.find({
+          $or: [
+            { Region: scope.region },
+            { Region: new RegExp(`^${String(scope.region).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+          ],
+        }).select('_id').lean();
+        (regionIds || []).forEach((r) => {
+          const idStr = String(r._id);
+          if (idStr && !regionValues.includes(idStr)) regionValues.push(idStr);
+        });
+      }
+    } catch (e) {
+      if (process.env.DEBUG_LOGS === 'true') console.debug('getRevisions region ids lookup failed:', e?.message);
+    }
+    // Ensure we always have at least rawRegion so we can match docs stored with region ID or name
+    if (rawRegion && !regionValues.includes(rawRegion)) regionValues.push(rawRegion);
+    const regionFilter = regionValues.length === 0
+      ? {} // no region filter if somehow empty (fallback will still run)
+      : regionValues.length === 1 ? { region: regionValues[0] } : { region: { $in: regionValues } };
+
+    // Department: match normalized name OR any Department _id with that name OR exact value from client (when filter is by Department)
+    const departmentValues = [scope.department];
+    if (rawDepartment && !departmentValues.includes(rawDepartment)) departmentValues.push(rawDepartment);
+    if (scope.department) {
+      try {
+        const Department = require('../models/Department');
+        const deptIds = await Department.find({
+          $or: [
+            { Department: scope.department },
+            { Department: new RegExp(`^${String(scope.department).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+          ],
+        }).select('_id').lean();
+        (deptIds || []).forEach((d) => {
+          const idStr = String(d._id);
+          if (idStr && !departmentValues.includes(idStr)) departmentValues.push(idStr);
+        });
+      } catch (e) {
+        if (process.env.DEBUG_LOGS === 'true') console.debug('getRevisions department ids lookup failed:', e?.message);
+      }
+    }
+    const departmentFilter = !scope.department
+      ? { $or: [{ department: '' }, { department: null }, { department: { $exists: false } }] }
+      : departmentValues.length <= 1 ? { department: scope.department } : { department: { $in: departmentValues } };
+
+    // Division: match normalized value OR exact value from client (when filter is by Division; no Division collection)
+    const divisionValues = [scope.division];
+    if (rawDivision && !divisionValues.includes(rawDivision)) divisionValues.push(rawDivision);
+    const divisionFilter = !scope.division
+      ? { $or: [{ division: '' }, { division: null }, { division: { $exists: false } }] }
+      : divisionValues.length <= 1 ? { division: scope.division } : { division: { $in: divisionValues } };
+
+    // Always use string fiscalYear so we match DB (TierRevision stores fiscalYear as string)
+    const fiscalYearStr = String(scope.fiscalYear || '');
+    const baseQuery = { fiscalYear: fiscalYearStr, ...regionFilter };
+    const query = { ...baseQuery, ...departmentFilter, ...divisionFilter };
+    let list = await TierRevision.find(query)
       .sort({ version: -1 })
       .limit(MAX_REVISIONS_TO_KEEP)
       .select('version comment createdAt createdBy createdByName')
       .populate('createdBy', 'username name email')
       .lean();
+    // Fallback 1: same region, any department/division (scope might differ)
+    if (list.length === 0) {
+      list = await TierRevision.find(baseQuery)
+        .sort({ version: -1 })
+        .limit(MAX_REVISIONS_TO_KEEP)
+        .select('version comment createdAt createdBy createdByName')
+        .populate('createdBy', 'username name email')
+        .lean();
+    }
+    // Fallback 2: match fiscalYear as string or number (DB might have stored number)
+    if (list.length === 0 && fiscalYearStr) {
+      const fyNum = Number(fiscalYearStr);
+      const fyQuery = Number.isFinite(fyNum)
+        ? { $or: [{ fiscalYear: fiscalYearStr }, { fiscalYear: fyNum }] }
+        : { fiscalYear: fiscalYearStr };
+      list = await TierRevision.find({ ...fyQuery, ...regionFilter, ...departmentFilter, ...divisionFilter })
+        .sort({ version: -1 })
+        .limit(MAX_REVISIONS_TO_KEEP)
+        .select('version comment createdAt createdBy createdByName')
+        .populate('createdBy', 'username name email')
+        .lean();
+    }
+    // Fallback 3: same region only (any fiscal year) so we show something when DB has revisions for this region
+    if (list.length === 0 && Object.keys(regionFilter).length > 0) {
+      list = await TierRevision.find(regionFilter)
+        .sort({ version: -1 })
+        .limit(MAX_REVISIONS_TO_KEEP)
+        .select('version comment createdAt createdBy createdByName fiscalYear')
+        .populate('createdBy', 'username name email')
+        .lean();
+    }
+    // Fallback 4: any revisions in collection (confirm we're hitting the right DB; show latest 5)
+    if (list.length === 0) {
+      list = await TierRevision.find({})
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .select('version comment createdAt createdBy createdByName fiscalYear region')
+        .populate('createdBy', 'username name email')
+        .lean();
+    }
     res.json(list);
   } catch (error) {
     console.error('Error in getRevisions:', error);

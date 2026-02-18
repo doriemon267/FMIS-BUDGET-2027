@@ -176,8 +176,8 @@ const TierPage = () => {
       const found = regions.find(
         (r) => String(r._id) === String(regionParam) || String(r.Region) === regionParam
       );
-      if (found) setSelectedRegion(found._id);
-      else setSelectedRegion(regionParam);
+      if (found) setSelectedRegion(found._id != null ? String(found._id) : String(regionParam));
+      else setSelectedRegion(String(regionParam));
     }
     if (departmentParam) pendingDepartmentParamRef.current = departmentParam;
     if (divisionParam) pendingDivisionParamRef.current = divisionParam;
@@ -286,23 +286,31 @@ const TierPage = () => {
         };
       });
 
+      // Use same scope as fetchRevisions so saved TierRevision is found when loading version history
       const saveData = {
-        fiscalYear: activeFiscalYear,
-        region: selectedRegion,
-        department: selectedDepartment ? (departments.find(d => String(d._id) === String(selectedDepartment))?.Department || departments.find(d => String(d._id) === String(selectedDepartment))?.name || '') : '',
-        division: selectedDivision ? (divisions.find(d => d.name === selectedDivision || String(d._id) === String(selectedDivision))?.name ?? selectedDivision) : '',
+        fiscalYear: String(activeFiscalYear),
+        region: String(selectedRegion),
+        department: String(selectedDepartmentName ?? ''),
+        division: String(selectedDivisionName ?? ''),
         items: itemsArray,
         ...(revisionComment.trim() && { revisionComment: revisionComment.trim() }),
       };
 
-      await api.post('/tier/data', saveData);
+      const saveRes = await api.post('/tier/data', saveData);
       const saved = JSON.stringify({ items: source });
       setLastSavedJson(saved);
       lastSavedJsonRef.current = saved;
       setIsDirty(false);
-      setSnackbar({ open: true, message: 'Tier data saved successfully', severity: 'success' });
+      const version = saveRes?.data?.version ?? saveRes?.data?.versionNumber;
+      setSnackbar({
+        open: true,
+        message: version != null ? `Tier data saved successfully (Version ${version}).` : 'Tier data saved successfully.',
+        severity: 'success',
+      });
       setRevisionComment('');
+      queryClient.invalidateQueries({ queryKey: ['tierSavedItems', activeFiscalYear, selectedRegion, selectedDepartmentName, selectedDivisionName] });
       try { await fetchCurrentVersion(); } catch (_) { /* ignore */ }
+      if (revisionsDrawerOpen) fetchRevisions();
     } catch (error) {
       console.error('Error saving tier data:', error);
       setSnackbar({ open: true, message: 'Error saving tier data. Please try again.', severity: 'error' });
@@ -315,14 +323,16 @@ const TierPage = () => {
     if (!activeFiscalYear || !selectedRegion || selectedRegion === 'ALL') return;
     setRevisionsLoading(true);
     try {
-      const params = new URLSearchParams({
-        fiscalYear: activeFiscalYear,
-        region: selectedRegion,
-      });
-      if (selectedDepartment) params.set('department', selectedDepartment);
-      if (selectedDivision) params.set('division', selectedDivision);
+      // Single region param (ID only): backend normalizes to name. Do not add region name to avoid duplicate query keys.
+      const regionVal = typeof selectedRegion === 'object' ? (selectedRegion?._id != null ? String(selectedRegion._id) : '') : String(selectedRegion ?? '');
+      const params = new URLSearchParams();
+      params.set('fiscalYear', String(activeFiscalYear));
+      params.set('region', regionVal);
+      params.set('department', String(selectedDepartmentName ?? ''));
+      params.set('division', String(selectedDivisionName ?? ''));
       const res = await api.get(`/api/tier/revisions?${params.toString()}`);
-      setRevisions(Array.isArray(res.data) ? res.data : []);
+      const data = res.data;
+      setRevisions(Array.isArray(data?.revisions) ? data.revisions : (Array.isArray(data) ? data : []));
     } catch (err) {
       console.error('Error fetching revisions:', err);
       setRevisions([]);
@@ -366,15 +376,18 @@ const TierPage = () => {
       setRevisionsDrawerOpen(false);
       setViewRevisionOpen(false);
       setViewRevisionDetail(null);
-      // Set cache directly from restore response so table shows the exact restored data
+      // Set cache directly from restore response so table shows the exact restored data (key must match TierTable: fiscalYear, region, departmentName, divisionName)
       const restoredItems = Array.isArray(res?.data?.tier?.items) ? res.data.tier.items : [];
-      const savedItemsKey = ['tierSavedItems', activeFiscalYear, selectedRegion, selectedDepartment || '', selectedDivision || ''];
+      const savedItemsKey = ['tierSavedItems', activeFiscalYear, selectedRegion, selectedDepartmentName, selectedDivisionName];
+      // Restore creates a new revision, so get the latest version (which will be the restored one)
+      // The version will be updated via onVersionChange when saved-items query refetches
       queryClient.setQueryData(savedItemsKey, { items: restoredItems });
       queryClient.invalidateQueries({ queryKey: ['tierSavedItems'] });
       setTableKey(Date.now());
       setTierData(null);
       lastSavedJsonRef.current = null;
       setLastSavedJson(null);
+      // Fetch latest version (restore creates new revision, so this will be the restored version)
       try { await fetchCurrentVersion(); } catch (_) { /* ignore */ }
     } catch (err) {
       console.error('Error restoring revision:', err);
@@ -521,9 +534,9 @@ const TierPage = () => {
           <InputLabel id="region-select-label">Region</InputLabel>
           <Select
             labelId="region-select-label"
-            value={String(selectedRegion ?? "")}
+            value={typeof selectedRegion === 'string' ? selectedRegion : (selectedRegion?._id != null ? String(selectedRegion._id) : '')}
             label="Region"
-            onChange={(e) => setSelectedRegion(e.target.value || "")}
+            onChange={(e) => setSelectedRegion(e.target.value || '')}
           >
             <MenuItem value="ALL">
               <em>ALL</em> — Consolidate all regions
@@ -689,6 +702,7 @@ const TierPage = () => {
             departmentName={selectedDepartmentName}
             divisionName={selectedDivisionName}
             onTierDataChange={setTierData}
+            onVersionChange={setCurrentVersion}
             readOnly={isTierViewOnly}
           />
         </>
@@ -779,6 +793,7 @@ const TierPage = () => {
                       <>
                         <Typography component="span" variant="body2" color="text.secondary">
                           Version {rev.version}
+                          {rev.fiscalYear ? ` · FY ${rev.fiscalYear}` : ''}
                           {index === 0 && ' (newest)'}
                           {' · '}
                           {formatRevisionDate(rev.createdAt)}

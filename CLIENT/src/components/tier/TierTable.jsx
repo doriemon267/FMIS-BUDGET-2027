@@ -262,11 +262,13 @@ const CollapsibleUsesRow = ({ name, items, allTierInputs, handleTierInputChange,
   );
 };
 
-function TierTable({ fiscalYear, region, regionName, department, division, departmentName, divisionName, onTierDataChange, readOnly = false }) {
+function TierTable({ fiscalYear, region, regionName, department, division, departmentName, divisionName, onTierDataChange, onVersionChange, readOnly = false }) {
   const [tierInputs, setTierInputs] = useState({});
   const [mooeOpen, setMooeOpen] = useState(false);
   const [incomeOpen, setIncomeOpen] = useState(false);
+  const [capitalOutlayOpen, setCapitalOutlayOpen] = useState(false);
   const initializedScopeRef = useRef(null);
+  const lastSyncedItemsRef = useRef(null);
 
   // Use names for API filters so backend can match proposals/documents (stored as names). Fallback to id when name not provided.
   const effectiveDept = departmentName != null && departmentName !== '' ? departmentName : (department || '');
@@ -306,17 +308,30 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
     enabled: hasRequiredParams && !!region && region !== 'ALL',
   });
 
-  // Initialize tierInputs from saved items when they load (so we show current version, not original)
+  // Sync tierInputs from saved items when they load or when server data changes (e.g. after save or restore revision).
+  // Use lastSyncedItemsRef so we re-apply when saved data actually changes (new version), not just on every refetch.
   useEffect(() => {
     const items = savedItemsQuery.data?.items;
+    const version = savedItemsQuery.data?.version;
+    // Report version to parent so it can display which version's data is currently loaded
+    if (onVersionChange && version != null) {
+      onVersionChange(version);
+    }
     if (!Array.isArray(items) || items.length === 0) {
       if (savedItemsQuery.isFetched) {
-        initializedScopeRef.current = scopeKey;
-        setTierInputs({});
+        const emptySig = `${scopeKey}:empty`;
+        if (lastSyncedItemsRef.current !== emptySig) {
+          lastSyncedItemsRef.current = emptySig;
+          initializedScopeRef.current = scopeKey;
+          setTierInputs({});
+          if (onVersionChange) onVersionChange(0);
+        }
       }
       return;
     }
-    if (initializedScopeRef.current === scopeKey) return;
+    const dataSig = `${scopeKey}:${JSON.stringify(items)}`;
+    if (lastSyncedItemsRef.current === dataSig) return;
+    lastSyncedItemsRef.current = dataSig;
     initializedScopeRef.current = scopeKey;
     const next = {};
     items.forEach((it) => {
@@ -327,7 +342,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
       };
     });
     setTierInputs(next);
-  }, [savedItemsQuery.data, savedItemsQuery.isFetched, scopeKey]);
+  }, [savedItemsQuery.data, savedItemsQuery.isFetched, scopeKey, onVersionChange]);
 
   // BRD-level or finalized Initial proposals (PROJECTED CORPORATE INCOME and PROJECTED SUBSIDY → TIER 1). Tier is available once proposal is at BRD level so Tier saved here is what Budget Planning Analyst passes to Budget Officer until Budget Manager finalizes.
   const [finalizedQuery] = useQueries({
@@ -446,6 +461,15 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
     }, {});
   }, [mooeData]);
 
+  // All MOOE items for expand content (so expand always shows rows; user can edit zero values too).
+  const groupedMooeDataForExpand = useMemo(() => {
+    const result = {};
+    Object.entries(groupedMooeData).forEach(([subline, sublineItems]) => {
+      result[subline] = sublineItems.map((item, idx) => ({ item, originalIdx: idx }));
+    });
+    return result;
+  }, [groupedMooeData]);
+
   // MOOE: only items with value (tier1 + tier2 > 0) for display — "huwag isali ang mga walang value". Keeps { item, originalIdx } so lineItemId matches tierInputs.
   const filteredGroupedMooeData = useMemo(() => {
     const getLineItemId = (name, item, rowIndex) => `${name}-${item.uacsCode || item._id || item.key || item.name || rowIndex}`;
@@ -474,6 +498,17 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
     });
     return result;
   }, [groupedMooeData, tierInputs]);
+
+  // Capital Outlay: group by category (parent section, e.g. "Websites"); under it show subline rows (Websites, Operating System)
+  const groupedCapitalOutlayByCategory = useMemo(() => {
+    const result = {};
+    (capitalOutlayData || []).forEach((item, idx) => {
+      const categoryName = (item.categoryGroup || item.category?.categoryName || item.sublineItem || item.accountingTitle || 'Other').trim();
+      if (!result[categoryName]) result[categoryName] = [];
+      result[categoryName].push({ item, originalIdx: idx });
+    });
+    return result;
+  }, [capitalOutlayData]);
 
   // Flatten personnel categories into items for rendering / processing.
   const personnelItems = useMemo(() => {
@@ -517,7 +552,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
     }));
   }, []);
 
-  const { sourcesOfFunds, usesOfFunds, surplusDeficit, itemTier1Map, usesCorporateIncome, totalUsesCorporateIncome } = useMemo(() => {
+  const { sourcesOfFunds, usesOfFunds, surplusDeficit, itemTier1Map, usesCorporateIncome, totalUsesCorporateIncome, categoryTotalsCapitalOutlay = {} } = useMemo(() => {
     const uses = {
       'Personnel Services': { tier1: 0, tier2: 0, total: 0 },
       'Maintenance and Other Operating Expenses': { tier1: 0, tier2: 0, total: 0 },
@@ -648,11 +683,17 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
       });
     });
 
-    // Capital Outlay
+    // Capital Outlay (and per-category totals for itemized display)
     const capitalParent = 'Capital Outlay';
+    const categoryTotalsCapitalOutlay = {};
     if (!uses[capitalParent]) uses[capitalParent] = { tier1: 0, tier2: 0, total: 0 };
     capitalOutlayData.forEach(item => {
       const { displayTier1, displayTier2, displayTotal } = processItem(capitalParent, item);
+      const categoryName = (item.categoryGroup || item.category?.categoryName || item.sublineItem || item.accountingTitle || 'Other').trim();
+      if (!categoryTotalsCapitalOutlay[categoryName]) categoryTotalsCapitalOutlay[categoryName] = { tier1: 0, tier2: 0, total: 0 };
+      categoryTotalsCapitalOutlay[categoryName].tier1 += displayTier1;
+      categoryTotalsCapitalOutlay[categoryName].tier2 += displayTier2;
+      categoryTotalsCapitalOutlay[categoryName].total += displayTotal;
       uses[capitalParent].tier1 += displayTier1;
       uses[capitalParent].tier2 += displayTier2;
       uses[capitalParent].total += displayTotal;
@@ -693,6 +734,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
       // Surplus = Total Sources (Proposed Budget) - Total Uses (Proposed Budget)
       // Where Proposed Budget = Corporate Income + Subsidy Total
       surplusDeficit: totalSources - (totalUsesCorporateIncome + subsidyTotal),
+      categoryTotalsCapitalOutlay,
     };
   }, [tierInputs, projectedCorporateIncome, personnelData, mooeData, capitalOutlayData, groupedMooeData, chargedToIncomePersonnel]);
 
@@ -1028,59 +1070,120 @@ function TierTable({ fiscalYear, region, regionName, department, division, depar
               <TableRow>
                 <TableCell style={{ padding: 0 }} colSpan={6}>
                   <Collapse in={mooeOpen} timeout="auto" unmountOnExit>
-                    <Box>
-                      <Table size="small" sx={{ tableLayout: 'fixed', width: '100%' }}>
-                        <colgroup>
-                          <col style={{ width: '25%', minWidth: 200 }} />
-                          <col style={{ width: COL.corporateIncome }} />
-                          <col style={{ width: COL.tier1 }} />
-                          <col style={{ width: COL.tier2 }} />
-                          <col style={{ width: COL.total }} />
-                          <col style={{ width: COL.proposedBudget }} />
-                        </colgroup>
-                        <TableBody>
-                          {Object.entries(filteredGroupedMooeData).map(([subline, entries]) => (
-                            <React.Fragment key={subline}>
-                              <TableRow>
-                                <TableCell colSpan={6} style={{ fontWeight: 'bold' }}>{subline}</TableCell>
-                              </TableRow>
-                              {entries.map(({ item, originalIdx }) => (
-                                <SubRow
-                                  key={item.uacsCode || item._id || originalIdx}
-                                  rowIndex={originalIdx}
-                                  item={item}
-                                  name="Maintenance and Other Operating Expenses"
-                                  allTierInputs={tierInputs}
-                                  handleTierInputChange={handleTierInputChange}
-                                  descriptionKey="accountingTitle"
-                                  itemTier1={(itemTier1Map || {})[`Maintenance and Other Operating Expenses-${item.uacsCode || item._id || item.key || item.name || originalIdx}`] ?? 0}
-                                  itemCorporateIncome={Number(item?.income) || 0}
-                                  readOnly={readOnly}
-                                />
-                              ))}
-                            </React.Fragment>
-                          ))}
-                        </TableBody>
-                      </Table>
+                    <Box sx={{ py: 1, px: 2 }}>
+                      {Object.keys(groupedMooeDataForExpand).length === 0 ? (
+                        <Typography variant="body2" color="text.secondary">No MOOE data for this scope.</Typography>
+                      ) : (
+                        <Table size="small" sx={{ tableLayout: 'fixed', width: '100%' }}>
+                          <colgroup>
+                            <col style={{ width: '25%', minWidth: 200 }} />
+                            <col style={{ width: COL.corporateIncome }} />
+                            <col style={{ width: COL.tier1 }} />
+                            <col style={{ width: COL.tier2 }} />
+                            <col style={{ width: COL.total }} />
+                            <col style={{ width: COL.proposedBudget }} />
+                          </colgroup>
+                          <TableBody>
+                            {Object.entries(groupedMooeDataForExpand).map(([subline, entries]) => (
+                              <React.Fragment key={subline}>
+                                <TableRow>
+                                  <TableCell colSpan={6} style={{ fontWeight: 'bold' }}>{subline}</TableCell>
+                                </TableRow>
+                                {entries.map(({ item, originalIdx }) => (
+                                  <SubRow
+                                    key={item.uacsCode || item._id || originalIdx}
+                                    rowIndex={originalIdx}
+                                    item={item}
+                                    name="Maintenance and Other Operating Expenses"
+                                    allTierInputs={tierInputs}
+                                    handleTierInputChange={handleTierInputChange}
+                                    descriptionKey="accountingTitle"
+                                    itemTier1={(itemTier1Map || {})[`Maintenance and Other Operating Expenses-${item.uacsCode || item._id || item.key || item.name || originalIdx}`] ?? 0}
+                                    itemCorporateIncome={Number(item?.income) || 0}
+                                    readOnly={readOnly}
+                                  />
+                                ))}
+                              </React.Fragment>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
                     </Box>
                   </Collapse>
                 </TableCell>
               </TableRow>
             </React.Fragment>
 
-            <CollapsibleUsesRow
-              name="Capital Outlay"
-              items={capitalOutlayData}
-              allTierInputs={tierInputs}
-              handleTierInputChange={handleTierInputChange}
-              totals={usesOfFunds['Capital Outlay']}
-              descriptionKey="particulars"
-              secondaryDescriptionKey="accountingTitle"
-              itemTier1Map={itemTier1Map || {}}
-              corporateIncome={usesCorporateIncome?.['Capital Outlay'] ?? 0}
-              readOnly={readOnly}
-              getItemCorporateIncome={(item) => Number(item?.income) || 0}
-            />
+            <React.Fragment>
+              <TableRow>
+                <TableCell>
+                  <IconButton aria-label="expand row" size="small" onClick={() => setCapitalOutlayOpen(!capitalOutlayOpen)}>
+                    {capitalOutlayOpen ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+                  </IconButton>
+                  Capital Outlay
+                </TableCell>
+                <TableCell align="right">{formatCurrency(usesCorporateIncome?.['Capital Outlay'] ?? 0)}</TableCell>
+                <TableCell align="right">{formatCurrency(usesOfFunds['Capital Outlay'].tier1)}</TableCell>
+                <TableCell align="right">{formatCurrency(usesOfFunds['Capital Outlay'].tier2)}</TableCell>
+                <TableCell align="right">{formatCurrency(usesOfFunds['Capital Outlay'].total)}</TableCell>
+                <TableCell align="right">{formatCurrency(usesOfFunds['Capital Outlay'].total)}</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell style={{ padding: 0 }} colSpan={6}>
+                  <Collapse in={capitalOutlayOpen} timeout="auto" unmountOnExit>
+                    <Box sx={{ py: 1, px: 2 }}>
+                      {Object.keys(groupedCapitalOutlayByCategory).length === 0 ? (
+                        <Typography variant="body2" color="text.secondary">No Capital Outlay data for this scope.</Typography>
+                      ) : (
+                        <Table size="small" sx={{ tableLayout: 'fixed', width: '100%' }}>
+                          <colgroup>
+                            <col style={{ width: '25%', minWidth: 200 }} />
+                            <col style={{ width: COL.corporateIncome }} />
+                            <col style={{ width: COL.tier1 }} />
+                            <col style={{ width: COL.tier2 }} />
+                            <col style={{ width: COL.total }} />
+                            <col style={{ width: COL.proposedBudget }} />
+                          </colgroup>
+                          <TableBody>
+                            {Object.entries(groupedCapitalOutlayByCategory).map(([categoryName, entries]) => {
+                              const catTotals = categoryTotalsCapitalOutlay[categoryName] || { tier1: 0, tier2: 0, total: 0 };
+                              const catCorporateIncome = entries.reduce((s, { item }) => s + (Number(item?.income) || 0), 0);
+                              return (
+                                <React.Fragment key={categoryName}>
+                                  <TableRow sx={{ backgroundColor: 'action.hover' }}>
+                                    <TableCell style={{ fontWeight: 'bold', paddingLeft: 4 }}>{categoryName}</TableCell>
+                                    <TableCell align="right">{formatCurrency(catCorporateIncome)}</TableCell>
+                                    <TableCell align="right">{formatCurrency(catTotals.tier1)}</TableCell>
+                                    <TableCell align="right">{formatCurrency(catTotals.tier2)}</TableCell>
+                                    <TableCell align="right">{formatCurrency(catTotals.total)}</TableCell>
+                                    <TableCell align="right">{formatCurrency(catTotals.total)}</TableCell>
+                                  </TableRow>
+                                  {entries.map(({ item, originalIdx }) => (
+                                    <SubRow
+                                      key={item._id || item.uacsCode || originalIdx}
+                                      rowIndex={originalIdx}
+                                      item={item}
+                                      name="Capital Outlay"
+                                      allTierInputs={tierInputs}
+                                      handleTierInputChange={handleTierInputChange}
+                                      descriptionKey="particulars"
+                                      secondaryDescriptionKey="accountingTitle"
+                                      itemTier1={itemTier1Map[`Capital Outlay-${item.uacsCode || item._id || item.key || item.name || originalIdx}`] ?? 0}
+                                      itemCorporateIncome={Number(item?.income) || 0}
+                                      readOnly={readOnly}
+                                    />
+                                  ))}
+                                </React.Fragment>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </Box>
+                  </Collapse>
+                </TableCell>
+              </TableRow>
+            </React.Fragment>
 
             <TableRow sx={{ backgroundColor: 'primary.main', color: 'white' }}>
               <TableCell><Typography variant="h6" sx={{color: 'white'}}>TOTAL USES OF FUNDS</Typography></TableCell>
