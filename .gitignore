@@ -60,6 +60,7 @@ coverage/
 
 # Markdown files (exclude from tracking)
 *.md
+!README.md
 
 # Test directories and files
 test/

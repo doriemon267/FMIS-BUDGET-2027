@@ -1,4 +1,5 @@
 const CapitalOutlay = require('../models/CapitalOutlay');
+const CapitalOutlayDetails = require('../models/CapitalOutlayDetails');
 const Region = require('../models/Region');
 
 const consolidatedCapitalOutlayController = {
@@ -7,19 +8,14 @@ const consolidatedCapitalOutlayController = {
     try {
       const { regions, fiscalYear, budgetType } = req.query;
       
-      // Initialize base filter
       let regionFilter = {};
       
-      // Apply submission workflow filtering for proper data isolation
       if (req.submissionWorkflowFilters) {
-        // Use submission workflow filters (preferred approach)
         Object.assign(regionFilter, req.submissionWorkflowFilters);
       } else if (req.hierarchicalAccess) {
-        // Fallback to hierarchical access info with submission workflow logic
         const accessInfo = req.hierarchicalAccess;
         
         if (accessInfo?.scope === 'DIVISION') {
-          // Division users: only their division data
           if (accessInfo.accessibleRegions?.[0]?.regionName) {
             regionFilter.region = accessInfo.accessibleRegions[0].regionName;
           }
@@ -30,7 +26,6 @@ const consolidatedCapitalOutlayController = {
             regionFilter.division = accessInfo.accessibleDivisions[0];
           }
         } else if (accessInfo?.scope === 'DEPARTMENT') {
-          // Department users: can see their department data + SUBMITTED division data ONLY
           const baseRegion = accessInfo.accessibleRegions?.[0]?.regionName;
           const baseDepartment = accessInfo.accessibleDepartments?.[0]?.departmentName;
           
@@ -41,13 +36,7 @@ const consolidatedCapitalOutlayController = {
                 { department: baseDepartment },
                 {
                   $or: [
-                    // 1. Department-level data (no division)
-                    {
-                      $and: [
-                        { $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] }
-                      ]
-                    },
-                    // 2. Division data that has been SUBMITTED only
+                    { $and: [{ $or: [{ division: { $exists: false } }, { division: null }, { division: "" }] }] },
                     {
                       $and: [
                         { division: { $exists: true, $ne: null, $ne: "" } },
@@ -60,20 +49,12 @@ const consolidatedCapitalOutlayController = {
             };
           }
         } else if (accessInfo?.scope === 'REGION') {
-          // Region users: only see department-level consolidated data (no division data)
           const baseRegion = accessInfo.accessibleRegions?.[0]?.regionName;
-          
           if (baseRegion) {
             regionFilter = {
               $and: [
                 { region: baseRegion },
-                {
-                  $or: [
-                    { department: { $exists: false } },
-                    { department: null },
-                    { department: "" }
-                  ]
-                }
+                { $or: [{ department: { $exists: false } }, { department: null }, { department: "" }] }
               ]
             };
           }
@@ -82,48 +63,82 @@ const consolidatedCapitalOutlayController = {
         }
       }
       
-      // Handle explicit regions parameter
       if (regions && !regionFilter.$and) {
         const regionList = Array.isArray(regions) ? regions : [regions];
         regionFilter.region = { $in: regionList };
       }
 
-      // Build final query
       const coQuery = { ...regionFilter };
       if (fiscalYear) coQuery.fiscalYear = fiscalYear;
       if (budgetType) coQuery.budgetType = budgetType;
 
-      // Fetch all Capital Outlay proposals matching the query
-      const coData = await CapitalOutlay.find(coQuery).lean();
+      const coData = await CapitalOutlay.find(coQuery).populate('category', 'categoryName').lean();
 
-      // Group by region
+      const parentIds = coData.map((c) => c._id);
+      const allDetails = await CapitalOutlayDetails.find({ capital_outlay_id: { $in: parentIds } })
+        .sort({ createdAt: 1 })
+        .lean();
+
+      const detailsByParentId = {};
+      allDetails.forEach((d) => {
+        // Parentheses added to fix potential ambiguity (though only ?? used here, it's good practice)
+        const pid = (d.capital_outlay_id?.toString?.()) ?? d.capital_outlay_id;
+        if (!detailsByParentId[pid]) detailsByParentId[pid] = [];
+        detailsByParentId[pid].push(d);
+      });
+
       const regionGroups = {};
       let grandTotal = 0;
 
-      coData.forEach(item => {
-        const regionName = item.region || 'Unknown Region';
-        if (!regionGroups[regionName]) {
-          regionGroups[regionName] = [];
+      coData.forEach((parent) => {
+        const regionName = parent.region || 'Unknown Region';
+        if (!regionGroups[regionName]) regionGroups[regionName] = [];
+        const details = detailsByParentId[parent._id.toString()];
+        
+        if (Array.isArray(details) && details.length > 0) {
+          const categoryGroup = parent.sublineItem || parent.accountingTitle || (parent.category && parent.category.categoryName) || 'Other';
+          details.forEach((d) => {
+            const incomeAmt = Number(d.income_amount) || 0;
+            const subsidyAmt = Number(d.subsidy_amount) || 0;
+            const amount = incomeAmt + subsidyAmt;
+            const expanded = {
+              ...parent,
+              _id: d._id,
+              particulars: d.particulars || '',
+              sublineItem: d.particulars || parent.sublineItem,
+              categoryGroup,
+              income: incomeAmt,
+              subsidy: subsidyAmt,
+              cost: amount,
+              amount,
+              uacsCode: `${parent.uacsCode || parent._id}-${d._id}`,
+            };
+            regionGroups[regionName].push(expanded);
+            grandTotal += amount;
+          });
+        } else {
+          const amount = (Number(parent.amount) ?? (Number(parent.cost) || 0)) || ((Number(parent.income) || 0) + (Number(parent.subsidy) || 0));
+          regionGroups[regionName].push({ ...parent, amount });
+          grandTotal += amount;
         }
-        regionGroups[regionName].push(item);
-        grandTotal += Number(item.amount) || 0;
       });
 
-      // Format response
-      const formattedData = Object.keys(regionGroups).map(regionName => ({
-        region: regionName,
-        items: regionGroups[regionName],
-        total: regionGroups[regionName].reduce((sum, item) => sum + (Number(item.amount) || 0), 0),
-        count: regionGroups[regionName].length
-      }));
+      const formattedData = Object.keys(regionGroups).map((regionName) => {
+        const items = regionGroups[regionName];
+        // FIX 2: Wrapped ?? and || in parentheses
+        const total = items.reduce((sum, item) => sum + (Number(item.amount) ?? (Number(item.cost) || 0)), 0);
+        return { region: regionName, items, total, count: items.length };
+      });
 
+      const totalEntries = Object.values(regionGroups).reduce((s, arr) => s + arr.length, 0);
+      
       return res.status(200).json({
         success: true,
         data: formattedData,
         summary: {
           totalRegions: Object.keys(regionGroups).length,
-          totalEntries: coData.length,
-          grandTotal: grandTotal
+          totalEntries,
+          grandTotal
         },
         filters: {
           fiscalYear,
