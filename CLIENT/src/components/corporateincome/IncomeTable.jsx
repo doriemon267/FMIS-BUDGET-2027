@@ -25,6 +25,7 @@ import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { NumericFormat } from "react-number-format";
 import { debounce } from 'lodash';
+import { getErrorMessage } from "../../utils/errorHandler";
 
 const NumberFormatCustom = React.forwardRef(function NumberFormatCustom(props, ref) {
   const { onChange, value, ...other } = props;
@@ -409,7 +410,7 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
     },
     onError: (error) => {
       console.error("Error saving income amount:", error);
-      toast.error(`Error saving income amount: ${error.message}`);
+      toast.error(getErrorMessage(error));
     }
   });
 
@@ -421,7 +422,7 @@ const IncomeTable = ({ onGrandTotalUpdate, onGroupedItemsUpdate, locked = false,
     },
     onError: (error) => {
       console.error("Error updating income:", error);
-      toast.error(`Error updating income amount: ${error.message}`);
+      toast.error(getErrorMessage(error));
     }
   });
 

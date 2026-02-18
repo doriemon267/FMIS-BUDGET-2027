@@ -70,12 +70,14 @@ const PERSONNEL_SERVICES_STRUCTURE = {
 };
 const getConsolidatedPersonnelServicesData = async (req, res) => {
   try {
-    const { regions, fiscalYear, budgetType } = req.query;
+    const { regions, region, fiscalYear, budgetType, department, division } = req.query;
     // Build query
     const query = {};
     if (regions) {
       const regionList = Array.isArray(regions) ? regions : [regions];
       query.region = { $in: regionList };
+    } else if (region) {
+      query.region = region;
     }
     // Apply hierarchical filters if present
     if (req.hierarchicalFilters && req.hierarchicalFilters.region) {
@@ -83,6 +85,8 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
     }
     if (fiscalYear) query.fiscalYear = fiscalYear;
     if (budgetType) query.budgetType = budgetType;
+    if (department) query.department = department;
+    if (division) query.division = division;
     // Fetch all PersonnelServices data
     const psData = await PersonnelServices.find(query).lean();
     if (!Array.isArray(psData) || psData.length === 0) {

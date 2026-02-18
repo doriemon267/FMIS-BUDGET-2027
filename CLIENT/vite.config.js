@@ -4,40 +4,47 @@ import react from "@vitejs/plugin-react";
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+
+  // 1. DEVELOPMENT SERVER SETTINGS
+  // Ito ang settings habang nagko-code ka pa (npm run dev)
   server: {
     port: 3005,
-    host: true, // Listen on all interfaces so http://budget.fmis.local:3005 works (hosts: 127.0.0.1 budget.fmis.local)
-    allowedHosts: ["budget.fmis.local", "localhost", "127.0.0.1"],
-    // Pwedeng i-enable ang https dito kung kailangan sa local dev
+    host: true, // Listen on all IPs (Network Access)
+    allowedHosts: ["budget.fmis.local", "localhost", "127.0.0.1", "budget.nia.gov.ph"],
   },
+
+  // 2. PRODUCTION BUILD SETTINGS
+  // Ito ang settings pag nag-run ka na ng (npm run build)
   build: {
-    // 1. Tatanggalin nito ang link sa original source code sa browser DevTools
+    // SECURITY: Itago ang original code sa browser DevTools
     sourcemap: false, 
-    
-    // 2. I-minify ang code (default ang esbuild, na mabilis at secure)
+
+    // PERFORMANCE: Gamitin ang mabilis na minifier
     minify: 'esbuild',
-    
-    // 3. Opsyonal: Nililinis ang dist folder bawat build para walang lumang files
+
+    // CLEANUP: Burahin ang lumang laman ng 'dist' folder bago mag-build
     emptyOutDir: true,
 
-    // 4. Pinapaliit ang size ng chunks para mas mabilis i-load sa IIS
+    // OPTIMIZATION & CACHING STRATEGY
     rollupOptions: {
       output: {
-        manualChunks: undefined,
+        // A. VENDOR CHUNKING
+        // Ihiwalay ang lahat ng libraries (node_modules) sa 'vendor.js'
+        // Resulta: Mabilis mag-load ang app dahil naka-cache lang ang libraries.
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            return 'vendor';
+          }
+        },
+
+        // B. FILE HASHING (Cache Busting)
+        // Format: assets/filename-HASH.js
+        // Resulta: Pag nagbago ka ng code, magbabago ang Hash, kaya pipilitin
+        // ng browser na i-download ang bago (Automatic Update).
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]',
       },
     },
   },
 });
-// import { defineConfig } from "vite";
-// import react from "@vitejs/plugin-react";
-
-// // https://vitejs.dev/config/
-// export default defineConfig({
-//   plugins: [react()],
-//   server: {
-//     port: 3005,
-//     // https: {
-
-//     // }
-//   },
-// });

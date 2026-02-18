@@ -412,6 +412,12 @@ const UserActivityLogsPage = () => {
                   </Paper>
                 </Box>
               )}
+              {detailLog.ipAddress && (
+                <Box>
+                  <Typography variant="caption" color="text.secondary">IP address</Typography>
+                  <Typography variant="body2">{detailLog.ipAddress}</Typography>
+                </Box>
+              )}
               {detailLog.userAgent && (
                 <Box>
                   <Typography variant="caption" color="text.secondary">User agent</Typography>

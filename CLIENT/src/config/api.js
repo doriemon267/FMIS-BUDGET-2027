@@ -2,6 +2,8 @@ import axios from "axios";
 import env from "../utils/env";
 import { getStoredWorkflowRef } from "../hooks/useWorkflowRef";
 import IS_PRODUCTION from "../utils/IS_PRODUCTION";
+import { getErrorMessage } from "../utils/errorHandler";
+import { toast } from "react-toastify";
 
 // Increase default timeout and allow override via env
 const REQUEST_TIMEOUT = Number(env("REQUEST_TIMEOUT_MS")) || 30000; // default 30s
@@ -170,6 +172,19 @@ api.interceptors.response.use(undefined, async (error) => {
   }
   return Promise.reject(error);
 });
+
+// Global API error handler: show toast for failed requests (except 401/403 handled by auth), no console logging
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+    if (error?.response && status !== 401 && status !== 403) {
+      const message = getErrorMessage(error);
+      toast.error(message, { autoClose: 12000, closeButton: true, draggable: true });
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default api;
 

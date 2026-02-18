@@ -21,6 +21,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import RestoreIcon from '@mui/icons-material/Restore';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import { preventNegativeNumericKey, toNonNegativeNumber } from '../../../utils/preventNegativeInput';
 
 const EditableMOOETable = ({ data, onChange }) => {
   const [expandedGroups, setExpandedGroups] = useState({});
@@ -345,9 +346,9 @@ const EditableMOOETable = ({ data, onChange }) => {
                               <TextField
                                 type="text"
                                 value={formatNumber(item.income || 0)}
+                                onKeyDown={preventNegativeNumericKey}
                                 onChange={(e) => {
-                                  const inputValue = e.target.value.replace(/,/g, '');
-                                  const numValue = parseFloat(inputValue) || 0;
+                                  const numValue = toNonNegativeNumber(e.target.value);
                                   handleFieldChange(index, 'income', numValue);
                                 }}
                                 size="small"
@@ -367,9 +368,9 @@ const EditableMOOETable = ({ data, onChange }) => {
                               <TextField
                                 type="text"
                                 value={formatNumber(item.subsidy || 0)}
+                                onKeyDown={preventNegativeNumericKey}
                                 onChange={(e) => {
-                                  const inputValue = e.target.value.replace(/,/g, '');
-                                  const numValue = parseFloat(inputValue) || 0;
+                                  const numValue = toNonNegativeNumber(e.target.value);
                                   handleFieldChange(index, 'subsidy', numValue);
                                 }}
                                 size="small"

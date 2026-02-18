@@ -1,15 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import { Box, Button, IconButton, List, ListItem, ListItemText, ListItemSecondaryAction, Tooltip, Typography } from '@mui/material';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Box, Button, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, List, ListItem, ListItemText, ListItemSecondaryAction, Tooltip, Typography, CircularProgress } from '@mui/material';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import DownloadIcon from '@mui/icons-material/Download';
 import api from '../../config/api';
 import { toast } from 'react-toastify';
 
 const ProposalAttachments = ({ proposal, moduleName = 'general', userInfo, onChange }) => {
   const [attachments, setAttachments] = useState(() => proposal?.attachments || []);
   const [uploading, setUploading] = useState(false);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [viewAttachment, setViewAttachment] = useState(null);
+  const [viewBlobUrl, setViewBlobUrl] = useState(null);
+  const [viewLoading, setViewLoading] = useState(false);
 
   useEffect(() => {
     setAttachments(proposal?.attachments || []);
@@ -85,6 +91,11 @@ const ProposalAttachments = ({ proposal, moduleName = 'general', userInfo, onCha
     return false;
   };
 
+  // At BRD Level, no one can delete attachments - view/download only
+  const brdStatuses = ['FORWARDED_TO_BRD_ANALYST', 'FORWARDED_TO_BRD_OFFICER', 'FORWARDED_TO_BRD_MANAGER'];
+  const isAtBRDLevel = brdStatuses.includes(String(proposal?.status || '').toUpperCase());
+  const canDeleteAttachments = !isAtBRDLevel && canAttachFiles();
+
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -155,7 +166,7 @@ const ProposalAttachments = ({ proposal, moduleName = 'general', userInfo, onCha
 
   const handleDownload = async (att) => {
     try {
-      const response = await api.get(`/uploads/${att.filename}`, {
+      const response = await api.get(`/api/allproposal/uploads/${att.filename}`, {
         responseType: 'blob'
       });
       const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -168,6 +179,39 @@ const ProposalAttachments = ({ proposal, moduleName = 'general', userInfo, onCha
       window.URL.revokeObjectURL(url);
     } catch (err) {
       toast.error('Failed to download file');
+    }
+  };
+
+  const handleCloseView = useCallback(() => {
+    if (viewBlobUrl) {
+      window.URL.revokeObjectURL(viewBlobUrl);
+      setViewBlobUrl(null);
+    }
+    setViewAttachment(null);
+    setViewDialogOpen(false);
+  }, [viewBlobUrl]);
+
+  const handleView = async (att) => {
+    if (att.mimeType !== 'application/pdf') {
+      toast.info('Preview available for PDF only. Use Download for Excel files.');
+      return;
+    }
+    setViewLoading(true);
+    setViewDialogOpen(true);
+    setViewAttachment(att);
+    setViewBlobUrl(null);
+    try {
+      const response = await api.get(`/api/allproposal/uploads/${att.filename}`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      setViewBlobUrl(url);
+    } catch (err) {
+      toast.error('Failed to load document');
+      setViewDialogOpen(false);
+      setViewAttachment(null);
+    } finally {
+      setViewLoading(false);
     }
   };
 
@@ -208,15 +252,19 @@ const ProposalAttachments = ({ proposal, moduleName = 'general', userInfo, onCha
               secondary={(new Date(att.uploadedAt)).toLocaleString()} 
             />
             <ListItemSecondaryAction>
+              {att.mimeType === 'application/pdf' && (
+                <Tooltip title="View">
+                  <IconButton size="small" onClick={() => handleView(att)}>
+                    <VisibilityIcon />
+                  </IconButton>
+                </Tooltip>
+              )}
               <Tooltip title="Download">
-                <IconButton 
-                  size="small" 
-                  onClick={() => handleDownload(att)}
-                >
-                  {att.mimeType === 'application/pdf' ? <PictureAsPdfIcon /> : <InsertDriveFileIcon />}
+                <IconButton size="small" onClick={() => handleDownload(att)}>
+                  <DownloadIcon />
                 </IconButton>
               </Tooltip>
-              {canAttachFiles() && (
+              {canDeleteAttachments && (
                 <Tooltip title="Delete">
                   <IconButton size="small" onClick={() => handleDelete(att)}><DeleteIcon /></IconButton>
                 </Tooltip>
@@ -225,6 +273,36 @@ const ProposalAttachments = ({ proposal, moduleName = 'general', userInfo, onCha
           </ListItem>
         ))}
       </List>
+
+      <Dialog
+        open={viewDialogOpen}
+        onClose={handleCloseView}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{ sx: { minHeight: '80vh' } }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {viewAttachment?.originalName || viewAttachment?.filename || 'Document'}
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: 0, display: 'flex', flexDirection: 'column', minHeight: 400 }}>
+          {viewLoading && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flex: 1, minHeight: 400 }}>
+              <CircularProgress />
+            </Box>
+          )}
+          {!viewLoading && viewBlobUrl && (
+            <Box component="iframe" src={viewBlobUrl} title={viewAttachment?.originalName} sx={{ flex: 1, minHeight: 480, border: 'none' }} />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseView}>Close</Button>
+          {viewAttachment && (
+            <Button startIcon={<DownloadIcon />} variant="contained" onClick={() => { handleDownload(viewAttachment); }}>
+              Download
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

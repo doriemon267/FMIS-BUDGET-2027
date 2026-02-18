@@ -7,6 +7,7 @@ const mongoose         = require('mongoose');
 const Proposal         = require('../models/Proposal');
 const ProposalEditLog  = require('../models/ProposalEditLog');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
+const { validateNonNegativeInItems, MOOE_NUMERIC_FIELDS } = require('../utils/validateNonNegative');
 // New combined endpoint to fetch all data at once
 exports.getMOOEData = async (req, res) => {
   try {
@@ -943,7 +944,10 @@ exports.bulkSaveMOOE = async (req, res) => {
       console.error('❌ ERROR: entries is not an array or missing');
       return res.status(400).json({ error: 'entries must be an array' });
     }
-    
+    const nonNeg = validateNonNegativeInItems(entries, MOOE_NUMERIC_FIELDS);
+    if (!nonNeg.valid) {
+      return res.status(400).json({ error: nonNeg.message });
+    }
     // Resolve organizational ownership using submission workflow data (preferred)
     const workflowData = req.submissionWorkflowData || {};
     console.log('   Meta.department:', meta?.department, 'Meta.division:', meta?.division);
@@ -1714,7 +1718,10 @@ exports.bulkUpdateMOOE = async (req, res) => {
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "Items array is required and must not be empty" });
     }
-
+    const nonNeg = validateNonNegativeInItems(items, MOOE_NUMERIC_FIELDS);
+    if (!nonNeg.valid) {
+      return res.status(400).json({ message: nonNeg.message });
+    }
     const Settings = require("../models/Settings");
     const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 

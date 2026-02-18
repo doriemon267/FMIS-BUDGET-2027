@@ -35,6 +35,8 @@ import AppTrayLauncher from "../global/components/floating_apps/AppTrayLauncher"
 import { ErrorBoundary } from 'react-error-boundary';
 import { DrawerProvider, useDrawer } from "../context/DrawerContext";
 import ThemeSync from "../components/common/ThemeSync";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 const drawerWidth = 280;
 const collapsedDrawerWidth = 80;
@@ -252,6 +254,7 @@ const DashboardContent = () => {
         <CustomDrawer collapsed={collapsed && !isMdScreen} />
       </Drawer>
 
+        <ToastContainer position="top-right" autoClose={5000} hideProgressBar={false} newestOnTop closeOnClick rtl={false} pauseOnFocusLoss draggable pauseOnHover theme="colored" />
         <Box
           component="main"
           sx={{

@@ -262,11 +262,15 @@ const CollapsibleUsesRow = ({ name, items, allTierInputs, handleTierInputChange,
   );
 };
 
-function TierTable({ fiscalYear, region, regionName, department, division, onTierDataChange, readOnly = false }) {
+function TierTable({ fiscalYear, region, regionName, department, division, departmentName, divisionName, onTierDataChange, readOnly = false }) {
   const [tierInputs, setTierInputs] = useState({});
   const [mooeOpen, setMooeOpen] = useState(false);
   const [incomeOpen, setIncomeOpen] = useState(false);
   const initializedScopeRef = useRef(null);
+
+  // Use names for API filters so backend can match proposals/documents (stored as names). Fallback to id when name not provided.
+  const effectiveDept = departmentName != null && departmentName !== '' ? departmentName : (department || '');
+  const effectiveDiv = divisionName != null && divisionName !== '' ? divisionName : (division || '');
 
   // When region is "ALL", omit region filter to consolidate all regions.
   // effectiveRegion (ObjectId) for finalized data; regionName (string) for Capital Outlay & Income (DB stores region as string)
@@ -274,29 +278,29 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
   const baseParams = useMemo(() => {
     const params = { fiscalYear, budgetType: 'Initial' };
     if (regionName) params.region = regionName;
-    if (department) params.department = department;
-    if (division) params.division = division;
+    if (effectiveDept) params.department = effectiveDept;
+    if (effectiveDiv) params.division = effectiveDiv;
     return params;
-  }, [fiscalYear, regionName, department, division]);
+  }, [fiscalYear, regionName, effectiveDept, effectiveDiv]);
 
   const finalizedParams = useMemo(() => {
     const params = { fiscalYear };
     if (effectiveRegion) params.region = effectiveRegion;
-    if (department) params.department = department;
-    if (division) params.division = division;
+    if (effectiveDept) params.department = effectiveDept;
+    if (effectiveDiv) params.division = effectiveDiv;
     return params;
-  }, [fiscalYear, effectiveRegion, department, division]);
+  }, [fiscalYear, effectiveRegion, effectiveDept, effectiveDiv]);
 
   const hasRequiredParams = !!fiscalYear && !!region;
-  const scopeKey = `${fiscalYear}|${region}|${department || ''}|${division || ''}`;
+  const scopeKey = `${fiscalYear}|${region}|${effectiveDept}|${effectiveDiv}`;
 
   // Load saved Tier items (current version) so table shows saved values, not only "original" from API
   const savedItemsQuery = useQuery({
-    queryKey: ['tierSavedItems', fiscalYear, region, department, division],
+    queryKey: ['tierSavedItems', fiscalYear, region, effectiveDept, effectiveDiv],
     queryFn: () =>
       api
         .get('/api/tier/saved-items', {
-          params: { fiscalYear, region, department: department || '', division: division || '' },
+          params: { fiscalYear, region, department: effectiveDept || '', division: effectiveDiv || '' },
         })
         .then((r) => r.data),
     enabled: hasRequiredParams && !!region && region !== 'ALL',
@@ -363,10 +367,12 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
         enabled: hasRequiredParams,
       },
       {
-        queryKey: ['capitalOutlay', fiscalYear, regionName, 'Initial'],
+        queryKey: ['capitalOutlay', fiscalYear, regionName, effectiveDept, effectiveDiv, 'Initial'],
         queryFn: async () => {
           const params = { fiscalYear: String(fiscalYear || ''), budgetType: 'Initial' };
           if (regionName) params.regions = [regionName];
+          if (effectiveDept) params.department = effectiveDept;
+          if (effectiveDiv) params.division = effectiveDiv;
           const res = await api.get('/api/consolidated-reports/capital-outlay-data', { params });
           const data = res.data?.data || res.data || [];
           return Array.isArray(data) ? data.flatMap(r => r.items || r) : [];
@@ -380,7 +386,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
       },
       {
         // Fetch charged-to-income eligible personnel for PROJECTED CORPORATE INCOME calculation
-        queryKey: ['chargedToIncomePersonnel', fiscalYear, regionName, 'Initial'],
+        queryKey: ['chargedToIncomePersonnel', fiscalYear, regionName, effectiveDept, effectiveDiv, 'Initial'],
         queryFn: async () => {
           const params = {
             fiscalYear: Number(fiscalYear),
@@ -390,6 +396,8 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
             page: 1
           };
           if (regionName) params.region = regionName;
+          if (effectiveDept) params.department = effectiveDept;
+          if (effectiveDiv) params.division = effectiveDiv;
           const res = await api.get('/personnelServices', { params });
           return res.data?.personnelServices || res.data?.data || [];
         },
@@ -869,7 +877,7 @@ function TierTable({ fiscalYear, region, regionName, department, division, onTie
             <TableRow>
               <TableCell rowSpan={2} sx={{ width: '25%', minWidth: 200 }}>Particulars</TableCell>
               <TableCell align="right" rowSpan={2} sx={{ width: COL.corporateIncome }}>PROJECTED CORPORATE INCOME</TableCell>
-              <TableCell align="right" colSpan={3}>PROJECTED SUBSIDY</TableCell>
+              <TableCell align="center" colSpan={3}>PROJECTED SUBSIDY</TableCell>
               <TableCell align="right" rowSpan={2} sx={{ width: COL.proposedBudget }}>PROPOSED BUDGET</TableCell>
             </TableRow>
             <TableRow>

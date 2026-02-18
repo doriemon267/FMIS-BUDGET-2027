@@ -614,11 +614,8 @@ io.use(async (socket, next) => {
 app.use(
   cors({
     origin: (origin, callback) => {
-      console.log("CORS check for origin:", origin); // a new line of code here
-      if (!origin) {
-        console.log("CORS: No origin, allowing.");
-        return callback(null, true);
-      }
+      // No Origin header = same-origin, server, or tool (Postman/curl) — allow
+      if (!origin) return callback(null, true);
 
       const allowedOrigins = [
         process.env.CLIENT1,
@@ -633,13 +630,9 @@ app.use(
       const isLocal = origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1");
       const isFmisLocal = origin && origin.includes("fmis.local");
 
-      console.log(`CORS check: isAllowed=${isAllowed}, isNia=${isNia}, isLocal=${isLocal}, isFmisLocal=${isFmisLocal}`);
+      if (isAllowed || isNia || isLocal || isFmisLocal) return callback(null, true);
 
-      if (isAllowed || isNia || isLocal || isFmisLocal) {
-        console.log("CORS: Origin allowed.");
-        return callback(null, true);
-      }
-
+      // Log only when blocking (useful for debugging unauthorized origins)
       console.warn("CORS: Origin blocked:", origin);
       return callback(null, false); // Return false instead of Error to avoid 500s in some configurations
     },

@@ -1076,12 +1076,6 @@ exports.createProposal = async (req, res) => {
 exports.getProposals = async (req, res) => {
   try {
   const userRole = getUserRole(req);
-  // Debug: Log incoming request context for troubleshooting monitoring visibility
-  try {
-    console.log('[getProposals] userRole:', userRole, 'userRoles:', req.user?.Roles, 'userId:', userIdString, 'view:', view, 'region:', req.query?.region);
-  } catch (e) {
-    console.log('[getProposals] Failed to log debug context');
-  }
   const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
   const userName = [req.user?.name, req.user?.UserName, `${req.user?.FirstName || ''} ${req.user?.LastName || ''}`.trim(), req.user?.email].find(v => v && v.length > 0) || 'UNKNOWN_USER';
   const { status, modelType, fiscalYear, page = 1, limit = 10, view } = req.query;
@@ -2283,7 +2277,14 @@ exports.deleteAttachment = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Attachment not found' });
     }
 
-    // Permission: only uploader, BRD staff, or SUPER ADMIN can delete attachments
+    // At BRD Level, no one can delete attachments - view/download only
+    const brdStatuses = ['FORWARDED_TO_BRD_ANALYST', 'FORWARDED_TO_BRD_OFFICER', 'FORWARDED_TO_BRD_MANAGER'];
+    const proposalStatus = String(proposal.status || '').toUpperCase();
+    if (brdStatuses.includes(proposalStatus)) {
+      return res.status(403).json({ success: false, message: 'Deletion of attachments is not allowed when the proposal is at BRD level. You may view or download only.' });
+    }
+
+    // Permission: only uploader, BRD staff, or SUPER ADMIN can delete attachments (when not at BRD level)
     const deleterUserId = String(req.user?.id);
     const userRole = getUserRole(req);
     const isBRDStaff = ['BUDGET PLANNING ANALYST', 'BUDGET_PLANNING_ANALYST', 'BUDGET OFFICER', 'BUDGET_OFFICER', 'BUDGET MANAGER', 'BUDGET_MANAGER'].includes(userRole);

@@ -8,6 +8,7 @@ const ProposalEditLog = require('../models/ProposalEditLog');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { getActiveSettingsWithCompensation, getCompensationField } = require("../utils/settingsUtils");
+const { validateNonNegativeFields, validateNonNegativeInItems, PERSONNEL_NUMERIC_FIELDS } = require('../utils/validateNonNegative');
 // Import ChildrenAllowance model safely
 const ChildrenAllowance =
   mongoose.models.ChildrenAllowance || require("../models/childrenAllowance");
@@ -649,6 +650,10 @@ exports.bulkAddPersonnelServices = async (req, res) => {
     console.log('🔍 [BULK ADD] Assigned Division:', userDivision);
     console.log('🔍 [BULK ADD] =================================================================');
 
+    const bodyNonNeg = validateNonNegativeFields(req.body, PERSONNEL_NUMERIC_FIELDS);
+    if (!bodyNonNeg.valid) {
+      return res.status(400).json({ message: bodyNonNeg.message });
+    }
     if (!statusOfAppointment || !RATA) {
       return res
         .status(400)
@@ -1086,7 +1091,10 @@ exports.updatePersonnelService = async (req, res) => {
       filteredUpdateFields.childrenAllowance =
         filteredUpdateFields.noOfDependent * 30 * 12;
     }
-
+    const nonNeg = validateNonNegativeFields(filteredUpdateFields, PERSONNEL_NUMERIC_FIELDS);
+    if (!nonNeg.valid) {
+      return res.status(400).json({ message: nonNeg.message });
+    }
     // First, find the personnel service record to check access
     const personnelServices = await PersonnelServices.findById(id);
     if (!personnelServices) {
@@ -1647,7 +1655,10 @@ exports.bulkUpdatePersonnelService = async (req, res) => {
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "Items array is required and must not be empty" });
     }
-
+    const nonNeg = validateNonNegativeInItems(items, PERSONNEL_NUMERIC_FIELDS);
+    if (!nonNeg.valid) {
+      return res.status(400).json({ message: nonNeg.message });
+    }
     const activeSettings = await Settings.findOne({ isActive: true });
     const setFY = activeSettings?.fiscalYear;
     const setBT = activeSettings?.budgetType;
@@ -1794,7 +1805,13 @@ exports.bulkSetPersonnelSubsidy = async (req, res) => {
         message: "Items array is required to update subsidy",
       });
     }
-
+    const subsidyNonNeg = validateNonNegativeInItems(
+      items.map(p => ({ subsidyAmount: p.subsidyAmount ?? p.amount })),
+      ['subsidyAmount']
+    );
+    if (!subsidyNonNeg.valid) {
+      return res.status(400).json({ message: subsidyNonNeg.message });
+    }
     const hierarchicalFilters = normalizeHierarchicalFilters(req.hierarchicalFilters);
     const results = {
       updated: [],
@@ -1916,7 +1933,16 @@ exports.bulkSetPersonnelChargedToIncome = async (req, res) => {
         message: "Items array is required to update charged to income",
       });
     }
-
+    const chargedNonNeg = validateNonNegativeInItems(
+      items.map(p => ({
+        chargedToIncomeAmount: p.chargedToIncomeAmount,
+        chargedToIncomeSubsidyAmount: p.chargedToIncomeSubsidyAmount
+      })),
+      ['chargedToIncomeAmount', 'chargedToIncomeSubsidyAmount']
+    );
+    if (!chargedNonNeg.valid) {
+      return res.status(400).json({ message: chargedNonNeg.message });
+    }
     const hierarchicalFilters = normalizeHierarchicalFilters(req.hierarchicalFilters);
     console.log("DEBUG: hierarchicalFilters:", hierarchicalFilters);
     

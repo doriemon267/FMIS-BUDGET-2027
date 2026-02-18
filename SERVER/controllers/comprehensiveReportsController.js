@@ -4,6 +4,7 @@ const path = require('path');
 const PersonnelServices = require('../models/PersonnelServices');
 const MooeProposal = require('../models/mooeProposals');
 const CapitalOutlay = require('../models/CapitalOutlay');
+const CapitalOutlayDetails = require('../models/CapitalOutlayDetails');
 const Income = require('../models/Income');
 const Region = require('../models/Region');
 const Settings = require('../models/Settings');
@@ -152,12 +153,34 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
     }
   }
 
+  // MOOE & Capital Outlay: use same filters as Region view (region, fiscalYear, budgetType only)
+  // so data always shows regardless of view by Office/RC (department/division often not set on MOOE/CO)
+  const mooeQuery = {};
+  const coQuery = {};
+  if (regions) {
+    const regionList = Array.isArray(regions) ? regions : [regions];
+    const regionExact = { region: { $in: regionList } };
+    const regionRegex = regionList.map((r) => ({ region: new RegExp('^' + String(r).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') }));
+    mooeQuery.$or = [regionExact, ...regionRegex];
+    coQuery.$or = [regionExact, ...regionRegex];
+  }
+  if (fiscalYear) {
+    mooeQuery.fiscalYear = fiscalYear;
+    const fyNum = Number(fiscalYear);
+    const fyOr = [{ fiscalYear: fiscalYear }, ...(Number.isFinite(fyNum) ? [{ fiscal_year: fyNum }] : [])];
+    coQuery.$and = [...(coQuery.$and || []), { $or: fyOr }];
+  }
+  if (budgetType) {
+    mooeQuery.budgetType = budgetType;
+    coQuery.budgetType = budgetType;
+  }
+
   // Fetch data from all sources concurrently
   const [incomeData, psData, mooeData, coData] = await Promise.all([
     Income.find(query).lean(),
     PersonnelServices.find(query).lean(),
-    MooeProposal.find(query).lean(),
-    CapitalOutlay.find(query).populate('category').lean()
+    MooeProposal.find(mooeQuery).lean(),
+    CapitalOutlay.find(coQuery).populate('category').lean()
   ]);
 
   // Initialize comprehensive report structure
@@ -202,18 +225,14 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
     reportData.summary.totalEmployees = psSection.totalEmployees;
     addSectionTotals(psSection);
   }
-  // Process MOOE data
-  if (Array.isArray(mooeData) && mooeData.length > 0) {
-    const mooeSection = await processMOOEData(mooeData, query);
-    reportData.sections.push(mooeSection);
-    addSectionTotals(mooeSection);
-  }
-  // Process Capital Outlay data
-  if (Array.isArray(coData) && coData.length > 0) {
-    const coSection = await processCapitalOutlayData(coData, query);
-    reportData.sections.push(coSection);
-    addSectionTotals(coSection);
-  }
+  // Process MOOE data (always include section; show zero/empty when no data)
+  const mooeSection = await processMOOEData(Array.isArray(mooeData) ? mooeData : [], query);
+  reportData.sections.push(mooeSection);
+  addSectionTotals(mooeSection);
+  // Process Capital Outlay data (always include section; show zero/empty when no data)
+  const coSection = await processCapitalOutlayData(Array.isArray(coData) ? coData : [], query);
+  reportData.sections.push(coSection);
+  addSectionTotals(coSection);
   // Get unique regions count
   const allRegions = new Set();
   [...incomeData, ...psData, ...mooeData, ...coData].forEach(item => {
@@ -226,7 +245,8 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
 
 const getComprehensiveReportData = async (req, res) => {
   try {
-    const { regions, fiscalYear, budgetType, groupBy, offices, responsibilityCenters } = req.query;
+    const { regions, region, fiscalYear, budgetType, groupBy, offices, responsibilityCenters } = req.query;
+    const regionsParam = regions ?? region;
     const officesParam = offices ? (Array.isArray(offices) ? offices : [offices]) : [];
     const responsibilityCentersParam = responsibilityCenters ? (Array.isArray(responsibilityCenters) ? responsibilityCenters : [responsibilityCenters]) : [];
     let preparerScope = null;
@@ -249,7 +269,7 @@ const getComprehensiveReportData = async (req, res) => {
       }
     }
     const reportData = await buildComprehensiveReportData({
-      regions,
+      regions: regionsParam,
       fiscalYear,
       budgetType,
       preparerScope,
@@ -438,6 +458,10 @@ const processPersonnelServicesData = async (psData, query) => {
       cat.totalIncome = Object.values(cat.items).reduce((s, item) => s + (Number(item.income) || 0), 0);
       cat.totalSubsidy = Object.values(cat.items).reduce((s, item) => s + (Number(item.subsidy) || 0), 0);
     });
+    // Recompute section totals from categories so displayed total matches sum of rows (no inconsistency)
+    sectionTotal = Object.values(consolidatedCategories).reduce((s, c) => s + (Number(c.total) || 0), 0);
+    sectionTotalIncome = Object.values(consolidatedCategories).reduce((s, c) => s + (Number(c.totalIncome) || 0), 0);
+    sectionTotalSubsidy = Object.values(consolidatedCategories).reduce((s, c) => s + (Number(c.totalSubsidy) || 0), 0);
     return {
       sectionCode: "B.1.1",
       sectionName: "Personnel Services",
@@ -532,6 +556,22 @@ const processMOOEData = async (mooeData, query) => {
   const regionSet = new Set();
   let sectionTotal = 0;
   let totalEntries = 0;
+  // When no data, always return consolidated shape so UI always shows MOOE section with table
+  const hasData = Array.isArray(mooeData) && mooeData.length > 0;
+  if (!hasData) {
+    return {
+      sectionCode: "B.1.2",
+      sectionName: "MAINTENANCE AND OTHER OPERATING EXPENSES",
+      sectionDescription: "Operating expenses for maintenance and other operational requirements",
+      sectionTotal: 0,
+      sectionTotalIncome: 0,
+      sectionTotalSubsidy: 0,
+      totalEntries: 0,
+      totalRegions: 0,
+      consolidatedData: true,
+      categories: {}
+    };
+  }
   // Check if we should consolidate all regions
   const consolidateRegions = !query.regions || query.regions === 'all';
   if (consolidateRegions) {
@@ -540,7 +580,8 @@ const processMOOEData = async (mooeData, query) => {
     mooeData.forEach((proposal) => {
       const income = Number(proposal.income) || 0;
       const subsidy = Number(proposal.subsidy) || 0;
-      const amount = income + subsidy;
+      let amount = income + subsidy;
+      if (amount <= 0) amount = Number(proposal.amount) || 0;
       if (amount <= 0) return;
       regionSet.add(proposal.region || 'Unspecified');
       totalEntries++;
@@ -552,7 +593,8 @@ const processMOOEData = async (mooeData, query) => {
           totalIncome: 0,
           totalSubsidy: 0,
           itemCount: 0,
-          regions: new Set()
+          regions: new Set(),
+          items: []
         };
       }
       consolidatedCategories[category].total += amount;
@@ -560,6 +602,14 @@ const processMOOEData = async (mooeData, query) => {
       consolidatedCategories[category].totalSubsidy += subsidy;
       consolidatedCategories[category].itemCount++;
       consolidatedCategories[category].regions.add(proposal.region || 'Unspecified');
+      consolidatedCategories[category].items.push({
+        name: proposal.sublineItem || proposal.accountingTitle || 'N/A',
+        title: proposal.sublineItem || proposal.accountingTitle || 'N/A',
+        uacsCode: proposal.uacsCode,
+        income,
+        subsidy,
+        amount
+      });
       sectionTotal += amount;
     });
     // Remove categories with total 0
@@ -567,8 +617,8 @@ const processMOOEData = async (mooeData, query) => {
       if (consolidatedCategories[key].total === 0) delete consolidatedCategories[key];
     });
     // Convert Set to Array for JSON serialization
-    Object.values(consolidatedCategories).forEach(category => {
-      category.regions = Array.from(category.regions);
+    Object.values(consolidatedCategories).forEach(cat => {
+      cat.regions = Array.from(cat.regions);
     });
     const sectionTotalIncome = Object.values(consolidatedCategories).reduce((s, c) => s + (Number(c.totalIncome) || 0), 0);
     const sectionTotalSubsidy = Object.values(consolidatedCategories).reduce((s, c) => s + (Number(c.totalSubsidy) || 0), 0);
@@ -590,7 +640,8 @@ const processMOOEData = async (mooeData, query) => {
     mooeData.forEach((proposal) => {
       const income = Number(proposal.income) || 0;
       const subsidy = Number(proposal.subsidy) || 0;
-      const amount = income + subsidy;
+      let amount = income + subsidy;
+      if (amount <= 0) amount = Number(proposal.amount) || 0;
       if (amount <= 0) return;
       const region = proposal.region || 'Unspecified';
       regionSet.add(region);
@@ -637,42 +688,119 @@ const processCapitalOutlayData = async (coData, query) => {
   const regionSet = new Set();
   let sectionTotal = 0;
   let totalEntries = 0;
+  // When no data, always return consolidated shape so UI always shows Capital Outlay section with table
+  const hasData = Array.isArray(coData) && coData.length > 0;
+  if (!hasData) {
+    return {
+      sectionCode: "B.2",
+      sectionName: "CAPITAL OUTLAYS",
+      sectionDescription: "Capital expenditures for infrastructure, equipment, and other capital investments",
+      sectionTotal: 0,
+      sectionTotalIncome: 0,
+      sectionTotalSubsidy: 0,
+      totalEntries: 0,
+      totalRegions: 0,
+      consolidatedData: true,
+      categories: {}
+    };
+  }
+  // Fetch breakdown details (CapitalOutlayDetails) so report shows each row as created, not lumped
+  const coIds = coData.map((p) => p._id).filter(Boolean);
+  const detailsList = coIds.length > 0
+    ? await CapitalOutlayDetails.find({ capital_outlay_id: { $in: coIds } }).sort({ createdAt: 1 }).lean()
+    : [];
+  const detailsByParent = new Map();
+  detailsList.forEach((d) => {
+    const id = (d.capital_outlay_id && d.capital_outlay_id.toString()) || d.capital_outlay_id;
+    if (!id) return;
+    if (!detailsByParent.has(id)) detailsByParent.set(id, []);
+    detailsByParent.get(id).push(d);
+  });
+
   // Check if we should consolidate all regions
   const consolidateRegions = !query.regions || query.regions === 'all';
   if (consolidateRegions) {
-    // TRUE Consolidation - sum amounts by category only; exclude 0 value (only include amount > 0)
+    // TRUE Consolidation - sum amounts by category; use breakdown rows (CapitalOutlayDetails) when present
     const consolidatedCategories = {};
     coData.forEach((proposal) => {
-      const income = Number(proposal.income) || 0;
-      const subsidy = Number(proposal.subsidy) || 0;
-      const amount = income + subsidy;
-      if (amount <= 0) return;
-      regionSet.add(proposal.region || 'Unspecified');
-      totalEntries++;
       const categoryName = proposal.category?.name || proposal.accountingTitle || 'Uncategorized';
-      if (!consolidatedCategories[categoryName]) {
-        consolidatedCategories[categoryName] = {
-          name: categoryName,
-          total: 0,
-          totalIncome: 0,
-          totalSubsidy: 0,
-          itemCount: 0,
-          regions: new Set()
-        };
+      const detailRows = detailsByParent.get(proposal._id.toString()) || [];
+
+      if (detailRows.length > 0) {
+        detailRows.forEach((detail) => {
+          const income = Number(detail.income_amount) || 0;
+          const subsidy = Number(detail.subsidy_amount) || 0;
+          const amount = income + subsidy;
+          if (amount <= 0) return;
+          regionSet.add(proposal.region || 'Unspecified');
+          totalEntries++;
+          if (!consolidatedCategories[categoryName]) {
+            consolidatedCategories[categoryName] = {
+              name: categoryName,
+              total: 0,
+              totalIncome: 0,
+              totalSubsidy: 0,
+              itemCount: 0,
+              regions: new Set(),
+              items: []
+            };
+          }
+          consolidatedCategories[categoryName].total += amount;
+          consolidatedCategories[categoryName].totalIncome += income;
+          consolidatedCategories[categoryName].totalSubsidy += subsidy;
+          consolidatedCategories[categoryName].itemCount++;
+          consolidatedCategories[categoryName].regions.add(proposal.region || 'Unspecified');
+          consolidatedCategories[categoryName].items.push({
+            name: (detail.particulars || '').trim() || 'N/A',
+            title: (detail.particulars || '').trim() || 'N/A',
+            uacsCode: proposal.uacsCode,
+            income,
+            subsidy,
+            amount
+          });
+          sectionTotal += amount;
+        });
+      } else {
+        const income = Number(proposal.income) || 0;
+        const subsidy = Number(proposal.subsidy) || 0;
+        let amount = income + subsidy;
+        if (amount <= 0) amount = Number(proposal.cost) || 0;
+        if (amount <= 0) return;
+        regionSet.add(proposal.region || 'Unspecified');
+        totalEntries++;
+        if (!consolidatedCategories[categoryName]) {
+          consolidatedCategories[categoryName] = {
+            name: categoryName,
+            total: 0,
+            totalIncome: 0,
+            totalSubsidy: 0,
+            itemCount: 0,
+            regions: new Set(),
+            items: []
+          };
+        }
+        consolidatedCategories[categoryName].total += amount;
+        consolidatedCategories[categoryName].totalIncome += income;
+        consolidatedCategories[categoryName].totalSubsidy += subsidy;
+        consolidatedCategories[categoryName].itemCount++;
+        consolidatedCategories[categoryName].regions.add(proposal.region || 'Unspecified');
+        consolidatedCategories[categoryName].items.push({
+          name: proposal.particulars || proposal.sublineItem || proposal.accountingTitle || 'N/A',
+          title: proposal.particulars || proposal.sublineItem || proposal.accountingTitle || 'N/A',
+          uacsCode: proposal.uacsCode,
+          income,
+          subsidy,
+          amount
+        });
+        sectionTotal += amount;
       }
-      consolidatedCategories[categoryName].total += amount;
-      consolidatedCategories[categoryName].totalIncome += income;
-      consolidatedCategories[categoryName].totalSubsidy += subsidy;
-      consolidatedCategories[categoryName].itemCount++;
-      consolidatedCategories[categoryName].regions.add(proposal.region || 'Unspecified');
-      sectionTotal += amount;
     });
     // Remove categories with total 0
     Object.keys(consolidatedCategories).forEach(key => {
       if (consolidatedCategories[key].total === 0) delete consolidatedCategories[key];
     });
-    Object.values(consolidatedCategories).forEach(category => {
-      category.regions = Array.from(category.regions);
+    Object.values(consolidatedCategories).forEach(cat => {
+      cat.regions = Array.from(cat.regions);
     });
     const sectionTotalIncome = Object.values(consolidatedCategories).reduce((s, c) => s + (Number(c.totalIncome) || 0), 0);
     const sectionTotalSubsidy = Object.values(consolidatedCategories).reduce((s, c) => s + (Number(c.totalSubsidy) || 0), 0);
@@ -689,41 +817,65 @@ const processCapitalOutlayData = async (coData, query) => {
       categories: consolidatedCategories
     };
   } else {
-    // Group by region (existing logic for specific region); exclude 0 value
+    // Group by region; use breakdown rows (CapitalOutlayDetails) when present
     const grouped = {};
     coData.forEach((proposal) => {
-      const income = Number(proposal.income) || 0;
-      const subsidy = Number(proposal.subsidy) || 0;
-      const amount = income + subsidy;
-      if (amount <= 0) return;
       const region = proposal.region || 'Unspecified';
-      regionSet.add(region);
-      totalEntries++;
-      if (!grouped[region]) {
-        grouped[region] = {
-          region,
-          totalEntries: 0,
-          categories: {}
-        };
-      }
-      grouped[region].totalEntries++;
       const categoryName = proposal.category?.name || proposal.accountingTitle || 'Uncategorized';
-      if (!grouped[region].categories[categoryName]) {
-        grouped[region].categories[categoryName] = {
-          name: categoryName,
-          items: [],
-          total: 0
-        };
+      const detailRows = detailsByParent.get(proposal._id.toString()) || [];
+
+      if (detailRows.length > 0) {
+        detailRows.forEach((detail) => {
+          const income = Number(detail.income_amount) || 0;
+          const subsidy = Number(detail.subsidy_amount) || 0;
+          const amount = income + subsidy;
+          if (amount <= 0) return;
+          regionSet.add(region);
+          totalEntries++;
+          if (!grouped[region]) {
+            grouped[region] = { region, totalEntries: 0, categories: {} };
+          }
+          grouped[region].totalEntries++;
+          if (!grouped[region].categories[categoryName]) {
+            grouped[region].categories[categoryName] = { name: categoryName, items: [], total: 0 };
+          }
+          grouped[region].categories[categoryName].items.push({
+            title: (detail.particulars || '').trim() || 'N/A',
+            name: (detail.particulars || '').trim() || 'N/A',
+            uacsCode: proposal.uacsCode,
+            income,
+            subsidy,
+            amount
+          });
+          grouped[region].categories[categoryName].total += amount;
+          sectionTotal += amount;
+        });
+      } else {
+        const income = Number(proposal.income) || 0;
+        const subsidy = Number(proposal.subsidy) || 0;
+        let amount = income + subsidy;
+        if (amount <= 0) amount = Number(proposal.cost) || 0;
+        if (amount <= 0) return;
+        regionSet.add(region);
+        totalEntries++;
+        if (!grouped[region]) {
+          grouped[region] = { region, totalEntries: 0, categories: {} };
+        }
+        grouped[region].totalEntries++;
+        if (!grouped[region].categories[categoryName]) {
+          grouped[region].categories[categoryName] = { name: categoryName, items: [], total: 0 };
+        }
+        grouped[region].categories[categoryName].items.push({
+          title: proposal.particulars || proposal.sublineItem || 'N/A',
+          name: proposal.particulars || proposal.sublineItem || 'N/A',
+          uacsCode: proposal.uacsCode,
+          income,
+          subsidy,
+          amount
+        });
+        grouped[region].categories[categoryName].total += amount;
+        sectionTotal += amount;
       }
-      grouped[region].categories[categoryName].items.push({
-        title: proposal.particulars || proposal.sublineItem || 'N/A',
-        uacsCode: proposal.uacsCode,
-        income: income,
-        subsidy: subsidy,
-        amount: amount
-      });
-      grouped[region].categories[categoryName].total += amount;
-      sectionTotal += amount;
     });
     return {
       sectionCode: "B.2",
@@ -746,7 +898,8 @@ const getComprehensiveReportPdf = async (req, res) => {
       });
     }
 
-    const { regions, fiscalYear, budgetType, groupBy, offices, responsibilityCenters } = req.query;
+    const { regions, region, fiscalYear, budgetType, groupBy, offices, responsibilityCenters } = req.query;
+    const regionsParam = regions ?? region;
     const officesParam = offices ? (Array.isArray(offices) ? offices : [offices]) : [];
     const responsibilityCentersParam = responsibilityCenters ? (Array.isArray(responsibilityCenters) ? responsibilityCenters : [responsibilityCenters]) : [];
     let preparerScope = null;
@@ -767,7 +920,7 @@ const getComprehensiveReportPdf = async (req, res) => {
       }
     }
     const reportData = await buildComprehensiveReportData({
-      regions,
+      regions: regionsParam,
       fiscalYear,
       budgetType,
       preparerScope,

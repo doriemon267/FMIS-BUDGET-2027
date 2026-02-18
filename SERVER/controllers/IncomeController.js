@@ -5,6 +5,7 @@ const Settings = require("../models/Settings");
 const Proposal = require('../models/Proposal');
 const ProposalEditLog = require('../models/ProposalEditLog');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
+const { validateNonNegativeFields, validateNonNegativeInItems, INCOME_NUMERIC_FIELDS } = require('../utils/validateNonNegative');
 // Create new income entry
 exports.createIncome = async (req, res) => {
   try {
@@ -30,6 +31,10 @@ exports.createIncome = async (req, res) => {
         message: "Missing required fields", 
         details: "particulars, incomecategory, and amount are required" 
       });
+    }
+    const nonNeg = validateNonNegativeFields({ cost, amount }, INCOME_NUMERIC_FIELDS);
+    if (!nonNeg.valid) {
+      return res.status(400).json({ message: nonNeg.message });
     }
   // Get submission workflow data from middleware
   const workflowData = req.submissionWorkflowData || {};
@@ -170,7 +175,10 @@ exports.updateIncome = async (req, res) => {
         message: "Cannot edit income record that has been submitted or approved"
       });
     }
-
+    const nonNeg = validateNonNegativeFields({ cost, amount }, INCOME_NUMERIC_FIELDS);
+    if (!nonNeg.valid) {
+      return res.status(400).json({ message: nonNeg.message });
+    }
     // Find and update the income entry
     const updatedIncome = await Income.findByIdAndUpdate(
       req.params.id,
@@ -649,7 +657,10 @@ exports.bulkUpdateIncome = async (req, res) => {
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "Items array is required and must not be empty" });
     }
-
+    const nonNeg = validateNonNegativeInItems(items, INCOME_NUMERIC_FIELDS);
+    if (!nonNeg.valid) {
+      return res.status(400).json({ message: nonNeg.message });
+    }
     const activeSettings = await Settings.findOne({ isActive: true });
     const setFY = activeSettings?.fiscalYear;
     const setBT = activeSettings?.budgetType;

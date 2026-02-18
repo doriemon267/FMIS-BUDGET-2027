@@ -6,6 +6,7 @@ const Settings = require("../models/Settings");
 const Proposal = require('../models/Proposal');
 const ProposalEditLog = require('../models/ProposalEditLog');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
+const { validateNonNegativeFields, validateNonNegativeInItems, CAPITAL_OUTLAY_NUMERIC_FIELDS } = require('../utils/validateNonNegative');
 // All Chart of Accounts entries are read straight from the FMIS main database via MONGODB_MAIN_URL.
 // We intentionally avoid local file-based seeding so the data always mirrors the source system.
 // Helper function to get the active fiscal year
@@ -149,7 +150,10 @@ exports.addCapitalOutlay = async (req, res) => {
             "Missing fields: cost, category, sublineItem, accountingTitle, uacsCode, and region are all required.",
         });
     }
-    
+    const nonNeg = validateNonNegativeFields({ cost, income, subsidy }, CAPITAL_OUTLAY_NUMERIC_FIELDS);
+    if (!nonNeg.valid) {
+      return res.status(400).json({ error: nonNeg.message });
+    }
     // ─── UACS CODE VALIDATION REMOVED ───
     // Previous validation required codes starting with "5-01-" or "5-02-"
     // However, the chart_of_accounts table contains codes starting with "1-"
@@ -331,7 +335,10 @@ exports.editCapitalOutlay = async (req, res) => {
         message: "Cannot edit capital outlay record that has been submitted or approved"
       });
     }
-
+    const nonNeg = validateNonNegativeFields({ cost, income, subsidy }, CAPITAL_OUTLAY_NUMERIC_FIELDS);
+    if (!nonNeg.valid) {
+      return res.status(400).json({ error: nonNeg.message });
+    }
     // Update capital outlay
     // Use submission workflow data for ownership normalization
     const workflowData = req.submissionWorkflowData || {};
@@ -593,7 +600,10 @@ exports.bulkUpdateCapitalOutlay = async (req, res) => {
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "Items array is required and must not be empty" });
     }
-
+    const nonNeg = validateNonNegativeInItems(items, CAPITAL_OUTLAY_NUMERIC_FIELDS);
+    if (!nonNeg.valid) {
+      return res.status(400).json({ message: nonNeg.message });
+    }
     const activeSettings = await Settings.findOne({ isActive: true });
     const setFY = activeSettings?.fiscalYear;
     const setBT = activeSettings?.budgetType;

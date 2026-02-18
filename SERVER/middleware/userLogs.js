@@ -23,6 +23,22 @@ const UserActivityLog = require('../models/UserActivityLog');
 
 const SENSITIVE_KEYS = ['password', 'token', 'secret', 'apiKey', 'authorization', 'jwt', 'cookie'];
 
+/**
+ * Get client IP (prefer public IP when behind proxy).
+ * Order: req.ip (set by Express when trust proxy) → X-Forwarded-For → X-Real-IP → socket.
+ */
+function getClientIp(req) {
+  if (!req) return null;
+  if (req.ip) return req.ip;
+  const forwarded = req.get?.('x-forwarded-for');
+  if (forwarded) {
+    const first = forwarded.split(',')[0]?.trim();
+    if (first) return first;
+  }
+  if (req.get?.('x-real-ip')) return req.get('x-real-ip').trim();
+  return req.connection?.remoteAddress ?? req.socket?.remoteAddress ?? null;
+}
+
 function sanitize(obj) {
   if (obj == null || typeof obj !== 'object') return obj;
   if (Array.isArray(obj)) return obj.map(sanitize);
@@ -80,7 +96,7 @@ async function createUserActivityLog(req, payload = {}) {
       snapshot: snapshot ? sanitize(snapshot) : null,
       method: payload.method ?? req?.method ?? null,
       path: payload.path ?? req?.path ?? null,
-      ipAddress: payload.ipAddress ?? req?.ip ?? req?.connection?.remoteAddress ?? null,
+      ipAddress: payload.ipAddress ?? getClientIp(req) ?? null,
       userAgent: payload.userAgent ?? req?.get?.('user-agent') ?? null,
       details: sanitize(payload.details ?? {}),
       timestamp: new Date(),

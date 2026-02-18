@@ -289,8 +289,8 @@ const TierPage = () => {
       const saveData = {
         fiscalYear: activeFiscalYear,
         region: selectedRegion,
-        department: selectedDepartment,
-        division: selectedDivision,
+        department: selectedDepartment ? (departments.find(d => String(d._id) === String(selectedDepartment))?.Department || departments.find(d => String(d._id) === String(selectedDepartment))?.name || '') : '',
+        division: selectedDivision ? (divisions.find(d => d.name === selectedDivision || String(d._id) === String(selectedDivision))?.name ?? selectedDivision) : '',
         items: itemsArray,
         ...(revisionComment.trim() && { revisionComment: revisionComment.trim() }),
       };
@@ -409,6 +409,14 @@ const TierPage = () => {
   };
   const getDivisionDisplayName = () =>
     !selectedDivision ? 'All' : (divisions.find(d => d.name === selectedDivision || d._id === selectedDivision)?.name ?? selectedDivision);
+
+  // Names for API scope (backend stores department/division as names). Empty string when not selected.
+  const selectedDepartmentName = selectedDepartment
+    ? (departments.find(d => String(d._id) === String(selectedDepartment))?.Department || departments.find(d => String(d._id) === String(selectedDepartment))?.name || '')
+    : '';
+  const selectedDivisionName = selectedDivision
+    ? (divisions.find(d => d.name === selectedDivision || String(d._id) === String(selectedDivision))?.name ?? selectedDivision)
+    : '';
 
   const handleViewPDF = async () => {
     if (!tierData?.reportSummary || !activeFiscalYear) {
@@ -678,6 +686,8 @@ const TierPage = () => {
             regionName={selectedRegion !== 'ALL' && regions?.find(r => r._id === selectedRegion || String(r._id) === String(selectedRegion))?.Region}
             department={selectedDepartment}
             division={selectedDivision}
+            departmentName={selectedDepartmentName}
+            divisionName={selectedDivisionName}
             onTierDataChange={setTierData}
             readOnly={isTierViewOnly}
           />

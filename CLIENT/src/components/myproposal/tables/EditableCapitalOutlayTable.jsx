@@ -26,6 +26,7 @@ import RestoreIcon from '@mui/icons-material/Restore';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import { NumericFormat } from 'react-number-format';
+import { preventNegativeNumericKey, toNonNegativeNumber } from '../../../utils/preventNegativeInput';
 
 const NumericFormatInput = React.forwardRef(function NumericFormatInput(props, ref) {
   const { onChange, name, ...other } = props;
@@ -246,7 +247,7 @@ const EditableCapitalOutlayTable = ({ data = [], onChange }) => {
     const updated = { ...previous };
 
     if (['income', 'subsidy', 'cost'].includes(field)) {
-      const numericValue = Number(value || 0);
+      const numericValue = toNonNegativeNumber(value);
       updated[field] = numericValue;
       const income = field === 'income' ? numericValue : Number(updated.income || 0);
       const subsidy = field === 'subsidy' ? numericValue : Number(updated.subsidy || 0);
@@ -481,6 +482,7 @@ const EditableCapitalOutlayTable = ({ data = [], onChange }) => {
                               {onChange ? (
                                 <TextField
                                   value={item.income ?? 0}
+                                  onKeyDown={preventNegativeNumericKey}
                                   onChange={(e) => handleFieldChange(index, 'income', e.target.value)}
                                   size="small"
                                   fullWidth
@@ -499,6 +501,7 @@ const EditableCapitalOutlayTable = ({ data = [], onChange }) => {
                               {onChange ? (
                                 <TextField
                                   value={item.subsidy ?? 0}
+                                  onKeyDown={preventNegativeNumericKey}
                                   onChange={(e) => handleFieldChange(index, 'subsidy', e.target.value)}
                                   size="small"
                                   fullWidth

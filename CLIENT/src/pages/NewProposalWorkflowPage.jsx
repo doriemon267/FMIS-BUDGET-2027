@@ -63,6 +63,7 @@ import { useDebouncedCallback } from '../hooks/useDebounce';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import { TableSkeleton } from '../components/common/LoadingSkeleton';
 import ErrorAlert from '../components/common/ErrorAlert';
+import { preventNegativeNumericKey, toNonNegativeNumber } from '../utils/preventNegativeInput';
 
 // Brand colors aligned to Transactions Processing UI
 const BRAND_COLORS = {
@@ -1269,8 +1270,8 @@ const NewProposalWorkflowPage = () => {
           setDetailsLoading(false);
         }
       }
-    } catch (error) {
-      handleApiError(error, toast, 'Saving changes');
+    } catch (_error) {
+      // Toast already shown by global api interceptor; no console logging
     } finally {
       setDetailsLoading(false);
     }
@@ -3636,21 +3637,14 @@ const NewProposalWorkflowPage = () => {
                                                           maximumFractionDigits: 2,
                                                         }
                                                       )}
+                                                      onKeyDown={preventNegativeNumericKey}
                                                       onChange={(e) => {
-                                                        const numValue =
-                                                          parseFloat(
-                                                            e.target.value.replace(
-                                                              /,/g,
-                                                              ""
-                                                            )
-                                                          );
-                                                        if (!isNaN(numValue)) {
-                                                          handleEditItemAmount(
-                                                            "income",
-                                                            globalIndex,
-                                                            numValue
-                                                          );
-                                                        }
+                                                        const numValue = toNonNegativeNumber(e.target.value);
+                                                        handleEditItemAmount(
+                                                          "income",
+                                                          globalIndex,
+                                                          numValue
+                                                        );
                                                       }}
                                                       inputProps={{
                                                         style: {
@@ -3886,11 +3880,10 @@ const NewProposalWorkflowPage = () => {
                                           value={(editedItem?.RATA || 0).toLocaleString("en-US", {
                                             minimumFractionDigits: 2,
                                           })}
+                                          onKeyDown={preventNegativeNumericKey}
                                           onChange={(e) => {
-                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
-                                            if (!isNaN(numValue)) {
-                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "RATA");
-                                            }
+                                            const numValue = toNonNegativeNumber(e.target.value);
+                                            handleEditItemAmount("personnel", globalIndex, numValue, null, "RATA");
                                           }}
                                           inputProps={{
                                             style: { textAlign: "right" },
@@ -4129,11 +4122,10 @@ const NewProposalWorkflowPage = () => {
                                           value={(editedItem?.RATA || 0).toLocaleString("en-US", {
                                             minimumFractionDigits: 2,
                                           })}
+                                          onKeyDown={preventNegativeNumericKey}
                                           onChange={(e) => {
-                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
-                                            if (!isNaN(numValue)) {
-                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "RATA");
-                                            }
+                                            const numValue = toNonNegativeNumber(e.target.value);
+                                            handleEditItemAmount("personnel", globalIndex, numValue, null, "RATA");
                                           }}
                                           inputProps={{
                                             style: { textAlign: "right" },
@@ -4372,11 +4364,10 @@ const NewProposalWorkflowPage = () => {
                                           value={(editedItem?.RATA || 0).toLocaleString("en-US", {
                                             minimumFractionDigits: 2,
                                           })}
+                                          onKeyDown={preventNegativeNumericKey}
                                           onChange={(e) => {
-                                            const numValue = parseFloat(e.target.value.replace(/,/g, ""));
-                                            if (!isNaN(numValue)) {
-                                              handleEditItemAmount("personnel", globalIndex, numValue, null, "RATA");
-                                            }
+                                            const numValue = toNonNegativeNumber(e.target.value);
+                                            handleEditItemAmount("personnel", globalIndex, numValue, null, "RATA");
                                           }}
                                           inputProps={{
                                             style: { textAlign: "right" },
@@ -4728,28 +4719,15 @@ const NewProposalWorkflowPage = () => {
                                                                     maximumFractionDigits: 2,
                                                                   }
                                                                 )}
-                                                                onChange={(
-                                                                  e
-                                                                ) => {
-                                                                  const numValue =
-                                                                    parseFloat(
-                                                                      e.target.value.replace(
-                                                                        /,/g,
-                                                                        ""
-                                                                      )
-                                                                    );
-                                                                  if (
-                                                                    !isNaN(
-                                                                      numValue
-                                                                    )
-                                                                  ) {
-                                                                    handleEditItemAmount(
-                                                                      "mooe",
-                                                                      globalIndex,
-                                                                      numValue,
-                                                                      "income"
-                                                                    );
-                                                                  }
+                                                                onKeyDown={preventNegativeNumericKey}
+                                                                onChange={(e) => {
+                                                                  const numValue = toNonNegativeNumber(e.target.value);
+                                                                  handleEditItemAmount(
+                                                                    "mooe",
+                                                                    globalIndex,
+                                                                    numValue,
+                                                                    "income"
+                                                                  );
                                                                 }}
                                                                 inputProps={{
                                                                   style: {
@@ -4798,28 +4776,15 @@ const NewProposalWorkflowPage = () => {
                                                                     maximumFractionDigits: 2,
                                                                   }
                                                                 )}
-                                                                onChange={(
-                                                                  e
-                                                                ) => {
-                                                                  const numValue =
-                                                                    parseFloat(
-                                                                      e.target.value.replace(
-                                                                        /,/g,
-                                                                        ""
-                                                                      )
-                                                                    );
-                                                                  if (
-                                                                    !isNaN(
-                                                                      numValue
-                                                                    )
-                                                                  ) {
-                                                                    handleEditItemAmount(
-                                                                      "mooe",
-                                                                      globalIndex,
-                                                                      numValue,
-                                                                      "subsidy"
-                                                                    );
-                                                                  }
+                                                                onKeyDown={preventNegativeNumericKey}
+                                                                onChange={(e) => {
+                                                                  const numValue = toNonNegativeNumber(e.target.value);
+                                                                  handleEditItemAmount(
+                                                                    "mooe",
+                                                                    globalIndex,
+                                                                    numValue,
+                                                                    "subsidy"
+                                                                  );
                                                                 }}
                                                                 inputProps={{
                                                                   style: {
@@ -5263,22 +5228,15 @@ const NewProposalWorkflowPage = () => {
                                                         maximumFractionDigits: 2,
                                                       }
                                                     )}
+                                                    onKeyDown={preventNegativeNumericKey}
                                                     onChange={(e) => {
-                                                      const numValue =
-                                                        parseFloat(
-                                                          e.target.value.replace(
-                                                            /,/g,
-                                                            ""
-                                                          )
-                                                        );
-                                                      if (!isNaN(numValue)) {
-                                                        handleEditItemAmount(
-                                                          "capitalOutlay",
-                                                          globalIndex,
-                                                          numValue,
-                                                          "income"
-                                                        );
-                                                      }
+                                                      const numValue = toNonNegativeNumber(e.target.value);
+                                                      handleEditItemAmount(
+                                                        "capitalOutlay",
+                                                        globalIndex,
+                                                        numValue,
+                                                        "income"
+                                                      );
                                                     }}
                                                     inputProps={{
                                                       style: {
@@ -5330,22 +5288,15 @@ const NewProposalWorkflowPage = () => {
                                                         maximumFractionDigits: 2,
                                                       }
                                                     )}
+                                                    onKeyDown={preventNegativeNumericKey}
                                                     onChange={(e) => {
-                                                      const numValue =
-                                                        parseFloat(
-                                                          e.target.value.replace(
-                                                            /,/g,
-                                                            ""
-                                                          )
-                                                        );
-                                                      if (!isNaN(numValue)) {
-                                                        handleEditItemAmount(
-                                                          "capitalOutlay",
-                                                          globalIndex,
-                                                          numValue,
-                                                          "subsidy"
-                                                        );
-                                                      }
+                                                      const numValue = toNonNegativeNumber(e.target.value);
+                                                      handleEditItemAmount(
+                                                        "capitalOutlay",
+                                                        globalIndex,
+                                                        numValue,
+                                                        "subsidy"
+                                                      );
                                                     }}
                                                     inputProps={{
                                                       style: {

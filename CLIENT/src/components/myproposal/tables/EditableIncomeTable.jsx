@@ -22,6 +22,7 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import { NumericFormat } from 'react-number-format';
 import { useUser } from '../../../context/UserContext';
+import { preventNegativeNumericKey, toNonNegativeNumber } from '../../../utils/preventNegativeInput';
 
 const NumericFormatInput = React.forwardRef(function NumericFormatInput(props, ref) {
   const { onChange, name, ...other } = props;
@@ -283,7 +284,7 @@ const EditableIncomeTable = ({ data = [], onChange, discountSettings = null, reg
   };
 
   const handleAmountChange = (index, value) => {
-    const numValue = parseFloat(value) || 0;
+    const numValue = toNonNegativeNumber(value);
     handleFieldChange(index, 'amount', numValue);
   };
 
@@ -464,6 +465,7 @@ const EditableIncomeTable = ({ data = [], onChange, discountSettings = null, reg
                         {canEditAmount ? (
                           <TextField
                             value={item.amount || 0}
+                            onKeyDown={preventNegativeNumericKey}
                             onChange={(e) => handleAmountChange(item.originalIndex, e.target.value)}
                             size="small"
                             variant="outlined"

@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const PersonnelServices = require("../models/PersonnelServices");
 const Settings = require("../models/Settings");
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
+const { validateNonNegativeInItems } = require('../utils/validateNonNegative');
 
 const getPersonnelByParams = async (req, res) => {
   try {
@@ -86,7 +87,10 @@ const bulkUpdatePersonnel = async (req, res) => {
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "Items array is required and must not be empty" });
     }
-
+    const nonNeg = validateNonNegativeInItems(items, ['Total', 'amount']);
+    if (!nonNeg.valid) {
+      return res.status(400).json({ message: nonNeg.message });
+    }
     const activeSettings = await Settings.findOne({ isActive: true });
     const setFY = activeSettings?.fiscalYear;
     const setBT = activeSettings?.budgetType;

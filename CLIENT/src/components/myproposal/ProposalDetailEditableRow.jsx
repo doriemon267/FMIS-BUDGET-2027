@@ -15,6 +15,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import api from '../../config/api';
 import { getStoredWorkflowRef } from '../../hooks/useWorkflowRef';
 import { toast } from 'react-toastify';
+import { preventNegativeNumericKey, toNonNegativeNumber } from '../../utils/preventNegativeInput';
 
 const ProposalDetailEditableRow = ({ 
   row, 
@@ -168,8 +169,10 @@ const ProposalDetailEditableRow = ({
               fullWidth
               variant="standard"
               type="number"
+              inputProps={{ min: 0 }}
               value={editedData.monthlySalary || 0}
-              onChange={(e) => handleChange('monthlySalary', parseFloat(e.target.value))}
+              onKeyDown={preventNegativeNumericKey}
+              onChange={(e) => handleChange('monthlySalary', toNonNegativeNumber(e.target.value))}
             />
           ) : (
             formatCurrency(row.monthlySalary)
@@ -181,8 +184,10 @@ const ProposalDetailEditableRow = ({
               fullWidth
               variant="standard"
               type="number"
+              inputProps={{ min: 0 }}
               value={editedData.annualSalary || 0}
-              onChange={(e) => handleChange('annualSalary', parseFloat(e.target.value))}
+              onKeyDown={preventNegativeNumericKey}
+              onChange={(e) => handleChange('annualSalary', toNonNegativeNumber(e.target.value))}
             />
           ) : (
             formatCurrency(row.annualSalary)
@@ -258,8 +263,10 @@ const ProposalDetailEditableRow = ({
               fullWidth
               variant="standard"
               type="number"
+              inputProps={{ min: 0 }}
               value={editedData.income || 0}
-              onChange={(e) => handleChange('income', parseFloat(e.target.value))}
+              onKeyDown={preventNegativeNumericKey}
+              onChange={(e) => handleChange('income', toNonNegativeNumber(e.target.value))}
               sx={{ textAlign: 'right' }}
             />
           ) : (
@@ -272,8 +279,10 @@ const ProposalDetailEditableRow = ({
               fullWidth
               variant="standard"
               type="number"
+              inputProps={{ min: 0 }}
               value={editedData.subsidy || 0}
-              onChange={(e) => handleChange('subsidy', parseFloat(e.target.value))}
+              onKeyDown={preventNegativeNumericKey}
+              onChange={(e) => handleChange('subsidy', toNonNegativeNumber(e.target.value))}
               sx={{ textAlign: 'right' }}
             />
           ) : (
@@ -286,8 +295,10 @@ const ProposalDetailEditableRow = ({
               fullWidth
               variant="standard"
               type="number"
+              inputProps={{ min: 0 }}
               value={editedData.amount || 0}
-              onChange={(e) => handleChange('amount', parseFloat(e.target.value))}
+              onKeyDown={preventNegativeNumericKey}
+              onChange={(e) => handleChange('amount', toNonNegativeNumber(e.target.value))}
               sx={{ textAlign: 'right' }}
             />
           ) : (
@@ -394,8 +405,10 @@ const ProposalDetailEditableRow = ({
               fullWidth
               variant="standard"
               type="number"
+              inputProps={{ min: 0 }}
               value={editedData.income || 0}
-              onChange={(e) => handleChange('income', parseFloat(e.target.value))}
+              onKeyDown={preventNegativeNumericKey}
+              onChange={(e) => handleChange('income', toNonNegativeNumber(e.target.value))}
               sx={{ textAlign: 'right' }}
             />
           ) : (
@@ -408,8 +421,10 @@ const ProposalDetailEditableRow = ({
               fullWidth
               variant="standard"
               type="number"
+              inputProps={{ min: 0 }}
               value={editedData.subsidy || 0}
-              onChange={(e) => handleChange('subsidy', parseFloat(e.target.value))}
+              onKeyDown={preventNegativeNumericKey}
+              onChange={(e) => handleChange('subsidy', toNonNegativeNumber(e.target.value))}
               sx={{ textAlign: 'right' }}
             />
           ) : (
@@ -422,8 +437,10 @@ const ProposalDetailEditableRow = ({
               fullWidth
               variant="standard"
               type="number"
+              inputProps={{ min: 0 }}
               value={editedData.cost || 0}
-              onChange={(e) => handleChange('cost', parseFloat(e.target.value))}
+              onKeyDown={preventNegativeNumericKey}
+              onChange={(e) => handleChange('cost', toNonNegativeNumber(e.target.value))}
               sx={{ textAlign: 'right' }}
             />
           ) : (
@@ -500,8 +517,10 @@ const ProposalDetailEditableRow = ({
               fullWidth
               variant="standard"
               type="number"
+              inputProps={{ min: 0 }}
               value={editedData.amount || 0}
-              onChange={(e) => handleChange('amount', parseFloat(e.target.value))}
+              onKeyDown={preventNegativeNumericKey}
+              onChange={(e) => handleChange('amount', toNonNegativeNumber(e.target.value))}
             />
           ) : (
             formatCurrency(row.amount)
