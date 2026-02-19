@@ -37,8 +37,8 @@ import {
   Visibility as VisibilityIcon,
   Assessment as AssessmentIcon,
   Schedule as ScheduleIcon,
-  AttachMoney as MoneyIcon,
 } from "@mui/icons-material";
+import PesoIcon from "../icons/PesoIcon";
 import { grey, green, blue, orange, red } from "@mui/material/colors";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
@@ -565,7 +565,7 @@ const OvertimePayCustomTable = ({
             <Card sx={{ backgroundColor: '#e3f2fd', borderLeft: '4px solid #2196f3' }}>
               <CardContent sx={{ py: 1 }}>
                 <Box display="flex" alignItems="center" gap={1}>
-                  <MoneyIcon sx={{ color: '#2196f3' }} />
+                  <PesoIcon sx={{ color: '#2196f3' }} />
                   <Box>
                     <Typography variant="body2" color="text.secondary">Total Amount</Typography>
                     <Typography variant="h6" fontWeight="bold">

@@ -1,5 +1,6 @@
 import { yupResolver } from "@hookform/resolvers/yup";
 import {
+  Box,
   Dialog,
   DialogActions,
   DialogContent,
@@ -8,6 +9,7 @@ import {
   Typography,
   TextField,
   Autocomplete,
+  useTheme,
 } from "@mui/material";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -26,7 +28,9 @@ const CategoryCustomCreateUpdateDialog = ({
   endpoint,
   parentClose,
   dataListName,
+  trigger,
 }) => {
+  const theme = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const isEditMode = Boolean(row);
   const queryClient = useQueryClient();
@@ -102,12 +106,15 @@ const CategoryCustomCreateUpdateDialog = ({
 
   const label = formatLabel(dataListName);
 
- // ✅ This stays outside — always render buttons
-return (
+  const addTrigger = !row && trigger ? (
+    <Box component="span" onClick={handleOpen} sx={{ display: "inline-flex", cursor: "pointer" }}>
+      {trigger}
+    </Box>
+  ) : null;
+
+  return (
     <div>
-      {!row ? (
-        <CustomButton onClick={handleOpen}>ADD</CustomButton>
-      ) : (
+      {!row ? (trigger ? addTrigger : <CustomButton onClick={handleOpen}>ADD</CustomButton>) : (
         <MenuItem
           onClick={handleOpen}
           disableRipple
@@ -119,15 +126,27 @@ return (
       )}
   
       {/* ✅ Only guard inside the dialog */}
-      <Dialog open={isOpen} onClose={handleClose} maxWidth="sm" fullWidth>
+      <Dialog
+        open={isOpen}
+        onClose={handleClose}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: "20px" } }}
+      >
         {(!schema || Object.keys(schema).length === 0) ? (
           <DialogContent>
             <Typography>Loading form fields...</Typography>
           </DialogContent>
         ) : (
           <>
-            <DialogTitle>
-              {isEditMode ? "Edit Entry" : "Add New Entry"}
+            <DialogTitle
+              sx={{
+                background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
+                color: "white",
+                py: 2.5,
+              }}
+            >
+              {isEditMode ? "Edit Category" : "Add New Category"}
             </DialogTitle>
             <DialogContent dividers>
               <Typography variant="body2" gutterBottom mb={2}>

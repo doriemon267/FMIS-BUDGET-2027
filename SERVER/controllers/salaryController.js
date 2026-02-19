@@ -1,5 +1,54 @@
 const SalaryGrade = require('../models/SalarySelection');
 const CPSCTemplate = require('../models/CPSCTemplate');
+/** List salary table (Permanent & Casual) with pagination, search, filter */
+exports.getSalaryTableList = async (req, res) => {
+  try {
+    const { limit = 20, offset = 0, q = '', salaryGrade = '', jobGrade = '', sortField = 'salary_grade', sortDir = 'asc' } = req.query;
+    const lim = Math.min(parseInt(limit, 10) || 20, 100);
+    const skip = parseInt(offset, 10) || 0;
+
+    const filter = {};
+    if (q && q.trim()) {
+      const qr = q.trim();
+      filter.$or = [
+        { salary_grade: { $regex: qr, $options: 'i' } },
+        { job_grade: { $regex: qr, $options: 'i' } },
+      ];
+    }
+    if (salaryGrade) filter.salary_grade = { $regex: salaryGrade, $options: 'i' };
+    if (jobGrade) filter.job_grade = { $regex: jobGrade, $options: 'i' };
+
+    const sort = { [sortField]: sortDir === 'desc' ? -1 : 1 };
+
+    const [docs, totalRecords] = await Promise.all([
+      SalaryGrade.find(filter).sort(sort).skip(skip).limit(lim).lean(),
+      SalaryGrade.countDocuments(filter),
+    ]);
+
+    const rows = docs.map((d) => {
+      const rates = d.rates instanceof Map ? d.rates : (d.rates && typeof d.rates === 'object' ? new Map(Object.entries(d.rates)) : new Map());
+      const step1 = rates.get('1') ?? rates.get(1);
+      const step2 = rates.get('2') ?? rates.get(2);
+      const step3 = rates.get('3') ?? rates.get(3);
+      const step4 = rates.get('4') ?? rates.get(4);
+      const step5 = rates.get('5') ?? rates.get(5);
+      const step6 = rates.get('6') ?? rates.get(6);
+      const step7 = rates.get('7') ?? rates.get(7);
+      const step8 = rates.get('8') ?? rates.get(8);
+      return {
+        _id: d._id,
+        salaryGrade: d.salary_grade || '',
+        jobGrade: d.job_grade || '',
+        step1, step2, step3, step4, step5, step6, step7, step8,
+      };
+    });
+
+    res.status(200).json({ rows, totalRecords });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 // Get all Salary Grades
 exports.getSalaryGrades = async (req, res) => {
   try {

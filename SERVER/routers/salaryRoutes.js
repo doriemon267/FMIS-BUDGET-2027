@@ -12,6 +12,7 @@ const salaryController = require('../controllers/salaryController');
 salaryRouter.use(tokenMiddleware);
 
 // ==================== Existing Salary Routes ====================
+salaryRouter.get('/salary-grades/table', salaryController.getSalaryTableList);
 salaryRouter.get('/salary-grades', salaryController.getSalaryGrades);
 salaryRouter.get('/job-grades/:salary_grade', salaryController.getJobGrades);
 salaryRouter.get('/steps/:job_grade', salaryController.getSteps);

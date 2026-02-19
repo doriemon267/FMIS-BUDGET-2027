@@ -1,49 +1,87 @@
 const mongoose = require('mongoose');
+// Ensure CPCS models are registered when this module is used (e.g. bulk upload)
+require('../models/CPCSSalarySettings');
+require('../models/CPCSSalaryTable');
+require('../models/FourthTrancheCosTable');
 
 /**
- * Auto-compute salary rate based on SG, JG, and Step
+ * Compute salary rate. COS: Fourth-Tranche PDF table. PERMANENT/CASUAL: CPCS II / SalarySelection.
+ */
+const computeSalaryRateFromCPCS = async (sg, jg, step, statusOfAppointment, employeeStatus, settings) => {
+  try {
+    const stepNum = parseInt(step, 10);
+    if (!stepNum || stepNum < 1 || stepNum > 8) return null;
+
+    const appointment = (statusOfAppointment || '').toString().toUpperCase();
+    const cosUsesTable = settings && (settings.cosUsesCPCSIIRate !== false) && settings.useCPCSForEmployeeAdd;
+
+    // COS: uses Fourth-Tranche PDF table (Jan 1 2019) — Salary Grade + Step
+    if (appointment === 'COS' && cosUsesTable && sg && stepNum) {
+      const FourthTrancheCosTable = mongoose.model('FourthTrancheCosTable');
+      const row = await FourthTrancheCosTable.findOne({ salaryGrade: parseInt(sg, 10) }).lean();
+      if (row && row[`step${stepNum}`] != null) return row[`step${stepNum}`];
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error computing salary rate from CPCS II Rate:', error);
+    return null;
+  }
+};
+
+/**
+ * Auto-compute salary rate.
+ * COS: SSL4 table (hiwalay). PERMANENT at CASUAL: shared SalarySelection table.
  * @param {number} sg - Salary Grade
  * @param {string} jg - Job Grade
  * @param {number} step - Step
  * @param {string} statusOfAppointment - Employment status (PERMANENT, CASUAL, COS)
+ * @param {string} [employeeStatus] - Active | Inactive (for CPCS: inactive may use CPCS 1)
  * @returns {Promise<number|null>} Computed rate or null if not found
  */
-const computeSalaryRate = async (sg, jg, step, statusOfAppointment) => {
+const computeSalaryRate = async (sg, jg, step, statusOfAppointment, employeeStatus) => {
   try {
-    const status = statusOfAppointment ? statusOfAppointment.toString().toUpperCase() : '';
+    const CPCSSalarySettings = mongoose.model('CPCSSalarySettings');
+    const settings = await CPCSSalarySettings.findOne().lean();
+    if (settings && settings.useCPCSForEmployeeAdd) {
+      const rate = await computeSalaryRateFromCPCS(sg, jg, step, statusOfAppointment, employeeStatus, settings);
+      if (rate != null) return rate;
+    }
 
-    // For PERMANENT employees: use SG and Step
-    if (status === 'PERMANENT' && sg && step) {
+    const status = statusOfAppointment ? statusOfAppointment.toString().toUpperCase() : '';
+    const cpcs1Types = (settings && settings.cpcs1AppointmentTypes) || ['CASUAL'];
+    const cpcs2Types = (settings && settings.cpcs2AppointmentTypes) || ['PERMANENT'];
+    const useCPCS2 = cpcs2Types.includes(status);
+    const useCPCS1 = cpcs1Types.includes(status);
+
+    // CPCS 2 (Salary Grade + Step): PERMANENT or CASUAL when assigned to CPCS 2
+    if (useCPCS2 && sg && step) {
       const SalaryGrade = mongoose.model('SalaryGrade');
       const salaryGrade = await SalaryGrade.findOne({ salary_grade: sg.toString() });
-
       if (salaryGrade && salaryGrade.rates && salaryGrade.rates.get(step.toString())) {
         return salaryGrade.rates.get(step.toString());
       }
     }
 
-    // For CASUAL employees: use JG and Step
-    if (status === 'CASUAL' && jg && step) {
+    // CPCS 1 (Job Grade + Step): CASUAL or PERMANENT when assigned to CPCS 1
+    if (useCPCS1 && jg && step) {
       const SalaryGrade = mongoose.model('SalaryGrade');
-      // Clean JG format (remove JG- prefix if present)
       const cleanJG = jg.toString().replace(/^JG-?/i, '');
       const rateData = await SalaryGrade.findOne({ job_grade: cleanJG });
-
       if (rateData && rateData.rates && rateData.rates.get(step.toString())) {
         return rateData.rates.get(step.toString());
       }
     }
 
-    // For COS employees: don't auto-compute (manual entry)
+    // For COS employees: don't auto-compute (manual entry) when not using CPCS
     if (status === 'COS') {
-      return null; // COS rates are manually entered
+      return null;
     }
 
-    // Fallback for other statuses or missing status
+    // Fallback
     if (sg && step) {
       const SalaryGrade = mongoose.model('SalaryGrade');
       const salaryGrade = await SalaryGrade.findOne({ salary_grade: sg.toString() });
-
       if (salaryGrade && salaryGrade.rates && salaryGrade.rates.get(step.toString())) {
         return salaryGrade.rates.get(step.toString());
       }
@@ -244,7 +282,13 @@ const validateAndProcessEmployeeRecord = async (record, activeRegion, fiscalYear
   // Auto-compute or validate Rate
   let computedRate = null;
   if (!isCOS && record.SG && record.Step) {
-    computedRate = await computeSalaryRate(record.SG, record.JG, record.Step, record.StatusOfAppointment);
+    computedRate = await computeSalaryRate(
+      record.SG,
+      record.JG,
+      record.Step,
+      record.StatusOfAppointment,
+      record.Status
+    );
 
     if (computedRate) {
       if (record.Rate) {
@@ -301,5 +345,6 @@ const validateAndProcessEmployeeRecord = async (record, activeRegion, fiscalYear
 
 module.exports = {
   computeSalaryRate,
+  computeSalaryRateFromCPCS,
   validateAndProcessEmployeeRecord
 };

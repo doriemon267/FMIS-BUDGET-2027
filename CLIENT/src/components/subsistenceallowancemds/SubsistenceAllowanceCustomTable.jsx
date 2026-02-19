@@ -32,10 +32,10 @@ import {
   GetApp as GetAppIcon,
   Visibility as VisibilityIcon,
   Assessment as AssessmentIcon,
-  AttachMoney as MoneyIcon,
   People as PeopleIcon,
   Restaurant as RestaurantIcon,
 } from "@mui/icons-material";
+import PesoIcon from "../icons/PesoIcon";
 import { blueGrey, green, grey, blue, orange } from "@mui/material/colors";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs from "dayjs";
@@ -567,7 +567,7 @@ const CustomTable = ({
             >
               <CardContent sx={{ py: 1 }}>
                 <Box display="flex" alignItems="center" gap={1}>
-                  <MoneyIcon 
+                  <PesoIcon 
                     sx={{ 
                       color: '#2196f3',
                       fontSize: '2rem',

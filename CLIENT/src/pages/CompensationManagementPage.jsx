@@ -34,7 +34,6 @@ import {
   MdLink,
   MdRefresh,
   MdMoreVert,
-  MdAttachMoney,
   MdWarning,
   MdCalendarToday
 } from "react-icons/md";
@@ -43,6 +42,7 @@ import api from "../config/api";
 import { toast } from "react-hot-toast";
 import CompensationStandaloneDialog from "../components/settings/CompensationStandaloneDialog";
 import LinkCompensationToFiscalYearsDialog from "../components/settings/LinkCompensationToFiscalYearsDialog";
+import PesoIcon from "../components/icons/PesoIcon";
 
 const CompensationManagementPage = () => {
   const theme = useTheme();
@@ -224,7 +224,7 @@ const CompensationManagementPage = () => {
         <Stack direction="row" justifyContent="space-between" alignItems="center">
           <Box>
             <Typography variant="h4" fontWeight="bold" gutterBottom sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <MdAttachMoney size={32} />
+              <PesoIcon sx={{ fontSize: 32 }} />
               Compensation Management
             </Typography>
             <Typography variant="body1" sx={{ opacity: 0.9 }}>

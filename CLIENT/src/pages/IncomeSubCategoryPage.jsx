@@ -10,7 +10,8 @@ import {
   Tooltip,
   alpha,
 } from "@mui/material";
-import { MdAttachMoney, MdCategory } from "react-icons/md";
+import { MdCategory } from "react-icons/md";
+import PesoIcon from "../components/icons/PesoIcon";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import IncomeSubCategoriesCustomPage from "../components/incomesubcategories/IncomeSubCategoriesCustomPage";
@@ -144,7 +145,7 @@ const IncomeSubCategoryPage = () => {
             color: theme.palette.info.main,
           },
         }}
-        icon={<MdAttachMoney />}
+        icon={<PesoIcon />}
       >
         <Typography variant="body2" fontWeight={500}>
           Create income subcategories here, then use them in{" "}

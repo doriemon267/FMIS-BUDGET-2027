@@ -1441,7 +1441,7 @@ const NewProposalWorkflowPage = () => {
       ) {
         actions.push(
           {
-            label: "Approve & Forward to Budget Planning Analyst",
+            label: "Approve & Forward to Budget/Planning Analyst",
             value: "approver-approve-forward-analyst",
             icon: <SendIcon />,
             color: "primary",
@@ -1458,8 +1458,8 @@ const NewProposalWorkflowPage = () => {
       // Super admin can do analyst actions
       if (
         [
-          "Forwarded to Budget Planning Analyst",
-          "Returned to Budget Planning Analyst",
+          "Forwarded to Budget/Planning Analyst",
+          "Returned to Budget/Planning Analyst",
           "Returned",
           "FORWARDED_TO_BRD_ANALYST",
           "RETURNED_TO_PLANNING_ANALYST",
@@ -1619,7 +1619,7 @@ const NewProposalWorkflowPage = () => {
     ) {
       actions.push(
         {
-          label: "Approve & Forward to Budget Planning Analyst",
+          label: "Approve & Forward to Budget/Planning Analyst",
           value: "approver-approve-forward-analyst",
           icon: <SendIcon />,
           color: "primary",
@@ -1637,8 +1637,8 @@ const NewProposalWorkflowPage = () => {
     // BUDGET PLANNING ANALYST actions
     if (
       userRoles.includes("BUDGET PLANNING ANALYST") &&
-      (currentStatus === "Forwarded to Budget Planning Analyst" ||
-        currentStatus === "Returned to Budget Planning Analyst" ||
+      (currentStatus === "Forwarded to Budget/Planning Analyst" ||
+        currentStatus === "Returned to Budget/Planning Analyst" ||
         currentStatus === "Returned" ||
         currentStatus === "FORWARDED_TO_BRD_ANALYST" ||
         currentStatus === "RETURNED_TO_PLANNING_ANALYST")
@@ -1676,7 +1676,7 @@ const NewProposalWorkflowPage = () => {
           color: "primary",
         },
         {
-          label: "Return to Budget Planning Analyst",
+          label: "Return to Budget/Planning Analyst",
           value: "officer-return",
           icon: <RejectIcon />,
           color: "warning",
@@ -1724,14 +1724,14 @@ const NewProposalWorkflowPage = () => {
     DRAFT: "Draft",
     FORWARDED_TO_REVIEWER: "Forwarded to Reviewer",
     FORWARDED_TO_APPROVER: "Forwarded to Approver",
-    FORWARDED_TO_BRD_ANALYST: "Forwarded to Budget Planning Analyst",
+    FORWARDED_TO_BRD_ANALYST: "Forwarded to Budget/Planning Analyst",
     FORWARDED_TO_BRD_OFFICER: "Forwarded to Budget Officer",
     FORWARDED_TO_BRD_MANAGER: "Forwarded to Overall Budget Approver",
     FINALIZED: "Finalized",
     RETURNED_TO_PREPARER: "Returned to Preparer",
     RETURNED_TO_REVIEWER: "Returned to Reviewer",
     RETURNED_TO_APPROVER: "Returned to Approver",
-    RETURNED_TO_PLANNING_ANALYST: "Returned to Budget Planning Analyst",
+    RETURNED_TO_PLANNING_ANALYST: "Returned to Budget/Planning Analyst",
     RETURNED_TO_OFFICER: "Returned to Budget Officer",
     RETURNED: "Returned",
   };
@@ -1992,10 +1992,10 @@ const NewProposalWorkflowPage = () => {
                 // Normalize both into a stable enum-style key to let the UI map to icons & labels consistently.
                 const normalizeStatusKey = (s) => {
                   const mapping = {
-                    'Forwarded to Budget Planning Analyst': 'FORWARDED_TO_BRD_ANALYST',
+                    'Forwarded to Budget/Planning Analyst': 'FORWARDED_TO_BRD_ANALYST',
                     'Forwarded to Budget Officer': 'FORWARDED_TO_BRD_OFFICER',
                     'Forwarded to Overall Budget Approver': 'FORWARDED_TO_BRD_MANAGER',
-                    'Returned to Budget Planning Analyst': 'RETURNED_TO_PLANNING_ANALYST',
+                    'Returned to Budget/Planning Analyst': 'RETURNED_TO_PLANNING_ANALYST',
                     'Returned to Budget Officer': 'RETURNED_TO_OFFICER',
                     'Finalized': 'FINALIZED',
                     'Draft': 'DRAFT',
@@ -3117,7 +3117,7 @@ const NewProposalWorkflowPage = () => {
                   {(() => {
                     const st = selectedProposal?.status;
                     const brdOrFinal = [
-                      "FORWARDED_TO_BRD_ANALYST", "Forwarded to Budget Planning Analyst",
+                      "FORWARDED_TO_BRD_ANALYST", "Forwarded to Budget/Planning Analyst",
                       "FORWARDED_TO_BRD_OFFICER", "Forwarded to Budget Officer",
                       "FORWARDED_TO_BRD_MANAGER", "Forwarded to Overall Budget Approver", "Forwarded to Manager",
                       "FINALIZED", "Finalized",

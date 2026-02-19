@@ -412,7 +412,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           allowOptionalComment: true
         });
         actions.push({
-          label: 'Approve & Forward to Budget Approver',
+          label: 'Approve/Forward to Budget Approver',
           action: 'reviewer-approve-forward-approver',
           color: 'bg-green-500 hover:bg-green-600',
           icon: '✅',

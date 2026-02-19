@@ -33,7 +33,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-hot-toast";
 import CloseIcon from "@mui/icons-material/Close";
 import BadgeIcon from "@mui/icons-material/Badge";
-import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
+import PesoIcon from "../icons/PesoIcon";
 import EditIcon from "@mui/icons-material/Edit";
 import api from "../../config/api";
 import CustomTextField from "../../global/components/CustomTextField";
@@ -1149,7 +1149,7 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                           InputProps={{
                             startAdornment: (
                               <InputAdornment position="start">
-                                <AttachMoneyIcon color="action" />
+                                <PesoIcon sx={{ color: "action.main" }} />
                               </InputAdornment>
                             ),
                           }}

@@ -142,6 +142,8 @@ const departmentRouter = require("./routers/Department");
 const employeeRouter = require("./routers/employeeListRoutes");
 const statusRouter = require("./routers/Status");
 const salaryRouter = require("./routers/salaryRoutes");
+const cpcsSalaryRoutes = require("./routers/cpcsSalaryRoutes");
+const cosSalaryRoutes = require("./routers/cosSalaryRoutes");
 const mooeRoutes = require("./routers/mooeRoutes");
 const fiscalYearRoutes = require("./routers/fiscalYearRoutes");
 const personnelServicesRouter = require("./routers/personnelServices_router");
@@ -879,6 +881,8 @@ app.use("/uploads", checkToken, express.static(path.join(__dirname, "uploads")))
 app.use(apiPrefix, employeeRouter);
 app.use(apiPrefix, statusRouter);
 app.use(apiPrefix, salaryRouter);
+app.use(`${apiPrefix}/cpcs-salary`, cpcsSalaryRoutes);
+app.use(`${apiPrefix}/cos-salary`, cosSalaryRoutes);
 // Routes
 app.use(apiPrefix, authRouter);
 app.use(apiPrefix, personnelRoutes);

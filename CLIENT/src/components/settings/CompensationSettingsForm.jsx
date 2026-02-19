@@ -31,7 +31,6 @@ import api from "../../config/api";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import {
-  MdAttachMoney,
   MdAccountBalance,
   MdAccessTime,
   MdEmojiEvents,
@@ -39,6 +38,7 @@ import {
   MdCalendarToday,
   MdCategory
 } from "react-icons/md";
+import PesoIcon from "../../icons/PesoIcon";
 
 // Component for numeric input formatting (for monetary values)
 const NumberFormatCustom = React.forwardRef(function NumberFormatCustom(props, ref) {
@@ -292,7 +292,7 @@ const CompensationSection = ({ control, errors }) => {
     { name: "earnedLeaves", label: "Earned Leaves (Days)", special: true },
   ];
   return (
-    <AccordionSection title="Compensation & Allowances" icon={<MdAttachMoney />}>
+    <AccordionSection title="Compensation & Allowances" icon={<PesoIcon />}>
       <Grid container spacing={3}>
         {fields.map(({ name, label, special }) => (
           <Grid item xs={12} sm={6} key={name}>

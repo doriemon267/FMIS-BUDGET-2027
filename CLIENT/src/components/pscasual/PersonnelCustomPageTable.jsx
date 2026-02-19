@@ -46,7 +46,7 @@ import PrintIcon from '@mui/icons-material/Print';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import GetAppIcon from '@mui/icons-material/GetApp';
 import EditIcon from '@mui/icons-material/Edit';
-import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined';
+import PesoIcon from '../icons/PesoIcon';
 import HighlightOffIcon from '@mui/icons-material/HighlightOff';
 import { useWorkflowRef } from "../../hooks/useWorkflowRef";
 import { updatePersonnelChargedToIncome } from "../../services/personnelSubsidyService";
@@ -845,7 +845,7 @@ const PSCasualCustomPageTable = ({
             <Button
               variant="outlined"
               color="info"
-              startIcon={<PaidOutlinedIcon />}
+              startIcon={<PesoIcon />}
               disabled={!selectedRows.length}
               onClick={() => handleOpenChargedToIncomeDialog("tag")}
             >

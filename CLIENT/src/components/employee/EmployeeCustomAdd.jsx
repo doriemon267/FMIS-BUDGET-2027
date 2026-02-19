@@ -44,7 +44,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import BadgeIcon from "@mui/icons-material/Badge";
 import WorkIcon from "@mui/icons-material/Work";
-import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
+import PesoIcon from "../icons/PesoIcon";
 import { useThemeContext } from "../../context/ThemeContext";
 
 // Styled components
@@ -84,12 +84,31 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
   const [activeSettings, setActiveSettings] = useState(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [formDataToSave, setFormDataToSave] = useState(null);
+  const [useCPCSForEmployeeAdd, setUseCPCSForEmployeeAdd] = useState(false);
+  const [cpcs1Types, setCpcs1Types] = useState(["CASUAL"]);
+  const [cpcs2Types, setCpcs2Types] = useState(["PERMANENT"]);
   // Get user's hierarchical access information
   const userAccessLevel = currentUser?.hierarchicalAccess?.scope || 'REGION';
   const rawDivision = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
   const userDivision = typeof rawDivision === "string" ? rawDivision : rawDivision?.divisionName;
   const userDepartment = currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
   const userRegion = currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
+
+  // Fetch CPCS salary setting when add dialog opens (for rate lookup)
+  useEffect(() => {
+    if (!isOpen) return;
+    api.get("/cpcs-salary/use-cpcs")
+      .then((res) => {
+        setUseCPCSForEmployeeAdd(res.data?.useCPCSForEmployeeAdd === true);
+        setCpcs1Types(Array.isArray(res.data?.cpcs1AppointmentTypes) ? res.data.cpcs1AppointmentTypes : ["CASUAL"]);
+        setCpcs2Types(Array.isArray(res.data?.cpcs2AppointmentTypes) ? res.data.cpcs2AppointmentTypes : ["PERMANENT"]);
+      })
+      .catch(() => {
+        setUseCPCSForEmployeeAdd(false);
+        setCpcs1Types(["CASUAL"]);
+        setCpcs2Types(["PERMANENT"]);
+      });
+  }, [isOpen]);
 
   // Debug user context
   useEffect(() => {
@@ -860,18 +879,19 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
           // Make DateOfAppointment and Status optional for now
         ];
       case 2: // Salary Information
-        // Field requirements depend on StatusOfAppointment
+        // Field requirements depend on StatusOfAppointment and CPCS assignment
         const status = watchedValues.StatusOfAppointment?.toString().toUpperCase();
         const isCOS = status === 'COS';
         const isPermanentOrContractual = status === 'PERMANENT' || status === 'CONTRACTUAL';
         const isCasual = status === 'CASUAL';
+        const casualUsesCPCS2 = isCasual && cpcs2Types.includes(status);
         
         if (isCOS) {
           return ["Rate"]; // Only Rate is required for COS
-        } else if (isPermanentOrContractual) {
-          return ["SG", "Step", "Rate"]; // SG, Step, Rate required for Permanent/Contractual
+        } else if (isPermanentOrContractual || casualUsesCPCS2) {
+          return ["SG", "Step", "Rate"]; // SG, Step, Rate for Permanent/Contractual or Casual (CPCS 2)
         } else if (isCasual) {
-          return ["JG", "Step", "Rate"]; // JG, Step, Rate required for Casual
+          return ["JG", "Step", "Rate"]; // JG, Step, Rate for Casual (CPCS 1)
         } else {
           return ["Step", "Rate"]; // Default fallback
         }
@@ -1338,10 +1358,12 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                   </Typography>
 
                   <Grid container spacing={2}>
-                    {/* Show SG for Permanent/Contractual employees only */}
-                    {watchedValues.StatusOfAppointment &&
-                     (watchedValues.StatusOfAppointment.toString().toUpperCase() === 'PERMANENT' ||
-                      watchedValues.StatusOfAppointment.toString().toUpperCase() === 'CONTRACTUAL') && (
+                    {/* Show SG for Permanent/Contractual or CASUAL (CPCS 2) employees */}
+                    {watchedValues.StatusOfAppointment && (() => {
+                      const st = watchedValues.StatusOfAppointment.toString().toUpperCase();
+                      const showSG = st === 'PERMANENT' || st === 'CONTRACTUAL' || (st === 'CASUAL' && cpcs2Types.includes('CASUAL'));
+                      return showSG;
+                    })() && (
                       <Grid item xs={12} sm={6}>
                         <CustomTextField
                           fieldName="SG"
@@ -1359,7 +1381,7 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                           InputProps={{
                             startAdornment: (
                               <InputAdornment position="start">
-                                <AttachMoneyIcon color="action" />
+                                <PesoIcon sx={{ color: "action.main" }} />
                               </InputAdornment>
                             ),
                           }}
@@ -1368,13 +1390,15 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                             setValue("SG", sgValue);
 
                             const status = watchedValues.StatusOfAppointment?.toString().toUpperCase();
-                            if (status !== 'PERMANENT' && status !== 'CONTRACTUAL') return;
+                            const useSG = status === 'PERMANENT' || status === 'CONTRACTUAL' || (status === 'CASUAL' && cpcs2Types.includes('CASUAL'));
+                            if (!useSG) return;
 
                             if (sgValue) {
                               try {
-                                const response = await api.get(
-                                  `salary-grades?salary_grade=${sgValue}`
-                                );
+                                const url = useCPCSForEmployeeAdd
+                                  ? `cpcs-salary/grades?salary_grade=${sgValue}`
+                                  : `salary-grades?salary_grade=${sgValue}`;
+                                const response = await api.get(url);
                                 const salaryGrades = response.data.grades?.[0];
 
                                 if (salaryGrades) {
@@ -1409,9 +1433,10 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                         />
                       </Grid>
                     )}
-                    {/* Only show JG for Casual employees */}
+                    {/* Show JG for CASUAL (CPCS 1) only - when CASUAL uses Job Grade */}
                     {watchedValues.StatusOfAppointment &&
-                     watchedValues.StatusOfAppointment.toString().toUpperCase() === 'CASUAL' && (
+                     watchedValues.StatusOfAppointment.toString().toUpperCase() === 'CASUAL' &&
+                     cpcs1Types.includes('CASUAL') && (
                       <Grid item xs={12} sm={6}>
                         <CustomTextField
                           fieldName="JG"
@@ -1436,9 +1461,10 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                               }
 
                               try {
-                                const response = await api.get(
-                                  `/rate-by-job-grade-and-step/${jgValue}/${stepValue}`
-                                );
+                                const path = useCPCSForEmployeeAdd
+                                  ? `/cpcs-salary/rate-by-job-grade-and-step/${jgValue}/${stepValue}`
+                                  : `/rate-by-job-grade-and-step/${jgValue}/${stepValue}`;
+                                const response = await api.get(path);
                                 const rateData = response.data;
 
                                 if (rateData && rateData.rate) {
@@ -1479,8 +1505,9 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                           onChange={async (value) => {
                             setValue("Step", value);
                             const status = watchedValues.StatusOfAppointment?.toString().toUpperCase();
+                            const casualUsesSG = status === 'CASUAL' && cpcs2Types.includes('CASUAL');
 
-                            if (status === 'PERMANENT' || status === 'CONTRACTUAL') {
+                            if (status === 'PERMANENT' || status === 'CONTRACTUAL' || casualUsesSG) {
                                 if (salaryData && value) {
                                     const rate = salaryData.rates[value] || "";
                                     setValue("Rate", rate);
@@ -1489,9 +1516,10 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                                 const jgValue = getValues("JG");
                                 if (jgValue && value) {
                                     try {
-                                        const response = await api.get(
-                                            `/rate-by-job-grade-and-step/${jgValue}/${value}`
-                                        );
+                                        const path = useCPCSForEmployeeAdd
+                                            ? `/cpcs-salary/rate-by-job-grade-and-step/${jgValue}/${value}`
+                                            : `/rate-by-job-grade-and-step/${jgValue}/${value}`;
+                                        const response = await api.get(path);
                                         const rateData = response.data;
                                         if (rateData && rateData.rate) {
                                             setValue("Rate", rateData.rate);

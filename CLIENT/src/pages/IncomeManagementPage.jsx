@@ -31,7 +31,8 @@ import {
   FormGroup,
   FormControlLabel
 } from "@mui/material";
-import { MdCategory, MdList, MdAttachMoney, MdAdd, MdEdit, MdDelete } from "react-icons/md";
+import { MdCategory, MdList, MdAdd, MdEdit, MdDelete } from "react-icons/md";
+import PesoIcon from "../components/icons/PesoIcon";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import CategoryIcon from "@mui/icons-material/Category";
@@ -611,7 +612,7 @@ const IncomeManagementPage = () => {
                 justifyContent: 'center'
               }}
             >
-              <MdAttachMoney size={32} />
+              <PesoIcon sx={{ fontSize: 32 }} />
             </Box>
             <Box>
               <Typography variant="h4" fontWeight="bold" gutterBottom sx={{ mb: 0.5 }}>
@@ -852,7 +853,7 @@ const IncomeManagementPage = () => {
           },
           py: 2
         }}
-        icon={<MdAttachMoney />}
+        icon={<PesoIcon />}
       >
         <Typography variant="body1" fontWeight={600} sx={{ mb: 1 }}>
           Income Management System Guidelines

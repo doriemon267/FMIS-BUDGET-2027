@@ -35,9 +35,9 @@ import formatCurrency from "../../utils/formatCurrency";
 import { formatDateToMDY } from "../../utils/formatDate";
 import { 
   Assessment as AssessmentIcon,
-  AttachMoney as MoneyIcon,
   Gavel as GavelIcon,
 } from "@mui/icons-material";
+import PesoIcon from "../icons/PesoIcon";
 
 const CustomTable = ({
   columns,
@@ -364,7 +364,7 @@ const CustomTable = ({
               >
                 <CardContent sx={{ py: 1 }}>
                   <Box display="flex" alignItems="center" gap={1}>
-                    <MoneyIcon 
+                    <PesoIcon 
                       sx={{ 
                         color: '#2196f3',
                         fontSize: '2rem',

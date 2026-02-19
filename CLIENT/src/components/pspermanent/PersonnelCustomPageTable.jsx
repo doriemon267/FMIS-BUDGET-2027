@@ -36,7 +36,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import GetAppIcon from '@mui/icons-material/GetApp';
 import PrintIcon from '@mui/icons-material/Print';
-import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined';
+import PesoIcon from '../icons/PesoIcon';
 import HighlightOffIcon from '@mui/icons-material/HighlightOff';
 import { useQueryClient } from "@tanstack/react-query";
 import { invalidateDataList } from "../../utils/queryClientHelpers";
@@ -879,7 +879,7 @@ const PSPCustomPageTable = ({
             <Button
               variant="outlined"
               color="info"
-              startIcon={<PaidOutlinedIcon />}
+              startIcon={<PesoIcon />}
               disabled={!selectedRows.length}
               onClick={() => handleOpenChargedToIncomeDialog("tag")}
             >

@@ -26,11 +26,11 @@ import {
 } from "@mui/material";
 import {
   MdGrade,
-  MdAttachMoney,
   MdSave,
   MdAdd,
   MdCalendarToday
 } from "react-icons/md";
+import PesoIcon from "../icons/PesoIcon";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
@@ -341,7 +341,7 @@ const EnhancedRataDialog = ({ open, onClose, editData = null }) => {
                       startAdornment: (
                         <InputAdornment position="start">
                           <Box sx={{ color: '#264524', display: 'flex', alignItems: 'center' }}>
-                            <MdAttachMoney />
+                            <PesoIcon />
                           </Box>
                         </InputAdornment>
                       ),
@@ -382,7 +382,7 @@ const EnhancedRataDialog = ({ open, onClose, editData = null }) => {
                       startAdornment: (
                         <InputAdornment position="start">
                           <Box sx={{ color: '#264524', display: 'flex', alignItems: 'center' }}>
-                            <MdAttachMoney />
+                            <PesoIcon />
                           </Box>
                         </InputAdornment>
                       ),
@@ -417,7 +417,7 @@ const EnhancedRataDialog = ({ open, onClose, editData = null }) => {
                   startAdornment: (
                     <InputAdornment position="start">
                       <Box sx={{ color: '#264524', display: 'flex', alignItems: 'center' }}>
-                        <MdAttachMoney />
+                        <PesoIcon />
                       </Box>
                     </InputAdornment>
                   ),

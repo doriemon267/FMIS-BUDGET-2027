@@ -43,7 +43,6 @@ import {
   MoreVert,
   TrendingUp,
   AccountBalance,
-  Paid,
   Save,
   Add,
   Close,
@@ -53,6 +52,7 @@ import {
   Clear,
   FilterList,
 } from "@mui/icons-material";
+import PesoIcon from "../icons/PesoIcon";
 import { useUser } from "../../context/UserContext";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -444,7 +444,7 @@ const CapitalOutlayTableEnhanced = ({ onDataChange, disableIncomeInputs = false,
       label: "Grand total",
       value: calculateTotals.cost,
       helper: "Income + subsidy",
-      icon: Paid,
+      icon: PesoIcon,
       color: "warning.main",
       formatter: formatNumber,
     },

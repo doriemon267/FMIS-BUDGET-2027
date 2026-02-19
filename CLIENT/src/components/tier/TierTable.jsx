@@ -97,18 +97,28 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
   const handleTier1Change = (value) => {
     if (readOnly) return;
     const num = value === '' ? 0 : Number(value);
+    // When clearing (''), only update that field so user can set back to 0 without value jumping to other field
+    if (value === '') {
+      handleTierInputChange(lineItemId, { tier1: '' }, name);
+      return;
+    }
     const tier2 = Math.max(0, rowTotal - num);
-    handleTierInputChange(lineItemId, { tier1: value === '' ? '' : num, tier2 }, name);
+    handleTierInputChange(lineItemId, { tier1: num, tier2 }, name);
   };
   const handleTier2Change = (value) => {
     if (readOnly) return;
     const num = value === '' ? 0 : Number(value);
     if (disableTier2Balance) {
       handleTierInputChange(lineItemId, { tier2: value === '' ? '' : num }, name);
-    } else {
-      const tier1 = Math.max(0, rowTotal - num);
-      handleTierInputChange(lineItemId, { tier2: value === '' ? '' : num, tier1 }, name);
+      return;
     }
+    // When clearing (''), only update that field so user can set back to 0 without value jumping to other field
+    if (value === '') {
+      handleTierInputChange(lineItemId, { tier2: '' }, name);
+      return;
+    }
+    const tier1 = Math.max(0, rowTotal - num);
+    handleTierInputChange(lineItemId, { tier2: num, tier1 }, name);
   };
 
   const tier1Value = tier1Focused ? tier1Raw : tier1DisplayFormatted;
@@ -135,14 +145,17 @@ const SubRow = ({ item, name, rowIndex, allTierInputs, handleTierInputChange, de
       : (displayTier2 === 0 ? '' : String(displayTier2));
     setTier2Raw(raw);
   };
-  const onTier1Blur = () => {
+  const onTier1Blur = (e) => {
     setTier1Focused(false);
-    const parsed = parseAmountFromInput(tier1Raw);
+    // Use e.target.value to avoid stale state when user clears and blurs quickly
+    const currentValue = e?.target?.value ?? tier1Raw;
+    const parsed = parseAmountFromInput(String(currentValue));
     handleTier1Change(parsed === '' ? '' : parsed);
   };
-  const onTier2Blur = () => {
+  const onTier2Blur = (e) => {
     setTier2Focused(false);
-    const parsed = parseAmountFromInput(tier2Raw);
+    const currentValue = e?.target?.value ?? tier2Raw;
+    const parsed = parseAmountFromInput(String(currentValue));
     handleTier2Change(parsed === '' ? '' : parsed);
   };
 

@@ -3,7 +3,7 @@ import { Route, Routes } from "react-router-dom";
 import UserProvider from "./context/UserContext";
 import { RegionProvider } from "./context/RegionContext";
 import Dashboard from "./layout/Dashboard";
-import HomePage from "./pages/HomePage";
+import RootRedirect from "./components/RootRedirect";
 import AccessGuard from "./components/guards/AccessGuard";
 import DashBoardHome from "./pages/DashBoard";
 import Proposals from "./pages/Proposals";
@@ -34,6 +34,8 @@ import ChildrenAllowancePage from "./pages/ChildrenAllowancePage";
 import IncomeManagementPage from "./pages/IncomeManagementPage";
 import SalaryManagement from "./components/management/SalaryManagement";
 import SalaryTablePage from "./pages/SalaryTablePage";
+import EmployeeSalaryTablePage from "./pages/EmployeeSalaryTablePage";
+import CosSalaryTablePage from "./pages/CosSalaryTablePage";
 import GroupedIncomeCategoryPage from "./pages/GroupedIncomeCategoryPage";
 import RetireePage from "./pages/RetireePage";
 
@@ -62,7 +64,7 @@ import UserActivityLogsPage from "./pages/UserActivityLogsPage";
 const App = () => {
   return (
     <Routes>
-      <Route path="/" element={<HomePage />} />
+      <Route path="/" element={<RootRedirect />} />
      
 
       <Route
@@ -238,6 +240,28 @@ const App = () => {
               requiredWorkflowRoles={["regionCreator", "superAdmin"]}
             >
               <SalaryTablePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/employee-salary-table"
+          element={
+            <ProtectedRoute
+              requiredPermissions={["ManageSettings"]}
+              requiredWorkflowRoles={["regionCreator", "superAdmin"]}
+            >
+              <EmployeeSalaryTablePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/cos-salary-table"
+          element={
+            <ProtectedRoute
+              requiredPermissions={["ManageSettings"]}
+              requiredWorkflowRoles={["regionCreator", "superAdmin"]}
+            >
+              <CosSalaryTablePage />
             </ProtectedRoute>
           }
         />

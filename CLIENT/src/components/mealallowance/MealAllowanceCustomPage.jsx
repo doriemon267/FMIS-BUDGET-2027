@@ -18,11 +18,11 @@ import {
 } from "@mui/material";
 import {
   Assessment as AssessmentIcon,
-  AttachMoney as MoneyIcon,
   People as PeopleIcon,
   Restaurant as RestaurantIcon,
   Refresh as RefreshIcon
 } from "@mui/icons-material";
+import PesoIcon from "../icons/PesoIcon";
 import { useQuery } from "@tanstack/react-query";
 import api from "../../config/api";
 
@@ -224,7 +224,7 @@ const CustomPage = ({
             >
               <CardContent sx={{ py: 1 }}>
                 <Box display="flex" alignItems="center" gap={1}>
-                  <MoneyIcon 
+                  <PesoIcon 
                     sx={{ 
                       color: '#2196f3',
                       fontSize: '2rem',

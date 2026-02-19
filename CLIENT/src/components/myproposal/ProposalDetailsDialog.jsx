@@ -33,7 +33,6 @@ import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import PublicIcon from '@mui/icons-material/Public';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
-import MoneyIcon from '@mui/icons-material/Money';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import ApartmentIcon from '@mui/icons-material/Apartment';
 import BusinessCenterIcon from '@mui/icons-material/BusinessCenter';

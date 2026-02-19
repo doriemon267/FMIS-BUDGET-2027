@@ -11,14 +11,13 @@ import {
   FaChevronCircleDown,
   FaClipboardList,
   FaInfoCircle,
-  FaRegMoneyBillAlt,
-  FaMoneyBillWave,
   FaPhone,
   FaHome,
   FaFileAlt,
   FaRegChartBar,
   FaArrowLeft,
 } from "react-icons/fa";
+import { FaPesoSign } from "react-icons/fa6";
 import { TbReportAnalytics } from "react-icons/tb";
 import { FiUsers } from "react-icons/fi";
 import { IoSettingsOutline } from "react-icons/io5";
@@ -228,7 +227,7 @@ const CustomDrawer = ({ collapsed = false }) => {
                   link: "/consolidated-corporate-income",
                   name: "Consolidated Corporate Income",
                   isAllow: hasPermission(currentUser, "ViewReports"),
-                  icon: <FaRegMoneyBillAlt />,
+                  icon: <FaPesoSign />,
                 },
                 {
                   link: "/consolidated-reports",
@@ -240,7 +239,7 @@ const CustomDrawer = ({ collapsed = false }) => {
                   link: "/consolidated-capital-outlay-reports",
                   name: "Consolidated Capital Outlay Reports",
                   isAllow: hasPermission(currentUser, "ViewReports"),
-                  icon: <FaRegMoneyBillAlt />,
+                  icon: <FaPesoSign />,
                 },
                 {
                   link: "/consolidated-personnel-services-reports",
@@ -394,15 +393,23 @@ const CustomDrawer = ({ collapsed = false }) => {
               //   isAllow:
               //     hasPermission(currentUser, "ManageSettings") ||
               //     isOverallApprover,
-              //   icon: <FaMoneyBillWave />,
+              //   icon: <FaPesoSign />,
               // },
               {
-                link: "/salary-table",
-                name: "Salary Table",
+                link: "/employee-salary-table",
+                name: "Permanent & Casual Salary Table",
                 isAllow:
                   hasPermission(currentUser, "ManageSettings") ||
                   isOverallApprover,
-                icon: <FaMoneyBillWave />,
+                icon: <FaPesoSign />,
+              },
+              {
+                link: "/cos-salary-table",
+                name: "COS Salary Table (SSL4)",
+                isAllow:
+                  hasPermission(currentUser, "ManageSettings") ||
+                  isOverallApprover,
+                icon: <FaPesoSign />,
               },
 
               // {

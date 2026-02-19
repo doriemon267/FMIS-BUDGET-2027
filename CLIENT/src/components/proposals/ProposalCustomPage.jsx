@@ -10,9 +10,7 @@ import PropTypes from "prop-types";
 import { useRegion } from "../../context/RegionContext";
 import { IoPersonCircleOutline } from "react-icons/io5";
 import { GrHostMaintenance } from "react-icons/gr";
-import { FaMoneyBill } from "react-icons/fa";
-import { FaFileContract } from "react-icons/fa6";
-import { FaMoneyCheckAlt } from "react-icons/fa";
+import { FaFileContract, FaPesoSign } from "react-icons/fa6";
 import StyledBox from "../../global/components/StyledBox";
 import PSPermanentServiceTable from "../pspermanent/PersonnelServicesPage";
 import PSCasualServiceTable from "../pscasual/PersonnelServicesPage";
@@ -1379,7 +1377,7 @@ const ProposalCustomPage = ({
         <Tab
           label="Income"
           value="Income"
-          icon={<FaMoneyCheckAlt size={16} />}
+          icon={<FaPesoSign size={16} />}
         />
         <Tab
           label="PS-Perm"
@@ -1405,7 +1403,7 @@ const ProposalCustomPage = ({
         <Tab
           label="Capital"
           value="Capital Outlay"
-          icon={<FaMoneyBill size={16} />}
+          icon={<FaPesoSign size={16} />}
         />
         <Tab
           label="Budget"

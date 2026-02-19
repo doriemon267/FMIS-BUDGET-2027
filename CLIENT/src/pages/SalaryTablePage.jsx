@@ -16,12 +16,12 @@ import {
 import TableContainer from '@mui/material/TableContainer';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import {
-  MdAttachMoney,
   MdTrendingUp,
   MdPeople,
   MdSettings,
   MdGrade,
 } from 'react-icons/md';
+import PesoIcon from '../components/icons/PesoIcon';
 import { AiOutlineDownload, AiOutlineReload } from 'react-icons/ai';
 import { DataGrid } from '@mui/x-data-grid';
 import { getSalaryTable } from '../services/mssqlService';
@@ -327,7 +327,7 @@ const SalaryTablePage = () => {
           </Box>
         </Paper>
         <Paper elevation={0} sx={{ ...statBoxStyle(theme.palette.info.main), flex: 1, minWidth: 0, mx: 0.5 }}>
-          <MdAttachMoney style={{ verticalAlign: 'middle', fontSize: 22, color: theme.palette.info.main }} />
+          <PesoIcon sx={{ verticalAlign: 'middle', fontSize: 22, color: theme.palette.info.main }} />
           <Box>
             <Typography variant="caption" color="text.secondary">Avg Monthly (page)</Typography>
             <Typography variant="h6" fontWeight="bold" color={theme.palette.info.main}>

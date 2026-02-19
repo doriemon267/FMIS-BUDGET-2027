@@ -18,9 +18,8 @@ import {
   FaCashRegister,
   FaCheckCircle,
   FaExternalLinkAlt,
-  FaFileInvoiceDollar,
-  FaMoneyBillWave,
 } from "react-icons/fa";
+import { FaPesoSign } from "react-icons/fa6";
 import env from "../utils/env";
 import IS_PRODUCTION from "../utils/IS_PRODUCTION";
 import { useEffect, useState } from "react";
@@ -136,7 +135,7 @@ export default function HomePage() {
       title: "Disbursement Voucher System",
       description:
         "Streamline the process of creating and approving disbursement vouchers.",
-      icon: <FaFileInvoiceDollar style={{ fontSize: 40, color: "#fff" }} />,
+      icon: <FaPesoSign style={{ fontSize: 40, color: "#fff" }} />,
       dashboardUrl: "https://dv.nia.gov.ph/dashboard",
       bgPosition: "top center",
     },
@@ -152,7 +151,7 @@ export default function HomePage() {
       title: "Billing & Collection System",
       description:
         "Streamline billing and collection processes for efficient financial management.",
-      icon: <FaMoneyBillWave style={{ fontSize: 40, color: "#fff" }} />,
+      icon: <FaPesoSign style={{ fontSize: 40, color: "#fff" }} />,
       dashboardUrl: "https://bc.nia.gov.ph/dashboard",
       bgPosition: "bottom right",
     },

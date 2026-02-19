@@ -32,13 +32,13 @@ import {
   Business,
   Construction,
   Category,
-  AttachMoney,
   Assessment,
   FileDownload,
   Summarize,
   ExpandMore,
   ExpandLess,
 } from "@mui/icons-material";
+import PesoIcon from "../icons/PesoIcon";
 import api from "../../config/api";
 import ReportPageLayout from "./ReportPageLayout";
 import {
@@ -954,7 +954,7 @@ const ComprehensiveReportsPage = () => {
   const getSectionIcon = (sectionCode) => {
     switch (sectionCode) {
       case "A.1": return <AccountBalance />;
-      case "A.2": return <AttachMoney />;
+      case "A.2": return <PesoIcon />;
       case "B.1.1": return <Group />;
       case "B.1.2": return <Business />;
       case "B.2": return <Construction />;

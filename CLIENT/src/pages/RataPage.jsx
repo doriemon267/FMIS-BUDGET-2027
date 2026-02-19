@@ -23,7 +23,6 @@ import {
 } from "@mui/material";
 import {
   MdGrade,
-  MdAttachMoney,
   MdTrendingUp,
   MdSettings,
   MdPeople,
@@ -31,6 +30,7 @@ import {
   MdLink,
   MdCalendarToday
 } from "react-icons/md";
+import PesoIcon from "../components/icons/PesoIcon";
 import {
   AiOutlineEdit,
   AiOutlineEye,
@@ -323,14 +323,14 @@ const RataPage = () => {
             </Box>
           </Paper>
           <Paper elevation={0} sx={{ ...statBoxStyle(theme.palette.info.main), flex: 1, minWidth: 0, mx: 0.5 }}>
-            <MdAttachMoney style={{ verticalAlign: 'middle', fontSize: 22, color: theme.palette.info.main }} />
+            <PesoIcon sx={{ verticalAlign: 'middle', fontSize: 22, color: theme.palette.info.main }} />
             <Box>
               <Typography variant="caption" color="text.secondary">Total RA</Typography>
               <Typography variant="h6" fontWeight="bold" color={theme.palette.info.main}>₱{totalRA.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Typography>
             </Box>
           </Paper>
           <Paper elevation={0} sx={{ ...statBoxStyle(theme.palette.warning.main), flex: 1, minWidth: 0, mx: 0.5 }}>
-            <MdAttachMoney style={{ verticalAlign: 'middle', fontSize: 22, color: theme.palette.warning.main }} />
+            <PesoIcon sx={{ verticalAlign: 'middle', fontSize: 22, color: theme.palette.warning.main }} />
             <Box>
               <Typography variant="caption" color="text.secondary">Total TA</Typography>
               <Typography variant="h6" fontWeight="bold" color={theme.palette.warning.main}>₱{totalTA.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Typography>

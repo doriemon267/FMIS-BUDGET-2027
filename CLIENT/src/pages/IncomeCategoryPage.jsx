@@ -9,7 +9,8 @@ import {
   useTheme,
   alpha
 } from "@mui/material";
-import { MdCategory, MdList, MdAttachMoney } from "react-icons/md";
+import { MdCategory, MdList } from "react-icons/md";
+import PesoIcon from "../components/icons/PesoIcon";
 import IncomeCategoriesCustomPage from "../components/incomecategories/IncomeCategoriesCustomPage";
 import IncomeCategoriesCustomCreateUpdateDialog from "../components/incomecategories/IncomeCategoriesCustomCreateUpdateDialog";
 import EnhancedIncomeCategoriesDialog from "../components/incomecategories/EnhancedIncomeCategoriesDialog";
@@ -85,7 +86,7 @@ const schema = {
               size="small"
               color="secondary"
               variant="outlined"
-              icon={<MdAttachMoney />}
+              icon={<PesoIcon />}
               sx={{
                 mb: 0.5,
                 fontSize: '0.75rem',
@@ -116,7 +117,7 @@ const schema = {
         }}
       >
         <Stack direction="row" alignItems="center" spacing={2}>
-          <MdAttachMoney size={32} />
+          <PesoIcon sx={{ fontSize: 32 }} />
           <Box>
             <Typography variant="h4" fontWeight="bold" gutterBottom>
               Income Categories
