@@ -21,10 +21,15 @@ try {
   return;
 }
 
+// In development or when DISABLE_RATE_LIMIT=true, use a much higher limit to avoid "Too many requests" on localhost
+const isDev = process.env.NODE_ENV !== 'production' || process.env.DISABLE_RATE_LIMIT === 'true';
+// Production: 500 per 15 min — normal use (many API calls per page + notifications polling) can reach 100+ with just a few pages; 100 was too strict
+const apiMax = isDev ? 10000 : (Number(process.env.RATE_LIMIT_API_MAX) || 500);
+
 // General API rate limiter
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  max: apiMax, // Limit each IP per windowMs (500 in prod by default, 10000 in dev; override with RATE_LIMIT_API_MAX)
   message: {
     error: 'Too many requests from this IP, please try again later.',
   },
