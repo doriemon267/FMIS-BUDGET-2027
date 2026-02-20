@@ -20,6 +20,7 @@ const {
   getEditById,
   getEditsByProposal,
   getComparisonData,
+  getVersionHistory,
   approveEdit,
   deleteDraftEdit
 } = require('../controllers/budgetOfficerEditController');
@@ -68,6 +69,18 @@ const requireBudgetOfficerAccess = (req, res, next) => {
   });
 };
 
+const requireBRDAccess = (req, res, next) => {
+  const userRoles = (req.user?.Roles || []).map(String);
+  const isBRD = userRoles.some(r => /BUDGET_OFFICER|BUDGET OFFICER/i.test(r)) ||
+    userRoles.some(r => /BUDGET_MANAGER|OVERALL_BUDGET_APPROVER|BUDGET MANAGER/i.test(r)) ||
+    userRoles.some(r => /SUPER_ADMIN|SUPER ADMIN/i.test(r));
+  if (isBRD) return next();
+  return res.status(403).json({
+    success: false,
+    message: 'Access denied. Version history is available only to Budget Officer and Budget Manager (BRD level).'
+  });
+};
+
 // Get proposal data for editing (Budget Officer or Budget Reviewer)
 router.get('/proposal-for-edit', 
   requireBudgetOfficerAccess,
@@ -96,6 +109,12 @@ comparisonRouter.get('/comparison/:proposalId', getComparisonData);
 // Get edits for a specific proposal
 router.get('/proposal/:proposalId',
   getEditsByProposal
+);
+
+// Version history (original + revised) for BRD - Budget Officer & Budget Manager only
+router.get('/version-history/:proposalId',
+  requireBRDAccess,
+  getVersionHistory
 );
 
 // Approve edit (Budget Manager or higher)

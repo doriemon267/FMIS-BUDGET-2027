@@ -74,6 +74,17 @@ export const getEditsByProposal = async (proposalId) => {
 };
 
 /**
+ * Get version history (original + revised) for BRD - Budget Officer & Budget Manager only
+ * @param {string} proposalId - The proposal ID
+ * @returns {Promise} API response with { data: { proposal, original, revisions } }
+ */
+export const getVersionHistory = async (proposalId, options = {}) => {
+  const { signal, ...rest } = options;
+  const response = await api.get(`/api/budget-officer-edits/version-history/${proposalId}`, { signal, ...rest });
+  return response.data;
+};
+
+/**
  * Delete draft edit
  * @param {string} editId - The edit ID
  * @returns {Promise} API response

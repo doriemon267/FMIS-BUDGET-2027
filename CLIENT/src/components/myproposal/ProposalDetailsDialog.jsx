@@ -23,6 +23,7 @@ import { useUser } from '../../context/UserContext';
 import api from '../../config/api';
 import { getProposalForEdit, getComparisonData } from '../../services/budgetOfficerEditService';
 import BudgetOfficerEditView from './BudgetOfficerEditView';
+import ProposalVersionHistoryDialog from './ProposalVersionHistoryDialog';
 import BudgetAnalystComparisonView from './BudgetAnalystComparisonView';
 import BudgetManagerSubmissionView from './BudgetManagerSubmissionView';
 import WorkflowActionsRefactored from '../workflow/WorkflowActionsRefactored';
@@ -39,6 +40,7 @@ import BusinessCenterIcon from '@mui/icons-material/BusinessCenter';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import InfoIcon from '@mui/icons-material/Info';
 import WarningIcon from '@mui/icons-material/Warning';
+import HistoryIcon from '@mui/icons-material/History';
 
 const CACHE_TTL = 60 * 1000; // 1 minute cache for proposal details
 
@@ -51,6 +53,7 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [officerEditMode, setOfficerEditMode] = useState(false); // Track if Budget Officer wants to edit
   const [displayedProposal, setDisplayedProposal] = useState(proposal); // Local copy for immediate status updates
+  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
 
   const cacheRef = useRef(new Map());
   const abortControllerRef = useRef(null);
@@ -217,6 +220,16 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
       role === 'officeverifier'
     ));
   }, [userInfo, isManagerLevel, normalizedWorkflowRoles]);
+
+  // BRD level: Budget Officer, Budget Manager, or Super Admin (for version history)
+  const isBRDLevel = useMemo(() => {
+    if (isBudgetOfficer || isManagerLevel) return true;
+    return normalizedPrimaryRoles.some((r) =>
+      r === 'BUDGET OFFICER' || r === 'BUDGET_OFFICER' ||
+      r === 'BUDGET MANAGER' || r === 'OVERALL_BUDGET_APPROVER' ||
+      r === 'SUPER ADMIN' || r === 'SUPER_ADMIN'
+    );
+  }, [isBudgetOfficer, isManagerLevel, normalizedPrimaryRoles]);
 
   // APPROVER: Division Approvers (divisionapprover) and Office Approvers (officeapprover)
   // Can view and approve proposals routed to them
@@ -970,6 +983,17 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
               color={getStatusColor(displayedProposal?.status)} 
               sx={{ fontWeight: 'bold' }}
             />
+            {isBRDLevel && (
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<HistoryIcon fontSize="small" />}
+                onClick={() => setVersionHistoryOpen(true)}
+                disabled={loading}
+              >
+                Version history
+              </Button>
+            )}
             <Button
               size="small"
               variant="outlined"
@@ -1665,6 +1689,11 @@ const ProposalDetailsDialog = ({ open, onClose, proposal, onRefresh }) => {
           </Box>
         )}
       </DialogActions>
+      <ProposalVersionHistoryDialog
+        open={versionHistoryOpen}
+        onClose={() => setVersionHistoryOpen(false)}
+        proposalId={proposalKey}
+      />
     </Dialog>
   );
 };

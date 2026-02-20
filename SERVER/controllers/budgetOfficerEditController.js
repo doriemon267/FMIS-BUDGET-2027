@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const BudgetOfficerEdit = require('../models/BudgetOfficerEdit');
+const ProposalBudgetSnapshot = require('../models/ProposalBudgetSnapshot');
 const ProposalEditLog = require('../models/ProposalEditLog');
 const Proposal = require('../models/Proposal');
 const Income = require('../models/Income');
@@ -673,6 +674,60 @@ function sanitizeEditPayload(edit) {
 // Export for use in other controllers
 exports.applyEditsToOriginalDocuments = applyEditsToOriginalDocuments;
 
+// BRD statuses: proposal first seen by Budget and Revenue Division
+const BRD_STATUSES = [
+  'Forwarded to Budget Planning Analyst',
+  'Forwarded to Budget Officer',
+  'Forwarded to Overall Budget Approver',
+  'FORWARDED_TO_BRD_ANALYST',
+  'FORWARDED_TO_BRD_OFFICER',
+  'FORWARDED_TO_BRD_MANAGER'
+];
+
+/**
+ * Capture initial budget snapshot when proposal first reaches BRD (for version history).
+ * Idempotent: only creates if no snapshot exists for this proposal.
+ */
+const captureInitialBudgetSnapshotIfNeeded = async (proposal, income, personnelServices, mooe, capitalOutlay) => {
+  if (!proposal || !proposal._id) return;
+  const status = String(proposal.status || '').trim();
+  if (!BRD_STATUSES.some(s => status === s)) return;
+  const existing = await ProposalBudgetSnapshot.findOne({ proposalId: proposal._id }).lean();
+  if (existing) return;
+  const toNum = (v) => (typeof v === 'number' && Number.isFinite(v)) ? v : 0;
+  const sumIncome = (income || []).reduce((s, i) => s + toNum(i.amount), 0);
+  const psFields = ['annualSalary', 'RATA', 'PERA', 'uniformALLOWANCE', 'productivityIncentive', 'medical', 'childrenAllowance', 'meal', 'cashGift', 'subsistenceAllowanceMDS', 'subsistenceAllowanceST', 'midyearBonus', 'yearEndBonus', 'gsisPremium', 'philhealthPremium', 'pagibigPremium', 'employeeCompensation', 'loyaltyAward', 'overtimePay', 'earnedLeaves', 'retirementBenefits', 'terminalLeave', 'courtAppearance'];
+  const sumPS = (arr = []) => arr.reduce((s, p) => s + psFields.reduce((t, f) => t + toNum(p[f]), 0), 0);
+  const sumMOOE = (mooe || []).reduce((s, m) => s + toNum(m.amount), 0);
+  const sumCO = (capitalOutlay || []).reduce((s, c) => s + toNum(c.income) + toNum(c.subsidy), 0);
+  await ProposalBudgetSnapshot.create({
+    proposalId: proposal._id,
+    capturedWhen: 'BRD_RECEIPT',
+    proposalStatusAtCapture: status,
+    proposalMeta: {
+      fiscalYear: proposal.fiscalYear,
+      budgetType: proposal.budgetType,
+      region: proposal.region,
+      processBy: proposal.processBy,
+      title: proposal.title,
+      department: proposal.department,
+      division: proposal.division
+    },
+    snapshot: {
+      income: (income || []).map(doc => ({ ...doc })),
+      personnelServices: (personnelServices || []).map(doc => ({ ...doc })),
+      mooe: (mooe || []).map(doc => ({ ...doc })),
+      capitalOutlay: (capitalOutlay || []).map(doc => ({ ...doc }))
+    },
+    totals: {
+      totalIncome: sumIncome,
+      totalPersonnel: sumPS(personnelServices),
+      totalMOOE: sumMOOE,
+      totalCapitalOutlay: sumCO
+    }
+  });
+};
+
 /**
  * Get proposal data for Budget Officer to edit
  * This fetches all 4 tables: Income, Personnel Services, MOOE, Capital Outlay
@@ -964,6 +1019,13 @@ exports.getProposalForEdit = async (req, res) => {
     );
     
     console.log(`Fetched ${capitalOutlay.length} Capital Outlay items with details`);
+
+    // Capture initial budget snapshot for BRD version history (original vs revised) if not yet captured
+    try {
+      await captureInitialBudgetSnapshotIfNeeded(proposal, income, personnelServices, mooe, capitalOutlay);
+    } catch (snapErr) {
+      console.warn('ProposalBudgetSnapshot capture failed (non-fatal):', snapErr.message);
+    }
     
     // If there's an existing draft, merge it with the original data
     let responseData = {
@@ -2088,6 +2150,98 @@ exports.getEditsByProposal = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch edits',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get version history of initial budget proposal (original + revisions) for BRD (Budget Officer / Budget Manager).
+ * Returns snapshot as "original" and list of BudgetOfficerEdit (Submitted/Approved) as "revisions".
+ */
+exports.getVersionHistory = async (req, res) => {
+  try {
+    const { proposalId } = req.params;
+    const userRoles = (req.user?.Roles || []).map(String);
+
+    const isBRD =
+      userRoles.some(r => /BUDGET_OFFICER|BUDGET OFFICER/i.test(r)) ||
+      userRoles.some(r => /BUDGET_MANAGER|OVERALL_BUDGET_APPROVER|BUDGET MANAGER/i.test(r)) ||
+      userRoles.some(r => /SUPER_ADMIN|SUPER ADMIN/i.test(r));
+
+    if (!isBRD) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Version history is available only to Budget Officer and Budget Manager (BRD level).'
+      });
+    }
+
+    // Accept either legacy Proposal._id or NewProposalWorkflow._id (workflowRef)
+    let proposal = await Proposal.findById(proposalId).lean();
+    if (!proposal) {
+      proposal = await Proposal.findOne({
+        $or: [{ workflowRef: proposalId }, { proposalId: proposalId }]
+      }).lean();
+    }
+    if (!proposal) {
+      return res.status(404).json({
+        success: false,
+        message: 'Proposal not found'
+      });
+    }
+    const legacyProposalId = proposal._id;
+
+    const [snapshot, revisions] = await Promise.all([
+      ProposalBudgetSnapshot.findOne({ proposalId: legacyProposalId }).lean(),
+      BudgetOfficerEdit.find({
+        proposalId: legacyProposalId,
+        status: { $in: ['Submitted', 'Approved'] }
+      })
+        .sort({ submittedAt: 1 })
+        .lean()
+    ]);
+
+    const revisionList = (revisions || []).map(edit => {
+      let changeSummary = null;
+      try {
+        const doc = new BudgetOfficerEdit(edit);
+        if (doc.getChangeSummary) changeSummary = doc.getChangeSummary();
+      } catch (_) {}
+      return {
+        _id: edit._id,
+        submittedAt: edit.submittedAt,
+        approvedAt: edit.approvedAt,
+        status: edit.status,
+        editedBy: edit.editedBy,
+        comments: edit.comments,
+        changeSummary,
+        editedData: {
+          income: edit.editedIncome,
+          personnelServices: edit.editedPersonnelServices,
+          mooe: edit.editedMOOE,
+          capitalOutlay: edit.editedCapitalOutlay
+        }
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        proposal: { _id: proposal._id, title: proposal.title, status: proposal.status, fiscalYear: proposal.fiscalYear, processBy: proposal.processBy },
+        original: snapshot ? {
+          capturedAt: snapshot.capturedAt,
+          proposalStatusAtCapture: snapshot.proposalStatusAtCapture,
+          snapshot: snapshot.snapshot,
+          totals: snapshot.totals
+        } : null,
+        revisions: revisionList
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching version history:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch version history',
       error: error.message
     });
   }

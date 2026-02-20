@@ -47,6 +47,7 @@ import {
 } from "@mui/icons-material";
 import SearchIcon from "@mui/icons-material/Search";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import HistoryIcon from "@mui/icons-material/History";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useUser } from "../context/UserContext";
 import { useRegion } from "../context/RegionContext";
@@ -64,6 +65,7 @@ import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import { TableSkeleton } from '../components/common/LoadingSkeleton';
 import ErrorAlert from '../components/common/ErrorAlert';
 import { preventNegativeNumericKey, toNonNegativeNumber } from '../utils/preventNegativeInput';
+import ProposalVersionHistoryDialog from '../components/myproposal/ProposalVersionHistoryDialog';
 
 // Brand colors aligned to Transactions Processing UI
 const BRAND_COLORS = {
@@ -220,6 +222,11 @@ const NewProposalWorkflowPage = () => {
     ].includes(role)
   );
 
+  // Version history: BRD Budget Officer & Budget Manager only (same as backend)
+  const canViewVersionHistory = (currentUser?.Roles || []).some((r) =>
+    /BUDGET_OFFICER|BUDGET OFFICER|BUDGET_MANAGER|BUDGET MANAGER|OVERALL_BUDGET_APPROVER|SUPER_ADMIN|SUPER ADMIN/i.test(String(r || ''))
+  );
+
   const tabs = (isBudgetManager || isSuperAdmin)
     ? [...BASE_TABS, { label: "Monitoring", value: "monitoring" }]
     : BASE_TABS;
@@ -250,6 +257,7 @@ const NewProposalWorkflowPage = () => {
   const [auditTrailDialogOpen, setAuditTrailDialogOpen] = useState(false);
   const [auditTrailData, setAuditTrailData] = useState([]);
   const [auditTrailLoading, setAuditTrailLoading] = useState(false);
+  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   const [actionType, setActionType] = useState("");
   const [actionComment, setActionComment] = useState("");
   const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
@@ -2975,7 +2983,20 @@ const NewProposalWorkflowPage = () => {
             p: 3,
           }}
         >
-          Proposal Details
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span>Proposal Details</span>
+            {canViewVersionHistory && selectedProposal?._id && (
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<HistoryIcon />}
+                onClick={() => setVersionHistoryOpen(true)}
+                sx={{ color: "white", borderColor: "rgba(255,255,255,0.7)", "&:hover": { borderColor: "white", bgcolor: "rgba(255,255,255,0.1)" } }}
+              >
+                Version history
+              </Button>
+            )}
+          </Box>
         </DialogTitle>
         <DialogContent sx={{ p: 0 }}>
           {detailsLoading ? (
@@ -5441,6 +5462,12 @@ const NewProposalWorkflowPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <ProposalVersionHistoryDialog
+        open={versionHistoryOpen}
+        onClose={() => setVersionHistoryOpen(false)}
+        proposalId={selectedProposal?._id ? String(selectedProposal._id) : undefined}
+      />
 
       {/* Proposal History Dialog */}
       <Dialog

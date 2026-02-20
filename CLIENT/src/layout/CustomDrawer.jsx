@@ -88,7 +88,7 @@ const CustomDrawer = ({ collapsed = false }) => {
   const fmisUrl =
     process.env.NODE_ENV === "production"
       ? "https://fmis.nia.gov.ph/dashboard"
-      : "https://main.fmis.local/dashboard";
+      : "http://localhost:3000/dashboard";
 
   // Show NEP Ceiling menu only when there are FINALIZED proposals (for active fiscal year)
   useEffect(() => {
@@ -471,7 +471,7 @@ const CustomDrawer = ({ collapsed = false }) => {
           link={
             IS_PRODUCTION
               ? "https://fmis.nia.gov.ph/dashboard"
-              : "https://main.fmis.local/dashboard"
+              : "http://localhost:3000/dashboard"
           }
         />
 
