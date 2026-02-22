@@ -478,14 +478,15 @@ router.put(
 // =============================================================================
 /**
  * Get divisions for a specific department
- * GET /api/hierarchical-rbac/divisions?departmentId=:departmentId
+ * GET /api/hierarchical-rbac/divisions?departmentId=:departmentId&regionId=:regionId (regionId optional - when provided, only returns divisions for that region)
+ * Requires departmentdivisionmappings to have region-specific records (departmentId + regionId per mapping)
  */
 router.get(
   '/divisions',
   ...authenticatedRoute(),
   async (req, res) => {
     try {
-      const { departmentId } = req.query;
+      const { departmentId, regionId } = req.query;
       if (!departmentId) {
         return res.status(400).json({
           success: false,
@@ -496,7 +497,6 @@ router.get(
       const mongoose = require('mongoose');
       const mappingsCollection = mongoose.connection.db.collection('departmentdivisionmappings');
 
-      // Find mappings for the specified department
       let departmentObjectId;
       try {
         departmentObjectId = new mongoose.Types.ObjectId(departmentId);
@@ -507,9 +507,34 @@ router.get(
         });
       }
 
-      const mappings = await mappingsCollection.find({
-        departmentId: departmentObjectId
-      }).toArray();
+      const query = { departmentId: departmentObjectId };
+
+      // Filter by regionId when provided (purely from DB - no static mapping)
+      let resolvedRegionId = null;
+      const rawRegionId = regionId != null ? String(regionId).trim() : '';
+      if (rawRegionId) {
+        if (mongoose.Types.ObjectId.isValid(rawRegionId) && rawRegionId.length === 24) {
+          try {
+            resolvedRegionId = new mongoose.Types.ObjectId(rawRegionId);
+          } catch (_) { /* keep null */ }
+        }
+        if (!resolvedRegionId) {
+          // regionId param might be region name - resolve from Region collection
+          const Region = require('../models/Region');
+          const regionDoc = await Region.findOne({
+            $or: [
+              { Region: rawRegionId },
+              { Region: { $regex: new RegExp(`^${rawRegionId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
+              { RegionName: rawRegionId },
+              { regionName: rawRegionId }
+            ]
+          }).select('_id').lean();
+          if (regionDoc) resolvedRegionId = regionDoc._id;
+        }
+        if (resolvedRegionId) query.regionId = resolvedRegionId;
+      }
+
+      const mappings = await mappingsCollection.find(query).toArray();
 
       if (!mappings || mappings.length === 0) {
         return res.status(200).json({
@@ -519,7 +544,6 @@ router.get(
         });
       }
 
-      // Extract divisions from mappings
       const divisions = [];
       mappings.forEach(mapping => {
         if (mapping.divisions && mapping.divisions.length > 0) {
@@ -1038,17 +1062,23 @@ router.get(
         };
       });
 
-      const formattedMappings = mappings.map(mapping => ({
-        departmentId: mapping.departmentId,
-        departmentName: mapping.departmentName,
-        divisions: mapping.divisions ? mapping.divisions.filter(div => div.isActive !== false).map(div => ({
-          name: div.name,
-          code: div.code,
-          sections: div.sections ? div.sections.filter(section => section.isActive !== false) : []
-        })) : [],
-        hasSubDivisions: mapping.hasSubDivisions || false,
-        regionId: mapping.regionId
-      }));
+      const regionIdToName = new Map(regions.map(r => [r._id.toString(), r.Region || r.name || r.regionName || '']));
+      const formattedMappings = mappings.map(mapping => {
+        const rid = mapping.regionId ? mapping.regionId.toString() : null;
+        const regionName = mapping.regionName || (rid ? regionIdToName.get(rid) : null) || '';
+        return {
+          departmentId: mapping.departmentId,
+          departmentName: mapping.departmentName,
+          divisions: mapping.divisions ? mapping.divisions.filter(div => div.isActive !== false).map(div => ({
+            name: div.name,
+            code: div.code,
+            sections: div.sections ? div.sections.filter(section => section.isActive !== false) : []
+          })) : [],
+          hasSubDivisions: mapping.hasSubDivisions || false,
+          regionId: mapping.regionId,
+          regionName: regionName
+        };
+      });
 
       // Get departments with divisions
       const departmentsWithDivisions = formattedMappings.filter(mapping =>

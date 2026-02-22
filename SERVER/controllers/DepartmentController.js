@@ -23,21 +23,76 @@ exports.getAllDepartment = async (req, res) => {
         return res.status(404).json({ error: 'Region not found' });
       }
 
-      // Filter departments by region using OrganizationStructure
-      const OrganizationStructure = require('../models/OrganizationStructure');
-      const mappings = await OrganizationStructure.find({ 
-        $or: [
-          { regionId: regionDoc._id },
-          { regionId: regionDoc._id.toString() }
-        ]
-      });
+      const regionName = (regionDoc.Region || regionDoc.regionName || regionDoc.RegionName || '').trim().toUpperCase();
+      const regionParam = (typeof region === 'string' ? region : '').trim().toUpperCase();
+      const excludeROandIMO = regionName === 'CENTRAL OFFICE' || regionName === 'MARIIS' || regionName === 'UPRIIS' ||
+        regionParam === 'CENTRAL OFFICE' || regionParam === 'MARIIS' || regionParam === 'UPRIIS';
 
-      // Get unique department IDs
-      const departmentIds = [...new Set(mappings.map(mapping => mapping.departmentId))];
+      let departments;
 
-      // Fetch departments by IDs
-      const departments = await Department.find({ _id: { $in: departmentIds } });
-      res.status(200).json({departments});
+      if (excludeROandIMO) {
+        // Central Office: get ALL departments and exclude REGIONAL OFFICE and IMO (these are regional-only)
+        const all = await Department.find({}).lean();
+        departments = all.filter(d => {
+          const name = (d.Department || d.name || d.departmentName || '').trim().toUpperCase();
+          return name !== 'REGIONAL OFFICE' && name !== 'IRRIGATION MANAGEMENT OFFICE';
+        });
+        // Fallback: if departments collection is empty, get from departmentdivisionmappings (regionId for Central Office)
+        if (departments.length === 0) {
+          try {
+            const mongooseConn = mongoose.connection;
+            if (mongooseConn && mongooseConn.db) {
+              const mappingsCol = mongooseConn.db.collection('departmentdivisionmappings');
+              const regionsCol = mongooseConn.db.collection('regions');
+              const coRegion = await regionsCol.findOne({
+                $or: [
+                  { Region: { $regex: /^central\s*office$/i } },
+                  { Region: 'CENTRAL OFFICE' },
+                  { Region: 'Central Office' }
+                ]
+              });
+              if (coRegion) {
+                const coMappings = await mappingsCol.find({ regionId: coRegion._id }).toArray();
+                const seen = new Set();
+                const exclude = ['REGIONAL OFFICE', 'IRRIGATION MANAGEMENT OFFICE'];
+                const fromMappings = coMappings
+                  .filter(m => {
+                    const name = (m.departmentName || '').trim().toUpperCase();
+                    return name && !exclude.includes(name) && !seen.has(String(m.departmentId));
+                  })
+                  .map(m => {
+                    seen.add(String(m.departmentId));
+                    return { _id: m.departmentId, Department: m.departmentName || '' };
+                  });
+                if (fromMappings.length > 0) departments = fromMappings;
+              }
+            }
+          } catch (err) {
+            console.error('[DepartmentController] Central Office mappings fallback error:', err.message);
+          }
+        }
+      } else {
+        const OrganizationStructure = require('../models/OrganizationStructure');
+        const mappings = await OrganizationStructure.find({
+          $or: [
+            { regionId: regionDoc._id },
+            { regionId: regionDoc._id.toString() }
+          ]
+        });
+        const departmentIds = [...new Set(mappings.map(m => m.departmentId && m.departmentId.toString()).filter(Boolean))];
+        if (departmentIds.length > 0) {
+          const objectIds = departmentIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
+          if (objectIds.length > 0) {
+            departments = await Department.find({ _id: { $in: objectIds } });
+          } else {
+            departments = [];
+          }
+        } else {
+          departments = [];
+        }
+      }
+
+      res.status(200).json({ departments });
     } else {
       // Return all departments if no region filter
       const departments = await Department.find();

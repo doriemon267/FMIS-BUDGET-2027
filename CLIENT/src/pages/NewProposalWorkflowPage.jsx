@@ -820,6 +820,7 @@ const NewProposalWorkflowPage = () => {
 
       // Budget Reviewer actions
       "reviewer-approve-forward-approver": "submit-to-approver",
+      "reviewer-approve-forward-analyst": "submit-to-analyst", // IMO path: skip Approver
       "reviewer-return": "return-to-preparer",
       "reviewer-save-edits": "reviewer-save-edits",
 
@@ -1593,7 +1594,7 @@ const NewProposalWorkflowPage = () => {
       }
     }
 
-    // BUDGET REVIEWER actions
+    // BUDGET REVIEWER actions (IMO path: Forward to Analyst; RIO/CO path: Forward to Approver)
     if (
       userRoles.includes("BUDGET REVIEWER") &&
       (currentStatus === "Forwarded to Reviewer" ||
@@ -1605,6 +1606,12 @@ const NewProposalWorkflowPage = () => {
         {
           label: "Approve & Forward to Budget Approver",
           value: "reviewer-approve-forward-approver",
+          icon: <SendIcon />,
+          color: "primary",
+        },
+        {
+          label: "Forward to Budget/Planning Analyst (IMO path)",
+          value: "reviewer-approve-forward-analyst",
           icon: <SendIcon />,
           color: "primary",
         },

@@ -31,10 +31,12 @@ const WORKFLOW_TRANSITIONS = {
   'BUDGET REVIEWER': {
     'FORWARDED_TO_REVIEWER': {
       'submit-to-approver': 'FORWARDED_TO_APPROVER',
+      'submit-to-analyst': 'FORWARDED_TO_BRD_ANALYST', // IMO path: skip Approver, go direct to Analyst
       'return-to-preparer': 'RETURNED_TO_PREPARER'
     },
     'RETURNED_TO_REVIEWER': {
       'submit-to-approver': 'FORWARDED_TO_APPROVER',
+      'submit-to-analyst': 'FORWARDED_TO_BRD_ANALYST', // IMO path
       'return-to-preparer': 'RETURNED_TO_PREPARER'
     }
   },
@@ -94,10 +96,12 @@ const WORKFLOW_TRANSITIONS = {
     },
     'FORWARDED_TO_REVIEWER': {
       'submit-to-approver': 'FORWARDED_TO_APPROVER',
+      'submit-to-analyst': 'FORWARDED_TO_BRD_ANALYST', // IMO path (Super Admin)
       'return-to-preparer': 'RETURNED_TO_PREPARER'
     },
     'RETURNED_TO_REVIEWER': {
       'submit-to-approver': 'FORWARDED_TO_APPROVER',
+      'submit-to-analyst': 'FORWARDED_TO_BRD_ANALYST', // IMO path (Super Admin)
       'return-to-preparer': 'RETURNED_TO_PREPARER'
     },
     'FORWARDED_TO_APPROVER': {
@@ -1348,7 +1352,11 @@ exports.getProposals = async (req, res) => {
       const regionName = legacy?.region || p.region?.Region || p.region?.regionName || p.region?.RegionName || '';
       const divisionName = legacy?.division || p.division || '';
       const departmentName = legacy?.department || p.department || '';
-      const responsibilityCenter = divisionName || departmentName || regionName || undefined;
+      // Responsibility Center: Central Office → show Division/Department; Regional → show Region (consolidated)
+      const isCentralOffice = p.isCentralOffice === true || /central\s*office/i.test(String(regionName));
+      const responsibilityCenter = isCentralOffice
+        ? [departmentName, divisionName].filter(Boolean).join(' / ') || divisionName || departmentName || undefined
+        : (regionName || divisionName || departmentName || undefined);
       return ({
         _id: p._id,
         title: p.title,
@@ -1359,7 +1367,7 @@ exports.getProposals = async (req, res) => {
         department: departmentName || undefined,
         // Who created/owns the draft on UI (used by actions menu for PREPARER)
         processBy: legacy?.processBy || p.createdByName,
-        // Responsibility Center: prefer Division, then Department, then Region
+        // Responsibility Center: CO → Division/Department; Regional → Region (consolidated)
         responsibilityCenter,
         budgetType: p.modelType,  // Map modelType to budgetType for consistency
         status: p.status,
@@ -1563,7 +1571,11 @@ exports.getProposalById = async (req, res) => {
     const regionName = legacy?.region || proposal.region?.Region || proposal.region?.regionName || proposal.region?.RegionName || '';
     const divisionName = legacy?.division || proposal.division || '';
     const departmentName = legacy?.department || proposal.department || '';
-    const responsibilityCenter = divisionName || departmentName || regionName || undefined;
+    // Responsibility Center: Central Office → show Division/Department; Regional → show Region (consolidated)
+    const isCentralOffice = proposal.isCentralOffice === true || /central\s*office/i.test(String(regionName));
+    const responsibilityCenter = isCentralOffice
+      ? [departmentName, divisionName].filter(Boolean).join(' / ') || divisionName || departmentName || undefined
+      : (regionName || divisionName || departmentName || undefined);
 
     const mappedProposal = {
       ...proposal.toObject ? proposal.toObject() : proposal,

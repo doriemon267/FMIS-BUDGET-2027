@@ -8,6 +8,7 @@
     "test": "jest --runInBand",
     "test:integration": "jest tests/integration --runInBand",
     "migrate:normalize-recipient-ids": "node ./scripts/normalize-recipient-userids.js",
+    "seed:departmentdivisionmappings": "node ./migrations/seed-departmentdivisionmappings.js",
     "encrypt:env": "node ./tools/encryptEnv.js",
     "format": "prettier --write \"**/*.{js,json,md}\" --ignore-path .prettierignore",
     "format:check": "prettier --check \"**/*.{js,json,md}\" --ignore-path .prettierignore"

@@ -53,6 +53,7 @@ const TierPage = () => {
   const pendingDivisionParamRef = useRef(null);
   const [activeFiscalYear, setActiveFiscalYear] = useState("");
   const [regions, setRegions] = useState([]);
+  const [organizationStructure, setOrganizationStructure] = useState(null);
   const [departments, setDepartments] = useState([]);
   const [divisions, setDivisions] = useState([]);
   const [selectedRegion, setSelectedRegion] = useState("");
@@ -160,8 +161,18 @@ const TierPage = () => {
       }
     };
 
+    const fetchOrgStructure = async () => {
+      try {
+        const res = await api.get("/api/hierarchical-rbac/organization-structure", { params: { structure: "old" } });
+        setOrganizationStructure(res.data?.data || res.data);
+      } catch (error) {
+        console.error("Error fetching organization structure:", error);
+      }
+    };
+
     fetchActiveSettings();
     fetchRegions();
+    fetchOrgStructure();
   }, [searchParams]);
 
   // Apply scope from URL params when coming from New Proposal Workflow (e.g. "Open Tier")
@@ -214,28 +225,86 @@ const TierPage = () => {
   }, [divisions]);
 
   useEffect(() => {
-    if (selectedRegion && selectedRegion !== 'ALL') {
-      const fetchDepartments = async () => {
-        try {
-          const response = await api.get(`/departments?region=${selectedRegion}`);
-          setDepartments(response.data.departments || []);
-        } catch (error) {
-          console.error("Error fetching departments:", error);
-        }
-      };
-      fetchDepartments();
-    } else {
+    if (!selectedRegion || selectedRegion === 'ALL') {
       setDepartments([]);
+      setSelectedDepartment("");
+      setSelectedDivision("");
+      return;
     }
+    const data = organizationStructure;
+    const allDepts = data?.availableUnits?.departments || [];
+    const mappings = data?.mappings || [];
+    const orgRegions = data?.availableUnits?.regions || [];
+    const regionStr = String(selectedRegion);
+    const selReg = regions.find((r) => String(r._id) === regionStr);
+    const selectedRegionName = (selReg?.Region || selReg?.regionName || "").trim();
+    const norm = (s) => String(s || "").trim().toUpperCase();
+    const rn = norm(selectedRegionName);
+    const isExcludeRegionalAndIMO = rn === "CENTRAL OFFICE" || rn === "MARIIS" || rn === "UPRIIS";
+    const excludeNames = isExcludeRegionalAndIMO ? ["REGIONAL OFFICE", "IRRIGATION MANAGEMENT OFFICE"] : [];
+
+    let regionMappings = mappings.filter((m) => m.regionId && String(m.regionId) === regionStr);
+    if (regionMappings.length === 0) {
+      regionMappings = mappings.filter((m) => {
+        const mn = norm(m.regionName);
+        const sn = rn;
+        return mn && sn && mn === sn;
+      });
+    }
+    if (regionMappings.length === 0 && isExcludeRegionalAndIMO) {
+      const matchedOrgRegion = orgRegions.find((r) => norm(r.name || r.Region) === rn);
+      if (matchedOrgRegion) {
+        const altId = String(matchedOrgRegion.id || matchedOrgRegion._id);
+        regionMappings = mappings.filter((m) => m.regionId && String(m.regionId) === altId);
+      }
+    }
+    if (regionMappings.length === 0 && isExcludeRegionalAndIMO && allDepts.length > 0) {
+      const coDeptIds = allDepts
+        .filter((d) => !excludeNames.includes(norm(d.name || d.Department)))
+        .map((d) => String(d.id || d._id));
+      const depts = allDepts
+        .filter((d) => coDeptIds.includes(String(d.id || d._id)))
+        .map((d) => ({ _id: d.id || d._id, Department: d.name || d.Department, name: d.name || d.Department }));
+      setDepartments(depts);
+      setSelectedDepartment("");
+      setSelectedDivision("");
+      return;
+    }
+
+    let regionDeptIds = [...new Set(regionMappings.map((m) => m.departmentId?.toString()).filter(Boolean))];
+    if (regionDeptIds.length === 0 && allDepts.length > 0 && !isExcludeRegionalAndIMO) {
+      regionDeptIds = allDepts.map((d) => String(d.id || d._id));
+    }
+
+    const regionDepts = allDepts.filter((d) => {
+      const id = d.id || d._id;
+      const name = norm(d.name || d.Department);
+      const excluded = excludeNames.includes(name);
+      return id && regionDeptIds.includes(String(id)) && !excluded;
+    });
+
+    const depts = regionDepts.map((d) => ({
+      _id: d.id || d._id,
+      Department: d.name || d.Department,
+      name: d.name || d.Department,
+    }));
+    setDepartments(depts);
     setSelectedDepartment("");
     setSelectedDivision("");
-  }, [selectedRegion]);
+  }, [selectedRegion, organizationStructure, regions]);
 
   useEffect(() => {
     if (selectedDepartment) {
       const fetchDivisions = async () => {
         try {
-          const response = await api.get(`/api/hierarchical-rbac/divisions?departmentId=${selectedDepartment}`);
+          const params = new URLSearchParams({ departmentId: selectedDepartment });
+          // Always pass regionId when a specific region is selected (required for region-specific division filter)
+          const r = selectedRegion;
+          const regionId = (r && r !== 'ALL')
+            ? (typeof r === 'object' && r?._id != null ? String(r._id) : String(r).trim())
+            : null;
+          if (regionId) params.set('regionId', regionId);
+          const response = await api.get(`/api/hierarchical-rbac/divisions?${params.toString()}`);
           setDivisions(response.data.data || response.data || []);
         } catch (error) {
           console.error("Error fetching divisions:", error);
@@ -245,7 +314,7 @@ const TierPage = () => {
     }
     // Reset division when department changes
     setSelectedDivision("");
-  }, [selectedDepartment]);
+  }, [selectedDepartment, selectedRegion]);
 
 
   const handleSave = async () => {
@@ -560,14 +629,25 @@ const TierPage = () => {
             onChange={(e) => setSelectedDepartment(e.target.value || "")}
             disabled={!selectedRegion || selectedRegion === 'ALL'}
           >
-            {departments.map((dept, idx) => {
-              const val = dept._id != null ? String(dept._id) : (dept.Department || dept.name || `dept-${idx}`);
-              return (
-                <MenuItem key={val} value={val}>
-                  {dept.Department || dept.name || "Unnamed Department"}
-                </MenuItem>
-              );
-            })}
+            {(() => {
+              const selRegion = regions.find(r => String(r._id) === String(selectedRegion));
+              const regionName = (selRegion?.Region || selRegion?.regionName || '').trim().toUpperCase();
+              const excludeROandIMO = regionName === 'CENTRAL OFFICE' || regionName === 'MARIIS' || regionName === 'UPRIIS';
+              const displayDepts = excludeROandIMO
+                ? departments.filter(d => {
+                    const name = (d.Department || d.name || d.departmentName || '').trim().toUpperCase();
+                    return name !== 'REGIONAL OFFICE' && name !== 'IRRIGATION MANAGEMENT OFFICE';
+                  })
+                : departments;
+              return displayDepts.map((dept, idx) => {
+                const val = dept._id != null ? String(dept._id) : (dept.Department || dept.name || `dept-${idx}`);
+                return (
+                  <MenuItem key={val} value={val}>
+                    {dept.Department || dept.name || "Unnamed Department"}
+                  </MenuItem>
+                );
+              });
+            })()}
           </Select>
         </FormControl>
         <FormControl sx={{ minWidth: 200 }}>
