@@ -496,11 +496,11 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           requiresComment: true
         });
         actions.push({
-          label: "Return to Budget Approver",
+          label: "Return to Budget Preparer",
           action: "analyst-return",
           color: "bg-red-500 hover:bg-red-600",
           icon: "↩️",
-          description: "Send back to Budget Approver for revisions",
+          description: "Send back to Budget Preparer for revisions",
           requiresComment: true
         });
       }
@@ -530,7 +530,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           requiresComment: true
         });
         actions.push({
-          label: "Return to Budget/Planning Analyst",
+          label: "Return to Budget Preparer",
           action: "officer-return",
           color: "bg-red-500 hover:bg-red-600",
           icon: "↩️",
@@ -576,11 +576,11 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           requiresComment: true
         });
         actions.push({
-          label: "Return",
+          label: "Return to Budget Preparer",
           action: "manager-return",
           color: "bg-red-500 hover:bg-red-600",
           icon: "↩️",
-          description: "Return proposal for revisions",
+          description: "Return proposal to Budget Preparer for revisions",
           requiresComment: true
         });
       }
@@ -609,11 +609,11 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
         requiresComment: true
       });
       actions.push({
-        label: "Return",
+        label: "Return to Budget Preparer",
         action: "manager-return",
         color: "bg-red-500 hover:bg-red-600",
         icon: "↩️",
-        description: "Return proposal for revisions",
+        description: "Return proposal to Budget Preparer for revisions",
         requiresComment: true
       });
     }
@@ -842,7 +842,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           break;
         case "analyst-return":
           endpoint = "/api/workflow/analyst/return";
-          successMessage = "Proposal returned to Budget Approver successfully";
+          successMessage = "Proposal returned to Budget Preparer successfully";
           break;
         case "officer-verify":
           endpoint = "/api/workflow/verify";
@@ -854,7 +854,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           break;
         case "officer-return":
           endpoint = "/api/workflow/officer/return";
-          successMessage = "Proposal returned to Reviewer successfully";
+          successMessage = "Proposal returned to Budget Preparer successfully";
           break;
         case "officer-submit-to-manager":
           endpoint = "/api/workflow/officer/submit-to-manager";
@@ -874,7 +874,7 @@ const WorkflowActions = forwardRef(({ proposal, userInfo, onRefresh, onView, sho
           break;
         case "manager-return":
           endpoint = "/api/workflow/manager/return";
-          successMessage = "Proposal returned for further review";
+          successMessage = "Proposal returned to Budget Preparer successfully";
           break;
         case "manager-save-edits":
           endpoint = "/api/workflow/manager/save-edits";

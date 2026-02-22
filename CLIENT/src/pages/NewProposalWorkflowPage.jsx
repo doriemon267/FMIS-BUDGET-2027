@@ -829,20 +829,20 @@ const NewProposalWorkflowPage = () => {
       "approver-return": "return-to-reviewer",
       "approver-save-edits": "approver-save-edits",
 
-      // Budget Planning Analyst actions
+      // Budget Planning Analyst actions (BRD: return goes to Preparer only)
       "analyst-submit-to-officer": "forward-to-officer",
-      "analyst-return": "return-to-approver",
+      "analyst-return": "return-to-preparer",
       "analyst-save-edits": "analyst-save-edits",
 
-      // Budget Officer actions
+      // Budget Officer actions (BRD: return goes to Preparer only)
       "officer-approve": "forward-to-manager",
-      "officer-return": "return-to-analyst",
+      "officer-return": "return-to-preparer",
       "officer-save-edits": "officer-save-edits",
       "officer-submit-to-manager": "forward-to-manager",
 
-      // Budget Manager actions
+      // Budget Manager actions (BRD: return goes to Preparer only)
       "manager-approve": "finalize",
-      "manager-return": "return-to-officer",
+      "manager-return": "return-to-preparer",
       "manager-save-edits": "manager-save-edits",
     };
 
@@ -1463,7 +1463,7 @@ const NewProposalWorkflowPage = () => {
         );
       }
 
-      // Super admin can do analyst actions
+      // Super admin can do analyst actions (BRD return → Preparer only)
       if (
         [
           "Forwarded to Budget/Planning Analyst",
@@ -1481,7 +1481,7 @@ const NewProposalWorkflowPage = () => {
             color: "primary",
           },
           {
-            label: "Return to Budget Approver",
+            label: "Return to Budget Preparer",
             value: "analyst-return",
             icon: <RejectIcon />,
             color: "warning",
@@ -1489,7 +1489,7 @@ const NewProposalWorkflowPage = () => {
         );
       }
 
-      // Super admin can do officer actions
+      // Super admin can do officer actions (BRD return → Preparer only)
       if (
         [
           "Forwarded to Budget Officer",
@@ -1507,7 +1507,7 @@ const NewProposalWorkflowPage = () => {
             color: "primary",
           },
           {
-            label: "Return to Budget Planning Analyst",
+            label: "Return to Budget Preparer",
             value: "officer-return",
             icon: <RejectIcon />,
             color: "warning",
@@ -1515,7 +1515,7 @@ const NewProposalWorkflowPage = () => {
         );
       }
 
-      // Super admin can finalize
+      // Super admin can finalize (BRD return → Preparer only)
       if (
         [
           "Forwarded to Overall Budget Approver",
@@ -1534,7 +1534,7 @@ const NewProposalWorkflowPage = () => {
             color: "success",
           },
           {
-            label: "Return to Budget Officer",
+            label: "Return to Budget Preparer",
             value: "manager-return",
             icon: <RejectIcon />,
             color: "warning",
@@ -1642,7 +1642,7 @@ const NewProposalWorkflowPage = () => {
       );
     }
 
-    // BUDGET PLANNING ANALYST actions
+    // BUDGET PLANNING ANALYST actions (BRD: return to Preparer only)
     if (
       userRoles.includes("BUDGET PLANNING ANALYST") &&
       (currentStatus === "Forwarded to Budget/Planning Analyst" ||
@@ -1659,7 +1659,7 @@ const NewProposalWorkflowPage = () => {
           color: "primary",
         },
         {
-          label: "Return to Budget Approver",
+          label: "Return to Budget Preparer",
           value: "analyst-return",
           icon: <RejectIcon />,
           color: "warning",
@@ -1667,7 +1667,7 @@ const NewProposalWorkflowPage = () => {
       );
     }
 
-    // BUDGET OFFICER actions
+    // BUDGET OFFICER actions (BRD: return to Preparer only)
     if (
       userRoles.includes("BUDGET OFFICER") &&
       (currentStatus === "Forwarded to Budget Officer" ||
@@ -1684,7 +1684,7 @@ const NewProposalWorkflowPage = () => {
           color: "primary",
         },
         {
-          label: "Return to Budget/Planning Analyst",
+          label: "Return to Budget Preparer",
           value: "officer-return",
           icon: <RejectIcon />,
           color: "warning",
@@ -1692,7 +1692,7 @@ const NewProposalWorkflowPage = () => {
       );
     }
 
-    // BUDGET MANAGER actions
+    // BUDGET MANAGER actions (BRD: return to Preparer only)
     if (
       userRoles.includes("BUDGET MANAGER") &&
       (
@@ -1716,7 +1716,7 @@ const NewProposalWorkflowPage = () => {
           color: "success",
         },
         {
-          label: "Return to Budget Officer",
+          label: "Return to Budget Preparer",
           value: "manager-return",
           icon: <RejectIcon />,
           color: "warning",
@@ -3199,52 +3199,6 @@ const NewProposalWorkflowPage = () => {
                     </Typography>
                   </Grid>
                 </Grid>
-
-                {/* Save button for reviewers if changes made */}
-                {canUserEdit() && changedItems.size > 0 && (
-                  <Box
-                    sx={{
-                      mt: 3,
-                      pt: 2,
-                      borderTop: "1px solid #e0e0e0",
-                      display: "flex",
-                      gap: 2,
-                    }}
-                  >
-                    <Button
-                      variant="contained"
-                      sx={{
-                        bgcolor: "#2d5016",
-                        "&:hover": { bgcolor: "#1e3a0f" },
-                      }}
-                      onClick={handleSaveChanges}
-                    >
-                      Save Changes ({changedItems.size})
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      onClick={() => {
-                        setEditableItems({
-                          income: JSON.parse(
-                            JSON.stringify(proposalDetails.income || [])
-                          ),
-                          personnel: JSON.parse(
-                            JSON.stringify(proposalDetails.personnel || [])
-                          ),
-                          mooe: JSON.parse(
-                            JSON.stringify(proposalDetails.mooe || [])
-                          ),
-                          capitalOutlay: JSON.parse(
-                            JSON.stringify(proposalDetails.capitalOutlay || [])
-                          ),
-                        });
-                        setChangedItems(new Set());
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </Box>
-                )}
 
                 {/* Inline Proposal Details Edit (Budget Preparer or Super Admin in Draft) */}
                 {(() => {
@@ -5434,7 +5388,45 @@ const NewProposalWorkflowPage = () => {
             </>
           )}
         </DialogContent>
-        <DialogActions sx={{ p: 3, borderTop: "1px solid #e0e0e0" }}>
+        <DialogActions sx={{ p: 3, borderTop: "1px solid #e0e0e0", justifyContent: "space-between" }}>
+          <Box sx={{ display: "flex", gap: 2 }}>
+            {canUserEdit() && changedItems.size > 0 && (
+              <>
+                <Button
+                  variant="contained"
+                  sx={{
+                    bgcolor: "#2d5016",
+                    "&:hover": { bgcolor: "#1e3a0f" },
+                  }}
+                  onClick={handleSaveChanges}
+                >
+                  Save Changes ({changedItems.size})
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    setEditableItems({
+                      income: JSON.parse(
+                        JSON.stringify(proposalDetails.income || [])
+                      ),
+                      personnel: JSON.parse(
+                        JSON.stringify(proposalDetails.personnel || [])
+                      ),
+                      mooe: JSON.parse(
+                        JSON.stringify(proposalDetails.mooe || [])
+                      ),
+                      capitalOutlay: JSON.parse(
+                        JSON.stringify(proposalDetails.capitalOutlay || [])
+                      ),
+                    });
+                    setChangedItems(new Set());
+                  }}
+                >
+                  Cancel
+                </Button>
+              </>
+            )}
+          </Box>
           <Button
             onClick={() => {
               if (changedItems.size > 0) {

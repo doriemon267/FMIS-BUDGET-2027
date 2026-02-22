@@ -2,6 +2,7 @@ const jwt = require("jsonwebtoken");
 const mongoose = require('mongoose');
 const { resolveUserIdentity, getClientIp } = require("../utils/requestContext");
 const { mainConnection } = require('../config/mongo_db');
+const { requireBudgetRole } = require('./requireBudgetRole');
 
 module.exports = async (req, res, next) => {
   try {
@@ -107,7 +108,7 @@ module.exports = async (req, res, next) => {
     const identity = await resolveUserIdentity({ req });
     req.identity = identity;
 
-    next();
+    return requireBudgetRole(req, res, next);
   } catch (error) {
     console.error("Authentication error in check_token_prod:", error.message);
     if (error.name === 'TokenExpiredError') {

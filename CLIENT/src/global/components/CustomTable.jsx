@@ -1,6 +1,8 @@
 import {
   Box,
   Button,
+  Checkbox,
+  Chip,
   IconButton,
   MenuItem,
   Paper,
@@ -20,8 +22,9 @@ import {
 import { blueGrey, green, grey } from "@mui/material/colors";
 import { useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TiFilter } from "react-icons/ti";
+import { useSearchParams } from "react-router-dom";
 import api from "../../config/api";
 import { useSearch } from "../../context/SearchContext";
 import TableBodyLoading from "../../global/components/TableBodyLoading";
@@ -30,22 +33,18 @@ import formatCurrency from "../../utils/formatCurrency";
 import { formatDateToMDY, isValidDate } from "../../utils/formatDate";
 
 const CustomTable = ({
-  columns,
+  columns: initialColumns,
   ROWS_PER_PAGE = 20,
   apiPath,
   dataListName = "",
-  orderByDefault = "updatedAt",
-  filter = {}, // Added filter prop
-  /**
-   * If `true` (default), CustomTable will use `data.count` if present
-   * for the pagination `count`. Set to `false` to disable this behavior
-   * and retain the legacy fallback behavior.
-   */
-  useCount = false,
+  orderByDefault = "createdAt",
+  setSelectedRows,
+  selectedRows,
+  showBatchOptions,
+  schema,
 }) => {
   const { searchValue, setSearchValue } = useSearch();
-  const [debouncedSearch, setDebouncedSearch] = useState(searchValue);
-  const tenSecondsAgo = dayjs().subtract(10, "second");
+  const TEN_SECONDS_AGO = dayjs().subtract(10, "second");
 
   const [order, setOrder] = useState("desc");
   const [orderBy, setOrderBy] = useState(orderByDefault);
@@ -54,134 +53,161 @@ const CustomTable = ({
   const [filterAnchorEl, setFilterAnchorEl] = useState(null);
   const [focusedCell, setFocusedCell] = useState(null);
   const [fieldAndValue, setFieldAndValue] = useState({
-    field: "",
-    value: "",
-    label: "",
-    operator: "=", // for number type
+    field: schema?.status?.listDefaultValue ? "status" : "",
+    value: schema?.status?.listDefaultValue || "",
+    label: schema?.status?.listDefaultValue ? schema.status.label : "",
+    operator: "=",
+    filterType: "exact",
   });
 
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedSearch(searchValue);
-    }, 400);
-
-    return () => clearTimeout(handler);
-  }, [searchValue]);
-
-  const serializedFilter = useMemo(
-    () => JSON.stringify(filter ?? {}),
-    [filter]
+  const [columns, setColumns] = useState(() =>
+    setSelectedRows
+      ? [
+          {
+            field: "select",
+            label: "Select",
+            width: 80,
+            type: "checkbox",
+            noFilter: true,
+            noSort: true,
+          },
+          ...initialColumns.map((col) => ({ ...col, width: col.width || 150 })),
+        ]
+      : initialColumns.map((col) => ({ ...col, width: col.width || 150 })),
   );
 
-  const memoizedFilter = useMemo(
-    () => JSON.parse(serializedFilter),
-    [serializedFilter]
-  );
+  const [resizing, setResizing] = useState(null);
+  const [columnHovering, setColumnHovering] = useState("");
+  const tableRef = useRef(null);
 
-  const activeFilterValue = useMemo(() => {
-    if (fieldAndValue.field === "date") {
-      return isValidDate(fieldAndValue.value) ? fieldAndValue.value : "";
-    }
-    return fieldAndValue.value ?? "";
-  }, [fieldAndValue.field, fieldAndValue.value]);
+  const [searchParams] = useSearchParams();
+  const notificationId = searchParams.get("_id");
 
-  const queryParams = useMemo(() => {
-    const params = {
-      page: page + 1,
-      limit: rowsPerPage,
-      orderBy,
-      order,
-      operator: fieldAndValue.operator,
-      ...memoizedFilter,
-    };
-
-    if (debouncedSearch) {
-      params.search = debouncedSearch;
-    }
-
-    if (fieldAndValue.field && activeFilterValue !== "" && activeFilterValue !== undefined) {
-      params[fieldAndValue.field] = activeFilterValue;
-    }
-
-    return params;
-  }, [
-    page,
-    rowsPerPage,
-    orderBy,
-    order,
-    fieldAndValue.operator,
-    fieldAndValue.field,
-    activeFilterValue,
-    memoizedFilter,
-    debouncedSearch,
-  ]);
-
-  const queryKey = useMemo(
-    () => [
-      dataListName,
-      page,
-      rowsPerPage,
-      debouncedSearch,
-      orderBy,
-      order,
-      fieldAndValue.field,
-      activeFilterValue,
-      fieldAndValue.operator,
-      serializedFilter,
-    ],
-    [
-      dataListName,
-      page,
-      rowsPerPage,
-      debouncedSearch,
-      orderBy,
-      order,
-      fieldAndValue.field,
-      activeFilterValue,
-      fieldAndValue.operator,
-      serializedFilter,
-    ]
-  );
-
-  const { data = {}, isLoading, isFetching } = useQuery({
-    queryKey,
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: [dataListName, page],
     queryFn: async () => {
-      const res = await api.get(apiPath, { params: queryParams });
+      const res = await api.get(apiPath, {
+        params: {
+          page: page + 1,
+          limit: rowsPerPage,
+          search: searchValue,
+          [fieldAndValue.field]: fieldAndValue.value,
+          orderBy,
+          order,
+          operator: fieldAndValue.operator,
+          _id: notificationId,
+          filterType: fieldAndValue.filterType,
+        },
+      });
       return res.data;
     },
-    keepPreviousData: true,
-    staleTime: 30000,
   });
 
-  const loading = isLoading || isFetching;
+  useEffect(() => {
+    if (fieldAndValue.value && fieldAndValue.field === "date") {
+      setPage(0);
+      setRowsPerPage(ROWS_PER_PAGE);
+      if (
+        isValidDate(fieldAndValue.value) ||
+        fieldAndValue.filterType === "month"
+      ) {
+        refetch();
+      }
+    } else if (searchValue && searchValue.split("-").length === 3) {
+      if (isValidDate(searchValue)) refetch();
+    } else {
+      setPage(0);
+      setRowsPerPage(ROWS_PER_PAGE);
+      const debouncedSearch = setTimeout(() => {
+        refetch();
+      }, 500);
+      return () => clearTimeout(debouncedSearch);
+    }
+  }, [searchValue, fieldAndValue, refetch, ROWS_PER_PAGE]);
 
   useEffect(() => {
-    if (
-      fieldAndValue.value &&
-      fieldAndValue.field === "date" &&
-      !isValidDate(fieldAndValue.value)
-    ) {
-      return;
-    }
-
-    setPage(0);
-    setRowsPerPage(ROWS_PER_PAGE);
-  }, [debouncedSearch, fieldAndValue.field, activeFilterValue, serializedFilter]);
+    const debouncedSearch = setTimeout(() => {
+      refetch();
+    }, 500);
+    return () => clearTimeout(debouncedSearch);
+  }, [order, orderBy, rowsPerPage, searchParams, refetch]);
 
   useEffect(() => {
     if (
       searchValue &&
       (fieldAndValue.field || fieldAndValue.label || fieldAndValue.value)
     ) {
-      setFieldAndValue({ field: "", label: "", value: "", operator: "=" });
+      setFieldAndValue({ field: "", label: "", value: "" });
     }
-  }, [searchValue]); // Depend only on searchValue to prevent looping
+  }, [searchValue]);
 
   useEffect(() => {
     if (fieldAndValue.value && searchValue) {
       setSearchValue("");
     }
-  }, [fieldAndValue.value]); // Depend only on fieldAndValue.value
+  }, [fieldAndValue.value, setSearchValue]);
+
+  const handleSelectAll = (event) => {
+    if (!setSelectedRows) return;
+    if (event.target.checked) {
+      const allRows = data[dataListName].map((row) => row);
+      setSelectedRows(allRows);
+    } else {
+      setSelectedRows([]);
+    }
+  };
+
+  const handleSelectRow = (event, row) => {
+    if (!setSelectedRows) return;
+    const selectedIndex = selectedRows.findIndex((r) => r._id === row._id);
+    let newSelected = [];
+
+    if (selectedIndex === -1) {
+      newSelected = [...selectedRows, row];
+    } else {
+      newSelected = selectedRows.filter((r) => r._id !== row._id);
+    }
+
+    setSelectedRows(newSelected);
+  };
+
+  const isSelected = (row) =>
+    setSelectedRows ? selectedRows.some((r) => r._id === row._id) : false;
+
+  const handleMouseDown = (e, field) => {
+    setResizing({
+      field,
+      startX: e.clientX,
+      startWidth: columns.find((col) => col.field === field).width,
+    });
+  };
+
+  const handleMouseMove = (e) => {
+    if (!resizing) return;
+    const newWidth = resizing.startWidth + (e.clientX - resizing.startX);
+    setColumns((prev) =>
+      prev.map((col) =>
+        col.field === resizing.field
+          ? { ...col, width: Math.max(50, newWidth) }
+          : col,
+      ),
+    );
+  };
+
+  const handleMouseUp = () => {
+    setResizing(null);
+  };
+
+  useEffect(() => {
+    if (resizing) {
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [resizing]);
 
   const handleRequestSort = (property) => {
     const isAsc = orderBy === property && order === "asc";
@@ -191,8 +217,14 @@ const CustomTable = ({
 
   const handleFilterClick = (event, columnKey, columnLabel) => {
     setFilterAnchorEl(event.currentTarget);
-    if (fieldAndValue.field !== columnKey)
-      setFieldAndValue({ field: columnKey, value: "", label: columnLabel });
+    const schemaField = schema?.[columnKey];
+    const column = columns.find((col) => col.field === columnKey);
+    setFieldAndValue({
+      field: columnKey,
+      value: schemaField?.listDefaultValue || column?.listDefaultValue || "",
+      label: columnLabel,
+      operator: "=",
+    });
   };
 
   const handleFilterClearValue = () =>
@@ -200,170 +232,237 @@ const CustomTable = ({
 
   const handleFilterClose = () => setFilterAnchorEl(null);
 
-  // _id from mongoDB
-  const handleCellClick = (rowIndex, columnKey, _id) => {
-    // console.log(_id);
-    setFocusedCell({ rowIndex, columnKey, _id });
+  const handleCellClick = (rowId, columnKey) => {
+    setFocusedCell({ rowId, columnKey, _id: rowId });
   };
 
   const handleChangePage = (event, newPage) => setPage(newPage);
 
   const handleChangeRowsPerPage = (event) => {
     setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0); // Reset to page 0 when rows per page changes
+    setPage(0);
   };
 
-  const handleDateChange = (e) => {
-    let inputValue = e.target.value; // YYYY-MM-DD
-    if (!inputValue) return;
+  const handleDateChange = (e, type = "exact") => {
+    let inputValue = e.target.value || "";
+    if (!inputValue) {
+      setFieldAndValue((prev) => ({ ...prev, value: "", filterType: type }));
+      return;
+    }
 
-    const [year, month, day] = inputValue.split("-");
-    const formattedValue = `${month}-${day}-${year}`;
-
-    setFieldAndValue((prev) => ({ ...prev, value: formattedValue }));
+    if (type === "month") {
+      setFieldAndValue((prev) => ({
+        ...prev,
+        value: inputValue,
+        filterType: type,
+      }));
+    } else {
+      const [year, month, day] = inputValue.split("-");
+      const formattedValue = `${month}-${day}-${year}`;
+      setFieldAndValue((prev) => ({
+        ...prev,
+        value: formattedValue,
+        filterType: type,
+      }));
+    }
   };
+
   const getFormattedValue = () => {
     if (!fieldAndValue.value) return "";
+    if (fieldAndValue.filterType === "month") {
+      return fieldAndValue.value;
+    }
     const [month, day, year] = fieldAndValue.value.split("-");
-    return `${year}-${month}-${day}`;
+    return `${year}-${month}-${day}` || "";
   };
-  // Function to render filters based on column type
+
   const renderFilter = () => {
     const column = columns.find((col) => col.field === fieldAndValue.field);
+    const schemaField = schema?.[fieldAndValue.field];
 
-    if (column) {
-      if (column.type === "date") {
-        return (
-          <>
+    if (!column) return null;
+
+    if (schemaField?.listOptions || column.listOptions) {
+      const options = schemaField?.listOptions || column.listOptions;
+      return (
+        <>
+          <Select
+            size="small"
+            value={fieldAndValue.value || "all"}
+            onChange={(e) => {
+              const value = e.target.value === "all" ? "" : e.target.value;
+              setFieldAndValue((prev) => ({ ...prev, value }));
+            }}
+            fullWidth
+          >
+            <MenuItem value="all">All</MenuItem>
+            {options.map((option) => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuItem>
+            ))}
+          </Select>
+          {fieldAndValue.value && (
+            <Button
+              size="small"
+              variant="contained"
+              color="error"
+              onClick={handleFilterClearValue}
+              sx={{ my: 1 }}
+            >
+              Clear
+            </Button>
+          )}
+        </>
+      );
+    } else if (column.type === "date") {
+      return (
+        <>
+          <Select
+            size="small"
+            value={fieldAndValue.filterType || "exact"}
+            onChange={(e) =>
+              setFieldAndValue((prev) => ({
+                ...prev,
+                filterType: e.target.value,
+                value: "",
+              }))
+            }
+            fullWidth
+            sx={{ mb: 1 }}
+          >
+            <MenuItem value="exact">Exact Date</MenuItem>
+            <MenuItem value="month">Month</MenuItem>
+          </Select>
+          {fieldAndValue.filterType === "month" ? (
+            <TextField
+              size="small"
+              type="month"
+              value={fieldAndValue.value || ""}
+              onChange={(e) => handleDateChange(e, "month")}
+              fullWidth
+              sx={{ "& .MuiOutlinedInput-root": { borderRadius: "8px" } }}
+            />
+          ) : (
             <TextField
               size="small"
               type="date"
               value={getFormattedValue()}
-              onChange={handleDateChange}
+              onChange={(e) => handleDateChange(e, "exact")}
               fullWidth
-              sx={{
-                "& .MuiOutlinedInput-root": {
-                  borderRadius: "8px",
-                },
-              }}
+              sx={{ "& .MuiOutlinedInput-root": { borderRadius: "8px" } }}
             />
-            {fieldAndValue.value && (
-              <Button
-                size="small"
-                variant="contained"
-                color="error"
-                onClick={handleFilterClearValue}
-                sx={{ my: 1 }}
-              >
-                Clear
-              </Button>
-            )}
-          </>
-        );
-      } else if (column.type === "number") {
-        return (
-          <>
-            <Select
+          )}
+          {fieldAndValue.value && (
+            <Button
               size="small"
-              value={fieldAndValue.operator || "="}
-              onChange={(e) =>
-                setFieldAndValue((prev) => ({
-                  ...prev,
-                  operator: e.target.value,
-                }))
-              }
-              fullWidth
+              variant="contained"
+              color="error"
+              onClick={handleFilterClearValue}
+              sx={{ my: 1 }}
             >
-              <MenuItem
-                sx={{ display: "flex", justifyContent: "space-between" }}
-                value="="
-              >
-                Equal to <b>=</b>
-              </MenuItem>
-              <MenuItem
-                sx={{ display: "flex", justifyContent: "space-between" }}
-                value="<"
-              >
-                Less than <b>&lt;</b>
-              </MenuItem>
-              <MenuItem
-                sx={{ display: "flex", justifyContent: "space-between" }}
-                value=">"
-              >
-                Greater than <b>&gt;</b>
-              </MenuItem>
-              <MenuItem
-                sx={{ display: "flex", justifyContent: "space-between" }}
-                value="<="
-              >
-                Less than or Equal <b>&le;</b>
-              </MenuItem>
-              <MenuItem
-                sx={{ display: "flex", justifyContent: "space-between" }}
-                value=">="
-              >
-                Greater than or Equal <b>&ge;</b>
-              </MenuItem>
-            </Select>
-
-            <TextField
-              size="small"
-              type="number"
-              placeholder={`Enter ${fieldAndValue.label}`}
-              value={fieldAndValue.value || ""}
-              onChange={(e) =>
-                setFieldAndValue((prev) => ({ ...prev, value: e.target.value }))
-              }
-              fullWidth
-            />
-            {fieldAndValue.value && (
-              <Button
-                size="small"
-                variant="contained"
-                color="error"
-                onClick={handleFilterClearValue}
-                sx={{ my: 1 }}
-              >
-                Clear
-              </Button>
-            )}
-          </>
-        );
-      } else if (column.type === "boolean") {
-        return (
-          <>
-            <Select
-              size="small"
-              value={
-                fieldAndValue.value !== undefined ? fieldAndValue.value : ""
-              }
-              onChange={(e) =>
-                setFieldAndValue((prev) => ({
-                  ...prev,
-                  value: e.target.value === "true",
-                }))
-              }
-              fullWidth
+              Clear
+            </Button>
+          )}
+        </>
+      );
+    } else if (column.type === "number") {
+      return (
+        <>
+          <Select
+            size="small"
+            value={fieldAndValue.operator || "="}
+            onChange={(e) =>
+              setFieldAndValue((prev) => ({
+                ...prev,
+                operator: e.target.value,
+              }))
+            }
+            fullWidth
+          >
+            <MenuItem
+              sx={{ display: "flex", justifyContent: "space-between" }}
+              value="="
             >
-              <MenuItem value="">All</MenuItem>
-              <MenuItem value="true">Yes</MenuItem>
-              <MenuItem value="false">No</MenuItem>
-            </Select>
-            {fieldAndValue.value !== undefined &&
-              fieldAndValue.value !== "" && (
-                <Button
-                  size="small"
-                  variant="contained"
-                  color="error"
-                  onClick={handleFilterClearValue}
-                  sx={{ my: 1 }}
-                >
-                  Clear
-                </Button>
-              )}
-          </>
-        );
-      }
+              Equal to <b>=</b>
+            </MenuItem>
+            <MenuItem
+              sx={{ display: "flex", justifyContent: "space-between" }}
+              value="<"
+            >
+              Less than <b>{"<"}</b>
+            </MenuItem>
+            <MenuItem
+              sx={{ display: "flex", justifyContent: "space-between" }}
+              value=">"
+            >
+              Greater than <b>{">"}</b>
+            </MenuItem>
+            <MenuItem
+              sx={{ display: "flex", justifyContent: "space-between" }}
+              value="<="
+            >
+              Less than or Equal <b>≤</b>
+            </MenuItem>
+            <MenuItem
+              sx={{ display: "flex", justifyContent: "space-between" }}
+              value=">="
+            >
+              Greater than or Equal <b>≥</b>
+            </MenuItem>
+          </Select>
+          <TextField
+            size="small"
+            type="number"
+            placeholder={`Enter ${fieldAndValue.label}`}
+            value={fieldAndValue.value || ""}
+            onChange={(e) =>
+              setFieldAndValue((prev) => ({ ...prev, value: e.target.value }))
+            }
+            fullWidth
+          />
+          {fieldAndValue.value && (
+            <Button
+              size="small"
+              variant="contained"
+              color="error"
+              onClick={handleFilterClearValue}
+              sx={{ my: 1 }}
+            >
+              Clear
+            </Button>
+          )}
+        </>
+      );
+    } else if (column.type === "boolean") {
+      return (
+        <>
+          <Select
+            size="small"
+            value={
+              fieldAndValue.value === true
+                ? "true"
+                : fieldAndValue.value === false
+                  ? "false"
+                  : "all"
+            }
+            onChange={(e) => {
+              const newValue =
+                e.target.value === "true"
+                  ? true
+                  : e.target.value === "false"
+                    ? false
+                    : null;
+              setFieldAndValue((prev) => ({ ...prev, value: newValue }));
+            }}
+            fullWidth
+          >
+            <MenuItem value="all">All</MenuItem>
+            <MenuItem value="true">Yes</MenuItem>
+            <MenuItem value="false">No</MenuItem>
+          </Select>
+        </>
+      );
     }
 
     return (
@@ -371,7 +470,7 @@ const CustomTable = ({
         <TextField
           size="small"
           placeholder={`Search by ${fieldAndValue.label}`}
-          value={fieldAndValue.value}
+          value={fieldAndValue.value || ""}
           onChange={(e) =>
             setFieldAndValue((prev) => ({ ...prev, value: e.target.value }))
           }
@@ -392,73 +491,162 @@ const CustomTable = ({
     );
   };
 
+  const isAllSelected = () => {
+    if (!data || !data[dataListName] || data[dataListName].length === 0)
+      return false;
+    return selectedRows.length === data[dataListName].length;
+  };
+
+  const isIndeterminate = () => {
+    if (!data || !data[dataListName] || data[dataListName].length === 0)
+      return false;
+    return (
+      selectedRows.length > 0 && selectedRows.length < data[dataListName].length
+    );
+  };
+
   return (
-    <Box overflow="auto">
+    <Box overflow="auto" ref={tableRef}>
       <Paper sx={{ width: "100%", overflow: "hidden", borderRadius: 0 }}>
         <TableContainer sx={{ height: "78vh" }}>
           <Table size="small" sx={{ borderCollapse: "collapse" }}>
-            <TableHead>
+            <TableHead
+              sx={{
+                position: "sticky",
+                top: 0,
+                zIndex: 1,
+              }}
+            >
               <TableRow>
-                {/* Render the headers dynamically from columns */}
                 {columns.map((column) =>
-                  column.type === "action" ? (
-                    <TableCell key={1}>{column.label}</TableCell>
+                  column.type === "checkbox" && setSelectedRows ? (
+                    <TableCell
+                      key={column.field}
+                      sx={{
+                        width: column.width,
+                        borderRight: "1px solid",
+                        borderColor: grey[500],
+                      }}
+                    >
+                      <Box
+                        display="flex"
+                        alignItems="center"
+                        justifyContent="space-between"
+                      >
+                        <Checkbox
+                          checked={isAllSelected()}
+                          indeterminate={isIndeterminate()}
+                          onChange={handleSelectAll}
+                        />
+                        {showBatchOptions}
+                      </Box>
+                    </TableCell>
+                  ) : column.type === "action" ? (
+                    <TableCell
+                      key={column.field || "action"}
+                      sx={{
+                        width: column.width,
+                        borderRight: "1px solid",
+                        borderColor: grey[500],
+                      }}
+                    >
+                      {column.label}
+                    </TableCell>
                   ) : (
                     <TableCell
                       size="small"
-                      key={column.type === "action" ? "action" : column.field}
+                      key={column.field}
+                      onMouseEnter={() => setColumnHovering(column.field)}
+                      onMouseLeave={() => setColumnHovering()}
                       sx={{
                         position: "relative",
                         borderRight: "1px solid",
-                        borderColor: grey[500], // Add border to each cell
-                        textAlign: column.type === "number" ? "right" : "left", // Align to right if column type is number
+                        borderColor: grey[500],
+                        width: column.width,
+                        minWidth: 50,
+                        userSelect: "none",
                       }}
                     >
-                      <div
-                        style={{
+                      <Box
+                        sx={{
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "space-between",
+                          position: "relative",
                         }}
                       >
-                        <TableSortLabel
-                          active={orderBy === column.field}
-                          direction={orderBy === column.field ? order : "asc"}
-                          onClick={() => handleRequestSort(column.field)}
-                          sx={{ flex: 1 }}
-                        >
-                          {column.label}
-                        </TableSortLabel>
-
-                        <Tooltip title={`Filter ${column.label}`}>
-                          <IconButton
-                            size="small"
-                            onClick={(event) =>
-                              handleFilterClick(
-                                event,
-                                column.field,
-                                column.label
-                              )
-                            }
+                        {column.noSort ? (
+                          <Box sx={{ flex: 1 }}>
+                            {schema?.[column.field]?.listDefaultValue
+                              ? `${column.label} (${
+                                  schema[column.field].listDefaultValue
+                                })`
+                              : column.listDefaultValue
+                                ? `${column.label} (${column.listDefaultValue})`
+                                : column.label}
+                          </Box>
+                        ) : (
+                          <TableSortLabel
+                            active={orderBy === column.field}
+                            direction={orderBy === column.field ? order : "asc"}
+                            onClick={() => handleRequestSort(column.field)}
+                            sx={{ flex: 1 }}
                           >
-                            <TiFilter color="lightgray" />
-                          </IconButton>
-                        </Tooltip>
-                      </div>
+                            {schema?.[column.field]?.listDefaultValue
+                              ? `${column.label} (${
+                                  schema[column.field].listDefaultValue
+                                })`
+                              : column.listDefaultValue
+                                ? `${column.label} (${column.listDefaultValue})`
+                                : column.label}
+                          </TableSortLabel>
+                        )}
+                        {!column.noFilter && (
+                          <Tooltip title={`Filter ${column.label}`}>
+                            <IconButton
+                              size="small"
+                              onClick={(event) =>
+                                handleFilterClick(
+                                  event,
+                                  column.field,
+                                  column.label,
+                                )
+                              }
+                            >
+                              <TiFilter color="lightgray" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        <Box
+                          sx={{
+                            position: "absolute",
+                            right: -5,
+                            top: 0,
+                            bottom: 0,
+                            width: 3,
+                            cursor: "col-resize",
+                            backgroundColor:
+                              columnHovering === column.field
+                                ? grey[400]
+                                : "transparent",
+                            "&:hover": { backgroundColor: grey[300] },
+                          }}
+                          onMouseDown={(e) => handleMouseDown(e, column.field)}
+                        />
+                      </Box>
                     </TableCell>
-                  )
+                  ),
                 )}
               </TableRow>
             </TableHead>
-            {/* LOADING AND TABLE BODY */}
-            {loading ? (
+            {isLoading ? (
               <TableBodyLoading numCell={columns.length} />
             ) : (
               <TableBody>
-                {(data[dataListName] || []).length === 0 ? (
+                {data?.[dataListName]?.length === 0 ? (
                   <TableRow sx={{ height: "70vh" }}>
                     <TableCell
-                      colSpan={11}
+                      colSpan={columns.length}
                       sx={{ textAlign: "center", fontWeight: "500" }}
                     >
                       {searchValue ? (
@@ -471,90 +659,130 @@ const CustomTable = ({
                     </TableCell>
                   </TableRow>
                 ) : (
-                  (data[dataListName] || []).map((row, rowIndex) => {
+                  data[dataListName].map((row, rowIndex) => {
                     const isRecentlyUpdated =
                       row.updatedAt &&
-                      dayjs(row.updatedAt).isAfter(tenSecondsAgo);
+                      dayjs(row.updatedAt).isAfter(TEN_SECONDS_AGO);
+                    const isRowSelected = isSelected(row);
 
                     return (
                       <TableRow
-                        key={rowIndex}
+                        key={row._id}
                         sx={{
-                          backgroundColor: isRecentlyUpdated
-                            ? green[50] // Highlight modified rows
-                            : rowIndex % 2 === 0
-                            ? blueGrey[50]
-                            : "#ffffff",
+                          backgroundColor: isRowSelected
+                            ? green[200]
+                            : isRecentlyUpdated
+                              ? green[50]
+                              : rowIndex % 2 === 0
+                                ? blueGrey[50]
+                                : "#ffffff",
                         }}
                       >
-                        {/* Render the rows dynamically from columns */}
-                        {columns.map((column, i) => (
-                          <TableCell
-                            key={column.field}
-                            onClick={() =>
-                              handleCellClick(
-                                rowIndex,
-                                column.field,
-                                row["_id"]
-                              )
-                            } // Focus on click
-                            sx={{
-                              maxWidth: "150px", // Adjust based on your design
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              fontWeight: "500",
-                              textAlign: column.type === "number" ? "right" : "left", // Align to right if column type is number
-                              ...(focusedCell &&
-                                focusedCell._id === row["_id"] &&
-                                focusedCell.rowIndex === rowIndex &&
-                                focusedCell.columnKey === column.field && {
-                                  outline: "2px solid lightblue", // Focused cell border
-                                }),
-                              borderLeft:
-                                i !== 0
-                                  ? rowIndex % 2 === 0
-                                    ? "1px solid white"
-                                    : `1px solid ${grey[200]}`
-                                  : focusedCell &&
-                                    focusedCell._id === row["_id"] &&
-                                    focusedCell.rowIndex === rowIndex &&
-                                    focusedCell.columnKey === column.field,
-                            }}
-                          >
-                            {column.render ? (
-                              column.render(row)
-                            ) : !column.searchable ? (
-                              column.type === "date" ? (
-                                formatDateToMDY(row[column.field])
-                              ) : column.type === "number" ? (
-                                formatCurrency(row[column.field])
-                              ) : column.type === "boolean" ? (
-                                row[column.field] ? (
-                                  "Yes"
-                                ) : (
-                                  "No"
-                                ) // Display "Yes" for true, "No" for false
-                              ) : (
-                                row[column.field]
-                              )
-                            ) : (
-                              <TextSearchable
-                                columnName={
-                                  column.type === "date"
-                                    ? formatDateToMDY(row[column.field])
-                                    : column.type === "number"
-                                    ? formatCurrency(row[column.field])
-                                    : column.type === "boolean"
-                                    ? row[column.field]
-                                      ? "Yes"
-                                      : "No"
-                                    : row[column.field]
+                        {columns.map((column, i) =>
+                          column.type === "checkbox" && setSelectedRows ? (
+                            <TableCell
+                              key={column.field}
+                              sx={{ width: column.width }}
+                            >
+                              <Checkbox
+                                checked={isRowSelected}
+                                onChange={(event) =>
+                                  handleSelectRow(event, row)
                                 }
                               />
-                            )}
-                          </TableCell>
-                        ))}
+                            </TableCell>
+                          ) : (
+                            <TableCell
+                              key={column.field}
+                              onClick={() =>
+                                handleCellClick(row._id, column.field)
+                              }
+                              sx={{
+                                width: column.width,
+                                maxWidth: column.width,
+                                whiteSpace: "normal",
+                                overflowWrap: "anywhere",
+                                wordBreak: "break-word",
+                                fontWeight: "500",
+                                ...(focusedCell &&
+                                  focusedCell._id === row._id &&
+                                  focusedCell.rowId === row._id &&
+                                  focusedCell.columnKey === column.field && {
+                                    outline: "2px solid lightblue",
+                                  }),
+                                borderLeft:
+                                  i !== 0
+                                    ? rowIndex % 2 === 0 && !isRowSelected
+                                      ? "1px solid white"
+                                      : `1px solid ${grey[200]}`
+                                    : focusedCell &&
+                                      focusedCell._id === row._id &&
+                                      focusedCell.rowId === row._id &&
+                                      focusedCell.columnKey === column.field,
+                              }}
+                            >
+                              {column.render ? (
+                                column.render(row)
+                              ) : !column.searchable ? (
+                                column.type === "date" ? (
+                                  formatDateToMDY(row[column.field])
+                                ) : column.type === "number" ? (
+                                  formatCurrency(row[column.field])
+                                ) : column.type === "boolean" ? (
+                                  row[column.field] ? (
+                                    column.isChip ? (
+                                      <Chip
+                                        size="small"
+                                        label="Yes"
+                                        color="success"
+                                      />
+                                    ) : (
+                                      <span
+                                        style={{
+                                          color: "green",
+                                          fontWeight: "bold",
+                                        }}
+                                      >
+                                        Yes
+                                      </span>
+                                    )
+                                  ) : column.isChip ? (
+                                    <Chip
+                                      size="small"
+                                      label="No"
+                                      color="error"
+                                    />
+                                  ) : (
+                                    <span
+                                      style={{
+                                        color: "red",
+                                        fontWeight: "bold",
+                                      }}
+                                    >
+                                      No
+                                    </span>
+                                  )
+                                ) : (
+                                  row[column.field]
+                                )
+                              ) : (
+                                <TextSearchable
+                                  columnName={
+                                    column.type === "date"
+                                      ? formatDateToMDY(row[column.field])
+                                      : column.type === "number"
+                                        ? formatCurrency(row[column.field])
+                                        : column.type === "boolean"
+                                          ? row[column.field]
+                                            ? "Yes"
+                                            : "No"
+                                          : row[column.field]
+                                  }
+                                />
+                              )}
+                            </TableCell>
+                          ),
+                        )}
                       </TableRow>
                     );
                   })
@@ -564,25 +792,18 @@ const CustomTable = ({
           </Table>
         </TableContainer>
 
-        {/* PAGINATION AREA */}
-        {!loading ? (
+        {!isLoading && (
           <TablePagination
             rowsPerPageOptions={[10, ROWS_PER_PAGE, 50]}
             component="div"
-            // Use `data.count` if the API returns it and `useCount` is enabled
-            count={
-              useCount && data.count !== undefined
-                ? data.count
-                : data.pagination?.totalCount || data.totalRecords || (data[dataListName] || []).length
-            }
+            count={data?.totalRecords || 0}
             rowsPerPage={rowsPerPage}
             page={page}
             onPageChange={handleChangePage}
             onRowsPerPageChange={handleChangeRowsPerPage}
           />
-        ) : undefined}
+        )}
 
-        {/* Popover for Filtering */}
         <Popover
           open={Boolean(filterAnchorEl)}
           anchorEl={filterAnchorEl}
@@ -593,7 +814,7 @@ const CustomTable = ({
             <Box sx={{ fontSize: 14, fontWeight: 600, color: "#333" }}>
               Filter by {fieldAndValue.label}
             </Box>
-            {renderFilter()} {/* Render filter based on column type */}
+            {renderFilter()}
           </Box>
         </Popover>
       </Paper>

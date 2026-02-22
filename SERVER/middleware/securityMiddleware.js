@@ -151,6 +151,8 @@ const adminRoute = () => {
       if (req.method === 'OPTIONS') return next();
       const adminRoles = [
         PERMISSION_LEVELS.SUPER_ADMIN,
+        'SUPER ADMIN',   // Display format from DB/API
+        'SUPERADMIN',    // CamelCase variant (SuperAdmin → SUPERADMIN)
         PERMISSION_LEVELS.BUDGET_ADMIN,
         PERMISSION_LEVELS.BUDGET_ANALYST,
         PERMISSION_LEVELS.BUDGET_PLANNING_ANALYST, // ✅ NEW: Support BUDGET PLANNING ANALYST role

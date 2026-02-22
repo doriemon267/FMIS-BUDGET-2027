@@ -32,8 +32,9 @@ export function setDevUser(user) {
 const fetchCsrfToken = async () => {
   if (_csrfToken) return _csrfToken;
   try {
-    // Use same origin as api (/) so cookie works - BUDGET_SERVER_URL_PROD causes cross-origin cookie issues
-    const csrfBase = IS_PRODUCTION ? "" : env("SERVER_URL_DEV");
+    // Use same origin as api so cookie works. Avoid double /api when SERVER_URL_DEV ends with /api (e.g. https://budget.fmis.local/api)
+    const rawBase = IS_PRODUCTION ? "" : env("SERVER_URL_DEV");
+    const csrfBase = rawBase ? rawBase.replace(/\/api\/?$/, "") || "" : "";
     const url = csrfBase ? `${csrfBase}${apiPrefix}/csrf-token` : `${apiPrefix}/csrf-token`;
     const resp = await axios.get(url, { withCredentials: true });
     _csrfToken = resp.data && resp.data.csrfToken;

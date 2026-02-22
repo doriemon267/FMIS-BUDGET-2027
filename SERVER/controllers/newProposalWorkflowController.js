@@ -51,39 +51,39 @@ const WORKFLOW_TRANSITIONS = {
   'BUDGET PLANNING ANALYST': {
     'FORWARDED_TO_BRD_ANALYST': {
       'forward-to-officer': 'FORWARDED_TO_BRD_OFFICER',
-      'return-to-approver': 'RETURNED_TO_APPROVER'
+      'return-to-preparer': 'RETURNED_TO_PREPARER'
     },
     'RETURNED_TO_PLANNING_ANALYST': {
       'forward-to-officer': 'FORWARDED_TO_BRD_OFFICER',
-      'return-to-approver': 'RETURNED_TO_APPROVER'
+      'return-to-preparer': 'RETURNED_TO_PREPARER'
     },
     'RETURNED_TO_PREPARER': {
       'forward-to-officer': 'FORWARDED_TO_BRD_OFFICER',
-      'return-to-approver': 'RETURNED_TO_APPROVER'
+      'return-to-preparer': 'RETURNED_TO_PREPARER'
     }
   },
   'BUDGET OFFICER': {
     'FORWARDED_TO_BRD_OFFICER': {
       'forward-to-manager': 'FORWARDED_TO_BRD_MANAGER',
-      'return-to-analyst': 'RETURNED_TO_PLANNING_ANALYST'
+      'return-to-preparer': 'RETURNED_TO_PREPARER'
     },
     'RETURNED_TO_OFFICER': {
       'forward-to-manager': 'FORWARDED_TO_BRD_MANAGER',
-      'return-to-analyst': 'RETURNED_TO_PLANNING_ANALYST'
+      'return-to-preparer': 'RETURNED_TO_PREPARER'
     },
     'RETURNED_TO_PREPARER': {
       'forward-to-manager': 'FORWARDED_TO_BRD_MANAGER',
-      'return-to-analyst': 'RETURNED_TO_PLANNING_ANALYST'
+      'return-to-preparer': 'RETURNED_TO_PREPARER'
     }
   },
   'BUDGET MANAGER': {
     'FORWARDED_TO_BRD_MANAGER': {
       'finalize': 'FINALIZED',
-      'return-to-officer': 'RETURNED_TO_OFFICER'
+      'return-to-preparer': 'RETURNED_TO_PREPARER'
     },
     'RETURNED_TO_PREPARER': {
       'finalize': 'FINALIZED',
-      'return-to-officer': 'RETURNED_TO_OFFICER'
+      'return-to-preparer': 'RETURNED_TO_PREPARER'
     }
   },
   'SUPER ADMIN': {
@@ -110,11 +110,11 @@ const WORKFLOW_TRANSITIONS = {
     },
     'FORWARDED_TO_BRD_ANALYST': {
       'forward-to-officer': 'FORWARDED_TO_BRD_OFFICER',
-      'return-to-approver': 'RETURNED_TO_APPROVER'
+      'return-to-preparer': 'RETURNED_TO_PREPARER'
     },
     'RETURNED_TO_PLANNING_ANALYST': {
       'forward-to-officer': 'FORWARDED_TO_BRD_OFFICER',
-      'return-to-approver': 'RETURNED_TO_APPROVER'
+      'return-to-preparer': 'RETURNED_TO_PREPARER'
     },
     'RETURNED_TO_PREPARER': {
       'submit-to-reviewer': 'FORWARDED_TO_REVIEWER',
@@ -122,22 +122,19 @@ const WORKFLOW_TRANSITIONS = {
       'forward-to-officer': 'FORWARDED_TO_BRD_OFFICER',
       'forward-to-manager': 'FORWARDED_TO_BRD_MANAGER',
       'finalize': 'FINALIZED',
-      'return-to-approver': 'RETURNED_TO_APPROVER',
-      'return-to-reviewer': 'RETURNED_TO_REVIEWER',
-      'return-to-analyst': 'RETURNED_TO_PLANNING_ANALYST',
-      'return-to-officer': 'RETURNED_TO_OFFICER'
+      'return-to-preparer': 'RETURNED_TO_PREPARER'
     },
     'FORWARDED_TO_BRD_OFFICER': {
       'forward-to-manager': 'FORWARDED_TO_BRD_MANAGER',
-      'return-to-analyst': 'RETURNED_TO_PLANNING_ANALYST'
+      'return-to-preparer': 'RETURNED_TO_PREPARER'
     },
     'RETURNED_TO_OFFICER': {
       'forward-to-manager': 'FORWARDED_TO_BRD_MANAGER',
-      'return-to-analyst': 'RETURNED_TO_PLANNING_ANALYST'
+      'return-to-preparer': 'RETURNED_TO_PREPARER'
     },
     'FORWARDED_TO_BRD_MANAGER': {
       'finalize': 'FINALIZED',
-      'return-to-officer': 'RETURNED_TO_OFFICER'
+      'return-to-preparer': 'RETURNED_TO_PREPARER'
     }
   }
 };

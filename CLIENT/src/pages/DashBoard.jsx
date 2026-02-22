@@ -199,9 +199,17 @@ const HomePage = () => {
   const isPreparer = userRoles.includes('BUDGET PREPARER');
 
   // Get user's hierarchical access information
-  const userAccessLevel = currentUser?.hierarchicalAccess?.scope || 'REGION';
-  const userDivision = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
+  let userAccessLevel = currentUser?.hierarchicalAccess?.scope || 'REGION';
+  let userDivision = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
   const userDepartment = currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
+
+  // Budget Preparer should always see Division scope — they create proposals for their division, not region
+  if (isPreparer && (userAccessLevel === 'REGION' || !userAccessLevel || userAccessLevel === 'BUDGET_AND_REVENUE_DIVISION')) {
+    userAccessLevel = 'DIVISION';
+  }
+
+  // Normalize division: can be string name or object with name/divisionName
+  const divisionName = typeof userDivision === 'string' ? userDivision : (userDivision?.name || userDivision?.divisionName);
 
   // Get the active region name
   const regionName = activeRegion?.name || activeRegion?.regionName;
@@ -212,8 +220,8 @@ const HomePage = () => {
       case 'DIVISION':
         return {
           level: 'Division',
-          name: userDivision || 'Your Division',
-          scope: `${userDivision || 'Division'} (${userDepartment || 'Department'}, ${regionName || 'Region'})`
+          name: divisionName || 'Your Division',
+          scope: `${divisionName || 'Division'} (${userDepartment || 'Department'}, ${regionName || 'Region'})`
         };
       case 'DEPARTMENT':
         return {
@@ -403,7 +411,9 @@ const HomePage = () => {
                   Welcome back, {currentUser?.FirstName || 'Team Member'}
                 </Typography>
                 <Typography variant='body1' sx={{ opacity: 0.9, mb: 2, maxWidth: 680 }}>
-                  Monitor submissions, act on pending work, and keep {displayInfo.name} on track for the current fiscal cycle.
+                  {isPreparer
+                    ? `Prepare budget proposals for ${displayInfo.name} and track your submissions for the current fiscal cycle.`
+                    : `Monitor submissions, act on pending work, and keep ${displayInfo.name} on track for the current fiscal cycle.`}
                 </Typography>
                 <Stack
                   direction='row'
