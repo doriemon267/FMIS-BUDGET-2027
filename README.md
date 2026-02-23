@@ -194,6 +194,11 @@ Details and diagrams: **BUDGET_WORKFLOW_DOCUMENTATION.md**.
 
 ## Documentation
 
+- **USER_MANUAL.md** – End-user manual: login, roles, navigation, proposal management, reports, workflow reference, troubleshooting.
+- **SYSTEM_DOCUMENTATION.md** – Technical reference: architecture, API routes, data models, auth, workflow engine, configuration.
+- **RUNBOOK.md** – Operations runbook: health checks, startup issues, user access, workflow, backups.
+- **CHANGELOG.md** – Version history and changes.
+- **openapi.yaml** – OpenAPI 3.0 spec for main API endpoints.
 - **BUDGET_WORKFLOW_DOCUMENTATION.md** – Full workflow (Initial → NEP → GAA), Tier versioning, NEP ceilings, workflow actions, and technical notes.
 
 ---

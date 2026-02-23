@@ -10,6 +10,7 @@ import {
   Stack,
   useTheme,
 } from '@mui/material';
+import { hasBudgetModuleAccess } from '../../constants/roles';
 import LockIcon from '@mui/icons-material/Lock';
 import HomeIcon from '@mui/icons-material/Home';
 import LogoutIcon from '@mui/icons-material/Logout';
@@ -195,46 +196,7 @@ const AccessGuard = ({ children }) => {
   }
 
   // Budget role gate: Only SUPER ADMIN or users with at least one budget role can proceed
-  const roles = currentUser?.Roles || [];
-  const hierarchicalAccess = currentUser?.hierarchicalAccess;
-  const hasWorkflowAssignment =
-    (hierarchicalAccess?.workflowRoles?.length ?? 0) > 0 ||
-    (hierarchicalAccess?.roles?.length ?? 0) > 0;
-
-  const budgetRoles = [
-    'SUPER ADMIN',
-    'SUPER_ADMIN',
-    'SUPERADMIN',
-    'BUDGET COORDINATOR',
-    'BUDGET_COORDINATOR',
-    'BUDGET MANAGER',
-    'BUDGET_MANAGER',
-    'BUDGET OFFICER',
-    'BUDGET_OFFICER',
-    'BUDGET PREPARER',
-    'BUDGET_PREPARER',
-    'BUDGET REVIEWER',
-    'BUDGET_REVIEWER',
-    'BUDGET APPROVER',
-    'BUDGET_APPROVER',
-    'BUDGET PLANNING ANALYST',
-    'BUDGET_PLANNING_ANALYST',
-    'OVERALL BUDGET APPROVER',
-    'OVERALL_BUDGET_APPROVER',
-    'BUDGET_ADMIN',
-    'REVIEWER',
-    'APPROVER',
-  ];
-
-  const normalize = (r) => String(r || '').toUpperCase().replace(/\s/g, '_').trim();
-  const isSuperAdmin = roles.some((r) =>
-    ['SUPER_ADMIN', 'SUPERADMIN', 'SUPER ADMIN'].includes(normalize(r))
-  );
-  const hasBudgetRole = roles.some((r) =>
-    budgetRoles.some((br) => normalize(r) === normalize(br))
-  );
-
-  const isAuthorized = isSuperAdmin || hasBudgetRole || hasWorkflowAssignment;
+  const isAuthorized = hasBudgetModuleAccess(currentUser);
 
   if (!isAuthorized) {
     return <NoBudgetRolePage onLogout={logout} />;

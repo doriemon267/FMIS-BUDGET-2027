@@ -37,14 +37,16 @@ const apiLimiter = rateLimit({
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
 });
 
-// Strict rate limiter for authentication endpoints
+// Strict rate limiter for authentication endpoints (failed attempts only)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 login requests per windowMs
+  max: isDev ? 100 : (Number(process.env.RATE_LIMIT_AUTH_MAX) || 5),
   message: {
     error: 'Too many login attempts, please try again after 15 minutes.',
   },
   skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 // Rate limiter for file uploads

@@ -16,21 +16,71 @@ import {
   ListItemText,
   Divider,
   Box,
+  Paper,
 } from '@mui/material';
 import {
   HelpOutline,
   Keyboard,
   Info,
-  QuestionAnswer,
-  VideoLibrary,
+  PlayArrow,
 } from '@mui/icons-material';
 import FAQ from './FAQ';
 import { useState } from 'react';
 
 const InAppHelp = ({ open, onClose, context = 'general' }) => {
   const [activeTab, setActiveTab] = useState('overview');
+  const [walkthroughStep, setWalkthroughStep] = useState(0);
+
+  const quickStartSteps = [
+    { title: 'Go to Create Proposal', desc: 'Click "Create Proposal" under Budget Proposal Management, or use the template selector on the dashboard.' },
+    { title: 'Fill required fields', desc: 'Enter title, fiscal year, budget type (Initial/NEP/GAA), projected income and subsidy. Select your region.' },
+    { title: 'Add line items', desc: 'Add Personnel Services, MOOE, Capital Outlay, and Income data in the respective tabs.' },
+    { title: 'Submit for review', desc: 'When ready, click Submit. The proposal goes to Budget Reviewer, then Approver, then BRD Analyst, Officer, and Manager.' },
+    { title: 'Track progress', desc: 'Use "All Proposals" to see status. You can Return at any step if changes are needed.' },
+  ];
 
   const helpContent = {
+    quickStart: (
+      <Box>
+        <Typography variant="h6" gutterBottom>
+          Quick Start Walkthrough
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Step {walkthroughStep + 1} of {quickStartSteps.length}
+        </Typography>
+        <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+          <Typography fontWeight={600} gutterBottom>
+            {quickStartSteps[walkthroughStep].title}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {quickStartSteps[walkthroughStep].desc}
+          </Typography>
+        </Paper>
+        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between' }}>
+          <Button
+            size="small"
+            disabled={walkthroughStep === 0}
+            onClick={() => setWalkthroughStep((s) => Math.max(0, s - 1))}
+          >
+            Previous
+          </Button>
+          {walkthroughStep < quickStartSteps.length - 1 ? (
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<PlayArrow />}
+              onClick={() => setWalkthroughStep((s) => s + 1)}
+            >
+              Next
+            </Button>
+          ) : (
+            <Button variant="contained" size="small" onClick={() => setWalkthroughStep(0)}>
+              Restart
+            </Button>
+          )}
+        </Box>
+      </Box>
+    ),
     overview: (
       <Box>
         <Typography variant="h6" gutterBottom>
@@ -92,8 +142,8 @@ const InAppHelp = ({ open, onClose, context = 'general' }) => {
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth disableEnforceFocus={false} aria-labelledby="help-dialog-title">
+      <DialogTitle id="help-dialog-title">
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <HelpOutline color="primary" />
           <Typography variant="h6">Help & Support</Typography>
@@ -101,6 +151,14 @@ const InAppHelp = ({ open, onClose, context = 'general' }) => {
       </DialogTitle>
       <DialogContent>
         <Box sx={{ mb: 2 }}>
+          <Button
+            variant={activeTab === 'quickStart' ? 'contained' : 'outlined'}
+            onClick={() => setActiveTab('quickStart')}
+            sx={{ mr: 1 }}
+            size="small"
+          >
+            Quick Start
+          </Button>
           <Button
             variant={activeTab === 'overview' ? 'contained' : 'outlined'}
             onClick={() => setActiveTab('overview')}
@@ -126,7 +184,7 @@ const InAppHelp = ({ open, onClose, context = 'general' }) => {
           </Button>
         </Box>
         <Divider sx={{ mb: 2 }} />
-        {helpContent[activeTab] || helpContent.overview}
+        {helpContent[activeTab] ?? helpContent.quickStart}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Close</Button>

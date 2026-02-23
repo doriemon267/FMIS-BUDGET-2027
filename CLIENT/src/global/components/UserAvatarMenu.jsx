@@ -11,17 +11,14 @@ import {
 } from "@mui/material";
 import {
   Settings as SettingsIcon,
-  GridView as PortalAccessIcon,
-  QrCode2 as QrCodeIcon,
-  ViewModule as BarcodeIcon,
   HelpOutline as HelpIcon,
-  Print as PrintIcon,
   Tune as PreferencesIcon,
 } from "@mui/icons-material";
 import React, { useState } from "react";
 import LogoutDialog from "../../components/LogoutDialog";
 import UserPreferencesDialog from "../../components/settings/UserPreferencesDialog";
 import { useUser } from "../../context/UserContext";
+import InAppHelp from "../../components/common/InAppHelp";
 
 const formatDisplayName = (user) => {
   if (!user) return "";
@@ -32,17 +29,7 @@ const formatDisplayName = (user) => {
   return `${first}${middleInitial} ${last}${suffix}`.trim().replace(/\s+/g, " ");
 };
 
-const EXTERNAL_LINKS = [
-  { label: "Settings", href: "https://accounts.nia.gov.ph/Manage", icon: SettingsIcon },
-  { label: "Portal Access", href: "https://accounts.nia.gov.ph/portal/access", icon: PortalAccessIcon },
-  { label: "Show QR Code", href: "https://accounts.nia.gov.ph/home/qrcode", icon: QrCodeIcon },
-  { label: "Show Barcode", href: "https://accounts.nia.gov.ph/home/barcode", icon: BarcodeIcon },
-];
-
-const HELP_LINKS = [
-  { label: "Help", href: "https://accounts.nia.gov.ph/Content/Help/Index.html", icon: HelpIcon },
-  { label: "Printable Help", href: "https://accounts.nia.gov.ph/Content/Help/Index.pdf", icon: PrintIcon },
-];
+const SETTINGS_HREF = "https://accounts.nia.gov.ph/Manage";
 
 const UserAvatarMenu = () => {
   const { currentUser } = useUser();
@@ -50,6 +37,7 @@ const UserAvatarMenu = () => {
 
   const [anchorElUser, setAnchorElUser] = React.useState(null);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const handleOpenUserMenu = (event) => setAnchorElUser(event.currentTarget);
   const handleCloseUserMenu = () => setAnchorElUser(null);
@@ -57,9 +45,12 @@ const UserAvatarMenu = () => {
     setPreferencesOpen(true);
     handleCloseUserMenu();
   };
-
-  const handleLinkClick = (href) => {
-    window.open(href, "_blank", "noopener,noreferrer");
+  const handleOpenHelp = () => {
+    setHelpOpen(true);
+    handleCloseUserMenu();
+  };
+  const handleSettingsClick = () => {
+    window.open(SETTINGS_HREF, "_blank", "noopener,noreferrer");
     handleCloseUserMenu();
   };
 
@@ -117,16 +108,12 @@ const UserAvatarMenu = () => {
         </Box>
         <Divider />
 
-        {EXTERNAL_LINKS.map(({ label, href, icon: Icon }) => (
-          <MenuItem key={label} onClick={() => handleLinkClick(href)}>
-            <ListItemIcon>
-              <Icon fontSize="small" />
-            </ListItemIcon>
-            <Typography variant="body2">{label}</Typography>
-          </MenuItem>
-        ))}
-
-        <Divider />
+        <MenuItem onClick={handleSettingsClick}>
+          <ListItemIcon>
+            <SettingsIcon fontSize="small" />
+          </ListItemIcon>
+          <Typography variant="body2">Settings</Typography>
+        </MenuItem>
 
         <MenuItem onClick={handleOpenPreferences}>
           <ListItemIcon>
@@ -135,16 +122,12 @@ const UserAvatarMenu = () => {
           <Typography variant="body2">Preferences</Typography>
         </MenuItem>
 
-        <Divider />
-
-        {HELP_LINKS.map(({ label, href, icon: Icon }) => (
-          <MenuItem key={label} onClick={() => handleLinkClick(href)}>
-            <ListItemIcon>
-              <Icon fontSize="small" />
-            </ListItemIcon>
-            <Typography variant="body2">{label}</Typography>
-          </MenuItem>
-        ))}
+        <MenuItem onClick={handleOpenHelp}>
+          <ListItemIcon>
+            <HelpIcon fontSize="small" />
+          </ListItemIcon>
+          <Typography variant="body2">Help</Typography>
+        </MenuItem>
 
         <Divider />
 
@@ -152,6 +135,7 @@ const UserAvatarMenu = () => {
       </Menu>
 
       <UserPreferencesDialog open={preferencesOpen} onClose={() => setPreferencesOpen(false)} />
+      <InAppHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
     </Box>
   );
 };

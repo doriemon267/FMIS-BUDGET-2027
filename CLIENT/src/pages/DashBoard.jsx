@@ -39,6 +39,7 @@ import DashboardAnalytics from '../components/dashboard/DashboardAnalytics';
 import InAppHelp from '../components/common/InAppHelp';
 import DeadlineReminder from '../components/common/DeadlineReminder';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 
 // Reusable Stat Card Component
 const StatCard = ({ title, value, color, icon: Icon, isLoading, subtitle, filled = true }) => {
@@ -318,6 +319,11 @@ const HomePage = () => {
     await queryClient.invalidateQueries(['dashboardStats', regionName, userAccessLevel]);
   };
 
+  useKeyboardShortcuts({
+    'ctrl+r': (e) => { e.preventDefault(); handleRefreshStats(); },
+    'ctrl+shift+h': (e) => { e.preventDefault(); setHelpOpen(true); },
+  }, [regionName, userAccessLevel]);
+
   const statusBreakdown = [
     {
       label: 'Pending Review',
@@ -353,22 +359,19 @@ const HomePage = () => {
     ].filter(Boolean),
   };
 
+  // Build chips: always show Fiscal Year, Access; show Division/Department when assigned; show Region
   const actionChips = [
-    {
-      label: `Fiscal Year: ${fiscalYear}`,
-      color: 'primary',
-      variant: 'outlined',
-    },
-    {
-      label: `Access: ${displayInfo.level}`,
-      color: 'secondary',
-      variant: 'outlined',
-    },
-    {
-      label: `Scope: ${displayInfo.scope}`,
-      color: 'secondary',
-      variant: 'outlined',
-    },
+    { label: `Fiscal Year: ${fiscalYear}`, color: 'primary', variant: 'outlined' },
+    { label: `Access: ${displayInfo.level}`, color: 'secondary', variant: 'outlined' },
+    // Show Division when user has division assignment
+    ...(divisionName
+      ? [{ label: `Division: ${divisionName}`, color: 'secondary', variant: 'outlined' }]
+      : []),
+    // Show Department when user has department assignment
+    ...(userDepartment
+      ? [{ label: `Department: ${userDepartment}`, color: 'secondary', variant: 'outlined' }]
+      : []),
+    // Show Region
     {
       label: `Region: ${regionName || 'Not assigned'}`,
       color: 'success',
@@ -728,6 +731,28 @@ const HomePage = () => {
                       {regionName || 'Region not assigned'}
                     </Typography>
                   </Box>
+                  {divisionName && (
+                    <>
+                      <Divider />
+                      <Box>
+                        <Typography variant='caption' color='text.secondary'>Division</Typography>
+                        <Typography variant='body1' fontWeight={600}>
+                          {divisionName}
+                        </Typography>
+                      </Box>
+                    </>
+                  )}
+                  {userDepartment && (
+                    <>
+                      <Divider />
+                      <Box>
+                        <Typography variant='caption' color='text.secondary'>Department</Typography>
+                        <Typography variant='body1' fontWeight={600}>
+                          {userDepartment}
+                        </Typography>
+                      </Box>
+                    </>
+                  )}
                   <Divider />
                   <Box>
                     <Typography variant='caption' color='text.secondary'>Access Level</Typography>

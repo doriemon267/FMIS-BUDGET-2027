@@ -30,12 +30,16 @@ import { GiMeal } from "react-icons/gi";
 import { BiSolidShieldPlus } from "react-icons/bi";
 import { FaAward } from "react-icons/fa6";
 import { BiData } from "react-icons/bi";
-import {
-  isBudgetAdmin,
-  isPreparer,
-  isSuperAdmin,
-} from "../utils/checkRole";
+import { isSuperAdmin } from "../utils/checkRole";
 import { hasPermission } from "../utils/permissions";
+import {
+  JOB_ROLES,
+  ROLE_SCOPES,
+  APPROVER_WORKFLOW_ROLES,
+  APPROVER_JOB_ROLES,
+  hasApproverRole as checkHasApproverRole,
+  isBRDLevelUser,
+} from "../constants/roles";
 import { useUser } from "../context/UserContext";
 import IS_PRODUCTION from "../utils/IS_PRODUCTION";
 import api from "../config/api";
@@ -49,31 +53,13 @@ const CustomDrawer = ({ collapsed = false }) => {
   const workflowRoles = (currentUser?.workflowRoles || []).map(String);
   const allRoles = [...roles, ...workflowRoles];
   
-  // Helper function to check if user has any approver role
-  const hasApproverRole = () => {
-    const approverWorkflowRoles = ['divisionapprover', 'officeapprover', 'approver'];
-    const approverPrimaryRoles = ['APPROVER', 'DIVISION APPROVER', 'OFFICE APPROVER', 'BUDGET APPROVER'];
-    
-    const hasWorkflowApprover = workflowRoles.some(role => 
-      approverWorkflowRoles.includes(role.toLowerCase())
-    );
-    const hasPrimaryApprover = roles.some(role => 
-      approverPrimaryRoles.some(approverRole => role.toUpperCase().includes(approverRole))
-    );
-    
-    return hasWorkflowApprover || hasPrimaryApprover;
-  };
-  
-  const isOverallApprover = roles.includes("BUDGET MANAGER");
-  const isBudgetOfficer = roles.includes("BUDGET OFFICER");
+  const hasApproverRole = () => checkHasApproverRole(roles, workflowRoles);
+  const isOverallApprover = roles.some((r) => String(r) === JOB_ROLES.BUDGET_MANAGER);
+  const isBudgetOfficer = roles.some((r) => String(r) === JOB_ROLES.BUDGET_OFFICER);
   const isApprover = hasApproverRole();
-  const isReviewer = roles.includes("BUDGET REVIEWER");
-  const isBudgetPlanningAnalyst = roles.includes("BUDGET PLANNING ANALYST");
-  // Determine if this user is BRD-level (Budget and Revenue Division) either by hierarchical access or by job role
-  const isBRDLevel =
-    currentUser?.hierarchicalAccess?.scope === "BUDGET_AND_REVENUE_DIVISION" ||
-    currentUser?.hierarchicalAccess?.assignmentLevel === "BUDGET_AND_REVENUE_DIVISION" ||
-    roles.some((r) => String(r).toUpperCase().includes("BRD"));
+  const isReviewer = roles.some((r) => String(r) === JOB_ROLES.BUDGET_REVIEWER);
+  const isBudgetPlanningAnalyst = roles.some((r) => String(r) === JOB_ROLES.BUDGET_PLANNING_ANALYST);
+  const isBRDLevel = isBRDLevelUser(currentUser);
 
   // Only BRD-level roles and Super Admin may see: BRD Consolidation, NEP Ceiling, Tier
   const canSeeBRDOnlyMenus =

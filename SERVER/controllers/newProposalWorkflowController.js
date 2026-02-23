@@ -215,7 +215,68 @@ const canPerformAction = (userRole, proposal, action) => {
  * @param {string} currentUserId - The ID of the user performing the action
  * @returns {Promise<Array>} Array of user IDs to notify
  */
-const getNotificationRecipients = async (action, proposal, currentUserRole, currentUserId) => {
+/**
+ * Get Budget Planning Analysts eligible for a proposal based on region assignment.
+ * Central Office proposals → analysts with "Central Office" in assignedRegions.
+ * Other Region proposals → analysts whose assignedRegions includes the proposal's region (not Central Office).
+ * @param {Object} proposal - Proposal with region populated or isCentralOffice
+ * @returns {Promise<Array>} Array of { userId, userName } for eligible analysts
+ */
+const getAnalystsEligibleForProposal = async (proposal) => {
+  try {
+    let regionName = null;
+    if (proposal.region) {
+      if (typeof proposal.region === 'object' && proposal.region.Region) {
+        regionName = proposal.region.Region;
+      } else {
+        const regionDoc = await Region.findById(proposal.region).select('Region').lean();
+        if (regionDoc) regionName = regionDoc.Region;
+      }
+    }
+    const isCentralOffice = proposal.isCentralOffice === true ||
+      (typeof regionName === 'string' && String(regionName).trim().toLowerCase().includes('central office'));
+
+    const analystRoles = ['budgetAnalyst', 'BUDGET_PLANNING_ANALYST', 'BUDGET PLANNING ANALYST'];
+    const query = {
+      $or: [
+        { workflowRoles: { $in: analystRoles } },
+        { userRole: { $in: analystRoles } },
+        { userRoles: { $in: analystRoles } }
+      ],
+      isActive: true
+    };
+
+    const assignments = await HierarchicalUserAssignment.find(query)
+      .select('userId userName assignedRegions isNIAWide')
+      .lean();
+
+    const eligible = [];
+    for (const a of assignments) {
+      const regions = (a.assignedRegions || []).map(r => String(r).trim());
+      if (a.isNIAWide) {
+        eligible.push({ userId: a.userId, userName: a.userName || a.userId });
+        continue;
+      }
+      const hasCentralOffice = regions.some(r => r.toLowerCase().includes('central office'));
+      const normalizedRegionName = regionName ? String(regionName).trim() : '';
+      const matchesProposalRegion = normalizedRegionName && regions.some(r => r === normalizedRegionName || r.toLowerCase() === normalizedRegionName.toLowerCase());
+      const hasRegionalAssignment = regions.some(r => !r.toLowerCase().includes('central office'));
+
+      if (isCentralOffice && hasCentralOffice) {
+        eligible.push({ userId: a.userId, userName: a.userName || a.userId });
+      } else if (!isCentralOffice && (matchesProposalRegion || (hasRegionalAssignment && !hasCentralOffice))) {
+        eligible.push({ userId: a.userId, userName: a.userName || a.userId });
+      }
+    }
+    return eligible;
+  } catch (err) {
+    console.error('[getAnalystsEligibleForProposal] Error:', err.message);
+    return [];
+  }
+};
+
+const getNotificationRecipients = async (action, proposal, currentUserRole, currentUserId, options = {}) => {
+  const { targetAnalystId } = options;
   const recipients = [];
 
   try {
@@ -298,11 +359,24 @@ const getNotificationRecipients = async (action, proposal, currentUserRole, curr
       console.log('[getNotificationRecipients] Found', filteredApprovers.length, 'approvers for submit-to-approver');
       recipients.push(...filteredApprovers.map(u => u.userId));
     } else if (action === 'submit-to-analyst') {
-      // Notify Budget Planning Analysts (budgetAnalyst role)
-      const analysts = await findUsersByWorkflowRole(['budgetAnalyst', 'BUDGET_PLANNING_ANALYST', 'BUDGET PLANNING ANALYST'], proposalRegionId);
-      const filteredAnalysts = analysts.filter(u => u.userId !== currentUserIdString);
-      console.log('[getNotificationRecipients] Found', filteredAnalysts.length, 'analysts for submit-to-analyst');
-      recipients.push(...filteredAnalysts.map(u => u.userId));
+      // Route to analysts by proposal region: Central Office → CO analyst; Other Region → Regional analyst
+      // Uses HierarchicalUserAssignment.assignedRegions - only analysts assigned to this proposal's region receive it
+      if (targetAnalystId) {
+        const eligible = await getAnalystsEligibleForProposal(proposal);
+        const isEligible = eligible.some(a => String(a.userId) === String(targetAnalystId));
+        if (isEligible && String(targetAnalystId) !== currentUserIdString) {
+          recipients.push(String(targetAnalystId));
+          console.log('[getNotificationRecipients] submit-to-analyst: using targetAnalystId', targetAnalystId);
+        } else if (!isEligible) {
+          console.warn('[getNotificationRecipients] targetAnalystId', targetAnalystId, 'not eligible for this proposal - routing by region fallback');
+        }
+      }
+      if (recipients.length === 0) {
+        const eligible = await getAnalystsEligibleForProposal(proposal);
+        const filtered = eligible.filter(a => String(a.userId) !== currentUserIdString);
+        recipients.push(...filtered.map(a => a.userId));
+        console.log('[getNotificationRecipients] submit-to-analyst: routed', filtered.length, 'analysts by proposal region (Central Office vs Other Region)');
+      }
     } else if (action === 'forward-to-officer') {
       // Notify Budget Officers (officeFinalVerifier role)
       const officers = await findUsersByWorkflowRole(['officeFinalVerifier', 'BUDGET_OFFICER', 'BUDGET OFFICER'], proposalRegionId);
@@ -1599,6 +1673,33 @@ exports.getProposalById = async (req, res) => {
   }
 };
 
+// Get Budget Planning Analysts eligible for a proposal (for Approver "Send to" options)
+// Central Office proposals → analysts with Central Office in assignedRegions
+// Other Region proposals → analysts with that region in assignedRegions
+exports.getAnalystsForProposal = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const proposal = await NewProposalWorkflow.findById(id).populate('region', 'Region RegionName');
+    if (!proposal) {
+      return res.status(404).json({ success: false, message: 'Proposal not found' });
+    }
+    const analysts = await getAnalystsEligibleForProposal(proposal);
+    res.json({
+      success: true,
+      data: analysts,
+      isCentralOffice: proposal.isCentralOffice === true ||
+        (proposal.region && proposal.region.Region && String(proposal.region.Region).toLowerCase().includes('central office'))
+    });
+  } catch (error) {
+    console.error('Error fetching analysts for proposal:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch analysts',
+      error: error.message
+    });
+  }
+};
+
 // Perform action on proposal
 const TierRevision = require('../models/TierRevision');
 
@@ -1875,7 +1976,8 @@ exports.performAction = async (req, res) => {
 
       if (isNotificationAction) {
         // Get recipient user IDs based on the action
-        const recipientUserIds = await getNotificationRecipients(action, proposal, userRole, userId);
+        const recipientOptions = action === 'submit-to-analyst' ? { targetAnalystId: req.body.targetAnalystId } : {};
+        const recipientUserIds = await getNotificationRecipients(action, proposal, userRole, userId, recipientOptions);
         
         console.log('[PERFORM_ACTION] Recipients found:', recipientUserIds.length, 'IDs:', recipientUserIds);
         
@@ -1955,7 +2057,18 @@ exports.updateProposal = async (req, res) => {
       });
     }
 
-    const allowedFields = ['title', 'description', 'modelType', 'fiscalYear', 'amount', 'income', 'personnel', 'mooe', 'capitalOutlay', 'division', 'department', 'office', 'isCentralOffice'];
+    // Optimistic locking: if client sent __v, ensure it matches (prevents overwriting concurrent edits)
+    const clientVersion = req.body.__v;
+    if (clientVersion !== undefined && proposal.__v !== clientVersion) {
+      return res.status(409).json({
+        success: false,
+        message: 'This proposal was modified by another user. Please refresh and try again.',
+        code: 'VERSION_CONFLICT',
+        currentVersion: proposal.__v
+      });
+    }
+
+    const allowedFields = ['title', 'description', 'modelType', 'fiscalYear', 'amount', 'income', 'personnel', 'mooe', 'capitalOutlay', 'division', 'department', 'office', 'isCentralOffice', 'projectedCorporateIncome', 'projectedSubsidy'];
     const updates = {};
     const changes = {}; // Track what changed
 

@@ -48,7 +48,8 @@ import {
 const ACCESS_LEVELS = [
   { value: 'RESPONSIBILITY_CENTER', label: 'Responsibility Center Level', icon: <BusinessIcon />, color: '#2196F3' },
   { value: 'OFFICE', label: 'Office Level', icon: <DomainIcon />, color: '#FF9800' },
-  { value: 'FULL', label: 'Budget Revenue Division Level', icon: <HierarchyIcon />, color: '#9C27B0' },
+  { value: 'BUDGET_AND_REVENUE_DIVISION', label: 'Budget Revenue Division Level', icon: <HierarchyIcon />, color: '#9C27B0' },
+  { value: 'FULL', label: 'Full (Admin)', icon: <HierarchyIcon />, color: '#4A148C' },
   // { value: 'OWN_ONLY', label: 'Own Records Only', icon: <PersonIcon />, color: '#757575' }
 ];
 
@@ -384,7 +385,7 @@ const HierarchicalUserAssignmentPage = () => {
 
       // Auto-set assignment level and permissions based on the budget role
       if (budgetRole === 'BUDGET_PLANNING_ANALYST') {
-        handleFormChange('assignmentLevel', 'RESPONSIBILITY_CENTER');
+        handleFormChange('assignmentLevel', 'BUDGET_AND_REVENUE_DIVISION');
         handleFormChange('rolePermissions', {
           CreateProposals: true,
           EditOwnProposals: true,
@@ -608,8 +609,9 @@ const HierarchicalUserAssignmentPage = () => {
           ? 'OFFICE'
           : formData.assignmentLevel;
 
-    // Validate based on normalized level
-    if (normalizedLevel === 'RESPONSIBILITY_CENTER' && (!formData.officeId || !formData.responsibilityCenterName)) {
+    // Validate based on normalized level (skip org validation for BPA - Department/Division optional)
+    const isBPA = formData.userRole === 'BUDGET_PLANNING_ANALYST';
+    if (!isBPA && normalizedLevel === 'RESPONSIBILITY_CENTER' && (!formData.officeId || !formData.responsibilityCenterName)) {
       setSnackbar({
         open: true,
         message: 'Responsibility Center assignment requires Office and Responsibility Center',
@@ -618,7 +620,7 @@ const HierarchicalUserAssignmentPage = () => {
       return;
     }
 
-    if (normalizedLevel === 'OFFICE' && !formData.officeId) {
+    if (!isBPA && normalizedLevel === 'OFFICE' && !formData.officeId) {
       setSnackbar({
         open: true,
         message: 'Office assignment requires Office selection',
@@ -628,6 +630,8 @@ const HierarchicalUserAssignmentPage = () => {
     }
 
     // Build payload with conditional fields based on assignment level
+    // For BPA always use BUDGET_AND_REVENUE_DIVISION (Department/Division optional)
+    const effectiveLevel = formData.userRole === 'BUDGET_PLANNING_ANALYST' ? 'BUDGET_AND_REVENUE_DIVISION' : normalizedLevel;
     const payload = {
       userId: formData.userId,
       userName: formData.userName,
@@ -635,8 +639,8 @@ const HierarchicalUserAssignmentPage = () => {
       // NEW: Include multiple roles from FMIS main system
       userRoles: formData.userRoles || [],
       userRole: formData.userRole,
-      assignmentLevel: normalizedLevel,
-      accessScope: normalizedLevel,
+      assignmentLevel: effectiveLevel,
+      accessScope: effectiveLevel,
       rolePermissions: formData.rolePermissions
     };
 
@@ -681,11 +685,9 @@ const HierarchicalUserAssignmentPage = () => {
   };
 
   const normalizeAssignmentLevel = (level) => {
-    return level === 'DIVISION'
-      ? 'RESPONSIBILITY_CENTER'
-      : level === 'DEPARTMENT'
-        ? 'OFFICE'
-        : level;
+    if (level === 'DIVISION') return 'RESPONSIBILITY_CENTER';
+    if (level === 'DEPARTMENT') return 'OFFICE';
+    return level;
   };
 
   const getAccessLevelInfo = (level) => {
@@ -699,6 +701,8 @@ const HierarchicalUserAssignmentPage = () => {
         return 'Proposals consolidate to Office';
       case 'OFFICE':
         return 'Proposals saved directly to Office';
+      case 'BUDGET_AND_REVENUE_DIVISION':
+        return 'BRD level - access based on assigned regions (Central Office, regional, etc.)';
       case 'FULL':
         return 'Can access all organizational levels (all permissions and workflow roles automatically granted)';
       default:
@@ -1278,10 +1282,13 @@ const HierarchicalUserAssignmentPage = () => {
                     </Grid>
                   )}
 
-                  {/* Central Office → Department & Division selection (for BPA only) */}
+                  {/* Central Office → Department & Division selection (for BPA only) - OPTIONAL */}
                   {!formData.isNIAWide && hasCentralOfficeSelected && (
                     <>
                       <Grid item xs={12}>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                          Optional: Kung walang napili, lahat ng proposals mula sa Central Office ay mapupunta sa user na ito.
+                        </Typography>
                         <Autocomplete
                           options={organizationStructure?.availableUnits?.offices || []}
                           getOptionLabel={(option) => {
@@ -1302,8 +1309,8 @@ const HierarchicalUserAssignmentPage = () => {
                           renderInput={(params) => (
                             <TextField
                               {...params}
-                              label="Department (Central Office)"
-                              placeholder="Pumili ng Department..."
+                              label="Department (Central Office) - Optional"
+                              placeholder="Pumili ng Department (opsyonal)..."
                               fullWidth
                             />
                           )}
@@ -1337,12 +1344,12 @@ const HierarchicalUserAssignmentPage = () => {
                           renderInput={(params) => (
                             <TextField
                               {...params}
-                              label="Division (Central Office)"
-                              placeholder="Pumili ng Division..."
+                              label="Division (Central Office) - Optional"
+                              placeholder="Pumili ng Division (opsyonal)..."
                               fullWidth
                               helperText={!formData.officeId
-                                ? 'Pumili muna ng Department bago pumili ng Division.'
-                                : ''}
+                                ? 'Pumili muna ng Department kung gusto mong i-scope ang Division.'
+                                : 'Optional - kung walang napili, lahat ng Central Office ay sakop.'}
                             />
                           )}
                           noOptionsText={!formData.officeId
@@ -1757,6 +1764,25 @@ const HierarchicalUserAssignmentPage = () => {
                             </Typography>
                           </TableCell>
                           <TableCell>
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                            {(assignment.userRoles && assignment.userRoles.length > 0) ? (
+                              assignment.userRoles.map((roleVal) => {
+                                const normalized = String(roleVal || '').replace(/\s+/g, '_');
+                                const role = USER_ROLES.find(r =>
+                                  r.value === roleVal || r.value === normalized ||
+                                  r.value?.replace(/_/g, ' ') === roleVal
+                                );
+                                return (
+                                  <Chip
+                                    key={roleVal}
+                                    label={role ? role.label : roleVal}
+                                    size="small"
+                                    color="primary"
+                                    variant="outlined"
+                                  />
+                                );
+                              })
+                            ) : (
                             <Chip
                               label={(() => {
                                 // First check if userRole is explicitly set
@@ -1805,6 +1831,8 @@ const HierarchicalUserAssignmentPage = () => {
                               color="primary"
                               variant="outlined"
                             />
+                            )}
+                            </Box>
                           </TableCell>
                           <TableCell>
                             <Chip
@@ -1921,8 +1949,10 @@ const HierarchicalUserAssignmentPage = () => {
                                   const level = assignment.assignmentLevel;
                                   const perms = assignment.rolePermissions || {};
                                   
-                                  if (level === 'RESPONSIBILITY_CENTER' || level === 'DIVISION') {
-                                    inferredRole = 'BUDGET PLANNING ANALYST';
+                                  if (level === 'BUDGET_AND_REVENUE_DIVISION') {
+                                    inferredRole = assignment.userRole || (assignment.userRoles && assignment.userRoles[0]) || 'BUDGET_PLANNING_ANALYST';
+                                  } else if (level === 'RESPONSIBILITY_CENTER' || level === 'DIVISION') {
+                                    inferredRole = assignment.userRole || 'BUDGET PLANNING ANALYST';
                                   } else if (level === 'OFFICE' || level === 'DEPARTMENT') {
                                     if (perms.ApproveProposals) {
                                       inferredRole = 'BUDGET OFFICER';
@@ -1942,6 +1972,7 @@ const HierarchicalUserAssignmentPage = () => {
                                     'DIVISION': 'RESPONSIBILITY_CENTER',
                                     'DEPARTMENT': 'OFFICE',
                                     'REGION': 'FULL',
+                                    'BUDGET_AND_REVENUE_DIVISION': 'BUDGET_AND_REVENUE_DIVISION',
                                     'FULL': 'FULL',
                                     'OWN_ONLY': 'OWN_ONLY'
                                   };
@@ -1973,10 +2004,13 @@ const HierarchicalUserAssignmentPage = () => {
                                   setFormData(formFields);
                                   
                                   // Ensure Central Office Department/Division fields appear correctly when editing BPA
-                                  if ((formFields.userRole === 'BUDGET_PLANNING_ANALYST') || (inferredRole === 'BUDGET PLANNING ANALYST')) {
-                                    const hasCentral =
-                                      !!formFields.officeId &&
-                                      !!formFields.responsibilityCenterName;
+                                  const isBPAEdit = (formFields.userRole === 'BUDGET_PLANNING_ANALYST' || inferredRole === 'BUDGET PLANNING ANALYST' ||
+                                    (formFields.userRoles || []).some(r => /BUDGET_PLANNING_ANALYST|BUDGET PLANNING ANALYST/i.test(String(r))));
+                                  if (isBPAEdit) {
+                                    const regions = formFields.assignedRegions || [];
+                                    const hasCentral = regions.some(r =>
+                                      String(r || '').toLowerCase().includes('central office')
+                                    );
                                     setHasCentralOfficeSelected(hasCentral);
                                   } else {
                                     // For non-BPA, do not show Central Office-specific controls

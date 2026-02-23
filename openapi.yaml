@@ -1,0 +1,202 @@
+openapi: 3.0.3
+info:
+  title: FMIS Budget Module API
+  description: NIA FMIS Budget Module - Budget proposals, workflow, reports
+  version: 1.0.0
+
+servers:
+  - url: /api
+    description: API base path (prefixed by deployment URL)
+
+tags:
+  - name: Auth
+  - name: Proposals
+  - name: Health
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Returns server and MongoDB status for load balancers/monitoring
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy]
+                  timestamp:
+                    type: string
+                    format: date-time
+                  version:
+                    type: string
+                  mongo:
+                    type: object
+                    properties:
+                      connected:
+                        type: boolean
+                      readyState:
+                        type: integer
+        '503':
+          description: Degraded (e.g. MongoDB disconnected)
+
+  /login:
+    post:
+      tags: [Auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                rememberMe:
+                  type: boolean
+      responses:
+        '200':
+          description: Login successful
+        '401':
+          description: Invalid credentials
+
+  /get-user:
+    get:
+      tags: [Auth]
+      summary: Get current user
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Current user with roles and hierarchical access
+        '401':
+          description: Not authenticated
+
+  /logout:
+    get:
+      tags: [Auth]
+      summary: Logout
+
+  /allproposal/proposals:
+    get:
+      tags: [Proposals]
+      summary: List proposals
+      parameters:
+        - name: fiscalYear
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [DRAFT, FORWARDED_TO_REVIEWER, FORWARDED_TO_APPROVER, FORWARDED_TO_BRD_ANALYST, FORWARDED_TO_BRD_OFFICER, FORWARDED_TO_BRD_MANAGER, FINALIZED, RETURNED_TO_PREPARER, RETURNED_TO_REVIEWER, RETURNED_TO_APPROVER]
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: List of proposals
+
+    post:
+      tags: [Proposals]
+      summary: Create proposal
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                fiscalYear:
+                  type: integer
+                modelType:
+                  type: string
+                  enum: [Initial, NEP, GAA]
+                amount:
+                  type: number
+      security:
+        - cookieAuth: []
+      responses:
+        '201':
+          description: Proposal created
+
+  /allproposal/proposals/{id}:
+    get:
+      tags: [Proposals]
+      summary: Get proposal by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Proposal details
+        '404':
+          description: Not found
+
+    put:
+      tags: [Proposals]
+      summary: Update proposal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Updated
+
+  /allproposal/proposals/{id}/action:
+    post:
+      tags: [Proposals]
+      summary: Perform workflow action
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  description: Workflow action (e.g. submit-to-reviewer, forward-to-approver, return-to-preparer, finalize)
+                comment:
+                  type: string
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Action performed
+        '400':
+          description: Invalid action or state
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: authToken
+      description: JWT in httpOnly cookie

@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const assignedRole = require("../models/assigned_role");
 const User = require("../models/User");
+const { createUserActivityLog } = require("../middleware/userLogs");
 
 exports.login = async (req, res) => {
   const { username, password, rememberMe } = req.body;
@@ -30,6 +31,12 @@ exports.login = async (req, res) => {
     ).json();
 
     if (!credentials.access_token) {
+      await createUserActivityLog(req, {
+        action: "LOGIN_FAILED",
+        resource: "Auth",
+        userId: "anonymous",
+        details: { reason: "Invalid credentials" },
+      }).catch(() => {});
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
@@ -52,9 +59,22 @@ exports.login = async (req, res) => {
     if (process.env.COOKIE_DOMAIN) cookieOpts.domain = process.env.COOKIE_DOMAIN;
     res.cookie("jwtToken", jwtToken, cookieOpts);
 
+    await createUserActivityLog(req, {
+      action: "LOGIN_SUCCESS",
+      resource: "Auth",
+      userId: username || "unknown",
+      details: { success: true },
+    }).catch(() => {});
+
     res.sendStatus(200);
   } catch (e) {
     console.error(e);
+    await createUserActivityLog(req, {
+      action: "LOGIN_FAILED",
+      resource: "Auth",
+      userId: "anonymous",
+      details: { reason: "Server error" },
+    }).catch(() => {});
     res.status(500).json({ error: "Server error" });
   }
 };
@@ -181,7 +201,16 @@ exports.getUser = async (req, res) => {
   }
 };
 
-exports.logout = (req, res) => {
+exports.logout = async (req, res) => {
+  const userId = req?.user?.id ?? req?.user?.userId ?? req?.user?.Id ?? req?.user?.Username?.[0] ?? "anonymous";
+
+  await createUserActivityLog(req, {
+    action: "LOGOUT",
+    resource: "Auth",
+    userId: String(userId),
+    details: { success: true },
+  }).catch(() => {});
+
   const clearOpts = { httpOnly: true, secure: true, sameSite: "None" };
   if (process.env.COOKIE_DOMAIN) clearOpts.domain = process.env.COOKIE_DOMAIN;
   res.clearCookie("jwtToken", clearOpts);

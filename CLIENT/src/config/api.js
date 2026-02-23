@@ -4,6 +4,7 @@ import { getStoredWorkflowRef } from "../hooks/useWorkflowRef";
 import IS_PRODUCTION from "../utils/IS_PRODUCTION";
 import { getErrorMessage } from "../utils/errorHandler";
 import { toast } from "react-toastify";
+import { goTo } from "../global/navigation";
 
 // Increase default timeout and allow override via env
 const REQUEST_TIMEOUT = Number(env("REQUEST_TIMEOUT_MS")) || 30000; // default 30s
@@ -152,8 +153,7 @@ api.interceptors.response.use(undefined, async (error) => {
         return api.request(config);
       }
     } catch (refreshErr) {
-      // If refresh fails, attempt lightweight diagnostics once to surface
-      // why the server is returning 403 (useful in production debugging).
+      // If refresh fails, redirect appropriately for better UX
       try {
         if (!config.__diagnosticRan) {
           config.__diagnosticRan = true;
@@ -167,7 +167,14 @@ api.interceptors.response.use(undefined, async (error) => {
       } catch (diagErr) {
         console.debug('Auth diagnostic failed:', diagErr?.message || diagErr);
       }
-      // Fall through and reject original error
+      // Redirect: 401 -> login, 403 -> not-authorized (avoids stuck UI)
+      if (response.status === 401) {
+        goTo('/login');
+        toast.error('Session expired. Please log in again.');
+      } else if (response.status === 403) {
+        goTo('/not-authorized');
+        toast.error('You do not have permission to perform this action.');
+      }
       return Promise.reject(error);
     }
   }

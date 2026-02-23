@@ -1,0 +1,4709 @@
+[{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551c949"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c939"
+  },
+  "departmentName": "REGIONAL OFFICE",
+  "divisions": [
+    {
+      "name": "OFFICE OF THE REGIONAL MANAGER",
+      "code": "OFFICE_OF_THE_REGIONAL_MANAGER",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551c94a"
+      }
+    },
+    {
+      "name": "ENGINEERING & OPERATION DIVISION",
+      "code": "ENGINEERING_&_OPERATION_DIVISION",
+      "sections": [
+        {
+          "name": "Office of EOD Manager",
+          "code": "OFFICE_OF_EOD_MANAGER",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c94c"
+          }
+        },
+        {
+          "name": "Construction Management Section",
+          "code": "CONSTRUCTION_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c94d"
+          }
+        },
+        {
+          "name": "Planning & Design Section",
+          "code": "PLANNING_&_DESIGN_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c94e"
+          }
+        },
+        {
+          "name": "Operation Section",
+          "code": "OPERATION_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c94f"
+          }
+        },
+        {
+          "name": "Institutional Dev't. Section",
+          "code": "INSTITUTIONAL_DEV'T._SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c950"
+          }
+        },
+        {
+          "name": "Equipment Management Section",
+          "code": "EQUIPMENT_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c951"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551c94b"
+      }
+    },
+    {
+      "name": "ADMINISTRATIVE & FINANCE DIVISION",
+      "code": "ADMINISTRATIVE_&_FINANCE_DIVISION",
+      "sections": [
+        {
+          "name": "Office of the AFD Manager",
+          "code": "OFFICE_OF_THE_AFD_MANAGER",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c953"
+          }
+        },
+        {
+          "name": "Finance Section",
+          "code": "FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c954"
+          }
+        },
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c955"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551c952"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c926"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.472Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.473Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551c96a"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c939"
+  },
+  "departmentName": "REGIONAL OFFICE",
+  "divisions": [
+    {
+      "name": "OFFICE OF THE REGIONAL MANAGER",
+      "code": "OFFICE_OF_THE_REGIONAL_MANAGER",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551c96b"
+      }
+    },
+    {
+      "name": "ENGINEERING AND OPERATIONS DIVISION",
+      "code": "ENGINEERING_AND_OPERATIONS_DIVISION",
+      "sections": [
+        {
+          "name": "Planning & Design Section",
+          "code": "PLANNING_&_DESIGN_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c96d"
+          }
+        },
+        {
+          "name": "Construction & Management Section",
+          "code": "CONSTRUCTION_&_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c96e"
+          }
+        },
+        {
+          "name": "Operations Section",
+          "code": "OPERATIONS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c96f"
+          }
+        },
+        {
+          "name": "Institutional Development Section",
+          "code": "INSTITUTIONAL_DEVELOPMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c970"
+          }
+        },
+        {
+          "name": "Equipment Management Section",
+          "code": "EQUIPMENT_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c971"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551c96c"
+      }
+    },
+    {
+      "name": "ADMINISTRATIVE AND FINANCE DIVISION",
+      "code": "ADMINISTRATIVE_AND_FINANCE_DIVISION",
+      "sections": [
+        {
+          "name": "Finance Section",
+          "code": "FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c973"
+          }
+        },
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c974"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551c972"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c927"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.474Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.474Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551c989"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c939"
+  },
+  "departmentName": "REGIONAL OFFICE",
+  "divisions": [
+    {
+      "name": "OFFICE OF THE REGIONAL MANAGER",
+      "code": "OFFICE_OF_THE_REGIONAL_MANAGER",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551c98a"
+      }
+    },
+    {
+      "name": "ENGINEERING AND OPERATIONS DIVISION",
+      "code": "ENGINEERING_AND_OPERATIONS_DIVISION",
+      "sections": [
+        {
+          "name": "Planning & Design Section",
+          "code": "PLANNING_&_DESIGN_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c98c"
+          }
+        },
+        {
+          "name": "Construction Management Section",
+          "code": "CONSTRUCTION_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c98d"
+          }
+        },
+        {
+          "name": "Operations Section",
+          "code": "OPERATIONS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c98e"
+          }
+        },
+        {
+          "name": "Institutional Development Section",
+          "code": "INSTITUTIONAL_DEVELOPMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c98f"
+          }
+        },
+        {
+          "name": "Equipment Management Section",
+          "code": "EQUIPMENT_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c990"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551c98b"
+      }
+    },
+    {
+      "name": "ADMINISTRATIVE AND FINANCE DIVISION",
+      "code": "ADMINISTRATIVE_AND_FINANCE_DIVISION",
+      "sections": [
+        {
+          "name": "Finance Section",
+          "code": "FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c992"
+          }
+        },
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c993"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551c991"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c928"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.475Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.475Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551c9a5"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c939"
+  },
+  "departmentName": "REGIONAL OFFICE",
+  "divisions": [
+    {
+      "name": "OFFICE OF THE REGIONAL MANAGER",
+      "code": "OFFICE_OF_THE_REGIONAL_MANAGER",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551c9a6"
+      }
+    },
+    {
+      "name": "ENGINEERING AND OPERATIONS DIVISION",
+      "code": "ENGINEERING_AND_OPERATIONS_DIVISION",
+      "sections": [
+        {
+          "name": "Planning & Design Section",
+          "code": "PLANNING_&_DESIGN_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9a8"
+          }
+        },
+        {
+          "name": "Construction Management Section",
+          "code": "CONSTRUCTION_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9a9"
+          }
+        },
+        {
+          "name": "Operations Section",
+          "code": "OPERATIONS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9aa"
+          }
+        },
+        {
+          "name": "Institutional Development Section",
+          "code": "INSTITUTIONAL_DEVELOPMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9ab"
+          }
+        },
+        {
+          "name": "Equipment Management Section",
+          "code": "EQUIPMENT_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9ac"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551c9a7"
+      }
+    },
+    {
+      "name": "ADMINISTRATIVE AND FINANCE DIVISION",
+      "code": "ADMINISTRATIVE_AND_FINANCE_DIVISION",
+      "sections": [
+        {
+          "name": "Finance Section",
+          "code": "FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9ae"
+          }
+        },
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9af"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551c9ad"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c929"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.476Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.476Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551c9c1"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c939"
+  },
+  "departmentName": "REGIONAL OFFICE",
+  "divisions": [
+    {
+      "name": "OFFICE OF THE REGIONAL MANAGER",
+      "code": "OFFICE_OF_THE_REGIONAL_MANAGER",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551c9c2"
+      }
+    },
+    {
+      "name": "ENGINEERING AND OPERATIONS DIVISION",
+      "code": "ENGINEERING_AND_OPERATIONS_DIVISION",
+      "sections": [
+        {
+          "name": "Planning & Design Section",
+          "code": "PLANNING_&_DESIGN_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9c4"
+          }
+        },
+        {
+          "name": "Construction Management Section",
+          "code": "CONSTRUCTION_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9c5"
+          }
+        },
+        {
+          "name": "Operations Section",
+          "code": "OPERATIONS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9c6"
+          }
+        },
+        {
+          "name": "Institutional Development Section",
+          "code": "INSTITUTIONAL_DEVELOPMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9c7"
+          }
+        },
+        {
+          "name": "Equipment Management Section",
+          "code": "EQUIPMENT_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9c8"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551c9c3"
+      }
+    },
+    {
+      "name": "ADMINISTRATIVE AND FINANCE DIVISION",
+      "code": "ADMINISTRATIVE_AND_FINANCE_DIVISION",
+      "sections": [
+        {
+          "name": "Finance Section",
+          "code": "FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9ca"
+          }
+        },
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9cb"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551c9c9"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c92a"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.477Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.477Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551c9dd"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c939"
+  },
+  "departmentName": "REGIONAL OFFICE",
+  "divisions": [
+    {
+      "name": "OFFICE OF THE REGIONAL MANAGER",
+      "code": "OFFICE_OF_THE_REGIONAL_MANAGER",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551c9de"
+      }
+    },
+    {
+      "name": "ENGINEERING AND OPERATIONS DIVISION",
+      "code": "ENGINEERING_AND_OPERATIONS_DIVISION",
+      "sections": [
+        {
+          "name": "Planning & Design Section",
+          "code": "PLANNING_&_DESIGN_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9e0"
+          }
+        },
+        {
+          "name": "Construction Management Section",
+          "code": "CONSTRUCTION_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9e1"
+          }
+        },
+        {
+          "name": "Operations Section",
+          "code": "OPERATIONS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9e2"
+          }
+        },
+        {
+          "name": "Institutional Development Section",
+          "code": "INSTITUTIONAL_DEVELOPMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9e3"
+          }
+        },
+        {
+          "name": "Equipment Management Section",
+          "code": "EQUIPMENT_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9e4"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551c9df"
+      }
+    },
+    {
+      "name": "ADMINISTRATIVE AND FINANCE DIVISION",
+      "code": "ADMINISTRATIVE_AND_FINANCE_DIVISION",
+      "sections": [
+        {
+          "name": "Finance Section",
+          "code": "FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9e6"
+          }
+        },
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9e7"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551c9e5"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c92b"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.477Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.477Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551c9f9"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c939"
+  },
+  "departmentName": "REGIONAL OFFICE",
+  "divisions": [
+    {
+      "name": "OFFICE OF THE REGIONAL MANAGER",
+      "code": "OFFICE_OF_THE_REGIONAL_MANAGER",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551c9fa"
+      }
+    },
+    {
+      "name": "ENGINEERING AND OPERATIONS DIVISION",
+      "code": "ENGINEERING_AND_OPERATIONS_DIVISION",
+      "sections": [
+        {
+          "name": "Planning & Design Section",
+          "code": "PLANNING_&_DESIGN_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9fc"
+          }
+        },
+        {
+          "name": "Construction Management Section",
+          "code": "CONSTRUCTION_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9fd"
+          }
+        },
+        {
+          "name": "Operations Section",
+          "code": "OPERATIONS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9fe"
+          }
+        },
+        {
+          "name": "Institutional Development Section",
+          "code": "INSTITUTIONAL_DEVELOPMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551c9ff"
+          }
+        },
+        {
+          "name": "Equipment Management Section",
+          "code": "EQUIPMENT_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca00"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551c9fb"
+      }
+    },
+    {
+      "name": "ADMINISTRATIVE AND FINANCE DIVISION",
+      "code": "ADMINISTRATIVE_AND_FINANCE_DIVISION",
+      "sections": [
+        {
+          "name": "Finance Section",
+          "code": "FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca02"
+          }
+        },
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca03"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551ca01"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c92c"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.478Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.478Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551ca15"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c939"
+  },
+  "departmentName": "REGIONAL OFFICE",
+  "divisions": [
+    {
+      "name": "OFFICE OF THE REGIONAL MANAGER",
+      "code": "OFFICE_OF_THE_REGIONAL_MANAGER",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551ca16"
+      }
+    },
+    {
+      "name": "ENGINEERING AND OPERATIONS DIVISION",
+      "code": "ENGINEERING_AND_OPERATIONS_DIVISION",
+      "sections": [
+        {
+          "name": "Planning & Design Section",
+          "code": "PLANNING_&_DESIGN_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca18"
+          }
+        },
+        {
+          "name": "Construction Management Section",
+          "code": "CONSTRUCTION_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca19"
+          }
+        },
+        {
+          "name": "Operations Section",
+          "code": "OPERATIONS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca1a"
+          }
+        },
+        {
+          "name": "Institutional Development Section",
+          "code": "INSTITUTIONAL_DEVELOPMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca1b"
+          }
+        },
+        {
+          "name": "Equipment Management Section",
+          "code": "EQUIPMENT_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca1c"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551ca17"
+      }
+    },
+    {
+      "name": "ADMINISTRATIVE AND FINANCE DIVISION",
+      "code": "ADMINISTRATIVE_AND_FINANCE_DIVISION",
+      "sections": [
+        {
+          "name": "Finance Section",
+          "code": "FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca1e"
+          }
+        },
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca1f"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551ca1d"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c92d"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.479Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.479Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551ca2d"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c939"
+  },
+  "departmentName": "REGIONAL OFFICE",
+  "divisions": [
+    {
+      "name": "OFFICE OF THE REGIONAL MANAGER",
+      "code": "OFFICE_OF_THE_REGIONAL_MANAGER",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551ca2e"
+      }
+    },
+    {
+      "name": "ENGINEERING AND OPERATIONS DIVISION",
+      "code": "ENGINEERING_AND_OPERATIONS_DIVISION",
+      "sections": [
+        {
+          "name": "Planning & Design Section",
+          "code": "PLANNING_&_DESIGN_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca30"
+          }
+        },
+        {
+          "name": "Construction Management Section",
+          "code": "CONSTRUCTION_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca31"
+          }
+        },
+        {
+          "name": "Operations Section",
+          "code": "OPERATIONS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca32"
+          }
+        },
+        {
+          "name": "Institutional Development Section",
+          "code": "INSTITUTIONAL_DEVELOPMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca33"
+          }
+        },
+        {
+          "name": "Equipment Management Section",
+          "code": "EQUIPMENT_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca34"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551ca2f"
+      }
+    },
+    {
+      "name": "ADMINISTRATIVE AND FINANCE DIVISION",
+      "code": "ADMINISTRATIVE_AND_FINANCE_DIVISION",
+      "sections": [
+        {
+          "name": "Finance Section",
+          "code": "FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca36"
+          }
+        },
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca37"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551ca35"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c92e"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.480Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.480Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551ca49"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c939"
+  },
+  "departmentName": "REGIONAL OFFICE",
+  "divisions": [
+    {
+      "name": "OFFICE OF THE REGIONAL MANAGER",
+      "code": "OFFICE_OF_THE_REGIONAL_MANAGER",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551ca4a"
+      }
+    },
+    {
+      "name": "ENGINEERING AND OPERATIONS DIVISION",
+      "code": "ENGINEERING_AND_OPERATIONS_DIVISION",
+      "sections": [
+        {
+          "name": "Planning & Design Section",
+          "code": "PLANNING_&_DESIGN_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca4c"
+          }
+        },
+        {
+          "name": "Construction Management Section",
+          "code": "CONSTRUCTION_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca4d"
+          }
+        },
+        {
+          "name": "Operations Section",
+          "code": "OPERATIONS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca4e"
+          }
+        },
+        {
+          "name": "Institutional Development Section",
+          "code": "INSTITUTIONAL_DEVELOPMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca4f"
+          }
+        },
+        {
+          "name": "Equipment Management Section",
+          "code": "EQUIPMENT_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca50"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551ca4b"
+      }
+    },
+    {
+      "name": "ADMINISTRATIVE AND FINANCE DIVISION",
+      "code": "ADMINISTRATIVE_AND_FINANCE_DIVISION",
+      "sections": [
+        {
+          "name": "Finance Section",
+          "code": "FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca52"
+          }
+        },
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca53"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551ca51"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c92f"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.480Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.480Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551ca61"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c939"
+  },
+  "departmentName": "REGIONAL OFFICE",
+  "divisions": [
+    {
+      "name": "OFFICE OF THE REGIONAL MANAGER",
+      "code": "OFFICE_OF_THE_REGIONAL_MANAGER",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551ca62"
+      }
+    },
+    {
+      "name": "ENGINEERING AND OPERATIONS DIVISION",
+      "code": "ENGINEERING_AND_OPERATIONS_DIVISION",
+      "sections": [
+        {
+          "name": "Planning & Design Section",
+          "code": "PLANNING_&_DESIGN_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca64"
+          }
+        },
+        {
+          "name": "Construction Management Section",
+          "code": "CONSTRUCTION_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca65"
+          }
+        },
+        {
+          "name": "Operations Section",
+          "code": "OPERATIONS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca66"
+          }
+        },
+        {
+          "name": "Institutional Development Section",
+          "code": "INSTITUTIONAL_DEVELOPMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca67"
+          }
+        },
+        {
+          "name": "Equipment Management Section",
+          "code": "EQUIPMENT_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca68"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551ca63"
+      }
+    },
+    {
+      "name": "ADMINISTRATIVE AND FINANCE DIVISION",
+      "code": "ADMINISTRATIVE_AND_FINANCE_DIVISION",
+      "sections": [
+        {
+          "name": "Finance Section",
+          "code": "FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca6a"
+          }
+        },
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca6b"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551ca69"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c930"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.481Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.481Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551ca79"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c939"
+  },
+  "departmentName": "REGIONAL OFFICE",
+  "divisions": [
+    {
+      "name": "OFFICE OF THE REGIONAL MANAGER",
+      "code": "OFFICE_OF_THE_REGIONAL_MANAGER",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551ca7a"
+      }
+    },
+    {
+      "name": "ENGINEERING AND OPERATIONS DIVISION",
+      "code": "ENGINEERING_AND_OPERATIONS_DIVISION",
+      "sections": [
+        {
+          "name": "Planning & Design Section",
+          "code": "PLANNING_&_DESIGN_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca7c"
+          }
+        },
+        {
+          "name": "Construction Management Section",
+          "code": "CONSTRUCTION_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca7d"
+          }
+        },
+        {
+          "name": "Operations Section",
+          "code": "OPERATIONS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca7e"
+          }
+        },
+        {
+          "name": "Institutional Development Section",
+          "code": "INSTITUTIONAL_DEVELOPMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca7f"
+          }
+        },
+        {
+          "name": "Equipment Management Section",
+          "code": "EQUIPMENT_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca80"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551ca7b"
+      }
+    },
+    {
+      "name": "ADMINISTRATIVE AND FINANCE DIVISION",
+      "code": "ADMINISTRATIVE_AND_FINANCE_DIVISION",
+      "sections": [
+        {
+          "name": "Finance Section",
+          "code": "FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca82"
+          }
+        },
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca83"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551ca81"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c931"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.482Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.482Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551ca91"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c939"
+  },
+  "departmentName": "REGIONAL OFFICE",
+  "divisions": [
+    {
+      "name": "OFFICE OF THE REGIONAL MANAGER",
+      "code": "OFFICE_OF_THE_REGIONAL_MANAGER",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551ca92"
+      }
+    },
+    {
+      "name": "ENGINEERING AND OPERATIONS DIVISION",
+      "code": "ENGINEERING_AND_OPERATIONS_DIVISION",
+      "sections": [
+        {
+          "name": "Planning & Design Section",
+          "code": "PLANNING_&_DESIGN_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca94"
+          }
+        },
+        {
+          "name": "Construction Management Section",
+          "code": "CONSTRUCTION_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca95"
+          }
+        },
+        {
+          "name": "Operations Section",
+          "code": "OPERATIONS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca96"
+          }
+        },
+        {
+          "name": "Institutional Development Section",
+          "code": "INSTITUTIONAL_DEVELOPMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca97"
+          }
+        },
+        {
+          "name": "Equipment Management Section",
+          "code": "EQUIPMENT_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca98"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551ca93"
+      }
+    },
+    {
+      "name": "ADMINISTRATIVE AND FINANCE DIVISION",
+      "code": "ADMINISTRATIVE_AND_FINANCE_DIVISION",
+      "sections": [
+        {
+          "name": "Finance Section",
+          "code": "FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca9a"
+          }
+        },
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551ca9b"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551ca99"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c932"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.482Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.482Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551caa9"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c939"
+  },
+  "departmentName": "REGIONAL OFFICE",
+  "divisions": [
+    {
+      "name": "OFFICE OF THE REGIONAL MANAGER",
+      "code": "OFFICE_OF_THE_REGIONAL_MANAGER",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551caaa"
+      }
+    },
+    {
+      "name": "ENGINEERING AND OPERATIONS DIVISION",
+      "code": "ENGINEERING_AND_OPERATIONS_DIVISION",
+      "sections": [
+        {
+          "name": "Planning & Design Section",
+          "code": "PLANNING_&_DESIGN_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551caac"
+          }
+        },
+        {
+          "name": "Construction Management Section",
+          "code": "CONSTRUCTION_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551caad"
+          }
+        },
+        {
+          "name": "Operations Section",
+          "code": "OPERATIONS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551caae"
+          }
+        },
+        {
+          "name": "Institutional Development Section",
+          "code": "INSTITUTIONAL_DEVELOPMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551caaf"
+          }
+        },
+        {
+          "name": "Equipment Management Section",
+          "code": "EQUIPMENT_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cab0"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551caab"
+      }
+    },
+    {
+      "name": "ADMINISTRATIVE AND FINANCE DIVISION",
+      "code": "ADMINISTRATIVE_AND_FINANCE_DIVISION",
+      "sections": [
+        {
+          "name": "Finance Section",
+          "code": "FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cab2"
+          }
+        },
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cab3"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cab1"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c933"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.483Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.483Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551cac1"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c939"
+  },
+  "departmentName": "REGIONAL OFFICE",
+  "divisions": [
+    {
+      "name": "OFFICE OF THE REGIONAL MANAGER",
+      "code": "OFFICE_OF_THE_REGIONAL_MANAGER",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cac2"
+      }
+    },
+    {
+      "name": "ENGINEERING AND OPERATIONS DIVISION",
+      "code": "ENGINEERING_AND_OPERATIONS_DIVISION",
+      "sections": [
+        {
+          "name": "Planning & Design Section",
+          "code": "PLANNING_&_DESIGN_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cac4"
+          }
+        },
+        {
+          "name": "Construction Management Section",
+          "code": "CONSTRUCTION_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cac5"
+          }
+        },
+        {
+          "name": "Operations Section",
+          "code": "OPERATIONS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cac6"
+          }
+        },
+        {
+          "name": "Institutional Development Section",
+          "code": "INSTITUTIONAL_DEVELOPMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cac7"
+          }
+        },
+        {
+          "name": "Equipment Management Section",
+          "code": "EQUIPMENT_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cac8"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cac3"
+      }
+    },
+    {
+      "name": "ADMINISTRATIVE AND FINANCE DIVISION",
+      "code": "ADMINISTRATIVE_AND_FINANCE_DIVISION",
+      "sections": [
+        {
+          "name": "Finance Section",
+          "code": "FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551caca"
+          }
+        },
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cacb"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cac9"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c934"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.484Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.484Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551cad9"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c93b"
+  },
+  "departmentName": "ADMINISTRATIVE DEPARTMENT",
+  "divisions": [
+    {
+      "name": "HUMAN RESOURCES DIVISION",
+      "code": "HUMAN_RESOURCES_DIVISION",
+      "sections": [
+        {
+          "name": "Recruitment, Standards and Compensation Section",
+          "code": "RECRUITMENT,_STANDARDS_AND_COMPENSATION_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cadb"
+          }
+        },
+        {
+          "name": "Employee Welfare and Benefits Section",
+          "code": "EMPLOYEE_WELFARE_AND_BENEFITS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cadc"
+          }
+        },
+        {
+          "name": "Training and Career Development Section",
+          "code": "TRAINING_AND_CAREER_DEVELOPMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cadd"
+          }
+        },
+        {
+          "name": "Personnel Relations, Documentation and Records Section",
+          "code": "PERSONNEL_RELATIONS,_DOCUMENTATION_AND_RECORDS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cade"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cada"
+      }
+    },
+    {
+      "name": "PROCUREMENT AND PROPERTY DIVISION",
+      "code": "PROCUREMENT_AND_PROPERTY_DIVISION",
+      "sections": [
+        {
+          "name": "Procurement Section",
+          "code": "PROCUREMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cae0"
+          }
+        },
+        {
+          "name": "Property Section",
+          "code": "PROPERTY_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cae1"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cadf"
+      }
+    },
+    {
+      "name": "GENERAL SERVICES DIVISION",
+      "code": "GENERAL_SERVICES_DIVISION",
+      "sections": [
+        {
+          "name": "Building and Facilities Unit",
+          "code": "BUILDING_AND_FACILITIES_UNIT",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cae3"
+          }
+        },
+        {
+          "name": "Motorpool Unit",
+          "code": "MOTORPOOL_UNIT",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cae4"
+          }
+        },
+        {
+          "name": "Maintenance Section",
+          "code": "MAINTENANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cae5"
+          }
+        },
+        {
+          "name": "Communication Unit",
+          "code": "COMMUNICATION_UNIT",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cae6"
+          }
+        },
+        {
+          "name": "Mechanical-Electrical Unit",
+          "code": "MECHANICAL-ELECTRICAL_UNIT",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cae7"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cae2"
+      }
+    },
+    {
+      "name": "CIVIL SECURITY DIVISION",
+      "code": "CIVIL_SECURITY_DIVISION",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cae8"
+      }
+    },
+    {
+      "name": "MEDICAL AND DENTAL DIVISION",
+      "code": "MEDICAL_AND_DENTAL_DIVISION",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cae9"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c935"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.485Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.485Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551caea"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c93c"
+  },
+  "departmentName": "FINANCIAL MANAGEMENT DEPARTMENT",
+  "divisions": [
+    {
+      "name": "ACCOUNTING DIVISION",
+      "code": "ACCOUNTING_DIVISION",
+      "sections": [
+        {
+          "name": "Bookkeeping Section",
+          "code": "BOOKKEEPING_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551caec"
+          }
+        },
+        {
+          "name": "Claims Analysis and Processing Section",
+          "code": "CLAIMS_ANALYSIS_AND_PROCESSING_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551caed"
+          }
+        },
+        {
+          "name": "Reconciliation and Miscellaneous Section",
+          "code": "RECONCILIATION_AND_MISCELLANEOUS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551caee"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551caeb"
+      }
+    },
+    {
+      "name": "BUDGET AND REVENUE DIVISION",
+      "code": "BUDGET_AND_REVENUE_DIVISION",
+      "sections": [
+        {
+          "name": "Control Monitoring Section",
+          "code": "CONTROL_MONITORING_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551caf0"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551caef"
+      }
+    },
+    {
+      "name": "CASH DIVISION",
+      "code": "CASH_DIVISION",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551caf1"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c935"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.485Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.485Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551caf2"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c93d"
+  },
+  "departmentName": "OPERATIONS DEPARTMENT",
+  "divisions": [
+    {
+      "name": "SYSTEM MANAGEMENT DIVISION",
+      "code": "SYSTEM_MANAGEMENT_DIVISION",
+      "sections": [
+        {
+          "name": "Office of the Manager",
+          "code": "OFFICE_OF_THE_MANAGER",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551caf4"
+          }
+        },
+        {
+          "name": "Systems Operation Section",
+          "code": "SYSTEMS_OPERATION_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551caf5"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551caf3"
+      }
+    },
+    {
+      "name": "EQUIPMENT MANAGEMENT DIVISION",
+      "code": "EQUIPMENT_MANAGEMENT_DIVISION",
+      "sections": [
+        {
+          "name": "Office of the Manager",
+          "code": "OFFICE_OF_THE_MANAGER",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551caf7"
+          }
+        },
+        {
+          "name": "Equipment Utilization and Evaluation Section",
+          "code": "EQUIPMENT_UTILIZATION_AND_EVALUATION_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551caf8"
+          }
+        },
+        {
+          "name": "Equipment Inspection and Repair Evaluation Section",
+          "code": "EQUIPMENT_INSPECTION_AND_REPAIR_EVALUATION_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551caf9"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551caf6"
+      }
+    },
+    {
+      "name": "INSTITUTIONAL DEVELOPMENT DIVISION",
+      "code": "INSTITUTIONAL_DEVELOPMENT_DIVISION",
+      "sections": [
+        {
+          "name": "Office of the Manager",
+          "code": "OFFICE_OF_THE_MANAGER",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cafb"
+          }
+        },
+        {
+          "name": "Irrigator's Assistance Organization and Capability Building Section",
+          "code": "IRRIGATOR'S_ASSISTANCE_ORGANIZATION_AND_CAPABILITY_BUILDING_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cafc"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cafa"
+      }
+    },
+    {
+      "name": "IRRIGATION ENGINEERING DIVISION",
+      "code": "IRRIGATION_ENGINEERING_DIVISION",
+      "sections": [
+        {
+          "name": "Operations Section",
+          "code": "OPERATIONS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cafe"
+          }
+        },
+        {
+          "name": "Construction Technology Section",
+          "code": "CONSTRUCTION_TECHNOLOGY_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551caff"
+          }
+        },
+        {
+          "name": "Office of the Manager",
+          "code": "OFFICE_OF_THE_MANAGER",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb00"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cafd"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c935"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.485Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.485Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551cb01"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c93e"
+  },
+  "departmentName": "ENGINEERING DEPARTMENT",
+  "divisions": [
+    {
+      "name": "PROJECT PLANNING DIVISION",
+      "code": "PROJECT_PLANNING_DIVISION",
+      "sections": [
+        {
+          "name": "Project Formulation and Packaging Section",
+          "code": "PROJECT_FORMULATION_AND_PACKAGING_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb03"
+          }
+        },
+        {
+          "name": "Office of the Manager",
+          "code": "OFFICE_OF_THE_MANAGER",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb04"
+          }
+        },
+        {
+          "name": "Land and Water Resources Section",
+          "code": "LAND_AND_WATER_RESOURCES_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb05"
+          }
+        },
+        {
+          "name": "Environmental and Watershed Management Section",
+          "code": "ENVIRONMENTAL_AND_WATERSHED_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb06"
+          }
+        },
+        {
+          "name": "Interim Geology Section",
+          "code": "INTERIM_GEOLOGY_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb07"
+          }
+        },
+        {
+          "name": "Project Approval and Fund Sourcing Group",
+          "code": "PROJECT_APPROVAL_AND_FUND_SOURCING_GROUP",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb08"
+          }
+        },
+        {
+          "name": "Project Investigation and Validation Section",
+          "code": "PROJECT_INVESTIGATION_AND_VALIDATION_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb09"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb02"
+      }
+    },
+    {
+      "name": "DESIGN AND SPECIFICATIONS DIVISION",
+      "code": "DESIGN_AND_SPECIFICATIONS_DIVISION",
+      "sections": [
+        {
+          "name": "Office of the Manager",
+          "code": "OFFICE_OF_THE_MANAGER",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb0b"
+          }
+        },
+        {
+          "name": "Civil Works Design Section",
+          "code": "CIVIL_WORKS_DESIGN_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb0c"
+          }
+        },
+        {
+          "name": "Electro-Mechanical Section",
+          "code": "ELECTRO-MECHANICAL_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb0d"
+          }
+        },
+        {
+          "name": "Architectural and Drafting Section",
+          "code": "ARCHITECTURAL_AND_DRAFTING_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb0e"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb0a"
+      }
+    },
+    {
+      "name": "CONSTRUCTION MANAGEMENT DIVISION",
+      "code": "CONSTRUCTION_MANAGEMENT_DIVISION",
+      "sections": [
+        {
+          "name": "Contracts Administration Section",
+          "code": "CONTRACTS_ADMINISTRATION_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb10"
+          }
+        },
+        {
+          "name": "Construction Planning and Scheduling Section",
+          "code": "CONSTRUCTION_PLANNING_AND_SCHEDULING_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb11"
+          }
+        },
+        {
+          "name": "Project Benefits Monitoring and Evaluation Section",
+          "code": "PROJECT_BENEFITS_MONITORING_AND_EVALUATION_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb12"
+          }
+        },
+        {
+          "name": "Office of the Manager",
+          "code": "OFFICE_OF_THE_MANAGER",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb13"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb0f"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c935"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.486Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.486Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551cb14"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c93f"
+  },
+  "departmentName": "CORPORATE PLANNING SERVICES",
+  "divisions": [
+    {
+      "name": "PLANNING & PROGRAMMING DIVISION",
+      "code": "PLANNING_&_PROGRAMMING_DIVISION",
+      "sections": [
+        {
+          "name": "Corporate Planning and Policy Section",
+          "code": "CORPORATE_PLANNING_AND_POLICY_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb16"
+          }
+        },
+        {
+          "name": "Investment Planning and Programming Section",
+          "code": "INVESTMENT_PLANNING_AND_PROGRAMMING_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb17"
+          }
+        },
+        {
+          "name": "Office of the Manager",
+          "code": "OFFICE_OF_THE_MANAGER",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb18"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb15"
+      }
+    },
+    {
+      "name": "MANAGEMENT INFORMATION DIVISION",
+      "code": "MANAGEMENT_INFORMATION_DIVISION",
+      "sections": [
+        {
+          "name": "Data Management and Network Operation Section",
+          "code": "DATA_MANAGEMENT_AND_NETWORK_OPERATION_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb1a"
+          }
+        },
+        {
+          "name": "Information Systems Development Section",
+          "code": "INFORMATION_SYSTEMS_DEVELOPMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb1b"
+          }
+        },
+        {
+          "name": "Office of the Manager",
+          "code": "OFFICE_OF_THE_MANAGER",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb1c"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb19"
+      }
+    },
+    {
+      "name": "MANAGEMENT SERVICES DIVISION",
+      "code": "MANAGEMENT_SERVICES_DIVISION",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb1d"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c935"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.486Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.486Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551cb1e"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c940"
+  },
+  "departmentName": "HEAD OFFICE",
+  "divisions": [
+    {
+      "name": "OFFICE OF THE DEPARTMENT MANAGER",
+      "code": "OFFICE_OF_THE_DEPARTMENT_MANAGER",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb1f"
+      }
+    },
+    {
+      "name": "ENGINEERING AND OPERATIONS DIVISION",
+      "code": "ENGINEERING_AND_OPERATIONS_DIVISION",
+      "sections": [
+        {
+          "name": "Civil Works Section",
+          "code": "CIVIL_WORKS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb21"
+          }
+        },
+        {
+          "name": "Watershed Management Section",
+          "code": "WATERSHED_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb22"
+          }
+        },
+        {
+          "name": "Flood Forecasting and Instrumentation Section",
+          "code": "FLOOD_FORECASTING_AND_INSTRUMENTATION_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb23"
+          }
+        },
+        {
+          "name": "Electro-Mechanical Section",
+          "code": "ELECTRO-MECHANICAL_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb24"
+          }
+        },
+        {
+          "name": "Dam Operation",
+          "code": "DAM_OPERATION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb25"
+          }
+        },
+        {
+          "name": "Power Plant and Transmission Unit",
+          "code": "POWER_PLANT_AND_TRANSMISSION_UNIT",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb26"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb20"
+      }
+    },
+    {
+      "name": "ADMINISTRATIVE AND FINANCE DIVISION",
+      "code": "ADMINISTRATIVE_AND_FINANCE_DIVISION",
+      "sections": [
+        {
+          "name": "Administrative and Finance Section",
+          "code": "ADMINISTRATIVE_AND_FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb28"
+          }
+        },
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb29"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb27"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c936"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.486Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.486Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551cb2a"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c941"
+  },
+  "departmentName": "DIVISION I",
+  "divisions": [
+    {
+      "name": "DIVISION I",
+      "code": "DIVISION_I",
+      "sections": [
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OPERATION_AND_MAINTENANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb2c"
+          }
+        },
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb2d"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb2b"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c936"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.486Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.486Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551cb2e"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c942"
+  },
+  "departmentName": "DIVISION II",
+  "divisions": [
+    {
+      "name": "DIVISION II",
+      "code": "DIVISION_II",
+      "sections": [
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OPERATION_AND_MAINTENANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb30"
+          }
+        },
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb31"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb2f"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c936"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.486Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.486Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551cb32"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c943"
+  },
+  "departmentName": "DIVISION III",
+  "divisions": [
+    {
+      "name": "DIVISION III",
+      "code": "DIVISION_III",
+      "sections": [
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OPERATION_AND_MAINTENANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb34"
+          }
+        },
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb35"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb33"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c936"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.487Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.487Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551cb36"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c944"
+  },
+  "departmentName": "DIVISION IV",
+  "divisions": [
+    {
+      "name": "DIVISION IV",
+      "code": "DIVISION_IV",
+      "sections": [
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OPERATION_AND_MAINTENANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb38"
+          }
+        },
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb39"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb37"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c936"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.487Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.487Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551cb3a"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c945"
+  },
+  "departmentName": "DAM & RESERVOIR DIVISION",
+  "divisions": [
+    {
+      "name": "DAM & RESERVOIR DIVISION",
+      "code": "DAM_&_RESERVOIR_DIVISION",
+      "sections": [
+        {
+          "name": "Civil Works Section",
+          "code": "CIVIL_WORKS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb3c"
+          }
+        },
+        {
+          "name": "Equipment/Motorpool Unit",
+          "code": "EQUIPMENT/MOTORPOOL_UNIT",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb3d"
+          }
+        },
+        {
+          "name": "Watershed Management Section",
+          "code": "WATERSHED_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb3e"
+          }
+        },
+        {
+          "name": "Flood Forecasting and Instrumentation Section",
+          "code": "FLOOD_FORECASTING_AND_INSTRUMENTATION_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb3f"
+          }
+        },
+        {
+          "name": "Electro-Mechanical Section",
+          "code": "ELECTRO-MECHANICAL_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb40"
+          }
+        },
+        {
+          "name": "Dam Operation",
+          "code": "DAM_OPERATION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb41"
+          }
+        },
+        {
+          "name": "Power Plant and Transmission Unit",
+          "code": "POWER_PLANT_AND_TRANSMISSION_UNIT",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb42"
+          }
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "ADMINISTRATIVE_AND_FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb43"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb3b"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c936"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.487Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.487Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551cb44"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c940"
+  },
+  "departmentName": "HEAD OFFICE",
+  "divisions": [
+    {
+      "name": "OFFICE OF THE DEPARTMENT MANAGER",
+      "code": "OFFICE_OF_THE_DEPARTMENT_MANAGER",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb45"
+      }
+    },
+    {
+      "name": "ENGINEERING AND OPERATIONS DIVISION",
+      "code": "ENGINEERING_AND_OPERATIONS_DIVISION",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ENGINEERING_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb47"
+          }
+        },
+        {
+          "name": "Operations Section",
+          "code": "OPERATIONS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb48"
+          }
+        },
+        {
+          "name": "Institutional Development Section",
+          "code": "INSTITUTIONAL_DEVELOPMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb49"
+          }
+        },
+        {
+          "name": "Equipment Management Section",
+          "code": "EQUIPMENT_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb4a"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb46"
+      }
+    },
+    {
+      "name": "ADMINISTRATIVE AND FINANCE DIVISION",
+      "code": "ADMINISTRATIVE_AND_FINANCE_DIVISION",
+      "sections": [
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb4c"
+          }
+        },
+        {
+          "name": "Finance Section",
+          "code": "FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb4d"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb4b"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c937"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.487Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.487Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551cb4e"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c941"
+  },
+  "departmentName": "DIVISION I",
+  "divisions": [
+    {
+      "name": "DIVISION I",
+      "code": "DIVISION_I",
+      "sections": [
+        {
+          "name": "Adminstrative & Finance Section",
+          "code": "ADMINSTRATIVE_&_FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb50"
+          }
+        },
+        {
+          "name": "Operation, Maintenace, & Institutional Development Section",
+          "code": "OPERATION,_MAINTENACE,_&_INSTITUTIONAL_DEVELOPMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb51"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb4f"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c937"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.487Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.487Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551cb52"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c942"
+  },
+  "departmentName": "DIVISION II",
+  "divisions": [
+    {
+      "name": "DIVISION II",
+      "code": "DIVISION_II",
+      "sections": [
+        {
+          "name": "Operation, Maintenance and Institutional Development Section",
+          "code": "OPERATION,_MAINTENANCE_AND_INSTITUTIONAL_DEVELOPMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb54"
+          }
+        },
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb55"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb53"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c937"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.487Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.487Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551cb56"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c943"
+  },
+  "departmentName": "DIVISION III",
+  "divisions": [
+    {
+      "name": "DIVISION III",
+      "code": "DIVISION_III",
+      "sections": [
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OPERATION_AND_MAINTENANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb58"
+          }
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "ADMINISTRATIVE_AND_FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb59"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb57"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c937"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.487Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.487Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551cb5a"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c944"
+  },
+  "departmentName": "DIVISION IV",
+  "divisions": [
+    {
+      "name": "DIVISION IV",
+      "code": "DIVISION_IV",
+      "sections": [
+        {
+          "name": "Administrative & Finance Section",
+          "code": "ADMINISTRATIVE_&_FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb5c"
+          }
+        },
+        {
+          "name": "Operations, Maintenance & Institutional Section",
+          "code": "OPERATIONS,_MAINTENANCE_&_INSTITUTIONAL_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb5d"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb5b"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c937"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.488Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.488Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551cb5e"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c946"
+  },
+  "departmentName": "DIVISION V",
+  "divisions": [
+    {
+      "name": "DIVISION V",
+      "code": "DIVISION_V",
+      "sections": [
+        {
+          "name": "Operations, Maintenance and Institutional Development Section",
+          "code": "OPERATIONS,_MAINTENANCE_AND_INSTITUTIONAL_DEVELOPMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb60"
+          }
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "ADMINISTRATIVE_AND_FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb61"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb5f"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c937"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.488Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.488Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68be0fba37907a9f5551cb62"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c947"
+  },
+  "departmentName": "DRD",
+  "divisions": [
+    {
+      "name": "DRD",
+      "code": "DRD",
+      "sections": [
+        {
+          "name": "Electro-Mechanical Section",
+          "code": "ELECTRO-MECHANICAL_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb64"
+          }
+        },
+        {
+          "name": "Civil Works Section",
+          "code": "CIVIL_WORKS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb65"
+          }
+        },
+        {
+          "name": "Watershed Management Section",
+          "code": "WATERSHED_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb66"
+          }
+        },
+        {
+          "name": "IFFWSDO Section",
+          "code": "IFFWSDO_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb67"
+          }
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "ADMINISTRATIVE_AND_FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cb68"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cb63"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c937"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.488Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.488Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68cceb2ba4ca4054ead8c6a9"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c93a"
+  },
+  "departmentName": "IRRIGATION MANAGEMENT OFFICE",
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c926"
+  },
+  "regionName": "REGION I",
+  "divisions": [
+    {
+      "name": "ILOCOS NORTE IMO",
+      "code": "IN-IMO",
+      "sections": [
+        {
+          "name": "Office of the IMO Manager",
+          "code": "OIMOM"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Engineering, Operation and Maintenance Section",
+          "code": "EOMS"
+        }
+      ]
+    },
+    {
+      "name": "ILOCOS SUR IMO",
+      "code": "IS-IMO",
+      "sections": [
+        {
+          "name": "Office of the Division Manager",
+          "code": "ODM"
+        },
+        {
+          "name": "Operation Section",
+          "code": "OS"
+        },
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        }
+      ]
+    },
+    {
+      "name": "LA UNION IMO",
+      "code": "LU-IMO",
+      "sections": [
+        {
+          "name": "Office of the IMO Manager",
+          "code": "OIMOM"
+        },
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operations Section",
+          "code": "OS"
+        }
+      ]
+    },
+    {
+      "name": "PANGASINAN IMO",
+      "code": "PG-IMO",
+      "sections": [
+        {
+          "name": "Office of the IMO Manager",
+          "code": "OIMOM"
+        },
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation & Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    }
+  ],
+  "createdAt": {
+    "$date": "2025-09-19T05:33:31.104Z"
+  },
+  "updatedAt": {
+    "$date": "2025-10-06T01:57:37.317Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "68cceb2ba4ca4054ead8c6aa"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c93a"
+  },
+  "departmentName": "IRRIGATION MANAGEMENT OFFICE",
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c927"
+  },
+  "regionName": "REGION II",
+  "divisions": [
+    {
+      "name": "ISABELA IMO",
+      "code": "ISA-IMO",
+      "sections": [
+        {
+          "name": "Engineering - Construction",
+          "code": "EC"
+        },
+        {
+          "name": "Engineering - Planning and Design",
+          "code": "EPD"
+        },
+        {
+          "name": "Engineering - Operations",
+          "code": "EO"
+        },
+        {
+          "name": "Engineering - Equipment",
+          "code": "EE"
+        },
+        {
+          "name": "Engineering - Institutional Development",
+          "code": "EID"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        }
+      ]
+    },
+    {
+      "name": "QUIRINO IMO",
+      "code": "QUI-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "NUEVA VIZCAYA IMO",
+      "code": "NV-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "CAGAYAN-BATANES IMO",
+      "code": "CB-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    }
+  ],
+  "createdAt": {
+    "$date": "2025-09-19T05:33:31.104Z"
+  },
+  "updatedAt": {
+    "$date": "2025-10-06T01:57:37.322Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "68cceb2ba4ca4054ead8c6ab"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c93a"
+  },
+  "departmentName": "IRRIGATION MANAGEMENT OFFICE",
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c928"
+  },
+  "regionName": "REGION III",
+  "divisions": [
+    {
+      "name": "BATAAN-ZAMBALES IMO",
+      "code": "BZ-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "PAMPANGA IMO",
+      "code": "PAM-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "BULACAN-AURORA IMO",
+      "code": "BA-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "TARLAC IMO",
+      "code": "TAR-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    }
+  ],
+  "createdAt": {
+    "$date": "2025-09-19T05:33:31.104Z"
+  },
+  "updatedAt": {
+    "$date": "2025-10-06T01:57:37.327Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "68cceb2ba4ca4054ead8c6ac"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c93a"
+  },
+  "departmentName": "IRRIGATION MANAGEMENT OFFICE",
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c929"
+  },
+  "regionName": "REGION IV-A",
+  "divisions": [
+    {
+      "name": "LAGUNA-RIZAL IMO",
+      "code": "LR-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "BATANGAS IMO",
+      "code": "BAT-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "QUEZON IMO",
+      "code": "QUE-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "CAVITE IMO",
+      "code": "CAV-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    }
+  ],
+  "createdAt": {
+    "$date": "2025-09-19T05:33:31.104Z"
+  },
+  "updatedAt": {
+    "$date": "2025-10-06T01:57:37.330Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "68cceb2ba4ca4054ead8c6ad"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c93a"
+  },
+  "departmentName": "IRRIGATION MANAGEMENT OFFICE",
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c92a"
+  },
+  "regionName": "REGION IV-B",
+  "divisions": [
+    {
+      "name": "MINDORO ORIENTAL-MARINDUQUE IMO",
+      "code": "MOM-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "MINDORO OCCIDENTAL IMO",
+      "code": "MOCC-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "PALAWAN IMO",
+      "code": "PAL-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "ROMBLON IMO",
+      "code": "ROM-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    }
+  ],
+  "createdAt": {
+    "$date": "2025-09-19T05:33:31.105Z"
+  },
+  "updatedAt": {
+    "$date": "2025-10-06T01:57:37.335Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "68cceb2ba4ca4054ead8c6ae"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c93a"
+  },
+  "departmentName": "IRRIGATION MANAGEMENT OFFICE",
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c92b"
+  },
+  "regionName": "REGION V",
+  "divisions": [
+    {
+      "name": "CAMARINES SUR IMO",
+      "code": "CS-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "CAMARINES NORTE IMO",
+      "code": "CN-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "ALBAY-CATANDUANES IMO",
+      "code": "AC-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "SORSOGON-MASBATE IMO",
+      "code": "SM-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    }
+  ],
+  "createdAt": {
+    "$date": "2025-09-19T05:33:31.105Z"
+  },
+  "updatedAt": {
+    "$date": "2025-10-06T01:57:37.338Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "68cceb2ba4ca4054ead8c6af"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c93a"
+  },
+  "departmentName": "IRRIGATION MANAGEMENT OFFICE",
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c92c"
+  },
+  "regionName": "REGION VI",
+  "divisions": [
+    {
+      "name": "ILOILO-GUIMARAS IMO",
+      "code": "IG-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "AKLAN-CAPIZ IMO",
+      "code": "AKC-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "NEGROS OCCIDENTAL IMO",
+      "code": "NO-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "ANTIQUE IMO",
+      "code": "ANT-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    }
+  ],
+  "createdAt": {
+    "$date": "2025-09-19T05:33:31.105Z"
+  },
+  "updatedAt": {
+    "$date": "2025-10-06T01:57:37.341Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "68cceb2ba4ca4054ead8c6b0"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c93a"
+  },
+  "departmentName": "IRRIGATION MANAGEMENT OFFICE",
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c92d"
+  },
+  "regionName": "REGION VII",
+  "divisions": [
+    {
+      "name": "BOHOL IMO",
+      "code": "BOH-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "CEBU IMO",
+      "code": "CEB-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "NEGROS ORIENTAL-SIQUIJOR IMO",
+      "code": "NOS-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    }
+  ],
+  "createdAt": {
+    "$date": "2025-09-19T05:33:31.105Z"
+  },
+  "updatedAt": {
+    "$date": "2025-10-06T01:57:37.345Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "68cceb2ba4ca4054ead8c6b1"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c93a"
+  },
+  "departmentName": "IRRIGATION MANAGEMENT OFFICE",
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c92e"
+  },
+  "regionName": "REGION VIII",
+  "divisions": [
+    {
+      "name": "LEYTE-BILIRAN IMO",
+      "code": "LB-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "SAMAR-NORTHERN SAMAR IMO",
+      "code": "SNS-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "EASTERN SAMAR IMO",
+      "code": "ES-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "SOUTHERN LEYTE IMO",
+      "code": "SL-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    }
+  ],
+  "createdAt": {
+    "$date": "2025-09-19T05:33:31.105Z"
+  },
+  "updatedAt": {
+    "$date": "2025-10-06T01:57:37.348Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "68cceb2ba4ca4054ead8c6b2"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c93a"
+  },
+  "departmentName": "IRRIGATION MANAGEMENT OFFICE",
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c92f"
+  },
+  "regionName": "REGION IX",
+  "divisions": [
+    {
+      "name": "ZAMBOANGA DEL SUR IMO",
+      "code": "ZDS-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "ZAMBOANGA DEL NORTE IMO",
+      "code": "ZDN-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "ZAMBOANGA-SIBUGAY IMO",
+      "code": "ZS-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    }
+  ],
+  "createdAt": {
+    "$date": "2025-09-19T05:33:31.105Z"
+  },
+  "updatedAt": {
+    "$date": "2025-10-06T01:57:37.350Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "68cceb2ba4ca4054ead8c6b3"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c93a"
+  },
+  "departmentName": "IRRIGATION MANAGEMENT OFFICE",
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c930"
+  },
+  "regionName": "REGION X",
+  "divisions": [
+    {
+      "name": "BUKIDNON IMO",
+      "code": "BUK-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "LANAO DEL NORTE-MISAMIS OCCIDENTAL IMO",
+      "code": "LNMO-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "MISAMIS ORIENTAL-CAMIGUIN IMO",
+      "code": "MOC-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    }
+  ],
+  "createdAt": {
+    "$date": "2025-09-19T05:33:31.105Z"
+  },
+  "updatedAt": {
+    "$date": "2025-10-06T01:57:37.353Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "68cceb2ba4ca4054ead8c6b4"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c93a"
+  },
+  "departmentName": "IRRIGATION MANAGEMENT OFFICE",
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c931"
+  },
+  "regionName": "REGION XI",
+  "divisions": [
+    {
+      "name": "DAVAO DEL SUR-DAVAO OCCIDENTAL IMO",
+      "code": "DDSDO-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "DAVAO DEL NORTE-DAVAO DE ORO IMO",
+      "code": "DDNDDO-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "DAVAO ORIENTAL IMO",
+      "code": "DO-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    }
+  ],
+  "createdAt": {
+    "$date": "2025-09-19T05:33:31.105Z"
+  },
+  "updatedAt": {
+    "$date": "2025-10-06T01:57:37.355Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "68cceb2ba4ca4054ead8c6b5"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c93a"
+  },
+  "departmentName": "IRRIGATION MANAGEMENT OFFICE",
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c932"
+  },
+  "regionName": "REGION XII",
+  "divisions": [
+    {
+      "name": "SOUTH COTABATO-SARANGANI IMO",
+      "code": "SCS-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "SULTAN KUDARAT IMO",
+      "code": "SK-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "NORTH COTABATO IMO",
+      "code": "NC-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    }
+  ],
+  "createdAt": {
+    "$date": "2025-09-19T05:33:31.105Z"
+  },
+  "updatedAt": {
+    "$date": "2025-10-06T01:57:37.360Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "68cceb2ba4ca4054ead8c6b6"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c93a"
+  },
+  "departmentName": "IRRIGATION MANAGEMENT OFFICE",
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c933"
+  },
+  "regionName": "CAR",
+  "divisions": [
+    {
+      "name": "KALINGA-APAYAO IMO",
+      "code": "KA-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "MT. PROVINCE-IFUGAO IMO",
+      "code": "MPI-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "ABRA-BENGUET IMO",
+      "code": "AB-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    }
+  ],
+  "createdAt": {
+    "$date": "2025-09-19T05:33:31.105Z"
+  },
+  "updatedAt": {
+    "$date": "2025-10-06T01:57:37.364Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "68cceb2ba4ca4054ead8c6b7"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c93a"
+  },
+  "departmentName": "IRRIGATION MANAGEMENT OFFICE",
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c934"
+  },
+  "regionName": "CARAGA",
+  "divisions": [
+    {
+      "name": "AGUSAN DEL SUR IMO",
+      "code": "ADS-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "AGUSAN DEL NORTE-SURIGAO DEL NORTE IMO",
+      "code": "ADNSDN-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    },
+    {
+      "name": "SURIGAO DEL SUR IMO",
+      "code": "SDS-IMO",
+      "sections": [
+        {
+          "name": "Engineering Section",
+          "code": "ES"
+        },
+        {
+          "name": "Administrative and Finance Section",
+          "code": "AFS"
+        },
+        {
+          "name": "Operation and Maintenance Section",
+          "code": "OMS"
+        }
+      ]
+    }
+  ],
+  "createdAt": {
+    "$date": "2025-09-19T05:33:31.105Z"
+  },
+  "updatedAt": {
+    "$date": "2025-10-06T01:57:37.367Z"
+  }
+},
+{
+  "_id": {
+    "$oid": "68cfb4314c57136a88094197"
+  },
+  "departmentId": {
+    "$oid": "68cfb4314c57136a88094194"
+  },
+  "departmentName": "PUBLIC AFFAIRS AND STAFF INFORMATION",
+  "divisions": [],
+  "hasSubDivisions": false,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c935"
+  },
+  "createdAt": {
+    "$date": "2025-09-21T08:15:45.155Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-21T08:15:45.156Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68cfb4314c57136a8809419d"
+  },
+  "departmentId": {
+    "$oid": "68cfb4314c57136a8809419a"
+  },
+  "departmentName": "LEGAL SERVICES",
+  "divisions": [],
+  "hasSubDivisions": false,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c935"
+  },
+  "createdAt": {
+    "$date": "2025-09-21T08:15:45.168Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-21T08:15:45.168Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "68cfb4314c57136a880941a3"
+  },
+  "departmentId": {
+    "$oid": "68cfb4314c57136a880941a0"
+  },
+  "departmentName": "INTERNAL AUDIT SERVICES",
+  "divisions": [
+    {
+      "name": "ORGANIZATION & MANAGEMENT AUDIT DIVISION",
+      "code": "ORGANIZATION__MANAGEMENT_AUDIT_DIVISION",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68cfb4314c57136a880941a4"
+      }
+    },
+    {
+      "name": "FINANCIAL & OPERATIONS AUDIT DIVISION",
+      "code": "FINANCIAL__OPERATIONS_AUDIT_DIVISION",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68cfb4314c57136a880941a5"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c935"
+  },
+  "createdAt": {
+    "$date": "2025-09-21T08:15:45.179Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-21T08:15:45.180Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "691d2a5fa030a65724eb71cd"
+  },
+  "departmentId": {
+    "$oid": "691d29fba030a65724eb71cc"
+  },
+  "departmentName": "OFFICE OF THE ADMINISTRATOR",
+  "divisions": [],
+  "hasSubDivisions": false,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c935"
+  },
+  "createdAt": {
+    "$date": "2025-09-21T08:15:45.155Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-21T08:15:45.156Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "691d2c79a030a65724eb71d3"
+  },
+  "departmentId": {
+    "$oid": "691d2b7da030a65724eb71ce"
+  },
+  "departmentName": "OFFICE OF THE SENIOR DEPUTY ADMINISTRATOR",
+  "divisions": [],
+  "hasSubDivisions": false,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c935"
+  },
+  "createdAt": {
+    "$date": "2025-09-21T08:15:45.155Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-21T08:15:45.156Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "691d2c98a030a65724eb71d4"
+  },
+  "departmentId": {
+    "$oid": "691d2b92a030a65724eb71cf"
+  },
+  "departmentName": "OFFICE OF THE DEPUTY ADMINISTRATOR FOR ENGINEERING & OPERATIONS",
+  "divisions": [],
+  "hasSubDivisions": false,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c935"
+  },
+  "createdAt": {
+    "$date": "2025-09-21T08:15:45.155Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-21T08:15:45.156Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "691d2cb8a030a65724eb71d5"
+  },
+  "departmentId": {
+    "$oid": "691d2ba9a030a65724eb71d0"
+  },
+  "departmentName": "OFFICE OF THE DEPUTY ADMINISTRATOR FOR ADMINISTRATIVE AND FINANCE SECTOR",
+  "divisions": [],
+  "hasSubDivisions": false,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c935"
+  },
+  "createdAt": {
+    "$date": "2025-09-21T08:15:45.155Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-21T08:15:45.156Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "691d2cd2a030a65724eb71d6"
+  },
+  "departmentId": {
+    "$oid": "691d2bc5a030a65724eb71d1"
+  },
+  "departmentName": "BAC A",
+  "divisions": [],
+  "hasSubDivisions": false,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c935"
+  },
+  "createdAt": {
+    "$date": "2025-09-21T08:15:45.155Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-21T08:15:45.156Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "691d2cf9a030a65724eb71d7"
+  },
+  "departmentId": {
+    "$oid": "691d2bdda030a65724eb71d2"
+  },
+  "departmentName": "OFFICE OF THE CORPORATE BOARD SECRETARY",
+  "divisions": [],
+  "hasSubDivisions": false,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c935"
+  },
+  "createdAt": {
+    "$date": "2025-09-21T08:15:45.155Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-21T08:15:45.156Z"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "6922af87ef095cfeb324aa5c"
+  },
+  "departmentId": {
+    "$oid": "6922af566e1f2b731101fa09"
+  },
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c935"
+  },
+  "divisions": []
+},
+{
+  "_id": {
+    "$oid": "6927ae8fffcc52886c789c75"
+  },
+  "departmentId": {
+    "$oid": "68be0fba37907a9f5551c939"
+  },
+  "departmentName": "REGIONAL OFFICE",
+  "divisions": [
+    {
+      "name": "OFFICE OF THE REGIONAL MANAGER",
+      "code": "OFFICE_OF_THE_REGIONAL_MANAGER",
+      "sections": [],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cac2"
+      }
+    },
+    {
+      "name": "ENGINEERING AND OPERATIONS DIVISION",
+      "code": "ENGINEERING_AND_OPERATIONS_DIVISION",
+      "sections": [
+        {
+          "name": "Planning & Design Section",
+          "code": "PLANNING_&_DESIGN_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cac4"
+          }
+        },
+        {
+          "name": "Construction Management Section",
+          "code": "CONSTRUCTION_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cac5"
+          }
+        },
+        {
+          "name": "Operations Section",
+          "code": "OPERATIONS_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cac6"
+          }
+        },
+        {
+          "name": "Institutional Development Section",
+          "code": "INSTITUTIONAL_DEVELOPMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cac7"
+          }
+        },
+        {
+          "name": "Equipment Management Section",
+          "code": "EQUIPMENT_MANAGEMENT_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cac8"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cac3"
+      }
+    },
+    {
+      "name": "ADMINISTRATIVE AND FINANCE DIVISION",
+      "code": "ADMINISTRATIVE_AND_FINANCE_DIVISION",
+      "sections": [
+        {
+          "name": "Finance Section",
+          "code": "FINANCE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551caca"
+          }
+        },
+        {
+          "name": "Administrative Section",
+          "code": "ADMINISTRATIVE_SECTION",
+          "isActive": true,
+          "_id": {
+            "$oid": "68be0fba37907a9f5551cacb"
+          }
+        }
+      ],
+      "isActive": true,
+      "_id": {
+        "$oid": "68be0fba37907a9f5551cac9"
+      }
+    }
+  ],
+  "hasSubDivisions": true,
+  "regionId": {
+    "$oid": "68be0fba37907a9f5551c937"
+  },
+  "createdAt": {
+    "$date": "2025-09-07T23:05:30.484Z"
+  },
+  "updatedAt": {
+    "$date": "2025-09-07T23:05:30.484Z"
+  },
+  "__v": 0
+}]

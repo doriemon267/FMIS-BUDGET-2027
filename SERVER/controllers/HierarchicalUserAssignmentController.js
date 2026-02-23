@@ -321,8 +321,8 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
         code: 'MISSING_REQUIRED_FIELDS'
       });
     }
-    // Validate assignment level
-    const validLevels = ['DIVISION', 'DEPARTMENT', 'REGION', 'FULL', 'OWN_ONLY', 'RESPONSIBILITY_CENTER', 'OFFICE'];
+    // Validate assignment level (BUDGET_AND_REVENUE_DIVISION for BPA, BUDGET_OFFICER, OVERALL_BUDGET_APPROVER)
+    const validLevels = ['DIVISION', 'DEPARTMENT', 'REGION', 'FULL', 'OWN_ONLY', 'RESPONSIBILITY_CENTER', 'OFFICE', 'BUDGET_AND_REVENUE_DIVISION'];
     if (!validLevels.includes(normalizedEffectiveLevel)) {
       return res.status(400).json({
         success: false,
@@ -347,30 +347,34 @@ const createOrUpdateHierarchicalAssignment = async (req, res) => {
       });
     }
     // Build hierarchical assignment based on level
-    if (DEBUG) console.debug('🔍 Building hierarchical assignment with:', {
-      assignmentLevel: normalizedEffectiveLevel,
-      regionId,
-      departmentId: effectiveDepartmentId,
-      divisionName: effectiveDivisionName
-    });
-    
-    const assignmentData = await buildHierarchicalAssignment({
-      assignmentLevel: normalizedEffectiveLevel,
-      regionId,
-      departmentId: effectiveDepartmentId,
-      divisionName: effectiveDivisionName
-    });
-    
-    if (!assignmentData.success) {
-      console.error('❌ Failed to build hierarchical assignment:', assignmentData);
-      return res.status(400).json(assignmentData);
+    // For BUDGET_PLANNING_ANALYST with BUDGET_AND_REVENUE_DIVISION, department/division are optional (assignedRegions drives access)
+    let assignmentData;
+    if (normalizedEffectiveLevel === 'BUDGET_AND_REVENUE_DIVISION') {
+      assignmentData = { success: true, regions: [], departments: [], divisions: [], hierarchicalStructure: { level: 'BUDGET_AND_REVENUE_DIVISION', consolidatesTo: 'BUDGET_AND_REVENUE_DIVISION' } };
+    } else {
+      if (DEBUG) console.debug('🔍 Building hierarchical assignment with:', {
+        assignmentLevel: normalizedEffectiveLevel,
+        regionId,
+        departmentId: effectiveDepartmentId,
+        divisionName: effectiveDivisionName
+      });
+      assignmentData = await buildHierarchicalAssignment({
+        assignmentLevel: normalizedEffectiveLevel,
+        regionId,
+        departmentId: effectiveDepartmentId,
+        divisionName: effectiveDivisionName
+      });
+      if (!assignmentData.success) {
+        console.error('❌ Failed to build hierarchical assignment:', assignmentData);
+        return res.status(400).json(assignmentData);
+      }
     }
     
   if (DEBUG) console.debug('✅ Hierarchical assignment built successfully:', assignmentData);
     // Find existing assignment or create new one
     let assignment = await HierarchicalUserAssignment.findOne({ userId, isActive: true });
 
-    const approvalLevels = ['REGION', 'FULL', 'OFFICE', 'RESPONSIBILITY_CENTER'];
+    const approvalLevels = ['REGION', 'FULL', 'OFFICE', 'RESPONSIBILITY_CENTER', 'BUDGET_AND_REVENUE_DIVISION'];
     
     // ✅ ONLY accept VALID 6-STEP WORKFLOW roles + 3 admin roles
     // DO NOT accept legacy role names like PREPARER, REVIEWER, APPROVER

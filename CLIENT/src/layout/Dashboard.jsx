@@ -35,6 +35,7 @@ import AppTrayLauncher from "../global/components/floating_apps/AppTrayLauncher"
 import { ErrorBoundary } from 'react-error-boundary';
 import { DrawerProvider, useDrawer } from "../context/DrawerContext";
 import ThemeSync from "../components/common/ThemeSync";
+import OfflineBanner from "../components/common/OfflineBanner";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -106,6 +107,7 @@ const DashboardContent = () => {
   return (
     <Box sx={{ display: "flex" }}>
       <ThemeSync />
+      <OfflineBanner />
       <CssBaseline />
       <AppBar
         position="fixed"

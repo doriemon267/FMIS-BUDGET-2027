@@ -73,14 +73,10 @@ function setSnapshot(req, before, after) {
  */
 async function createUserActivityLog(req, payload = {}) {
   try {
-    const userId = req?.user?.id ?? req?.user?.userId ?? req?.user?.Id ?? req?.user?.Username?.[0] ?? 'anonymous';
-    const userName =
-      req?.user?.particular ??
-      req?.user?.name ??
-      (req?.user?.FirstName && req?.user?.LastName
-        ? `${req.user.FirstName} ${req.user.LastName}`.trim()
-        : req?.user?.Username?.[0]) ??
-      '';
+    const userId = payload.userId ?? req?.user?.id ?? req?.user?.userId ?? req?.user?.Id ?? req?.user?.Username?.[0] ?? 'anonymous';
+    const userName = payload.userName ?? req?.user?.particular ?? req?.user?.name ??
+      (req?.user?.FirstName && req?.user?.LastName ? `${req.user.FirstName} ${req.user.LastName}`.trim() : null) ??
+      req?.user?.Username?.[0] ?? '';
     const userRoles = req?.user?.Roles ?? req?.user?.workflowRoles ?? [];
     const normalizedRoles = Array.isArray(userRoles) ? userRoles.map(String) : [String(userRoles)];
 

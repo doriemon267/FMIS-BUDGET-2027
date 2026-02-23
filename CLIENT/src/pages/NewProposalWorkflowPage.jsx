@@ -280,6 +280,9 @@ const NewProposalWorkflowPage = () => {
   const [chargedPersonnelRowsPerPage, setChargedPersonnelRowsPerPage] = useState(10);
   const [actionLoading, setActionLoading] = useState(false);
   const [showAllRegions, setShowAllRegions] = useState(false);
+  const [analystsForProposal, setAnalystsForProposal] = useState([]);
+  const [targetAnalystId, setTargetAnalystId] = useState(null);
+  const [analystsForMenuProposal, setAnalystsForMenuProposal] = useState([]);
 
   // SUPER ADMIN: default to "show all regions" so they see proposals without selecting a region
   useEffect(() => {
@@ -356,6 +359,65 @@ const NewProposalWorkflowPage = () => {
     proposalDetails?.region,
     proposalDetails?.income
   ]);
+
+  // Fetch analysts when action menu opens for a proposal at Approver/Reviewer step (for dynamic "Send to" label)
+  useEffect(() => {
+    if (!actionMenuAnchor || !selectedProposal?._id) {
+      setAnalystsForMenuProposal([]);
+      return;
+    }
+    setAnalystsForMenuProposal([]); // Clear while fetching for new proposal
+    const atApproverStep = ["Forwarded to Approver", "Returned to Approver", "FORWARDED_TO_APPROVER", "RETURNED_TO_APPROVER"].includes(selectedProposal?.status);
+    const atReviewerStep = ["Forwarded to Reviewer", "Returned to Reviewer", "FORWARDED_TO_REVIEWER", "RETURNED_TO_REVIEWER"].includes(selectedProposal?.status);
+    const isApprover = (currentUser?.Roles || []).some((r) => ["BUDGET APPROVER", "BUDGET_APPROVER"].includes(String(r)));
+    const isReviewer = (currentUser?.Roles || []).some((r) => ["BUDGET REVIEWER", "BUDGET_REVIEWER"].includes(String(r)));
+    if (!(atApproverStep && isApprover) && !(atReviewerStep && isReviewer)) {
+      setAnalystsForMenuProposal([]);
+      return;
+    }
+    let cancelled = false;
+    api.get(`${WORKFLOW_API_BASE}/${selectedProposal._id}/analysts-for-proposal`)
+      .then((res) => {
+        if (!cancelled) setAnalystsForMenuProposal(res?.data?.data || []);
+      })
+      .catch(() => { if (!cancelled) setAnalystsForMenuProposal([]); });
+    return () => { cancelled = true; };
+  }, [actionMenuAnchor, selectedProposal?._id, selectedProposal?.status, currentUser?.Roles]);
+
+  // Update menu actions when analysts load (for dynamic "Send to" label)
+  useEffect(() => {
+    if (actionMenuAnchor && selectedProposal) {
+      setAvailableActionsForMenu(getAvailableActions(selectedProposal, analystsForMenuProposal));
+    }
+  }, [analystsForMenuProposal, actionMenuAnchor, selectedProposal]);
+
+  // Fetch analysts for "Send to" when Approver/Reviewer forwards to Analyst (Central Office vs Other Region)
+  const isSubmitToAnalystAction = ["approver-approve-forward-analyst", "reviewer-approve-forward-analyst", "approver-approve-forward-officer"].includes(actionType);
+  useEffect(() => {
+    if (!actionDialogOpen || !isSubmitToAnalystAction || !selectedProposal?._id) {
+      setAnalystsForProposal([]);
+      setTargetAnalystId(null);
+      return;
+    }
+    let cancelled = false;
+    const fetch = async () => {
+      try {
+        const res = await api.get(`${WORKFLOW_API_BASE}/${selectedProposal._id}/analysts-for-proposal`);
+        const analysts = res?.data?.data || [];
+        if (!cancelled) {
+          setAnalystsForProposal(analysts);
+          setTargetAnalystId(analysts[0]?.userId || null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setAnalystsForProposal([]);
+          setTargetAnalystId(null);
+        }
+      }
+    };
+    fetch();
+    return () => { cancelled = true; };
+  }, [actionDialogOpen, isSubmitToAnalystAction, selectedProposal?._id]);
 
   // Pagination
   const [page, setPage] = useState(0);
@@ -970,11 +1032,15 @@ const NewProposalWorkflowPage = () => {
       // Calculate and include projectedSubsidy before submission
       const projectedSubsidy = calculateProjectedSubsidy();
       
-      await api.post(`${WORKFLOW_API_BASE}/${selectedProposal._id}/action`, {
+      const payload = {
         action: backendAction,
         comment: actionComment,
         projectedSubsidy, // Include calculated subsidy
-      });
+      };
+      if (backendAction === "submit-to-analyst" && targetAnalystId) {
+        payload.targetAnalystId = targetAnalystId;
+      }
+      await api.post(`${WORKFLOW_API_BASE}/${selectedProposal._id}/action`, payload);
 
       toast.success("Action completed successfully");
       setActionDialogOpen(false);
@@ -982,6 +1048,8 @@ const NewProposalWorkflowPage = () => {
       setSelectedProposal(null);
       setActionType("");
       setActionComment("");
+      setAnalystsForProposal([]);
+      setTargetAnalystId(null);
       
       await fetchProposals({ forceAllRegions: showAllRegions });
       
@@ -1209,14 +1277,20 @@ const NewProposalWorkflowPage = () => {
         calculatedSubsidy += proposalDetails.capitalOutlay.reduce((sum, item) => sum + (item.subsidy || item.totalSubsidy || 0), 0);
       }
 
-      // Update the proposal with the calculated subsidy
+      // Update the proposal with the calculated subsidy (include __v for optimistic locking)
       try {
         await api.put(
           `/api/allproposal/proposals/${selectedProposal._id}`,
-          { projectedSubsidy: calculatedSubsidy }
+          { projectedSubsidy: calculatedSubsidy, __v: selectedProposal.__v }
         );
       } catch (error) {
-        logger.warn("Failed to update projected subsidy", error);
+        if (error?.response?.status === 409) {
+          toast.warning("Proposal was modified by another user. Refreshing...");
+          const refreshed = await api.get(`${WORKFLOW_API_BASE}/${selectedProposal._id}`);
+          if (refreshed?.data?.proposal) setSelectedProposal(refreshed.data.proposal);
+        } else {
+          logger.warn("Failed to update projected subsidy", error);
+        }
       }
 
       await fetchProposals({ forceAllRegions: showAllRegions });
@@ -1334,7 +1408,8 @@ const NewProposalWorkflowPage = () => {
   };
 
   // Get available actions based on user role and proposal status
-  const getAvailableActions = (proposal) => {
+  // analystsForMenu: optional - when provided and one analyst, shows "Send to [Name] ([id])" for Approver action
+  const getAvailableActions = (proposal, analystsForMenu = []) => {
     const userRoles = currentUser?.Roles || [];
     const currentStatus = proposal.status;
     const actions = [];
@@ -1448,9 +1523,12 @@ const NewProposalWorkflowPage = () => {
           "RETURNED_TO_APPROVER",
         ].includes(currentStatus)
       ) {
+        const analystLabelAdmin = analystsForMenu.length === 1
+          ? `Send to ${analystsForMenu[0]?.userName || analystsForMenu[0]?.userId} (${analystsForMenu[0]?.userId})`
+          : "Approve & Forward to Budget/Planning Analyst";
         actions.push(
           {
-            label: "Approve & Forward to Budget/Planning Analyst",
+            label: analystLabelAdmin,
             value: "approver-approve-forward-analyst",
             icon: <SendIcon />,
             color: "primary",
@@ -1610,7 +1688,9 @@ const NewProposalWorkflowPage = () => {
           color: "primary",
         },
         {
-          label: "Forward to Budget/Planning Analyst (IMO path)",
+          label: analystsForMenu.length === 1
+            ? `Send to ${analystsForMenu[0]?.userName || analystsForMenu[0]?.userId} (${analystsForMenu[0]?.userId})`
+            : "Forward to Budget/Planning Analyst (IMO path)",
           value: "reviewer-approve-forward-analyst",
           icon: <SendIcon />,
           color: "primary",
@@ -1632,9 +1712,12 @@ const NewProposalWorkflowPage = () => {
         currentStatus === "FORWARDED_TO_APPROVER" ||
         currentStatus === "RETURNED_TO_APPROVER")
     ) {
+      const analystLabel = analystsForMenu.length === 1
+        ? `Send to ${analystsForMenu[0]?.userName || analystsForMenu[0]?.userId} (${analystsForMenu[0]?.userId})`
+        : "Approve & Forward to Budget/Planning Analyst";
       actions.push(
         {
-          label: "Approve & Forward to Budget/Planning Analyst",
+          label: analystLabel,
           value: "approver-approve-forward-analyst",
           icon: <SendIcon />,
           color: "primary",
@@ -2693,7 +2776,10 @@ const NewProposalWorkflowPage = () => {
                                         Boolean(actionMenuAnchor) &&
                                         selectedProposal?._id === proposal._id
                                       }
-                                      onClose={() => setActionMenuAnchor(null)}
+                                      onClose={() => {
+                                        setActionMenuAnchor(null);
+                                        setAnalystsForMenuProposal([]);
+                                      }}
                                       PaperProps={{
                                         sx: {
                                           mt: 1,
@@ -2852,7 +2938,11 @@ const NewProposalWorkflowPage = () => {
       {/* Action Dialog */}
       <Dialog
         open={actionDialogOpen}
-        onClose={() => setActionDialogOpen(false)}
+        onClose={() => {
+          setActionDialogOpen(false);
+          setAnalystsForProposal([]);
+          setTargetAnalystId(null);
+        }}
         maxWidth="sm"
         fullWidth
         PaperProps={{
@@ -2877,7 +2967,39 @@ const NewProposalWorkflowPage = () => {
             variant="body1"
             sx={{ mb: 3, color: "#333", lineHeight: 1.6 }}
           >
-            Are you sure you want to perform this action on the proposal?
+            {isSubmitToAnalystAction && analystsForProposal.length > 0 ? (
+              <>
+                {analystsForProposal.length === 1 ? (
+                  <>
+                    Are you sure you want to send this proposal to{" "}
+                    <strong>
+                      {analystsForProposal[0]?.userName || targetAnalystId} ({analystsForProposal[0]?.userId || targetAnalystId})
+                    </strong>
+                    ?
+                  </>
+                ) : (
+                  <>
+                    Send this proposal to the Budget Planning Analyst for this region:
+                    <FormControl fullWidth sx={{ mt: 2 }}>
+                      <InputLabel>Select Analyst</InputLabel>
+                      <Select
+                        value={targetAnalystId || analystsForProposal[0]?.userId || ""}
+                        onChange={(e) => setTargetAnalystId(e.target.value)}
+                        label="Select Analyst"
+                      >
+                        {analystsForProposal.map((a) => (
+                          <MenuItem key={a.userId} value={a.userId}>
+                            {a.userName} ({a.userId})
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </>
+                )}
+              </>
+            ) : (
+              "Are you sure you want to perform this action on the proposal?"
+            )}
           </Typography>
           <TextField
             fullWidth
@@ -3287,25 +3409,29 @@ const NewProposalWorkflowPage = () => {
                               const payload = {
                                 title: proposalEditValues.title,
                                 description: proposalEditValues.description,
+                                __v: selectedProposal.__v,
                               };
-                              await api.put(
+                              const res = await api.put(
                                 `/api/allproposal/proposals/${selectedProposal._id}`,
                                 payload
                               );
+                              const updated = res?.data?.data || res?.data;
                               toast.success("Proposal details updated");
                               setSelectedProposal((prev) =>
-                                prev ? { ...prev, ...payload } : prev
+                                prev ? { ...prev, ...payload, __v: updated?.__v ?? prev.__v } : prev
                               );
-                              // Invalidate query to refetch updated proposals
                               queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
                               setProposalEditDirty(false);
                               queryClient.invalidateQueries({ queryKey: ["workflowNotifications"] });
                             } catch (err) {
-                              console.error(
-                                "Error updating proposal details",
-                                err
-                              );
-                              toast.error("Failed to update proposal details");
+                              if (err?.response?.status === 409) {
+                                toast.warning("Proposal was modified by another user. Please refresh and try again.");
+                                const refreshed = await api.get(`${WORKFLOW_API_BASE}/${selectedProposal._id}`);
+                                if (refreshed?.data?.proposal) setSelectedProposal(refreshed.data.proposal);
+                              } else {
+                                console.error("Error updating proposal details", err);
+                                toast.error("Failed to update proposal details");
+                              }
                             }
                           }}
                         >

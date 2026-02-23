@@ -21,6 +21,7 @@ const LinkTo = ({
   isAllow = false,
   notificationValue = 0,
   collapsed = false,
+  ariaLabel,
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -111,6 +112,7 @@ const LinkTo = ({
         component={hasDirectLink && !hasSubMenu ? Link : "div"}
         {...(hasDirectLink && !hasSubMenu && { to })}
         onClick={hasSubMenu ? handleCollapsedClick : undefined}
+        aria-label={ariaLabel || (hasSubMenu ? `Expand ${label} menu` : `Go to ${label}`)}
         sx={{
           ...itemSx,
           bgcolor: active ? "rgba(250,250,250,.2)" : "transparent",
@@ -163,6 +165,7 @@ const LinkTo = ({
         component={Link}
         to={promotedLink.link}
         onClick={() => isMdScreen && setTimeout(() => toggleDrawer(), 300)}
+        aria-label={ariaLabel || `Go to ${promotedLink.name}`}
         sx={{
           ...itemSx,
           bgcolor:
@@ -197,6 +200,7 @@ const LinkTo = ({
       <ListItem
         component={link && !subLinks.length ? Link : "div"}
         to={link}
+        aria-label={ariaLabel || (subLinks.length ? `Expand ${name} menu` : `Go to ${name}`)}
         onClick={(e) => {
           if (subLinks.length) {
             e.preventDefault();
