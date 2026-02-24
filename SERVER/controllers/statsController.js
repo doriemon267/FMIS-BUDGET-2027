@@ -24,9 +24,9 @@ exports.getOverviewStats = async (req, res) => {
       Object.assign(baseFilter, req.hierarchicalFilters);
     }
     
-    // Allow explicit region query param to further narrow within user's scope
+    // Allow explicit region query param to further narrow within user's scope (skip when "All Regions")
     const regionParam = req.query.region;
-    if (regionParam) {
+    if (regionParam && String(regionParam).trim() && String(regionParam).toLowerCase() !== 'all regions') {
       baseFilter.region = regionParam;
     }
     

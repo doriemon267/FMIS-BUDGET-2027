@@ -296,44 +296,40 @@ const getNotificationRecipients = async (action, proposal, currentUserRole, curr
     const currentUserIdString = String(currentUserId);
     
     // Helper function to find users by workflow role
+    // Include workflow role aliases (divisionReviewer=Reviewer, divisionApprover=Approver, officeApprover=Approver)
     const findUsersByWorkflowRole = async (roles, region = null) => {
       try {
-        let query = { 
+        const roleList = [...new Set(roles)];
+        const roleMatch = { 
           $or: [
-            { workflowRoles: { $in: roles } },
-            { userRole: { $in: roles } }
-          ],
-          isActive: true 
+            { workflowRoles: { $in: roleList } },
+            { userRole: { $in: roleList } },
+            { userRoles: { $in: roleList } }
+          ]
         };
-        
-        // If region is specified, filter by regionId OR users with no region (system-wide staff)
-        if (region && region !== null) {
-          query.$and = [
-            {
-              $or: [
-                { regionId: region },
-                { regionId: null },
-                { regionId: { $exists: false } }
-              ]
-            }
-          ];
+        let query = { ...roleMatch, isActive: true };
+        if (region != null) {
+          query = {
+            $and: [
+              roleMatch,
+              { isActive: true },
+              { $or: [{ regionId: region }, { regionId: null }, { regionId: { $exists: false } }, { isNIAWide: true }] }
+            ]
+          };
         }
         
         console.log('[getNotificationRecipients] Query:', JSON.stringify(query));
-        let users = await HierarchicalUserAssignment.find(query).select('userId workflowRoles userRole regionId');
-        // Fallback: if no users found in hierarchical assignments, optionally try User.roles as fallback
+        let users = await HierarchicalUserAssignment.find(query).select('userId workflowRoles userRole userRoles regionId').lean();
+        // Fallback: if no users found in HUA, try User.roles (ensures submission notifications work)
         if (!users || users.length === 0) {
-          if (process.env.ALLOW_USER_ROLES_FALLBACK === 'true') {
-            console.warn('[getNotificationRecipients] No HierarchicalUserAssignment found for roles, falling back to User.roles lookup (ALLOWED by env)')
-            try {
-              const userDocs = await User.find({ roles: { $in: roles }, isActive: true }).select('userId roles');
-              users = userDocs.map(u => ({ userId: u.userId || String(u._id), workflowRoles: u.roles || [], regionId: null }));
-              console.log('[getNotificationRecipients] Fallback found', users.length, 'users via User.roles for roles', roles);
-            } catch (fallbackErr) {
-              console.error('[getNotificationRecipients] Error during fallback User.roles query:', fallbackErr.message);
-            }
-          } else {
-            console.warn('[getNotificationRecipients] No HierarchicalUserAssignment found for roles, and User.roles fallback is disabled (ALLOW_USER_ROLES_FALLBACK != true)');
+          console.warn('[getNotificationRecipients] No HierarchicalUserAssignment found for roles, falling back to User.roles');
+          try {
+            const roleVariants = roleList.flatMap(r => [r, r.replace(/_/g, ' '), r.replace(/\s+/g, '_')]);
+            const userDocs = await User.find({ roles: { $in: roleVariants } }).select('userId roles').lean();
+            users = userDocs.map(u => ({ userId: u.userId || String(u._id), workflowRoles: u.roles || [], regionId: null }));
+            console.log('[getNotificationRecipients] Fallback found', users.length, 'users via User.roles for roles', roleList);
+          } catch (fallbackErr) {
+            console.error('[getNotificationRecipients] Fallback User.roles error:', fallbackErr.message);
           }
         }
         console.log('[getNotificationRecipients] Found', users.length, 'users with roles', roles);
@@ -347,17 +343,25 @@ const getNotificationRecipients = async (action, proposal, currentUserRole, curr
     
     // Determine target recipients based on action
     if (action === 'submit-to-reviewer') {
-      // Notify Budget Reviewers in the same region
-      const reviewers = await findUsersByWorkflowRole(['BUDGET_REVIEWER', 'BUDGET REVIEWER'], proposalRegionId);
+      // Notify Budget Reviewers in the same region (include workflow role aliases)
+      let reviewers = await findUsersByWorkflowRole(['BUDGET_REVIEWER', 'BUDGET REVIEWER', 'divisionReviewer'], proposalRegionId);
+      if (reviewers.length === 0 && proposalRegionId) {
+        reviewers = await findUsersByWorkflowRole(['BUDGET_REVIEWER', 'BUDGET REVIEWER', 'divisionReviewer'], null);
+        console.log('[getNotificationRecipients] submit-to-reviewer: fallback without region, found', reviewers.length);
+      }
       const filteredReviewers = reviewers.filter(u => u.userId !== currentUserIdString);
       console.log('[getNotificationRecipients] Found', filteredReviewers.length, 'reviewers for submit-to-reviewer');
-      recipients.push(...filteredReviewers.map(u => u.userId));
+      recipients.push(...filteredReviewers.map(u => String(u.userId)));
     } else if (action === 'submit-to-approver') {
-      // Notify Budget Approvers
-      const approvers = await findUsersByWorkflowRole(['BUDGET_APPROVER', 'BUDGET APPROVER'], proposalRegionId);
+      // Notify Budget Approvers (include workflow role aliases)
+      let approvers = await findUsersByWorkflowRole(['BUDGET_APPROVER', 'BUDGET APPROVER', 'divisionApprover', 'officeApprover'], proposalRegionId);
+      if (approvers.length === 0 && proposalRegionId) {
+        approvers = await findUsersByWorkflowRole(['BUDGET_APPROVER', 'BUDGET APPROVER', 'divisionApprover', 'officeApprover'], null);
+        console.log('[getNotificationRecipients] submit-to-approver: fallback without region, found', approvers.length);
+      }
       const filteredApprovers = approvers.filter(u => u.userId !== currentUserIdString);
       console.log('[getNotificationRecipients] Found', filteredApprovers.length, 'approvers for submit-to-approver');
-      recipients.push(...filteredApprovers.map(u => u.userId));
+      recipients.push(...filteredApprovers.map(u => String(u.userId)));
     } else if (action === 'submit-to-analyst') {
       // Route to analysts by proposal region: Central Office → CO analyst; Other Region → Regional analyst
       // Uses HierarchicalUserAssignment.assignedRegions - only analysts assigned to this proposal's region receive it
@@ -378,17 +382,21 @@ const getNotificationRecipients = async (action, proposal, currentUserRole, curr
         console.log('[getNotificationRecipients] submit-to-analyst: routed', filtered.length, 'analysts by proposal region (Central Office vs Other Region)');
       }
     } else if (action === 'forward-to-officer') {
-      // Notify Budget Officers (officeFinalVerifier role)
-      const officers = await findUsersByWorkflowRole(['officeFinalVerifier', 'BUDGET_OFFICER', 'BUDGET OFFICER'], proposalRegionId);
+      // Notify Budget Officers (officeFinalVerifier, BUDGET_OFFICER)
+      let officers = await findUsersByWorkflowRole(['officeFinalVerifier', 'BUDGET_OFFICER', 'BUDGET OFFICER', 'budgetOfficer'], proposalRegionId);
+      if (officers.length === 0 && proposalRegionId) {
+        officers = await findUsersByWorkflowRole(['officeFinalVerifier', 'BUDGET_OFFICER', 'BUDGET OFFICER', 'budgetOfficer'], null);
+        console.log('[getNotificationRecipients] forward-to-officer: fallback without region, found', officers.length);
+      }
       const filteredOfficers = officers.filter(u => u.userId !== currentUserIdString);
       console.log('[getNotificationRecipients] Found', filteredOfficers.length, 'officers for forward-to-officer');
-      recipients.push(...filteredOfficers.map(u => u.userId));
+      recipients.push(...filteredOfficers.map(u => String(u.userId)));
     } else if (action === 'forward-to-manager') {
       // Notify Budget Managers (regionFinalVerifier role)
-      const managers = await findUsersByWorkflowRole(['regionFinalVerifier', 'OVERALL_BUDGET_APPROVER', 'BUDGET_ADMIN']);
+      const managers = await findUsersByWorkflowRole(['regionFinalVerifier', 'OVERALL_BUDGET_APPROVER', 'BUDGET_ADMIN', 'overallBudgetApprover']);
       const filteredManagers = managers.filter(u => u.userId !== currentUserIdString);
       console.log('[getNotificationRecipients] Found', filteredManagers.length, 'managers for forward-to-manager');
-      recipients.push(...filteredManagers.map(u => u.userId));
+      recipients.push(...filteredManagers.map(u => String(u.userId)));
     } else if (action === 'finalize') {
       // Notify the proposal creator (Budget Preparer)
       console.log('[getNotificationRecipients] Notifying creator:', proposal.createdBy);
@@ -402,25 +410,25 @@ const getNotificationRecipients = async (action, proposal, currentUserRole, curr
         recipients.push(proposal.createdBy.toString());
       } else if (action === 'return-to-reviewer') {
         // Notify Budget Reviewers
-        const reviewers = await findUsersByWorkflowRole(['BUDGET_REVIEWER', 'BUDGET REVIEWER'], proposalRegionId);
+        const reviewers = await findUsersByWorkflowRole(['BUDGET_REVIEWER', 'BUDGET REVIEWER', 'divisionReviewer'], proposalRegionId);
         const filteredReviewers = reviewers.filter(u => u.userId !== currentUserIdString);
         console.log('[getNotificationRecipients] Found', filteredReviewers.length, 'reviewers for return-to-reviewer');
         recipients.push(...filteredReviewers.map(u => u.userId));
       } else if (action === 'return-to-approver') {
         // Notify Budget Approvers
-        const approvers = await findUsersByWorkflowRole(['BUDGET_APPROVER', 'BUDGET APPROVER'], proposalRegionId);
+        const approvers = await findUsersByWorkflowRole(['BUDGET_APPROVER', 'BUDGET APPROVER', 'divisionApprover', 'officeApprover'], proposalRegionId);
         const filteredApprovers = approvers.filter(u => u.userId !== currentUserIdString);
         console.log('[getNotificationRecipients] Found', filteredApprovers.length, 'approvers for return-to-approver');
         recipients.push(...filteredApprovers.map(u => u.userId));
       } else if (action === 'return-to-analyst') {
         // Notify Budget Planning Analysts (budgetAnalyst role)
-        const analysts = await findUsersByWorkflowRole(['budgetAnalyst', 'BUDGET_PLANNING_ANALYST', 'BUDGET PLANNING ANALYST'], proposalRegionId);
+        const analysts = await findUsersByWorkflowRole(['budgetAnalyst', 'BUDGET_PLANNING_ANALYST', 'BUDGET PLANNING ANALYST', 'BUDGET_ANALYST'], proposalRegionId);
         const filteredAnalysts = analysts.filter(u => u.userId !== currentUserIdString);
         console.log('[getNotificationRecipients] Found', filteredAnalysts.length, 'analysts for return-to-analyst');
         recipients.push(...filteredAnalysts.map(u => u.userId));
       } else if (action === 'return-to-officer') {
-        // Notify Budget Officers (officeFinalVerifier role)
-        const officers = await findUsersByWorkflowRole(['officeFinalVerifier', 'BUDGET_OFFICER', 'BUDGET OFFICER'], proposalRegionId);
+        // Notify Budget Officers
+        const officers = await findUsersByWorkflowRole(['officeFinalVerifier', 'BUDGET_OFFICER', 'BUDGET OFFICER', 'budgetOfficer'], proposalRegionId);
         const filteredOfficers = officers.filter(u => u.userId !== currentUserIdString);
         console.log('[getNotificationRecipients] Found', filteredOfficers.length, 'officers for return-to-officer');
         recipients.push(...filteredOfficers.map(u => u.userId));
@@ -562,33 +570,36 @@ const createWorkflowNotification = async (action, proposal, recipientUserIds, cu
     // Unique key to prevent duplicate notifications for the same action + proposal
     const uniqueKey = `${action}_${proposal._id}`;
 
-    const notificationData = recipientUserIds.map(userId => ({
-      recipientUserId: userId,
-      type: isReturnAction ? 'PROPOSAL_RETURNED' : 'PROPOSAL_SUBMITTED',
-      title: notificationTitle,
-      message: notificationMessage,
-      relatedEntityId: proposal._id.toString(),
-      relatedEntityType: 'PROPOSAL',
-      relatedLink: relatedLink,
-      entity: 'proposal',
-      recordIds: [proposal._id],
-      org: {
-        region: proposal.region,
-        department: proposal.department,
-        division: proposal.division
-      },
-      metadata: {
-        action,
-        proposalTitle: proposal.title,
-        proposalId: proposal._id.toString(),
-        tab: 'all-proposals',
-        performedBy: currentUserName,
-        comment: comment || ''
-      },
-      uniqueKey,
-      status: 'UNREAD',
-      createdAt: new Date()
-    }));
+    const notificationData = recipientUserIds.map(uid => {
+      const recipientUserId = String(uid);
+      return {
+        recipientUserId,
+        type: isReturnAction ? 'PROPOSAL_RETURNED' : 'PROPOSAL_SUBMITTED',
+        title: notificationTitle,
+        message: notificationMessage,
+        relatedEntityId: proposal._id.toString(),
+        relatedEntityType: 'PROPOSAL',
+        relatedLink: relatedLink,
+        entity: 'proposal',
+        recordIds: [proposal._id],
+        org: {
+          region: proposal.region,
+          department: proposal.department,
+          division: proposal.division
+        },
+        metadata: {
+          action,
+          proposalTitle: proposal.title,
+          proposalId: proposal._id.toString(),
+          tab: 'all-proposals',
+          performedBy: currentUserName,
+          comment: comment || '',
+          uniqueKey
+        },
+        status: 'UNREAD',
+        createdAt: new Date()
+      };
+    });
 
     console.log('[createWorkflowNotification] About to insert', notificationData.length, 'notifications');
     

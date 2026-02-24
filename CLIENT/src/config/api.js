@@ -142,10 +142,27 @@ api.interceptors.response.use(
   }
 );
 
+// Detect Super Admin not whitelisted (so we show AccessGuard page instead of in-app error)
+const isUnauthorizedSuperAdminResponse = (res) => {
+  if (!res?.data) return false;
+  const code = res.data.code;
+  const err = res.data.error || res.data.message || '';
+  const errStr = String(err);
+  return code === 'UNAUTHORIZED_SUPER_ADMIN' || /Super Admin ID is not authorized/i.test(errStr);
+};
+
 // Handle auth-related 401/403 by attempting a silent session/user refresh
 api.interceptors.response.use(undefined, async (error) => {
   const { config, response } = error || {};
   if (!config || !response) return Promise.reject(error);
+
+  // 403 Super Admin not whitelisted -> send to AccessGuard (full "Access Restricted" page)
+  if (response.status === 403 && isUnauthorizedSuperAdminResponse(response)) {
+    if (typeof window.__onUnauthorizedSuperAdmin === 'function') {
+      window.__onUnauthorizedSuperAdmin();
+    }
+    return Promise.reject(error);
+  }
 
   // Only try once per request
   if (config.__isRetryRequest) return Promise.reject(error);
@@ -166,6 +183,14 @@ api.interceptors.response.use(undefined, async (error) => {
         return api.request(config);
       }
     } catch (refreshErr) {
+      // If refresh also returns Super Admin unauthorized, show AccessGuard
+      const refreshRes = refreshErr?.response;
+      if (refreshRes && isUnauthorizedSuperAdminResponse(refreshRes)) {
+        if (typeof window.__onUnauthorizedSuperAdmin === 'function') {
+          window.__onUnauthorizedSuperAdmin();
+        }
+        return Promise.reject(error);
+      }
       // If refresh fails, redirect appropriately for better UX
       try {
         if (!config.__diagnosticRan) {

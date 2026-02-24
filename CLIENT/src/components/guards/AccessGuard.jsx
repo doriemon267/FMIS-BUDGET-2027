@@ -200,7 +200,7 @@ const AccessGuard = ({ children }) => {
     return (
       <NoBudgetRolePage
         onLogout={logout}
-        message="Your Super Admin ID is not authorized for this environment. Return to the main FMIS dashboard or sign out."
+        message="Your USER ID is not authorized for this environment. Return to the main FMIS dashboard or sign out."
       />
     );
   }

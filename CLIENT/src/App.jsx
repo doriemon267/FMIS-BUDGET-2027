@@ -365,8 +365,8 @@ const App = () => {
           element={
             <ProtectedRoute 
               requiredPermissions={["ManageSettings"]}
-              requiredWorkflowRoles={["regionCreator", "superAdmin"]}
-              excludeRoles={["preparer", "reviewer", "approver", "overallBudgetApprover"]}
+              requiredWorkflowRoles={[]}
+              excludeRoles={["preparer", "reviewer", "approver"]}
             >
               <HierarchicalUserAssignmentPage />
             </ProtectedRoute>
@@ -451,7 +451,7 @@ const App = () => {
         <Route
           path="/comprehensive-reports"
           element={
-            <ProtectedRoute requiredPermissions={["ViewReports"]} requiredWorkflowRoles={["superAdmin", "budgetAnalyst", "preparer"]}>
+            <ProtectedRoute requiredPermissions={["ViewReports"]} requiredWorkflowRoles={["superAdmin", "budgetAnalyst", "preparer", "approver", "reviewer"]}>
               <ComprehensiveReportsPage />
             </ProtectedRoute>
           }

@@ -60,22 +60,25 @@ function requireBudgetRole(req, res, next) {
   // Check if the user has a Super Admin role
   const hasSuperAdminRole = userRoles.includes('SUPER_ADMIN') || userRoles.includes('SUPERADMIN');
 
-  if (hasSuperAdminRole) {
-    // KAHIT SUPER ADMIN: I-check kung authorized ang ID na ito
-    if (AUTHORIZED_SUPER_ADMINS.includes(userId)) {
-      return next(); // Pasok!
-    } else {
-      console.warn(`[SECURITY ALERT] User ${userId} tried to use SUPER_ADMIN role but is not authorized.`);
-      return res.status(403).json({
-        error: 'Restricted Access',
-        message: 'Your role is Super Admin, but your specific User ID is not authorized for this action.',
-        code: 'UNAUTHORIZED_SUPER_ADMIN'
-      });
+  if (hasSuperAdminRole && !AUTHORIZED_SUPER_ADMINS.includes(userId)) {
+    // Not whitelisted as Super Admin — allow if they have another valid budget role (e.g. BUDGET MANAGER)
+    const hasOtherBudgetRole = userRoles.some((role) => {
+      const n = normalizeRole(role);
+      return (n !== 'SUPER_ADMIN' && n !== 'SUPERADMIN') && VALID_BUDGET_ROLES.has(n);
+    });
+    if (hasOtherBudgetRole) {
+      return next(); // Accept as Budget role (Dev/prod: Budget users with extra Super Admin role still get in)
     }
+    console.warn(`[SECURITY ALERT] User ${userId} tried to use SUPER_ADMIN role but is not authorized.`);
+    return res.status(403).json({
+      error: 'Restricted Access',
+      message: 'Your role is Super Admin, but your specific User ID is not authorized for this environment.',
+      code: 'UNAUTHORIZED_SUPER_ADMIN'
+    });
   }
 
-  // Regular Budget Role Check
-  if (hasValidBudgetRole(userRoles)) {
+  // Whitelisted Super Admin or any valid Budget Role
+  if (hasSuperAdminRole || hasValidBudgetRole(userRoles)) {
     return next();
   }
 

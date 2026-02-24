@@ -104,25 +104,29 @@ module.exports = async (req, res, next) => {
       email: payload.email || payload.Email || payload.userEmail || null
     };
 
-    // 9. [NEW] STRICT PRODUCTION WHITELIST FOR SUPER ADMINS
+    // 9. [NEW] STRICT PRODUCTION WHITELIST FOR SUPER ADMINS (allow if user has another valid budget role)
     const isSuper = normalizedRoles.includes('SUPER_ADMIN') || normalizedRoles.includes('SUPERADMIN');
-    if (isSuper) {
-      const allowedIds = process.env.SUPER_ADMIN_IDS ? process.env.SUPER_ADMIN_IDS.split(',').map(id => id.trim()) : [];
-      if (!allowedIds.includes(userId)) {
-        // Log unauthorized attempt
-        AuditLog.create({
-          userId: userId,
-          userName: particular,
-          userRoles: normalizedRoles,
-          action: "BLOCKED_UNAUTHORIZED_SUPERADMIN",
-          resource: "SYSTEM_ACCESS",
-          method: req.method,
-          ipAddress: req.clientIp,
-          details: { error: "Super Admin ID not whitelisted in .env" }
-        }).catch(() => {});
-
-        return res.status(403).json({ error: "Access denied. Your Super Admin ID is not authorized for this environment." });
-      }
+    const allowedIds = process.env.SUPER_ADMIN_IDS ? process.env.SUPER_ADMIN_IDS.split(',').map(id => id.trim()) : [];
+    const whitelistedSuper = isSuper && allowedIds.includes(userId);
+    const hasOtherBudgetRole = isSuper && !whitelistedSuper && normalizedRoles.some((r) => {
+      const n = String(r || '').trim();
+      return n !== 'SUPER_ADMIN' && n !== 'SUPERADMIN' && [
+        'BUDGET_MANAGER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_PREPARER', 'BUDGET_REVIEWER', 'BUDGET_APPROVER',
+        'BUDGET_PLANNING_ANALYST', 'BUDGET_OFFICER', 'BUDGET_COORDINATOR', 'BUDGET_ADMIN', 'REVIEWER', 'APPROVER'
+      ].includes(n);
+    });
+    if (isSuper && !whitelistedSuper && !hasOtherBudgetRole) {
+      AuditLog.create({
+        userId: userId,
+        userName: particular,
+        userRoles: normalizedRoles,
+        action: "BLOCKED_UNAUTHORIZED_SUPERADMIN",
+        resource: "SYSTEM_ACCESS",
+        method: req.method,
+        ipAddress: req.clientIp,
+        details: { error: "Admin ID not whitelisted in .env" }
+      }).catch(() => {});
+      return res.status(403).json({ error: "Access denied. Your Role/ID is not authorized for this environment." });
     }
 
     // 10. [NEW] SUCCESS AUDIT LOG

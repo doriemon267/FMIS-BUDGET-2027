@@ -87,7 +87,7 @@ const lookupUserFromMainDB = async (req, res) => {
       // Handle both cases: roles as ObjectIds or as direct role names
       const allRoleNames = [];
       for (const roleItem of userData.roles) {
-        console.log(`🔍 Processing role item:`, roleItem, `type:`, typeof roleItem);
+        if (DEBUG) console.debug('Processing role item:', roleItem, 'type:', typeof roleItem);
         if (roleItem && roleItem._bsontype === 'ObjectId') {
           // It's an ObjectId object
           const roleDoc = await Role.findById(roleItem, { name: 1 }).lean();
@@ -188,47 +188,44 @@ const lookupUserFromMainDB = async (req, res) => {
 
   if (DEBUG) console.debug(`🔍 User ${userId} roles from DB:`, roleNames);
 
-    if (roleNames.includes('SUPER ADMIN') || roleNames.includes('SUPER_ADMIN') || roleNames.includes('ADMIN')) {
+    // Normalize for case-insensitive matching (FMIS may store "Budget Manager", "BUDGET MANAGER", etc.)
+    const norm = (s) => String(s || '').toUpperCase().replace(/\s+/g, ' ').trim();
+    const roleSet = new Set(roleNames.map(norm));
+
+    const has = (...variants) => variants.some((v) => roleSet.has(norm(v)));
+
+    if (has('SUPER ADMIN', 'SUPER_ADMIN', 'ADMIN')) {
       budgetRoles.push('SUPER_ADMIN');
       primaryRole = 'SUPER_ADMIN';
     } else {
-      // Check for each role type and add to budgetRoles array
-      // Allow multiple roles where it makes sense (e.g., Preparer + Reviewer, Approver + Reviewer)
-      
-      // Check for OVERALL_BUDGET_APPROVER
-      if (roleNames.includes('OVERALL_BUDGET_APPROVER') || roleNames.includes('OVERALL BUDGET APPROVER')) {
+      // Check for OVERALL_BUDGET_APPROVER / BUDGET MANAGER first (highest budget role)
+      if (has('OVERALL_BUDGET_APPROVER', 'OVERALL BUDGET APPROVER', 'BUDGET_MANAGER', 'BUDGET MANAGER')) {
         budgetRoles.push('OVERALL_BUDGET_APPROVER');
         primaryRole = 'OVERALL_BUDGET_APPROVER';
       }
-      
-      // Check for BUDGET_OFFICER
-      if (roleNames.includes('BUDGET OFFICER') || roleNames.includes('BUDGET_OFFICER')) {
+
+      if (has('BUDGET OFFICER', 'BUDGET_OFFICER')) {
         budgetRoles.push('BUDGET_OFFICER');
         if (primaryRole === 'BUDGET_PREPARER') primaryRole = 'BUDGET_OFFICER';
       }
-      
-      // Check for BUDGET_PLANNING_ANALYST
-      if (roleNames.includes('BUDGET PLANNING ANALYST') || roleNames.includes('BUDGET_PLANNING_ANALYST')) {
+
+      if (has('BUDGET PLANNING ANALYST', 'BUDGET_PLANNING_ANALYST')) {
         budgetRoles.push('BUDGET_PLANNING_ANALYST');
         if (primaryRole === 'BUDGET_PREPARER') primaryRole = 'BUDGET_PLANNING_ANALYST';
       }
-      
-      // Check for BUDGET_APPROVER
-      if (roleNames.includes('BUDGET APPROVER') || roleNames.includes('BUDGET_APPROVER')) {
+
+      if (has('BUDGET APPROVER', 'BUDGET_APPROVER')) {
         budgetRoles.push('BUDGET_APPROVER');
         if (primaryRole === 'BUDGET_PREPARER') primaryRole = 'BUDGET_APPROVER';
       }
-      
-      // Check for BUDGET_REVIEWER
-      if (roleNames.includes('BUDGET REVIEWER') || roleNames.includes('BUDGET_REVIEWER')) {
+
+      if (has('BUDGET REVIEWER', 'BUDGET_REVIEWER')) {
         budgetRoles.push('BUDGET_REVIEWER');
         if (primaryRole === 'BUDGET_PREPARER') primaryRole = 'BUDGET_REVIEWER';
       }
-      
-      // Check for BUDGET_PREPARER
-      if (roleNames.includes('BUDGET PREPARER') || roleNames.includes('BUDGET_PREPARER')) {
+
+      if (has('BUDGET PREPARER', 'BUDGET_PREPARER')) {
         budgetRoles.push('BUDGET_PREPARER');
-        // Don't change primaryRole if it's already set to higher role
       }
 
       // IMPORTANT:
@@ -249,6 +246,26 @@ const lookupUserFromMainDB = async (req, res) => {
     }
 
   if (DEBUG) console.debug(`📋 Determined budgetRoles for user ${userId}:`, budgetRoles, `primaryRole: ${primaryRole}`);
+
+    // Only expose budget-related roles to the UI (exclude CASH CHECK PREPARER, etc.)
+    const BUDGET_ROLE_PATTERNS = [
+      'SUPER ADMIN', 'SUPER_ADMIN', 'ADMIN', 'BUDGET ADMIN', 'BUDGET_ADMIN', 'BUDGET ANALYST', 'BUDGET_ANALYST',
+      'OVERALL BUDGET APPROVER', 'OVERALL_BUDGET_APPROVER', 'BUDGET MANAGER', 'BUDGET_MANAGER',
+      'BUDGET OFFICER', 'BUDGET_OFFICER', 'BUDGET PLANNING ANALYST', 'BUDGET_PLANNING_ANALYST',
+      'BUDGET APPROVER', 'BUDGET_APPROVER', 'BUDGET REVIEWER', 'BUDGET_REVIEWER', 'BUDGET PREPARER', 'BUDGET_PREPARER'
+    ];
+    const normalizeForMatch = (name) => String(name || '').toUpperCase().replace(/\s+/g, ' ').trim();
+    userInfo.roles = roleNames; // keep full list for internal use if needed
+    userInfo.budgetRelevantRoles = roleNames.filter((r) => {
+      const n = normalizeForMatch(r);
+      return BUDGET_ROLE_PATTERNS.some((p) => normalizeForMatch(p) === n || n.includes(p.replace(/_/g, ' ')));
+    });
+    if (userInfo.budgetRelevantRoles.length === 0 && roleNames.length > 0) {
+      userInfo.budgetRelevantRoles = roleNames.filter((r) =>
+        /BUDGET|ADMIN|SUPER|APPROVER|REVIEWER|PREPARER|ANALYST|OFFICER/i.test(String(r))
+      );
+    }
+
     userInfo.budgetRoles = budgetRoles; // Multiple roles
     userInfo.budgetRole = primaryRole; // Primary role for backward compatibility
 

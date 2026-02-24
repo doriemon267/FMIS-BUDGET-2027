@@ -9,6 +9,8 @@ const Income = require('../models/Income');
 const Region = require('../models/Region');
 const Settings = require('../models/Settings');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+const Proposal = require('../models/Proposal');
 let MuhammaraRecipe;
 try {
   // Lazy-load muhammara so the rest of the app still works even if it's not installed yet
@@ -123,7 +125,83 @@ const PERSONNEL_SERVICES_STRUCTURE = {
     }
   }
 };
-const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, preparerScope, groupBy, offices, responsibilityCenters }) => {
+/**
+ * Add approver scope filter: restrict to proposals with status FORWARDED_TO_APPROVER or RETURNED_TO_APPROVER.
+ * When approverProposalFilter is provided and has IDs, only data linked to those proposals is included.
+ * When approverProposalFilter is provided but has empty IDs, return early with empty report.
+ */
+const getRoleBasedProposalFilterFromRequest = async (req, regionsParam, fiscalYear, budgetType) => {
+  const userRoles = req.user?.Roles || [];
+  const isApprover = userRoles.some(r => (r && String(r).replace(/\s+/g, '_')) === 'BUDGET_APPROVER') ||
+    userRoles.some(r => (r && String(r).replace(/\s+/g, ' ').trim()) === 'BUDGET APPROVER');
+  const isReviewer = userRoles.some(r => (r && String(r).replace(/\s+/g, '_')) === 'BUDGET_REVIEWER') ||
+    userRoles.some(r => (r && String(r).replace(/\s+/g, ' ').trim()) === 'BUDGET REVIEWER');
+  if ((!isApprover && !isReviewer) || !fiscalYear || !budgetType) return null;
+
+  const statuses = isApprover
+    ? ['FORWARDED_TO_APPROVER', 'RETURNED_TO_APPROVER']
+    : ['FORWARDED_TO_REVIEWER', 'RETURNED_TO_REVIEWER'];
+
+  const modelTypeMap = { NEP: 'NEP', GAA: 'GAA' };
+  const modelType = modelTypeMap[String(budgetType).toUpperCase()] || 'Initial';
+  const fyNum = Number(fiscalYear) || parseInt(fiscalYear, 10);
+
+  const npwQuery = {
+    status: { $in: statuses },
+    fiscalYear: Number.isFinite(fyNum) ? fyNum : parseInt(String(fiscalYear), 10),
+    modelType
+  };
+
+  if (regionsParam && regionsParam !== 'all') {
+    const regionList = Array.isArray(regionsParam) ? regionsParam : [regionsParam];
+    const regionDocs = await Region.find({ Region: { $in: regionList } }).select('_id').lean();
+    const regionIds = regionDocs.map((r) => r._id);
+    if (regionIds.length > 0) npwQuery.region = { $in: regionIds };
+  }
+
+  const npwDocs = await NewProposalWorkflow.find(npwQuery).select('_id').lean();
+  const workflowIds = npwDocs.map((d) => d._id);
+  const proposalDocs = await Proposal.find({ proposalId: { $in: workflowIds } }).select('_id').lean();
+  const proposalIds = proposalDocs.map((d) => d._id);
+  return { workflowIds, proposalIds };
+};
+
+const applyApproverProposalFilter = (baseQuery, approverProposalFilter) => {
+  if (!approverProposalFilter || (!approverProposalFilter.workflowIds?.length && !approverProposalFilter.proposalIds?.length)) {
+    return null; // No filter to apply
+  }
+  const orConditions = [];
+  if (approverProposalFilter.workflowIds?.length) {
+    orConditions.push({ workflowRef: { $in: approverProposalFilter.workflowIds } });
+  }
+  if (approverProposalFilter.proposalIds?.length) {
+    orConditions.push({ proposalId: { $in: approverProposalFilter.proposalIds } });
+  }
+  return orConditions.length ? { $and: [{ ...baseQuery }, { $or: orConditions }] } : baseQuery;
+};
+
+const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, preparerScope, groupBy, offices, responsibilityCenters, approverProposalFilter }) => {
+  // Budget Approver: when no proposals passed to them, return empty report (page accessible, data empty)
+  const isEmptyApproverScope = approverProposalFilter && !approverProposalFilter.workflowIds?.length && !approverProposalFilter.proposalIds?.length;
+  if (isEmptyApproverScope) {
+    return {
+      summary: {
+        reportTitle: 'BUDGET SUMMARY REPORT',
+        fiscalYear: fiscalYear || 'All Years',
+        budgetType: budgetType || 'All Types',
+        regions: regions ? (Array.isArray(regions) ? regions : [regions]) : ['All Regions'],
+        generatedDate: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+        totalRegions: 0,
+        totalEmployees: 0,
+        grandTotal: 0,
+        totalIncome: 0,
+        totalSubsidy: 0,
+        approverNoProposals: true // Budget Approver: no proposals passed to them yet
+      },
+      sections: []
+    };
+  }
+
   // Build base query
   const query = {};
   if (regions) {
@@ -154,7 +232,6 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
   }
 
   // MOOE & Capital Outlay: use same filters as Region view (region, fiscalYear, budgetType only)
-  // so data always shows regardless of view by Office/RC (department/division often not set on MOOE/CO)
   const mooeQuery = {};
   const coQuery = {};
   if (regions) {
@@ -175,12 +252,17 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
     coQuery.budgetType = budgetType;
   }
 
+  const incomeQuery = applyApproverProposalFilter(query, approverProposalFilter) || query;
+  const psQuery = applyApproverProposalFilter(query, approverProposalFilter) || query;
+  const mooeQueryFinal = applyApproverProposalFilter(mooeQuery, approverProposalFilter) || mooeQuery;
+  const coQueryFinal = applyApproverProposalFilter(coQuery, approverProposalFilter) || coQuery;
+
   // Fetch data from all sources concurrently
   const [incomeData, psData, mooeData, coData] = await Promise.all([
-    Income.find(query).lean(),
-    PersonnelServices.find(query).lean(),
-    MooeProposal.find(mooeQuery).lean(),
-    CapitalOutlay.find(coQuery).populate('category').lean()
+    Income.find(incomeQuery).lean(),
+    PersonnelServices.find(psQuery).lean(),
+    MooeProposal.find(mooeQueryFinal).lean(),
+    CapitalOutlay.find(coQueryFinal).populate('category').lean()
   ]);
 
   // Initialize comprehensive report structure
@@ -250,9 +332,11 @@ const getComprehensiveReportData = async (req, res) => {
     const officesParam = offices ? (Array.isArray(offices) ? offices : [offices]) : [];
     const responsibilityCentersParam = responsibilityCenters ? (Array.isArray(responsibilityCenters) ? responsibilityCenters : [responsibilityCenters]) : [];
     let preparerScope = null;
+    let approverProposalFilter = null;
     const userRoles = req.user?.Roles || [];
     const isPreparer = userRoles.some(r => (r && String(r).replace(/\s+/g, '_')) === 'BUDGET_PREPARER') ||
       userRoles.some(r => (r && String(r).replace(/\s+/g, ' ').trim()) === 'BUDGET PREPARER');
+
     if (isPreparer && req.user?.id) {
       const userIdString = String(req.user.id);
       const hua = await HierarchicalUserAssignment.findOne({ userId: userIdString, isActive: true })
@@ -268,6 +352,9 @@ const getComprehensiveReportData = async (req, res) => {
         };
       }
     }
+
+    approverProposalFilter = await getRoleBasedProposalFilterFromRequest(req, regionsParam, fiscalYear, budgetType);
+
     const reportData = await buildComprehensiveReportData({
       regions: regionsParam,
       fiscalYear,
@@ -275,7 +362,8 @@ const getComprehensiveReportData = async (req, res) => {
       preparerScope,
       groupBy: groupBy || 'region',
       offices: officesParam,
-      responsibilityCenters: responsibilityCentersParam
+      responsibilityCenters: responsibilityCentersParam,
+      approverProposalFilter
     });
 
     res.status(200).json({
@@ -919,6 +1007,7 @@ const getComprehensiveReportPdf = async (req, res) => {
         };
       }
     }
+    const approverProposalFilter = await getRoleBasedProposalFilterFromRequest(req, regionsParam, fiscalYear, budgetType);
     const reportData = await buildComprehensiveReportData({
       regions: regionsParam,
       fiscalYear,
@@ -926,7 +1015,8 @@ const getComprehensiveReportPdf = async (req, res) => {
       preparerScope,
       groupBy: groupBy || 'region',
       offices: officesParam,
-      responsibilityCenters: responsibilityCentersParam
+      responsibilityCenters: responsibilityCentersParam,
+      approverProposalFilter
     });
 
     if (!reportData || !reportData.summary) {

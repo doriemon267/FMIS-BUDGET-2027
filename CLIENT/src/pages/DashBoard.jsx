@@ -178,7 +178,7 @@ const HomePage = () => {
   const theme = useTheme();
   const { mode } = useThemeContext();
   const { currentUser } = useUser();
-  const { activeRegion } = useRegion();
+  const { activeRegion, availableRegions } = useRegion();
   const queryClient = useQueryClient();
   const isDarkMode = mode === 'dark';
   
@@ -212,8 +212,14 @@ const HomePage = () => {
   // Normalize division: can be string name or object with name/divisionName
   const divisionName = typeof userDivision === 'string' ? userDivision : (userDivision?.name || userDivision?.divisionName);
 
-  // Get the active region name
-  const regionName = activeRegion?.name || activeRegion?.regionName;
+  // Get the active region name — Budget Manager sees "All Regions"
+  const normRole = (r) => String(r || '').toUpperCase().replace(/\s+/g, '_').trim();
+  const isBudgetManager = (currentUser?.Roles || []).some(
+    (r) => normRole(r) === 'BUDGET_MANAGER' || normRole(r) === 'OVERALL_BUDGET_APPROVER'
+  );
+  const regionName = (isBudgetManager && availableRegions?.length > 1)
+    ? 'All Regions'
+    : (activeRegion?.name || activeRegion?.regionName);
 
   // Determine display name and level based on user's access
   const getDisplayInfo = () => {

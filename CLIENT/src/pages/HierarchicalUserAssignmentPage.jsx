@@ -159,18 +159,26 @@ const HierarchicalUserAssignmentPage = () => {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteUserId, setDeleteUserId] = useState(null);
 
-  // Check if user is admin
-  const isAdmin = currentUser?.Roles && (
-    currentUser.Roles.includes('SUPER_ADMIN') ||
-    currentUser.Roles.includes('SUPER ADMIN') ||
-    currentUser.Roles.includes('BUDGET_ADMIN') ||
-    currentUser.Roles.includes('BUDGET_ANALYST') ||
-    currentUser.Roles.includes('BUDGET_PLANNING_ANALYST') ||
-    currentUser.Roles.includes('BUDGET_MANAGER') ||
-    currentUser.Roles.includes('OVERALL_BUDGET_APPROVER') ||
-    currentUser.Roles.includes('BUDGET_PREPARER') ||
-    currentUser.Roles.includes('BUDGET_REVIEWER') ||
-    currentUser.Roles.includes('BUDGET_APPROVER')
+  // Check if user is admin (match both underscore and space variants from FMIS)
+  const roles = currentUser?.Roles || [];
+  const roleSet = new Set(roles.map((r) => String(r).toUpperCase().replace(/\s+/g, '_')));
+  const ha = currentUser?.hierarchicalAccess || {};
+  const isAdmin = (
+    (roleSet.size > 0 && (
+      roleSet.has('SUPER_ADMIN') ||
+      roleSet.has('BUDGET_ADMIN') ||
+      roleSet.has('BUDGET_ANALYST') ||
+      roleSet.has('BUDGET_PLANNING_ANALYST') ||
+      roleSet.has('BUDGET_MANAGER') ||
+      roleSet.has('OVERALL_BUDGET_APPROVER') ||
+      roleSet.has('BUDGET_PREPARER') ||
+      roleSet.has('BUDGET_REVIEWER') ||
+      roleSet.has('BUDGET_APPROVER')
+    )) ||
+    ha.scope === 'BUDGET_AND_REVENUE_DIVISION' ||
+    ha.scope === 'FULL' ||
+    ha.assignmentLevel === 'BUDGET_AND_REVENUE_DIVISION' ||
+    ha.assignmentLevel === 'FULL'
   );
 
   // Fetch organization structure
@@ -370,18 +378,21 @@ const HierarchicalUserAssignmentPage = () => {
 
   // Effect to auto-populate form when user lookup succeeds
   React.useEffect(() => {
-    if (userLookupData && !editingAssignment) {
+    if (!userLookupData) return;
+
+    // Always push FMIS budget roles to "Roles to be Saved" (including when editing) so new roles from FMIS Main appear
+    const fmisRoles = userLookupData.budgetRoles || [];
+    if (fmisRoles.length > 0) {
+      handleFormChange('userRoles', fmisRoles);
+      const budgetRole = userLookupData.budgetRole || fmisRoles[0] || 'BUDGET_PREPARER';
+      handleFormChange('userRole', budgetRole);
+    }
+
+    if (!editingAssignment) {
       handleFormChange('userId', userLookupData.userId || '');
       handleFormChange('userName', userLookupData.userName || '');
       handleFormChange('email', userLookupData.email || '');
-      // NEW: Support multiple roles from FMIS main system
-      // Merge FMIS roles with any existing manually selected roles
-      const existingRoles = formData.userRoles || [];
-      const fmisRoles = userLookupData.budgetRoles || [];
-      const mergedRoles = [...new Set([...existingRoles, ...fmisRoles])]; // Remove duplicates
-      handleFormChange('userRoles', mergedRoles);
-      const budgetRole = userLookupData.budgetRole || mergedRoles[0] || 'BUDGET_PREPARER';
-      handleFormChange('userRole', budgetRole);
+      const budgetRole = userLookupData.budgetRole || fmisRoles[0] || 'BUDGET_PREPARER';
 
       // Auto-set assignment level and permissions based on the budget role
       if (budgetRole === 'BUDGET_PLANNING_ANALYST') {
@@ -423,8 +434,8 @@ const HierarchicalUserAssignmentPage = () => {
           ManageSettings: false
         });
         handleFormChange('workflowRoles', null);
-      } else if (budgetRole === 'BUDGET MANAGER') {
-        handleFormChange('assignmentLevel', 'DIVISION');
+      } else if (budgetRole === 'BUDGET MANAGER' || budgetRole === 'OVERALL_BUDGET_APPROVER') {
+        handleFormChange('assignmentLevel', 'BUDGET_AND_REVENUE_DIVISION');
         handleFormChange('rolePermissions', {
           CreateProposals: true,
           EditOwnProposals: true,
@@ -433,8 +444,9 @@ const HierarchicalUserAssignmentPage = () => {
           ApproveProposals: true,
           ViewReports: true,
           ManageUsers: true,
-          ManageSettings: false
+          ManageSettings: true
         });
+        handleFormChange('workflowRoles', null);
       }
     }
   }, [userLookupData, editingAssignment]);
@@ -963,27 +975,33 @@ const HierarchicalUserAssignmentPage = () => {
                 />
               </Grid>
 
-              {/* Display user's actual roles from main database */}
-              {userLookupData?.roles && userLookupData.roles.length > 0 && (
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="FMIS Main System Roles"
-                    value={userLookupData.roles.join(', ')}
-                    InputProps={{
-                      readOnly: true,
-                    }}
-                    helperText="Original roles from FMIS main authentication system"
-                    variant="outlined"
-                    sx={{
-                      '& .MuiInputBase-input': {
-                        backgroundColor: '#e3f2fd',
-                        fontSize: '0.875rem'
-                      }
-                    }}
-                  />
-                </Grid>
-              )}
+              {/* Display only budget-related roles from FMIS main (exclude CASH CHECK PREPARER, etc.) */}
+              {(() => {
+                const rawRoles = userLookupData?.roles || [];
+                const displayRoles = userLookupData?.budgetRelevantRoles?.length > 0
+                  ? userLookupData.budgetRelevantRoles
+                  : rawRoles.filter((r) => /BUDGET|SUPER\s*ADMIN|^ADMIN$|OVERALL\s*APPROVER|BUDGET\s*APPROVER|BUDGET\s*REVIEWER|BUDGET\s*PREPARER|BUDGET\s*ANALYST|BUDGET\s*OFFICER|BUDGET\s*MANAGER/i.test(String(r).trim()));
+                return displayRoles.length > 0 ? (
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="FMIS Main System Roles (Budget-related only)"
+                      value={displayRoles.join(', ')}
+                      InputProps={{
+                        readOnly: true,
+                      }}
+                      helperText="Budget-related roles from FMIS main authentication system"
+                      variant="outlined"
+                      sx={{
+                        '& .MuiInputBase-input': {
+                          backgroundColor: '#e3f2fd',
+                          fontSize: '0.875rem'
+                        }
+                      }}
+                    />
+                  </Grid>
+                ) : null;
+              })()}
 
               {/* NEW: Display multiple roles in text field format */}
               {userLookupData?.budgetRoles && userLookupData.budgetRoles.length > 0 && (
@@ -1110,6 +1128,42 @@ const HierarchicalUserAssignmentPage = () => {
                       }
                     }}
                   />
+                </Grid>
+              )}
+
+              {/* Refresh from FMIS - manual sync when role changed in FMIS-Main */}
+              {formData.userId && formData.userId.length >= 6 && (
+                <Grid item xs={12}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    disabled={isLookingUpUser}
+                    onClick={async () => {
+                      try {
+                        setIsLookingUpUser(true);
+                        const res = await api.get(`/api/hierarchical-rbac/user-lookup/${formData.userId}`);
+                        const fmisData = res.data?.data || res.data;
+                        if (fmisData) {
+                          if (fmisData.userName) handleFormChange('userName', fmisData.userName);
+                          if (fmisData.email) handleFormChange('email', fmisData.email);
+                          if (fmisData.budgetRoles && fmisData.budgetRoles.length > 0) {
+                            handleFormChange('userRoles', fmisData.budgetRoles);
+                            handleFormChange('userRole', fmisData.budgetRole || fmisData.budgetRoles[0]);
+                          }
+                          queryClient.invalidateQueries({ queryKey: ['user-lookup', String(formData.userId)] });
+                          setSnackbar({ open: true, message: 'Mga role na-refresh mula sa FMIS-Main', severity: 'success' });
+                        } else {
+                          setSnackbar({ open: true, message: 'Walang natagpuang data mula sa FMIS-Main', severity: 'warning' });
+                        }
+                      } catch (err) {
+                        setSnackbar({ open: true, message: err?.response?.data?.message || 'Hindi ma-refresh ang data', severity: 'error' });
+                      } finally {
+                        setIsLookingUpUser(false);
+                      }
+                    }}
+                  >
+                    {isLookingUpUser ? 'Naglo-load...' : 'Refresh from FMIS'}
+                  </Button>
                 </Grid>
               )}
 
@@ -1943,6 +1997,7 @@ const HierarchicalUserAssignmentPage = () => {
                                 size="small"
                                 onClick={async () => {
                                   setEditingAssignment(assignment);
+                                  setUserLookupId(String(assignment.userId || ''));
                                   
                                   // ✅ Infer role from assignment level and permissions (same logic as table display)
                                   let inferredRole = '';
@@ -2002,6 +2057,21 @@ const HierarchicalUserAssignmentPage = () => {
                                   };
                                   
                                   setFormData(formFields);
+                                  
+                                  // Fetch fresh user data from FMIS-Main when editing (sync roles if changed there)
+                                  if (assignment.userId) {
+                                    try {
+                                      const res = await api.get(`/api/hierarchical-rbac/user-lookup/${assignment.userId}`);
+                                      const fmisData = res.data?.data || res.data;
+                                      if (fmisData && fmisData.budgetRoles && fmisData.budgetRoles.length > 0) {
+                                        handleFormChange('userRoles', fmisData.budgetRoles);
+                                        handleFormChange('userRole', fmisData.budgetRole || fmisData.budgetRoles[0]);
+                                        setSnackbar({ open: true, message: 'Roles refreshed from FMIS-Main', severity: 'info' });
+                                      }
+                                    } catch (err) {
+                                      console.warn('FMIS-Main lookup on edit failed:', err?.message);
+                                    }
+                                  }
                                   
                                   // Ensure Central Office Department/Division fields appear correctly when editing BPA
                                   const isBPAEdit = (formFields.userRole === 'BUDGET_PLANNING_ANALYST' || inferredRole === 'BUDGET PLANNING ANALYST' ||

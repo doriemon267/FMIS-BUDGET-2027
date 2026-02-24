@@ -143,6 +143,17 @@ const UserProvider = ({ children }) => {
     }
   };
 
+  // Allow api interceptor to send Super Admin unauthorized -> show AccessGuard page
+  useEffect(() => {
+    window.__onUnauthorizedSuperAdmin = () => {
+      setCurrentUser(null);
+      setUnauthorizedSuperAdmin(true);
+    };
+    return () => {
+      delete window.__onUnauthorizedSuperAdmin;
+    };
+  }, []);
+
   // --- MAIN INITIALIZATION ---
   useEffect(() => {
     // Read token from URL after auth redirect (?token=, ?access_token=, #access_token=, #token=)

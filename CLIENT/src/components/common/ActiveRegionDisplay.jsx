@@ -74,8 +74,13 @@ const ActiveRegionDisplay = ({ variant = 'default', showButton = true }) => {
   // Compute the primary region name with fallbacks to hierarchical access info
   const regionName = (activeRegion && (activeRegion.name || activeRegion.regionName || activeRegion.Region))
     || regionLabelFromHA;
-
   const isFullScope = scope === 'FULL';
+  const normRole = (r) => String(r || '').toUpperCase().replace(/\s+/g, '_').trim();
+  const isBudgetManager = (currentUser?.Roles || []).some(
+    (r) => normRole(r) === 'BUDGET_MANAGER' || normRole(r) === 'OVERALL_BUDGET_APPROVER'
+  );
+  const showAllRegions = isFullScope || (isBudgetManager && availableRegions?.length > 1);
+  const displayRegionLabel = showAllRegions ? 'All Regions' : (regionName || 'Not assigned');
 
   // If no activeRegion, try to still show assignment chips from hierarchical access
   if (!activeRegion) {
@@ -115,19 +120,19 @@ const ActiveRegionDisplay = ({ variant = 'default', showButton = true }) => {
       );
     }
 
-    // No assignments found at all
+    // No assignments found at all — Budget Manager gets "All Regions", others get "No Region Assigned"
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        {isFullScope && (
+        {(isFullScope || isBudgetManager) && (
           <Chip
-            icon={<AccountTreeIcon />}
-            label="Full Access"
+            icon={isFullScope ? <AccountTreeIcon /> : <LocationIcon />}
+            label={isFullScope ? 'Full Access' : 'All Regions'}
             color="success"
             size="small"
             sx={{ fontWeight: 600 }}
           />
         )}
-        {!isFullScope && (
+        {!isFullScope && !isBudgetManager && (
           <>
             <Chip
               icon={<LocationIcon />}
@@ -152,7 +157,7 @@ const ActiveRegionDisplay = ({ variant = 'default', showButton = true }) => {
       return null; // Hide completely for BRD Level users
     }
 
-    const primaryLabel = divisionLabel || departmentLabel || regionName;
+    const primaryLabel = divisionLabel || departmentLabel || displayRegionLabel;
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         {primaryLabel && (
@@ -249,7 +254,7 @@ const ActiveRegionDisplay = ({ variant = 'default', showButton = true }) => {
       )}
       <Chip
         icon={<LocationIcon />}
-        label={`Region: ${regionName}`}
+        label={`Region: ${displayRegionLabel}`}
         color="primary"
         size="small"
         onClick={hasMultipleRegions() ? handleRegionMenuClick : undefined}

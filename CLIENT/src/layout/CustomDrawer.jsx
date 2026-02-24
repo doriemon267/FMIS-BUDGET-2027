@@ -282,13 +282,13 @@ const CustomDrawer = ({ collapsed = false }) => {
             name="Employee List"
             link="/employee"
             isAllow={
+              !isReviewer &&
               (
-                hasPermission(currentUser, "EditAllProposals") &&
-              
+                (hasPermission(currentUser, "EditAllProposals") &&
                 !isBudgetOfficer &&
-                !isBudgetPlanningAnalystOrApprover
-
-              ) || isOverallApprover || isBRDLevel || isSuperAdmin(currentUser)
+                !isBudgetPlanningAnalystOrApprover) ||
+                isOverallApprover || isBRDLevel || isSuperAdmin(currentUser)
+              )
             }
             collapsed={collapsed}
           />
@@ -301,7 +301,8 @@ const CustomDrawer = ({ collapsed = false }) => {
               hasPermission(currentUser, "EditAllProposals") &&
               !isOverallApprover &&
               !isBudgetOfficer &&
-              !isBudgetPlanningAnalystOrApprover
+              !isBudgetPlanningAnalystOrApprover &&
+              !isReviewer
             }
             collapsed={collapsed}
           />

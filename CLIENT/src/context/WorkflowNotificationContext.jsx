@@ -44,11 +44,11 @@ export const WorkflowNotificationProvider = ({ children }) => {
         throw err;
       }
     },
-    // CRITICAL: These settings prevent the 15-minute caching issue
+    // CRITICAL: These settings ensure fresh notifications
     staleTime: 0,              // Always consider data stale
-    gcTime: 0,                 // Don't cache in memory (was cacheTime)
-    refetchInterval: 60000,    // Poll every 60 seconds (single source; was 30s)
-    refetchOnWindowFocus: false, // Avoid burst of requests when switching tabs
+    gcTime: 0,                 // Don't cache in memory
+    refetchInterval: 30000,    // Poll every 30 seconds for workflow notifications
+    refetchOnWindowFocus: true, // Refetch when user returns to tab (see new submissions)
     refetchOnReconnect: true,  // Refresh when reconnecting
     retry: 1,
     retryDelay: 1000

@@ -150,7 +150,7 @@ const HierarchicalUserAssignmentSchema = new mongoose.Schema({
       // Legacy roles (for backward compatibility)
       'departmentCreator', 'departmentConsolidator', 'departmentSubmission',
       'officeConsolidator', 'officeSubmission', 'officeFinalVerifier',
-      'regionCreator', 'regionFinalVerifier'
+      'regionCreator', 'regionFinalVerifier', 'superAdmin'
     ],
     default: []
   },
@@ -249,7 +249,7 @@ HierarchicalUserAssignmentSchema.statics.getUserPermissions = async function(use
         'BUDGET_PLANNING_ANALYST', 'BUDGET_OFFICER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_ADMIN',
         'departmentCreator', 'departmentConsolidator', 'departmentSubmission',
         'officeConsolidator', 'officeSubmission', 'officeFinalVerifier',
-        'regionCreator', 'regionFinalVerifier'
+        'regionCreator', 'regionFinalVerifier', 'superAdmin'
       ]);
       
       // Map non-standard role names to valid enum values

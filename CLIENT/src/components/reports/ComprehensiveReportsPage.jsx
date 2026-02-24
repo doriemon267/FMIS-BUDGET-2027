@@ -1065,6 +1065,12 @@ const ComprehensiveReportsPage = () => {
       </Card>
       {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
+      {reportData?.summary?.approverNoProposals && (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          No proposals have been passed to you yet. Report data will appear when proposals are forwarded to you in the workflow (e.g., Forwarded to Reviewer, Forwarded to Approver).
+        </Alert>
+      )}
+
       {reportData && (
         <Box>
           {/* ================================================================= */}

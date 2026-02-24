@@ -132,13 +132,32 @@ const requirePermission = (permission, errorMessage = null) => {
 const applyHierarchicalFilters = (req, res, next) => {
   if (req.method === 'OPTIONS') return next();
   const assignment = req.userHierarchicalAssignment;
+  const roles = req.user?.Roles || req.user?.roles || [];
+  const normRole = (r) => String(r || '').toUpperCase().replace(/\s+/g, '_').trim();
+  const isBudgetManager = roles.some((r) => {
+    const n = normRole(r);
+    return n === 'BUDGET_MANAGER' || n === 'OVERALL_BUDGET_APPROVER';
+  });
+
   if (!assignment || assignment.assignmentLevel === 'NONE') {
-    // No assignment - restrict to own data only
+    // Budget Manager / Overall Budget Approver without HUA record: see all data (dashboard stats, etc.)
+    if (isBudgetManager) {
+      req.hierarchicalFilters = {};
+      return next();
+    }
     req.hierarchicalFilters = { userId: req.user?.id };
     return next();
   }
   let filters = {};
   switch (assignment.assignmentLevel) {
+    case 'BUDGET_AND_REVENUE_DIVISION':
+    case 'FULL':
+      filters = {};
+      break;
+    case 'WORKFLOW':
+      // Workflow users with no HUA doc: Budget Manager sees all, others restrict to own
+      filters = isBudgetManager ? {} : { userId: req.user?.id };
+      break;
     case 'DIVISION':
       // Can only see data from their specific division
       if (assignment.regions.length > 0 && assignment.departments.length > 0 && assignment.divisions.length > 0) {
@@ -173,10 +192,6 @@ const applyHierarchicalFilters = (req, res, next) => {
           region: regionName
         };
       }
-      break;
-    case 'FULL':
-      // Full access - no filters
-      filters = {};
       break;
     default:
       // Default to own data only
