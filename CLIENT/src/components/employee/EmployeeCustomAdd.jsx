@@ -124,9 +124,10 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
       Region: "",
       Department: "",
       Division: "",
-      Section: "",
       Status: "Active",
       DateOfBirth: "",
+      Item_No: "",
+      PG: "",
     },
   });
 
@@ -352,7 +353,6 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
       if (name === "Department") {
         const deptName = values?.Department || "";
         setValue("Division", "");
-        setValue("Section", "");
         setSectionOptions([]);
 
         if (!deptName || !organizationStructure) {
@@ -407,7 +407,6 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
             setSectionOptions([]);
           }
         }
-        setValue("Section", "");
       }
     });
 
@@ -747,6 +746,17 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
     // Ensure the Region field is set to the selected region value
     data.Region = (activeRegion ? (activeRegion.name || activeRegion.regionName) : data.Region) || selectedRegionValue;
 
+    // Convert EmployeeFullName to uppercase
+    if (data.EmployeeFullName) {
+      data.EmployeeFullName = String(data.EmployeeFullName).trim().toUpperCase();
+    }
+
+    // Map Item_No to ItemNumber for backend
+    if (data.Item_No != null && data.Item_No !== "") {
+      data.ItemNumber = data.Item_No;
+    }
+    delete data.Item_No;
+
     // Add employee status field if not present
     if (!data.employeeStatus) {
       data.employeeStatus = data.Status === "Active" ? "Active" : "Inactive";
@@ -863,11 +873,9 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
     switch (step) {
       case 0: // Basic Information
         const basicFields = [
-          "EmployeeID",
           "EmployeeFullName",
-          "Department", // Only require department, not all hierarchy levels
+          "Department",
         ];
-        // Only add Region if no activeRegion is set
         if (!activeRegion) {
           basicFields.push("Region");
         }
@@ -876,25 +884,9 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
         return [
           "PositionTitle",
           "StatusOfAppointment",
-          // Make DateOfAppointment and Status optional for now
         ];
-      case 2: // Salary Information
-        // Field requirements depend on StatusOfAppointment and CPCS assignment
-        const status = watchedValues.StatusOfAppointment?.toString().toUpperCase();
-        const isCOS = status === 'COS';
-        const isPermanentOrContractual = status === 'PERMANENT' || status === 'CONTRACTUAL';
-        const isCasual = status === 'CASUAL';
-        const casualUsesCPCS2 = isCasual && cpcs2Types.includes(status);
-        
-        if (isCOS) {
-          return ["Rate"]; // Only Rate is required for COS
-        } else if (isPermanentOrContractual || casualUsesCPCS2) {
-          return ["SG", "Step", "Rate"]; // SG, Step, Rate for Permanent/Contractual or Casual (CPCS 2)
-        } else if (isCasual) {
-          return ["JG", "Step", "Rate"]; // JG, Step, Rate for Casual (CPCS 1)
-        } else {
-          return ["Step", "Rate"]; // Default fallback
-        }
+      case 2: // Salary Information - SG, JG, PG not required (bases from employee-salary-table / cos-salary-table)
+        return ["Rate"]; // Only Rate required; SG/JG/PG optional
       default:
         return [];
     }
@@ -1062,29 +1054,6 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                   <Grid container spacing={2}>
                     <Grid item xs={12} sm={6}>
                       <CustomTextField
-                        fieldName="EmployeeID"
-                        control={control}
-                        label="Employee ID"
-                        required
-                        rules={{
-                          required: "Employee ID is required",
-                          pattern: {
-                            value: /^[A-Za-z0-9-]+$/,
-                            message:
-                              "Employee ID can only contain letters, numbers, and hyphens",
-                          },
-                        }}
-                        InputProps={{
-                          startAdornment: (
-                            <InputAdornment position="start">
-                              <BadgeIcon color="action" />
-                            </InputAdornment>
-                          ),
-                        }}
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <CustomTextField
                         fieldName="EmployeeFullName"
                         control={control}
                         label="Employee Full Name"
@@ -1121,6 +1090,13 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                             return true;
                           }
                         }}
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <CustomTextField
+                        fieldName="Item_No"
+                        control={control}
+                        label="Item No."
                       />
                     </Grid>
 
@@ -1199,10 +1175,8 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                         rules={{ required: "Department is required" }}
                         disabled={userAccessLevel === 'DIVISION' || userAccessLevel === 'DEPARTMENT'}
                         onChange={(val) => {
-                          // val can be object or string - we set via watcher already; keep here for safety
                           if (userAccessLevel !== 'DIVISION' && userAccessLevel !== 'DEPARTMENT') {
                             setValue("Division", "");
-                            setValue("Section", "");
                           }
                         }}
                       />
@@ -1214,21 +1188,6 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                         options={divisionOptions}
                         control={control}
                         disabled={userAccessLevel === 'DIVISION'}
-                        onChange={() => {
-                          // Clear Section when Division changes
-                          if (userAccessLevel !== 'DIVISION') {
-                            setValue("Section", "");
-                          }
-                        }}
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={4}>
-                      <CustomAutoComplete
-                        fieldName="Section"
-                        label="Section"
-                        options={sectionOptions}
-                        control={control}
-                        disabled={false} // Section should always be enabled for Division level users
                       />
                     </Grid>
                   </Grid>
@@ -1312,10 +1271,6 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                         control={control}
                         label="Date of Appointment"
                         type="date"
-                        required
-                        rules={{
-                          required: "Date of appointment is required"
-                        }}
                         InputLabelProps={{ shrink: true }}
                       />
                     </Grid>
@@ -1370,9 +1325,7 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                           control={control}
                           label="Salary Grade"
                           type="number"
-                          required
                           rules={{
-                            required: "Salary grade is required",
                             min: {
                               value: 1,
                               message: "Salary grade must be at least 1",
@@ -1403,6 +1356,9 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
 
                                 if (salaryGrades) {
                                   setValue("JG", salaryGrades.job_grade || '');
+                                  if (useCPCSForEmployeeAdd && salaryGrades.cpcs2PayGrade != null) {
+                                    setValue("PG", salaryGrades.cpcs2PayGrade);
+                                  }
                                   const steps = salaryGrades.steps.map(
                                     (aw) => aw + ""
                                   );
@@ -1410,7 +1366,7 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                                   setSalaryData(salaryGrades);
                                   const defaultStep = steps[0] || "1";
                                   setValue("Step", defaultStep);
-                                  const rate = salaryGrades.rates[defaultStep];
+                                  const rate = salaryGrades.rates?.[defaultStep];
                                   setValue("Rate", rate || '');
 
                                   // Trigger validation
@@ -1443,8 +1399,6 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                           control={control}
                           label="Job Grade"
                           type="number"
-                          required
-                          rules={{ required: "Job grade is required" }}
                           onChange={async (e) => {
                             const jgValue = e.target.value;
                             setValue("JG", jgValue);
@@ -1487,6 +1441,68 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                         />
                       </Grid>
                     )}
+                    {/* PG - optional, with SG/JG in Salary Information (not for COS - COS uses SG only) */}
+                    {(watchedValues.StatusOfAppointment?.toString().toUpperCase() === 'PERMANENT' ||
+                      watchedValues.StatusOfAppointment?.toString().toUpperCase() === 'CONTRACTUAL' ||
+                      watchedValues.StatusOfAppointment?.toString().toUpperCase() === 'CASUAL') && (
+                      <Grid item xs={12} sm={6}>
+                        <CustomTextField
+                          fieldName="PG"
+                          control={control}
+                          label="PG"
+                          type="number"
+                        />
+                      </Grid>
+                    )}
+                    {/* COS: SG + Step (optional) - auto-compute Rate from cos-salary-table, no manual Rate needed */}
+                    {watchedValues.StatusOfAppointment &&
+                     watchedValues.StatusOfAppointment.toString().toUpperCase() === 'COS' && (
+                      <>
+                        <Grid item xs={12} sm={6}>
+                          <CustomTextField
+                            fieldName="SG"
+                            control={control}
+                            label="Salary Grade (COS)"
+                            type="number"
+                            rules={{ min: { value: 1, message: "SG must be at least 1" } }}
+                            onChange={async (e) => {
+                              const sgVal = e.target.value;
+                              setValue("SG", sgVal);
+                              const stepVal = getValues("Step");
+                              if (sgVal && stepVal) {
+                                try {
+                                  const res = await api.get(`/cos-salary/rate/${sgVal}/${stepVal}`);
+                                  if (res.data?.rate != null) setValue("Rate", res.data.rate);
+                                } catch (err) {
+                                  console.error("Error fetching COS rate:", err);
+                                }
+                              }
+                            }}
+                          />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          <CustomAutoComplete
+                            fieldName="Step"
+                            options={["1", "2", "3", "4", "5", "6", "7", "8"]}
+                            label="Step (COS)"
+                            control={control}
+                            onChange={async (val) => {
+                              setValue("Step", val);
+                              const sgVal = getValues("SG");
+                              if (sgVal && val) {
+                                try {
+                                  const res = await api.get(`/cos-salary/rate/${sgVal}/${val}`);
+                                  if (res.data?.rate != null) setValue("Rate", res.data.rate);
+                                } catch (err) {
+                                  console.error("Error fetching COS rate:", err);
+                                }
+                              }
+                              trigger("Rate");
+                            }}
+                          />
+                        </Grid>
+                      </>
+                    )}
                     {/* Step field - show for Permanent, Contractual, and Casual employees */}
                     {watchedValues.StatusOfAppointment &&
                      watchedValues.StatusOfAppointment.toString().toUpperCase() !== 'COS' && (
@@ -1500,8 +1516,6 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                           }
                           label="Step"
                           control={control}
-                          required
-                          rules={{ required: "Step is required" }}
                           onChange={async (value) => {
                             setValue("Step", value);
                             const status = watchedValues.StatusOfAppointment?.toString().toUpperCase();
@@ -1611,9 +1625,11 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                         <Typography variant="h6">
                           {watchedValues.EmployeeFullName || "Employee Name"}
                         </Typography>
-                        <Typography variant="body2">
-                          ID: {watchedValues.EmployeeID || "N/A"}
-                        </Typography>
+                        {watchedValues.Item_No && (
+                          <Typography variant="body2">
+                            Item No.: {watchedValues.Item_No}
+                          </Typography>
+                        )}
                         {watchedValues.DateOfBirth && (
                           <Typography variant="body2">
                             Born: {new Date(watchedValues.DateOfBirth).toLocaleDateString()}
@@ -1650,22 +1666,16 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                             </Typography>
                           </Box>
 
-                          <Box sx={{ mb: 2 }}>
-                            <Typography variant="body2" color="text.secondary">
-                              Division / Section
-                            </Typography>
-                            <Typography variant="body1">
-                              {watchedValues.Division
-                                ? watchedValues.Division
-                                : "N/A"}
-                              {watchedValues.Division && watchedValues.Section
-                                ? " / "
-                                : ""}
-                              {watchedValues.Section
-                                ? watchedValues.Section
-                                : ""}
-                            </Typography>
-                          </Box>
+                          {watchedValues.Division && (
+                            <Box sx={{ mb: 2 }}>
+                              <Typography variant="body2" color="text.secondary">
+                                Division
+                              </Typography>
+                              <Typography variant="body1">
+                                {watchedValues.Division}
+                              </Typography>
+                            </Box>
+                          )}
 
                           {watchedValues.DateOfBirth && (
                             <Box sx={{ mb: 2 }}>
@@ -1736,15 +1746,22 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                             </Typography>
                             {watchedValues.StatusOfAppointment && 
                              watchedValues.StatusOfAppointment.toString().toUpperCase() === 'COS' ? (
-                              <Typography variant="body1">
-                                Contract Rate: ₱{watchedValues.Rate ? Number(watchedValues.Rate).toLocaleString() : "N/A"}
-                              </Typography>
+                              <>
+                                {(watchedValues.SG || watchedValues.Step) && (
+                                  <Typography variant="body2" color="text.secondary">
+                                    SG: {watchedValues.SG ?? "N/A"} | Step: {watchedValues.Step ?? "N/A"} (from cos-salary-table)
+                                  </Typography>
+                                )}
+                                <Typography variant="body1">
+                                  Contract Rate: ₱{watchedValues.Rate ? Number(watchedValues.Rate).toLocaleString() : "N/A"}
+                                </Typography>
+                              </>
                             ) : (
                               <>
                                 <Typography variant="body1">
-                                  SG: {watchedValues.SG || "N/A"} | JG:{" "}
-                                  {watchedValues.JG ? watchedValues.JG.toString().replace(/^JG-?/, '') : "N/A"} | Step:{" "}
-                                  {watchedValues.Step || "N/A"}
+                                  SG: {watchedValues.SG ?? "N/A"} | JG:{" "}
+                                  {watchedValues.JG != null && watchedValues.JG !== "" ? String(watchedValues.JG).replace(/^JG-?/, '') : "N/A"} | PG: {watchedValues.PG ?? "N/A"} | Step:{" "}
+                                  {watchedValues.Step ?? "N/A"}
                                 </Typography>
                                 <Typography
                                   variant="h6"
@@ -1870,9 +1887,11 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
               <Typography variant="subtitle1" fontWeight="bold">
                 {formDataToSave.EmployeeFullName}
               </Typography>
-              <Typography variant="body2" color="text.secondary">
-                ID: {formDataToSave.EmployeeID}
-              </Typography>
+              {formDataToSave.Item_No && (
+                <Typography variant="body2" color="text.secondary">
+                  Item No.: {formDataToSave.Item_No}
+                </Typography>
+              )}
               <Typography variant="body2" color="text.secondary">
                 Position: {formDataToSave.PositionTitle || "N/A"}
               </Typography>
@@ -2112,18 +2131,14 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                   <li>Excel file format (.xlsx, .xls)</li>
                   <li>First row must contain column headers</li>
                   <li>
-                    Required columns: EmployeeID*, EmployeeFullName*, Region*, Department*, PositionTitle*, StatusOfAppointment*, DateOfAppointment*, Status*
+                    Required: EmployeeFullName*, Region*, Department*, PositionTitle*, StatusOfAppointment*, Status*
                   </li>
                   <li>
-                    For Permanent employees: SG*, JG*, Step* required (rate auto-computed from SG + Step)
+                    Rate: auto-computed from SG+Step (cos-salary-table for COS, employee-salary-table for others). Leave empty when SG+Step provided.
                   </li>
                   <li>
-                    For Casual employees: JG*, Step* required (rate auto-computed from JG + Step)
+                    Optional: DateOfBirth, DateOfAppointment, Division, Item_No, PG, SG, JG, Step (PG with SG/JG in Salary section)
                   </li>
-                  <li>
-                    For COS employees: Only Rate* required (manual entry)
-                  </li>
-                  <li>Optional columns: DateOfBirth, Division, Section</li>
                   <li>Rate will be auto-computed based on employee type (see above)</li>
                   <li>Region must match the currently selected region</li>
                   <li>Use the template download button to get the correct format</li>

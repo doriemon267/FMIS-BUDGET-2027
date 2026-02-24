@@ -43,15 +43,15 @@ const EmployeeMasterSchema = mongoose.Schema({
   },
   SG: {
     type: Number,
-    required: true
   },
   Step: {
     type: Number,
-    required: true
-  }, 
+  },
   JG: {
     type: Number,
-    required: true
+  },
+  PG: {
+    type: Number,
   },
   Rate: {
     type: Number,

@@ -194,7 +194,10 @@ exports.getUser = async (req, res) => {
 
     console.log("[AUTH][GET-USER] Sending user response payload (safe fields only).");
 
-    res.json({ user: userResponse });
+    // Include token so client can send it to budget API when auth and budget are different origins
+    const out = { user: userResponse };
+    if (req.authToken) out.token = req.authToken;
+    res.json(out);
   } catch (e) {
     console.error("[AUTH][GET-USER] Error while resolving user:", e);
     res.status(500).json({ error: "Server error" });

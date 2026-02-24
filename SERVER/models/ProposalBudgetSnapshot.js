@@ -48,6 +48,6 @@ const proposalBudgetSnapshotSchema = new mongoose.Schema({
   timestamps: true
 });
 
-proposalBudgetSnapshotSchema.index({ proposalId: 1 });
+// proposalId already has unique: true (creates index); no duplicate schema.index()
 
 module.exports = mongoose.model('ProposalBudgetSnapshot', proposalBudgetSnapshotSchema);

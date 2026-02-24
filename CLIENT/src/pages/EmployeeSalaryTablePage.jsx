@@ -54,6 +54,7 @@ const EmployeeSalaryTablePage = () => {
     cpcs1AppointmentTypes: ["CASUAL"],
     cpcs2AppointmentTypes: ["PERMANENT"],
     inactiveUsesCPCS1: true,
+    useCPCSForEmployeeAdd: false,
   });
   const [loading, setLoading] = useState(true);
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -118,6 +119,7 @@ const EmployeeSalaryTablePage = () => {
         cpcs1AppointmentTypes: res.data.cpcs1AppointmentTypes || ["CASUAL"],
         cpcs2AppointmentTypes: res.data.cpcs2AppointmentTypes || ["PERMANENT"],
         inactiveUsesCPCS1: res.data.inactiveUsesCPCS1 !== false,
+        useCPCSForEmployeeAdd: res.data.useCPCSForEmployeeAdd === true,
       });
     } catch (e) {
       toast.error(e?.response?.data?.error || "Failed to load settings");
@@ -143,6 +145,7 @@ const EmployeeSalaryTablePage = () => {
         cpcs1AppointmentTypes: settings.cpcs1AppointmentTypes,
         cpcs2AppointmentTypes: settings.cpcs2AppointmentTypes,
         inactiveUsesCPCS1: settings.inactiveUsesCPCS1,
+        useCPCSForEmployeeAdd: settings.useCPCSForEmployeeAdd,
       });
       toast.success("Settings saved.");
     } catch (e) {
@@ -440,6 +443,11 @@ const EmployeeSalaryTablePage = () => {
                 </Box>
                 <FormControlLabel
                   sx={{ mt: 2, display: "block" }}
+                  control={<Switch checked={settings.useCPCSForEmployeeAdd} onChange={(e) => setSettings((s) => ({ ...s, useCPCSForEmployeeAdd: e.target.checked }))} />}
+                  label="Use CPCS for employee add (individual add, edit, and bulk import use this table for rate)"
+                />
+                <FormControlLabel
+                  sx={{ mt: 1, display: "block" }}
                   control={<Switch checked={settings.inactiveUsesCPCS1} onChange={(e) => setSettings((s) => ({ ...s, inactiveUsesCPCS1: e.target.checked }))} />}
                   label="Inactive employees (CASUAL) use CPCS 1 for rate"
                 />

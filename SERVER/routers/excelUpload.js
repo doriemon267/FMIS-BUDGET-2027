@@ -66,11 +66,22 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     }
     const workbook = xlsx.read(req.file.buffer, { type: "buffer", cellDates: true, cellNF: false, cellText: false });
     const sheetName = workbook.SheetNames[0];
-    const sheetData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { 
+    const sheetDataRaw = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { 
       raw: false, 
       dateNF: 'mm/dd/yyyy',
       defval: null
     });
+
+    // Normalize column names: template uses "Field*" but processor expects "Field"
+    const normalizeRecord = (row) => {
+      const out = {};
+      for (const [key, val] of Object.entries(row)) {
+        const cleanKey = (key || '').replace(/\*+$/, '').trim();
+        if (cleanKey) out[cleanKey] = val;
+      }
+      return out;
+    };
+    const sheetData = sheetDataRaw.map(normalizeRecord);
 
     // Validate all records first
     const validationResults = [];
@@ -95,7 +106,6 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       console.log('Validation errors found:', errorRecords.length);
       errorRecords.slice(0, 3).forEach((record, index) => {
         console.log(`Record ${index + 1} (Row ${record.row}):`, {
-          employeeId: record.record.EmployeeID,
           employeeName: record.record.EmployeeFullName,
           errors: record.errors
         });
@@ -106,7 +116,6 @@ router.post("/upload", upload.single("file"), async (req, res) => {
         message: `${errorRecords.length} record(s) have validation errors`,
         details: errorRecords.slice(0, 10).map(r => ({
           row: r.row,
-          employeeId: r.record.EmployeeID,
           employeeName: r.record.EmployeeFullName,
           errors: r.errors
         }))
@@ -121,18 +130,22 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       if (result.warnings.length > 0) {
         warningRecords.push({
           row: result.row,
-          employeeId: result.record.EmployeeID,
           employeeName: result.record.EmployeeFullName,
           warnings: result.warnings
         });
       }
 
       try {
-        const existingEmployee = await Employee.findOne({ EmployeeID: result.record.EmployeeID });
+        const matchQuery = {
+          EmployeeFullName: new RegExp(`^${String(result.record.EmployeeFullName).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
+          fiscalYear: activeSettings.fiscalYear,
+          Region: new RegExp(`^${String(activeRegion).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+        };
+        const existingEmployee = await Employee.findOne(matchQuery);
 
         if (existingEmployee) {
           await Employee.updateOne(
-            { EmployeeID: result.record.EmployeeID },
+            { _id: existingEmployee._id },
             {
               $set: {
                 ...result.record,
@@ -157,10 +170,10 @@ router.post("/upload", upload.single("file"), async (req, res) => {
           });
         }
       } catch (dbError) {
-        console.error(`Error saving record ${result.record.EmployeeID}:`, dbError);
+        console.error(`Error saving record ${result.record.EmployeeFullName}:`, dbError);
         return res.status(500).json({
           error: "Database error",
-          message: `Error saving record for EmployeeID: ${result.record.EmployeeID}`,
+          message: `Error saving record for ${result.record.EmployeeFullName}`,
           details: dbError.message
         });
       }

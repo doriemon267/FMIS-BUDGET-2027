@@ -1,145 +1,151 @@
 const jwt = require("jsonwebtoken");
 const mongoose = require('mongoose');
+const AuditLog = require("../models/AuditLog");
 const { resolveUserIdentity, getClientIp } = require("../utils/requestContext");
 const { mainConnection } = require('../config/mongo_db');
 const { requireBudgetRole } = require('./requireBudgetRole');
 
+/**
+ * Development Middleware: Allows Mock Auth and Auto-SuperAdmin
+ */
 module.exports = async (req, res, next) => {
   try {
-    // CORS preflight
     if (req.method === 'OPTIONS') return next();
 
-    // Dev-only backdoor for testing with headers (if explicitly enabled or in debug mode)
-    const allowMockAuth = process.env.ALLOW_MOCK_AUTH === 'true' || process.env.DEBUG_MODE === 'true';
+    req.clientIp = getClientIp(req);
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    // Safety check: Avoid bypass if accidentally deployed to production
+    const allowMockAuth = !isProduction && (process.env.ALLOW_MOCK_AUTH === 'true' || process.env.DEBUG_MODE === 'true');
     const devUserId = req.headers['x-dev-user-id'] || req.headers['X-Dev-User-Id'];
-    const devRolesHeader = req.headers['x-dev-roles'] || req.headers['X-Dev-Roles'];
-
+    
+    // 1. DEVELOPMENT BACKDOOR LOGIC (Mock Auth)
     if (allowMockAuth && devUserId) {
       const uid = String(devUserId).trim();
-      const rolesArr = devRolesHeader ? String(devRolesHeader).split(',').map(r => r.trim()).filter(Boolean) : ['DEVELOPER'];
+      // AUTOMATIC SUPER_ADMIN para hindi ma-block sa budget role check
+      const rolesArr = ['SUPER_ADMIN', 'DEVELOPER']; 
+      const devName = `Dev User (${uid})`;
       
       req.user = {
         id: uid,
         userId: uid,
-        Id: uid,
-        Username: [uid],
         Roles: rolesArr,
-        name: uid,
-        particular: `Dev User (${uid})`,
+        particular: devName,
+        userName: devName, // tugma sa AuditLog schema
         particularID: uid,
+        isDev: true
       };
       
-      const identity = await resolveUserIdentity({ req });
-      req.identity = identity;
-      req.clientIp = getClientIp(req);
+      if (resolveUserIdentity) req.identity = await resolveUserIdentity({ req });
+
+      // LOG TO DATABASE (Background)
+      AuditLog.create({
+        userId: uid,
+        userName: devName,
+        userRoles: rolesArr,
+        action: "DEV_MOCK_AUTH",
+        resource: "SYSTEM_ACCESS",
+        method: req.method,
+        ipAddress: req.clientIp,
+        userAgent: req.headers['user-agent'],
+        details: { mode: 'development_mock', autoAdmin: true }
+      }).catch(e => console.error("AuditLog Error:", e.message));
+
       return requireBudgetRole(req, res, next);
     }
 
+    // 2. JWT LOGIC (In case Dev uses actual tokens)
     const authHeader = req.headers.authorization || req.headers.Authorization;
-    const jwtToken = req.cookies?.jwtToken || req.cookies?.authToken || req.cookies?.jwt || (authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null);
+    const jwtToken = 
+      req.cookies?.jwtToken || 
+      req.cookies?.authToken || 
+      req.cookies?.jwt || 
+      (authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null);
 
     if (!jwtToken) {
-      return res.status(401).json({ error: "Access denied. No token provided." });
+      return res.status(401).json({ error: "Access denied. Token or Dev Header required." });
     }
 
-    // Try multiple secrets for flexibility
+    // Try multiple secrets (Flexible for Dev environments)
     let payload = null;
     const secrets = [
       process.env.JWT_CLIENT_SECRET_PROD,
       process.env.JWT_SECRET_KEY,
-      process.env.JWT_SECRET,
-      process.env.SECRET_KEY
+      process.env.JWT_SECRET
     ].filter(Boolean);
 
     for (const secret of secrets) {
       try {
-        payload = jwt.verify(jwtToken, secret);
+        payload = jwt.verify(jwtToken, secret, { algorithms: ['HS256'] });
         if (payload) break;
-      } catch (err) {
-        // continue
-      }
+      } catch (err) { /* silent try */ }
     }
 
     if (!payload) {
+      AuditLog.create({
+        userId: "ANONYMOUS_DEV",
+        userName: "UNKNOWN",
+        action: "AUTH_FAILED",
+        resource: "AUTHENTICATION",
+        ipAddress: req.clientIp,
+        status: 401
+      }).catch(() => {});
       return res.status(401).json({ error: "Invalid token" });
     }
 
-    // Capture client IP
-    req.clientIp = getClientIp(req);
-
-    // Development mode user resolution (local JWT or external API)
-    let userId = payload.userId || payload.id || payload.sub || (payload.Username && payload.Username[0]);
-    
-    // If we have an accessToken but no direct user info, try external API
-    if (!userId && payload.accessToken && process.env.ACCOUNT_USER_API_URL) {
-      try {
-        const userRes = await fetch(process.env.ACCOUNT_USER_API_URL, {
-          headers: { Authorization: `Bearer ${payload.accessToken}` },
-        });
-        if (userRes.ok) {
-          const user = await userRes.json();
-          userId = user.userId || user.id || user.Username?.[0];
-          // Merge API user data if needed
-          Object.assign(payload, user);
-        }
-      } catch (e) {
-        console.error("External API fetch failed in dev token:", e.message);
-      }
-    }
-
-    if (!userId) {
-      return res.status(401).json({ error: "User identity not found in token" });
-    }
-
-    // Normalize roles
-    let roles = payload.roles || payload.Roles || payload.role || [];
+    // Identity Extraction
+    let userId = String(payload.userId || payload.id || (payload.Username && payload.Username[0]));
+    let roles = payload.roles || payload.Roles || [];
     if (!Array.isArray(roles)) roles = [roles];
     roles = roles.map(r => typeof r === 'string' ? r.replace(/\s+/g, '_').toUpperCase() : r);
 
-    // If roles are missing in the token payload, try to fetch from main DB assigned_roles
-    if ((!roles || roles.length === 0) && mainConnection && mainConnection.readyState) {
+    // Fallback DB Role Lookup
+    if (roles.length === 0 && mainConnection?.readyState) {
       try {
         const AssignedRole = mainConnection.model('assigned_roles', new mongoose.Schema({}, { strict: false }), 'assigned_roles');
-        const Role = mainConnection.model('roles', new mongoose.Schema({}, { strict: false }), 'roles');
-        const assigned = await AssignedRole.findOne({ $or: [{ user: userId }, { user: Number(userId) }] }).lean();
-        if (assigned && Array.isArray(assigned.roles) && assigned.roles.length > 0) {
-          const resolved = [];
-          for (const r of assigned.roles) {
-            if (r && typeof r === 'string' && r.match(/^[0-9a-fA-F]{24}$/)) {
-              const doc = await Role.findById(r).lean();
-              if (doc && doc.name) resolved.push(doc.name.replace(/\s+/g, '_').toUpperCase());
-            } else if (r && r._bsontype === 'ObjectId') {
-              const doc = await Role.findById(r).lean();
-              if (doc && doc.name) resolved.push(doc.name.replace(/\s+/g, '_').toUpperCase());
-            } else if (typeof r === 'string') {
-              resolved.push(r.replace(/\s+/g, '_').toUpperCase());
-            } else if (r && typeof r === 'object' && r.name) {
-              resolved.push(String(r.name).replace(/\s+/g, '_').toUpperCase());
-            }
-          }
-          if (resolved.length) roles = Array.from(new Set(resolved));
-        }
-      } catch (e) {
-        // ignore db lookup failures in dev token middleware
-        if (process.env.DEBUG_LOGS === 'true') console.debug('Assigned roles lookup failed in token middleware:', e?.message || e);
-      }
+        const assigned = await AssignedRole.findOne({ user: userId }).lean();
+        if (assigned?.roles) roles = assigned.roles.map(r => String(r).toUpperCase());
+      } catch (e) {}
     }
+
+    const userName = `${payload.FirstName || ''} ${payload.LastName || ''}`.trim() || userId;
 
     req.user = {
       ...payload,
       id: userId,
       userId: userId,
       Roles: roles,
-      particular: `${payload.FirstName || ''} ${payload.LastName || ''}`.trim() || userId,
+      particular: userName,
+      userName: userName,
       particularID: userId
     };
 
-    const identity = await resolveUserIdentity({ req });
-    req.identity = identity;
+    if (resolveUserIdentity) req.identity = await resolveUserIdentity({ req });
+
+    // SUCCESS LOG
+    AuditLog.create({
+      userId: userId,
+      userName: userName,
+      userRoles: roles,
+      action: "AUTH_SUCCESS_DEV",
+      resource: "AUTHENTICATION",
+      method: req.method,
+      ipAddress: req.clientIp
+    }).catch(() => {});
 
     return requireBudgetRole(req, res, next);
+
   } catch (e) {
-    console.error("Authentication error in check_token_dev:", e);
-    return res.status(401).json({ error: "Access denied due to an error." });
+    console.error("Dev Auth Exception:", e.message);
+    AuditLog.create({
+      userId: "SYSTEM",
+      userName: "DEV_ERROR",
+      action: "AUTH_EXCEPTION",
+      resource: "AUTHENTICATION",
+      ipAddress: req.clientIp,
+      details: { error: e.message }
+    }).catch(() => {});
+
+    return res.status(401).json({ error: "Access denied." });
   }
 };

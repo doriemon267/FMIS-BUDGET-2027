@@ -11,8 +11,7 @@ const userPreferencesSchema = new mongoose.Schema(
     userId: {
       type: String,
       required: true,
-      unique: true,
-      index: true,
+      unique: true, // unique already creates an index; no need for index: true or schema.index()
     },
     preferences: {
       type: mongoose.Schema.Types.Mixed,
@@ -23,8 +22,5 @@ const userPreferencesSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
-
-// Index for efficient lookups
-userPreferencesSchema.index({ userId: 1 });
 
 module.exports = mongoose.model('UserPreferences', userPreferencesSchema);

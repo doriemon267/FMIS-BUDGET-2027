@@ -1,119 +1,164 @@
 const jwt = require("jsonwebtoken");
 const mongoose = require('mongoose');
-const { resolveUserIdentity, getClientIp } = require("../utils/requestContext");
 const { mainConnection } = require('../config/mongo_db');
+const AuditLog = require("../models/AuditLog"); // Added Logging
+const { resolveUserIdentity, getClientIp } = require("../utils/requestContext");
 const { requireBudgetRole } = require('./requireBudgetRole');
 
+/**
+ * Authentication & Authorization Middleware (Production Grade with Whitelist & Logging)
+ */
 module.exports = async (req, res, next) => {
   try {
-    // CORS preflight
+    // 1. Skip if it's a CORS preflight request
     if (req.method === 'OPTIONS') return next();
 
+    // 2. Token Extraction
     const authHeader = req.headers.authorization || req.headers.Authorization;
-    const jwtToken = req.cookies?.jwtToken || req.cookies?.authToken || req.cookies?.jwt || (authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null);
+    const jwtToken = 
+      req.cookies?.jwtToken || 
+      req.cookies?.authToken || 
+      req.cookies?.jwt || 
+      (authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null);
 
     if (!jwtToken) {
       return res.status(401).json({ error: "Access denied. No token provided." });
     }
 
-    // Verify token using production secret
+    // 3. Strict Verification
     const secret = process.env.JWT_CLIENT_SECRET_PROD || process.env.JWT_SECRET_KEY;
     if (!secret) {
-       console.error("Production JWT secret not configured");
-       return res.status(500).json({ error: "Server configuration error" });
+      console.error("[CRITICAL] JWT Secret is not configured in .env");
+      return res.status(500).json({ error: "Internal server configuration error" });
     }
 
-    const payload = jwt.verify(jwtToken, secret);
+    const payload = jwt.verify(jwtToken, secret, { algorithms: ['HS256'] });
     if (!payload) {
-      return res.status(401).json({ error: "Invalid token" });
+      return res.status(401).json({ error: "Invalid token structure" });
     }
 
-    // Capture client IP
-    req.clientIp = getClientIp(req);
+    // 4. Metadata & IP Tracking
+    req.authToken = jwtToken;
+    req.clientIp = getClientIp ? getClientIp(req) : (req.ip || req.connection?.remoteAddress);
 
-    const accessToken = payload.accessToken;
-    let user = null;
-
-    // Fetch user data from external API if configured
-    if (accessToken && process.env.ACCOUNT_USER_API_URL) {
-      const userRes = await fetch(process.env.ACCOUNT_USER_API_URL, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (userRes.ok) {
-        user = await userRes.json();
-      }
+    // 5. User Identity Extraction
+    const rawUserId = payload.userId || payload.id || payload.UserName || (Array.isArray(payload.Username) ? payload.Username[0] : payload.Username);
+    
+    if (!rawUserId) {
+      return res.status(401).json({ error: "Access denied. User identity not found in token." });
     }
+    const userId = String(rawUserId);
 
-    // Fallback to payload data if API call failed or wasn't configured
-    const userData = user || payload;
-    const userId = userData.userId || userData.id || userData.UserName || (userData.Username && userData.Username[0]);
+    // 6. Name Formatting (Original Logic)
+    const middleInitial = payload.MiddleName ? `${payload.MiddleName.charAt(0)}.` : "";
+    const particular = `${payload.FirstName ?? ""} ${middleInitial} ${payload.LastName ?? ""} ${payload.Suffix ?? ""}`
+                        .replace(/\s+/g, " ")
+                        .trim() || userId;
 
-    if (!userId) {
-      return res.status(401).json({ error: "Access denied. User identity not found." });
-    }
+    // 7. Role Resolution (Original DB Fallback)
+    let roles = payload.roles || payload.Roles || [];
+    if (!Array.isArray(roles)) roles = roles ? [roles] : [];
 
-    // Normalize roles
-    let roles = userData.roles || userData.Roles || userData.role || [];
-    if (!Array.isArray(roles)) roles = [roles];
-    roles = roles.map(r => typeof r === 'string' ? r.replace(/\s+/g, '_').toUpperCase() : r);
-
-    // If roles missing, try to fetch from main DB assigned_roles collection
-    if ((!roles || roles.length === 0) && mainConnection && mainConnection.readyState) {
+    if (roles.length === 0 && mainConnection?.readyState === 1) {
       try {
         const AssignedRole = mainConnection.model('assigned_roles', new mongoose.Schema({}, { strict: false }), 'assigned_roles');
         const Role = mainConnection.model('roles', new mongoose.Schema({}, { strict: false }), 'roles');
-        const assigned = await AssignedRole.findOne({ $or: [{ user: userId }, { user: Number(userId) }] }).lean();
-        if (assigned && Array.isArray(assigned.roles) && assigned.roles.length > 0) {
-          const resolved = [];
-          for (const r of assigned.roles) {
-            if (r && typeof r === 'string' && r.match(/^[0-9a-fA-F]{24}$/)) {
-              const doc = await Role.findById(r).lean();
-              if (doc && doc.name) resolved.push(doc.name.replace(/\s+/g, '_').toUpperCase());
-            } else if (r && r._bsontype === 'ObjectId') {
-              const doc = await Role.findById(r).lean();
-              if (doc && doc.name) resolved.push(doc.name.replace(/\s+/g, '_').toUpperCase());
-            } else if (typeof r === 'string') {
-              resolved.push(r.replace(/\s+/g, '_').toUpperCase());
-            } else if (r && typeof r === 'object' && r.name) {
-              resolved.push(String(r.name).replace(/\s+/g, '_').toUpperCase());
+
+        const assigned = await AssignedRole.findOne({
+          $or: [{ user: userId }, { user: Number(userId) }, { user: parseInt(userId, 10) }]
+        }).lean();
+
+        if (assigned && assigned.roles && assigned.roles.length > 0) {
+          const roleNames = [];
+          for (const roleItem of assigned.roles) {
+            if (roleItem && roleItem._bsontype === 'ObjectId') {
+              const roleDoc = await Role.findById(roleItem, { name: 1 }).lean();
+              if (roleDoc?.name) roleNames.push(roleDoc.name);
+            } else if (typeof roleItem === 'string' && roleItem.match(/^[0-9a-fA-F]{24}$/)) {
+              const roleDoc = await Role.findById(roleItem, { name: 1 }).lean();
+              if (roleDoc?.name) roleNames.push(roleDoc.name);
+            } else if (typeof roleItem === 'object' && roleItem?.name) {
+              roleNames.push(roleItem.name);
+            } else if (typeof roleItem === 'string') {
+              roleNames.push(roleItem);
             }
           }
-          if (resolved.length) roles = Array.from(new Set(resolved));
+          roles = roleNames;
         }
-      } catch (e) {
-        if (process.env.DEBUG_LOGS === 'true') console.debug('Assigned roles lookup failed in token middleware:', e?.message || e);
+      } catch (dbError) {
+        console.error("Role DB Lookup Error (main DB):", dbError.message);
       }
     }
 
-    // Normalize email from API (pwedeng iba-ibang field name: email, Email, userEmail, UserEmail, etc.)
-    let email = userData.email ?? userData.Email ?? userData.userEmail ?? userData.UserEmail ?? userData.mail ?? null;
+    const normalizedRoles = roles.map(r => String(r).replace(/\s+/g, '_').toUpperCase());
 
-    // Kung walang hiwalay na email pero ang userId ay "909549mund.m.edra@gmail.com", kunin ang email part para sa UI
-    if (!email && typeof userId === 'string' && userId.includes('@')) {
-      const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
-      const match = userId.match(emailRegex);
-      if (match) email = match[1];
-    }
-
+    // 8. Attach Cleaned User Object
     req.user = {
-      ...userData,
+      ...payload,
       id: userId,
       userId: userId,
-      Roles: roles,
-      particular: `${userData.FirstName || ''} ${userData.LastName || ''}`.trim() || userId,
+      Roles: normalizedRoles,
+      particular: particular,
       particularID: userId,
-      email: email
+      userName: particular, // mapped to your AuditLog schema
+      email: payload.email || payload.Email || payload.userEmail || null
     };
 
-    const identity = await resolveUserIdentity({ req });
-    req.identity = identity;
+    // 9. [NEW] STRICT PRODUCTION WHITELIST FOR SUPER ADMINS
+    const isSuper = normalizedRoles.includes('SUPER_ADMIN') || normalizedRoles.includes('SUPERADMIN');
+    if (isSuper) {
+      const allowedIds = process.env.SUPER_ADMIN_IDS ? process.env.SUPER_ADMIN_IDS.split(',').map(id => id.trim()) : [];
+      if (!allowedIds.includes(userId)) {
+        // Log unauthorized attempt
+        AuditLog.create({
+          userId: userId,
+          userName: particular,
+          userRoles: normalizedRoles,
+          action: "BLOCKED_UNAUTHORIZED_SUPERADMIN",
+          resource: "SYSTEM_ACCESS",
+          method: req.method,
+          ipAddress: req.clientIp,
+          details: { error: "Super Admin ID not whitelisted in .env" }
+        }).catch(() => {});
+
+        return res.status(403).json({ error: "Access denied. Your Super Admin ID is not authorized for this environment." });
+      }
+    }
+
+    // 10. [NEW] SUCCESS AUDIT LOG
+    AuditLog.create({
+      userId: userId,
+      userName: particular,
+      userRoles: normalizedRoles,
+      action: "LOGIN_SUCCESS",
+      resource: "AUTHENTICATION",
+      method: req.method,
+      ipAddress: req.clientIp,
+      userAgent: req.headers['user-agent']
+    }).catch(() => {});
+
+    if (resolveUserIdentity) {
+      req.identity = await resolveUserIdentity({ req });
+    }
 
     return requireBudgetRole(req, res, next);
+
   } catch (error) {
-    console.error("Authentication error in check_token_prod:", error.message);
+    // 11. ERROR LOGGING
+    AuditLog.create({
+      userId: "ANONYMOUS",
+      userName: "SYSTEM",
+      action: error.name === 'TokenExpiredError' ? "TOKEN_EXPIRED" : "AUTH_EXCEPTION",
+      resource: "AUTHENTICATION",
+      method: req.method,
+      ipAddress: req.clientIp,
+      details: { error: error.message }
+    }).catch(() => {});
+
+    console.error("Auth Middleware Error:", error.message);
     if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ error: "Token expired", expired: true });
+      return res.status(401).json({ error: "Session expired. Please login again.", expired: true });
     }
-    return res.status(401).json({ error: "Access denied" });
+    return res.status(401).json({ error: "Access denied." });
   }
 };

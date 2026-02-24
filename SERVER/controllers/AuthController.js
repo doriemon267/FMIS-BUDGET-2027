@@ -43,8 +43,9 @@ const getUser = (req, res) => {
     if (!token && req.cookies && req.cookies.authToken) token = req.cookies.authToken;
     if (!token) return res.status(401).json({ error: 'Not authenticated' });
     const payload = jwt.verify(token, process.env.JWT_SECRET_KEY);
-    // Return user info only
-    return res.json({ user: { id: payload.userId || payload.sub || null, name: payload.name, email: payload.email, roles: payload.roles } });
+    const user = { id: payload.userId || payload.sub || null, name: payload.name, email: payload.email, roles: payload.roles };
+    // Return token so budget app can send it to budget API when on a different origin (cookie not sent cross-origin)
+    return res.json({ user, token });
   } catch (err) {
     console.error('getUser error:', err.message);
     return res.status(401).json({ error: 'Invalid or expired token' });

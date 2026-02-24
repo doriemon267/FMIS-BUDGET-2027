@@ -50,7 +50,7 @@ const auditLogSchema = new mongoose.Schema(
     timestamp: {
       type: Date,
       default: Date.now,
-      index: true,
+      // index from schema.index() below (timestamp: -1 and TTL); avoid duplicate index: true
     },
   },
   {

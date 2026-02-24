@@ -21,8 +21,8 @@ const mainFmisDashboardUrl = IS_PRODUCTION
   ? 'https://fmis.nia.gov.ph/dashboard'
   : 'https://main.fmis.local/dashboard';
 
-/** Page shown when user has no budget role - redirect back to main FMIS instead of forcing sign out */
-const NoBudgetRolePage = ({ onLogout }) => {
+/** Page shown when user has no budget role or is unauthorized SUPER_ADMIN - redirect back to main FMIS */
+const NoBudgetRolePage = ({ onLogout, message }) => {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
 
@@ -99,7 +99,7 @@ const NoBudgetRolePage = ({ onLogout }) => {
               mx: 'auto',
             }}
           >
-            Your account does not have a budget role. If you accidentally landed here, return to the main FMIS dashboard. To request access, contact your System Administrator.
+            {message ?? 'Your account does not have a budget role. If you accidentally landed here, return to the main FMIS dashboard. To request access, contact your System Administrator.'}
           </Typography>
 
           <Stack
@@ -169,9 +169,9 @@ const NoBudgetRolePage = ({ onLogout }) => {
 };
 
 const AccessGuard = ({ children }) => {
-  const { currentUser, loading, logout } = useUser();
+  const { currentUser, loading, logout, unauthorizedSuperAdmin } = useUser();
 
-  if (loading || !currentUser) {
+  if (loading || (!currentUser && !unauthorizedSuperAdmin)) {
     return (
       <Box
         sx={{
@@ -192,6 +192,16 @@ const AccessGuard = ({ children }) => {
           Loading user profile...
         </Typography>
       </Box>
+    );
+  }
+
+  // Block: User has SUPER_ADMIN role but ID is not in SUPER_ADMIN_IDS whitelist (security alert)
+  if (unauthorizedSuperAdmin) {
+    return (
+      <NoBudgetRolePage
+        onLogout={logout}
+        message="Your Super Admin ID is not authorized for this environment. Return to the main FMIS dashboard or sign out."
+      />
     );
   }
 

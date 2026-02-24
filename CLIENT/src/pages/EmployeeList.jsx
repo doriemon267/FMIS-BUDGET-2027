@@ -296,24 +296,24 @@ const EmployeeList = () => {
         </Tooltip>
       ),
     },
-    Section: {
-      type: "text",
-      label: "Section",
-      searchable: true,
-      show: true,
-      customRender: (row) => (
-        <Typography
-          sx={{
-            maxWidth: "150px",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {row.Section || "N/A"}
-        </Typography>
-      ),
-    },
+    // Section: {
+    //   type: "text",
+    //   label: "Section",
+    //   searchable: true,
+    //   show: true,
+    //   customRender: (row) => (
+    //     <Typography
+    //       sx={{
+    //         maxWidth: "150px",
+    //         overflow: "hidden",
+    //         textOverflow: "ellipsis",
+    //         whiteSpace: "nowrap",
+    //       }}
+    //     >
+    //       {row.Section || "N/A"}
+    //     </Typography>
+    //   ),
+    // },
     Region: {
       type: "text",
       label: "Region",
@@ -392,12 +392,13 @@ const EmployeeList = () => {
           title={
             <Box>
               <Typography variant="body2" fontWeight={500}>
-                Salary Grade: {row.SG || "N/A"}
+                Salary Grade: {row.SG ?? "N/A"}
               </Typography>
-              <Typography variant="body2">Step: {row.Step || "N/A"}</Typography>
+              <Typography variant="body2">Step: {row.Step ?? "N/A"}</Typography>
               <Typography variant="body2">
                 Job Grade: {row.JG ? row.JG.toString().replace(/^JG-?/, '') : "N/A"}
               </Typography>
+              <Typography variant="body2">PG: {row.PG ?? "N/A"}</Typography>
               <Divider sx={{ my: 1, bgcolor: "rgba(255,255,255,0.2)" }} />
               <Typography variant="body2" fontWeight={600}>
                 Monthly Rate: ₱{row.Rate ? row.Rate.toLocaleString() : "N/A"}

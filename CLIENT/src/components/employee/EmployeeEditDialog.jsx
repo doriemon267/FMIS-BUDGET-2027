@@ -71,6 +71,14 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
   const [departmentOptions, setDepartmentOptions] = useState([]);
   const [positionOptions, setPositionOptions] = useState([]);
   const [organizationStructure, setOrganizationStructure] = useState(null);
+  const [useCPCSForEmployeeAdd, setUseCPCSForEmployeeAdd] = useState(false);
+
+  // Fetch CPCS setting for employee add/edit (use CPCSSalaryTable vs salary-grades)
+  useEffect(() => {
+    api.get("/cpcs-salary/use-cpcs")
+      .then((res) => setUseCPCSForEmployeeAdd(res.data?.useCPCSForEmployeeAdd === true))
+      .catch(() => setUseCPCSForEmployeeAdd(false));
+  }, []);
 
   // Utility function to format dates for HTML date inputs
   const formatDateForInput = (dateValue) => {
@@ -102,17 +110,17 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
   // Initialize react-hook-form with existing employee data
   const methods = useForm({
     defaultValues: {
-      EmployeeID: row?.EmployeeID || "",
       EmployeeFullName: row?.EmployeeFullName || "",
       Region: row?.Region || "",
       Department: row?.Department || "",
       Division: row?.Division || "",
-      Section: row?.Section || "",
       PositionTitle: row?.PositionTitle || "",
       StatusOfAppointment: row?.StatusOfAppointment || "",
       DateOfAppointment: formatDateForInput(row?.DateOfAppointment),
       DateOfBirth: formatDateForInput(row?.DateOfBirth),
       Status: row?.Status || "Active",
+      Item_No: row?.ItemNumber || "",
+      PG: row?.PG || "",
       SG: row?.SG || "",
       JG: row?.JG || "",
       Step: row?.Step || "",
@@ -321,7 +329,10 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
       // For PERMANENT/CONTRACTUAL employees with SG
       if ((status === 'PERMANENT' || status === 'CONTRACTUAL') && sg) {
         try {
-          const response = await api.get(`salary-grades?salary_grade=${sg}`);
+          const url = useCPCSForEmployeeAdd
+            ? `cpcs-salary/grades?salary_grade=${sg}`
+            : `salary-grades?salary_grade=${sg}`;
+          const response = await api.get(url);
           const salaryGrades = response.data.grades?.[0];
 
           if (salaryGrades) {
@@ -340,7 +351,7 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
     };
 
     initializeSalaryData();
-  }, [isOpen, row]);
+  }, [isOpen, row, useCPCSForEmployeeAdd]);
 
   // When Department/Division changes, fetch divisions based on selected Department
   useEffect(() => {
@@ -510,22 +521,26 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
 
       if (isOpen && row?.SG && row.StatusOfAppointment?.toString().toUpperCase() !== 'COS') {
         try {
-          // console.log("🔄 Fetching salary data for SG:", row.SG);
-          const response = await api.get(`salary-grades?salary_grade=${row.SG}`);
+          const url = useCPCSForEmployeeAdd
+            ? `cpcs-salary/grades?salary_grade=${row.SG}`
+            : `salary-grades?salary_grade=${row.SG}`;
+          const response = await api.get(url);
           const salaryGrades = response.data.grades?.[0];
 
           if (salaryGrades) {
-            // console.log("✅ Salary data loaded:", salaryGrades);
             const steps = salaryGrades.steps.map((aw) => aw + "");
-            // console.log("✅ Setting stepOptions:", steps);
             setStepOptions(steps);
             setSalaryData(salaryGrades);
 
             // Also ensure the form values are set
             setValue("JG", salaryGrades.job_grade || row.JG || "");
             setValue("Step", row.Step || steps[0] || "1");
+            if (useCPCSForEmployeeAdd && salaryGrades.cpcs2PayGrade != null) {
+              setValue("PG", salaryGrades.cpcs2PayGrade);
+            }
             // Always recompute the rate based on salary grade data, don't use stored value
-            const correctRate = salaryGrades.rates[row.Step || steps[0]];
+            const stepKey = String(row.Step || steps[0] || "1");
+            const correctRate = salaryGrades.rates?.[stepKey];
             setValue("Rate", correctRate || "");
           } else {
             // console.log("❌ No salary data found for SG:", row.SG);
@@ -547,19 +562,19 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
     if (isOpen) {
       initializeSalaryData();
     }
-  }, [isOpen, row, setValue]);
+  }, [isOpen, row, setValue, useCPCSForEmployeeAdd]);
 
   // Handle row data changes (in case row is loaded asynchronously)
   useEffect(() => {
     if (row && isOpen) {
       // console.log("🔄 Row data changed, updating form values:", row);
       // Update form values when row data becomes available
-      setValue("EmployeeID", row.EmployeeID || "");
       setValue("EmployeeFullName", row.EmployeeFullName || "");
       setValue("Region", row.Region || "");
       setValue("Department", row.Department || "");
       setValue("Division", row.Division || "");
-      setValue("Section", row.Section || "");
+      setValue("Item_No", row.ItemNumber || "");
+      setValue("PG", row.PG || "");
       setValue("PositionTitle", row.PositionTitle || "");
       setValue("StatusOfAppointment", row.StatusOfAppointment || "");
       setValue("DateOfAppointment", formatDateForInput(row.DateOfAppointment));
@@ -612,6 +627,17 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
       : "Admin";
     
     data.processBy = processBy;
+
+    // Convert EmployeeFullName to uppercase
+    if (data.EmployeeFullName) {
+      data.EmployeeFullName = String(data.EmployeeFullName).trim().toUpperCase();
+    }
+
+    // Map Item_No to ItemNumber for backend
+    if (data.Item_No != null && data.Item_No !== "") {
+      data.ItemNumber = data.Item_No;
+    }
+    delete data.Item_No;
     
     // Add employee status field if not present
     if (!data.employeeStatus) {
@@ -729,32 +755,11 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
   const getFieldsForStep = (step) => {
     switch (step) {
       case 0: // Basic Information
-        return [
-          "EmployeeID",
-          "EmployeeFullName",
-          "Department",
-        ];
+        return ["EmployeeFullName", "Department"];
       case 1: // Position Information
-        return [
-          "PositionTitle",
-          "StatusOfAppointment",
-        ];
-      case 2: // Salary Information
-        // Field requirements depend on StatusOfAppointment
-        const status = watchedValues.StatusOfAppointment?.toString().toUpperCase();
-        const isCOS = status === 'COS';
-        const isPermanentOrContractual = status === 'PERMANENT' || status === 'CONTRACTUAL';
-        const isCasual = status === 'CASUAL';
-        
-        if (isCOS) {
-          return ["Rate"]; // Only Rate is required for COS
-        } else if (isPermanentOrContractual) {
-          return ["SG", "Step", "Rate"]; // SG, Step, Rate required for Permanent/Contractual
-        } else if (isCasual) {
-          return ["JG", "Step", "Rate"]; // JG, Step, Rate required for Casual
-        } else {
-          return ["Step", "Rate"]; // Default fallback
-        }
+        return ["PositionTitle", "StatusOfAppointment"];
+      case 2: // Salary Information - SG, JG, PG not required (bases from salary tables)
+        return ["Rate"];
       default:
         return [];
     }
@@ -901,29 +906,6 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                   <Grid container spacing={2}>
                     <Grid item xs={12} sm={6}>
                       <CustomTextField
-                        fieldName="EmployeeID"
-                        control={control}
-                        label="Employee ID"
-                        required
-                        rules={{
-                          required: "Employee ID is required",
-                          pattern: {
-                            value: /^[A-Za-z0-9-]+$/,
-                            message:
-                              "Employee ID can only contain letters, numbers, and hyphens",
-                          },
-                        }}
-                        InputProps={{
-                          startAdornment: (
-                            <InputAdornment position="start">
-                              <BadgeIcon color="action" />
-                            </InputAdornment>
-                          ),
-                        }}
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <CustomTextField
                         fieldName="EmployeeFullName"
                         control={control}
                         label="Employee Full Name"
@@ -960,6 +942,13 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                             return true;
                           }
                         }}
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <CustomTextField
+                        fieldName="Item_No"
+                        control={control}
+                        label="Item No."
                       />
                     </Grid>
 
@@ -1009,7 +998,6 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                         onChange={(val) => {
                           if (userAccessLevel !== 'DIVISION' && userAccessLevel !== 'DEPARTMENT') {
                             setValue("Division", "");
-                            setValue("Section", "");
                           }
                         }}
                       />
@@ -1021,20 +1009,6 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                         options={divisionOptions}
                         control={control}
                         disabled={userAccessLevel === 'DIVISION'}
-                        onChange={() => {
-                          if (userAccessLevel !== 'DIVISION') {
-                            setValue("Section", "");
-                          }
-                        }}
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={4}>
-                      <CustomAutoComplete
-                        fieldName="Section"
-                        label="Section"
-                        options={sectionOptions}
-                        control={control}
-                        disabled={false} // Section should always be enabled for Division level users
                       />
                     </Grid>
                   </Grid>
@@ -1138,9 +1112,7 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                           control={control}
                           label="Salary Grade"
                           type="number"
-                          required
                           rules={{
-                            required: "Salary grade is required",
                             min: {
                               value: 1,
                               message: "Salary grade must be at least 1",
@@ -1159,13 +1131,17 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
 
                             if (sgValue) {
                               try {
-                                const response = await api.get(
-                                  `salary-grades?salary_grade=${sgValue}`
-                                );
+                                const url = useCPCSForEmployeeAdd
+                                  ? `cpcs-salary/grades?salary_grade=${sgValue}`
+                                  : `salary-grades?salary_grade=${sgValue}`;
+                                const response = await api.get(url);
                                 const salaryGrades = response.data.grades?.[0];
 
                                 if (salaryGrades) {
-                                  setValue("JG", salaryGrades.job_grade);
+                                  setValue("JG", salaryGrades.job_grade || "");
+                                  if (useCPCSForEmployeeAdd && salaryGrades.cpcs2PayGrade != null) {
+                                    setValue("PG", salaryGrades.cpcs2PayGrade);
+                                  }
                                   const steps = salaryGrades.steps.map(
                                     (aw) => aw + ""
                                   );
@@ -1173,8 +1149,8 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                                   setSalaryData(salaryGrades);
                                   const defaultStep = steps[0];
                                   setValue("Step", defaultStep);
-                                  const rate = salaryGrades.rates[defaultStep];
-                                  setValue("Rate", rate);
+                                  const rate = salaryGrades.rates?.[defaultStep];
+                                  setValue("Rate", rate || "");
 
                                   // Trigger validation
                                   trigger(["JG", "Step", "Rate"]);
@@ -1205,8 +1181,6 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                           control={control}
                           label="Job Grade"
                           type="number"
-                          required
-                          rules={{ required: "Job grade is required" }}
                           onChange={async (e) => {
                             const jgValue = e.target.value;
                             setValue("JG", jgValue);
@@ -1223,9 +1197,10 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                               }
 
                               try {
-                                const response = await api.get(
-                                  `/rate-by-job-grade-and-step/${jgValue}/${stepValue}`
-                                );
+                                const path = useCPCSForEmployeeAdd
+                                  ? `/cpcs-salary/rate-by-job-grade-and-step/${jgValue}/${stepValue}`
+                                  : `/rate-by-job-grade-and-step/${jgValue}/${stepValue}`;
+                                const response = await api.get(path);
                                 const rateData = response.data;
 
                                 if (rateData && rateData.rate) {
@@ -1248,6 +1223,68 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                         />
                       </Grid>
                     )}
+                    {/* PG - optional, with SG/JG in Salary Information (not for COS - COS uses SG only) */}
+                    {(watchedValues.StatusOfAppointment?.toString().toUpperCase() === 'PERMANENT' ||
+                      watchedValues.StatusOfAppointment?.toString().toUpperCase() === 'CONTRACTUAL' ||
+                      watchedValues.StatusOfAppointment?.toString().toUpperCase() === 'CASUAL') && (
+                      <Grid item xs={12} sm={6}>
+                        <CustomTextField
+                          fieldName="PG"
+                          control={control}
+                          label="PG"
+                          type="number"
+                        />
+                      </Grid>
+                    )}
+                    {/* COS: SG + Step (optional) - auto-compute Rate from cos-salary-table */}
+                    {watchedValues.StatusOfAppointment &&
+                     watchedValues.StatusOfAppointment.toString().toUpperCase() === 'COS' && (
+                      <>
+                        <Grid item xs={12} sm={6}>
+                          <CustomTextField
+                            fieldName="SG"
+                            control={control}
+                            label="Salary Grade (COS)"
+                            type="number"
+                            rules={{ min: { value: 1, message: "SG must be at least 1" } }}
+                            onChange={async (e) => {
+                              const sgVal = e.target.value;
+                              setValue("SG", sgVal);
+                              const stepVal = getValues("Step");
+                              if (sgVal && stepVal) {
+                                try {
+                                  const res = await api.get(`/cos-salary/rate/${sgVal}/${stepVal}`);
+                                  if (res.data?.rate != null) setValue("Rate", res.data.rate);
+                                } catch (err) {
+                                  console.error("Error fetching COS rate:", err);
+                                }
+                              }
+                            }}
+                          />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          <CustomAutoComplete
+                            fieldName="Step"
+                            options={["1", "2", "3", "4", "5", "6", "7", "8"]}
+                            label="Step (COS)"
+                            control={control}
+                            onChange={async (val) => {
+                              setValue("Step", val);
+                              const sgVal = getValues("SG");
+                              if (sgVal && val) {
+                                try {
+                                  const res = await api.get(`/cos-salary/rate/${sgVal}/${val}`);
+                                  if (res.data?.rate != null) setValue("Rate", res.data.rate);
+                                } catch (err) {
+                                  console.error("Error fetching COS rate:", err);
+                                }
+                              }
+                              trigger("Rate");
+                            }}
+                          />
+                        </Grid>
+                      </>
+                    )}
                     {/* Step field - show for Permanent, Contractual, and Casual employees */}
                     {watchedValues.StatusOfAppointment &&
                      watchedValues.StatusOfAppointment.toString().toUpperCase() !== 'COS' && (
@@ -1261,8 +1298,6 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                           }
                           label="Step"
                           control={control}
-                          required
-                          rules={{ required: "Step is required" }}
                           onChange={async (value) => {
                             setValue("Step", value);
                             const status = watchedValues.StatusOfAppointment?.toString().toUpperCase();
@@ -1276,9 +1311,10 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                                 const jgValue = getValues("JG");
                                 if (jgValue && value) {
                                     try {
-                                        const response = await api.get(
-                                            `/rate-by-job-grade-and-step/${jgValue}/${value}`
-                                        );
+                                        const path = useCPCSForEmployeeAdd
+                                            ? `/cpcs-salary/rate-by-job-grade-and-step/${jgValue}/${value}`
+                                            : `/rate-by-job-grade-and-step/${jgValue}/${value}`;
+                                        const response = await api.get(path);
                                         const rateData = response.data;
                                         if (rateData && rateData.rate) {
                                             setValue("Rate", rateData.rate);
@@ -1367,9 +1403,11 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                         <Typography variant="h6">
                           {watchedValues.EmployeeFullName || "Employee Name"}
                         </Typography>
-                        <Typography variant="body2">
-                          ID: {watchedValues.EmployeeID || "N/A"}
-                        </Typography>
+                        {watchedValues.Item_No && (
+                          <Typography variant="body2">
+                            Item No.: {watchedValues.Item_No}
+                          </Typography>
+                        )}
                         {watchedValues.DateOfBirth && (
                           <Typography variant="body2">
                             Born: {new Date(watchedValues.DateOfBirth).toLocaleDateString()}
@@ -1406,22 +1444,16 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                             </Typography>
                           </Box>
 
-                          <Box sx={{ mb: 2 }}>
-                            <Typography variant="body2" color="text.secondary">
-                              Division / Section
-                            </Typography>
-                            <Typography variant="body1">
-                              {watchedValues.Division
-                                ? watchedValues.Division
-                                : "N/A"}
-                              {watchedValues.Division && watchedValues.Section
-                                ? " / "
-                                : ""}
-                              {watchedValues.Section
-                                ? watchedValues.Section
-                                : ""}
-                            </Typography>
-                          </Box>
+                          {watchedValues.Division && (
+                            <Box sx={{ mb: 2 }}>
+                              <Typography variant="body2" color="text.secondary">
+                                Division
+                              </Typography>
+                              <Typography variant="body1">
+                                {watchedValues.Division}
+                              </Typography>
+                            </Box>
+                          )}
 
                           {watchedValues.DateOfBirth && (
                             <Box sx={{ mb: 2 }}>
@@ -1492,15 +1524,22 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                             </Typography>
                             {watchedValues.StatusOfAppointment && 
                              watchedValues.StatusOfAppointment.toString().toUpperCase() === 'COS' ? (
-                              <Typography variant="body1">
-                                Contract Rate: ₱{watchedValues.Rate ? Number(watchedValues.Rate).toLocaleString() : "N/A"}
-                              </Typography>
+                              <>
+                                {(watchedValues.SG || watchedValues.Step) && (
+                                  <Typography variant="body2" color="text.secondary">
+                                    SG: {watchedValues.SG ?? "N/A"} | Step: {watchedValues.Step ?? "N/A"} (from cos-salary-table)
+                                  </Typography>
+                                )}
+                                <Typography variant="body1">
+                                  Contract Rate: ₱{watchedValues.Rate ? Number(watchedValues.Rate).toLocaleString() : "N/A"}
+                                </Typography>
+                              </>
                             ) : (
                               <>
                                 <Typography variant="body1">
-                                  SG: {watchedValues.SG || "N/A"} | JG:{" "}
-                                  {watchedValues.JG ? watchedValues.JG.toString().replace(/^JG-?/, '') : "N/A"} | Step:{" "}
-                                  {watchedValues.Step || "N/A"}
+                                  SG: {watchedValues.SG ?? "N/A"} | JG:{" "}
+                                  {watchedValues.JG != null && watchedValues.JG !== "" ? String(watchedValues.JG).replace(/^JG-?/, '') : "N/A"} | PG: {watchedValues.PG ?? "N/A"} | Step:{" "}
+                                  {watchedValues.Step ?? "N/A"}
                                 </Typography>
                                 <Typography
                                   variant="h6"
@@ -1626,9 +1665,11 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
               <Typography variant="subtitle1" fontWeight="bold">
                 {formDataToSave.EmployeeFullName}
               </Typography>
-              <Typography variant="body2" color="text.secondary">
-                ID: {formDataToSave.EmployeeID}
-              </Typography>
+              {formDataToSave.Item_No && (
+                <Typography variant="body2" color="text.secondary">
+                  Item No.: {formDataToSave.Item_No}
+                </Typography>
+              )}
               <Typography variant="body2" color="text.secondary">
                 Position: {formDataToSave.PositionTitle || "N/A"}
               </Typography>

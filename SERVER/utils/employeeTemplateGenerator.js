@@ -30,171 +30,165 @@ const generateFilteredSampleData = (region, scope, accessibleDepartments, access
   switch (scope.toUpperCase()) {
     case 'FULL':
     case 'REGION':
-      // Show generic samples for full/region access
       sampleData.push(
         {
-          'EmployeeID*': 'EMP002',
           'EmployeeFullName*': 'Maria Santos',
           'DateOfBirth': '03/20/1985',
           'Region*': region || 'REGION_NAME',
           'Department*': 'IT Department',
           'Division': 'Software Development',
-          'Section': 'Frontend Team',
           'PositionTitle*': 'Software Developer',
           'StatusOfAppointment*': 'Contractual',
           'DateOfAppointment*': '06/01/2023',
           'Status*': 'Active',
-          'SG*': 15,
-          'JG*': 'JG-15',
-          'Step*': 3,
+          'Item_No': '',
+          'PG': '',
+          'SG': 15,
+          'JG': 'JG-15',
+          'Step': 3,
           'Rate': ''
         },
         {
-          'EmployeeID*': 'EMP003',
           'EmployeeFullName*': 'Pedro Reyes',
           'DateOfBirth': '11/10/1978',
           'Region*': region || 'REGION_NAME',
           'Department*': 'Finance Department',
           'Division': 'Budget Division',
-          'Section': 'Planning Section',
           'PositionTitle*': 'Budget Preparer',
           'StatusOfAppointment*': 'Permanent',
           'DateOfAppointment*': '04/15/2020',
           'Status*': 'Active',
-          'SG*': 12,
-          'JG*': 'JG-12',
-          'Step*': 5,
+          'Item_No': '',
+          'PG': '',
+          'SG': 12,
+          'JG': 'JG-12',
+          'Step': 5,
           'Rate': ''
         }
       );
       break;
 
     case 'DEPARTMENT':
-      // Generate samples using user's actual accessible departments
       deptNames.forEach((deptName, index) => {
         sampleData.push({
-          'EmployeeID*': `EMP${String(index + 2).padStart(3, '0')}`,
           'EmployeeFullName*': `Sample Employee ${index + 1}`,
           'DateOfBirth': '03/20/1985',
           'Region*': region || 'REGION_NAME',
           'Department*': deptName,
           'Division': `${deptName} Division`,
-          'Section': `${deptName} Section`,
           'PositionTitle*': 'Staff',
           'StatusOfAppointment*': 'Permanent',
           'DateOfAppointment*': '06/01/2023',
           'Status*': 'Active',
-          'SG*': 10 + index,
-          'JG*': `JG-${10 + index}`,
-          'Step*': 1,
+          'Item_No': '',
+          'PG': '',
+          'SG': 10 + index,
+          'JG': `JG-${10 + index}`,
+          'Step': 1,
           'Rate': ''
         });
       });
       break;
 
     case 'DIVISION':
-      // Generate samples using user's actual accessible divisions
       divNames.forEach((divName, index) => {
         sampleData.push({
-          'EmployeeID*': `EMP${String(index + 2).padStart(3, '0')}`,
           'EmployeeFullName*': `Sample Employee ${index + 1}`,
           'DateOfBirth': '03/20/1985',
           'Region*': region || 'REGION_NAME',
-          'Department*': 'Department Name', // Generic since division-level users may access multiple departments
+          'Department*': 'Department Name',
           'Division': divName,
-          'Section': `${divName} Section`,
           'PositionTitle*': 'Staff',
           'StatusOfAppointment*': 'Permanent',
           'DateOfAppointment*': '06/01/2023',
           'Status*': 'Active',
-          'SG*': 10 + index,
-          'JG*': `JG-${10 + index}`,
-          'Step*': 1,
+          'Item_No': '',
+          'PG': '',
+          'SG': 10 + index,
+          'JG': `JG-${10 + index}`,
+          'Step': 1,
           'Rate': ''
         });
       });
       break;
 
     case 'SECTION':
-      // Generate samples using user's actual accessible sections
       sectNames.forEach((sectName, index) => {
         sampleData.push({
-          'EmployeeID*': `EMP${String(index + 2).padStart(3, '0')}`,
           'EmployeeFullName*': `Sample Employee ${index + 1}`,
           'DateOfBirth': '03/20/1985',
           'Region*': region || 'REGION_NAME',
-          'Department*': 'Department Name', // Generic
-          'Division': 'Division Name', // Generic
-          'Section': sectName,
+          'Department*': 'Department Name',
+          'Division': 'Division Name',
           'PositionTitle*': 'Staff',
           'StatusOfAppointment*': 'Permanent',
           'DateOfAppointment*': '06/01/2023',
           'Status*': 'Active',
-          'SG*': 10 + index,
-          'JG*': `JG-${10 + index}`,
-          'Step*': 1,
+          'Item_No': '',
+          'PG': '',
+          'SG': 10 + index,
+          'JG': `JG-${10 + index}`,
+          'Step': 1,
           'Rate': ''
         });
       });
       break;
 
     default:
-      // Default to showing generic samples
       sampleData.push(
         {
-          'EmployeeID*': 'EMP002',
           'EmployeeFullName*': 'Maria Santos',
           'DateOfBirth': '03/20/1985',
           'Region*': region || 'REGION_NAME',
           'Department*': 'IT Department',
           'Division': 'Software Development',
-          'Section': 'Frontend Team',
           'PositionTitle*': 'Software Developer',
           'StatusOfAppointment*': 'Contractual',
           'DateOfAppointment*': '06/01/2023',
           'Status*': 'Active',
-          'SG*': 15,
-          'JG*': 'JG-15',
-          'Step*': 3,
+          'Item_No': '',
+          'PG': '',
+          'SG': 15,
+          'JG': 'JG-15',
+          'Step': 3,
           'Rate': ''
         },
         {
-          'EmployeeID*': 'COS001',
           'EmployeeFullName*': 'Juan dela Cruz',
           'DateOfBirth': '05/10/1990',
           'Region*': region || 'REGION_NAME',
           'Department*': 'HR Department',
           'Division': 'Recruitment',
-          'Section': 'Talent Acquisition',
           'PositionTitle*': 'Consultant',
           'StatusOfAppointment*': 'COS',
           'DateOfAppointment*': '01/15/2024',
           'Status*': 'Active',
-          'SG*': '',
-          'JG*': '',
-          'Step*': '',
-          'Rate': '30000'
+          'Item_No': '',
+          'PG': '',
+          'SG': 10,
+          'JG': '',
+          'Step': 1,
+          'Rate': ''
         }
       );
   }
 
-  // Ensure we have at least one sample
   if (sampleData.length === 0) {
     sampleData.push({
-      'EmployeeID*': 'EMP002',
       'EmployeeFullName*': 'Sample Employee',
       'DateOfBirth': '03/20/1985',
       'Region*': region || 'REGION_NAME',
       'Department*': 'Department Name',
       'Division': 'Division Name',
-      'Section': 'Section Name',
       'PositionTitle*': 'Staff',
       'StatusOfAppointment*': 'Permanent',
       'DateOfAppointment*': '06/01/2023',
       'Status*': 'Active',
-      'SG*': 10,
-      'JG*': 'JG-10',
-      'Step*': 1,
+      'Item_No': '',
+      'PG': '',
+      'SG': 10,
+      'JG': 'JG-10',
+      'Step': 1,
       'Rate': ''
     });
   }
@@ -299,40 +293,38 @@ const generateEmployeeTemplate = (options = {}) => {
   // Define the template structure based on the add employee form fields
   const templateData = [
     {
-      // Header row with field descriptions
-      'EmployeeID*': 'EMP001',
       'EmployeeFullName*': 'Juan Dela Cruz',
-      'DateOfBirth': '01/15/1990', // Optional field
+      'DateOfBirth': '01/15/1990',
       'Region*': region || 'REGION_NAME',
       'Department*': 'Department Name',
-      'Division': 'Division Name', // Optional
-      'Section': 'Section Name', // Optional
+      'Division': 'Division Name',
       'PositionTitle*': 'Position Title',
       'StatusOfAppointment*': 'Permanent',
       'DateOfAppointment*': '01/15/2024',
       'Status*': 'Active',
-      'SG*': 10, // Salary Grade - required for Permanent/Contractual, optional for COS
-      'JG*': 'JG-10', // Job Grade - required for Permanent/Contractual, optional for COS
-      'Step*': 1, // Step - required for Permanent/Contractual, optional for COS
-      'Rate': '', // Will be auto-computed for Permanent/Contractual, manual entry for COS
+      'Item_No': '',
+      'PG': '',
+      'SG': 10,
+      'JG': 'JG-10',
+      'Step': 1,
+      'Rate': '',
     },
     {
-      // COS (Contract of Service) example - no SG/JG/Step required
-      'EmployeeID*': 'COS001',
       'EmployeeFullName*': 'Maria Santos',
       'DateOfBirth': '03/20/1985',
       'Region*': region || 'REGION_NAME',
       'Department*': 'IT Department',
       'Division': 'Software Development',
-      'Section': 'Frontend Team',
       'PositionTitle*': 'Consultant',
       'StatusOfAppointment*': 'COS',
       'DateOfAppointment*': '06/01/2024',
       'Status*': 'Active',
-      'SG*': '', // Not required for COS
-      'JG*': '', // Not required for COS
-      'Step*': '', // Not required for COS
-      'Rate': '25000', // Manual rate entry for COS
+      'Item_No': '',
+      'PG': '',
+      'SG': 10,
+      'JG': '',
+      'Step': 1,
+      'Rate': '',
     },
     // Add filtered sample data based on access level
     ...generateFilteredSampleData(region, scope, accessibleDepartments, accessibleDivisions, accessibleSections)
@@ -344,20 +336,20 @@ const generateEmployeeTemplate = (options = {}) => {
 
   // Set column widths for better readability
   const colWidths = [
-    { wch: 15 }, // EmployeeID*
     { wch: 20 }, // EmployeeFullName*
     { wch: 12 }, // DateOfBirth
     { wch: 15 }, // Region*
     { wch: 18 }, // Department*
     { wch: 15 }, // Division
-    { wch: 15 }, // Section
     { wch: 20 }, // PositionTitle*
     { wch: 18 }, // StatusOfAppointment*
     { wch: 18 }, // DateOfAppointment*
     { wch: 10 }, // Status*
-    { wch: 8 },  // SG*
-    { wch: 10 }, // JG*
-    { wch: 8 },  // Step*
+    { wch: 10 }, // Item_No
+    { wch: 8 },  // PG
+    { wch: 8 },  // SG
+    { wch: 10 }, // JG
+    { wch: 8 },  // Step
     { wch: 12 }  // Rate
   ];
   ws['!cols'] = colWidths;
@@ -379,33 +371,25 @@ const generateEmployeeTemplate = (options = {}) => {
     { 'Instructions': 'Employee Import Template Instructions' },
     { 'Instructions': '' },
     { 'Instructions': 'REQUIRED FIELDS (marked with *):' },
-    { 'Instructions': '- EmployeeID*: Unique identifier for the employee' },
     { 'Instructions': '- EmployeeFullName*: Full name of the employee' },
     { 'Instructions': '- Region*: Must match the currently selected region' },
     { 'Instructions': '- Department*: Department name' },
     { 'Instructions': '- PositionTitle*: Job position title' },
-    { 'Instructions': '- StatusOfAppointment*: Employment status (Permanent, Contractual, etc.)' },
-    { 'Instructions': '- DateOfAppointment*: Date when employee was appointed' },
+    { 'Instructions': '- StatusOfAppointment*: Employment status (Permanent, Contractual, COS, etc.)' },
     { 'Instructions': '- Status*: Active or Inactive' },
-    { 'Instructions': '- SG*: Salary Grade (1-33)' },
-    { 'Instructions': '- JG*: Job Grade (will be auto-filled based on SG)' },
-    { 'Instructions': '- Step*: Salary step (1-8)' },
     { 'Instructions': '' },
     { 'Instructions': 'OPTIONAL FIELDS:' },
     { 'Instructions': '- DateOfBirth: Employee\'s date of birth (MM/DD/YYYY)' },
+    { 'Instructions': '- DateOfAppointment: Date when employee was appointed' },
     { 'Instructions': '- Division: Division name' },
-    { 'Instructions': '- Section: Section name' },
-    { 'Instructions': '- Rate: Will be auto-computed based on SG, JG, and Step' },
+    { 'Instructions': '- Item_No: Item number' },
+    { 'Instructions': '- PG: PG (bases from salary tables)' },
+    { 'Instructions': '- SG, JG, Step: Optional; bases from /employee-salary-table or /cos-salary-table' },
+    { 'Instructions': '- Rate: Auto-computed from SG+Step (leave empty when SG+Step provided)' },
     { 'Instructions': '' },
-    { 'Instructions': 'AUTO-COMPUTATION:' },
-    { 'Instructions': '- For Permanent/Contractual: Rate is auto-calculated from SG, JG, Step' },
-    { 'Instructions': '- For COS: Rate must be manually entered, SG/JG/Step are optional' },
-    { 'Instructions': '- If Rate is provided for Permanent/Contractual, it will be validated' },
-    { 'Instructions': '' },
-    { 'Instructions': 'SALARY GRADE FIELDS:' },
-    { 'Instructions': '- SG, JG, Step: Required for Permanent/Contractual employees' },
-    { 'Instructions': '- SG, JG, Step: Optional for COS employees' },
-    { 'Instructions': '- COS employees use manual Rate entry instead of auto-computation' },
+    { 'Instructions': 'SALARY FIELDS (SG, JG, PG not required):' },
+    { 'Instructions': '- Permanent/Casual: Use data from /employee-salary-table' },
+    { 'Instructions': '- COS: SG + Step auto-compute Rate from /cos-salary-table (leave Rate empty)' },
     { 'Instructions': '' },
     { 'Instructions': 'DATE FORMATS:' },
     { 'Instructions': '- Use MM/DD/YYYY format for dates (e.g., 01/15/1990)' },
@@ -442,43 +426,41 @@ const generateEmployeeTemplate = (options = {}) => {
 const getEmployeeFields = () => {
   return {
     required: [
-      'EmployeeID',
       'EmployeeFullName',
       'Region',
       'Department',
       'PositionTitle',
       'StatusOfAppointment',
-      'DateOfAppointment',
-      'Status',
-      'SG',
-      'JG',
-      'Step'
+      'Status'
     ],
     optional: [
       'DateOfBirth',
+      'DateOfAppointment',
       'Division',
-      'Section',
+      'Item_No',
+      'PG',
+      'SG',
+      'JG',
+      'Step',
       'Rate'
     ],
-    computed: [
-      'Rate' // Will be computed based on SG, JG, Step
-    ],
+    computed: [],
     descriptions: {
-      EmployeeID: 'Unique employee identifier',
       EmployeeFullName: 'Full name of the employee',
       DateOfBirth: 'Date of birth (optional)',
       Region: 'Region name (must match active region)',
       Department: 'Department name',
       Division: 'Division name (optional)',
-      Section: 'Section name (optional)',
       PositionTitle: 'Job position title',
       StatusOfAppointment: 'Employment appointment status',
       DateOfAppointment: 'Date of appointment',
       Status: 'Employee status (Active/Inactive)',
-      SG: 'Salary Grade (1-33)',
-      JG: 'Job Grade',
-      Step: 'Salary step (1-8)',
-      Rate: 'Monthly salary rate (auto-computed)'
+      Item_No: 'Item number (optional)',
+      PG: 'PG (optional, from salary tables)',
+      SG: 'Salary Grade (optional)',
+      JG: 'Job Grade (optional)',
+      Step: 'Salary step (optional)',
+      Rate: 'Monthly salary rate'
     }
   };
 };

@@ -30,6 +30,16 @@ let _devUser = null;
 export function setDevUser(user) {
   _devUser = user;
 }
+
+// Auth token for budget API when auth server is on a different origin (cookie not sent cross-origin).
+// Set from: redirect URL (?token= / #access_token=) or get-user response (auth server returns token).
+let _authToken = null;
+export function setAuthToken(token) {
+  _authToken = token || null;
+}
+export function getAuthToken() {
+  return _authToken || null;
+}
 const fetchCsrfToken = async () => {
   if (_csrfToken) return _csrfToken;
   try {
@@ -65,8 +75,12 @@ api.interceptors.request.use(
     if (config.url) {
       config.url = normalizeUrl(config.url);
     }
-    // Authentication now uses httpOnly cookies (authToken) set by the auth server.
-    // Do NOT attach tokens from localStorage; this prevents JS-accessible storage of tokens.
+    // Auth: cookie is sent only to same origin as auth server. When budget API is different origin,
+    // send token in header (set from redirect URL or get-user response).
+    const authToken = getAuthToken();
+    if (authToken && !config.headers.Authorization) {
+      config.headers.Authorization = `Bearer ${authToken}`;
+    }
 
     // Ensure X-CSRF-Token is present for state-changing requests
     const method = (config.method || 'get').toUpperCase();
@@ -143,13 +157,12 @@ api.interceptors.response.use(undefined, async (error) => {
       const refreshRes = await authApi.get('/get-user');
       const refreshedUser = refreshRes?.data?.user || null;
       if (refreshedUser) {
-        // Update in-memory dev user so subsequent requests include dev headers in non-prod
+        if (refreshRes?.data?.token) setAuthToken(refreshRes.data.token);
         try {
           setDevUser(refreshedUser);
         } catch (e) {
           // ignore
         }
-        // Retry the original request
         return api.request(config);
       }
     } catch (refreshErr) {

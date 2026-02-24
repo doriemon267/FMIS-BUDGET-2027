@@ -1,5 +1,25 @@
 const FourthTrancheCosTable = require("../models/FourthTrancheCosTable");
 
+/** Get rate by Salary Grade and Step (for COS auto-compute from cos-salary-table) */
+exports.getRateBySalaryGradeAndStep = async (req, res) => {
+  try {
+    const { salaryGrade, step } = req.params;
+    const sg = parseInt(salaryGrade, 10);
+    const stepNum = parseInt(step, 10);
+    if (isNaN(sg) || sg < 1 || sg > 33 || isNaN(stepNum) || stepNum < 1 || stepNum > 8) {
+      return res.status(400).json({ error: "Invalid salary grade (1-33) or step (1-8)" });
+    }
+    const row = await FourthTrancheCosTable.findOne({ salaryGrade: sg }).lean();
+    if (!row) return res.status(404).json({ error: `Salary grade ${sg} not found in COS table` });
+    const stepKey = `step${stepNum}`;
+    const rate = row[stepKey];
+    if (rate == null) return res.status(404).json({ error: `Rate not found for SG ${sg} Step ${stepNum}` });
+    res.json({ rate, salaryGrade: sg, step: stepNum });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 /** Get Fourth-Tranche COS table rows (from PDF) */
 exports.getTable = async (req, res) => {
   try {

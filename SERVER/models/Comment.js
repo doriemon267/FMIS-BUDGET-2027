@@ -37,8 +37,7 @@ const commentSchema = new mongoose.Schema(
   }
 );
 
-// Indexes
+// Indexes (userId already has index: true on the field)
 commentSchema.index({ proposalId: 1, createdAt: -1 });
-commentSchema.index({ userId: 1 });
 
 module.exports = mongoose.model('Comment', commentSchema);

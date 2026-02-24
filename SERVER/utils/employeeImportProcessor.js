@@ -5,7 +5,7 @@ require('../models/CPCSSalaryTable');
 require('../models/FourthTrancheCosTable');
 
 /**
- * Compute salary rate. COS: Fourth-Tranche PDF table. PERMANENT/CASUAL: CPCS II / SalarySelection.
+ * Compute salary rate. COS: Fourth-Tranche PDF table. PERMANENT/CASUAL: CPCSSalaryTable (when useCPCSForEmployeeAdd).
  */
 const computeSalaryRateFromCPCS = async (sg, jg, step, statusOfAppointment, employeeStatus, settings) => {
   try {
@@ -13,18 +13,67 @@ const computeSalaryRateFromCPCS = async (sg, jg, step, statusOfAppointment, empl
     if (!stepNum || stepNum < 1 || stepNum > 8) return null;
 
     const appointment = (statusOfAppointment || '').toString().toUpperCase();
-    const cosUsesTable = settings && (settings.cosUsesCPCSIIRate !== false) && settings.useCPCSForEmployeeAdd;
+    const CPCSSalaryTable = mongoose.model('CPCSSalaryTable');
 
-    // COS: uses Fourth-Tranche PDF table (Jan 1 2019) — Salary Grade + Step
-    if (appointment === 'COS' && cosUsesTable && sg && stepNum) {
+    // COS: always use Fourth-Tranche PDF table (cos-salary-table) — Salary Grade + Step
+    if (appointment === 'COS' && sg && stepNum) {
       const FourthTrancheCosTable = mongoose.model('FourthTrancheCosTable');
       const row = await FourthTrancheCosTable.findOne({ salaryGrade: parseInt(sg, 10) }).lean();
       if (row && row[`step${stepNum}`] != null) return row[`step${stepNum}`];
     }
 
+    // PERMANENT/CASUAL: use CPCSSalaryTable when useCPCSForEmployeeAdd is true
+    const cpcs1Types = (settings && settings.cpcs1AppointmentTypes) || ['CASUAL'];
+    const cpcs2Types = (settings && settings.cpcs2AppointmentTypes) || ['PERMANENT'];
+    const useCPCS2 = cpcs2Types.includes(appointment);
+    const useCPCS1 = cpcs1Types.includes(appointment);
+
+    // CPCS 2 (Salary Grade + Step): find by salaryGrade in CPCSSalaryTable
+    if (useCPCS2 && sg && stepNum) {
+      const row = await CPCSSalaryTable.findOne({ salaryGrade: parseInt(sg, 10) }).lean();
+      if (row && row[`step${stepNum}`] != null) return row[`step${stepNum}`];
+    }
+
+    // CPCS 1 (Job Grade + Step): find by cpcs1JobGrade in CPCSSalaryTable
+    if (useCPCS1 && jg && stepNum) {
+      const cleanJG = parseInt(String(jg).replace(/^JG-?/i, ''), 10);
+      if (!isNaN(cleanJG)) {
+        const row = await CPCSSalaryTable.findOne({ cpcs1JobGrade: cleanJG }).lean();
+        if (row && row[`step${stepNum}`] != null) return row[`step${stepNum}`];
+      }
+    }
+
     return null;
   } catch (error) {
-    console.error('Error computing salary rate from CPCS II Rate:', error);
+    console.error('Error computing salary rate from CPCS:', error);
+    return null;
+  }
+};
+
+/**
+ * Get PG (Pay Grade) from CPCSSalaryTable when useCPCSForEmployeeAdd is on.
+ * CPCS 2 (SG+Step): returns cpcs2PayGrade. CPCS 1 (JG+Step): returns cpcs2PayGrade from same row.
+ */
+const getPGFromCPCS = async (sg, jg, statusOfAppointment, settings) => {
+  try {
+    const CPCSSalaryTable = mongoose.model('CPCSSalaryTable');
+    const appointment = (statusOfAppointment || '').toString().toUpperCase();
+    const cpcs1Types = (settings && settings.cpcs1AppointmentTypes) || ['CASUAL'];
+    const cpcs2Types = (settings && settings.cpcs2AppointmentTypes) || ['PERMANENT'];
+
+    if (cpcs2Types.includes(appointment) && sg) {
+      const row = await CPCSSalaryTable.findOne({ salaryGrade: parseInt(sg, 10) }).lean();
+      if (row && row.cpcs2PayGrade != null) return row.cpcs2PayGrade;
+    }
+    if (cpcs1Types.includes(appointment) && jg) {
+      const cleanJG = parseInt(String(jg).replace(/^JG-?/i, ''), 10);
+      if (!isNaN(cleanJG)) {
+        const row = await CPCSSalaryTable.findOne({ cpcs1JobGrade: cleanJG }).lean();
+        if (row && row.cpcs2PayGrade != null) return row.cpcs2PayGrade;
+      }
+    }
+    return null;
+  } catch (error) {
     return null;
   }
 };
@@ -41,14 +90,23 @@ const computeSalaryRateFromCPCS = async (sg, jg, step, statusOfAppointment, empl
  */
 const computeSalaryRate = async (sg, jg, step, statusOfAppointment, employeeStatus) => {
   try {
+    const status = statusOfAppointment ? statusOfAppointment.toString().toUpperCase() : '';
+
+    // COS: always try Fourth-Tranche cos-salary-table first (SG + Step)
+    if (status === 'COS' && sg && step) {
+      const rate = await computeSalaryRateFromCPCS(sg, jg, step, statusOfAppointment, employeeStatus, {});
+      if (rate != null) return rate;
+    }
+
     const CPCSSalarySettings = mongoose.model('CPCSSalarySettings');
     const settings = await CPCSSalarySettings.findOne().lean();
     if (settings && settings.useCPCSForEmployeeAdd) {
       const rate = await computeSalaryRateFromCPCS(sg, jg, step, statusOfAppointment, employeeStatus, settings);
       if (rate != null) return rate;
+      // When useCPCSForEmployeeAdd is ON, do NOT fall back to SalaryGrade (old table)
+      // Return null so caller knows CPCS was expected but no rate found
+      return null;
     }
-
-    const status = statusOfAppointment ? statusOfAppointment.toString().toUpperCase() : '';
     const cpcs1Types = (settings && settings.cpcs1AppointmentTypes) || ['CASUAL'];
     const cpcs2Types = (settings && settings.cpcs2AppointmentTypes) || ['PERMANENT'];
     const useCPCS2 = cpcs2Types.includes(status);
@@ -73,12 +131,10 @@ const computeSalaryRate = async (sg, jg, step, statusOfAppointment, employeeStat
       }
     }
 
-    // For COS employees: don't auto-compute (manual entry) when not using CPCS
-    if (status === 'COS') {
-      return null;
-    }
+    // COS already tried above; if we reach here, no rate found
+    if (status === 'COS') return null;
 
-    // Fallback
+    // Fallback (only when useCPCSForEmployeeAdd is OFF)
     if (sg && step) {
       const SalaryGrade = mongoose.model('SalaryGrade');
       const salaryGrade = await SalaryGrade.findOne({ salary_grade: sg.toString() });
@@ -107,30 +163,67 @@ const computeSalaryRate = async (sg, jg, step, statusOfAppointment, employeeStat
  * @param {Array} userAccess.accessibleSections - List of accessible sections
  * @returns {Promise<Object>} Validated and processed record
  */
+/** Normalize record keys - map alternate Excel column names to expected field names */
+const normalizeRecordKeys = (rec) => {
+  const aliases = {
+    'EmployeeFullName*': 'EmployeeFullName', 'Employee Full Name': 'EmployeeFullName',
+    'Region*': 'Region', 'Region Name': 'Region',
+    'Department*': 'Department',
+    'PositionTitle*': 'PositionTitle', 'Position Title': 'PositionTitle',
+    'StatusOfAppointment*': 'StatusOfAppointment', 'Status of Appointment': 'StatusOfAppointment',
+    'DateOfAppointment*': 'DateOfAppointment', 'Date of Appointment': 'DateOfAppointment',
+    'Status*': 'Status',
+    'SG*': 'SG', 'Salary Grade': 'SG', 'salaryGrade': 'SG',
+    'Step*': 'Step', 'Steps': 'Step', 'SG Step': 'Step',
+    'Rate*': 'Rate', 'rate': 'Rate',
+    'Item_No': 'Item_No', 'Item No': 'Item_No', 'ItemNumber': 'Item_No', 'itemNumber': 'Item_No',
+    'PG*': 'PG', 'pg': 'PG',
+    'DateOfBirth': 'DateOfBirth', 'Date of Birth': 'DateOfBirth',
+    'Division': 'Division',
+  };
+  const out = {};
+  for (const [k, v] of Object.entries(rec || {})) {
+    const key = (k || '').toString().trim();
+    const mapped = aliases[key] || key.replace(/\*+$/, '').trim();
+    if (mapped) out[mapped] = v;
+  }
+  return out;
+};
+
 const validateAndProcessEmployeeRecord = async (record, activeRegion, fiscalYear, processBy, userAccess = {}) => {
   const errors = [];
   const warnings = [];
 
-  // Required fields validation - make SG/JG/Step conditional based on appointment type
+  // Normalize column names from Excel and merge into record
+  const normalized = normalizeRecordKeys(record);
+  Object.assign(record, normalized);
+
+  // SG and Step: accept numbers or strings (Excel may return either)
+  const sgVal = record.SG;
+  let stepVal = record.Step;
+  // Normalize step: Excel may return 1.0, "1.0", "1 ", etc.
+  if (stepVal != null && stepVal !== '') {
+    const stepNum = parseInt(String(stepVal).trim(), 10);
+    if (!isNaN(stepNum) && stepNum >= 1 && stepNum <= 8) {
+      record.Step = stepNum; // normalize for downstream
+    }
+  }
+  const hasSg = sgVal != null && sgVal !== '';
+  const hasStep = stepVal != null && stepVal !== '' && parseInt(String(stepVal).trim(), 10) >= 1 && parseInt(String(stepVal).trim(), 10) <= 8;
+
+  // Required fields - Rate not in base (auto-computed from SG+Step when provided)
   const baseRequiredFields = [
-    'EmployeeID',
     'EmployeeFullName',
     'Region',
     'Department',
     'PositionTitle',
     'StatusOfAppointment',
-    'DateOfAppointment',
     'Status'
   ];
 
-  // For COS (Contract of Service) employees, SG/JG/Step are not required since rates are not auto-computed
-  const salaryGradeFields = ['SG', 'JG', 'Step'];
   const isCOS = record.StatusOfAppointment && record.StatusOfAppointment.toString().toUpperCase() === 'COS';
-
-  // Special handling for VACANT positions
   const isVacant = record.EmployeeFullName && record.EmployeeFullName.toString().toUpperCase() === 'VACANT';
 
-  // For VACANT positions, only basic fields are required
   const vacantRequiredFields = [
     'EmployeeFullName',
     'Region',
@@ -139,8 +232,7 @@ const validateAndProcessEmployeeRecord = async (record, activeRegion, fiscalYear
     'StatusOfAppointment'
   ];
 
-  const requiredFields = isVacant ? vacantRequiredFields :
-                         (isCOS ? baseRequiredFields : [...baseRequiredFields, ...salaryGradeFields]);
+  const requiredFields = isVacant ? vacantRequiredFields : baseRequiredFields;
 
   for (const field of requiredFields) {
     if (!record[field] && record[field] !== 0) {
@@ -171,11 +263,6 @@ const validateAndProcessEmployeeRecord = async (record, activeRegion, fiscalYear
     }
   }
 
-  // Validate EmployeeID format
-  if (record.EmployeeID && !/^[A-Za-z0-9-]+$/.test(record.EmployeeID.toString())) {
-    errors.push('EmployeeID can only contain letters, numbers, and hyphens');
-  }
-
   // Validate region matches active region
   if (record.Region && record.Region.toString().toLowerCase() !== activeRegion.toLowerCase()) {
     errors.push(`Region mismatch: ${record.Region} does not match active region ${activeRegion}`);
@@ -202,29 +289,19 @@ const validateAndProcessEmployeeRecord = async (record, activeRegion, fiscalYear
     }
   }
 
-  if (scope === 'SECTION' && accessibleSections.length > 0) {
-    const sectNames = accessibleSections
-      .filter(s => s && (s.sectionName || s))
-      .map(s => s.sectionName || s);
-    if (record.Section && !sectNames.includes(record.Section)) {
-      errors.push(`Access denied: Section "${record.Section}" is not in your accessible sections: ${sectNames.join(', ')}`);
-    }
-  }
-
   // Validate Status (skip for VACANT positions as they don't have status)
   if (!isVacant && record.Status && !['Active', 'Inactive'].includes(record.Status)) {
     errors.push('Status must be either "Active" or "Inactive"');
   }
 
-  // Process EmployeeFullName - handle cases where Excel parsed it as a date/number
+  // Process EmployeeFullName - handle cases where Excel parsed it as a date/number, then convert to uppercase
   if (record.EmployeeFullName) {
     if (typeof record.EmployeeFullName === 'number') {
-      // If it's a number, it might be an Excel date serial - try to convert back to string
-      // But for names, this usually means the cell was formatted as date but contains text
       errors.push('EmployeeFullName appears to be formatted as a date in Excel. Please format the column as "Text"');
     } else if (record.EmployeeFullName instanceof Date) {
-      // If it's a Date object, convert to string
       record.EmployeeFullName = record.EmployeeFullName.toISOString().split('T')[0];
+    } else {
+      record.EmployeeFullName = String(record.EmployeeFullName).trim().toUpperCase();
     }
   }
 
@@ -279,9 +356,9 @@ const validateAndProcessEmployeeRecord = async (record, activeRegion, fiscalYear
     }
   }
 
-  // Auto-compute or validate Rate
+  // Auto-compute or validate Rate (both COS from cos-salary-table and Permanent/Casual)
   let computedRate = null;
-  if (!isCOS && record.SG && record.Step) {
+  if (hasSg && hasStep) {
     computedRate = await computeSalaryRate(
       record.SG,
       record.JG,
@@ -305,14 +382,28 @@ const validateAndProcessEmployeeRecord = async (record, activeRegion, fiscalYear
         record.Rate = computedRate;
       }
     } else {
+      const cpcsSettings = await mongoose.model('CPCSSalarySettings').findOne().lean();
+      const cpcsHint = cpcsSettings?.useCPCSForEmployeeAdd
+        ? ' CPCS II is enabled—ensure Employee Salary Table has data for this SG+Step.'
+        : '';
       if (!record.Rate) {
-        errors.push(`Could not compute salary rate for SG:${record.SG}, JG:${record.JG}, Step:${record.Step}. Please provide Rate manually.`);
+        errors.push(`Could not compute salary rate for SG:${record.SG}, JG:${record.JG}, Step:${record.Step}.${cpcsHint} Please provide Rate manually if needed.`);
       } else {
-        warnings.push(`Could not compute salary rate for SG:${record.SG}, JG:${record.JG}, Step:${record.Step}. Using provided rate: ${record.Rate}`);
+        warnings.push(`Could not compute salary rate for SG:${record.SG}, JG:${record.JG}, Step:${record.Step}. Using provided rate: ${record.Rate}${cpcsHint}`);
       }
     }
-  } else if (!isCOS && !record.Rate) {
-    errors.push('Rate is required for non-COS employees. Please provide SG and Step for auto-computation, or provide Rate directly.');
+  } else if (!record.Rate && record.Rate !== 0) {
+    errors.push('Provide SG and Step for auto-computation (cos-salary-table for COS, employee-salary-table for Permanent/Casual), or enter Rate manually.');
+  }
+
+  // Auto-populate PG from CPCSSalaryTable when useCPCSForEmployeeAdd and PG not provided
+  if (!record.PG && record.PG !== 0) {
+    const CPCSSalarySettings = mongoose.model('CPCSSalarySettings');
+    const settings = await CPCSSalarySettings.findOne().lean();
+    if (settings && settings.useCPCSForEmployeeAdd) {
+      const pgVal = await getPGFromCPCS(record.SG, record.JG, record.StatusOfAppointment, settings);
+      if (pgVal != null) record.PG = pgVal;
+    }
   }
 
   // Normalize JG format to standard "JG-X" format
@@ -329,11 +420,18 @@ const validateAndProcessEmployeeRecord = async (record, activeRegion, fiscalYear
     }
   }
 
+  // Map Item_No to ItemNumber / itemNumber for backend (employee_master and EmployeeList)
+  if (record.Item_No != null && record.Item_No !== '') {
+    record.ItemNumber = record.Item_No;
+    record.itemNumber = record.Item_No;
+  }
+  delete record.Item_No;
+
   // Set default values
   record.Region = record.Region || activeRegion;
   record.fiscalYear = fiscalYear;
   record.processBy = processBy || "ADMIN";
-  record.employeeStatus = record.Status || 'Active'; // Map Status to employeeStatus field
+  record.employeeStatus = record.Status || 'Active';
 
   return {
     record,

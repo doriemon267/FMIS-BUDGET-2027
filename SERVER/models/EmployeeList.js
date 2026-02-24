@@ -32,6 +32,9 @@ const EmployeeSchema = mongoose.Schema(
     JG: {
       type: String,
     },
+    PG: {
+      type: Number,
+    },
     Rate: {
       type: Number,
       required: true,

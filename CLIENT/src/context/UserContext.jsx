@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import api, { authApi, setDevUser } from "../config/api";
+import api, { authApi, setDevUser, setAuthToken } from "../config/api";
 import Loading from "../global/components/Loading";
 import InactivityWarningDialog from "../components/InactivityWarningDialog";
 import env from "../utils/env";
@@ -14,6 +14,8 @@ const UserContext = createContext({
   refetchUserProfile: async () => {},
   isLoading: false,
   error: null,
+  /** When true: user has SUPER_ADMIN role but ID is not in SUPER_ADMIN_IDS whitelist - block access */
+  unauthorizedSuperAdmin: false,
   logout: async () => {},
   hasWorkflowRole: () => false,
   workflowRoles: [],
@@ -21,6 +23,7 @@ const UserContext = createContext({
 
 const UserProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
+  const [unauthorizedSuperAdmin, setUnauthorizedSuperAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showInactivityWarning, setShowInactivityWarning] = useState(false);
   const closeWarningRef = useRef(null);
@@ -77,6 +80,10 @@ const UserProvider = ({ children }) => {
       }
       return user;
     } catch (error) {
+      const code = error?.response?.data?.code;
+      if (code === 'UNAUTHORIZED_SUPER_ADMIN') {
+        throw error;
+      }
       console.warn("Error enriching user roles:", error);
       return user;
     }
@@ -94,10 +101,21 @@ const UserProvider = ({ children }) => {
 
   // --- LOGIN HANDLER ---
   const handleSetUserInitialization = async () => {
+    setUnauthorizedSuperAdmin(false);
     const res = await authApi.get("/get-user");
-    const fullUser = await enrichUserWithRoles(res.data.user);
-    setDevUser(fullUser);
-    setCurrentUser(fullUser);
+    if (res.data?.token) setAuthToken(res.data.token);
+    try {
+      const fullUser = await enrichUserWithRoles(res.data.user);
+      setDevUser(fullUser);
+      setCurrentUser(fullUser);
+    } catch (enrichErr) {
+      if (enrichErr?.response?.data?.code === 'UNAUTHORIZED_SUPER_ADMIN') {
+        setCurrentUser(null);
+        setUnauthorizedSuperAdmin(true);
+      } else {
+        throw enrichErr;
+      }
+    }
   };
 
   const handleLogout = async () => {
@@ -106,7 +124,9 @@ const UserProvider = ({ children }) => {
     } catch (e) {
       console.warn("Backend logout error:", e);
     }
+    setAuthToken(null);
     setCurrentUser(null);
+    setUnauthorizedSuperAdmin(false);
     if (IS_PRODUCTION) {
       // Use NIA SSO logoff URL (same as LogoutDialog) - hindi lang redirect sa login
       const clientId = env("CLIENT_ID");
@@ -125,20 +145,57 @@ const UserProvider = ({ children }) => {
 
   // --- MAIN INITIALIZATION ---
   useEffect(() => {
+    // Read token from URL after auth redirect (?token=, ?access_token=, #access_token=, #token=)
+    const url = typeof window !== "undefined" ? window.location : {};
+    const params = new URLSearchParams(url.search || "");
+    const hash = (url.hash || "").replace(/^#/, "");
+    const hashParams = new URLSearchParams(hash);
+    const tokenFromUrl =
+      params.get("token") ||
+      params.get("access_token") ||
+      hashParams.get("access_token") ||
+      hashParams.get("token");
+    if (tokenFromUrl) {
+      setAuthToken(tokenFromUrl);
+      ["token", "access_token"].forEach((k) => {
+        params.delete(k);
+        hashParams.delete(k);
+      });
+      const cleanUrl = url.pathname || "/dashboard";
+      const cleanSearch = params.toString();
+      const newUrl = cleanSearch ? `${cleanUrl}?${cleanSearch}` : cleanUrl;
+      window.history.replaceState({}, "", newUrl);
+    }
+
     const fetchUser = async () => {
       try {
+        setUnauthorizedSuperAdmin(false);
         const res = await authApi.get("/get-user");
         if (res.data.user) {
-          const fullUser = await enrichUserWithRoles(res.data.user);
-          setDevUser(fullUser);
-          setCurrentUser(fullUser);
+          if (res.data.token) setAuthToken(res.data.token);
+          try {
+            const fullUser = await enrichUserWithRoles(res.data.user);
+            setDevUser(fullUser);
+            setCurrentUser(fullUser);
+          } catch (enrichErr) {
+            if (enrichErr?.response?.data?.code === 'UNAUTHORIZED_SUPER_ADMIN') {
+              setCurrentUser(null);
+              setUnauthorizedSuperAdmin(true);
+            } else {
+              throw enrichErr;
+            }
+          }
         } else {
-          // Kapag walang user response (logged out)
           redirectToLogin();
         }
       } catch (error) {
-        console.error("Error fetching user:", error);
-        redirectToLogin(); // Kapag nag-error (unauthorized), kick out
+        if (error?.response?.data?.code === 'UNAUTHORIZED_SUPER_ADMIN') {
+          setCurrentUser(null);
+          setUnauthorizedSuperAdmin(true);
+        } else {
+          console.error("Error fetching user:", error);
+          redirectToLogin();
+        }
       } finally {
         setIsLoading(false);
       }
@@ -178,14 +235,13 @@ const UserProvider = ({ children }) => {
 
   const value = {
     currentUser,
-    // Backward-compatible setter (used by existing screens)
+    unauthorizedSuperAdmin,
     setCurrentUser: handleSetUserInitialization,
-    // Explicit refetch used by some admin/config pages (e.g. hierarchical assignments)
     refetchUserProfile: handleSetUserInitialization,
     logout: handleLogout,
     isLoading,
     workflowRoles,
-    hasWorkflowRole, 
+    hasWorkflowRole,
   };
 
   if (isLoading) return <Loading />;
