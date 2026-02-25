@@ -21,6 +21,8 @@ const CustomPage = ({
   ROWS_PER_PAGE = 20,
   filter = {}, // Added filter prop
   orderByDefault = "updatedAt",
+  // Optional pre-fetched data (e.g. from parent useQuery)
+  data = null,
 }) => {
   const pageTitle =
     title || dataListName.charAt(0).toUpperCase() + dataListName.slice(1);
@@ -52,6 +54,9 @@ const CustomPage = ({
         dataListName={dataListName}
         apiPath={apiPath}
         ROWS_PER_PAGE={ROWS_PER_PAGE}
+        // When `data` is provided, CustomTable will render it directly
+        // and skip its own server-side fetching & filtering.
+        externalData={data}
         columns={Object.keys(schema)
           .filter((key) => schema[key].show === true || key === "action") // Always include "action"
           .map((key) => {

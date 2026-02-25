@@ -41,6 +41,15 @@ exports.getAllEmployees = async (req, res) => {
     // Use submission workflow filters if available (they include status filtering), otherwise use hierarchical filters
     const activeFilters = Object.keys(submissionWorkflowFilters).length > 0 ? submissionWorkflowFilters : hierarchicalFilters;
 
+    // Budget Preparer / workflow user without Department/Division assignment cannot see employee list (would see other depts' data)
+    if (activeFilters.__noScope || hierarchicalFilters.__noScope) {
+      return res.status(403).json({
+        success: false,
+        message: 'No Department/Division assigned for your account. You can only view employees within your assigned scope. Please contact the administrator to set your Hierarchical User Assignment (HUA).',
+        code: 'NO_SCOPE_ASSIGNMENT'
+      });
+    }
+
     // ENFORCE HIERARCHICAL ACCESS CONTROL
     // Get user's assignment level to determine access restrictions
     const assignment = req.userHierarchicalAssignment || {};
@@ -55,7 +64,8 @@ exports.getAllEmployees = async (req, res) => {
 
     // For Division and Department level users, strictly enforce their assigned scope
     // They should NOT be able to see employees outside their division/department
-    if (userLevel === 'DIVISION' || userLevel === 'DEPARTMENT') {
+    const isDivisionOrDeptLevel = ['DIVISION', 'DEPARTMENT', 'DIVISION_LEVEL', 'DEPARTMENT_REGIONAL_LEVEL', 'RESPONSIBILITY_CENTER', 'OFFICE'].includes(userLevel);
+    if (isDivisionOrDeptLevel) {
       // Override any region parameter - they can only see their assigned scope
       if (region && !hasRequestedRegionAccess) {
         return res.status(403).json({
@@ -95,12 +105,13 @@ exports.getAllEmployees = async (req, res) => {
     // Start with active filters as base
     let query = { ...dbFilters };
 
-    // Add processBy condition for additional access control within scope
+    // processBy = "additional access": show employees in scope OR employees the user processed (same logic as getEmployeeStats)
     if (processBy && Object.keys(dbFilters).length > 0) {
       query = {
-        $and: [
+        $or: [
           dbFilters,
-          { $or: [{ processBy: processBy }, { createdBy: processBy }] }
+          { processBy: processBy },
+          { createdBy: processBy }
         ]
       };
     }
@@ -694,6 +705,13 @@ exports.getEmployeeStats = async (req, res) => {
   try {
     // Get hierarchical filters from middleware
     const hierarchicalFilters = req.hierarchicalFilters || {};
+    if (hierarchicalFilters.__noScope) {
+      return res.status(403).json({
+        error: "No scope assigned",
+        message: "No Department/Division assigned for your account. Please contact the administrator to set your Hierarchical User Assignment (HUA).",
+        code: "NO_SCOPE_ASSIGNMENT"
+      });
+    }
     const { region, processBy } = req.query;
 
     // Use hierarchical filters as base, or fall back to region filter

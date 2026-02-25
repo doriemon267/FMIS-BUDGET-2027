@@ -142,13 +142,18 @@ api.interceptors.response.use(
   }
 );
 
-// Detect Super Admin not whitelisted (so we show AccessGuard page instead of in-app error)
+// Detect Super Admin not whitelisted / Role-ID not authorized for environment (show AccessGuard instead of broken dashboard)
 const isUnauthorizedSuperAdminResponse = (res) => {
   if (!res?.data) return false;
   const code = res.data.code;
   const err = res.data.error || res.data.message || '';
   const errStr = String(err);
-  return code === 'UNAUTHORIZED_SUPER_ADMIN' || /Super Admin ID is not authorized/i.test(errStr);
+  return (
+    code === 'UNAUTHORIZED_SUPER_ADMIN' ||
+    /Super Admin ID is not authorized/i.test(errStr) ||
+    /Your Role\/ID is not authorized for this environment/i.test(errStr) ||
+    /not authorized for this environment/i.test(errStr)
+  );
 };
 
 // Handle auth-related 401/403 by attempting a silent session/user refresh
@@ -156,8 +161,9 @@ api.interceptors.response.use(undefined, async (error) => {
   const { config, response } = error || {};
   if (!config || !response) return Promise.reject(error);
 
-  // 403 Super Admin not whitelisted -> send to AccessGuard (full "Access Restricted" page)
-  if (response.status === 403 && isUnauthorizedSuperAdminResponse(response)) {
+  // 403/483 Role or ID not authorized for this environment -> show AccessGuard (no broken dashboard in production)
+  const isAccessDeniedForEnvironment = (response.status === 403 || response.status === 483) && isUnauthorizedSuperAdminResponse(response);
+  if (isAccessDeniedForEnvironment) {
     if (typeof window.__onUnauthorizedSuperAdmin === 'function') {
       window.__onUnauthorizedSuperAdmin();
     }

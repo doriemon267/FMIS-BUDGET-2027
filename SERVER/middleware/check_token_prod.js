@@ -126,7 +126,10 @@ module.exports = async (req, res, next) => {
         ipAddress: req.clientIp,
         details: { error: "Admin ID not whitelisted in .env" }
       }).catch(() => {});
-      return res.status(403).json({ error: "Access denied. Your Role/ID is not authorized for this environment." });
+      return res.status(403).json({
+        code: 'UNAUTHORIZED_SUPER_ADMIN',
+        error: "Access denied. Your Role/ID is not authorized for this environment."
+      });
     }
 
     // 10. [NEW] SUCCESS AUDIT LOG

@@ -155,27 +155,39 @@ const applyHierarchicalFilters = (req, res, next) => {
       filters = {};
       break;
     case 'WORKFLOW':
-      // Workflow users with no HUA doc: Budget Manager sees all, others restrict to own
-      filters = isBudgetManager ? {} : { userId: req.user?.id };
+      // Workflow users with no HUA doc: Budget Manager sees all; others need scope for employee list
+      if (isBudgetManager) {
+        filters = {};
+      } else {
+        const hasScope = (assignment.regions?.length > 0) || (assignment.departments?.length > 0) || (assignment.divisions?.length > 0);
+        if (!hasScope) {
+          // Budget Preparer / workflow user without Department/Division assignment must not see other depts' data
+          filters = { __noScope: true };
+        } else {
+          filters = { userId: req.user?.id };
+        }
+      }
       break;
     case 'DIVISION':
+    case 'DIVISION_LEVEL':
+    case 'RESPONSIBILITY_CENTER':
       // Can only see data from their specific division
-      if (assignment.regions.length > 0 && assignment.departments.length > 0 && assignment.divisions.length > 0) {
-        // Normalize values from populated docs; use lowercase keys to match collections (e.g., Proposal)
+      if (assignment.regions?.length > 0 && assignment.departments?.length > 0 && assignment.divisions?.length > 0) {
         const regionName = assignment.regions[0].Region || assignment.regions[0].regionName;
         const departmentName = assignment.departments[0].Department || assignment.departments[0].departmentName || assignment.departments[0].DepartmentName;
-        const divisionName = (assignment.divisions[0] || '').trim();
+        const divisionName = typeof assignment.divisions[0] === 'string' ? assignment.divisions[0].trim() : (assignment.divisions[0]?.divisionName || '').trim();
         filters = {
           region: regionName,
           department: departmentName,
-          // Only include division filter if non-empty
           ...(divisionName ? { division: divisionName } : {})
         };
       }
       break;
     case 'DEPARTMENT':
+    case 'DEPARTMENT_REGIONAL_LEVEL':
+    case 'OFFICE':
       // Can see all data from their department (all divisions within)
-      if (assignment.regions.length > 0 && assignment.departments.length > 0) {
+      if (assignment.regions?.length > 0 && assignment.departments?.length > 0) {
         const regionName = assignment.regions[0].Region || assignment.regions[0].regionName;
         const departmentName = assignment.departments[0].Department || assignment.departments[0].departmentName || assignment.departments[0].DepartmentName;
         filters = {

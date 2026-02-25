@@ -78,11 +78,25 @@ const EmployeeList = () => {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Get user's hierarchical access information
-  const userAccessLevel = currentUser?.hierarchicalAccess?.scope || 'REGION';
+  let userAccessLevel = currentUser?.hierarchicalAccess?.scope || currentUser?.hierarchicalAccess?.assignmentLevel || 'REGION';
   const rawDivision = currentUser?.hierarchicalAccess?.accessibleDivisions?.[0];
-  const userDivision = typeof rawDivision === "string" ? rawDivision : rawDivision?.divisionName;
-  const userDepartment = currentUser?.hierarchicalAccess?.accessibleDepartments?.[0]?.departmentName;
-  const userRegion = currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.regionName;
+  const userDivision = typeof rawDivision === "string" ? rawDivision : (rawDivision?.divisionName || rawDivision?.name || rawDivision?.Division);
+  const deptObj = currentUser?.hierarchicalAccess?.accessibleDepartments?.[0];
+  const userDepartment = typeof deptObj === "string" ? deptObj : (deptObj?.departmentName || deptObj?.Department || deptObj?.DepartmentName);
+  const userRegion = currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.regionName
+    || currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.Region
+    || currentUser?.hierarchicalAccess?.accessibleRegions?.[0]?.name;
+
+  // Budget Preparer / division-scoped roles: show Division/Department in UI even when API returns REGION or normalized level
+  const rolesList = Array.isArray(currentUser?.Roles) ? currentUser.Roles : (currentUser?.Roles ? [currentUser.Roles] : []);
+  const isPreparer = rolesList.some((r) => String(r || '').toUpperCase().replace(/\s+/g, '_') === 'BUDGET_PREPARER' || (typeof r === 'string' && r.includes('BUDGET') && r.includes('PREPARER')));
+  const hasDivisionOrDept = !!(userDivision || userDepartment);
+  if (isPreparer && hasDivisionOrDept && (userAccessLevel === 'REGION' || !userAccessLevel || userAccessLevel === 'WORKFLOW')) {
+    userAccessLevel = 'DIVISION';
+  }
+  // Normalize API scope to display level (DIVISION_LEVEL -> Division, DEPARTMENT_REGIONAL_LEVEL -> Department)
+  if (userAccessLevel === 'DIVISION_LEVEL' || userAccessLevel === 'RESPONSIBILITY_CENTER') userAccessLevel = 'DIVISION';
+  if (userAccessLevel === 'DEPARTMENT_REGIONAL_LEVEL' || userAccessLevel === 'OFFICE') userAccessLevel = 'DEPARTMENT';
 
   // Get the active region name
   const regionName = activeRegion?.name || activeRegion?.regionName;
@@ -94,19 +108,19 @@ const EmployeeList = () => {
         return {
           level: 'Division',
           name: userDivision || 'Your Division',
-          scope: `${userDivision || 'Division'} (${userDepartment || 'Department'}, ${regionName || 'Region'})`
+          scope: `${userDivision || 'Division'} (${userDepartment || 'Department'}, ${regionName || userRegion || 'Region'})`
         };
       case 'DEPARTMENT':
         return {
           level: 'Department',
           name: userDepartment || 'Your Department',
-          scope: `${userDepartment || 'Department'} (${regionName || 'Region'})`
+          scope: `${userDepartment || 'Department'} (${regionName || userRegion || 'Region'})`
         };
       case 'REGION':
         return {
           level: 'Region',
-          name: regionName || 'Your Region',
-          scope: `${regionName || 'Region'}`
+          name: regionName || userRegion || 'Your Region',
+          scope: `${regionName || userRegion || 'Region'}`
         };
       case 'BUDGET_AND_REVENUE_DIVISION':
         return {
@@ -123,8 +137,8 @@ const EmployeeList = () => {
       default:
         return {
           level: 'Region',
-          name: regionName || 'Your Region',
-          scope: `${regionName || 'Region'}`
+          name: regionName || userRegion || 'Your Region',
+          scope: `${regionName || userRegion || 'Region'}`
         };
     }
   };
@@ -774,10 +788,10 @@ const EmployeeList = () => {
                         Employee Management
                       </Typography>
                       <Typography variant="h6" sx={{ opacity: 0.9 }}>
-                        {activeRegion
-                          ? `Managing employees in ${
-                              activeRegion.name || activeRegion.regionName || activeRegion.Region
-                            } region`
+                        {activeRegion || userRegion
+                          ? (userAccessLevel === 'DIVISION' || userAccessLevel === 'DEPARTMENT')
+                            ? `Managing employees in ${displayInfo.scope}`
+                            : `Managing employees in ${regionName || userRegion || (activeRegion?.name || activeRegion?.regionName || activeRegion?.Region)} region`
                           : "Employee management dashboard"}
                       </Typography>
                       <Typography variant="body2" sx={{ opacity: 0.7, mt: 1 }}>

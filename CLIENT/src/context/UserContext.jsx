@@ -80,8 +80,11 @@ const UserProvider = ({ children }) => {
       }
       return user;
     } catch (error) {
-      const code = error?.response?.data?.code;
-      if (code === 'UNAUTHORIZED_SUPER_ADMIN') {
+      const data = error?.response?.data || {};
+      const code = data.code;
+      const errMsg = data.error || data.message || '';
+      const isEnvUnauthorized = code === 'UNAUTHORIZED_SUPER_ADMIN' || /not authorized for this environment/i.test(String(errMsg));
+      if (isEnvUnauthorized) {
         throw error;
       }
       console.warn("Error enriching user roles:", error);
@@ -109,7 +112,9 @@ const UserProvider = ({ children }) => {
       setDevUser(fullUser);
       setCurrentUser(fullUser);
     } catch (enrichErr) {
-      if (enrichErr?.response?.data?.code === 'UNAUTHORIZED_SUPER_ADMIN') {
+      const d = enrichErr?.response?.data || {};
+      const isEnvUnauthorized = d.code === 'UNAUTHORIZED_SUPER_ADMIN' || /not authorized for this environment/i.test(String(d.error || d.message || ''));
+      if (isEnvUnauthorized) {
         setCurrentUser(null);
         setUnauthorizedSuperAdmin(true);
       } else {
@@ -189,7 +194,9 @@ const UserProvider = ({ children }) => {
             setDevUser(fullUser);
             setCurrentUser(fullUser);
           } catch (enrichErr) {
-            if (enrichErr?.response?.data?.code === 'UNAUTHORIZED_SUPER_ADMIN') {
+            const d = enrichErr?.response?.data || {};
+            const isEnvUnauthorized = d.code === 'UNAUTHORIZED_SUPER_ADMIN' || /not authorized for this environment/i.test(String(d.error || d.message || ''));
+            if (isEnvUnauthorized) {
               setCurrentUser(null);
               setUnauthorizedSuperAdmin(true);
             } else {
@@ -200,7 +207,9 @@ const UserProvider = ({ children }) => {
           redirectToLogin();
         }
       } catch (error) {
-        if (error?.response?.data?.code === 'UNAUTHORIZED_SUPER_ADMIN') {
+        const d = error?.response?.data || {};
+        const isEnvUnauthorized = d.code === 'UNAUTHORIZED_SUPER_ADMIN' || /not authorized for this environment/i.test(String(d.error || d.message || ''));
+        if (isEnvUnauthorized) {
           setCurrentUser(null);
           setUnauthorizedSuperAdmin(true);
         } else {

@@ -42,6 +42,8 @@ const CustomTable = ({
   selectedRows,
   showBatchOptions,
   schema,
+  // Optional pre-fetched data (e.g. from parent useQuery via CustomPage)
+  externalData = null,
 }) => {
   const { searchValue, setSearchValue } = useSearch();
   const TEN_SECONDS_AGO = dayjs().subtract(10, "second");
@@ -101,9 +103,21 @@ const CustomTable = ({
       });
       return res.data;
     },
+    // When externalData is provided, skip server-side fetching entirely.
+    enabled: !externalData,
   });
 
+  // Use externalData when provided; otherwise fall back to server data.
+  const effectiveData = externalData
+    ? {
+        [dataListName]: externalData,
+        totalRecords: externalData.length,
+      }
+    : data;
+  const isEffectiveLoading = externalData ? false : isLoading;
+
   useEffect(() => {
+    if (externalData) return; // Skip refetch logic when using external data
     if (fieldAndValue.value && fieldAndValue.field === "date") {
       setPage(0);
       setRowsPerPage(ROWS_PER_PAGE);
@@ -126,6 +140,7 @@ const CustomTable = ({
   }, [searchValue, fieldAndValue, refetch, ROWS_PER_PAGE]);
 
   useEffect(() => {
+    if (externalData) return; // Skip refetch logic when using external data
     const debouncedSearch = setTimeout(() => {
       refetch();
     }, 500);
@@ -492,16 +507,25 @@ const CustomTable = ({
   };
 
   const isAllSelected = () => {
-    if (!data || !data[dataListName] || data[dataListName].length === 0)
+    if (
+      !effectiveData ||
+      !effectiveData[dataListName] ||
+      effectiveData[dataListName].length === 0
+    )
       return false;
-    return selectedRows.length === data[dataListName].length;
+    return selectedRows.length === effectiveData[dataListName].length;
   };
 
   const isIndeterminate = () => {
-    if (!data || !data[dataListName] || data[dataListName].length === 0)
+    if (
+      !effectiveData ||
+      !effectiveData[dataListName] ||
+      effectiveData[dataListName].length === 0
+    )
       return false;
     return (
-      selectedRows.length > 0 && selectedRows.length < data[dataListName].length
+      selectedRows.length > 0 &&
+      selectedRows.length < effectiveData[dataListName].length
     );
   };
 
@@ -639,11 +663,11 @@ const CustomTable = ({
                 )}
               </TableRow>
             </TableHead>
-            {isLoading ? (
+            {isEffectiveLoading ? (
               <TableBodyLoading numCell={columns.length} />
             ) : (
               <TableBody>
-                {data?.[dataListName]?.length === 0 ? (
+                {effectiveData?.[dataListName]?.length === 0 ? (
                   <TableRow sx={{ height: "70vh" }}>
                     <TableCell
                       colSpan={columns.length}
@@ -659,7 +683,7 @@ const CustomTable = ({
                     </TableCell>
                   </TableRow>
                 ) : (
-                  data[dataListName].map((row, rowIndex) => {
+                  effectiveData[dataListName].map((row, rowIndex) => {
                     const isRecentlyUpdated =
                       row.updatedAt &&
                       dayjs(row.updatedAt).isAfter(TEN_SECONDS_AGO);
