@@ -1,6 +1,6 @@
 # FMIS – Online Submission of Budget Proposal Information System
 
-Sistema para sa **online submission at pagsusuri ng budget proposals** (Initial, NEP, GAA) na may workflow, Tier versioning, at BRD consolidation.
+A system for the online submission and review of budget proposals (Initial, NEP, GAA) featuring workflow management, Tier versioning, and BRD consolidation.
 
 ---
 
@@ -224,7 +224,3 @@ Details and diagrams: **BUDGET_WORKFLOW_DOCUMENTATION.md**.
 - `npm run lint` – ESLint
 
 ---
-
-## License
-
-ISC (or as specified in the repository).
