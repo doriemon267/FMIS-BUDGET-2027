@@ -19,6 +19,7 @@ import EmployeeCourtAppearancePage from "./pages/CourtAppearancePage";
 import OvertimePayDialog from "./pages/EmployeeOvertimePayPage";
 import SubsistenceAllowanceMDSPage from "./pages/SubsistenceAllowanceMDSPage";
 import SubsistenceAllowanceSTPage from "./pages/SubsistenceAllowanceSTPage";
+import SubsistenceAllowancePage from "./pages/SubsistenceAllowancePage";
 import LoyaltyPayPage from "./pages/LoyaltyPayPage";
 import AppearancePage from "./pages/AppearancePage";
 import AllProposalsPage from "./pages/AllProposalsPage";
@@ -302,6 +303,10 @@ const App = () => {
         />
         <Route
           path="/subsistenceAllowanceST"
+          element={<EmployeeBenefitsPage />}
+        />
+        <Route
+          path="/subsistenceAllowance"
           element={<EmployeeBenefitsPage />}
         />
         <Route path="/loyaltyPay" element={<EmployeeBenefitsPage />} />

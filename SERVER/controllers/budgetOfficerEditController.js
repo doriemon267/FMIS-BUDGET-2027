@@ -290,19 +290,19 @@ const applyEditsToOriginalDocuments = async (budgetOfficerEdit) => {
                 data.PERA = (activeSettings.PERA || 0) * 12;
               }
               if (data.uniformALLOWANCE === undefined || data.uniformALLOWANCE === null) {
-                data.uniformALLOWANCE = (activeSettings.uniformAllowance || 0) * 12;
+                data.uniformALLOWANCE = (activeSettings.uniformAllowance || 0);
               }
               if (data.productivityIncentive === undefined || data.productivityIncentive === null) {
-                data.productivityIncentive = (activeSettings.productivityIncentive || 0) * 12;
+                data.productivityIncentive = (activeSettings.productivityIncentive || 0);
               }
               if (data.cashGift === undefined || data.cashGift === null) {
-                data.cashGift = (activeSettings.cashGift || 0) * 12;
+                data.cashGift = (activeSettings.cashGift || 0);
               }
               if (data.pagibigPremium === undefined || data.pagibigPremium === null) {
                 data.pagibigPremium = (activeSettings.pagibigPremium || 0) * 12;
               }
               if (data.medical === undefined || data.medical === null) {
-                data.medical = (activeSettings.medicalAllowance || 0) * 12;
+                data.medical = 0; // Only set via /medicalAllowance page for personnel who qualify
               }
               if (data.employeeCompensation === undefined || data.employeeCompensation === null) {
                 data.employeeCompensation = (activeSettings.employeeCompensation || 0) * 12;
@@ -2542,19 +2542,19 @@ exports.approveEdit = async (req, res) => {
               personnelData.PERA = (activeSettings.PERA || 0) * 12;
             }
             if (personnelData.uniformALLOWANCE === undefined || personnelData.uniformALLOWANCE === null) {
-              personnelData.uniformALLOWANCE = (activeSettings.uniformAllowance || 0) * 12;
+              personnelData.uniformALLOWANCE = (activeSettings.uniformAllowance || 0);
             }
             if (personnelData.productivityIncentive === undefined || personnelData.productivityIncentive === null) {
-              personnelData.productivityIncentive = (activeSettings.productivityIncentive || 0) * 12;
+              personnelData.productivityIncentive = (activeSettings.productivityIncentive || 0);
             }
             if (personnelData.cashGift === undefined || personnelData.cashGift === null) {
-              personnelData.cashGift = (activeSettings.cashGift || 0) * 12;
+              personnelData.cashGift = (activeSettings.cashGift || 0);
             }
             if (personnelData.pagibigPremium === undefined || personnelData.pagibigPremium === null) {
               personnelData.pagibigPremium = (activeSettings.pagibigPremium || 0) * 12;
             }
             if (personnelData.medical === undefined || personnelData.medical === null) {
-              personnelData.medical = (activeSettings.medicalAllowance || 0) * 12;
+              personnelData.medical = 0; // Only set via /medicalAllowance page for personnel who qualify
             }
             if (personnelData.employeeCompensation === undefined || personnelData.employeeCompensation === null) {
               personnelData.employeeCompensation = (activeSettings.employeeCompensation || 0) * 12;

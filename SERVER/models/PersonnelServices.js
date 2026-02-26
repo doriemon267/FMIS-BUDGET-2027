@@ -323,7 +323,7 @@ personnelServicesSchema.pre('save', function(next) {
   const numericFields = [
     "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
     "medical", "childrenAllowance", "meal", "cashGift", 
-    "subsistenceAllowanceMDS", "subsistenceAllowanceST", "loyaltyAward", "overtimePay",
+    "subsistenceAllowance", "subsistenceAllowanceMDS", "subsistenceAllowanceST", "loyaltyAward", "overtimePay",
     "midyearBonus", "yearEndBonus", "gsisPremium", "philhealthPremium", "pagibigPremium", 
     "employeeCompensation", "courtAppearance", "earnedLeaves", "retirementBenefits", 
     "terminalLeave", "hazardPay", "honoraria"
@@ -350,7 +350,7 @@ personnelServicesSchema.statics.resetMealAllowance = async function(employeeNumb
       const numericFields = [
         "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
         "medical", "childrenAllowance", "meal", "cashGift", 
-        "subsistenceAllowanceMDS", "subsistenceAllowanceST", "loyaltyAward", "overtimePay",
+        "subsistenceAllowance", "subsistenceAllowanceMDS", "subsistenceAllowanceST", "loyaltyAward", "overtimePay",
         "midyearBonus", "yearEndBonus", "gsisPremium", "philhealthPremium", "pagibigPremium", 
         "employeeCompensation", "courtAppearance", "earnedLeaves", "retirementBenefits", 
         "terminalLeave", "hazardPay", "honoraria"

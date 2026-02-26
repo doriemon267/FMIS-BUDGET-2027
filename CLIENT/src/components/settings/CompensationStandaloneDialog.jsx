@@ -112,6 +112,7 @@ const compensationSchema = yup.object().shape({
   employeeCompensation: yup.number().min(0),
   weekdayMultiplier: yup.number().min(0),
   weekendMultiplier: yup.number().min(0),
+  subsistenceAllowance: yup.number().min(0),
   subsistenceAllowanceRate: yup.number().min(0),
   earnedLeaves: yup.number().min(0),
   loyaltyPay: yup.object({
@@ -201,6 +202,7 @@ const CompensationStandaloneDialog = ({
       employeeCompensation: 0,
       weekdayMultiplier: 0,
       weekendMultiplier: 0,
+      subsistenceAllowance: 0,
       subsistenceAllowanceRate: 0,
       earnedLeaves: 0,
       loyaltyPay: {
@@ -539,7 +541,8 @@ const CompensationStandaloneDialog = ({
                   {[
                     { name: "weekdayMultiplier", label: "Weekday Multiplier" },
                     { name: "weekendMultiplier", label: "Weekend Multiplier" },
-                    { name: "subsistenceAllowanceRate", label: "Subsistence Allowance Rate (₱)" },
+                    { name: "subsistenceAllowance", label: "Subsistence Allowance (Monthly ₱)" },
+                    { name: "subsistenceAllowanceRate", label: "Subsistence Allowance MDS Rate (₱)" },
                     { name: "earnedLeaves", label: "Earned Leaves (Days)", component: HighPrecisionFormatCustom }
                   ].map(({ name, label, component }) => (
                     <Grid item xs={12} sm={6} key={name}>

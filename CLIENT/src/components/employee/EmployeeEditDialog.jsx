@@ -111,6 +111,7 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
   const methods = useForm({
     defaultValues: {
       EmployeeFullName: row?.EmployeeFullName || "",
+      Employee_No: row?.EmployeeID || "",
       Region: row?.Region || "",
       Department: row?.Department || "",
       Division: row?.Division || "",
@@ -570,6 +571,7 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
       // console.log("🔄 Row data changed, updating form values:", row);
       // Update form values when row data becomes available
       setValue("EmployeeFullName", row.EmployeeFullName || "");
+      setValue("Employee_No", row.EmployeeID || "");
       setValue("Region", row.Region || "");
       setValue("Department", row.Department || "");
       setValue("Division", row.Division || "");
@@ -638,7 +640,12 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
       data.ItemNumber = data.Item_No;
     }
     delete data.Item_No;
-    
+    // Map Employee_No to EmployeeID for backend
+    if (data.Employee_No != null && String(data.Employee_No).trim() !== "") {
+      data.EmployeeID = String(data.Employee_No).trim();
+    }
+    delete data.Employee_No;
+
     // Add employee status field if not present
     if (!data.employeeStatus) {
       data.employeeStatus = data.Status === "Active" ? "Active" : "Inactive";
@@ -949,6 +956,14 @@ const EmployeeEditDialog = ({ row, dataListName, parentClose, onDataChange }) =>
                         fieldName="Item_No"
                         control={control}
                         label="Item No."
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <CustomTextField
+                        fieldName="Employee_No"
+                        control={control}
+                        label="Employee Number"
+                        helperText="e.g. V00001 for VACANT positions"
                       />
                     </Grid>
 

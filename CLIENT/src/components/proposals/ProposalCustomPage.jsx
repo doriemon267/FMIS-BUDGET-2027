@@ -516,6 +516,44 @@ const ProposalCustomPage = ({
     }
   }, []);
 
+  // When there is no stored activeWorkflowRef (e.g. user closed browser or opened in another browser),
+  // fetch the user's latest draft so they can continue instead of seeing "Create Proposal" again.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const storedWorkflowRef =
+      sessionStorage.getItem("activeWorkflowRef") ||
+      localStorage.getItem("activeWorkflowRef");
+    if (storedWorkflowRef) return; // Let the restore effect above handle it.
+
+    const resumeLatestDraft = async () => {
+      try {
+        const response = await api.get("/api/allproposal/proposals", {
+          params: { view: "my-proposals", limit: 1 },
+        });
+        if (!response.data?.success || !Array.isArray(response.data?.proposals)) return;
+        const list = response.data.proposals;
+        const latest = list[0];
+        if (!latest?._id) return;
+        // Only resume if still editable (Draft or Returned to Preparer)
+        const status = String(latest.status || "");
+        const statusUpper = status.toUpperCase();
+        const isDraft = statusUpper === "DRAFT";
+        const isReturnedToPreparer =
+          statusUpper === "RETURNED_TO_PREPARER" ||
+          (status.toLowerCase().includes("returned") && status.toLowerCase().includes("preparer"));
+        if (!isDraft && !isReturnedToPreparer) return;
+        setCurrentProposalId(latest._id);
+        try {
+          sessionStorage.setItem("activeWorkflowRef", latest._id);
+          localStorage.setItem("activeWorkflowRef", latest._id);
+        } catch (_) {}
+      } catch (err) {
+        logger.warn("Resume latest draft check failed", err);
+      }
+    };
+    resumeLatestDraft();
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const storedPreference = window.localStorage.getItem(

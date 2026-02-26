@@ -127,6 +127,7 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
       Status: "Active",
       DateOfBirth: "",
       Item_No: "",
+      Employee_No: "", // Employee Number (optional; for VACANT leave blank to auto-generate e.g. V00001)
       PG: "",
     },
   });
@@ -756,6 +757,11 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
       data.ItemNumber = data.Item_No;
     }
     delete data.Item_No;
+    // Map Employee_No to EmployeeID; for VACANT leave empty to let backend auto-generate (e.g. V00001)
+    if (data.Employee_No != null && String(data.Employee_No).trim() !== "") {
+      data.EmployeeID = String(data.Employee_No).trim();
+    }
+    delete data.Employee_No;
 
     // Add employee status field if not present
     if (!data.employeeStatus) {
@@ -1097,6 +1103,14 @@ const AddEmployeeDialog = ({ parentClose, onDataChange }) => {
                         fieldName="Item_No"
                         control={control}
                         label="Item No."
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <CustomTextField
+                        fieldName="Employee_No"
+                        control={control}
+                        label="Employee Number"
+                        helperText="Leave blank to auto-generate (VACANT: V00001, others: E00001)"
                       />
                     </Grid>
 

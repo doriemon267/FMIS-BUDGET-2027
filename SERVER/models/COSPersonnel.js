@@ -74,11 +74,17 @@ const COSPersonnelSchema = new mongoose.Schema(
     createdBy: {
       type: String,
     },
+    // Link to proposal (NewProposalWorkflow _id) so list and duplicate check can be per-proposal
+    workflowRef: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
   },
   {
     timestamps: true,
   }
 );
-// Optional: Gumawa ng composite index para siguraduhing walang duplicate record para sa parehong employee sa isang fiscalYear
-COSPersonnelSchema.index({ employeeNumber: 1, fiscalYear: 1 }, { unique: true });
+// Prevent duplicate same employee in same fiscal year. Sparse allows multiple docs with null employeeNumber (no E11000 on null).
+// If you had the non-sparse index before: run db.cospersonnels.dropIndex("employeeNumber_1_fiscalYear_1") once, then restart.
+COSPersonnelSchema.index({ employeeNumber: 1, fiscalYear: 1 }, { unique: true, sparse: true });
 module.exports = mongoose.model("COSPersonnel", COSPersonnelSchema);

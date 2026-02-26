@@ -67,6 +67,11 @@ const PersonnelServicesPage = () => {
       label: "MEAL ALLOWANCE",
       show: true,
     },
+    subsistenceAllowance: {
+      type: "number",
+      label: "SUBSISTENCE ALLOWANCE",
+      show: true,
+    },
     subsistenceAllowanceMDS: {
       type: "number",
       label: "SUBSISTENCE ALLOWANCE MDS",
@@ -145,7 +150,7 @@ const PersonnelServicesPage = () => {
     },
     pagibigPremium: {
       type: "number",
-      label: "PAG-IBIG PREMIUM",
+      label: "PG (PAG-IBIG)",
       show: true,
     },
     philhealthPremium: {

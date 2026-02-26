@@ -238,6 +238,17 @@ const EmployeeList = () => {
       type: "action",
       label: "Actions",
     },
+    EmployeeID: {
+      type: "text",
+      label: "Employee No.",
+      show: true,
+      searchable: true,
+      customRender: (row) => (
+        <Typography variant="body2" sx={{ fontFamily: "monospace" }}>
+          {row.EmployeeID || "—"}
+        </Typography>
+      ),
+    },
     EmployeeFullName: {
       type: "text",
       label: "Employee Name",

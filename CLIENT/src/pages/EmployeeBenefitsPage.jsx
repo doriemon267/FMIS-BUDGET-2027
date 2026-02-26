@@ -12,6 +12,7 @@ import EmployeeCourtAppearancePage from "./CourtAppearancePage";
 import EmployeeOvertimePayPage from "./EmployeeOvertimePayPage";
 import SubsistenceAllowanceMDSPage from "./SubsistenceAllowanceMDSPage";
 import SubsistenceAllowanceSTPage from "./SubsistenceAllowanceSTPage";
+import SubsistenceAllowancePage from "./SubsistenceAllowancePage";
 import MealAllowancePage from "./MealAllowancePage";
 import MedicalAllowancePage from "./MedicalAllowancePage";
 import LoyaltyPayPage from "./LoyaltyPayPage";
@@ -75,11 +76,12 @@ const tabPathMapping = {
   "/overTime": 1,
   "/subsistenceAllowanceMDS": 2,
   "/subsistenceAllowanceST": 3,
-  "/mealallowance": 4,
-  "/medicalAllowance": 5,
-  "/loyaltyPay": 6,
-  "/childrenAllowance": 7,
-  "/retirees": 8,
+  "/subsistenceAllowance": 4,
+  "/mealallowance": 5,
+  "/medicalAllowance": 6,
+  "/loyaltyPay": 7,
+  "/childrenAllowance": 8,
+  "/retirees": 9,
   "/employeeBenefits": 0 // Default tab
 };
 
@@ -115,6 +117,7 @@ const EmployeeBenefitsPage = () => {
     "Overtime Pay",
     "Subsistence Allowance MDS",
     "Subsistence Allowance ST",
+    "Subsistence Allowance",
     "Meal Allowance",
     "Medical Allowance",
     "Loyalty Pay",
@@ -190,6 +193,11 @@ const EmployeeBenefitsPage = () => {
             <StyledTab 
               icon={<GiMeal />} 
               iconPosition="start" 
+              label="Subsistence Allowance" 
+            />
+            <StyledTab 
+              icon={<GiMeal />} 
+              iconPosition="start" 
               label="Meal Allowance" 
             />
             <StyledTab 
@@ -230,18 +238,21 @@ const EmployeeBenefitsPage = () => {
         <SubsistenceAllowanceSTPage />
       </TabPanel>
       <TabPanel value={tabValue} index={4}>
-        <MealAllowancePage />
+        <SubsistenceAllowancePage />
       </TabPanel>
       <TabPanel value={tabValue} index={5}>
-        <MedicalAllowancePage />
+        <MealAllowancePage />
       </TabPanel>
       <TabPanel value={tabValue} index={6}>
-        <LoyaltyPayPage />
+        <MedicalAllowancePage />
       </TabPanel>
       <TabPanel value={tabValue} index={7}>
-        <ChildrenAllowancePage />
+        <LoyaltyPayPage />
       </TabPanel>
       <TabPanel value={tabValue} index={8}>
+        <ChildrenAllowancePage />
+      </TabPanel>
+      <TabPanel value={tabValue} index={9}>
         <RetireePage />
       </TabPanel>
     </Box>

@@ -167,6 +167,7 @@ const computeSalaryRate = async (sg, jg, step, statusOfAppointment, employeeStat
 const normalizeRecordKeys = (rec) => {
   const aliases = {
     'EmployeeFullName*': 'EmployeeFullName', 'Employee Full Name': 'EmployeeFullName',
+    'Employee Number': 'Employee_No', 'EmployeeID': 'Employee_No', 'Employee Id': 'Employee_No',
     'Region*': 'Region', 'Region Name': 'Region',
     'Department*': 'Department',
     'PositionTitle*': 'PositionTitle', 'Position Title': 'PositionTitle',
@@ -426,6 +427,11 @@ const validateAndProcessEmployeeRecord = async (record, activeRegion, fiscalYear
     record.itemNumber = record.Item_No;
   }
   delete record.Item_No;
+
+  // Map Employee_No to EmployeeID for backend (for VACANT, leave empty to auto-generate V00001 in upload route)
+  if (record.Employee_No != null && String(record.Employee_No).trim() !== '') {
+    record.EmployeeID = String(record.Employee_No).trim();
+  }
 
   // Set default values
   record.Region = record.Region || activeRegion;

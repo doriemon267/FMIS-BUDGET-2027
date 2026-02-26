@@ -34,6 +34,16 @@ import TextSearchable from "../../global/components/TextSearchable";
 import formatCurrency from "../../utils/formatCurrency";
 import { formatDateToMDY, isValidDate } from "../../utils/formatDate";
 
+const OTHER_COMPENSATION_FIELDS = new Set([
+  "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive", "honoraria", "medical",
+  "childrenAllowance", "meal", "subsistenceAllowance", "subsistenceAllowanceMDS", "subsistenceAllowanceST",
+  "cashGift", "midyearBonus", "yearEndBonus", "loyaltyAward", "overtimePay", "courtAppearance",
+  "earnedLeaves", "retirementBenefits", "terminalLeave", "hazardPay",
+]);
+const GOVERNMENT_SHARE_FIELDS = new Set([
+  "gsisPremium", "pagibigPremium", "philhealthPremium", "employeeCompensation",
+]);
+
 const CasualCustomTable = ({
   columns,
   ROWS_PER_PAGE = 20,
@@ -491,85 +501,97 @@ const CasualCustomTable = ({
             }}>
             <Table size="small" sx={{ borderCollapse: "collapse" }}>
               <TableHead>
-                <TableRow>
-                  {hasRowSelection && (
-                    <TableCell
-                      sx={{
-                        position: "sticky",
-                        top: 0,
-                        backgroundColor: "#375e38",
-                        zIndex: 1,
-                        borderRight: "1px solid",
-                        borderColor: grey[500],
-                        width: 48,
-                        padding: "4px 8px",
-                      }}
-                    >
-                      <Checkbox
-                        color="primary"
-                        indeterminate={
-                          safeSelectedRows.length > 0 &&
-                          safeSelectedRows.length < totalRecords
-                        }
-                        checked={
-                          totalRecords > 0 &&
-                          safeSelectedRows.length === totalRecords
-                        }
-                        onChange={handleSelectAllClick}
-                        sx={{
-                          color: "#fff",
-                          "&.Mui-checked": {
-                            color: "#fff",
-                          },
-                          "&.MuiCheckbox-indeterminate": {
-                            color: "#fff",
-                          },
-                        }}
-                      />
-                    </TableCell>
-                  )}
-                  {columns.map((column) => (
-                    <TableCell
-                      key={column.field}
-                      sx={{
-                        position: "sticky",
-                        top: 0,
-                        backgroundColor: "#375e38",
-                        zIndex: 1,
-                        borderRight: "1px solid",
-                        borderColor: grey[500],
-                        textAlign: column.type === "number" ? "right" : "left",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                        }}
-                      >
-                        <TableSortLabel
-                          active={orderBy === column.field}
-                          direction={orderBy === column.field ? order : "asc"}
-                          onClick={() => handleRequestSort(column.field)}
-                          sx={{ flex: 1 }}
+                {(() => {
+                  const getGroup = (field) =>
+                    OTHER_COMPENSATION_FIELDS.has(field) ? "other" : GOVERNMENT_SHARE_FIELDS.has(field) ? "gov" : null;
+                  const headerCellSx = {
+                    position: "sticky",
+                    top: 0,
+                    backgroundColor: "#375e38",
+                    zIndex: 1,
+                    borderRight: "1px solid",
+                    borderColor: grey[500],
+                    fontWeight: "bold",
+                    color: "#fff",
+                  };
+                  const groupHeaderCells = [];
+                  let i = 0;
+                  while (i < columns.length) {
+                    const group = getGroup(columns[i].field);
+                    if (group) {
+                      let span = 0;
+                      while (i + span < columns.length && getGroup(columns[i + span].field) === group) span += 1;
+                      groupHeaderCells.push(
+                        <TableCell
+                          key={`${group}-${i}`}
+                          colSpan={span}
+                          sx={{ ...headerCellSx, textAlign: "center", fontSize: "0.8rem" }}
                         >
-                          {column.label}
-                        </TableSortLabel>
-                        <Tooltip title={`Filter ${column.label}`}>
-                          <IconButton
-                            size="small"
-                            onClick={(event) =>
-                              handleFilterClick(event, column.field, column.label)
-                            }
+                          {group === "other" ? "OTHER COMPENSATION" : "GOVERNMENT SHARE"}
+                        </TableCell>
+                      );
+                      i += span;
+                    } else {
+                      groupHeaderCells.push(
+                        <TableCell key={`base-${i}`} sx={{ ...headerCellSx, textAlign: "center", fontSize: "0.75rem" }}>
+                          &nbsp;
+                        </TableCell>
+                      );
+                      i += 1;
+                    }
+                  }
+                  return (
+                    <>
+                      <TableRow>
+                        {hasRowSelection && (
+                          <TableCell rowSpan={2} sx={{ ...headerCellSx, width: 48, padding: "4px 8px", verticalAlign: "middle" }}>
+                            <Checkbox
+                              color="primary"
+                              indeterminate={safeSelectedRows.length > 0 && safeSelectedRows.length < totalRecords}
+                              checked={totalRecords > 0 && safeSelectedRows.length === totalRecords}
+                              onChange={handleSelectAllClick}
+                              sx={{
+                                color: "#fff",
+                                "&.Mui-checked": { color: "#fff" },
+                                "&.MuiCheckbox-indeterminate": { color: "#fff" },
+                              }}
+                            />
+                          </TableCell>
+                        )}
+                        {groupHeaderCells}
+                      </TableRow>
+                      <TableRow>
+                        {columns.map((column) => (
+                          <TableCell
+                            key={column.field}
+                            sx={{
+                              ...headerCellSx,
+                              textAlign: column.type === "number" ? "right" : "left",
+                              fontWeight: "normal",
+                              fontSize: "0.75rem",
+                            }}
                           >
-                            <TiFilter color="lightgray" />
-                          </IconButton>
-                        </Tooltip>
-                      </div>
-                    </TableCell>
-                  ))}
-                </TableRow>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                              <TableSortLabel
+                                active={orderBy === column.field}
+                                direction={orderBy === column.field ? order : "asc"}
+                                onClick={() => handleRequestSort(column.field)}
+                                sx={{ flex: 1 }}
+                              >
+                                {column.label}
+                              </TableSortLabel>
+                              <Tooltip title={`Filter ${column.label}`}>
+                                <IconButton size="small" onClick={(e) => handleFilterClick(e, column.field, column.label)}>
+                                  <TiFilter color="lightgray" />
+                                </IconButton>
+                              </Tooltip>
+                            </div>
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    </>
+                  );
+                })()}
               </TableHead>
               {isLoading ? (
                 <TableBody>

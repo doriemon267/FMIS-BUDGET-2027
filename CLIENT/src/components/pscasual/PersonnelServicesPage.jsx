@@ -117,7 +117,7 @@ const PersonnelCasualServicesPage = () => {
     },
     pagibigPremium: {
       type: "number",
-      label: "PAG-IBIG PREMIUM",
+      label: "PG (PAG-IBIG)",
       show: true,
     },
     philhealthPremium: {

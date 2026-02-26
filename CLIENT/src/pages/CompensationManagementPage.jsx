@@ -296,6 +296,7 @@ const CompensationManagementPage = () => {
                   <TableRow>
                     <TableCell sx={{ fontWeight: "bold" }}>Name</TableCell>
                     <TableCell align="right" sx={{ fontWeight: "bold" }}>PERA</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: "bold" }}>Subsistence Allowance (Monthly)</TableCell>
                     <TableCell align="right" sx={{ fontWeight: "bold" }}>Medical Allowance</TableCell>
                     <TableCell align="center" sx={{ fontWeight: "bold" }}>PhilHealth %</TableCell>
                     <TableCell align="center" sx={{ fontWeight: "bold" }}>Budget Type</TableCell>
@@ -329,6 +330,9 @@ const CompensationManagementPage = () => {
                         </TableCell>
                         <TableCell align="right">
                           ₱{(row.PERA || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell align="right">
+                          ₱{(row.subsistenceAllowance ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell align="right">
                           ₱{(row.medicalAllowance || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}

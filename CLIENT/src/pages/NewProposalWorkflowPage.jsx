@@ -110,6 +110,7 @@ const getOtherCompensation = (p) =>
   (Number(p?.childrenAllowance) || 0) +
   (Number(p?.meal) || 0) +
   (Number(p?.cashGift) || 0) +
+  (Number(p?.subsistenceAllowance) || 0) +
   (Number(p?.subsistenceAllowanceMDS) || 0) +
   (Number(p?.subsistenceAllowanceST) || 0) +
   (Number(p?.midyearBonus) || 0) +
@@ -3906,7 +3907,9 @@ const NewProposalWorkflowPage = () => {
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Annual Salary</TableCell>
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PERA</TableCell>
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>RATA</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Subsistence Allowance</TableCell>
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Other Compensation</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PG</TableCell>
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Government Share</TableCell>
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Total</TableCell>
                             </TableRow>
@@ -4011,7 +4014,13 @@ const NewProposalWorkflowPage = () => {
                                       )}
                                     </TableCell>
                                     <TableCell align="right">
+                                      {`₱${(item.subsistenceAllowance || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
                                       {`₱${getOtherCompensation(item).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.pagibigPremium || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right">
                                       {`₱${getGovernmentShare(item).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
@@ -4022,7 +4031,7 @@ const NewProposalWorkflowPage = () => {
                                   </TableRow>
                                   {isExpanded && (
                                     <TableRow>
-                                      <TableCell colSpan={13} sx={{ bgcolor: "#fafafa", p: 3 }}>
+                                      <TableCell colSpan={15} sx={{ bgcolor: "#fafafa", p: 3 }}>
                                         <Grid container spacing={2}>
                                           <Grid item xs={12}>
                                             <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 2, color: "#2d5016" }}>
@@ -4092,14 +4101,16 @@ const NewProposalWorkflowPage = () => {
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Annual Salary</TableCell>
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PERA</TableCell>
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>RATA</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Subsistence Allowance</TableCell>
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Other Compensation</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PG</TableCell>
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Government Share</TableCell>
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Total</TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
                             <TableRow>
-                              <TableCell colSpan={13} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
+                              <TableCell colSpan={15} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
                                 <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.9rem" }}>
                                   No permanent personnel services data available
                                 </Typography>
@@ -4253,7 +4264,13 @@ const NewProposalWorkflowPage = () => {
                                       )}
                                     </TableCell>
                                     <TableCell align="right">
+                                      {`₱${(item.subsistenceAllowance || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
                                       {`₱${getOtherCompensation(item).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.pagibigPremium || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right">
                                       {`₱${getGovernmentShare(item).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
@@ -4264,7 +4281,7 @@ const NewProposalWorkflowPage = () => {
                                   </TableRow>
                                   {isExpanded && (
                                     <TableRow>
-                                      <TableCell colSpan={13} sx={{ bgcolor: "#fafafa", p: 3 }}>
+                                      <TableCell colSpan={15} sx={{ bgcolor: "#fafafa", p: 3 }}>
                                         <Grid container spacing={2}>
                                           <Grid item xs={12}>
                                             <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 2, color: "#2d5016" }}>
@@ -4334,14 +4351,16 @@ const NewProposalWorkflowPage = () => {
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Annual Salary</TableCell>
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PERA</TableCell>
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>RATA</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Subsistence Allowance</TableCell>
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Other Compensation</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PG</TableCell>
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Government Share</TableCell>
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Total</TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
                             <TableRow>
-                              <TableCell colSpan={13} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
+                              <TableCell colSpan={15} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
                                 <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.9rem" }}>
                                   No casual personnel services data available
                                 </Typography>
@@ -4495,7 +4514,13 @@ const NewProposalWorkflowPage = () => {
                                       )}
                                     </TableCell>
                                     <TableCell align="right">
+                                      {`₱${(item.subsistenceAllowance || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
                                       {`₱${getOtherCompensation(item).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                    </TableCell>
+                                    <TableCell align="right">
+                                      {`₱${(item.pagibigPremium || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right">
                                       {`₱${getGovernmentShare(item).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
@@ -4506,7 +4531,7 @@ const NewProposalWorkflowPage = () => {
                                   </TableRow>
                                   {isExpanded && (
                                     <TableRow>
-                                      <TableCell colSpan={13} sx={{ bgcolor: "#fafafa", p: 3 }}>
+                                      <TableCell colSpan={15} sx={{ bgcolor: "#fafafa", p: 3 }}>
                                         <Grid container spacing={2}>
                                           <Grid item xs={12}>
                                             <Typography variant="subtitle2" sx={{ fontWeight: "bold", mb: 2, color: "#2d5016" }}>
@@ -4576,14 +4601,16 @@ const NewProposalWorkflowPage = () => {
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Annual Salary</TableCell>
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PERA</TableCell>
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>RATA</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Subsistence Allowance</TableCell>
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Other Compensation</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>PG</TableCell>
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Government Share</TableCell>
                               <TableCell align="right" sx={{ fontWeight: "bold", ...PS_HEADER_CELL.amount }}>Total</TableCell>
                             </TableRow>
                           </TableHead>
                           <TableBody>
                             <TableRow>
-                              <TableCell colSpan={13} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
+                              <TableCell colSpan={15} align="center" sx={{ py: 5, borderBottom: "none", bgcolor: "grey.50" }}>
                                 <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.9rem" }}>
                                   No personnel services charged to income available
                                 </Typography>

@@ -15,6 +15,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../../config/api";
 import { toast } from "react-hot-toast";
 import { useUser } from "../../context/UserContext";
+import { useRegion } from "../../context/RegionContext";
 import EditIcon from "@mui/icons-material/Edit";
 import CustomButton from "../../global/components/CustomButton";
 
@@ -23,6 +24,7 @@ const OvertimePayDialog = ({ row, endpoint, dataListName, schema }) => {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
   const { currentUser } = useUser();
+  const { activeRegion } = useRegion();
 
   const [overtimeRate, setOvertimeRate] = useState(100);
   const [weekdayMultiplier, setWeekdayMultiplier] = useState(1.25);
@@ -61,16 +63,18 @@ const OvertimePayDialog = ({ row, endpoint, dataListName, schema }) => {
     }
   };
 
-  // fetch employees after we have settings
+  // fetch employees from PersonnelServices (same FY + Region/Department/Division as in PS)
   const fetchEmployees = async () => {
     if (!settings?.fiscalYear) return;
     try {
-      const res = await api.get(`/getpersonnels?fiscalYear=${settings.fiscalYear}`);
-      // filter out Submitted / Approved
-      setEmployees(res.data.filter(emp => !["Submitted", "Approved"].includes(emp.status)));
+      const params = { fiscalYear: settings.fiscalYear };
+      if (activeRegion?.name) params.region = activeRegion.name;
+      const res = await api.get("/getpersonnels", { params });
+      const list = res.data || [];
+      setEmployees(list.filter(emp => !["Submitted", "Approved"].includes(emp.status)));
     } catch (err) {
       console.error("❌ Error fetching employees:", err);
-      toast.error("Nabigo sa pagkuha ng employees.");
+      toast.error("Nabigo sa pagkuha ng personnel (PersonnelServices).");
     }
   };
 
@@ -82,7 +86,7 @@ const OvertimePayDialog = ({ row, endpoint, dataListName, schema }) => {
     if (settings) {
       fetchEmployees();
     }
-  }, [settings]);
+  }, [settings, activeRegion?.name]);
 
   const computeAmount = useCallback(() => {
     const wd = Math.min(Number(weekdayHours) || 0, 3);

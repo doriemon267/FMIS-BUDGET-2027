@@ -158,90 +158,106 @@ exports.bulkAddCOSPersonnel = async (req, res) => {
         }
       });
     }
-    const checks = await Promise.all(
-      employees.map(async (employee) => {
-        // For non-SUPER_ADMIN: Double-check that employee belongs to user's assigned region
-        if (!isSuperAdmin && employee.Region !== userRegion) {
-          console.error(`SECURITY WARNING: Employee ${employee.EmployeeFullName} has region ${employee.Region} but user's assigned region is ${userRegion}`);
-          return null;
-        }
 
-        // Additional validation: Check if Division user is processing employee from their division
-        if (!isSuperAdmin && userAssignment?.assignmentLevel === 'DIVISION' && employee.Division !== userDivision) {
-          console.warn(`WORKFLOW WARNING: Division user ${req.user.id} processing employee ${employee.EmployeeFullName} from division ${employee.Division} (user's division: ${userDivision})`);
-        }
+    // Duplicate check: same employee + fiscal year = skip (DB has unique index on employeeNumber + fiscalYear).
+    // Fetch existing by fiscalYear (+ region) so we don't insert duplicate. Still save workflowRef for per-proposal listing.
+    const workflowProposalId = req.body.proposalId || null;
+    const fiscalYearNorm = fiscalYear != null ? String(fiscalYear) : undefined;
+    const existingQuery = {
+      ...(fiscalYearNorm && { fiscalYear: { $in: [fiscalYearNorm, Number(fiscalYear)] } }),
+      ...(userRegion && { region: userRegion })
+    };
+    const existingCOS = await COSPersonnel.find(existingQuery)
+      .select('employeeNumber itemNumber positionTitle department division gradelevel_SG employeeFullName').lean();
+    const existingByEmployeeNumber = new Map();
+    const existingVacantByDetails = new Set();
+    existingCOS.forEach((s) => {
+      if (s.employeeNumber && s.employeeNumber !== 'VACANT' && String(s.employeeNumber).trim() !== '') {
+        existingByEmployeeNumber.set(s.employeeNumber, s);
+      }
+      if (s.itemNumber && String(s.itemNumber).trim() !== '') {
+        existingByEmployeeNumber.set(s.itemNumber.trim(), s);
+      }
+      const isVacant = s.employeeFullName && String(s.employeeFullName).toUpperCase() === 'VACANT';
+      if (isVacant) {
+        const vacantKey = `${s.positionTitle}|${s.department}|${s.division || ''}|${s.gradelevel_SG || ''}`;
+        existingVacantByDetails.add(vacantKey);
+      }
+    });
 
-        const existingRecord = await COSPersonnel.findOne({
-          employeeNumber: employee.EmployeeID,
-          fiscalYear: fiscalYear,
-        });
-        
-        // Additional check for VACANT positions using ItemNumber or position details
-        const isVacant = employee.EmployeeFullName && 
+    const checks = employees.map((employee, idx) => {
+      // For non-SUPER_ADMIN: Double-check that employee belongs to user's assigned region
+      if (!isSuperAdmin && employee.Region !== userRegion) {
+        console.error(`SECURITY WARNING: Employee ${employee.EmployeeFullName} has region ${employee.Region} but user's assigned region is ${userRegion}`);
+        return null;
+      }
+
+      // Additional validation: Check if Division user is processing employee from their division
+      if (!isSuperAdmin && userAssignment?.assignmentLevel === 'DIVISION' && employee.Division !== userDivision) {
+        console.warn(`WORKFLOW WARNING: Division user ${req.user.id} processing employee ${employee.EmployeeFullName} from division ${employee.Division} (user's division: ${userDivision})`);
+      }
+
+      const isVacant = employee.EmployeeFullName &&
                         employee.EmployeeFullName.toString().toUpperCase() === 'VACANT';
-        
-        let existingVacantRecord = null;
-        if (isVacant && !existingRecord) {
-          const duplicateConditions = [];
-          
-          // Check by ItemNumber if available (most reliable)
-          if (employee.ItemNumber && employee.ItemNumber.trim() !== '') {
-            duplicateConditions.push({ itemNumber: employee.ItemNumber });
-          }
-          
-          // Always include position details as fallback
-          duplicateConditions.push({
-            positionTitle: employee.PositionTitle,
-            department: employee.Department,
-            division: employee.Division || null,
-            section: employee.Section || null,
-            gradelevel_SG: employee.SG?.toString() || "",
-            fiscalYear: fiscalYear,
-            region: employee.Region,
-            employeeFullName: "VACANT"
-          });
-          
-          existingVacantRecord = await COSPersonnel.findOne({
-            $or: duplicateConditions
-          });
+      let isDuplicate = false;
+      if (isVacant) {
+        if (employee.ItemNumber && employee.ItemNumber.trim() !== '') {
+          isDuplicate = existingByEmployeeNumber.has(employee.ItemNumber.trim());
         }
-        
-        if (existingRecord || existingVacantRecord) {
-          console.log(`Skipping ${isVacant ? 'VACANT position' : 'employee'} ${employee.EmployeeFullName} - already exists`);
+        if (!isDuplicate) {
+          const vacantKey = `${employee.PositionTitle}|${employee.Department}|${employee.Division || ''}|${employee.SG?.toString() || ''}`;
+          isDuplicate = existingVacantByDetails.has(vacantKey);
+        }
+      } else {
+        const empId = employee.EmployeeID != null ? String(employee.EmployeeID).trim() : '';
+        isDuplicate = empId ? existingByEmployeeNumber.has(empId) : false;
+        if (!empId) {
+          // Non-VACANT without EmployeeID would get synthetic id and couldn't be matched on next run; skip to avoid duplicates
           return null;
         }
-        
-        // Check if essential required fields are present (SG and Rate are still required)
-        if (!employee.SG || !employee.Rate) {
-          // Skip employees with missing essential required fields
-          return null;
-        }
-        
-        const monthlySalary = employee.Rate;
-        const annualSalary = monthlySalary * 12;
-        return {
-          department: employee.Department,
-          region: employee.Region,
-          budgetType: budgetType,
-          processBy: req.body.processBy,
-          processDate: new Date(),
-          fiscalYear: fiscalYear,
-          positionTitle: employee.PositionTitle,
-          itemNumber: employee.ItemNumber || "",
-          gradelevel_SG: employee.SG.toString(),
-          step: employee.Step || null,
-          gradelevel_JG: employee.JG ? employee.JG.toString() : "",
-          employeeFullName: employee.EmployeeFullName,
-          employeeNumber: employee.EmployeeID,
-          division: employee.Division,
-          statusOfAppointment: employee.StatusOfAppointment,
-          monthlySalary: monthlySalary,
-          annualSalary: annualSalary,
-          createdBy: req.user?.id ? String(req.user.id) : undefined, // Track who created this record
-          Total: annualSalary,
-        };
-      })
-    );
+      }
+      if (isDuplicate) {
+        console.log(`Skipping ${isVacant ? 'VACANT position' : 'employee'} ${employee.EmployeeFullName} - already exists for this fiscal year`);
+        return null;
+      }
+
+      // Check if essential required fields are present (SG and Rate are still required)
+      if (!employee.SG || !employee.Rate) {
+        return null;
+      }
+
+      const monthlySalary = employee.Rate;
+      const annualSalary = monthlySalary * 12;
+      // Avoid null employeeNumber: unique index would allow only one (null, fiscalYear). Use synthetic id for VACANT/missing.
+      let employeeNumber = employee.EmployeeID != null && String(employee.EmployeeID).trim() !== '' ? employee.EmployeeID : null;
+      if (employeeNumber == null || (typeof employeeNumber === 'string' && employeeNumber.trim() === '')) {
+        const itemNo = (employee.ItemNumber || '').toString().trim();
+        const posKey = [employee.PositionTitle, employee.Department, employee.Division].filter(Boolean).join('|');
+        employeeNumber = isVacant ? `VACANT-${itemNo || `${posKey}-${idx}`}` : `COS-${itemNo || `${posKey}-${idx}`}`;
+      }
+      return {
+        department: employee.Department,
+        region: employee.Region,
+        budgetType: budgetType,
+        processBy: req.body.processBy,
+        processDate: new Date(),
+        fiscalYear: fiscalYear,
+        positionTitle: employee.PositionTitle,
+        itemNumber: employee.ItemNumber || "",
+        gradelevel_SG: employee.SG.toString(),
+        step: employee.Step || null,
+        gradelevel_JG: employee.JG ? employee.JG.toString() : "",
+        employeeFullName: employee.EmployeeFullName,
+        employeeNumber,
+        division: employee.Division,
+        statusOfAppointment: employee.StatusOfAppointment,
+        monthlySalary: monthlySalary,
+        annualSalary: annualSalary,
+        createdBy: req.user?.id ? String(req.user.id) : undefined,
+        Total: annualSalary,
+        ...(workflowProposalId && { workflowRef: workflowProposalId }),
+      };
+    });
     const cosPersonnelData = checks.filter((record) => record !== null);
     if (cosPersonnelData.length > 0) {
       const addedRecords = await COSPersonnel.insertMany(cosPersonnelData);
@@ -718,9 +734,9 @@ exports.getCOSByParams = async (req, res) => {
     const { proposalId, region } = req.query;
     const query = {};
 
-    // If proposalId is provided, use it to find related COS personnel
+    // If proposalId is provided, filter by workflowRef (NewProposalWorkflow _id) so list is per-proposal
     if (proposalId) {
-      query.proposalId = proposalId;
+      query.workflowRef = proposalId;
     }
 
     // Apply region filter if provided

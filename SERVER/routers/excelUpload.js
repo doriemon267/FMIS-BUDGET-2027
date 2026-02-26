@@ -11,6 +11,7 @@ const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
 
 const { generateEmployeeTemplate, getEmployeeFields } = require('../utils/employeeTemplateGenerator');
 const { validateAndProcessEmployeeRecord } = require('../utils/employeeImportProcessor');
+const { getNextVacantEmployeeNumber, getNextRegularEmployeeNumber } = require('../utils/generateVacantEmployeeNumber');
 const router = express.Router();
 // Apply authentication to all excel upload routes
 router.use(tokenMiddleware);
@@ -136,11 +137,52 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       }
 
       try {
-        const matchQuery = {
-          EmployeeFullName: new RegExp(`^${String(result.record.EmployeeFullName).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
-          fiscalYear: activeSettings.fiscalYear,
-          Region: new RegExp(`^${String(activeRegion).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
-        };
+        const rec = result.record;
+        const isVacant = rec.EmployeeFullName && String(rec.EmployeeFullName).toUpperCase().trim() === 'VACANT';
+        const regionRegex = new RegExp(`^${String(activeRegion).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+        const fiscalYearVal = activeSettings.fiscalYear;
+
+        // Auto-generate Employee Number when missing: VACANT → V00001, regular → E00001
+        const hasEmployeeNo = rec.EmployeeID && String(rec.EmployeeID).trim() !== '' || rec.Employee_No && String(rec.Employee_No).trim() !== '';
+        if (!hasEmployeeNo) {
+          if (isVacant) {
+            rec.EmployeeID = await getNextVacantEmployeeNumber(Employee, fiscalYearVal, activeRegion);
+          } else {
+            rec.EmployeeID = await getNextRegularEmployeeNumber(Employee, fiscalYearVal, activeRegion);
+          }
+        } else if (rec.Employee_No != null && String(rec.Employee_No).trim() !== '') {
+          rec.EmployeeID = rec.EmployeeID || String(rec.Employee_No).trim();
+        }
+
+        // For VACANT: each position is a separate record — match by ItemNumber or by position details so we don't overwrite one VACANT for all
+        let matchQuery;
+        if (isVacant) {
+          const itemNo = (rec.itemNumber || rec.ItemNumber || '').toString().trim();
+          if (itemNo) {
+            matchQuery = {
+              EmployeeFullName: /^VACANT$/i,
+              fiscalYear: fiscalYearVal,
+              Region: regionRegex,
+              itemNumber: itemNo
+            };
+          } else {
+            matchQuery = {
+              EmployeeFullName: /^VACANT$/i,
+              fiscalYear: fiscalYearVal,
+              Region: regionRegex,
+              PositionTitle: rec.PositionTitle,
+              Department: rec.Department,
+              Division: (rec.Division || ''),
+              Section: (rec.Section || '')
+            };
+          }
+        } else {
+          matchQuery = {
+            EmployeeFullName: new RegExp(`^${String(rec.EmployeeFullName).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
+            fiscalYear: fiscalYearVal,
+            Region: regionRegex
+          };
+        }
         const existingEmployee = await Employee.findOne(matchQuery);
 
         if (existingEmployee) {

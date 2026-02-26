@@ -113,6 +113,7 @@ const advancedSchema = yup.object().shape({
   employeeCompensation: yup.number().min(0),
   weekdayMultiplier: yup.number().min(0),
   weekendMultiplier: yup.number().min(0),
+  subsistenceAllowance: yup.number().min(0),
   subsistenceAllowanceRate: yup.number().min(0),
   earnedLeaves: yup.number().min(0),
   loyaltyPay: yup.object({
@@ -288,7 +289,8 @@ const CompensationSection = ({ control, errors }) => {
     { name: "meal", label: "Meal Allowance (₱)" },
     { name: "courtAppearance", label: "Court Appearance (₱)" },
     { name: "childrenAllowance", label: "Children Allowance (₱)" },
-    { name: "subsistenceAllowanceRate", label: "Subsistence Allowance Rate" },
+    { name: "subsistenceAllowance", label: "Subsistence Allowance (Monthly ₱)" },
+    { name: "subsistenceAllowanceRate", label: "Subsistence Allowance MDS Rate" },
     { name: "earnedLeaves", label: "Earned Leaves (Days)", special: true },
   ];
   return (
@@ -718,6 +720,7 @@ const CompensationSettingsDialogForm = ({
       employeeCompensation: 0,
       weekdayMultiplier: 0,
       weekendMultiplier: 0,
+      subsistenceAllowance: 0,
       subsistenceAllowanceRate: 0,
       loyaltyPay: {
         baseYears: 0,
@@ -760,6 +763,7 @@ const CompensationSettingsDialogForm = ({
         employeeCompensation: editData.employeeCompensation,
         weekdayMultiplier: editData.weekdayMultiplier,
         weekendMultiplier: editData.weekendMultiplier,
+        subsistenceAllowance: editData.subsistenceAllowance,
         subsistenceAllowanceRate: editData.subsistenceAllowanceRate,
         earnedLeaves: editData.earnedLeaves,
         loyaltyPay: {
@@ -816,6 +820,7 @@ const CompensationSettingsDialogForm = ({
             employeeCompensation: advanced.employeeCompensation ?? current.employeeCompensation,
             weekdayMultiplier: advanced.weekdayMultiplier ?? current.weekdayMultiplier,
             weekendMultiplier: advanced.weekendMultiplier ?? current.weekendMultiplier,
+            subsistenceAllowance: advanced.subsistenceAllowance ?? current.subsistenceAllowance,
             subsistenceAllowanceRate: advanced.subsistenceAllowanceRate ?? current.subsistenceAllowanceRate,
             earnedLeaves: advanced.earnedLeaves ?? current.earnedLeaves,
           }));

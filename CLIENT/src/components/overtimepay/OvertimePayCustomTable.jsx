@@ -91,6 +91,7 @@ const OvertimePayCustomTable = ({
     operator: "=",
   });
   const [employeeOptions, setEmployeeOptions] = useState([]);
+  const [activeFiscalYear, setActiveFiscalYear] = useState(null);
 
   // Function to get hierarchical display based on user assignment level
   const getHierarchicalDisplay = () => {
@@ -149,22 +150,16 @@ const OvertimePayCustomTable = ({
   });
 
   const fetchEmployees = async () => {
+    if (!activeFiscalYear) return;
     try {
-      // Use the byParams endpoint to filter by region
-      const params = {};
-      if (activeRegion?.name) {
-        params.region = activeRegion.name;
-      }
-      
-      // Use the endpoint that supports region filtering
-      const res = await api.get("/getpersonnels/byParams", { params });
+      const params = { fiscalYear: activeFiscalYear };
+      if (activeRegion?.name) params.region = activeRegion.name;
+      const res = await api.get("/getpersonnels", { params });
       let data = res.data || [];
-      
-      // De-duplicate employee options
       const uniqueData = [];
       const seen = new Set();
       for (const emp of data) {
-        const key = emp.EmployeeID || emp.employeeFullName;
+        const key = emp.employeeNumber || emp.employeeFullName;
         if (!seen.has(key)) {
           seen.add(key);
           uniqueData.push(emp);
@@ -172,30 +167,26 @@ const OvertimePayCustomTable = ({
       }
       setEmployeeOptions(uniqueData);
     } catch (err) {
-      console.error("Error fetching employees:", err);
-      // Fallback to fetching all employees if the filtered endpoint fails
-      try {
-        const fallbackRes = await api.get("/getpersonnels");
-        let fallbackData = fallbackRes.data || [];
-        const uniqueData = [];
-        const seen = new Set();
-        for (const emp of fallbackData) {
-          const key = emp.EmployeeID || emp.employeeFullName;
-          if (!seen.has(key)) {
-            seen.add(key);
-            uniqueData.push(emp);
-          }
-        }
-        setEmployeeOptions(uniqueData);
-      } catch (fallbackErr) {
-        console.error("Fallback error fetching employees:", fallbackErr);
-      }
+      console.error("Error fetching personnel (PersonnelServices):", err);
+      setEmployeeOptions([]);
     }
   };
 
   useEffect(() => {
-    fetchEmployees();
-  }, [activeRegion]); // Re-fetch when region changes
+    const loadSettings = async () => {
+      try {
+        const res = await api.get("/settings/active");
+        if (res.data?.fiscalYear) setActiveFiscalYear(res.data.fiscalYear.toString());
+      } catch (e) {
+        console.error("Error fetching active settings:", e);
+      }
+    };
+    loadSettings();
+  }, []);
+
+  useEffect(() => {
+    if (activeFiscalYear) fetchEmployees();
+  }, [activeFiscalYear, activeRegion?.name]);
 
   const refreshData = () => {
     refetch();

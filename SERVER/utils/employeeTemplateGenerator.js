@@ -294,6 +294,7 @@ const generateEmployeeTemplate = (options = {}) => {
   const templateData = [
     {
       'EmployeeFullName*': 'Juan Dela Cruz',
+      'Employee Number': '',
       'DateOfBirth': '01/15/1990',
       'Region*': region || 'REGION_NAME',
       'Department*': 'Department Name',
@@ -311,6 +312,7 @@ const generateEmployeeTemplate = (options = {}) => {
     },
     {
       'EmployeeFullName*': 'Maria Santos',
+      'Employee Number': '',
       'DateOfBirth': '03/20/1985',
       'Region*': region || 'REGION_NAME',
       'Department*': 'IT Department',
@@ -326,6 +328,24 @@ const generateEmployeeTemplate = (options = {}) => {
       'Step': 1,
       'Rate': '',
     },
+    {
+      'EmployeeFullName*': 'VACANT',
+      'Employee Number': '',
+      'DateOfBirth': '',
+      'Region*': region || 'REGION_NAME',
+      'Department*': 'Department Name',
+      'Division': 'Division Name',
+      'PositionTitle*': 'Position Title',
+      'StatusOfAppointment*': 'Permanent',
+      'DateOfAppointment*': '',
+      'Status*': 'Active',
+      'Item_No': '1',
+      'PG': '',
+      'SG': '',
+      'JG': '',
+      'Step': '',
+      'Rate': '',
+    },
     // Add filtered sample data based on access level
     ...generateFilteredSampleData(region, scope, accessibleDepartments, accessibleDivisions, accessibleSections)
   ];
@@ -337,6 +357,7 @@ const generateEmployeeTemplate = (options = {}) => {
   // Set column widths for better readability
   const colWidths = [
     { wch: 20 }, // EmployeeFullName*
+    { wch: 14 }, // Employee Number
     { wch: 12 }, // DateOfBirth
     { wch: 15 }, // Region*
     { wch: 18 }, // Department*
@@ -371,7 +392,8 @@ const generateEmployeeTemplate = (options = {}) => {
     { 'Instructions': 'Employee Import Template Instructions' },
     { 'Instructions': '' },
     { 'Instructions': 'REQUIRED FIELDS (marked with *):' },
-    { 'Instructions': '- EmployeeFullName*: Full name of the employee' },
+    { 'Instructions': '- EmployeeFullName*: Full name of the employee (use VACANT for vacant positions)' },
+    { 'Instructions': '- Employee Number: Optional. For VACANT leave blank to auto-generate (e.g. V00001)' },
     { 'Instructions': '- Region*: Must match the currently selected region' },
     { 'Instructions': '- Department*: Department name' },
     { 'Instructions': '- PositionTitle*: Job position title' },
@@ -434,6 +456,7 @@ const getEmployeeFields = () => {
       'Status'
     ],
     optional: [
+      'Employee Number',
       'DateOfBirth',
       'DateOfAppointment',
       'Division',
@@ -446,7 +469,8 @@ const getEmployeeFields = () => {
     ],
     computed: [],
     descriptions: {
-      EmployeeFullName: 'Full name of the employee',
+      EmployeeFullName: 'Full name of the employee (use VACANT for vacant positions)',
+      'Employee Number': 'Optional. For VACANT leave blank to auto-generate (e.g. V00001)',
       DateOfBirth: 'Date of birth (optional)',
       Region: 'Region name (must match active region)',
       Department: 'Department name',

@@ -409,29 +409,38 @@ exports.getAllPersonnelServices = async (req, res) => {
       }
     }
     
-    // Recalculate fields
+    // Recalculate fields: use stored values when present, else fallback to activeSettings (annual = monthly * 12 where applicable)
     personnelServices = personnelServices.map((personnel) => {
+      const recalculatedSubsistenceAllowance = personnel.subsistenceAllowance ?? 0;
       const recalculatedSubsistenceAllowanceMDS =
         personnel.subsistenceAllowanceMDS || 0;
       const recalculatedSubsistenceAllowanceST =
         personnel.subsistenceAllowanceST || 0;
       const recalculatedLoyaltyAward = personnel.loyaltyAward || 0;
       const recalculatedOvertimePay = personnel.overtimePay || 0;
-      const recalculatedAnnualSalary = personnel.monthlySalary * 12;
-      const recalculatedRATA = personnel.RATA;
-      const recalculatedPERA = (activeSettings.PERA || 0) * 12;
-      const recalculatedUniform = activeSettings.uniformAllowance || 0;
-      const recalculatedProductivityIncentive =
-        activeSettings.productivityIncentive || 0;
-      const recalculatedMedical = personnel.medical || 0;
-      const recalculatedMeal = personnel.meal || 0;
-      const recalculatedChildrenAllowance = personnel.childrenAllowance || 0;
+      const recalculatedAnnualSalary = (personnel.monthlySalary || 0) * 12;
+      const recalculatedRATA = personnel.RATA ?? 0;
+      const recalculatedPERA = (personnel.PERA != null && personnel.PERA !== 0)
+        ? personnel.PERA
+        : (activeSettings.PERA || 0) * 12;
+      const recalculatedUniform = (personnel.uniformALLOWANCE != null && personnel.uniformALLOWANCE !== 0)
+        ? personnel.uniformALLOWANCE
+        : (activeSettings.uniformAllowance || 0) ;
+      const recalculatedProductivityIncentive = (personnel.productivityIncentive != null && personnel.productivityIncentive !== 0)
+        ? personnel.productivityIncentive
+        : (activeSettings.productivityIncentive || 0);
+      const recalculatedMedical = personnel.medical ?? 0;
+      const recalculatedMeal = personnel.meal ?? 0;
+      const recalculatedChildrenAllowance = personnel.childrenAllowance ?? 0;
       const recalculatedMidyearBonus = personnel.midyearBonus || personnel.monthlySalary || 0;
-      const recalculatedCashGift = activeSettings.cashGift || 0;
-      const recalculatedYearEndBonus = personnel.yearEndBonus;
+      const recalculatedCashGift = (personnel.cashGift != null && personnel.cashGift !== 0)
+        ? personnel.cashGift
+        : (activeSettings.cashGift || 0);
+      const recalculatedYearEndBonus = personnel.yearEndBonus ?? 0;
       const recalculatedCourtAppearanceAmount = personnel.courtAppearance || 0;
-      const recalculatedGsis =
-        personnel.annualSalary * (activeSettings.gsisPremium || 0);
+      const recalculatedGsis = (personnel.gsisPremium != null && personnel.gsisPremium !== 0)
+        ? personnel.gsisPremium
+        : recalculatedAnnualSalary * (activeSettings.gsisPremium || 0);
       // Calculate PhilHealth premium for 2025 per Circular 2019-0009
       let monthlyPhilhealthPremium;
       const monthlySalary = personnel.monthlySalary;
@@ -442,13 +451,20 @@ exports.getAllPersonnelServices = async (req, res) => {
       } else {
         monthlyPhilhealthPremium = monthlySalary * 0.05; // 5% rate for 2025
       }
-      const recalculatedPhilhealth = (monthlyPhilhealthPremium * 12) / 2;
-      const recalculatedPagibig = (activeSettings.pagibigPremium || 0) * 12;
-      const recalculatedEmpComp = (activeSettings.employeeCompensation || 0) * 12;
+      const recalculatedPhilhealth = (personnel.philhealthPremium != null && personnel.philhealthPremium !== 0)
+        ? personnel.philhealthPremium
+        : (monthlyPhilhealthPremium * 12) / 2;
+      const recalculatedPagibig = (personnel.pagibigPremium != null && personnel.pagibigPremium !== 0)
+        ? personnel.pagibigPremium
+        : (activeSettings.pagibigPremium || 0) * 12;
+      const recalculatedEmpComp = (personnel.employeeCompensation != null && personnel.employeeCompensation !== 0)
+        ? personnel.employeeCompensation
+        : (activeSettings.employeeCompensation || 0) * 12;
       const recalculatedTerminalLeave = personnel.terminalLeave || 0;
       const recalculatedearnedLeaves = personnel.earnedLeaves || 0;
       const recalculatedTotal =
         recalculatedAnnualSalary +
+        recalculatedSubsistenceAllowance +
         recalculatedSubsistenceAllowanceMDS +
         recalculatedSubsistenceAllowanceST +
         recalculatedLoyaltyAward +
@@ -473,6 +489,7 @@ exports.getAllPersonnelServices = async (req, res) => {
       return {
         ...personnel.toObject(),
         annualSalary: recalculatedAnnualSalary,
+        subsistenceAllowance: recalculatedSubsistenceAllowance,
         subsistenceAllowanceMDS: recalculatedSubsistenceAllowanceMDS,
         subsistenceAllowanceST: recalculatedSubsistenceAllowanceST,
         loyaltyAward: recalculatedLoyaltyAward,
@@ -764,59 +781,57 @@ exports.bulkAddPersonnelServices = async (req, res) => {
     const personnelServicesData = [];
     const duplicates = [];
 
-    // 🚀 OPTIMIZATION: Fetch all existing personnel services for this fiscal year and region once
-    // to avoid thousands of findOne calls in the loop below.
-    const existingServices = await PersonnelServices.find({
-      fiscalYear: fiscalYear,
-      region: userRegion
-    }).select('employeeNumber itemNumber positionTitle department division section gradelevel_SG statusOfAppointment employeeFullName').lean();
+    // 🚀 Fetch existing personnel for duplicate check.
+    // When workflowProposalId is set: scope by that proposal. Otherwise use fiscalYear only (no region) so we catch all duplicates in the fiscal year.
+    const fiscalYearNorm = fiscalYear != null ? String(fiscalYear) : undefined;
+    const existingQuery = {
+      ...(fiscalYearNorm && { fiscalYear: { $in: [fiscalYearNorm, Number(fiscalYear)] } }),
+      ...(workflowProposalId ? { workflowRef: workflowProposalId } : {})
+    };
+    const existingServices = await PersonnelServices.find(existingQuery)
+      .select('employeeNumber itemNumber positionTitle department division section gradelevel_SG statusOfAppointment employeeFullName').lean();
 
-    // Create lookup maps for fast duplicate checking
+    // Build lookup maps; use normalized keys so we don't miss duplicates (e.g. string coercion, trim).
     const existingByEmployeeNumber = new Map();
     const existingVacantByDetails = new Set();
     const existingByItemNumber = new Map();
 
     existingServices.forEach(s => {
-      if (s.employeeNumber && s.employeeNumber !== 'VACANT' && s.employeeNumber !== '') {
-        existingByEmployeeNumber.set(s.employeeNumber, s);
+      const empNum = s.employeeNumber != null ? String(s.employeeNumber).trim() : '';
+      if (empNum && empNum !== 'VACANT') {
+        existingByEmployeeNumber.set(empNum, s);
       }
-      
-      if (s.itemNumber && s.itemNumber.trim() !== '') {
-        existingByItemNumber.set(s.itemNumber.trim(), s);
+      const itemNum = s.itemNumber != null ? String(s.itemNumber).trim() : '';
+      if (itemNum) {
+        existingByItemNumber.set(itemNum, s);
       }
-
-      const isVacant = s.employeeFullName && s.employeeFullName.toString().toUpperCase() === 'VACANT';
+      const isVacant = s.employeeFullName && String(s.employeeFullName).toUpperCase() === 'VACANT';
       if (isVacant) {
-        // Create a unique key for vacant positions based on details
-        const vacantKey = `${s.positionTitle}|${s.department}|${s.division || ''}|${s.section || ''}|${s.gradelevel_SG}`;
+        const vacantKey = `${s.positionTitle}|${s.department}|${s.division || ''}|${s.section || ''}|${s.gradelevel_SG || ''}`;
         existingVacantByDetails.add(vacantKey);
       }
     });
-    
+
     for (const employee of employees) {
       let existingPersonnelService = null;
-      
-      // Check for duplicates differently based on whether it's a VACANT position
-      const isVacant = employee.EmployeeFullName && 
-                      employee.EmployeeFullName.toString().toUpperCase() === 'VACANT';
-      
+      const isVacant = employee.EmployeeFullName && String(employee.EmployeeFullName).toUpperCase().trim() === 'VACANT';
+
       if (isVacant) {
-        // Check by ItemNumber if available (most reliable)
-        if (employee.ItemNumber && employee.ItemNumber.trim() !== '') {
-          existingPersonnelService = existingByItemNumber.get(employee.ItemNumber.trim());
+        if (employee.ItemNumber && String(employee.ItemNumber).trim() !== '') {
+          existingPersonnelService = existingByItemNumber.get(String(employee.ItemNumber).trim());
         }
-        
-        // Fallback to position details for VACANT
         if (!existingPersonnelService) {
-          const vacantKey = `${employee.PositionTitle}|${employee.Department}|${employee.Division || ''}|${employee.Section || ''}|${employee.SG?.toString() || ""}`;
-          if (existingVacantByDetails.has(vacantKey)) {
-            // We don't have the full object in the Set, but we know it exists
-            existingPersonnelService = true; 
-          }
+          const vacantKey = `${employee.PositionTitle}|${employee.Department}|${employee.Division || ''}|${employee.Section || ''}|${employee.SG?.toString() || ''}`;
+          if (existingVacantByDetails.has(vacantKey)) existingPersonnelService = true;
         }
       } else {
-        // For regular employees, check by employeeNumber
-        existingPersonnelService = existingByEmployeeNumber.get(employee.EmployeeID);
+        const lookupKey = employee.EmployeeID != null ? String(employee.EmployeeID).trim() : '';
+        if (lookupKey) {
+          existingPersonnelService = existingByEmployeeNumber.get(lookupKey);
+        }
+        if (!existingPersonnelService && employee.ItemNumber && String(employee.ItemNumber).trim() !== '') {
+          existingPersonnelService = existingByItemNumber.get(String(employee.ItemNumber).trim());
+        }
       }
       
       if (existingPersonnelService) {
@@ -831,8 +846,8 @@ exports.bulkAddPersonnelServices = async (req, res) => {
           positionTitle: employee.PositionTitle,
           department: employee.Department,
           division: employee.Division,
-          existingStatus: existingPersonnelService.statusOfAppointment,
-          existingId: existingPersonnelService._id,
+          existingStatus: existingPersonnelService && typeof existingPersonnelService === 'object' ? existingPersonnelService.statusOfAppointment : undefined,
+          existingId: existingPersonnelService && typeof existingPersonnelService === 'object' ? existingPersonnelService._id : undefined,
           isVacant: isVacant
         });
         continue;
@@ -885,11 +900,11 @@ exports.bulkAddPersonnelServices = async (req, res) => {
         annualSalary: annualSalary,
         RATA: rataAmount * 12,
         PERA: (req.body.PERA || activeSettings.PERA || 0) * 12,
-        uniformALLOWANCE: (activeSettings.uniformAllowance || 0) * 12,
-        productivityIncentive: (activeSettings.productivityIncentive || 0) * 12,
-        medical: (req.body.medicalAllowance || activeSettings.medicalAllowance || 0) * 12,
+        uniformALLOWANCE: (activeSettings.uniformAllowance || 0),
+        productivityIncentive: (activeSettings.productivityIncentive || 0),
+        medical: 0, // Only set via /medicalAllowance page for personnel who qualify
         meal: 0,
-        cashGift: (activeSettings.cashGift || 0) * 12,
+        cashGift: (activeSettings.cashGift || 0),
         midyearBonus: monthlySalary,
         yearEndBonus: monthlySalary,
         gsisPremium: annualSalary * (activeSettings.gsisPremium || 0),

@@ -1,23 +1,46 @@
 const mongoose = require("mongoose");
 const EmployeeMaster = require("../models/employee_master");
+const { getNextVacantEmployeeNumber, getNextRegularEmployeeNumber } = require("../utils/generateVacantEmployeeNumber");
+
 // Create a new employee
 const createEmployee = async (req, res) => {
   try {
-    const { EmployeeFullName, fiscalYear, Region } = req.body;
-    // Check for duplicate employee in the same fiscal year and region
-    if (EmployeeFullName && fiscalYear && Region) {
-      const existingEmployee = await EmployeeMaster.findOne({
-        EmployeeFullName: { $regex: new RegExp(`^${EmployeeFullName}$`, 'i') }, // Case-insensitive exact match
-        fiscalYear: fiscalYear,
-        Region: Region
+    const { EmployeeFullName, fiscalYear, Region, EmployeeID } = req.body;
+    const isVacant = EmployeeFullName && String(EmployeeFullName).toUpperCase().trim() === 'VACANT';
+    let body = { ...req.body };
+    if (!EmployeeID || String(EmployeeID).trim() === '') {
+      if (isVacant) {
+        body.EmployeeID = await getNextVacantEmployeeNumber(EmployeeMaster, fiscalYear, Region);
+      } else {
+        body.EmployeeID = await getNextRegularEmployeeNumber(EmployeeMaster, fiscalYear, Region);
+      }
+    }
+    // Check for duplicate: by EmployeeID when present, else by fullName+fiscalYear+region (VACANT: also check ItemNumber)
+    if (body.EmployeeID && fiscalYear && Region) {
+      const existingByNumber = await EmployeeMaster.findOne({
+        EmployeeID: body.EmployeeID,
+        fiscalYear,
+        Region: { $regex: new RegExp(`^${Region}$`, 'i') }
       });
-      if (existingEmployee) {
-        return res.status(400).json({ 
-          error: `Employee "${EmployeeFullName}" already exists in fiscal year ${fiscalYear} for region ${Region}` 
+      if (existingByNumber) {
+        return res.status(400).json({
+          error: `Employee Number "${body.EmployeeID}" already exists in fiscal year ${fiscalYear} for region ${Region}`
         });
       }
     }
-    const employee = new EmployeeMaster(req.body);
+    if (EmployeeFullName && fiscalYear && Region && !body.EmployeeID) {
+      const existingEmployee = await EmployeeMaster.findOne({
+        EmployeeFullName: { $regex: new RegExp(`^${EmployeeFullName}$`, 'i') },
+        fiscalYear: fiscalYear,
+        Region: { $regex: new RegExp(`^${Region}$`, 'i') }
+      });
+      if (existingEmployee) {
+        return res.status(400).json({
+          error: `Employee "${EmployeeFullName}" already exists in fiscal year ${fiscalYear} for region ${Region}`
+        });
+      }
+    }
+    const employee = new EmployeeMaster(body);
     await employee.save();
     res.status(201).json(employee);
   } catch (error) {

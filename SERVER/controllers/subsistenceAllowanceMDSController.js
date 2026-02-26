@@ -248,7 +248,7 @@ exports.deleteSubsistenceAllowance = async (req, res) => {
       fiscalYear:     toDelete.fiscalYear,
     });
     if (personnel) {
-      personnel.subsistenceAllowance = 0;
+      personnel.subsistenceAllowanceMDS = 0;
       personnel.Total = Object.values(personnel.toObject()).reduce(
         (sum, v) => (typeof v === "number" ? sum + v : sum),
         0
