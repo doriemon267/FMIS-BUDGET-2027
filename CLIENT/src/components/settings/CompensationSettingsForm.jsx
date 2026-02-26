@@ -98,6 +98,7 @@ const advancedSchema = yup.object().shape({
   uniformAllowance: yup.number().min(0),
   productivityIncentive: yup.number().min(0),
   medicalAllowance: yup.number().min(0),
+  additionalMedical: yup.number().min(0),
   cashGift: yup.number().min(0),
   meal: yup.number().min(0),
   courtAppearance: yup.number().min(0),
@@ -292,6 +293,7 @@ const CompensationSection = ({ control, errors }) => {
     { name: "subsistenceAllowance", label: "Subsistence Allowance (Monthly ₱)" },
     { name: "subsistenceAllowanceRate", label: "Subsistence Allowance MDS Rate" },
     { name: "earnedLeaves", label: "Earned Leaves (Days)", special: true },
+    { name: "additionalMedical", label: "Additional Medical(₱)" },
   ];
   return (
     <AccordionSection title="Compensation & Allowances" icon={<PesoIcon />}>
@@ -710,6 +712,7 @@ const CompensationSettingsDialogForm = ({
       uniformAllowance: 0,
       productivityIncentive: 0,
       medicalAllowance: 200, // Default to 200 pesos per month per dependent
+      additionalMedical:0,
       cashGift: 0,
       meal: 200, // Default to 200 pesos per day for eligible employees
       courtAppearance: 0,
@@ -753,6 +756,7 @@ const CompensationSettingsDialogForm = ({
         uniformAllowance: editData.uniformAllowance,
         productivityIncentive: editData.productivityIncentive,
         medicalAllowance: editData.medicalAllowance,
+        additionalMedical: editData.additionalMedical,
         cashGift: editData.cashGift,
         meal: editData.meal,
         courtAppearance: editData.courtAppearance,
@@ -810,6 +814,7 @@ const CompensationSettingsDialogForm = ({
             uniformAllowance: advanced.uniformAllowance ?? current.uniformAllowance,
             productivityIncentive: advanced.productivityIncentive ?? current.productivityIncentive,
             medicalAllowance: advanced.medicalAllowance ?? current.medicalAllowance,
+            additionalMedical: advanced.additionalMedical ?? current.additionalMedical,
             cashGift: advanced.cashGift ?? current.cashGift,
             meal: advanced.meal ?? current.meal,
             courtAppearance: advanced.courtAppearance ?? current.courtAppearance,

@@ -38,7 +38,7 @@ exports.createSettingsWithRegions = async (req, res) => {
     // Compensation MUST be linked separately via Compensation Management page
     // This ensures NO accidental auto-creation or auto-linking of compensation
     const compensationFields = [
-      'compensationData', 'PERA', 'hazardPay', 'RATA', 'medicalAllowance', 'meal',
+      'compensationData', 'PERA', 'hazardPay', 'RATA', 'medicalAllowance','additionalMedical', 'meal',
       'uniformALLOWANCE', 'productivityIncentive', 'cashGift', 'midyearBonus',
       'yearEndBonus', 'gsisPremium', 'pagibigPremium', 'employeeCompensation',
       'philhealthPremium', 'subsistenceAllowance', 'overtimeRate', 'weekdayMultiplier',
@@ -569,7 +569,7 @@ exports.updateSettings = async (req, res) => {
     // These fields belong to CompensationSettings and must be managed separately
     const rejectedCompensationFields = [
       'meal', 'medicalAllowance', 'PERA', 'hazardPay', 'RATA',
-      'uniformALLOWANCE', 'productivityIncentive', 'cashGift', 'midyearBonus',
+      'uniformALLOWANCE', 'productivityIncentive', 'cashGift','additionalMedical', 'midyearBonus',
       'yearEndBonus', 'gsisPremium', 'pagibigPremium', 'employeeCompensation',
       'philhealthPremium', 'subsistenceAllowance', 'overtimeRate', 'weekdayMultiplier',
       'weekendMultiplier', 'earnedLeaves', 'compensationSettingsId', 'compensationData'
@@ -861,6 +861,7 @@ exports.getAdvancedSettings = async (req, res) => {
       weekendMultiplier: settings.weekendMultiplier,
       subsistenceAllowanceRate: settings.subsistenceAllowanceRate,
       earnedLeaves: settings.earnedLeaves,
+      additionalMedical: settings.additionalMedical,
     };
     res.status(200).json(advancedFields);
   } catch (error) {
@@ -902,6 +903,7 @@ exports.createCompensationSettings = async (req, res) => {
       childrenAllowance: compensationData.childrenAllowance ?? 0,
       meal: compensationData.meal ?? 200,
       cashGift: compensationData.cashGift ?? 0,
+      additionalMedical: compensationData.additionalMedical ?? 0,
       courtAppearance: compensationData.courtAppearance ?? 0,
       // Premiums
       gsisPremium: compensationData.gsisPremium ?? 0,
@@ -1235,6 +1237,7 @@ exports.updateAdvancedSettings = async (req, res) => {
           "uniformALLOWANCE",
           "productivityIncentive",
           "medical",
+          "additionalMedical",
           "meal",
           "cashGift",
           "midyearBonus",

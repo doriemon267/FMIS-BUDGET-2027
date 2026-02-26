@@ -41,58 +41,13 @@ const PersonnelServicesPage = () => {
       label: "JG",
       show: true,
     },
-    noOfDependent: {
-      type: "number",
-      label: "NO. OF DEPENDENTS",
-      show: true,
-      customRender: (row) => row.noOfDependent || 0,
-    },
+   
     monthlySalary: {
       type: "number",
       label: "MONTHLY SALARY",
       show: true,
     },
-    medical: {
-      type: "number",
-      label: "MEDICAL ALLOWANCE",
-      show: true,
-    },
-    childrenAllowance: {
-      type: "number",
-      label: "CHILDREN ALLOWANCE",
-      show: true,
-    },
-    meal: {
-      type: "number",
-      label: "MEAL ALLOWANCE",
-      show: true,
-    },
-    subsistenceAllowance: {
-      type: "number",
-      label: "SUBSISTENCE ALLOWANCE",
-      show: true,
-    },
-    subsistenceAllowanceMDS: {
-      type: "number",
-      label: "SUBSISTENCE ALLOWANCE MDS",
-      show: true,
-    },
-    subsistenceAllowanceST: {
-      type: "number",
-      label: "SUBSISTENCE ALLOWANCE ST",
-      show: true,
-    },
-    loyaltyAward: {
-      type: "number",
-      label: "LOYALTY AWARD",
-      show: true,
-    },
-    overtimePay: {
-      type: "number",
-      label: "OVERTIME PAY",
-      show: true,
-    },
-    annualSalary: {
+     annualSalary: {
       type: "number",
       label: "ANNUAL SALARY",
       show: true,
@@ -122,18 +77,53 @@ const PersonnelServicesPage = () => {
       label: "HONORARIA",
       show: true,
     },
-
-    hazardPay: {
+    medical: {
       type: "number",
-      label: "HAZARD PAY",
+      label: "MEDICAL ALLOWANCE",
       show: true,
     },
-    cashGift: {
+     noOfDependent: {
+      type: "number",
+      label: "NO. OF DEPENDENTS",
+      show: true,
+      customRender: (row) => row.noOfDependent || 0,
+    },
+    childrenAllowance: {
+      type: "number",
+      label: "CHILDREN ALLOWANCE",
+      show: true,
+    },
+    meal: {
+      type: "number",
+      label: "MEAL ALLOWANCE",
+      show: true,
+    },
+    additionalMedical: {
+      type: "number",
+      label: "ADDITIONAL MEDICAL",
+      show: true,
+    },
+    subsistenceAllowance: {
+      type: "number",
+      label: "SUBSISTENCE ALLOWANCE",
+      show: true,
+    },
+    subsistenceAllowanceMDS: {
+      type: "number",
+      label: "SUBSISTENCE ALLOWANCE MDS",
+      show: true,
+    },
+    subsistenceAllowanceST: {
+      type: "number",
+      label: "SUBSISTENCE ALLOWANCE ST",
+      show: true,
+    },
+     cashGift: {
       type: "number",
       label: "CASH GIFT",
       show: true,
     },
-    midyearBonus: {
+midyearBonus: {
       type: "number",
       label: "MIDYEAR BONUS",
       show: true,
@@ -143,7 +133,19 @@ const PersonnelServicesPage = () => {
       label: "YEAR END BONUS",
       show: true,
     },
-    gsisPremium: {
+
+    loyaltyAward: {
+      type: "number",
+      label: "LOYALTY AWARD",
+      show: true,
+    },
+    overtimePay: {
+      type: "number",
+      label: "OVERTIME PAY",
+      show: true,
+    },
+   
+     gsisPremium: {
       type: "number",
       label: "GSIS PREMIUM",
       show: true,
@@ -164,13 +166,9 @@ const PersonnelServicesPage = () => {
       label: "EMPLOYEE COMPENSATION",
       show: true,
     },
-    courtAppearance: {
-      type: "number",
-      label: "COURT APPEARANCE",
-      show: true,
-    },
 
-    earnedLeaves: {
+
+earnedLeaves: {
       type: "number",
       label: "EARNED LEAVES",
       show: true,
@@ -185,6 +183,22 @@ const PersonnelServicesPage = () => {
       label: "TERMINAL LEAVE",
       show: true,
     },
+
+    hazardPay: {
+      type: "number",
+      label: "HAZARD PAY",
+      show: true,
+    },
+   
+  
+   
+    courtAppearance: {
+      type: "number",
+      label: "COURT APPEARANCE",
+      show: true,
+    },
+
+    
     subsidyEligible: {
       type: "text",
       label: "SUBSIDY TAG",

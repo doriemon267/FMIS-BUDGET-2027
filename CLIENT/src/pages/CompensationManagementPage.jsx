@@ -298,6 +298,7 @@ const CompensationManagementPage = () => {
                     <TableCell align="right" sx={{ fontWeight: "bold" }}>PERA</TableCell>
                     <TableCell align="right" sx={{ fontWeight: "bold" }}>Subsistence Allowance (Monthly)</TableCell>
                     <TableCell align="right" sx={{ fontWeight: "bold" }}>Medical Allowance</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: "bold" }}>Additional Medical</TableCell>
                     <TableCell align="center" sx={{ fontWeight: "bold" }}>PhilHealth %</TableCell>
                     <TableCell align="center" sx={{ fontWeight: "bold" }}>Budget Type</TableCell>
                     <TableCell align="center" sx={{ fontWeight: "bold" }}>Linked FY</TableCell>
@@ -336,6 +337,9 @@ const CompensationManagementPage = () => {
                         </TableCell>
                         <TableCell align="right">
                           ₱{(row.medicalAllowance || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell align="right">
+                          ₱{(row.additionalMedical || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell align="center">
                           {((row.philhealthPremium || 0) * 100).toFixed(2)}%

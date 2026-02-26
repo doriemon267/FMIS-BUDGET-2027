@@ -23,6 +23,8 @@ const compensationSettingsSchema = new mongoose.Schema(
     
     // Allowances
     medicalAllowance: { type: Number, default: 200 }, // Fixed 200 pesos per month per dependent
+    // NEW: Additional Medical allowance (separate from base medicalAllowance)
+    additionalMedical: { type: Number },
     childrenAllowance: { type: Number },
     meal: { type: Number, default: 200 }, // Fixed 200 pesos per month for eligible employees
     cashGift: { type: Number },

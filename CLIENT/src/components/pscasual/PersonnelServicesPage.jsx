@@ -80,6 +80,11 @@ const PersonnelCasualServicesPage = () => {
       label: "MEDICAL ALLOWANCE",
       show: true,
     },
+    additionalMedical: {
+      type: "number",
+      label: "ADDITIONAL MEDICAL",
+      show: true,
+    },
     childrenAllowance: {
       type: "number",
       label: "CHILDREN ALLOWANCE",

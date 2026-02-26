@@ -35,10 +35,28 @@ import formatCurrency from "../../utils/formatCurrency";
 import { formatDateToMDY, isValidDate } from "../../utils/formatDate";
 
 const OTHER_COMPENSATION_FIELDS = new Set([
-  "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive", "honoraria", "medical",
-  "childrenAllowance", "meal", "subsistenceAllowance", "subsistenceAllowanceMDS", "subsistenceAllowanceST",
-  "cashGift", "midyearBonus", "yearEndBonus", "loyaltyAward", "overtimePay", "courtAppearance",
-  "earnedLeaves", "retirementBenefits", "terminalLeave", "hazardPay",
+  "RATA",
+  "PERA",
+  "uniformALLOWANCE",
+  "productivityIncentive",
+  "honoraria",
+  "medical",
+  "additionalMedical",
+  "childrenAllowance",
+  "meal",
+  "subsistenceAllowance",
+  "subsistenceAllowanceMDS",
+  "subsistenceAllowanceST",
+  "cashGift",
+  "midyearBonus",
+  "yearEndBonus",
+  "loyaltyAward",
+  "overtimePay",
+  "courtAppearance",
+  "earnedLeaves",
+  "retirementBenefits",
+  "terminalLeave",
+  "hazardPay",
 ]);
 const GOVERNMENT_SHARE_FIELDS = new Set([
   "gsisPremium", "pagibigPremium", "philhealthPremium", "employeeCompensation",

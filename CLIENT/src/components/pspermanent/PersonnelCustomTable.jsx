@@ -42,6 +42,7 @@ const OTHER_COMPENSATION_FIELDS = new Set([
   'productivityIncentive',
   'honoraria',
   'medical',
+  'additionalMedical',
   'childrenAllowance',
   'meal',
   'subsistenceAllowance',

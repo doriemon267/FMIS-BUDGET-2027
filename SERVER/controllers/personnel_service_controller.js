@@ -113,6 +113,7 @@ async function syncMealAllowanceData(employeeNumber, fiscalYear) {
             "medical",
             "meal",
             "cashGift",
+            "additionalMedical",
             "midyearBonus",
             "yearEndBonus",
             "gsisPremium",
@@ -436,6 +437,9 @@ exports.getAllPersonnelServices = async (req, res) => {
       const recalculatedCashGift = (personnel.cashGift != null && personnel.cashGift !== 0)
         ? personnel.cashGift
         : (activeSettings.cashGift || 0);
+      const recalculatedAdditionalMedical =(personnel.additionalMedical != null && personnel.additionalMedical !== 0)
+        ? personnel.additionalMedical
+        : (activeSettings.additionalMedical || 0);
       const recalculatedYearEndBonus = personnel.yearEndBonus ?? 0;
       const recalculatedCourtAppearanceAmount = personnel.courtAppearance || 0;
       const recalculatedGsis = (personnel.gsisPremium != null && personnel.gsisPremium !== 0)
@@ -477,6 +481,7 @@ exports.getAllPersonnelServices = async (req, res) => {
         recalculatedMeal +
         recalculatedChildrenAllowance +
         recalculatedCashGift +
+        recalculatedAdditionalMedical +
         recalculatedMidyearBonus +
         recalculatedYearEndBonus +
         recalculatedCourtAppearanceAmount +
@@ -502,6 +507,7 @@ exports.getAllPersonnelServices = async (req, res) => {
         meal: recalculatedMeal,
         childrenAllowance: recalculatedChildrenAllowance,
         cashGift: recalculatedCashGift,
+        additionalMedical:recalculatedAdditionalMedical,
         midyearBonus: recalculatedMidyearBonus,
         yearEndBonus: recalculatedYearEndBonus,
         courtAppearance: recalculatedCourtAppearanceAmount,
@@ -905,6 +911,8 @@ exports.bulkAddPersonnelServices = async (req, res) => {
         medical: 0, // Only set via /medicalAllowance page for personnel who qualify
         meal: 0,
         cashGift: (activeSettings.cashGift || 0),
+        // Additional Medical: default to 0 if not configured in active settings
+        additionalMedical: (activeSettings.additionalMedical || 0),
         midyearBonus: monthlySalary,
         yearEndBonus: monthlySalary,
         gsisPremium: annualSalary * (activeSettings.gsisPremium || 0),
@@ -941,6 +949,7 @@ exports.bulkAddPersonnelServices = async (req, res) => {
           PERA: 0,
           uniformALLOWANCE: 0,
           productivityIncentive: 0,
+          additionalMedical:0,
           medical: 0,
           meal: 0,
           cashGift: 0,
@@ -982,6 +991,7 @@ exports.bulkAddPersonnelServices = async (req, res) => {
           "courtAppearance",
           "hazardPay",
           "subsistenceAllowance",
+          "additionalMedical",
           "honoraria",
           "childrenAllowance",
         ];
@@ -1190,6 +1200,7 @@ exports.updatePersonnelService = async (req, res) => {
       "courtAppearance",
       "hazardPay",
       "subsistenceAllowance",
+      "additionalMedical",
       "honoraria",
       "childrenAllowance",
     ];
@@ -1333,6 +1344,7 @@ exports.getGrandTotalPermanent = async (req, res) => {
       const recalculatedUniform = activeSettings.uniformAllowance || 0;
       const recalculatedProductivityIncentive = activeSettings.productivityIncentive || 0;
       const recalculatedMedical = personnel.medical || 0;
+      const recalculatedAdditionalMedical = personnel.additionalMedical || 0;
       const recalculatedMeal = personnel.meal || 0;
       const recalculatedChildrenAllowance = personnel.childrenAllowance || 0;
       const recalculatedMidyearBonus = personnel.midyearBonus || personnel.monthlySalary || 0;
@@ -1367,6 +1379,7 @@ exports.getGrandTotalPermanent = async (req, res) => {
         recalculatedUniform +
         recalculatedProductivityIncentive +
         recalculatedMedical +
+        recalculatedAdditionalMedical +
         recalculatedMeal +
         recalculatedChildrenAllowance +
         recalculatedCashGift +
@@ -1436,6 +1449,7 @@ exports.getGrandTotalCasual = async (req, res) => {
       "PERA",
       "uniformALLOWANCE",
       "productivityIncentive",
+      "additionalMedical",
       "medical",
       "childrenAllowance",
       "meal",

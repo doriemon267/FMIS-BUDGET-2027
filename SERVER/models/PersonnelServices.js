@@ -118,6 +118,10 @@ const personnelServicesSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    additionalMedical:{
+      type: Number,
+      required: true,
+    },
     subsistenceAllowance: {
       type: Number,
       required: true,

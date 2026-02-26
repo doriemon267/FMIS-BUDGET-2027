@@ -107,6 +107,7 @@ const getOtherCompensation = (p) =>
   (Number(p?.uniformALLOWANCE) || 0) +
   (Number(p?.productivityIncentive) || 0) +
   (Number(p?.medical) || 0) +
+  (Number(p?.additionalMedical) || 0) +
   (Number(p?.childrenAllowance) || 0) +
   (Number(p?.meal) || 0) +
   (Number(p?.cashGift) || 0) +
