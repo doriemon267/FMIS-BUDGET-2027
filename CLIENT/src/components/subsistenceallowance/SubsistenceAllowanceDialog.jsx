@@ -52,7 +52,9 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
     queryFn: async () => {
       try {
         const res = await api.get(endpoint);
-        return res.data || [];
+        const entries = res.data || [];
+        // Ensure we always return an array
+        return Array.isArray(entries) ? entries : [];
       } catch (error) {
         return [];
       }
@@ -61,10 +63,15 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
 
   // Update addedEmployeesSet whenever existing entries change
   useEffect(() => {
-    const employeeNumbers = new Set(
-      existingEntries.map((entry) => entry.employeeNumber)
-    );
-    setAddedEmployeesSet(employeeNumbers);
+    // Safely check if existingEntries is an array before mapping
+    if (Array.isArray(existingEntries) && existingEntries.length > 0) {
+      const employeeNumbers = new Set(
+        existingEntries.map((entry) => entry?.employeeNumber).filter(Boolean)
+      );
+      setAddedEmployeesSet(employeeNumbers);
+    } else {
+      setAddedEmployeesSet(new Set());
+    }
   }, [existingEntries]);
 
   // FIX 1: Reset form when dialog opens or row changes
