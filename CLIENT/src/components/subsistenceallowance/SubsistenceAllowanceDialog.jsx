@@ -41,7 +41,7 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
 
   const { control, handleSubmit, reset, watch, setValue } = useForm({
     defaultValues: { 
-        employees: isEditing ? [] : [],  // Changed to support multiple
+        employees: [],  // Always an array for consistency
         positionTitle: "" 
     },
   });
@@ -72,7 +72,7 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
     if (open) {
       if (isEditing && row) {
         reset({
-          employees: [row], // Pass as array
+          employees: [row], // Pass as array even for edit mode
           positionTitle: row.positionTitle || "",
         });
       } else {
@@ -81,7 +81,7 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
     }
   }, [open, row, isEditing, reset]);
 
-  const selectedEmployees = watch("employees");
+  const selectedEmployees = Array.isArray(watch("employees")) ? watch("employees") : [];
 
   const getHierarchicalDisplay = () => {
     const hierarchical = currentUser?.hierarchicalAccess || {};
@@ -258,12 +258,13 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
                 render={({ field }) => (
                   <Autocomplete
                     {...field}
-                    multiple={!isEditing}
+                    multiple={true}
                     disabled={isEditing}
                     options={availableEmployees}
-                    getOptionLabel={(option) => option.employeeFullName || ""}
-                    isOptionEqualToValue={(p, v) => p.employeeNumber === v?.employeeNumber}
-                    onChange={(e, data) => field.onChange(data)}
+                    getOptionLabel={(option) => option?.employeeFullName || ""}
+                    isOptionEqualToValue={(p, v) => p?.employeeNumber === v?.employeeNumber}
+                    onChange={(e, data) => field.onChange(data || [])}
+                    value={Array.isArray(field.value) ? field.value : []}
                     renderInput={(params) => (
                       <TextField
                         {...params}
@@ -280,25 +281,26 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
                         </li>
                       );
                     }}
-                    renderTags={(value, getTagProps) =>
-                      value.map((option, index) => (
+                    renderTags={(value, getTagProps) => {
+                      const validValue = Array.isArray(value) ? value : [];
+                      return validValue.map((option, index) => (
                         <Chip
-                          label={option.employeeFullName}
+                          label={option?.employeeFullName || ""}
                           {...getTagProps({ index })}
-                          key={option.uniqueKey}
+                          key={option?.uniqueKey || index}
                           onDelete={() => {
-                            const newValues = value.filter((_, i) => i !== index);
+                            const newValues = validValue.filter((_, i) => i !== index);
                             field.onChange(newValues);
                           }}
                           variant="outlined"
                           size="small"
                         />
-                      ))
-                    }
+                      ));
+                    }}
                   />
                 )}
               />
-              {!isEditing && selectedEmployees.length > 0 && (
+              {!isEditing && selectedEmployees && selectedEmployees.length > 0 && (
                 <Typography variant="caption" sx={{ mt: 1, display: "block", color: "#2d5a3d", fontWeight: "bold" }}>
                   ✓ {selectedEmployees.length} employee(s) selected
                 </Typography>
@@ -339,10 +341,10 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
           <Button
             onClick={handleSubmit(onSubmit)}
             variant="contained"
-            disabled={mutation.isPending || (isEditing ? false : selectedEmployees.length === 0)}
+            disabled={mutation.isPending || (isEditing ? false : !selectedEmployees || selectedEmployees.length === 0)}
             sx={{ background: "linear-gradient(135deg, #2d5a3d 0%, #1e3d2a 100%)" }}
           >
-            {mutation.isPending ? <CircularProgress size={20} color="inherit" /> : isEditing ? "Update" : `Add (${selectedEmployees.length})`}
+            {mutation.isPending ? <CircularProgress size={20} color="inherit" /> : isEditing ? "Update" : `Add (${selectedEmployees?.length || 0})`}
           </Button>
         </DialogActions>
       </Dialog>
