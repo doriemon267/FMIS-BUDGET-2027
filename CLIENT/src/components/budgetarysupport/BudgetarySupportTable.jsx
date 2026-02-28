@@ -592,7 +592,10 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
   useEffect(() => {
     let newAmount = 0;
 
-    if (calculatedBudgetarySupport?.totalSubsidy) {
+    // Prefer proposal-specific totals when proposalId is available
+    if (proposalId && proposalData?.projectedSubsidy != null) {
+      newAmount = Number(proposalData.projectedSubsidy);
+    } else if (calculatedBudgetarySupport?.totalSubsidy) {
       newAmount = Number(calculatedBudgetarySupport.totalSubsidy);
     } else if (calculatedBudgetarySupport?.amount) {
       newAmount = Number(calculatedBudgetarySupport.amount);
@@ -609,7 +612,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
     }
     
     setAmount(newAmount);
-  }, [calculatedBudgetarySupport, data]);
+      }, [proposalId, proposalData, calculatedBudgetarySupport, data]);
 
   // Amount is now auto-calculated, no manual changes allowed
 

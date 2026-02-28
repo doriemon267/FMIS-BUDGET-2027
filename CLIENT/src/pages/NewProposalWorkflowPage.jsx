@@ -769,10 +769,25 @@ const NewProposalWorkflowPage = () => {
 
       // Fetch full proposal to include attachments/metadata
       try {
-        const proposalRes = await api.get(`/api/allproposal/proposals/${proposal._id}`);
+        const [proposalRes, totalsRes] = await Promise.all([
+          api.get(`/api/allproposal/proposals/${proposal._id}`),
+          api.get(`/api/allproposal/proposals/${proposal._id}/totals`).catch(() => null),
+        ]);
+
         const proposalData = proposalRes.data?.data || proposalRes.data;
+        const totalsData = totalsRes?.data?.data || null;
+
         if (proposalData) {
-          setSelectedProposal(proposalData);
+          setSelectedProposal({
+            ...proposalData,
+            ...(totalsData ? {
+              projectedSubsidy: totalsData.projectedSubsidy,
+              projectedCorporateIncome: totalsData.projectedCorporateIncome,
+              proposedBudget: totalsData.proposedBudget,
+              totalIncome: totalsData.totalIncome,
+              totalExpenses: totalsData.totalExpenses,
+            } : {}),
+          });
         }
       } catch (err) {
         // If full proposal fetch fails, keep the selected proposal as-is
@@ -920,8 +935,8 @@ const NewProposalWorkflowPage = () => {
     // CRITICAL: Always use backend-calculated projectedSubsidy and proposedBudget
     // The backend calculations are authoritative and properly exclude charged-to-income
     return {
-      projectedSubsidy: proposal.projectedSubsidy || proposal.totalExpenses || 0,
-      proposedBudget: proposal.proposedBudget || proposal.amount || 0
+      projectedSubsidy: Number(proposal?.projectedSubsidy ?? proposal?.totalExpenses ?? 0),
+      proposedBudget: Number(proposal?.proposedBudget ?? proposal?.amount ?? 0)
     };
   };
 
@@ -940,24 +955,15 @@ const NewProposalWorkflowPage = () => {
       }
 
       // Personnel Services subsidy
-      // Logic: If NOT charged to income, the entire Total is subsidy.
-      // If charged to income, only the explicit subsidyAmount is subsidy (usually 0).
+      // Align with Personnel Services table and BudgetarySupportTable:
+      // only NON charged-to-income personnel are counted as subsidy.
       if (proposalDetails.personnel?.length) {
         const sameDivision = selectedProposal?.division
-          ? proposalDetails.personnel.filter((p) => p.division === selectedProposal.division)
-          : proposalDetails.personnel;
+          ? proposalDetails.personnel.filter((p) => p.division === selectedProposal.division && p.chargedToIncomeEligible !== true)
+          : proposalDetails.personnel.filter((p) => p.chargedToIncomeEligible !== true);
           
         total += sameDivision.reduce((sum, item) => {
-          if (item.chargedToIncomeEligible) {
-            // If charged to income, the subsidy is the remainder (Total - Charged Amount)
-            // This handles cases where only a portion is charged to income
-            const total = Number(item.Total) || 0;
-            const charged = Number(item.chargedToIncomeAmount) || 0;
-            return sum + Math.max(0, total - charged);
-          } else {
-            // If NOT charged to income, the entire Total is subsidy
-            return sum + (Number(item.Total) || 0);
-          }
+          return sum + (Number(item.Total) || 0);
         }, 0);
       }
 
@@ -973,11 +979,7 @@ const NewProposalWorkflowPage = () => {
     }
 
     // Fallbacks when details are not yet loaded: use backend-calculated subsidy, else total expenses, else amount
-    return (
-      Number(selectedProposal?.projectedSubsidy || 0) ||
-      Number(selectedProposal?.totalExpenses || 0) ||
-      Number(selectedProposal?.amount || 0)
-    );
+    return Number(selectedProposal?.projectedSubsidy ?? selectedProposal?.totalExpenses ?? selectedProposal?.amount ?? 0);
   };
 
   // Calculate projected income from PS Charged + MOOE Income + CO Income (excluding Corporate Income)
@@ -1014,8 +1016,20 @@ const NewProposalWorkflowPage = () => {
   };
 
   // Calculate total proposed budget (Income + Subsidy)
+  const getAuthoritativeProjectedIncome = () => {
+    return Number(selectedProposal?.projectedCorporateIncome ?? calculateProjectedIncome() ?? 0);
+  };
+
+  const getAuthoritativeProjectedSubsidy = () => {
+    return Number(selectedProposal?.projectedSubsidy ?? selectedProposal?.totalExpenses ?? calculateProjectedSubsidy() ?? 0);
+  };
+
+  const getAuthoritativeProposedBudget = () => {
+    return Number(selectedProposal?.proposedBudget ?? (getAuthoritativeProjectedIncome() + getAuthoritativeProjectedSubsidy()));
+  };
+
   const calculateTotalBudget = () => {
-    return calculateProjectedIncome() + calculateProjectedSubsidy();
+    return getAuthoritativeProposedBudget();
   };
 
   // Handle proposal actions
@@ -1032,8 +1046,8 @@ const NewProposalWorkflowPage = () => {
     try {
       const backendAction = mapActionToBackend(actionType);
       
-      // Calculate and include projectedSubsidy before submission
-      const projectedSubsidy = calculateProjectedSubsidy();
+      // Use backend-authoritative subsidy value when available
+      const projectedSubsidy = getAuthoritativeProjectedSubsidy();
       
       const payload = {
         action: backendAction,
@@ -3214,11 +3228,7 @@ const NewProposalWorkflowPage = () => {
                       sx={{ fontWeight: 600, color: "#020b15" }}
                     >
                       ₱
-                      {(
-                        calculateProjectedIncome() || // Use calculated value (excludes Corporate Income)
-                        selectedProposal?.projectedCorporateIncome || 
-                        0
-                      ).toLocaleString(
+                      {getAuthoritativeProjectedIncome().toLocaleString(
                         "en-US",
                         { minimumFractionDigits: 2 }
                       )}
@@ -3237,12 +3247,7 @@ const NewProposalWorkflowPage = () => {
                       sx={{ fontWeight: 600, color: "#020b15" }}
                     >
                       ₱
-                      {(
-                        calculateProjectedSubsidy() || // Use calculated value from MOOE data
-                        selectedProposal?.projectedSubsidy ||
-                        selectedProposal?.totalExpenses ||
-                        0
-                      ).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {getAuthoritativeProjectedSubsidy().toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
                   </Grid>
                   <Grid item xs={12} md={4}>
@@ -3262,7 +3267,7 @@ const NewProposalWorkflowPage = () => {
                       }}
                     >
                       ₱
-                      {calculateTotalBudget().toLocaleString("en-US", {
+                      {getAuthoritativeProposedBudget().toLocaleString("en-US", {
                         minimumFractionDigits: 2,
                       })}
                     </Typography>
@@ -3876,7 +3881,9 @@ const NewProposalWorkflowPage = () => {
                 {/* PS-Permanent Tab */}
                 {detailsTab === "ps-permanent" && (() => {
                   const permanentPersonnel = proposalDetails?.personnel?.filter(
-                    person => String(person.statusOfAppointment || '').toUpperCase() === 'PERMANENT'
+                    person =>
+                      String(person.statusOfAppointment || '').toUpperCase() === 'PERMANENT' &&
+                      person.chargedToIncomeEligible !== true
                   ) || [];
                   
                   const paginatedPermanentPersonnel = permanentPersonnel.slice(
@@ -4128,7 +4135,9 @@ const NewProposalWorkflowPage = () => {
                 {/* PS-Casual Tab */}
                 {detailsTab === "ps-casual" && (() => {
                   const casualPersonnel = proposalDetails?.personnel?.filter(
-                    person => String(person.statusOfAppointment || '').toUpperCase() === 'CASUAL'
+                    person =>
+                      String(person.statusOfAppointment || '').toUpperCase() === 'CASUAL' &&
+                      person.chargedToIncomeEligible !== true
                   ) || [];
                   
                   const paginatedCasualPersonnel = casualPersonnel.slice(

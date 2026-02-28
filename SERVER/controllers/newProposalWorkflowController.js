@@ -2535,24 +2535,43 @@ exports.getAttachments = async (req, res) => {
 exports.getProposalTotalsByWorkflowRef = async (req, res) => {
   try {
     const { workflowRefId } = req.params;
-    
-    // Find the Proposal that references this NewProposalWorkflow
-    const proposal = await Proposal.findOne({
+
+    // First, find which model the ID belongs to so we can recalculate with the correct ref
+    let proposal = await Proposal.findOne({
       $or: [
         { workflowRef: workflowRefId },
-        { proposalId: workflowRefId }
+        { proposalId: workflowRefId },
+        { _id: workflowRefId }
       ]
     }).lean();
     
     if (!proposal) {
-      console.log('[getProposalTotalsByWorkflowRef] Proposal not found for workflowRef:', workflowRefId);
+      console.log('[getProposalTotalsByWorkflowRef] Proposal not found for ID:', workflowRefId);
       return res.status(404).json({
         success: false,
         message: 'Proposal not found'
       });
     }
     
-    console.log('[getProposalTotalsByWorkflowRef] Found Proposal for workflowRef:', workflowRefId);
+    // Determine the correct workflowRef to use for recalculation
+    const correctWorkflowRef = proposal.workflowRef || proposal.proposalId || workflowRefId;
+    
+    // Always recalculate before returning totals so Workflow, Budgetary Support,
+    // and Personnel Services views stay aligned.
+    try {
+      await recalculateAndSaveProposalTotals({ 
+        proposalId: proposal._id,  // Use the Proposal._id which we found
+        workflowRef: correctWorkflowRef
+      });
+    } catch (recalcError) {
+      console.warn('[getProposalTotalsByWorkflowRef] Recalculation warning:', recalcError.message);
+      // Continue and return best available persisted totals
+    }
+    
+    // Fetch the updated proposal after recalculation
+    proposal = await Proposal.findById(proposal._id).lean();
+    
+    console.log('[getProposalTotalsByWorkflowRef] Returning Proposal totals for ID:', workflowRefId);
     console.log('  projectedSubsidy:', proposal.projectedSubsidy);
     console.log('  projectedCorporateIncome:', proposal.projectedCorporateIncome);
     console.log('  proposedBudget:', proposal.proposedBudget);
