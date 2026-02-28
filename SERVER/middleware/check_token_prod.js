@@ -105,17 +105,35 @@ module.exports = async (req, res, next) => {
     };
 
     // 9. [NEW] STRICT PRODUCTION WHITELIST FOR SUPER ADMINS (allow if user has another valid budget role)
+    // In DEVELOPMENT mode: Skip SUPER_ADMIN_IDS check if user has any valid budget role
+    const IS_PRODUCTION = process.env.PRODUCTION_MODE && String(process.env.PRODUCTION_MODE).trim().length > 0;
     const isSuper = normalizedRoles.includes('SUPER_ADMIN') || normalizedRoles.includes('SUPERADMIN');
     const allowedIds = process.env.SUPER_ADMIN_IDS ? process.env.SUPER_ADMIN_IDS.split(',').map(id => id.trim()) : [];
     const whitelistedSuper = isSuper && allowedIds.includes(userId);
-    const hasOtherBudgetRole = isSuper && !whitelistedSuper && normalizedRoles.some((r) => {
+    const hasOtherBudgetRole = normalizedRoles.some((r) => {
       const n = String(r || '').trim();
       return n !== 'SUPER_ADMIN' && n !== 'SUPERADMIN' && [
         'BUDGET_MANAGER', 'OVERALL_BUDGET_APPROVER', 'BUDGET_PREPARER', 'BUDGET_REVIEWER', 'BUDGET_APPROVER',
         'BUDGET_PLANNING_ANALYST', 'BUDGET_OFFICER', 'BUDGET_COORDINATOR', 'BUDGET_ADMIN', 'REVIEWER', 'APPROVER'
       ].includes(n);
     });
-    if (isSuper && !whitelistedSuper && !hasOtherBudgetRole) {
+    
+    // DEVELOPMENT MODE: Skip SUPER_ADMIN_IDS whitelist if user has any valid budget role
+    if (!IS_PRODUCTION && hasOtherBudgetRole) {
+      // Allow access in development for any budget role, regardless of SUPER_ADMIN_IDS
+      AuditLog.create({
+        userId: userId,
+        userName: particular,
+        userRoles: normalizedRoles,
+        action: "LOGIN_SUCCESS_DEV_BYPASS",
+        resource: "AUTHENTICATION",
+        method: req.method,
+        ipAddress: req.clientIp,
+        userAgent: req.headers['user-agent'],
+        details: { note: "Development mode - SUPER_ADMIN_IDS check bypassed" }
+      }).catch(() => {});
+    } else if (isSuper && !whitelistedSuper && !hasOtherBudgetRole) {
+      // PRODUCTION MODE or no other budget role: Enforce strict SUPER_ADMIN_IDS whitelist
       AuditLog.create({
         userId: userId,
         userName: particular,

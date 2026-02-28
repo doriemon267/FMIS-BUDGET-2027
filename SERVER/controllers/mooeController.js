@@ -8,6 +8,33 @@ const Proposal         = require('../models/Proposal');
 const ProposalEditLog  = require('../models/ProposalEditLog');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { validateNonNegativeInItems, MOOE_NUMERIC_FIELDS } = require('../utils/validateNonNegative');
+
+// Statuses that prevent Budget Preparer from editing MOOE records
+const LOCKED_MOOE_STATUSES = [
+  "Forwarded to Reviewer",
+  "Forwarded to Approver",
+  "Forwarded to Budget Officer",
+  "Forwarded to Budget Planning Analyst",
+  "Forwarded to Overall Budget Approver",
+  "Approver Approved",
+  "Officer Approved",
+  "Division Submitted",
+  "Department Verified",
+  "Department Submitted",
+  "Region Approved",
+  "Office Approved",
+  "Finalized",
+  "Submitted",
+  // Legacy statuses
+  "Forwarded to Officer",
+  "Under Review by Reviewer",
+  "Reviewer Approved",
+  "Under Review by Officer",
+  "Under Review by Manager",
+  "Office",
+  "Office Submitted"
+];
+
 // New combined endpoint to fetch all data at once
 exports.getMOOEData = async (req, res) => {
   try {
@@ -1750,11 +1777,11 @@ exports.bulkUpdateMOOE = async (req, res) => {
         particulars: existingMooe.particulars
       });
 
-      const submittedStatuses = ["Submitted", "Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"];
-      if (submittedStatuses.includes(existingMooe.status)) {
+      // Prevent editing of MOOE records that have been forwarded or approved
+      if (LOCKED_MOOE_STATUSES.includes(existingMooe.status)) {
         return res.status(403).json({
           error: "Update not allowed",
-          message: `Cannot edit MOOE record ${item._id} that has been submitted or approved`
+          message: `Cannot edit MOOE record ${item._id} that has been submitted or approved (status: ${existingMooe.status})`
         });
       }
 

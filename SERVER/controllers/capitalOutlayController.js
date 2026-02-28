@@ -7,6 +7,33 @@ const Proposal = require('../models/Proposal');
 const ProposalEditLog = require('../models/ProposalEditLog');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { validateNonNegativeFields, validateNonNegativeInItems, CAPITAL_OUTLAY_NUMERIC_FIELDS } = require('../utils/validateNonNegative');
+
+// Statuses that prevent Budget Preparer from editing Capital Outlay records
+const LOCKED_CAPITAL_STATUSES = [
+  "Forwarded to Reviewer",
+  "Forwarded to Approver",
+  "Forwarded to Budget Officer",
+  "Forwarded to Budget Planning Analyst",
+  "Forwarded to Overall Budget Approver",
+  "Approver Approved",
+  "Officer Approved",
+  "Division Submitted",
+  "Department Verified",
+  "Department Submitted",
+  "Region Approved",
+  "Office Approved",
+  "Finalized",
+  "Submitted",
+  // Legacy statuses
+  "Forwarded to Officer",
+  "Under Review by Reviewer",
+  "Reviewer Approved",
+  "Under Review by Officer",
+  "Under Review by Manager",
+  "Office",
+  "Office Submitted"
+];
+
 // All Chart of Accounts entries are read straight from the FMIS main database via MONGODB_MAIN_URL.
 // We intentionally avoid local file-based seeding so the data always mirrors the source system.
 // Helper function to get the active fiscal year
@@ -328,11 +355,10 @@ exports.editCapitalOutlay = async (req, res) => {
     }
 
     // Check if the record has been submitted and prevent editing
-    const submittedStatuses = ["Submitted", "Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"];
-    if (submittedStatuses.includes(existingOutlay.status)) {
+    if (LOCKED_CAPITAL_STATUSES.includes(existingOutlay.status)) {
       return res.status(403).json({
         error: "Update not allowed",
-        message: "Cannot edit capital outlay record that has been submitted or approved"
+        message: `Cannot edit capital outlay record that has been submitted or approved (status: ${existingOutlay.status})`
       });
     }
     const nonNeg = validateNonNegativeFields({ cost, income, subsidy }, CAPITAL_OUTLAY_NUMERIC_FIELDS);
@@ -435,6 +461,15 @@ exports.deleteCapitalOutlay = async (req, res) => {
       console.error("[DELETE] CapitalOutlay not found for id:", id);
       return res.status(404).json({ error: "Capital outlay not found." });
     }
+
+    // Check if the record has been submitted and prevent deletion
+    if (LOCKED_CAPITAL_STATUSES.includes(found.status)) {
+      return res.status(403).json({
+        error: "Delete not allowed",
+        message: `Cannot delete capital outlay record that has been submitted or approved (status: ${found.status})`
+      });
+    }
+
     // Try to delete
     const deletedCapitalOutlay = await CapitalOutlay.findByIdAndDelete(id);
     if (!deletedCapitalOutlay) {
@@ -630,11 +665,11 @@ exports.bulkUpdateCapitalOutlay = async (req, res) => {
         particulars: existingCapitalOutlay.particulars
       });
 
-      const submittedStatuses = ["Submitted", "Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"];
-      if (submittedStatuses.includes(existingCapitalOutlay.status)) {
+      // Check if the record has been submitted and prevent editing
+      if (LOCKED_CAPITAL_STATUSES.includes(existingCapitalOutlay.status)) {
         return res.status(403).json({
           error: "Update not allowed",
-          message: `Cannot edit Capital Outlay record ${item._id} that has been submitted or approved`
+          message: `Cannot edit Capital Outlay record ${item._id} that has been submitted or approved (status: ${existingCapitalOutlay.status})`
         });
       }
 

@@ -6,6 +6,33 @@ const Proposal = require('../models/Proposal');
 const ProposalEditLog = require('../models/ProposalEditLog');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { validateNonNegativeFields, validateNonNegativeInItems, INCOME_NUMERIC_FIELDS } = require('../utils/validateNonNegative');
+
+// Statuses that prevent Budget Preparer from editing Income records
+const LOCKED_INCOME_STATUSES = [
+  "Forwarded to Reviewer",
+  "Forwarded to Approver",
+  "Forwarded to Budget Officer",
+  "Forwarded to Budget Planning Analyst",
+  "Forwarded to Overall Budget Approver",
+  "Approver Approved",
+  "Officer Approved",
+  "Division Submitted",
+  "Department Verified",
+  "Department Submitted",
+  "Region Approved",
+  "Office Approved",
+  "Finalized",
+  "Submitted",
+  // Legacy statuses
+  "Forwarded to Officer",
+  "Under Review by Reviewer",
+  "Reviewer Approved",
+  "Under Review by Officer",
+  "Under Review by Manager",
+  "Office",
+  "Office Submitted"
+];
+
 // Create new income entry
 exports.createIncome = async (req, res) => {
   try {
@@ -168,11 +195,10 @@ exports.updateIncome = async (req, res) => {
     }
 
     // Check if the record has been submitted and prevent editing
-    const submittedStatuses = ["Submitted", "Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"];
-    if (submittedStatuses.includes(existingIncome.status)) {
+    if (LOCKED_INCOME_STATUSES.includes(existingIncome.status)) {
       return res.status(403).json({
         error: "Update not allowed",
-        message: "Cannot edit income record that has been submitted or approved"
+        message: `Cannot edit income record that has been submitted or approved (status: ${existingIncome.status})`
       });
     }
     const nonNeg = validateNonNegativeFields({ cost, amount }, INCOME_NUMERIC_FIELDS);
@@ -243,10 +269,21 @@ exports.updateIncome = async (req, res) => {
 // Delete income entry
 exports.deleteIncome = async (req, res) => {
   try {
-    const deletedIncome = await Income.findByIdAndDelete(req.params.id);
-    if (!deletedIncome) {
+    // Find the income entry first to check its status
+    const existingIncome = await Income.findById(req.params.id);
+    if (!existingIncome) {
       return res.status(404).json({ message: "Income entry not found" });
     }
+
+    // Check if the record has been submitted and prevent deletion
+    if (LOCKED_INCOME_STATUSES.includes(existingIncome.status)) {
+      return res.status(403).json({
+        error: "Delete not allowed",
+        message: `Cannot delete income record that has been submitted or approved (status: ${existingIncome.status})`
+      });
+    }
+
+    const deletedIncome = await Income.findByIdAndDelete(req.params.id);
     res.status(200).json({ message: "Income entry deleted successfully" });
   } catch (error) {
     console.error("Error deleting income entry:", error);
@@ -678,11 +715,11 @@ exports.bulkUpdateIncome = async (req, res) => {
         return res.status(404).json({ message: `Income entry with ID ${item._id} not found` });
       }
 
-      const submittedStatuses = ["Submitted", "Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"];
-      if (submittedStatuses.includes(existingIncome.status)) {
+      // Check if the record has been submitted and prevent editing
+      if (LOCKED_INCOME_STATUSES.includes(existingIncome.status)) {
         return res.status(403).json({
           error: "Update not allowed",
-          message: `Cannot edit income record ${item._id} that has been submitted or approved`
+          message: `Cannot edit income record ${item._id} that has been submitted or approved (status: ${existingIncome.status})`
         });
       }
 

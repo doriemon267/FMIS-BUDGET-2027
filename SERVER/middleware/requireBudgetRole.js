@@ -31,6 +31,9 @@ const AUTHORIZED_SUPER_ADMINS = process.env.SUPER_ADMIN_IDS
   ? process.env.SUPER_ADMIN_IDS.split(',') 
   : ['111111']; // Fallback ID
 
+/** Check if running in production mode */
+const IS_PRODUCTION = process.env.PRODUCTION_MODE && String(process.env.PRODUCTION_MODE).trim().length > 0;
+
 function hasValidBudgetRole(userRoles) {
   if (!Array.isArray(userRoles)) return false;
   
@@ -60,6 +63,13 @@ function requireBudgetRole(req, res, next) {
   // Check if the user has a Super Admin role
   const hasSuperAdminRole = userRoles.includes('SUPER_ADMIN') || userRoles.includes('SUPERADMIN');
 
+  // DEVELOPMENT MODE: If not production and user has any valid budget role, allow access
+  // SUPER_ADMIN_IDS whitelist is only enforced in PRODUCTION mode
+  if (!IS_PRODUCTION && hasValidBudgetRole(userRoles)) {
+    return next(); // Allow any valid budget role in development, regardless of SUPER_ADMIN_IDS
+  }
+
+  // PRODUCTION MODE: Strict SUPER_ADMIN_IDS whitelist enforcement
   if (hasSuperAdminRole && !AUTHORIZED_SUPER_ADMINS.includes(userId)) {
     // Not whitelisted as Super Admin — allow if they have another valid budget role (e.g. BUDGET MANAGER)
     const hasOtherBudgetRole = userRoles.some((role) => {

@@ -21,13 +21,31 @@ const {
 } = require("../utils/controller_get_process");
 const { roundTo2Decimals } = require("../utils/roundCurrency");
 
+// Statuses that prevent Budget Preparer from editing
+// Once forwarded to Reviewer or beyond, only return to Draft/Returned to Preparer allows editing
 const LOCKED_PERSONNEL_STATUSES = [
-  "Submitted",
+  "Forwarded to Reviewer",
+  "Forwarded to Approver",
+  "Forwarded to Budget Officer",
+  "Forwarded to Budget Planning Analyst",
+  "Forwarded to Overall Budget Approver",
+  "Approver Approved",
+  "Officer Approved",
   "Division Submitted",
   "Department Verified",
   "Department Submitted",
   "Region Approved",
+  "Office Approved",
   "Finalized",
+  "Submitted",
+  // Legacy statuses
+  "Forwarded to Officer",
+  "Under Review by Reviewer",
+  "Reviewer Approved",
+  "Under Review by Officer",
+  "Under Review by Manager",
+  "Office",
+  "Office Submitted"
 ];
 
 const parseBooleanQuery = (value) => {
