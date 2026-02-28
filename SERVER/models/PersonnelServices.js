@@ -11,30 +11,56 @@ const personnelServicesSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: [
-        "Draft",                    // Division working copy
-        "Division Submitted",       // Division → Department
-        "Department Verified",      // Department technical validation
-        "Department Submitted",     // Department → Region  
-        "Region Approved",         // Region administrative approval
-        "Finalized",               // Ready for execution
-        "Returned"                 // Rejected at any level
+        "Draft",                          // PREPARER creates
+        "Forwarded to Reviewer",          // PREPARER submits to BUDGET REVIEWER
+        "Division Submitted",             // Legacy alias (pre-6-step)
+        "Forwarded to Approver",          // BUDGET REVIEWER approves and forwards to APPROVER
+        "Approver Approved",              // APPROVER approves and forwards
+        "Forwarded to Budget Officer",    // Forwarded to BUDGET_OFFICER
+        "Forwarded to Budget Planning Analyst", // Forwarded to Budget Planning Analyst
+        "Officer Approved",               // OFFICER approves
+        "Forwarded to Overall Budget Approver", // Forwarded to OVERALL BUDGET APPROVER
+        "Department Verified",            // Department technical validation
+        "Department Submitted",           // Department → Region  
+        "Region Approved",                // Region administrative approval
+        "Office Approved",                // Office/Budget Officer approval (preferred)
+        "Finalized",                      // Ready for execution
+        "Returned",                       // Rejected at any level (generic)
+        "Returned to Preparer",           // Specifically returned to preparer
+        // Legacy statuses (for backward compatibility)
+        "Forwarded to Officer",
+        "Under Review by Reviewer",
+        "Reviewer Approved",
+        "Under Review by Officer",
+        "Under Review by Manager",
+        "Office",
+        "Office Submitted"
       ],
       default: "Draft"
     },
-        enum: [
-          "Draft",                    // Division working copy
-          "Division Submitted",       // Division → Department
-          "Department Verified",      // Department technical validation
-          "Department Submitted",     // Department → Region  
-          "Region Approved",         // Region administrative approval
-          "Office Approved",         // Office/Budget Officer approval (preferred)
-          "Finalized",               // Ready for execution
-          "Returned"                 // Rejected at any level
-        ],
     // Enhanced workflow tracking
     workflowLevel: {
       type: String,
-      enum: ["DIVISION", "DEPARTMENT", "REGION", "FINALIZED"],
+      enum: [
+        "DIVISION", 
+        "DEPARTMENT", 
+        "REGION", 
+        "FINALIZED",
+        "BUDGET PREPARER",
+        "PREPARER",
+        "BUDGET REVIEWER",
+        "REVIEWER",
+        "BUDGET APPROVER",
+        "APPROVER",
+        "BUDGET_PLANNING_ANALYST",
+        "OFFICER",
+        "BUDGET_OFFICER",
+        "MANAGER",
+        "BUDGET_MANAGER",
+        "OVERALL_BUDGET_APPROVER",
+        "SUPER_ADMIN",
+        "SUPER ADMIN"
+      ],
       default: "DIVISION"
     },
     lastActionBy: String,

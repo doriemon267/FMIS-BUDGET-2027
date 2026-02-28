@@ -46,17 +46,30 @@ const incomeSchema = new mongoose.Schema(
       type: String,
       enum: [
         'Draft',
-        'Submitted',           // Legacy status
-        'Division Submitted',  // Analyst submits to Division
+        'Submitted',                       // Legacy status
+        'Division Submitted',              // Analyst submits to Division
+        'Forwarded to Reviewer',           // PREPARER submits to BUDGET REVIEWER
+        'Forwarded to Approver',           // BUDGET REVIEWER approves and forwards to APPROVER
+        'Approver Approved',               // APPROVER approves and forwards
+        'Forwarded to Budget Officer',     // Forwarded to BUDGET_OFFICER
+        'Forwarded to Budget Planning Analyst', // Forwarded to Budget Planning Analyst
+        'Forwarded to Officer',            // Reviewer approves (new workflow)
+        'Officer Approved',                // Officer approves (new workflow)
+        'Forwarded to Manager',            // Officer submits to Manager (new workflow)
+        'Forwarded to Overall Budget Approver', // Forwarded to OVERALL BUDGET APPROVER
         'Department Verified',
         'Department Submitted',
-        'Forwarded to Officer',  // Reviewer approves (new workflow)
-        'Officer Approved',      // Officer approves (new workflow)
-        'Forwarded to Manager',  // Officer submits to Manager (new workflow)
-        'Region Approved',       // Legacy status
-        'Office Approved',       // Legacy status
+        'Region Approved',                 // Legacy status
+        'Office Approved',                 // Legacy status
         'Finalized',
-        'Returned'
+        'Returned',                        // Rejected at any level (generic)
+        'Returned to Preparer',            // Specifically returned to preparer
+        'Under Review by Reviewer',
+        'Reviewer Approved',
+        'Under Review by Officer',
+        'Under Review by Manager',
+        'Office',
+        'Office Submitted'
       ],
       default: "Draft",
     },
@@ -64,7 +77,26 @@ const incomeSchema = new mongoose.Schema(
     // Modern workflow tracking fields
     workflowLevel: {
       type: String,
-      enum: ['DIVISION', 'DEPARTMENT', 'REGION', 'FINALIZED'],
+      enum: [
+        'DIVISION', 
+        'DEPARTMENT', 
+        'REGION', 
+        'FINALIZED',
+        'BUDGET PREPARER',
+        'PREPARER',
+        'BUDGET REVIEWER',
+        'REVIEWER',
+        'BUDGET APPROVER',
+        'APPROVER',
+        'BUDGET_PLANNING_ANALYST',
+        'OFFICER',
+        'BUDGET_OFFICER',
+        'MANAGER',
+        'BUDGET_MANAGER',
+        'OVERALL_BUDGET_APPROVER',
+        'SUPER_ADMIN',
+        'SUPER ADMIN'
+      ],
       default: 'DIVISION'
     },
     
