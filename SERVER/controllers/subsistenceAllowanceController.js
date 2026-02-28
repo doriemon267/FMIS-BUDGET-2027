@@ -93,6 +93,127 @@ exports.createSubsistenceAllowance = async (req, res) => {
 };
 
 /**
+ * Bulk create multiple Subsistence Allowance records
+ */
+exports.bulkCreateSubsistenceAllowance = async (req, res) => {
+  try {
+    const { entries } = req.body;
+
+    if (!Array.isArray(entries) || entries.length === 0) {
+      return res.status(400).json({
+        message: "entries must be a non-empty array",
+      });
+    }
+
+    const activeSettings = await getActiveSettingsWithCompensation({ lean: true });
+    if (!activeSettings) {
+      return res.status(404).json({
+        message: "Walang active settings na naka-link sa compensation.",
+      });
+    }
+
+    const monthlyAmount = Number(activeSettings.subsistenceAllowance) || 0;
+    if (monthlyAmount <= 0) {
+      return res.status(400).json({
+        message:
+          "Walang subsistence allowance (monthly) sa Compensation Management. Mag-set muna sa /compensation-management.",
+      });
+    }
+
+    const amount = monthlyAmount * 12;
+    const createdRecords = [];
+    const errors = [];
+
+    for (let i = 0; i < entries.length; i++) {
+      try {
+        const {
+          employeeNumber,
+          employeeFullName,
+          positionTitle,
+          department,
+          division,
+          region,
+          processBy,
+          processDate,
+          fiscalYear,
+          budgetType,
+        } = entries[i];
+
+        const usedFiscalYear = fiscalYear || activeSettings.fiscalYear;
+        const usedBudgetType = budgetType || activeSettings.budgetType;
+
+        // Check for duplicates
+        const existingRecord = await SubsistenceAllowance.findOne({
+          employeeNumber,
+          fiscalYear: usedFiscalYear,
+        });
+
+        if (existingRecord) {
+          errors.push({
+            index: i,
+            employeeNumber,
+            employeeFullName,
+            message: `Employee already has subsistence allowance record for FY ${usedFiscalYear}`,
+          });
+          continue;
+        }
+
+        const record = new SubsistenceAllowance({
+          employeeNumber,
+          employeeFullName,
+          positionTitle,
+          department,
+          division,
+          region,
+          Amount: amount,
+          processBy,
+          processDate,
+          fiscalYear: usedFiscalYear,
+          budgetType: usedBudgetType,
+        });
+
+        await record.save();
+        createdRecords.push(record);
+
+        // Update PersonnelServices
+        const personnel = await PersonnelServices.findOne({
+          employeeNumber,
+          fiscalYear: usedFiscalYear,
+        });
+
+        if (personnel) {
+          personnel.subsistenceAllowance = amount;
+          await personnel.save();
+          if (personnel.proposalId) {
+            try {
+              await recalculateAndSaveProposalTotals({ proposalId: personnel.proposalId });
+            } catch (recalcErr) {
+              console.error("Error recalculating proposal totals:", recalcErr);
+            }
+          }
+        }
+      } catch (entryErr) {
+        errors.push({
+          index: i,
+          message: entryErr.message,
+        });
+      }
+    }
+
+    return res.status(201).json({
+      message: `Created ${createdRecords.length} subsistence allowance record(s)${errors.length > 0 ? ` with ${errors.length} error(s)` : ""}`,
+      created: createdRecords.length,
+      total: entries.length,
+      data: createdRecords,
+      ...(errors.length > 0 && { errors }),
+    });
+  } catch (error) {
+    console.error("❌ Error in bulkCreateSubsistenceAllowance:", error);
+    return res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+/**
  * Fetch paginated Subsistence Allowance records.
  */
 exports.getAllSubsistenceAllowances = async (req, res) => {

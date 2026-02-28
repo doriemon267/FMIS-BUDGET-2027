@@ -13,9 +13,11 @@ import {
   Box,
   Typography,
   CircularProgress,
+  Chip,
+  Alert,
 } from "@mui/material";
-import { Restaurant as RestaurantIcon } from "@mui/icons-material";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Restaurant as RestaurantIcon, Clear as ClearIcon } from "@mui/icons-material";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import api from "../../config/api";
 import { toast } from "react-hot-toast";
 import { useUser } from "../../context/UserContext";
@@ -28,6 +30,7 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
   const [employees, setEmployees] = useState([]);
+  const [addedEmployeesSet, setAddedEmployeesSet] = useState(new Set());
   const { currentUser, assignmentLevel } = useUser();
   const { activeRegion } = useRegion();
 
@@ -38,26 +41,47 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
 
   const { control, handleSubmit, reset, watch, setValue } = useForm({
     defaultValues: { 
-        employee: null, 
+        employees: isEditing ? [] : [],  // Changed to support multiple
         positionTitle: "" 
     },
   });
+
+  // Fetch already-added employees to filter them out
+  const { data: existingEntries = [] } = useQuery({
+    queryKey: [dataListName, "all"],
+    queryFn: async () => {
+      try {
+        const res = await api.get(endpoint);
+        return res.data || [];
+      } catch (error) {
+        return [];
+      }
+    },
+  });
+
+  // Update addedEmployeesSet whenever existing entries change
+  useEffect(() => {
+    const employeeNumbers = new Set(
+      existingEntries.map((entry) => entry.employeeNumber)
+    );
+    setAddedEmployeesSet(employeeNumbers);
+  }, [existingEntries]);
 
   // FIX 1: Reset form when dialog opens or row changes
   useEffect(() => {
     if (open) {
       if (isEditing && row) {
         reset({
-          employee: row, // Pass the whole row so Autocomplete finds the match
+          employees: [row], // Pass as array
           positionTitle: row.positionTitle || "",
         });
       } else {
-        reset({ employee: null, positionTitle: "" });
+        reset({ employees: [], positionTitle: "" });
       }
     }
   }, [open, row, isEditing, reset]);
 
-  const selectedEmployee = watch("employee");
+  const selectedEmployees = watch("employees");
 
   const getHierarchicalDisplay = () => {
     const hierarchical = currentUser?.hierarchicalAccess || {};
@@ -80,38 +104,59 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
       const processBy = `${currentUser?.FirstName || ""} ${currentUser?.LastName || ""}`.trim();
       const processDate = new Date();
       
-      // FIX 2: Cleaner payload logic
-      const targetEmployee = isEditing ? row : data.employee;
-      
-      const payload = {
-        employeeNumber: targetEmployee.employeeNumber,
-        employeeFullName: targetEmployee.employeeFullName,
-        positionTitle: data.positionTitle || targetEmployee.positionTitle,
-        department: targetEmployee.department,
-        division: targetEmployee.division,
-        region: activeRegion?.name || targetEmployee.region,
-        fiscalYear: fiscalYearFromSettings,
-        processBy,
-        processDate,
-        budgetType: budgetTypeFromSettings,
-        // Include amounts if your backend expects them in the payload
-        monthlyAmount,
-        annualAmount
-      };
+      if (isEditing) {
+        // Single edit
+        const targetEmployee = row;
+        const payload = {
+          employeeNumber: targetEmployee.employeeNumber,
+          employeeFullName: targetEmployee.employeeFullName,
+          positionTitle: data.positionTitle || targetEmployee.positionTitle,
+          department: targetEmployee.department,
+          division: targetEmployee.division,
+          region: activeRegion?.name || targetEmployee.region,
+          fiscalYear: fiscalYearFromSettings,
+          processBy,
+          processDate,
+          budgetType: budgetTypeFromSettings,
+          monthlyAmount,
+          annualAmount
+        };
+        return await api.put(`${endpoint}/${row._id}`, payload);
+      } else {
+        // Bulk add multiple employees
+        if (data.employees.length === 0) {
+          throw new Error("Please select at least one employee");
+        }
 
-      return isEditing
-        ? await api.put(`${endpoint}/${row._id}`, payload)
-        : await api.post(endpoint, payload);
+        const payloads = data.employees.map((employee) => ({
+          employeeNumber: employee.employeeNumber,
+          employeeFullName: employee.employeeFullName,
+          positionTitle: employee.positionTitle,
+          department: employee.department,
+          division: employee.division,
+          region: activeRegion?.name || employee.region,
+          fiscalYear: fiscalYearFromSettings,
+          processBy,
+          processDate,
+          budgetType: budgetTypeFromSettings,
+          monthlyAmount,
+          annualAmount
+        }));
+
+        // Send bulk add request
+        return await api.post(`${endpoint}/bulk`, { entries: payloads });
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries([dataListName]);
+      queryClient.invalidateQueries({ queryKey: [dataListName, "all"] });
       queryClient.invalidateQueries({ queryKey: ["allProposals"] });
       queryClient.invalidateQueries({ queryKey: ["proposals"] });
       queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
       queryClient.invalidateQueries({ queryKey: ["personnel-services-combined"] });
       queryClient.invalidateQueries({ queryKey: ["calculated-budgetary-support"] });
       queryClient.invalidateQueries({ queryKey: ["comprehensive-report-data"] });
-      toast.success(isEditing ? "Record updated" : "Record created");
+      toast.success(isEditing ? "Record updated" : `${selectedEmployees.length} record(s) created`);
       handleClose();
     },
     onError: (err) => {
@@ -155,13 +200,6 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
     if (fiscalYearFromSettings) fetchEmployees();
   }, [fiscalYearFromSettings, activeRegion?.name]);
 
-  // Update position title when employee selection changes
-  useEffect(() => {
-    if (selectedEmployee && !isEditing) {
-      setValue("positionTitle", selectedEmployee.positionTitle || "");
-    }
-  }, [selectedEmployee, setValue, isEditing]);
-
   const onSubmit = (data) => mutation.mutate(data);
   const handleOpen = () => setOpen(true);
   const handleClose = () => {
@@ -169,9 +207,12 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
     reset();
   };
 
-  const employeeOptions = employees
-    .filter((e) => e.employeeFullName)
+  // Filter out already-added employees
+  const availableEmployees = employees
+    .filter((e) => e.employeeFullName && !addedEmployeesSet.has(e.employeeNumber))
     .map((e, i) => ({ ...e, uniqueKey: `${e.employeeNumber}-${i}` }));
+
+  const duplicateCount = selectedEmployees.filter((emp) => addedEmployeesSet.has(emp.employeeNumber)).length;
 
   return (
     <>
@@ -200,43 +241,80 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
 
         <DialogContent dividers sx={{ mt: 2 }}>
           <Grid container spacing={2}>
+            {!isEditing && addedEmployeesSet.size > 0 && (
+              <Grid item xs={12}>
+                <Alert severity="info" onClose={() => {}}>
+                  <Typography variant="body2">
+                    <strong>{addedEmployeesSet.size}</strong> employee(s) already have subsistence allowance. They won't appear in the dropdown.
+                  </Typography>
+                </Alert>
+              </Grid>
+            )}
             <Grid item xs={12}>
               <Controller
-                name="employee"
+                name="employees"
                 control={control}
-                rules={{ required: true }}
+                rules={{ required: isEditing ? false : "Select at least one employee" }}
                 render={({ field }) => (
                   <Autocomplete
                     {...field}
-                    options={employeeOptions}
+                    multiple={!isEditing}
                     disabled={isEditing}
+                    options={availableEmployees}
                     getOptionLabel={(option) => option.employeeFullName || ""}
                     isOptionEqualToValue={(p, v) => p.employeeNumber === v?.employeeNumber}
-                    onChange={(_, data) => field.onChange(data)}
+                    onChange={(e, data) => field.onChange(data)}
                     renderInput={(params) => (
-                      <TextField {...params} label="Select Employee" fullWidth required />
+                      <TextField
+                        {...params}
+                        label={isEditing ? "Employee" : "Select Employees (Add multiple)"}
+                        fullWidth
+                        required={!isEditing}
+                      />
                     )}
                     renderOption={(props, option) => {
-                        const { key, ...otherProps } = props; // Handle key properly
-                        return (
-                            <li key={option.uniqueKey} {...otherProps}>
-                                {option.employeeFullName}
-                            </li>
-                        );
+                      const { key, ...otherProps } = props;
+                      return (
+                        <li key={option.uniqueKey} {...otherProps}>
+                          {option.employeeFullName}
+                        </li>
+                      );
                     }}
+                    renderTags={(value, getTagProps) =>
+                      value.map((option, index) => (
+                        <Chip
+                          label={option.employeeFullName}
+                          {...getTagProps({ index })}
+                          key={option.uniqueKey}
+                          onDelete={() => {
+                            const newValues = value.filter((_, i) => i !== index);
+                            field.onChange(newValues);
+                          }}
+                          variant="outlined"
+                          size="small"
+                        />
+                      ))
+                    }
                   />
                 )}
               />
+              {!isEditing && selectedEmployees.length > 0 && (
+                <Typography variant="caption" sx={{ mt: 1, display: "block", color: "#2d5a3d", fontWeight: "bold" }}>
+                  ✓ {selectedEmployees.length} employee(s) selected
+                </Typography>
+              )}
             </Grid>
-            <Grid item xs={12} sm={6}>
-              <Controller
-                name="positionTitle"
-                control={control}
-                render={({ field }) => (
-                  <TextField {...field} fullWidth label="Position Title" disabled />
-                )}
-              />
-            </Grid>
+            {isEditing && (
+              <Grid item xs={12} sm={6}>
+                <Controller
+                  name="positionTitle"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField {...field} fullWidth label="Position Title" disabled />
+                  )}
+                />
+              </Grid>
+            )}
             <Grid item xs={12} sm={6}>
               <TextField
                 label="Monthly (Compensation)"
@@ -261,10 +339,10 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
           <Button
             onClick={handleSubmit(onSubmit)}
             variant="contained"
-            disabled={mutation.isPending || !selectedEmployee}
+            disabled={mutation.isPending || (isEditing ? false : selectedEmployees.length === 0)}
             sx={{ background: "linear-gradient(135deg, #2d5a3d 0%, #1e3d2a 100%)" }}
           >
-            {mutation.isPending ? <CircularProgress size={20} color="inherit" /> : isEditing ? "Update" : "Save"}
+            {mutation.isPending ? <CircularProgress size={20} color="inherit" /> : isEditing ? "Update" : `Add (${selectedEmployees.length})`}
           </Button>
         </DialogActions>
       </Dialog>
