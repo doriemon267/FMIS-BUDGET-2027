@@ -1045,10 +1045,10 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
     // });
     
     if (proposalId && personalServicesData) {
-      const psTotal = toNumber(useOfFundsBreakdown.personalServices);
-      const chargedToIncome = toNumber(useOfFundsBreakdown.chargedToIncomeAmount);
-      const mooeSubsidy = toNumber(useOfFundsBreakdown.maintenanceAndOperatingSubsidy);
-      const coSubsidy = toNumber(useOfFundsBreakdown.capitalOutlaysSubsidy);
+      const psTotal = toNumber(personalServices);
+      const chargedToIncome = toNumber(chargedToIncomeAmount);
+      const mooeSubsidy = toNumber(maintenanceAndOperatingSubsidy);
+      const coSubsidy = toNumber(capitalOutlaysSubsidy);
       const totalSubsidy = psTotal + mooeSubsidy + coSubsidy;
       
       console.log(`📊 [BudgetarySupportTable] Subsidy Composition Breakdown:`, {
