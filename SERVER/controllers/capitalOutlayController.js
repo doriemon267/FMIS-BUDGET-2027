@@ -222,6 +222,19 @@ exports.addCapitalOutlay = async (req, res) => {
     console.log("Creating new capital outlay...");
     // Map incoming proposalId (workflow) to legacy Proposal _id
     const incomingWorkflowId = proposalId || workflowData.proposalId;
+    
+    // Check workflow status - prevent adding to locked proposals
+    if (incomingWorkflowId) {
+      const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+      const workflow = await NewProposalWorkflow.findById(incomingWorkflowId).select('status');
+      if (workflow && LOCKED_CAPITAL_STATUSES.includes(workflow.status)) {
+        return res.status(403).json({
+          error: "Cannot add entries",
+          message: `Cannot add capital outlay entries to proposal in '${workflow.status}' status. Only 'Draft' or 'Returned to Preparer' proposals can have new entries added.`
+        });
+      }
+    }
+    
     let legacyProposal = null;
     if (incomingWorkflowId) {
       legacyProposal = await Proposal.findOne({ workflowRef: incomingWorkflowId }).select('_id');

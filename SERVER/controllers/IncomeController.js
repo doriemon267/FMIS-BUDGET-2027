@@ -70,6 +70,19 @@ exports.createIncome = async (req, res) => {
     // CRITICAL: Ensure proposalId is always set to prevent cross-proposal data mixing
     let finalWorkflowId = proposalId || workflowData.proposalId; // This refers to NewProposalWorkflow _id
     let legacyProposalId = null;
+    
+    // Check workflow status - prevent adding to locked proposals
+    if (finalWorkflowId) {
+      const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+      const workflow = await NewProposalWorkflow.findById(finalWorkflowId).select('status');
+      if (workflow && LOCKED_INCOME_STATUSES.includes(workflow.status)) {
+        return res.status(403).json({
+          error: "Cannot add entries",
+          message: `Cannot add income entries to proposal in '${workflow.status}' status. Only 'Draft' or 'Returned to Preparer' proposals can have new entries added.`
+        });
+      }
+    }
+    
     if (finalWorkflowId) {
       const legacy = await Proposal.findOne({ workflowRef: finalWorkflowId }).select('_id');
       if (legacy) {

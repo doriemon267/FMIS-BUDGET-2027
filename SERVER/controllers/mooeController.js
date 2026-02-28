@@ -989,6 +989,19 @@ exports.bulkSaveMOOE = async (req, res) => {
     }
     // CRITICAL: Link MOOE entries to specific proposal to prevent cross-proposal data mixing
     const ownerWorkflowId = meta?.proposalId ?? workflowData.proposalId ?? req.body.proposalId; // NewProposalWorkflow _id
+    
+    // Check workflow status - prevent adding to locked proposals
+    if (ownerWorkflowId) {
+      const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+      const workflow = await NewProposalWorkflow.findById(ownerWorkflowId).select('status');
+      if (workflow && LOCKED_MOOE_STATUSES.includes(workflow.status)) {
+        return res.status(403).json({
+          error: "Cannot add entries",
+          message: `Cannot add MOOE entries to proposal in '${workflow.status}' status. Only 'Draft' or 'Returned to Preparer' proposals can have new entries added.`
+        });
+      }
+    }
+    
     let legacyProposalForMOOE = null;
     if (ownerWorkflowId) {
       legacyProposalForMOOE = await Proposal.findOne({ workflowRef: ownerWorkflowId }).select('_id');

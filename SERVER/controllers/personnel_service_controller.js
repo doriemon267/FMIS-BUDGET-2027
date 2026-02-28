@@ -603,6 +603,19 @@ exports.bulkAddPersonnelServices = async (req, res) => {
     const workflowData = req.submissionWorkflowData || {};
     // CRITICAL: Extract proposalId to link personnel services to specific proposal
     const workflowProposalId = req.body.proposalId || workflowData.proposalId; // NewProposalWorkflow _id
+    
+    // Check workflow status - prevent adding to locked proposals
+    if (workflowProposalId) {
+      const NewProposalWorkflow = require('../models/NewProposalWorkflow');
+      const workflow = await NewProposalWorkflow.findById(workflowProposalId).select('status');
+      if (workflow && LOCKED_PERSONNEL_STATUSES.includes(workflow.status)) {
+        return res.status(403).json({
+          error: "Cannot add entries",
+          message: `Cannot add personnel services to proposal in '${workflow.status}' status. Only 'Draft' or 'Returned to Preparer' proposals can have new entries added.`
+        });
+      }
+    }
+    
     let legacyProposalPS = null;
     if (workflowProposalId) {
       legacyProposalPS = await Proposal.findOne({ workflowRef: workflowProposalId }).select('_id');
