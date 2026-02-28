@@ -172,6 +172,8 @@ const SubsistenceAllowanceSTDialog = ({ row, endpoint, dataListName, schema }) =
         positionTitle: data.positionTitle,
         department: data.department,
         division: data.division,
+        proposalId: isEditing ? row.proposalId : data.employee?.proposalId,
+        workflowRef: isEditing ? row.workflowRef : data.employee?.workflowRef,
         region: activeRegion?.name || data.region,
         monthlySalary: Number(data.monthlySalary),
         actualExposureDays: Number(data.actualExposureDays),

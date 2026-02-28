@@ -2,14 +2,22 @@ const ChildrenAllowance = require("../models/childrenAllowance");
 const Settings = require("../models/Settings");
 const PersonnelService = require('../models/PersonnelServices');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
+const { ensurePersonnelRecordEditable } = require('../utils/employeeBenefitSyncUtils');
+const PersonnelServices = PersonnelService;
 
 // Function to sync children allowance with personnel services
-async function syncWithPersonnelServices(employeeNumber, fiscalYear, amount, noOfDependents) {
+async function syncWithPersonnelServices(employeeNumber, fiscalYear, amount, noOfDependents, options = {}) {
   try {
-    const personnelService = await PersonnelServices.findOne({
-      employeeNumber,
-      fiscalYear,
-    });
+    const personnelService = await ensurePersonnelRecordEditable(
+      {
+        employeeNumber,
+        fiscalYear,
+        proposalId: options.proposalId,
+        workflowRef: options.workflowRef,
+        employeeFullName: options.employeeFullName,
+      },
+      'children allowance'
+    );
     if (personnelService) {
       personnelService.childrenAllowance = amount; // Update childrenAllowance field
       personnelService.noOfDependent = noOfDependents; // Update noOfDependent field
@@ -226,6 +234,8 @@ const createChildrenAllowance = async (req, res) => {
       department,
       division,
       region,
+      proposalId,
+      workflowRef,
       noOfDependents,
       amount,
       processBy,
@@ -308,12 +318,19 @@ const createChildrenAllowance = async (req, res) => {
     });
     await newRecord.save();
     // Sync with PersonnelServices, including noOfDependent
-    await syncWithPersonnelServices(employeeNumber, fiscalYear, amount, validDependents);
+    await syncWithPersonnelServices(employeeNumber, fiscalYear, amount, validDependents, {
+      proposalId,
+      workflowRef,
+      employeeFullName,
+    });
     return res.status(201).json({
       message: "Children allowance record created successfully",
       data: newRecord,
     });
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
     console.error("❌ Error in createChildrenAllowance:", error.stack);
     return res.status(500).json({
       error: "Failed to create children allowance record",
@@ -331,6 +348,8 @@ const updateChildrenAllowance = async (req, res) => {
       department,
       division,
       region,
+      proposalId,
+      workflowRef,
       noOfDependents,
       amount,
       processBy,
@@ -424,12 +443,19 @@ const updateChildrenAllowance = async (req, res) => {
       return res.status(404).json({ error: "Children allowance record not found" });
     }
     // Sync with PersonnelServices, including noOfDependent
-    await syncWithPersonnelServices(employeeNumber, fiscalYear, amount, validDependents);
+    await syncWithPersonnelServices(employeeNumber, fiscalYear, amount, validDependents, {
+      proposalId,
+      workflowRef,
+      employeeFullName,
+    });
     return res.status(200).json({
       message: "Children allowance record updated successfully",
       data: updatedRecord,
     });
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
     console.error("Error updating children allowance record:", error);
     return res.status(500).json({
       error: "Failed to update children allowance record",
@@ -447,11 +473,18 @@ const deleteChildrenAllowance = async (req, res) => {
     const { employeeNumber, fiscalYear, noOfDependents } = deletedRecord;
     await ChildrenAllowance.findByIdAndDelete(req.params.id);
     // Sync with PersonnelServices, setting amount to 0 but keeping noOfDependent
-    await syncWithPersonnelServices(employeeNumber, fiscalYear, 0, noOfDependents);
+    await syncWithPersonnelServices(employeeNumber, fiscalYear, 0, noOfDependents, {
+      proposalId: deletedRecord.proposalId,
+      workflowRef: deletedRecord.workflowRef,
+      employeeFullName: deletedRecord.employeeFullName,
+    });
     return res.status(200).json({
       message: "Children allowance record deleted successfully",
     });
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
     console.error("Error deleting children allowance record:", error);
     return res.status(500).json({
       error: "Failed to delete children allowance record",

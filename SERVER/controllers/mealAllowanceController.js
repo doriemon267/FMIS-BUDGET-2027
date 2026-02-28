@@ -4,6 +4,8 @@ const PersonnelService = require('../models/PersonnelServices');
 const { body, validationResult } = require("express-validator");
 const { calculateMealAllowance, calculateMonthlyMealAllowance, getAllowanceRates } = require("../utils/allowanceUtils");
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
+const { ensurePersonnelRecordEditable } = require('../utils/employeeBenefitSyncUtils');
+const PersonnelServices = PersonnelService;
 const validateMealAllowance = [
   body("employeeNumber")
     .trim()
@@ -26,25 +28,19 @@ const validateMealAllowance = [
     .isISO8601()
     .withMessage("Invalid process date"),
 ];
-async function syncPersonnelServicesMeal(employeeNumber, fiscalYear, mealAmount = 0) {
+async function syncPersonnelServicesMeal(employeeNumber, fiscalYear, mealAmount = 0, options = {}) {
   try {
-    // First check if the personnel record has been submitted
-    const personnelRecord = await PersonnelServices.findOne({
-      employeeNumber,
-      fiscalYear,
-    });
-    
-    if (personnelRecord) {
-      // Check if the record has been submitted and prevent updating
-      const submittedStatuses = ["Submitted", "Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"];
-      if (submittedStatuses.includes(personnelRecord.status)) {
-        console.log(`Cannot update meal allowance for submitted personnel record: ${employeeNumber}`);
-        return false;
-      }
-    }
+    const personnelDoc = await ensurePersonnelRecordEditable(
+      {
+        employeeNumber,
+        fiscalYear,
+        proposalId: options.proposalId,
+        workflowRef: options.workflowRef,
+        employeeFullName: options.employeeFullName,
+      },
+      'meal allowance'
+    );
 
-    // Find the exact personnel document to update (avoids updating wrong doc when multiple exist for same employee+fiscalYear)
-    const personnelDoc = await PersonnelServices.findOne({ employeeNumber, fiscalYear });
     if (!personnelDoc) return false;
     const updateResult = await PersonnelServices.updateOne(
       { _id: personnelDoc._id },
@@ -91,6 +87,8 @@ exports.createMealAllowance = [
         department,
         division,
         region,
+        proposalId,
+        workflowRef,
         processBy,
         processDate,
         fiscalYear,
@@ -158,7 +156,16 @@ exports.createMealAllowance = [
       });
       await record.save();
       // Find exact personnel doc so we update by _id (avoids overwriting another row's Total when multiple exist)
-      const personnelDoc = await PersonnelServices.findOne({ employeeNumber, fiscalYear: usedFiscalYear });
+      const personnelDoc = await ensurePersonnelRecordEditable(
+        {
+          employeeNumber,
+          employeeFullName,
+          fiscalYear: usedFiscalYear,
+          proposalId,
+          workflowRef,
+        },
+        'meal allowance'
+      );
       if (personnelDoc) {
         await PersonnelServices.updateOne(
           { _id: personnelDoc._id },
@@ -195,6 +202,9 @@ exports.createMealAllowance = [
       }
       return res.status(201).json(record);
     } catch (err) {
+      if (err.statusCode) {
+        return res.status(err.statusCode).json({ message: err.message });
+      }
       console.error("❌ Error in createMealAllowance:", err.stack);
       return res
         .status(500)
@@ -218,6 +228,8 @@ exports.updateMealAllowance = [
         department,
         division,
         region,
+        proposalId,
+        workflowRef,
         processBy,
         processDate,
         fiscalYear,
@@ -334,6 +346,9 @@ exports.updateMealAllowance = [
       }
       return res.status(200).json(updated);
     } catch (err) {
+      if (err.statusCode) {
+        return res.status(err.statusCode).json({ message: err.message });
+      }
       console.error("❌ Error in updateMealAllowance:", err.stack);
       return res
         .status(500)
@@ -521,15 +536,31 @@ exports.updateMealAllowance = [
       );
       if (!updated)
         return res.status(404).json({ message: "Record not found" });
-      await PersonnelServices.updateOne(
-        { employeeNumber: updated.employeeNumber, fiscalYear: usedFiscalYear },
-        { meal: amount },
-        { upsert: true }
+      const personnelDoc = await ensurePersonnelRecordEditable(
+        {
+          employeeNumber: updated.employeeNumber,
+          employeeFullName: updated.employeeFullName,
+          fiscalYear: usedFiscalYear,
+          proposalId,
+          workflowRef,
+        },
+        'meal allowance'
       );
+
+      if (personnelDoc) {
+        personnelDoc.meal = amount;
+        await personnelDoc.save();
+        if (personnelDoc.proposalId) {
+          await recalculateAndSaveProposalTotals({ proposalId: personnelDoc.proposalId });
+        }
+      }
       return res
         .status(200)
         .json({ message: "Record updated and synced", data: updated });
     } catch (err) {
+      if (err.statusCode) {
+        return res.status(err.statusCode).json({ message: err.message });
+      }
       console.error("❌ Error in updateMealAllowance:", err.stack);
       return res
         .status(500)
@@ -549,24 +580,19 @@ exports.deleteMealAllowance = async (req, res) => {
     const { employeeNumber, fiscalYear } = toDelete;
     
     // Check if the personnel record has been submitted before allowing deletion
-    const personnelRecord = await PersonnelServices.findOne({
-      employeeNumber,
-      fiscalYear,
-    });
-    
-    if (personnelRecord) {
-      // Check if the record has been submitted and prevent deletion
-      const submittedStatuses = ["Submitted", "Division Submitted", "Department Verified", "Department Submitted", "Region Approved", "Finalized"];
-      if (submittedStatuses.includes(personnelRecord.status)) {
-        return res.status(403).json({
-          error: "Delete not allowed",
-          message: "Cannot delete meal allowance for personnel service record that has been submitted or approved"
-        });
-      }
-    }
+    const personnelRecord = await ensurePersonnelRecordEditable(
+      {
+        employeeNumber,
+        fiscalYear,
+        proposalId: toDelete.proposalId,
+        workflowRef: toDelete.workflowRef,
+        employeeFullName: toDelete.employeeFullName,
+      },
+      'meal allowance'
+    );
 
     await MealAllowance.findByIdAndDelete(id);
-    const personnelDoc = await PersonnelServices.findOne({ employeeNumber, fiscalYear });
+    const personnelDoc = personnelRecord;
     if (personnelDoc) {
       await PersonnelServices.updateOne(
         { _id: personnelDoc._id },
@@ -602,6 +628,9 @@ exports.deleteMealAllowance = async (req, res) => {
       success: true
     });
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
     console.error(`Error deleting meal allowance:`, error);
     return res.status(500).json({ 
       message: "Server error", 

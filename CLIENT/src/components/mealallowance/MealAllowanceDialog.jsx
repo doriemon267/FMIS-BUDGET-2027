@@ -151,6 +151,8 @@ const MealAllowanceDialog = ({ row, endpoint, dataListName }) => {
         positionTitle: data.positionTitle,
         department: data.department,
         division: data.division,
+        proposalId: data.employee.proposalId,
+        workflowRef: data.employee.workflowRef,
         // Use active region if available, otherwise use employee's region
         region: activeRegion?.name || data.region,
         actualDays: Number(data.actualDays),

@@ -4,14 +4,22 @@ const Settings = require("../models/Settings");
 const { calculateMedicalAllowance, getAllowanceRates } = require("../utils/allowanceUtils");
 const PersonnelService = require('../models/PersonnelServices');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
+const { ensurePersonnelRecordEditable } = require('../utils/employeeBenefitSyncUtils');
+const PersonnelServices = PersonnelService;
 
 // Function to sync medical allowance with personnel services
-async function syncWithPersonnelServices(employeeNumber, fiscalYear, amount, noOfDependents) {
+async function syncWithPersonnelServices(employeeNumber, fiscalYear, amount, noOfDependents, options = {}) {
   try {
-    const personnelService = await PersonnelServices.findOne({
-      employeeNumber,
-      fiscalYear,
-    });
+    const personnelService = await ensurePersonnelRecordEditable(
+      {
+        employeeNumber,
+        fiscalYear,
+        proposalId: options.proposalId,
+        workflowRef: options.workflowRef,
+        employeeFullName: options.employeeFullName,
+      },
+      'medical allowance'
+    );
     if (personnelService) {
       personnelService.medical = amount;
       personnelService.noOfDependent = noOfDependents; // Update noOfDependent
@@ -186,6 +194,8 @@ const createMedicalAllowance = async (req, res) => {
       department,
       division,
       region,
+      proposalId,
+      workflowRef,
       noOfDependents,
       amount,
       processBy,
@@ -269,12 +279,19 @@ const createMedicalAllowance = async (req, res) => {
       budgetType,
     });
     await newRecord.save();
-    await syncWithPersonnelServices(employeeNumber, fiscalYear, amount, validDependents);
+    await syncWithPersonnelServices(employeeNumber, fiscalYear, amount, validDependents, {
+      proposalId,
+      workflowRef,
+      employeeFullName,
+    });
     return res.status(201).json({
       message: "Medical allowance record created successfully",
       data: newRecord,
     });
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
     console.error("❌ Error in createMedicalAllowance:", error.stack);
     return res.status(500).json({
       error: "Failed to create medical allowance record",
@@ -293,6 +310,8 @@ const updateMedicalAllowance = async (req, res) => {
       department,
       division,
       region,
+      proposalId,
+      workflowRef,
       noOfDependents,
       amount,
       processBy,
@@ -387,12 +406,19 @@ const updateMedicalAllowance = async (req, res) => {
     if (!updatedRecord) {
       return res.status(404).json({ error: "Medical allowance record not found" });
     }
-    await syncWithPersonnelServices(employeeNumber, fiscalYear, amount, validDependents);
+    await syncWithPersonnelServices(employeeNumber, fiscalYear, amount, validDependents, {
+      proposalId,
+      workflowRef,
+      employeeFullName,
+    });
     return res.status(200).json({
       message: "Medical allowance record updated successfully",
       data: updatedRecord,
     });
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
     console.error("Error updating medical allowance record:", error);
     return res.status(500).json({
       error: "Failed to update medical allowance record",
@@ -409,11 +435,18 @@ const deleteMedicalAllowance = async (req, res) => {
     }
     const { employeeNumber, fiscalYear, noOfDependents } = deletedRecord;
     await MedicalAllowance.findByIdAndDelete(req.params.id);
-    await syncWithPersonnelServices(employeeNumber, fiscalYear, 0, noOfDependents);
+    await syncWithPersonnelServices(employeeNumber, fiscalYear, 0, noOfDependents, {
+      proposalId: deletedRecord.proposalId,
+      workflowRef: deletedRecord.workflowRef,
+      employeeFullName: deletedRecord.employeeFullName,
+    });
     return res.status(200).json({
       message: "Medical allowance record deleted successfully",
     });
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
     console.error("Error deleting medical allowance record:", error);
     return res.status(500).json({
       error: "Failed to delete medical allowance record",

@@ -75,6 +75,8 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
         positionTitle: isEditing ? row.positionTitle : data.employee.positionTitle,
         department: isEditing ? row.department : data.employee.department,
         division: isEditing ? row.division : data.employee.division,
+        proposalId: isEditing ? row.proposalId : data.employee.proposalId,
+        workflowRef: isEditing ? row.workflowRef : data.employee.workflowRef,
         // Use active region if available, otherwise use employee's region
         region: activeRegion?.name || (isEditing ? row.region : data.employee.region),
         Amount: subsistenceRate,

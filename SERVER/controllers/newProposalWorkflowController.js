@@ -1327,7 +1327,10 @@ exports.getProposals = async (req, res) => {
 
     // Fetch legacy proposals for totals/region string mapping
     const wfIds = newProposals.map(p => p._id);
-    const legacyList = await Proposal.find({ workflowRef: { $in: wfIds } }, 'workflowRef region totalIncome totalExpenses proposedBudget department division').lean();
+    const legacyList = await Proposal.find(
+      { workflowRef: { $in: wfIds } },
+      'workflowRef region totalIncome totalExpenses proposedBudget projectedSubsidy projectedCorporateIncome department division amount'
+    ).lean();
     const legacyMap = new Map(legacyList.map(lp => [String(lp.workflowRef), lp]));
 
     // Fallback: if my-proposals view returned none, broaden search to createdBy only (no status) then re-filter

@@ -3,6 +3,7 @@ const SubsistenceAllowanceMDS = require("../models/subsistenceAllowanceMDS");
 const Settings = require("../models/Settings");
 const PersonnelServices = require('../models/PersonnelServices');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
+const { ensurePersonnelRecordEditable } = require('../utils/employeeBenefitSyncUtils');
 /**
  * Create a new Subsistence Allowance MDS record,
  * then immediately update the corresponding PersonnelServices entry.
@@ -16,6 +17,8 @@ exports.createSubsistenceAllowance = async (req, res) => {
       department,
       division,
       region,
+      proposalId,
+      workflowRef,
       processBy,
       processDate,
       fiscalYear, // optional
@@ -49,11 +52,16 @@ exports.createSubsistenceAllowance = async (req, res) => {
     });
     await record.save();
     // 3) Sync to PersonnelServices
-    const personnel = await PersonnelServices.findOne({
-      employeeNumber,
-      employeeFullName,
-      fiscalYear: usedFiscalYear,
-    });
+    const personnel = await ensurePersonnelRecordEditable(
+      {
+        employeeNumber,
+        employeeFullName,
+        fiscalYear: usedFiscalYear,
+        proposalId,
+        workflowRef,
+      },
+      'subsistence allowance MDS'
+    );
     if (personnel) {
       personnel.subsistenceAllowanceMDS = amount;
       await personnel.save();
@@ -73,6 +81,9 @@ exports.createSubsistenceAllowance = async (req, res) => {
       data: record,
     });
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
     console.error("❌ Error in createSubsistenceAllowance:", error);
     return res.status(500).json({ message: "Server error", error: error.message });
   }
@@ -171,6 +182,8 @@ exports.updateSubsistenceAllowance = async (req, res) => {
       department,
       division,
       region,
+      proposalId,
+      workflowRef,
       processBy,
       processDate,
       fiscalYear,
@@ -207,11 +220,16 @@ exports.updateSubsistenceAllowance = async (req, res) => {
     );
     if (!updated) return res.status(404).json({ message: "Record not found." });
     // Sync to PersonnelServices
-    const personnel = await PersonnelServices.findOne({
-      employeeNumber,
-      employeeFullName,
-      fiscalYear: usedFiscalYear,
-    });
+    const personnel = await ensurePersonnelRecordEditable(
+      {
+        employeeNumber,
+        employeeFullName,
+        fiscalYear: usedFiscalYear,
+        proposalId,
+        workflowRef,
+      },
+      'subsistence allowance MDS'
+    );
     if (personnel) {
       personnel.subsistenceAllowanceMDS = amount;
       await personnel.save();
@@ -227,6 +245,9 @@ exports.updateSubsistenceAllowance = async (req, res) => {
     }
     return res.status(200).json(updated);
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
     console.error("❌ Error in updateSubsistenceAllowance:", error);
     return res.status(500).json({ message: "Server error", error: error.message });
   }
@@ -243,10 +264,15 @@ exports.deleteSubsistenceAllowance = async (req, res) => {
     // Remove the record
     await SubsistenceAllowanceMDS.findByIdAndDelete(id);
     // Sync deletion to PersonnelServices
-    const personnel = await PersonnelServices.findOne({
-      employeeNumber: toDelete.employeeNumber,
-      fiscalYear:     toDelete.fiscalYear,
-    });
+    const personnel = await ensurePersonnelRecordEditable(
+      {
+        employeeNumber: toDelete.employeeNumber,
+        fiscalYear: toDelete.fiscalYear,
+        proposalId: toDelete.proposalId,
+        workflowRef: toDelete.workflowRef,
+      },
+      'subsistence allowance MDS'
+    );
     if (personnel) {
       personnel.subsistenceAllowanceMDS = 0;
       personnel.Total = Object.values(personnel.toObject()).reduce(
@@ -266,6 +292,9 @@ exports.deleteSubsistenceAllowance = async (req, res) => {
     }
     return res.status(200).json({ message: "Deleted and synced successfully." });
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
     console.error("❌ Error in deleteSubsistenceAllowance:", error);
     return res.status(500).json({ message: "Server error", error: error.message });
   }

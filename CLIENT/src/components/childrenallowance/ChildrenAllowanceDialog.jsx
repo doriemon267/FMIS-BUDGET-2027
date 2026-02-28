@@ -209,6 +209,8 @@ const ChildrenAllowanceDialog = ({ row, schema, endpoint, dataListName }) => {
         department: data.employee.department,
         division: data.employee.division,
         region: data.employee.region,
+        proposalId: data.employee.proposalId,
+        workflowRef: data.employee.workflowRef,
         noOfDependents: Number(data.noOfDependents),
         amount: computeAmount,
         processBy: `${currentUser.FirstName} ${currentUser.LastName}`,

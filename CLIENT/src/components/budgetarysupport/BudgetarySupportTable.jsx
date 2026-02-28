@@ -346,11 +346,30 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
 
   // Fetch Personnel Services data for Use of Funds breakdown (Combined Permanent + Casual)
   const { data: personalServicesData, error: personnelError, isLoading: isLoadingPersonnel } = useQuery({
-    queryKey: ['personnel-services-combined', fiscalYear, budgetType],
+    queryKey: ['personnel-services-combined', fiscalYear, budgetType, proposalId],
     queryFn: async () => {
       if (!hasValidParams) return [];
 
       try {
+        if (proposalId) {
+          const scopedResponse = await api.get('/personnel/getByParams', {
+            params: {
+              proposalId,
+              fiscalYear: Number(fiscalYear),
+              budgetType,
+              _t: Date.now(),
+            },
+          });
+
+          const scopedPayload = scopedResponse.data;
+          const scopedPersonnel =
+            Array.isArray(scopedPayload) ? scopedPayload :
+            Array.isArray(scopedPayload?.data) ? scopedPayload.data :
+            [];
+
+          return scopedPersonnel.filter((item) => item?.chargedToIncomeEligible !== true);
+        }
+
         // Use the same base PersonnelServices endpoint used by Personnel Services tables,
         // but let backend/hierarchical filters handle region and scope.
         const params = {
@@ -509,6 +528,25 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
       }
       
       try {
+        if (proposalId) {
+          const scopedResponse = await api.get('/personnel/getByParams', {
+            params: {
+              proposalId,
+              fiscalYear: Number(fiscalYear),
+              budgetType,
+              _t: Date.now(),
+            },
+          });
+
+          const scopedPayload = scopedResponse.data;
+          const scopedPersonnel =
+            Array.isArray(scopedPayload) ? scopedPayload :
+            Array.isArray(scopedPayload?.data) ? scopedPayload.data :
+            [];
+
+          return scopedPersonnel.filter((item) => item?.chargedToIncomeEligible === true);
+        }
+
         const baseParams = {
           ...(proposalId && { proposalId }), // CRITICAL: Filter by proposalId if available
           fiscalYear: Number(fiscalYear),

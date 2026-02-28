@@ -4,6 +4,7 @@ const Settings = require("../models/Settings");
 const PersonnelServices = require("../models/PersonnelServices");
 const { getActiveSettingsWithCompensation } = require("../utils/settingsUtils");
 const { recalculateAndSaveProposalTotals } = require("../utils/recalculateProposalTotals");
+const { ensurePersonnelRecordEditable, findScopedPersonnelService } = require("../utils/employeeBenefitSyncUtils");
 
 /** Match region flexibly: DB may store "CENTRAL OFFICE" or "CENTRAL-OFFICE" */
 function regionMatch(regionValue) {
@@ -28,6 +29,8 @@ exports.createSubsistenceAllowance = async (req, res) => {
       department,
       division,
       region,
+      proposalId,
+      workflowRef,
       processBy,
       processDate,
       fiscalYear,
@@ -66,10 +69,10 @@ exports.createSubsistenceAllowance = async (req, res) => {
     });
     await record.save();
 
-    const personnel = await PersonnelServices.findOne({
-      employeeNumber,
-      fiscalYear: usedFiscalYear,
-    });
+    const personnel = await ensurePersonnelRecordEditable(
+      { employeeNumber, fiscalYear: usedFiscalYear, proposalId, workflowRef },
+      "subsistence allowance"
+    );
     if (personnel) {
       personnel.subsistenceAllowance = amount;
       await personnel.save();
@@ -87,6 +90,9 @@ exports.createSubsistenceAllowance = async (req, res) => {
       data: record,
     });
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
     console.error("❌ Error in createSubsistenceAllowance:", error);
     return res.status(500).json({ message: "Server error", error: error.message });
   }
@@ -133,6 +139,8 @@ exports.bulkCreateSubsistenceAllowance = async (req, res) => {
           department,
           division,
           region,
+          proposalId,
+          workflowRef,
           processBy,
           processDate,
           fiscalYear,
@@ -176,10 +184,10 @@ exports.bulkCreateSubsistenceAllowance = async (req, res) => {
         createdRecords.push(record);
 
         // Update PersonnelServices
-        const personnel = await PersonnelServices.findOne({
-          employeeNumber,
-          fiscalYear: usedFiscalYear,
-        });
+        const personnel = await ensurePersonnelRecordEditable(
+          { employeeNumber, fiscalYear: usedFiscalYear, proposalId, workflowRef },
+          "subsistence allowance"
+        );
 
         if (personnel) {
           personnel.subsistenceAllowance = amount;
@@ -208,6 +216,9 @@ exports.bulkCreateSubsistenceAllowance = async (req, res) => {
       ...(errors.length > 0 && { errors }),
     });
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
     console.error("❌ Error in bulkCreateSubsistenceAllowance:", error);
     return res.status(500).json({ message: "Server error", error: error.message });
   }
@@ -294,6 +305,8 @@ exports.updateSubsistenceAllowance = async (req, res) => {
       department,
       division,
       region,
+      proposalId,
+      workflowRef,
       processBy,
       processDate,
       fiscalYear,
@@ -328,10 +341,15 @@ exports.updateSubsistenceAllowance = async (req, res) => {
     );
     if (!updated) return res.status(404).json({ message: "Record not found." });
 
-    const personnel = await PersonnelServices.findOne({
-      employeeNumber: updated.employeeNumber,
-      fiscalYear: usedFiscalYear,
-    });
+    const personnel = await ensurePersonnelRecordEditable(
+      {
+        employeeNumber: updated.employeeNumber,
+        fiscalYear: usedFiscalYear,
+        proposalId,
+        workflowRef,
+      },
+      "subsistence allowance"
+    );
     if (personnel) {
       personnel.subsistenceAllowance = amount;
       await personnel.save();
@@ -345,6 +363,9 @@ exports.updateSubsistenceAllowance = async (req, res) => {
     }
     return res.status(200).json(updated);
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
     console.error("❌ Error in updateSubsistenceAllowance:", error);
     return res.status(500).json({ message: "Server error", error: error.message });
   }
@@ -360,10 +381,15 @@ exports.deleteSubsistenceAllowance = async (req, res) => {
     if (!toDelete) return res.status(404).json({ message: "Record not found." });
     await SubsistenceAllowance.findByIdAndDelete(id);
 
-    const personnel = await PersonnelServices.findOne({
-      employeeNumber: toDelete.employeeNumber,
-      fiscalYear: toDelete.fiscalYear,
-    });
+    const personnel = await ensurePersonnelRecordEditable(
+      {
+        employeeNumber: toDelete.employeeNumber,
+        fiscalYear: toDelete.fiscalYear,
+        proposalId: toDelete.proposalId,
+        workflowRef: toDelete.workflowRef,
+      },
+      "subsistence allowance"
+    );
     if (personnel) {
       personnel.subsistenceAllowance = 0;
       await personnel.save();
@@ -377,6 +403,9 @@ exports.deleteSubsistenceAllowance = async (req, res) => {
     }
     return res.status(200).json({ message: "Deleted and synced successfully." });
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
     console.error("❌ Error in deleteSubsistenceAllowance:", error);
     return res.status(500).json({ message: "Server error", error: error.message });
   }

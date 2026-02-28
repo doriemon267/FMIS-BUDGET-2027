@@ -3,6 +3,8 @@ const SubsistenceAllowanceST = require("../models/subsistenceAllowanceST");
 const Settings               = require("../models/Settings");
 const PersonnelService = require('../models/PersonnelServices');  // :contentReference[oaicite:0]{index=0}&#8203;:contentReference[oaicite:1]{index=1}
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
+const { ensurePersonnelRecordEditable } = require('../utils/employeeBenefitSyncUtils');
+const PersonnelServices = PersonnelService;
 /**
  * Helper: compute combined ST (sum of all ST entries) for an employee in a fiscal year
  */
@@ -26,6 +28,8 @@ exports.createSubsistenceST = async (req, res) => {
       department,
       division,
       region,
+      proposalId,
+      workflowRef,
       monthlySalary,
       actualExposureDays,
       riskLevel,
@@ -80,7 +84,10 @@ exports.createSubsistenceST = async (req, res) => {
     await record.save();
     // 5) Compute combined ST & sync to PersonnelServices
     const combinedST = await computeCombinedST(employeeNumber, usedFY);
-    const person = await PersonnelServices.findOne({ employeeNumber, fiscalYear: usedFY });
+    const person = await ensurePersonnelRecordEditable(
+      { employeeNumber, employeeFullName, fiscalYear: usedFY, proposalId, workflowRef },
+      'subsistence allowance ST'
+    );
     if (person) {
       person.subsistenceAllowanceST = combinedST;
       await person.save();
@@ -96,6 +103,9 @@ exports.createSubsistenceST = async (req, res) => {
     }
     return res.status(201).json({ message: "Record created and synced.", data: record });
   } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
     console.error("❌ Error in createSubsistenceST:", err);
     return res.status(500).json({ message: "Server error", error: err.message });
   }
@@ -197,6 +207,8 @@ exports.updateSubsistenceST = async (req, res) => {
       department,
       division,
       region,
+      proposalId,
+      workflowRef,
       monthlySalary,
       actualExposureDays,
       riskLevel,
@@ -247,7 +259,16 @@ exports.updateSubsistenceST = async (req, res) => {
     );
     if (!updated) return res.status(404).json({ message: "Record not found." });
     const combinedST = await computeCombinedST(updated.employeeNumber, usedFY);
-    const person = await PersonnelServices.findOne({ employeeNumber: updated.employeeNumber, fiscalYear: usedFY });
+    const person = await ensurePersonnelRecordEditable(
+      {
+        employeeNumber: updated.employeeNumber,
+        employeeFullName: updated.employeeFullName,
+        fiscalYear: usedFY,
+        proposalId,
+        workflowRef,
+      },
+      'subsistence allowance ST'
+    );
     if (person) {
       person.subsistenceAllowanceST = combinedST;
       await person.save();
@@ -263,6 +284,9 @@ exports.updateSubsistenceST = async (req, res) => {
     }
     return res.status(200).json(updated);
   } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
     console.error("❌ Error in updateSubsistenceST:", err);
     return res.status(500).json({ message: "Server error", error: err.message });
   }
@@ -277,7 +301,16 @@ exports.deleteSubsistenceST = async (req, res) => {
     if (!toDelete) return res.status(404).json({ message: "Record not found." });
     await SubsistenceAllowanceST.findByIdAndDelete(id);
     const combinedST = await computeCombinedST(toDelete.employeeNumber, toDelete.fiscalYear);
-    const person = await PersonnelServices.findOne({ employeeNumber: toDelete.employeeNumber, fiscalYear: toDelete.fiscalYear });
+    const person = await ensurePersonnelRecordEditable(
+      {
+        employeeNumber: toDelete.employeeNumber,
+        employeeFullName: toDelete.employeeFullName,
+        fiscalYear: toDelete.fiscalYear,
+        proposalId: toDelete.proposalId,
+        workflowRef: toDelete.workflowRef,
+      },
+      'subsistence allowance ST'
+    );
     if (person) {
       person.subsistenceAllowanceST = combinedST;
       await person.save();
@@ -293,6 +326,9 @@ exports.deleteSubsistenceST = async (req, res) => {
     }
     return res.status(200).json({ message: "Deleted and synced successfully." });
   } catch (err) {
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
     console.error("❌ Error in deleteSubsistenceST:", err);
     return res.status(500).json({ message: "Server error", error: err.message });
   }
