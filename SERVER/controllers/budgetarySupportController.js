@@ -586,6 +586,19 @@ const calculateBudgetarySupport = async (req, res) => {
       });
       console.warn('IAs O&M Cost not available, continuing with other sources');
     }
+
+    // Log detailed subsidy composition
+    console.log(`📊 [calculateBudgetarySupport] Subsidy Composition for FY=${fiscalYear}, BudgetType=${budgetType}:`, {
+      'B.1.1 Personnel Services (non-charged)': breakdown.find(b => b.source.includes('Personnel Services'))?.amount || 0,
+      'B.1.2 MOOE Subsidy': breakdown.find(b => b.source.includes('MOOE'))?.amount || 0,
+      'B.2 Capital Outlay': breakdown.find(b => b.source.includes('Capital Outlay'))?.amount || 0,
+      'Charged-to-Income Amount': totalChargedToIncome,
+      '─────────────────────────': '',
+      'TOTAL PROJECTED SUBSIDY': totalSubsidy,
+      'TOTAL CHARGED TO INCOME': totalChargedToIncome,
+      'TOTAL BUDGET': totalSubsidy + totalChargedToIncome
+    });
+
     res.json({
       totalSubsidy,
       totalChargedToIncome,

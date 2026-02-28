@@ -2544,6 +2544,8 @@ function calculatePersonnelTotal(personnel) {
     (Number(personnel.PERA) || 0) +
     (Number(personnel.uniformALLOWANCE) || 0) +
     (Number(personnel.productivityIncentive) || 0) +
+    (Number(personnel.additionalMedical) || 0) +
+    (Number(personnel.subsistenceAllowance) || 0) +
     (Number(personnel.medical) || 0) +
     (Number(personnel.childrenAllowance) || 0) +
     (Number(personnel.meal) || 0) +
@@ -2553,6 +2555,7 @@ function calculatePersonnelTotal(personnel) {
     (Number(personnel.midyearBonus) || 0) +
     (Number(personnel.yearEndBonus) || 0) +
     (Number(personnel.gsisPremium) || 0) +
+    (Number(personnel.providentFund) || 0) +
     (Number(personnel.philhealthPremium) || 0) +
     (Number(personnel.pagibigPremium) || 0) +
     (Number(personnel.employeeCompensation) || 0) +

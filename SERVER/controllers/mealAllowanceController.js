@@ -193,9 +193,11 @@ exports.createMealAllowance = [
         // Recalculate proposal totals if personnel has a proposalId
         if (updatedPersonnel.proposalId) {
           try {
+            console.log(`🔄 [Meal] Triggering recalculation for proposal: ${updatedPersonnel.proposalId}`);
             await recalculateAndSaveProposalTotals({ proposalId: updatedPersonnel.proposalId });
+            console.log(`✅ [Meal] Recalculation completed for proposal: ${updatedPersonnel.proposalId}`);
           } catch (recalcErr) {
-            console.error('Error recalculating proposal totals:', recalcErr);
+            console.error('❌ [Meal] Error recalculating proposal totals:', recalcErr);
           }
         }
         }

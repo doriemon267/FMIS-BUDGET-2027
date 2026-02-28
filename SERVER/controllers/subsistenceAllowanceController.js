@@ -78,9 +78,11 @@ exports.createSubsistenceAllowance = async (req, res) => {
       await personnel.save();
       if (personnel.proposalId) {
         try {
+          console.log(`🔄 [Subsistence] Triggering recalculation for proposal: ${personnel.proposalId}`);
           await recalculateAndSaveProposalTotals({ proposalId: personnel.proposalId });
+          console.log(`✅ [Subsistence] Recalculation completed for proposal: ${personnel.proposalId}`);
         } catch (recalcErr) {
-          console.error("Error recalculating proposal totals:", recalcErr);
+          console.error("❌ [Subsistence] Error recalculating proposal totals:", recalcErr);
         }
       }
     }

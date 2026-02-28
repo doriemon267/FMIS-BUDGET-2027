@@ -494,28 +494,28 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
     }
   });
 
-  // Fetch Proposal record to get backend-calculated projectedSubsidy
+  // Fetch Proposal record to get backend-calculated projectedSubsidy (optional fallback only)
   const { data: proposalData } = useQuery({
     queryKey: ['proposal', 'totals', proposalId],
     queryFn: async () => {
       try {
         if (proposalId) {
-          // console.log('[BudgetarySupportTable] Fetching proposal totals by workflowRefId:', proposalId);
           const response = await api.get(`/api/allproposal/proposals/${proposalId}/totals`);
-          // console.log('[BudgetarySupportTable] Proposal totals fetched:', {
-            // projectedSubsidy: response.data?.data?.projectedSubsidy,
-            // projectedCorporateIncome: response.data?.data?.projectedCorporateIncome
-          // });
           return response.data?.data;
         }
         
         return null;
       } catch (err) {
-        console.error('[BudgetarySupportTable] Error fetching proposal totals:', err.response?.status, err.message);
+        // Gracefully handle 404 or other errors - this is just a fallback, not critical
+        if (err.response?.status !== 404) {
+          console.warn('[BudgetarySupportTable] Warning: Could not fetch proposal totals (non-404):', err.message);
+        }
         return null;
       }
     },
     enabled: !!proposalId,
+    retry: false, // Don't retry on 404 - it's expected for some proposals
+    staleTime: 30000, // Cache for 30s to reduce unnecessary requests
   });
 
   // Fetch charged-to-income personnel data for budget breakdown
@@ -629,28 +629,41 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
   // Use calculated budgetary support amount with better validation
   useEffect(() => {
     let newAmount = 0;
+    let source = 'none';
 
-    // Prefer proposal-specific totals when proposalId is available
-    if (proposalId && proposalData?.projectedSubsidy != null) {
-      newAmount = Number(proposalData.projectedSubsidy);
-    } else if (calculatedBudgetarySupport?.totalSubsidy) {
+    // PRIORITY: Always prefer freshly computed values from actual data
+    // This ensures that BudgetarySupportTable reflects the true state of PersonnelServices + MOOE + Capital Outlay
+    if (calculatedBudgetarySupport?.totalSubsidy) {
       newAmount = Number(calculatedBudgetarySupport.totalSubsidy);
+      source = 'COMPUTED (calculatedBudgetarySupport.totalSubsidy)';
     } else if (calculatedBudgetarySupport?.amount) {
       newAmount = Number(calculatedBudgetarySupport.amount);
+      source = 'COMPUTED (calculatedBudgetarySupport.amount)';
+    } else if (proposalId && proposalData?.projectedSubsidy != null) {
+      // FALLBACK: Use cached proposal total only when computed values are unavailable
+      newAmount = Number(proposalData.projectedSubsidy);
+      source = 'CACHED (proposalData.projectedSubsidy)';
     } else if (data?.amount) {
       newAmount = Number(data.amount);
+      source = 'LEGACY (data.amount)';
     } else {
       newAmount = 0;
+      source = 'DEFAULT (0)';
     }
     
     // Validate the amount
     if (isNaN(newAmount) || newAmount < 0) {
       console.warn('⚠️ Invalid amount detected, setting to 0:', newAmount);
       newAmount = 0;
+      source = 'INVALID → DEFAULT';
+    }
+    
+    if (proposalId) {
+      console.log('💰 [BudgetarySupportTable] Subsidy amount source:', source, '→', `₱${newAmount.toLocaleString()}`);
     }
     
     setAmount(newAmount);
-      }, [proposalId, proposalData, calculatedBudgetarySupport, data]);
+      }, [calculatedBudgetarySupport, proposalData, proposalId, data]);
 
   // Amount is now auto-calculated, no manual changes allowed
 
@@ -1030,6 +1043,25 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
       // subsidy: chargedToIncomeSubsidy,
       // willRender: chargedToIncomeAmount > 0
     // });
+    
+    if (proposalId && personalServicesData) {
+      const psTotal = toNumber(useOfFundsBreakdown.personalServices);
+      const chargedToIncome = toNumber(useOfFundsBreakdown.chargedToIncomeAmount);
+      const mooeSubsidy = toNumber(useOfFundsBreakdown.maintenanceAndOperatingSubsidy);
+      const coSubsidy = toNumber(useOfFundsBreakdown.capitalOutlaysSubsidy);
+      const totalSubsidy = psTotal + mooeSubsidy + coSubsidy;
+      
+      console.log(`📊 [BudgetarySupportTable] Subsidy Composition Breakdown:`, {
+        'Personnel Services (non-charged)': `₱${psTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+        'Charged-to-Income Amount': `₱${chargedToIncome.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+        'MOOE Subsidy': `₱${mooeSubsidy.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+        'Capital Outlay Subsidy': `₱${coSubsidy.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+        '─────────────────────────': '',
+        'TOTAL PROJECTED SUBSIDY': `₱${totalSubsidy.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+        'PersonnelServices Count': personalServicesData.length,
+        'proposalId': proposalId
+      });
+    }
     
     return {
       corporateIncome,

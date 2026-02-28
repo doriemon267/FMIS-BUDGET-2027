@@ -60,9 +60,11 @@ async function syncWithPersonnelServices(employeeNumber, fiscalYear, amount, noO
       // Trigger recalculation of proposal totals
       if (personnelService.proposalId) {
         try {
+          console.log(`🔄 [Medical] Triggering recalculation for proposal: ${personnelService.proposalId}`);
           await recalculateAndSaveProposalTotals({ proposalId: personnelService.proposalId });
+          console.log(`✅ [Medical] Recalculation completed for proposal: ${personnelService.proposalId}`);
         } catch (recalcErr) {
-          console.error('Error recalculating proposal totals:', recalcErr);
+          console.error('❌ [Medical] Error recalculating proposal totals:', recalcErr);
         }
       }
       return true;
