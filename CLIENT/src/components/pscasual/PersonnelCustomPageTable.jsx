@@ -143,6 +143,21 @@ const PSCasualCustomPageTable = ({
     }
   }, []);
 
+  // Invalidate related queries (BudgetarySupportTable, NewProposalWorkflowPage, Comprehensive Reports)
+  const invalidatePersonnelRelatedQueries = useCallback(async () => {
+    try {
+      await queryClient.invalidateQueries({ queryKey: [dataListName, "chargedToIncome"] });
+      await queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      await queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+      await queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
+      await queryClient.invalidateQueries({ queryKey: ["personnel-services-combined"] });
+      await queryClient.invalidateQueries({ queryKey: ["calculated-budgetary-support"] });
+      await queryClient.invalidateQueries({ queryKey: ["comprehensive-report-data"] });
+    } catch (e) {
+      console.warn("Personnel-related invalidation error:", e);
+    }
+  }, [queryClient, dataListName]);
+
   const fetchData = useCallback(async () => {
     try {
       const { data } = await api.get(`${apiPath}?statusOfAppointment=CASUAL`);
@@ -270,6 +285,7 @@ const PSCasualCustomPageTable = ({
         
         await fetchData();
         await invalidateDataList(queryClient, dataListName);
+        await invalidatePersonnelRelatedQueries();
       } else if (response.data.message) {
         toast.info(response.data.message);
         console.error("Bulk add response:", response.data);
@@ -298,6 +314,7 @@ const PSCasualCustomPageTable = ({
     fetchData,
     queryClient,
     dataListName,
+    invalidatePersonnelRelatedQueries,
     fetchActiveSettings,
     workflowRef,
     headerConfig
@@ -438,14 +455,8 @@ const PSCasualCustomPageTable = ({
       setSelectedRows([]);
       setChargedToIncomeDialog({ open: false, mode: "tag", amount: "", notes: "" });
       await fetchData();
-      // Invalidate and refetch proposal queries so budget totals update immediately
-      await queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      await invalidatePersonnelRelatedQueries();
       await queryClient.refetchQueries({ queryKey: ["proposals"] });
-      // Also invalidate allProposals for NewProposalWorkflowPage to update
-      await queryClient.invalidateQueries({ queryKey: ["allProposals"] });
-      await queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
-      // Also invalidate personnel services queries to update BudgetarySupportTable
-      await queryClient.invalidateQueries({ queryKey: ["personnel-services-combined"] });
       await queryClient.refetchQueries({ queryKey: ["personnel-services-combined"] });
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to update charged to income");
@@ -796,7 +807,7 @@ const PSCasualCustomPageTable = ({
   return (
     <>
       {/* Header Section with Title and User Access Info (hidden via env toggle) */}
-  {!(String(import.meta.env.VITE_HIDE_ACCESS_INFO_BANNERS).trim() === 'true') && (
+  {/* {!(String(import.meta.env.VITE_HIDE_ACCESS_INFO_BANNERS).trim() === 'true') && (
         <Paper sx={{ p: 3, mb: 2, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
           <Box>
             <Typography variant="h4" fontWeight="bold" gutterBottom>
@@ -818,7 +829,7 @@ const PSCasualCustomPageTable = ({
             </Typography>
           </Box>
         </Paper>
-      )}
+      )} */}
 
       {/* Enhanced Action Bar */}
       <Paper sx={{ p: 2, mb: 2 }}>
@@ -1271,6 +1282,10 @@ const PSCasualCustomPageTable = ({
                   schema={schema}
                   endpoint={apiPath}
                   dataListName={dataListName}
+                  onAfterInvalidate={async () => {
+                    await invalidatePersonnelRelatedQueries();
+                    await fetchData();
+                  }}
                   disableEdit={row.status === "Finalized"}
                   disableDelete={row.status === "Finalized"}
                 />
@@ -1282,7 +1297,7 @@ const PSCasualCustomPageTable = ({
             }
 
             return column;
-          }), [schema, enhancedMenuOptions, customEditElement, hasEdit, hasDelete, apiPath, dataListName, columnVisibility])}
+          }), [schema, enhancedMenuOptions, customEditElement, hasEdit, hasDelete, apiPath, dataListName, columnVisibility, invalidatePersonnelRelatedQueries, fetchData])}
       />
     </>
   );

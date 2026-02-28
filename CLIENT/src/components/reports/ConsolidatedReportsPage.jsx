@@ -601,7 +601,7 @@ const ConsolidatedReportsPage = () => {
                 Total Income
               </Typography>
               <Typography variant="h6" component="div" sx={{ color: "#375e38" }}>
-                ₱{(grandTotals && typeof grandTotals.income === 'number' ? grandTotals.income : 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ₱{(grandTotals && typeof grandTotals.income === 'number' ? grandTotals.income : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </Typography>
             </CardContent>
           </Card>
@@ -613,7 +613,7 @@ const ConsolidatedReportsPage = () => {
                 Total Subsidy
               </Typography>
               <Typography variant="h6" component="div" sx={{ color: "#375e38" }}>
-                ₱{(grandTotals && typeof grandTotals.subsidy === 'number' ? grandTotals.subsidy : 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ₱{(grandTotals && typeof grandTotals.subsidy === 'number' ? grandTotals.subsidy : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </Typography>
             </CardContent>
           </Card>
@@ -625,7 +625,7 @@ const ConsolidatedReportsPage = () => {
                 Total Amount
               </Typography>
               <Typography variant="h6" component="div" sx={{ color: "#375e38" }}>
-                ₱{(grandTotals && typeof grandTotals.amount === 'number' ? grandTotals.amount : 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ₱{(grandTotals && typeof grandTotals.amount === 'number' ? grandTotals.amount : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </Typography>
             </CardContent>
           </Card>
@@ -637,7 +637,7 @@ const ConsolidatedReportsPage = () => {
                 Grand Total
               </Typography>
               <Typography variant="h6" component="div" sx={{ color: "#375e38" }}>
-                ₱{(grandTotals && typeof grandTotals.total === 'number' ? grandTotals.total : 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ₱{(grandTotals && typeof grandTotals.total === 'number' ? grandTotals.total : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </Typography>
             </CardContent>
           </Card>
@@ -789,13 +789,13 @@ const ConsolidatedReportsPage = () => {
                         {row.category}
                       </TableCell>
                       <TableCell align="right" sx={{ fontWeight: "bold", padding: "8px 12px", fontSize: "0.875rem" }}>
-                        ₱{(row.children || []).reduce((sum, child) => sum + parseFloat(child.income || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        ₱{(row.children || []).reduce((sum, child) => sum + parseFloat(child.income || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell align="right" sx={{ fontWeight: "bold", padding: "8px 12px", fontSize: "0.875rem" }}>
-                        ₱{(row.children || []).reduce((sum, child) => sum + parseFloat(child.subsidy || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        ₱{(row.children || []).reduce((sum, child) => sum + parseFloat(child.subsidy || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell align="right" sx={{ fontWeight: "bold", padding: "8px 12px", fontSize: "0.875rem" }}>
-                        ₱{(row.children || []).reduce((sum, child) => sum + parseFloat(child.amount || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        ₱{(row.children || []).reduce((sum, child) => sum + parseFloat(child.amount || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
                     </TableRow>
 
@@ -813,13 +813,13 @@ const ConsolidatedReportsPage = () => {
                           {child.accountingTitle || child.lineItem || child.name}
                         </TableCell>
                         <TableCell align="right" sx={{ fontSize: "0.8rem", padding: "6px 12px", color: "#333" }}>
-                          ₱{parseFloat(child.income || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          ₱{parseFloat(child.income || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell align="right" sx={{ fontSize: "0.8rem", padding: "6px 12px", color: "#333" }}>
-                          ₱{parseFloat(child.subsidy || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          ₱{parseFloat(child.subsidy || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell align="right" sx={{ fontSize: "0.8rem", padding: "6px 12px", color: "#333" }}>
-                          ₱{parseFloat(child.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          ₱{parseFloat(child.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -890,7 +890,7 @@ const ConsolidatedReportsPage = () => {
                     fontSize: "0.875rem"
                   }}
                 >
-                  ₱{(grandTotals && typeof grandTotals.income === 'number' ? grandTotals.income : 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  ₱{(grandTotals && typeof grandTotals.income === 'number' ? grandTotals.income : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </TableCell>
                 
                 {/* Subsidy total - nakatapat sa SUBSIDY column */}
@@ -905,7 +905,7 @@ const ConsolidatedReportsPage = () => {
                     fontSize: "0.875rem"
                   }}
                 >
-                  ₱{(grandTotals && typeof grandTotals.subsidy === 'number' ? grandTotals.subsidy : 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  ₱{(grandTotals && typeof grandTotals.subsidy === 'number' ? grandTotals.subsidy : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </TableCell>
                 
                 {/* Amount total - nakatapat sa AMOUNT column */}
@@ -920,7 +920,7 @@ const ConsolidatedReportsPage = () => {
                     fontSize: "0.875rem"
                   }}
                 >
-                  ₱{(grandTotals && typeof grandTotals.amount === 'number' ? grandTotals.amount : 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  ₱{(grandTotals && typeof grandTotals.amount === 'number' ? grandTotals.amount : 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </TableCell>
               </TableRow>
             </TableFooter>

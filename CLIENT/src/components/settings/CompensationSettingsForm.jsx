@@ -104,6 +104,7 @@ const advancedSchema = yup.object().shape({
   courtAppearance: yup.number().min(0),
   childrenAllowance: yup.number().min(0),
   gsisPremium: yup.number().min(0),
+  providentFund: yup.number().min(0),
   philhealthPremium: yup
     .number()
     .min(0.05, "PhilHealth premium must be 5% in 2025 per Circular 2019-0009")
@@ -342,6 +343,7 @@ const CompensationSection = ({ control, errors }) => {
 const GovernmentShareSection = ({ control, errors }) => {
   const fields = [
     { name: "gsisPremium", label: "GSIS Premium", inputComponent: PercentageFormatCustom },
+    { name: "providentFund", label: "Provident Fund (PERMANENT only)", inputComponent: PercentageFormatCustom },
     { name: "philhealthPremium", label: "PhilHealth Premium", inputComponent: PercentageFormatCustom },
     { name: "pagibigPremium", label: "Pag-IBIG Premium", inputComponent: NumberFormatCustom },
     { name: "employeeCompensation", label: "Employee Compensation", inputComponent: NumberFormatCustom },
@@ -718,6 +720,7 @@ const CompensationSettingsDialogForm = ({
       courtAppearance: 0,
       childrenAllowance: 0,
       gsisPremium: 0,
+      providentFund: 0,
       philhealthPremium: 0.05, // Default to 5% for 2025
       pagibigPremium: 0,
       employeeCompensation: 0,
@@ -762,6 +765,7 @@ const CompensationSettingsDialogForm = ({
         courtAppearance: editData.courtAppearance,
         childrenAllowance: editData.childrenAllowance,
         gsisPremium: editData.gsisPremium,
+        providentFund: editData.providentFund,
         philhealthPremium: editData.philhealthPremium,
         pagibigPremium: editData.pagibigPremium,
         employeeCompensation: editData.employeeCompensation,
@@ -820,6 +824,7 @@ const CompensationSettingsDialogForm = ({
             courtAppearance: advanced.courtAppearance ?? current.courtAppearance,
             childrenAllowance: advanced.childrenAllowance ?? current.childrenAllowance,
             gsisPremium: advanced.gsisPremium ?? current.gsisPremium,
+            providentFund: advanced.providentFund ?? current.providentFund,
             philhealthPremium: advanced.philhealthPremium ?? current.philhealthPremium,
             pagibigPremium: advanced.pagibigPremium ?? current.pagibigPremium,
             employeeCompensation: advanced.employeeCompensation ?? current.employeeCompensation,

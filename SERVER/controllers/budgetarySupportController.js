@@ -4,6 +4,7 @@ const PersonnelServices = require('../models/PersonnelServices');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const mooeProposals = require('../models/mooeProposals');
 const IAsOMCost = require('../models/IAsOMCost');
+const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
 // Get all budgetary support entries
 const getAllBudgetarySupport = async (req, res) => {
   try {
@@ -380,10 +381,55 @@ const calculateBudgetarySupport = async (req, res) => {
         queryConditions.region = accessInfo.accessibleRegions[0].regionName;
       }
     }
-    // For PersonnelServices, use fiscal_year field as well
-    const personnelQueryConditions = { ...queryConditions };
-    if (fiscalYear) {
-      personnelQueryConditions.fiscal_year = Number(fiscalYear);
+    // Personnel Services: use SAME scope as Comprehensive Reports / Personnel Services table
+    // (Same query logic as buildComprehensiveReportData PS query - no budgetType, no submission status)
+    const personnelQueryConditions = {};
+    if (fiscalYear) personnelQueryConditions.fiscalYear = String(fiscalYear);
+    personnelQueryConditions.chargedToIncomeEligible = false;
+
+    // Region/scope: mirror Comprehensive Reports - support regions or region from query, then hierarchical
+    const regionsParam = req.query.regions ?? req.query.region;
+    let regionList = [];
+    if (regionsParam) {
+      regionList = Array.isArray(regionsParam) ? regionsParam : [regionsParam];
+      regionList = regionList.map(r => (r && String(r).trim())).filter(Boolean);
+    }
+    if (regionList.length > 0) {
+      personnelQueryConditions.region = regionList.length === 1 ? regionList[0] : { $in: regionList };
+    } else {
+      const accessInfo = req.hierarchicalAccessInfo;
+      if (accessInfo?.accessibleRegions?.length) {
+        const names = accessInfo.accessibleRegions.map(r => r.regionName || r).filter(Boolean);
+        if (names.length === 1) personnelQueryConditions.region = names[0];
+        else if (names.length > 1) personnelQueryConditions.region = { $in: names };
+      }
+      if (accessInfo?.scope === 'DIVISION') {
+        if (accessInfo.accessibleDepartments?.[0]?.departmentName) personnelQueryConditions.department = accessInfo.accessibleDepartments[0].departmentName;
+        if (accessInfo.accessibleDivisions?.[0]) personnelQueryConditions.division = accessInfo.accessibleDivisions[0];
+      } else if (accessInfo?.scope === 'DEPARTMENT' && accessInfo.accessibleDepartments?.[0]?.departmentName) {
+        personnelQueryConditions.department = accessInfo.accessibleDepartments[0].departmentName;
+      }
+    }
+
+    // Preparer scope: same as Comprehensive Reports - restrict to assigned division/department
+    const userRoles = req.user?.Roles || [];
+    const isPreparer = userRoles.some(r => (r && String(r).replace(/\s+/g, '_')) === 'BUDGET_PREPARER') ||
+      userRoles.some(r => (r && String(r).replace(/\s+/g, ' ').trim()) === 'BUDGET PREPARER');
+    if (isPreparer && req.user?.id) {
+      try {
+        const hua = await HierarchicalUserAssignment.findOne({ userId: String(req.user.id), isActive: true })
+          .populate('departmentId', 'Department departmentName DepartmentName')
+          .lean();
+        if (hua) {
+          const level = String(hua.assignmentLevel || '').toUpperCase();
+          const dept = hua.departmentId?.Department || hua.departmentId?.departmentName || hua.departmentId?.DepartmentName || '';
+          if (level === 'DIVISION' && (hua.divisionName || hua.division)) {
+            personnelQueryConditions.division = hua.divisionName || hua.division;
+          } else if ((level === 'DEPARTMENT' || level === 'OFFICE') && dept) {
+            personnelQueryConditions.department = dept;
+          }
+        }
+      } catch (_) { /* ignore */ }
     }
 
     // 1. Personnel Services (B.1.1) - SPLIT: GOVERNMENT SUBSIDY vs CHARGED TO INCOME
@@ -391,14 +437,15 @@ const calculateBudgetarySupport = async (req, res) => {
     try {
       const personnelServices = await PersonnelServices.find(personnelQueryConditions);
 
-      const personnelTotal = personnelServices.reduce((sum, item) => {
+      const { roundTo2Decimals } = require('../utils/roundCurrency');
+      const personnelTotal = roundTo2Decimals(personnelServices.reduce((sum, item) => {
         // CRITICAL: Only count PS that are NOT charged to income
         if (item.chargedToIncomeEligible === true) {
           totalChargedToIncome += (Number(item.Total) || 0);
           return sum; // Skip - this is charged to income
         }
         return sum + (Number(item.Total) || Number(item.annualSalary) || Number(item.total) || 0);
-      }, 0);
+      }, 0));
 
       if (personnelTotal > 0) {
         totalSubsidy += personnelTotal;

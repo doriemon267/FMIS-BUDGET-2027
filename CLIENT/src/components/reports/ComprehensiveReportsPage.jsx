@@ -948,7 +948,8 @@ const ComprehensiveReportsPage = () => {
   };
 
   const formatCurrency = (amount) => {
-    return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(amount || 0);
+    const rounded = Math.round(Number(amount || 0) * 100) / 100;
+    return new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(rounded);
   };
 
   const getSectionIcon = (sectionCode) => {

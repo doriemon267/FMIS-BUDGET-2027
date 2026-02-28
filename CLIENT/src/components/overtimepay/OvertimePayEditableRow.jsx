@@ -10,7 +10,7 @@ import {
   Fade,
   Zoom
 } from "@mui/material";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../../config/api";
 import { toast } from "react-hot-toast";
 import EditIcon from "@mui/icons-material/Edit";
@@ -20,6 +20,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import { green, orange, red, blue } from "@mui/material/colors";
 
 const OvertimePayEditableRow = ({ row, refreshData, activeSettings: propActiveSettings }) => {
+  const queryClient = useQueryClient();
   const [activeSettings, setActiveSettings] = useState(propActiveSettings);
   const [personStatus, setPersonStatus] = useState(null);
 
@@ -94,6 +95,12 @@ const OvertimePayEditableRow = ({ row, refreshData, activeSettings: propActiveSe
       toast.success("Overtime record updated successfully");
       setIsEditing(false);
       refreshData();
+      queryClient.invalidateQueries({ queryKey: ["personnel-services-combined"] });
+      queryClient.invalidateQueries({ queryKey: ["calculated-budgetary-support"] });
+      queryClient.invalidateQueries({ queryKey: ["comprehensive-report-data"] });
+      queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+      queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
     },
     onError: (err) => {
       toast.error(err.response?.data?.message || "Error updating record");
@@ -105,6 +112,12 @@ const OvertimePayEditableRow = ({ row, refreshData, activeSettings: propActiveSe
     onSuccess: () => {
       toast.success("Overtime record deleted successfully");
       refreshData();
+      queryClient.invalidateQueries({ queryKey: ["personnel-services-combined"] });
+      queryClient.invalidateQueries({ queryKey: ["calculated-budgetary-support"] });
+      queryClient.invalidateQueries({ queryKey: ["comprehensive-report-data"] });
+      queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+      queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
     },
     onError: (err) => {
       toast.error(err.response?.data?.message || "Error deleting record");

@@ -12,7 +12,9 @@ const {
   getPersonnelHiredBeforeJune1988,
   bulkSetPersonnelSubsidy,
   bulkSetPersonnelChargedToIncome,
-  debugCheckChargedToIncome
+  debugCheckChargedToIncome,
+  listChargedToIncome,
+  resetChargedToIncome
 } = require("../controllers/personnel_service_controller");
 // Import the model directly to ensure it's available
 const PersonnelService = require('../models/PersonnelServices');
@@ -31,8 +33,8 @@ personnelServicesRouter.use(tokenMiddleware);
 // Apply submission workflow control middleware for read operations
 personnelServicesRouter.use('/personnelServices', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
 personnelServicesRouter.use('/getpersonnels', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
-personnelServicesRouter.use('/grandtotalPermanent', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
-personnelServicesRouter.use('/grandtotalCasual', submissionWorkflowControl('read', { enforceSubmissionWorkflow: true }));
+personnelServicesRouter.use('/grandtotalPermanent', submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }));
+personnelServicesRouter.use('/grandtotalCasual', submissionWorkflowControl('read', { enforceSubmissionWorkflow: false }));
 // 🔒 Protect with due date check and submission workflow control
 personnelServicesRouter.post(
   "/personnelServices/bulk-add", 
@@ -147,6 +149,19 @@ personnelServicesRouter.get(
   "/debug/charged-to-income",
   debugCheckChargedToIncome || 
     ((req, res) => res.status(500).json({ message: "Debug function not available" }))
+);
+
+// List records marked as charged-to-income (optional: fiscalYear, region)
+personnelServicesRouter.get(
+  "/personnelServices/charged-to-income/list",
+  listChargedToIncome || ((req, res) => res.status(500).json({ message: "Not available" }))
+);
+
+// Reset all charged-to-income in scope (body: { fiscalYear, region? })
+personnelServicesRouter.post(
+  "/personnelServices/charged-to-income/reset",
+  submissionWorkflowControl('update', { enforceSubmissionWorkflow: true }),
+  resetChargedToIncome || ((req, res) => res.status(500).json({ message: "Not available" }))
 );
 
 module.exports = personnelServicesRouter;

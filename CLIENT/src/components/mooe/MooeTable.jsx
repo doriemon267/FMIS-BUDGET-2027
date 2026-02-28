@@ -1816,7 +1816,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                           }
                           return sum + getEffectiveIncome(child);
                         }, 0);
-                        return total > 0 ? `₱${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : (total === 0 ? "₱0.00" : "");
+                        return total > 0 ? `₱${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : (total === 0 ? "₱0.00" : "");
                       })()}
                     </TableCell>
                     <TableCell align="right" sx={{ fontWeight: "bold" }}>
@@ -1830,7 +1830,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                           }
                           return sum + getEffectiveSubsidy(child);
                         }, 0);
-                        return total > 0 ? `₱${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : (total === 0 ? "₱0.00" : "");
+                        return total > 0 ? `₱${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : (total === 0 ? "₱0.00" : "");
                       })()}
                     </TableCell>
                     <TableCell align="right" sx={{ fontWeight: "bold" }}>
@@ -1844,7 +1844,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                           }
                           return sum + getEffectiveIncome(child) + getEffectiveSubsidy(child);
                         }, 0);
-                        return total > 0 ? `₱${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : (total === 0 ? "₱0.00" : "");
+                        return total > 0 ? `₱${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : (total === 0 ? "₱0.00" : "");
                       })()}
                     </TableCell>
                   </TableRow>
@@ -1894,11 +1894,11 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                         <TableCell>
                           {viewMode === "consolidated" ? (
                             <Typography variant="body2" align="right">
-                              ₱{parseFloat(child.income || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              ₱{parseFloat(child.income || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </Typography>
                           ) : showSubChildrenTotal ? (
                             <Typography variant="body2" align="right" sx={{ fontWeight: 'bold', color: '#375e38' }}>
-                              ₱{hierarchicalIncomeSum.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              ₱{hierarchicalIncomeSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </Typography>
                           ) : (
                             <TextField
@@ -1940,11 +1940,11 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                         <TableCell>
                           {viewMode === "consolidated" ? (
                             <Typography variant="body2" align="right">
-                              ₱{parseFloat(child.subsidy || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              ₱{parseFloat(child.subsidy || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </Typography>
                           ) : showSubChildrenTotal ? (
                             <Typography variant="body2" align="right" sx={{ fontWeight: 'bold', color: '#375e38' }}>
-                              ₱{hierarchicalSubsidySum.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              ₱{hierarchicalSubsidySum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </Typography>
                           ) : (
                             <TextField
@@ -1994,7 +1994,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                                 return "";
                               }
                               
-                              return `₱${total.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+                              return `₱${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                             })()}
                           </Typography>
                         </TableCell>
@@ -2056,7 +2056,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                   width: "12%",
                 }}
               >
-                ₱{grandTotals.income.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ₱{grandTotals.income.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </TableCell>
               <TableCell 
                 sx={{ 
@@ -2071,7 +2071,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                   width: "12%",
                 }}
               >
-                ₱{grandTotals.subsidy.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ₱{grandTotals.subsidy.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </TableCell>
               <TableCell 
                 sx={{ 
@@ -2086,7 +2086,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                   width: "16%",
                 }}
               >
-                ₱{grandTotals.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ₱{grandTotals.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </TableCell>
             </TableRow>
 
@@ -2122,7 +2122,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                   width: "12%",
                 }}
               >
-                ₱{iasTotals.income.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ₱{iasTotals.income.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </TableCell>
               <TableCell 
                 sx={{ 
@@ -2137,7 +2137,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                   width: "12%",
                 }}
               >
-                ₱{iasTotals.subsidy.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ₱{iasTotals.subsidy.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </TableCell>
               <TableCell 
                 sx={{ 
@@ -2152,7 +2152,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                   width: "16%",
                 }}
               >
-                ₱{iasTotals.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ₱{iasTotals.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </TableCell>
             </TableRow>
 
@@ -2188,7 +2188,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                   width: "12%",
                 }}
               >
-                ₱{(grandTotals.income + iasTotals.income).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ₱{(grandTotals.income + iasTotals.income).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </TableCell>
               <TableCell 
                 sx={{ 
@@ -2203,7 +2203,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                   width: "12%",
                 }}
               >
-                ₱{(grandTotals.subsidy + iasTotals.subsidy).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ₱{(grandTotals.subsidy + iasTotals.subsidy).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </TableCell>
               <TableCell 
                 sx={{ 
@@ -2218,7 +2218,7 @@ const Mooe = ({ onDataChange, locked = false, proposalId = null, region = null, 
                   width: "16%",
                 }}
               >
-                ₱{(grandTotals.total + iasTotals.total).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ₱{(grandTotals.total + iasTotals.total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </TableCell>
             </TableRow>
           </TableFooter>

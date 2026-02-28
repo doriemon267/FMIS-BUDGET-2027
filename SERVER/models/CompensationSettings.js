@@ -31,10 +31,11 @@ const compensationSettingsSchema = new mongoose.Schema(
     courtAppearance: { type: Number },
     
     // Premium/Contributions
-    gsisPremium: { type: Number },
-    philhealthPremium: { type: Number },
-    pagibigPremium: { type: Number },
-    employeeCompensation: { type: Number },
+    gsisPremium: { type: Number },          // % of annual salary
+    providentFund: { type: Number },        // % of annual salary (PERMANENT only)
+    philhealthPremium: { type: Number },    // % of monthly salary (total, split EE/ER)
+    pagibigPremium: { type: Number },       // fixed monthly amount
+    employeeCompensation: { type: Number }, // fixed monthly amount (annualized in PS)
     
     // Leave & Benefits
     earnedLeaves: { type: Number },

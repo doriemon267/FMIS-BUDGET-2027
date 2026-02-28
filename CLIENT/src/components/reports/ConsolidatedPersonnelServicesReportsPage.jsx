@@ -361,7 +361,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                 Total Amount
               </Typography>
               <Typography variant="h6" component="div" sx={{ color: "#375e38" }}>
-                ₱{(grandTotals.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                ₱{(grandTotals.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </Typography>
             </CardContent>
           </Card>
@@ -431,7 +431,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                           Personnel Services ({region.totalEmployees} employees)
                         </TableCell>
                         <TableCell align="right" sx={{ fontWeight: "bold", padding: "8px 12px", fontSize: "0.875rem" }}>
-                          ₱{(region.categories || []).reduce((sum, cat) => sum + (cat.total || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          ₱{(region.categories || []).reduce((sum, cat) => sum + (cat.total || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </TableCell>
                       </TableRow>
                       {expandedRows.includes(region.id) && (region.categories || []).map((category) => (
@@ -456,7 +456,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                               {category.name}
                             </TableCell>
                             <TableCell align="right" sx={{ fontSize: "0.8rem", padding: "6px 12px", color: "#333", fontWeight: "bold" }}>
-                              ₱{(category.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              ₱{(category.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </TableCell>
                           </TableRow>
                           {expandedRows.includes(category.id) && (category.items || []).map((item) => (
@@ -474,7 +474,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                                 {item.name}
                               </TableCell>
                               <TableCell align="right" sx={{ fontSize: "0.75rem", padding: "6px 12px", color: "#555" }}>
-                                ₱{(item.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                ₱{(item.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </TableCell>
                             </TableRow>
                           ))}
@@ -519,7 +519,7 @@ const ConsolidatedPersonnelServicesReportsPage = () => {
                   GRAND TOTAL:
                 </TableCell>
                 <TableCell sx={{ backgroundColor: "#375e38", color: "#fff", fontWeight: "bold", padding: "8px 12px", border: "1px solid white", textAlign: "right", fontSize: "0.875rem" }}>
-                  ₱{(grandTotals.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  ₱{(grandTotals.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </TableCell>
               </TableRow>
             </TableFooter>

@@ -47,14 +47,36 @@ const getConsolidatedSummary = async (req, res) => {
         cisSubsidy: 0
       };
     }
-    // Sum Personnel Services fields (25 components per SUBTOTAL formula - excludes annualSalary)
+    // Sum Personnel Services fields (updated to include new components)
     const psFieldsToSum = [
-      "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
-      "medical", "childrenAllowance", "meal", "cashGift",
-      "subsistenceAllowanceMDS", "subsistenceAllowanceST", "loyaltyAward", "overtimePay",
-      "midyearBonus", "yearEndBonus", "gsisPremium", "philhealthPremium", "pagibigPremium",
-      "employeeCompensation", "courtAppearance", "earnedLeaves", "retirementBenefits",
-      "terminalLeave", "hazardPay", "honoraria"
+      "annualSalary",
+      "RATA",
+      "PERA",
+      "uniformALLOWANCE",
+      "productivityIncentive",
+      "medical",
+      "additionalMedical",
+      "childrenAllowance",
+      "meal",
+      "cashGift",
+      "subsistenceAllowance",
+      "subsistenceAllowanceMDS",
+      "subsistenceAllowanceST",
+      "loyaltyAward",
+      "overtimePay",
+      "midyearBonus",
+      "yearEndBonus",
+      "gsisPremium",
+      "providentFund",
+      "philhealthPremium",
+      "pagibigPremium",
+      "employeeCompensation",
+      "courtAppearance",
+      "earnedLeaves",
+      "retirementBenefits",
+      "terminalLeave",
+      "hazardPay",
+      "honoraria"
     ];
     const psSummary = {};
     psFieldsToSum.forEach(field => {
@@ -63,6 +85,11 @@ const getConsolidatedSummary = async (req, res) => {
         0
       );
     });
+    // Overall Personnel Services total, aligned with PersonnelServices.Total
+    psSummary.totalPersonnelServices = psEntries.reduce(
+      (sum, e) => sum + (Number(e.Total) || 0),
+      0
+    );
     // Compute annualSalary breakdown by appointment type
     const permAnnual = psEntries
       .filter(e => e.statusOfAppointment.toUpperCase() === "PERMANENT")

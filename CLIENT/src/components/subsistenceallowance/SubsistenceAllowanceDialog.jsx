@@ -106,6 +106,11 @@ const SubsistenceAllowanceDialog = ({ row, endpoint, dataListName, schema }) => 
     onSuccess: () => {
       queryClient.invalidateQueries([dataListName]);
       queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+      queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
+      queryClient.invalidateQueries({ queryKey: ["personnel-services-combined"] });
+      queryClient.invalidateQueries({ queryKey: ["calculated-budgetary-support"] });
+      queryClient.invalidateQueries({ queryKey: ["comprehensive-report-data"] });
       toast.success(isEditing ? "Record updated" : "Record created");
       handleClose();
     },

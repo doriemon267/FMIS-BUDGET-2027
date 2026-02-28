@@ -13,7 +13,7 @@ import { MdDelete } from "react-icons/md";
 import api from "../../config/api";
 import { invalidateDataList } from "../../utils/queryClientHelpers";
 
-const CustomDeleteDialog = ({ row, endpoint, parentClose, dataListName }) => {
+const CustomDeleteDialog = ({ row, endpoint, parentClose, dataListName, onAfterInvalidate }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -44,6 +44,9 @@ const CustomDeleteDialog = ({ row, endpoint, parentClose, dataListName }) => {
     mutation.mutate(undefined, {
       onSuccess: async () => {
         await invalidateDataList(queryClient, dataListName);
+        if (typeof onAfterInvalidate === 'function') {
+          await onAfterInvalidate();
+        }
         handleClose();
         if (parentClose) parentClose();
       },

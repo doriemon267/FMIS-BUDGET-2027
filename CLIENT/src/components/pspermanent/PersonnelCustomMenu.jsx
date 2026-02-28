@@ -43,6 +43,7 @@ export default function CustomMenu({
   hasDelete,
   customEditElement,
   additionalMenuOptions = [],
+  onAfterInvalidate,
 }) {
   const [anchorEl, setAnchorEl] = React.useState(null);
   const open = Boolean(anchorEl);
@@ -86,6 +87,7 @@ export default function CustomMenu({
               parentClose={handleClose}
               row={row}
               schema={schema}
+              onAfterInvalidate={onAfterInvalidate}
             />
           )}
           {/* Delete Option */}
@@ -109,6 +111,7 @@ export default function CustomMenu({
               endpoint={endpoint}
               parentClose={handleClose}
               dataListName={dataListName}
+              onAfterInvalidate={onAfterInvalidate}
             />
           )}
 

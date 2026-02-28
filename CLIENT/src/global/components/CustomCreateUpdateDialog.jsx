@@ -28,6 +28,7 @@ const CustomCreateUpdateDialog = ({
   endpoint,
   parentClose,
   dataListName,
+  onAfterInvalidate,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [regions, setRegions] = useState([]);
@@ -131,6 +132,11 @@ const CustomCreateUpdateDialog = ({
         queryClient.invalidateQueries({
           queryKey: ['personnelServices', 'chargedToIncome']
         });
+      }
+      
+      // Optional: invalidate related queries (e.g. BudgetarySupportTable, Comprehensive Reports)
+      if (typeof onAfterInvalidate === 'function') {
+        await onAfterInvalidate();
       }
       
       toast.success(

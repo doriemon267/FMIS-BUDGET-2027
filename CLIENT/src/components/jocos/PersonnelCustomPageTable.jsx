@@ -333,7 +333,7 @@ const PSCOSCustomPageTable = ({
   return (
     <>
       {/* Header Section with Title and User Access Info (hidden via env toggle) */}
-  {!(String(import.meta.env.VITE_HIDE_ACCESS_INFO_BANNERS).trim() === 'true') && (
+  {/* {!(String(import.meta.env.VITE_HIDE_ACCESS_INFO_BANNERS).trim() === 'true') && (
         <Paper sx={{ p: 3, mb: 2, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
           <Box>
             <Typography variant="h4" fontWeight="bold" gutterBottom>
@@ -355,7 +355,7 @@ const PSCOSCustomPageTable = ({
             </Typography>
           </Box>
         </Paper>
-      )}
+      )} */}
 
       {/* Enhanced Action Bar */}
       <Paper sx={{ p: 2, mb: 2 }}>

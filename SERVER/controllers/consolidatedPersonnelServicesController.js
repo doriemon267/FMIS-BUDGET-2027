@@ -21,19 +21,20 @@ const PERSONNEL_SERVICES_STRUCTURE = {
           "e": { name: "Uniform/Clothing Allowance", field: "uniformALLOWANCE" },
           "f": { name: "Children Allowances", field: "childrenAllowance" },
           "g": { name: "Medical Allowances", field: "medical" },
-          "h": { name: "Meal Allowances", field: "meal" },
-          "i": { name: "Per Diem & Allowance of Board of Directors", field: "perDiem" }, // Not in model
-          "j": { name: "Subsistence Allowance", field: "subsistenceAllowance" },
-          "k": { name: "Longevity Pay (Loyalty Award)", field: "loyaltyAward" },
-          "l": { name: "Overtime Services", field: "overtimePay" },
-          "m": { name: "Special Counsel Allowance", field: "specialCounsel" }, // Not in model
-          "n": { name: "Productivity Enhancement Incentive", field: "productivityIncentive" },
-          "o": { name: "Cash Gift", field: "cashGift" },
-          "p": { name: "Mid-Year and Year-End Bonus", field: "midyearBonus,yearEndBonus" }, // Combined
-          "q": { name: "Performance Based Bonus", field: "performanceBonus" }, // Not in model
-          "r": { name: "Hazard Pay", field: "hazardPay" },
-          "s": { name: "Other Bonuses and Allowances", field: "otherBonuses" }, // Not in model
-          "t": { name: "Anniversary Bonus", field: "anniversaryBonus" } // Not in model
+          "h": { name: "Additional Medical Allowance", field: "additionalMedical" },
+          "i": { name: "Meal Allowances", field: "meal" },
+          "j": { name: "Per Diem & Allowance of Board of Directors", field: "perDiem" }, // Not in model
+          "k": { name: "Subsistence Allowance", field: "subsistenceAllowance" },
+          "l": { name: "Longevity Pay (Loyalty Award)", field: "loyaltyAward" },
+          "m": { name: "Overtime Services", field: "overtimePay" },
+          "n": { name: "Special Counsel Allowance", field: "specialCounsel" }, // Not in model
+          "o": { name: "Productivity Enhancement Incentive", field: "productivityIncentive" },
+          "p": { name: "Cash Gift", field: "cashGift" },
+          "q": { name: "Mid-Year and Year-End Bonus", field: "midyearBonus,yearEndBonus" }, // Combined
+          "r": { name: "Performance Based Bonus", field: "performanceBonus" }, // Not in model
+          "s": { name: "Hazard Pay", field: "hazardPay" },
+          "t": { name: "Other Bonuses and Allowances", field: "otherBonuses" }, // Not in model
+          "u": { name: "Anniversary Bonus", field: "anniversaryBonus" } // Not in model
         }
       },
       "3": {
@@ -165,7 +166,7 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
         });
       });
       // Calculate employee total
-      const employeeTotal = Number(employee.Total) || 0;
+      const employeeTotal = Math.round((Number(employee.Total) || 0) * 100) / 100;
       grandTotal += employeeTotal;
     });
     // Transform to array format
@@ -242,7 +243,7 @@ const getConsolidatedPersonnelServicesData = async (req, res) => {
       summary: {
         totalRegions: regionSet.size,
         totalEmployees,
-        grandTotal
+        grandTotal: Math.round(grandTotal * 100) / 100
       }
     });
   } catch (error) {

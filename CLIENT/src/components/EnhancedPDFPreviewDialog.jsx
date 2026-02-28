@@ -369,7 +369,7 @@ const EnhancedPDFPreviewDialog = ({
                 <Box>
                   <Typography variant="body2" color="text.secondary">Grand Total</Typography>
                   <Typography variant="body1" fontWeight="bold" color="primary">
-                    ₱{(reportData?.grandTotal || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    ₱{(reportData?.grandTotal || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Typography>
                 </Box>
               </Box>

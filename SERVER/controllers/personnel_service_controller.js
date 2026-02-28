@@ -19,6 +19,7 @@ const {
   booleanFilter,
   searchFilter,
 } = require("../utils/controller_get_process");
+const { roundTo2Decimals } = require("../utils/roundCurrency");
 
 const LOCKED_PERSONNEL_STATUSES = [
   "Submitted",
@@ -90,19 +91,15 @@ async function syncMealAllowanceData(employeeNumber, fiscalYear) {
         isActive: true,
       }).lean();
       if (settings && settings.meal) {
-        // Calculate the correct annual amount
         const monthlyAmount = mealAllowance.actualDays * settings.meal;
         const annualAmount = monthlyAmount * 12;
-        // Update the personnel services record
+        const personnelDoc = await PersonnelServices.findOne({ employeeNumber, fiscalYear });
+        if (!personnelDoc) return false;
         await PersonnelServices.updateOne(
-          { employeeNumber, fiscalYear },
+          { _id: personnelDoc._id },
           { $set: { meal: annualAmount } }
         );
-        // Recalculate the Total field
-        const updatedPersonnel = await PersonnelServices.findOne({
-          employeeNumber,
-          fiscalYear,
-        });
+        const updatedPersonnel = await PersonnelServices.findOne({ _id: personnelDoc._id });
         if (updatedPersonnel) {
           const numericFields = [
             "annualSalary",
@@ -133,12 +130,12 @@ async function syncMealAllowanceData(employeeNumber, fiscalYear) {
             "honoraria",
             "childrenAllowance",
           ];
-          const newTotal = numericFields.reduce(
+          const newTotal = roundTo2Decimals(numericFields.reduce(
             (acc, field) => acc + (Number(updatedPersonnel[field]) || 0),
             0
-          );
+          ));
           await PersonnelServices.updateOne(
-            { employeeNumber, fiscalYear },
+            { _id: updatedPersonnel._id },
             { Total: newTotal }
           );
         }
@@ -445,6 +442,12 @@ exports.getAllPersonnelServices = async (req, res) => {
       const recalculatedGsis = (personnel.gsisPremium != null && personnel.gsisPremium !== 0)
         ? personnel.gsisPremium
         : recalculatedAnnualSalary * (activeSettings.gsisPremium || 0);
+      const isPermanent = String(personnel.statusOfAppointment || "").toUpperCase() === "PERMANENT";
+      const recalculatedProvidentFund = isPermanent
+        ? ((personnel.providentFund != null && personnel.providentFund !== 0)
+            ? personnel.providentFund
+            : recalculatedAnnualSalary * (activeSettings.providentFund || 0))
+        : 0;
       // Calculate PhilHealth premium for 2025 per Circular 2019-0009
       let monthlyPhilhealthPremium;
       const monthlySalary = personnel.monthlySalary;
@@ -486,6 +489,7 @@ exports.getAllPersonnelServices = async (req, res) => {
         recalculatedYearEndBonus +
         recalculatedCourtAppearanceAmount +
         recalculatedGsis +
+        recalculatedProvidentFund +
         recalculatedPhilhealth +
         recalculatedPagibig +
         recalculatedearnedLeaves +
@@ -512,12 +516,13 @@ exports.getAllPersonnelServices = async (req, res) => {
         yearEndBonus: recalculatedYearEndBonus,
         courtAppearance: recalculatedCourtAppearanceAmount,
         gsisPremium: recalculatedGsis,
+        providentFund: recalculatedProvidentFund,
         philhealthPremium: recalculatedPhilhealth,
         pagibigPremium: recalculatedPagibig,
         employeeCompensation: recalculatedEmpComp,
         terminalLeave: recalculatedTerminalLeave,
         earnedLeaves: recalculatedearnedLeaves,
-        Total: recalculatedTotal,
+        Total: roundTo2Decimals(recalculatedTotal),
       };
     });
     return res.json({
@@ -916,6 +921,10 @@ exports.bulkAddPersonnelServices = async (req, res) => {
         midyearBonus: monthlySalary,
         yearEndBonus: monthlySalary,
         gsisPremium: annualSalary * (activeSettings.gsisPremium || 0),
+        // Provident Fund: percentage of annual salary for PERMANENT only
+        providentFund: statusAppointment === "PERMANENT"
+          ? annualSalary * (activeSettings.providentFund || 0)
+          : 0,
         philhealthPremium: (monthlyPhilhealthPremium * 12) / 2,
         pagibigPremium: (activeSettings.pagibigPremium || 0) * 12,
         employeeCompensation: (activeSettings.employeeCompensation || 0) * 12,
@@ -956,6 +965,7 @@ exports.bulkAddPersonnelServices = async (req, res) => {
           midyearBonus: 0,
           yearEndBonus: 0,
           gsisPremium: 0,
+          providentFund: 0,
           philhealthPremium: 0,
           pagibigPremium: 0,
           employeeCompensation: 0,
@@ -978,6 +988,7 @@ exports.bulkAddPersonnelServices = async (req, res) => {
           "midyearBonus",
           "yearEndBonus",
           "gsisPremium",
+          "providentFund",
           "philhealthPremium",
           "pagibigPremium",
           "employeeCompensation",
@@ -995,10 +1006,10 @@ exports.bulkAddPersonnelServices = async (req, res) => {
           "honoraria",
           "childrenAllowance",
         ];
-        personnelService.Total = numericFields.reduce(
+        personnelService.Total = roundTo2Decimals(numericFields.reduce(
           (acc, field) => acc + (Number(personnelService[field]) || 0),
           0
-        );
+        ));
       }
       personnelServicesData.push(personnelService);
     }
@@ -1204,10 +1215,10 @@ exports.updatePersonnelService = async (req, res) => {
       "honoraria",
       "childrenAllowance",
     ];
-    updatedPersonnelService.Total = numericFields.reduce(
+    updatedPersonnelService.Total = roundTo2Decimals(numericFields.reduce(
       (acc, field) => acc + (Number(updatedPersonnelService[field]) || 0),
       0
-    );
+    ));
     await updatedPersonnelService.save();
     // Non-blocking: trigger Proposal totals recalculation for affected proposals
     try {
@@ -1306,10 +1317,11 @@ exports.getGrandTotalPermanent = async (req, res) => {
     const { fiscalYear } = activeSettings;
     // Get region from query parameters
     const { region, search, employeeFullName, orderBy, order = 'asc' } = req.query;
-    // Build query criteria
+    // Build query criteria - match list endpoint: exclude charged-to-income
     const query = {
       statusOfAppointment: "PERMANENT",
       fiscalYear,
+      chargedToIncomeEligible: false, // Same as table list - exclude charged-to-income
     };
     // Align totals with table filters
     if (search) {
@@ -1328,75 +1340,11 @@ exports.getGrandTotalPermanent = async (req, res) => {
     if (region && !query.region) {
       query.region = region;
     }
-    // Fetch all matching personnel services and recalculate Totals using the
-    // same formulas used by the list endpoint so the grand total exactly
-    // matches the per-row Total values shown in the UI.
+    // Use stored Total (same as table rows) - ensures top TOTAL row and bottom TOTAL match
     const personnelServices = await PersonnelServices.find(query).lean();
+    const grandTotal = personnelServices.reduce((acc, p) => acc + (Number(p.Total) || 0), 0);
 
-    const grandTotal = personnelServices.reduce((acc, personnel) => {
-      const recalculatedSubsistenceAllowanceMDS = personnel.subsistenceAllowanceMDS || 0;
-      const recalculatedSubsistenceAllowanceST = personnel.subsistenceAllowanceST || 0;
-      const recalculatedLoyaltyAward = personnel.loyaltyAward || 0;
-      const recalculatedOvertimePay = personnel.overtimePay || 0;
-      const recalculatedAnnualSalary = (personnel.monthlySalary || 0) * 12;
-      const recalculatedRATA = personnel.RATA || 0;
-      const recalculatedPERA = (activeSettings.PERA || 0) * 12;
-      const recalculatedUniform = activeSettings.uniformAllowance || 0;
-      const recalculatedProductivityIncentive = activeSettings.productivityIncentive || 0;
-      const recalculatedMedical = personnel.medical || 0;
-      const recalculatedAdditionalMedical = personnel.additionalMedical || 0;
-      const recalculatedMeal = personnel.meal || 0;
-      const recalculatedChildrenAllowance = personnel.childrenAllowance || 0;
-      const recalculatedMidyearBonus = personnel.midyearBonus || personnel.monthlySalary || 0;
-      const recalculatedCashGift = activeSettings.cashGift || 0;
-      const recalculatedYearEndBonus = personnel.yearEndBonus || 0;
-      const recalculatedCourtAppearanceAmount = personnel.courtAppearance || 0;
-      const recalculatedGsis = recalculatedAnnualSalary * (activeSettings.gsisPremium || 0);
-      // PhilHealth calculation (same rules as list endpoint)
-      const monthlySalary = personnel.monthlySalary || 0;
-      let monthlyPhilhealthPremium;
-      if (monthlySalary <= 10000) {
-        monthlyPhilhealthPremium = 500;
-      } else if (monthlySalary >= 100000) {
-        monthlyPhilhealthPremium = 5000;
-      } else {
-        monthlyPhilhealthPremium = monthlySalary * 0.05;
-      }
-      const recalculatedPhilhealth = (monthlyPhilhealthPremium * 12) / 2;
-      const recalculatedPagibig = (activeSettings.pagibigPremium || 0) * 12;
-      const recalculatedEmpComp = (activeSettings.employeeCompensation || 0) * 12;
-      const recalculatedTerminalLeave = personnel.terminalLeave || 0;
-      const recalculatedearnedLeaves = personnel.earnedLeaves || 0;
-
-      const subtotal =
-        recalculatedAnnualSalary +
-        recalculatedSubsistenceAllowanceMDS +
-        recalculatedSubsistenceAllowanceST +
-        recalculatedLoyaltyAward +
-        recalculatedOvertimePay +
-        recalculatedRATA +
-        recalculatedPERA +
-        recalculatedUniform +
-        recalculatedProductivityIncentive +
-        recalculatedMedical +
-        recalculatedAdditionalMedical +
-        recalculatedMeal +
-        recalculatedChildrenAllowance +
-        recalculatedCashGift +
-        recalculatedMidyearBonus +
-        recalculatedYearEndBonus +
-        recalculatedCourtAppearanceAmount +
-        recalculatedGsis +
-        recalculatedPhilhealth +
-        recalculatedPagibig +
-        recalculatedearnedLeaves +
-        recalculatedTerminalLeave +
-        recalculatedEmpComp;
-
-      return acc + subtotal;
-    }, 0);
-
-    return res.json({ fiscalYear, grandTotal });
+    return res.json({ fiscalYear, grandTotal: roundTo2Decimals(grandTotal) });
   } catch (error) {
     console.error("Error in getGrandTotalPermanent:", error.stack);
     return res
@@ -1425,6 +1373,7 @@ exports.getGrandTotalCasual = async (req, res) => {
     const query = {
       statusOfAppointment: "CASUAL",
       fiscalYear,
+      chargedToIncomeEligible: false, // Same as table list - exclude charged-to-income
     };
     // Align totals with table filters
     if (search) {
@@ -1443,39 +1392,10 @@ exports.getGrandTotalCasual = async (req, res) => {
     if (region && !query.region) {
       query.region = region;
     }
+    // Use stored Total (same as table rows) - ensures top TOTAL row and bottom TOTAL match
     const personnelServices = await PersonnelServices.find(query).lean();
-    const fieldsToSum = [
-      "annualSalary",
-      "PERA",
-      "uniformALLOWANCE",
-      "productivityIncentive",
-      "additionalMedical",
-      "medical",
-      "childrenAllowance",
-      "meal",
-      "cashGift",
-      "subsistenceAllowanceMDS",
-      "subsistenceAllowanceST",
-      "midyearBonus",
-      "yearEndBonus",
-      "gsisPremium",
-      "philhealthPremium",
-      "pagibigPremium",
-      "employeeCompensation",
-      "loyaltyAward",
-      "overtimePay",
-      "earnedLeaves",
-      "retirementBenefits",
-      "terminalLeave",
-    ];
-    const grandTotal = personnelServices.reduce((acc, curr) => {
-      const subtotal = fieldsToSum.reduce(
-        (sum, field) => sum + (Number(curr[field]) || 0),
-        0
-      );
-      return acc + subtotal;
-    }, 0);
-    return res.json({ fiscalYear, grandTotal });
+    const grandTotal = personnelServices.reduce((acc, p) => acc + (Number(p.Total) || 0), 0);
+    return res.json({ fiscalYear, grandTotal: roundTo2Decimals(grandTotal) });
   } catch (error) {
     console.error("Error in getGrandTotalCasual:", error.stack);
     return res
@@ -1525,8 +1445,8 @@ exports.getGrandTotal = async (req, res) => {
       { $group: { _id: null, grandTotal: { $sum: "$Total" } } },
       { $project: { _id: 0, grandTotal: 1 } },
     ]);
-    const result = grandTotal[0] || { grandTotal: 0 };
-    res.status(200).json(result);
+    const raw = grandTotal[0] || { grandTotal: 0 };
+    res.status(200).json({ grandTotal: roundTo2Decimals(raw.grandTotal || 0) });
   } catch (error) {
     console.error("Error fetching grand total:", error.stack);
     res.status(500).json({ message: "Server error", details: error.message });
@@ -2189,6 +2109,80 @@ exports.debugCheckChargedToIncome = async (req, res) => {
   }
 };
 
+/**
+ * List all personnel records marked as charged-to-income (optional: by fiscalYear, region).
+ * GET /personnelServices/charged-to-income/list?fiscalYear=2027&region=...
+ */
+exports.listChargedToIncome = async (req, res) => {
+  try {
+    const { fiscalYear, region } = req.query;
+    const query = { chargedToIncomeEligible: true };
+    if (fiscalYear) query.fiscalYear = String(fiscalYear).trim();
+    if (region) query.region = region;
+
+    const records = await PersonnelServices.find(query)
+      .select('_id employeeFullName employeeNumber positionTitle department division region fiscalYear Total chargedToIncomeAmount chargedToIncomeTaggedAt')
+      .lean();
+
+    const totalAmount = records.reduce((sum, r) => sum + (Number(r.chargedToIncomeAmount) || Number(r.Total) || 0), 0);
+
+    return res.json({
+      success: true,
+      count: records.length,
+      totalAmount: roundTo2Decimals(totalAmount),
+      records,
+    });
+  } catch (error) {
+    console.error("Error in listChargedToIncome:", error);
+    return res.status(500).json({ message: "Failed to list charged-to-income records", error: error.message });
+  }
+};
+
+/**
+ * Reset all personnel in scope from charged-to-income (set chargedToIncomeEligible = false).
+ * POST /personnelServices/charged-to-income/reset
+ * Body: { fiscalYear, region? }
+ */
+exports.resetChargedToIncome = async (req, res) => {
+  try {
+    const { fiscalYear, region } = req.body || {};
+    const query = { chargedToIncomeEligible: true };
+    if (fiscalYear) query.fiscalYear = String(fiscalYear).trim();
+    if (region) query.region = region;
+
+    const result = await PersonnelServices.updateMany(query, {
+      $set: {
+        chargedToIncomeEligible: false,
+        chargedToIncomeAmount: 0,
+        chargedToIncomeNotes: null,
+        chargedToIncomeTaggedBy: null,
+        chargedToIncomeTaggedAt: null,
+        chargedToIncomeSubsidyAmount: 0,
+      },
+    });
+
+    const recalculateAndSaveProposalTotals = require('../utils/recalculateProposalTotals').recalculateAndSaveProposalTotals;
+    if (result.modifiedCount > 0) {
+      try {
+        const keys = { fiscalYear: query.fiscalYear, region: query.region };
+        await recalculateAndSaveProposalTotals({ keys });
+      } catch (e) {
+        console.warn("Recalc proposal totals after reset:", e.message);
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `${result.modifiedCount} record(s) reset from charged-to-income`,
+      modifiedCount: result.modifiedCount,
+      matchedCount: result.matchedCount,
+    });
+  } catch (error) {
+    console.error("Error in resetChargedToIncome:", error);
+    return res.status(500).json({ message: "Failed to reset charged-to-income", error: error.message });
+  }
+};
+
 module.exports = {
   getAllPersonnelServices: exports.getAllPersonnelServices,
   bulkAddPersonnelServices: exports.bulkAddPersonnelServices,
@@ -2206,4 +2200,6 @@ module.exports = {
   bulkSetPersonnelSubsidy: exports.bulkSetPersonnelSubsidy,
   bulkSetPersonnelChargedToIncome: exports.bulkSetPersonnelChargedToIncome,
   debugCheckChargedToIncome: exports.debugCheckChargedToIncome,
+  listChargedToIncome: exports.listChargedToIncome,
+  resetChargedToIncome: exports.resetChargedToIncome,
 };

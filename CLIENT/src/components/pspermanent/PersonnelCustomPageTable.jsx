@@ -119,27 +119,32 @@ const PSPCustomPageTable = ({
     }
   }, []);
 
+  // Invalidate related queries (BudgetarySupportTable, NewProposalWorkflowPage, Comprehensive Reports)
+  const invalidatePersonnelRelatedQueries = useCallback(async () => {
+    try {
+      await queryClient.invalidateQueries({ queryKey: [dataListName, "chargedToIncome"] });
+      await queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      await queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+      await queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
+      await queryClient.invalidateQueries({ queryKey: ["personnel-services-combined"] });
+      await queryClient.invalidateQueries({ queryKey: ["calculated-budgetary-support"] });
+      await queryClient.invalidateQueries({ queryKey: ["comprehensive-report-data"] });
+    } catch (e) {
+      console.warn("Personnel-related invalidation error:", e);
+    }
+  }, [queryClient, dataListName]);
+
   const refreshPersonnelData = useCallback(async () => {
     try {
       await invalidateDataList(queryClient, dataListName);
-      // Also invalidate charged to income queries
-      await queryClient.invalidateQueries({
-        queryKey: [dataListName, "chargedToIncome"],
-      });
-      // Invalidate and refetch proposal queries so budget totals update immediately
-      await queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      await invalidatePersonnelRelatedQueries();
       await queryClient.refetchQueries({ queryKey: ["proposals"] });
-      // Also invalidate allProposals for NewProposalWorkflowPage to update
-      await queryClient.invalidateQueries({ queryKey: ["allProposals"] });
-      await queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
-      // Also invalidate personnel services queries to update BudgetarySupportTable
-      await queryClient.invalidateQueries({ queryKey: ["personnel-services-combined"] });
       await queryClient.refetchQueries({ queryKey: ["personnel-services-combined"] });
     } catch (error) {
       toast.error("Error refreshing personnel data.");
       console.error("Error refreshing data:", error);
     }
-  }, [queryClient, dataListName]);
+  }, [queryClient, dataListName, invalidatePersonnelRelatedQueries]);
 
   const fetchRATA = useCallback(async () => {
     try {
@@ -825,7 +830,7 @@ const PSPCustomPageTable = ({
   return (
     <>
       {/* Header Section with Title and User Access Info (hidden via env toggle) */}
-  {!(String(import.meta.env.VITE_HIDE_ACCESS_INFO_BANNERS).trim() === 'true') && (
+  {/* {!(String(import.meta.env.VITE_HIDE_ACCESS_INFO_BANNERS).trim() === 'true') && (
         <Paper sx={{ p: 3, mb: 2, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
           <Box>
             <Typography variant="h4" fontWeight="bold" gutterBottom>
@@ -850,7 +855,7 @@ const PSPCustomPageTable = ({
             </Typography>
           </Box>
         </Paper>
-      )}
+      )} */}
 
       {/* Enhanced Action Bar */}
 
@@ -1322,6 +1327,7 @@ const PSPCustomPageTable = ({
                   schema={schema}
                   endpoint={apiPath}
                   dataListName={dataListName}
+                  onAfterInvalidate={invalidatePersonnelRelatedQueries}
                   disableEdit={row.status === "Submitted" || row.status === "Approved"}
                   disableDelete={row.status === "Submitted" || row.status === "Approved"}
                 />
@@ -1333,7 +1339,7 @@ const PSPCustomPageTable = ({
             }
 
             return column;
-          }), [schema, columnVisibility, enhancedMenuOptions, customEditElement, hasEdit, hasDelete, apiPath, dataListName])}
+          }), [schema, columnVisibility, enhancedMenuOptions, customEditElement, hasEdit, hasDelete, apiPath, dataListName, invalidatePersonnelRelatedQueries])}
       />
     </>
   );

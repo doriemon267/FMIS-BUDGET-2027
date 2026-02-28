@@ -34,6 +34,12 @@ import TextSearchable from '../../global/components/TextSearchable';
 import formatCurrency from '../../utils/formatCurrency';
 import { formatDateToMDY, isValidDate } from '../../utils/formatDate';
 
+// Fields that should NOT be included in column totals row
+const EXCLUDED_TOTAL_FIELDS = new Set([
+  'monthlySalary',
+  'noOfDependent',
+]);
+
 // Grouped header: which columns fall under OTHER COMPENSATION vs GOVERNMENT SHARE
 const OTHER_COMPENSATION_FIELDS = new Set([
   'RATA',
@@ -61,6 +67,7 @@ const OTHER_COMPENSATION_FIELDS = new Set([
 ]);
 const GOVERNMENT_SHARE_FIELDS = new Set([
   'gsisPremium',
+  'providentFund',
   'pagibigPremium',
   'philhealthPremium',
   'employeeCompensation',
@@ -169,7 +176,7 @@ const PermanentCustomTable = ({
   useEffect(() => {
     if (data && data[dataListName]) {
       const newTotals = columns.reduce((acc, column) => {
-        if (column.type === 'number') {
+        if (column.type === 'number' && !EXCLUDED_TOTAL_FIELDS.has(column.field)) {
           acc[column.field] = data[dataListName].reduce(
             (sum, row) => sum + (row[column.field] || 0),
             0
@@ -860,6 +867,7 @@ const PermanentCustomTable = ({
                                 ? totals[column.field]
                                   ? totals[column.field].toLocaleString(undefined, {
                                       minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
                                     })
                                   : '0.00'
                                 : column.field === 'action'
@@ -919,7 +927,7 @@ const PermanentCustomTable = ({
         </Box>
       </Zoom>
 
-      {/* Grand Total Footer with Fade Animation */}
+      {/* Grand Total Footer - use sum of displayed rows to match SUBTOTAL column (avoids API vs list filter mismatch) */}
       <Fade in={true} timeout={1000}>
         <Box
           sx={{
@@ -951,8 +959,9 @@ const PermanentCustomTable = ({
               textAlign: 'right',
             }}
           >
-            {grandTotal.toLocaleString(undefined, {
+            {(totals?.Total ?? grandTotal).toLocaleString(undefined, {
               minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
             })}
           </Typography>
         </Box>

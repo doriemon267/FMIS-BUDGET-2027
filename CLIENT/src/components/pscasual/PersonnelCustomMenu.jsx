@@ -44,6 +44,7 @@ export default function CustomMenu({
   hasDelete,
   customEditElement,
   additionalMenuOptions = [],
+  onAfterInvalidate,
   disableEdit = false,
   disableDelete = false,
 }) {
@@ -86,6 +87,7 @@ export default function CustomMenu({
               parentClose={handleClose}
               row={row}
               schema={schema}
+              onAfterInvalidate={onAfterInvalidate}
             />
           )}
 
@@ -111,6 +113,7 @@ export default function CustomMenu({
               endpoint={endpoint}
               parentClose={handleClose}
               dataListName={dataListName}
+              onAfterInvalidate={onAfterInvalidate}
             />
           )}
 

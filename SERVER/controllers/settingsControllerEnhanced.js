@@ -853,6 +853,7 @@ exports.getAdvancedSettings = async (req, res) => {
       meal: settings.meal,
       courtAppearance: settings.courtAppearance,
       gsisPremium: settings.gsisPremium,
+      providentFund: settings.providentFund,
       philhealthPremium: settings.philhealthPremium,
       pagibigPremium: settings.pagibigPremium,
       employeeCompensation: settings.employeeCompensation,
@@ -907,6 +908,7 @@ exports.createCompensationSettings = async (req, res) => {
       courtAppearance: compensationData.courtAppearance ?? 0,
       // Premiums
       gsisPremium: compensationData.gsisPremium ?? 0,
+      providentFund: compensationData.providentFund ?? 0,
       philhealthPremium: compensationData.philhealthPremium ?? 0,
       pagibigPremium: compensationData.pagibigPremium ?? 0,
       employeeCompensation: compensationData.employeeCompensation ?? 0,

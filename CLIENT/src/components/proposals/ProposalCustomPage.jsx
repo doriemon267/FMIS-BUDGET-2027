@@ -303,6 +303,18 @@ const ProposalCustomPage = ({
     fetchRegionCeiling();
   }, [fetchRegionCeiling]);
 
+  // Fetch calculated budgetary support for aligned totals (same source as Budgetary Support Table)
+  const fiscalYearForCalc = selectedFiscalYear || activeFiscalYear;
+  const hasValidParams = !!(fiscalYearForCalc && activeBudgetType);
+  const { data: calculatedBudgetarySupport } = useQuery({
+    queryKey: ['calculated-budgetary-support', fiscalYearForCalc, activeBudgetType],
+    queryFn: () => api.get('/budgetary-support/calculate', {
+      params: { fiscalYear: Number(fiscalYearForCalc), budgetType: activeBudgetType },
+      timeout: 12000
+    }).then(r => r.data),
+    enabled: hasValidParams,
+  });
+
   // State for the new proposal form
   const [newProposalData, setNewProposalData] = useState({
     title: "",
@@ -644,23 +656,26 @@ const ProposalCustomPage = ({
 
   const calculateTotalBudget = useMemo(() => {
     try {
-      // Use the selected fiscal year for filtering (fall back to active fiscal year if not set)
       const fiscalYearToUse = selectedFiscalYear || activeFiscalYear;
-      // Filter personnel data by region and fiscal year
       const filteredPersonnelData = personnelData.filter((p) => {
         const matchesRegion = !regionFilter || p.region === regionFilter;
         const matchesFiscalYear = p.fiscalYear === fiscalYearToUse;
         return matchesRegion && matchesFiscalYear;
       });
 
-      const personnelTotal = filteredPersonnelData.reduce((sum, p) => {
-        // Only include submitted or draft items
-        if (!isEligibleForSubmission(p.status) && p.status !== "Submitted") {
-          return sum;
-        }
+      // Use calculated-budgetary-support breakdown when available (guarantees alignment with Budgetary Support Table)
+      const breakdown = calculatedBudgetarySupport?.breakdown || [];
+      const psBreakdown = breakdown.find(b => (b.source || '').includes('Personnel Services') || (b.source || '').includes('B.1.1'));
+      const capitalBreakdown = breakdown.find(b => (b.source || '').includes('Capital Outlay') || (b.source || '').includes('B.2'));
+      const mooeBreakdown = breakdown.find(b => (b.source || '').includes('MOOE') || (b.source || '').includes('B.1.2'));
+      const iasBreakdown = breakdown.find(b => (b.source || '').includes('IAs O&M'));
 
-        return sum + (Number(p.Total) || 0);
-      }, 0);
+      const personnelTotal = (psBreakdown?.amount != null && psBreakdown?.amount > 0)
+        ? Number(psBreakdown.amount)
+        : filteredPersonnelData.reduce((sum, p) => {
+            if (p.chargedToIncomeEligible === true) return sum;
+            return sum + (Number(p.Total) || 0);
+          }, 0);
 
       // Filter MOOE data by region and fiscal year
       const filteredMooeData = mooeData.filter((item) => {
@@ -669,29 +684,16 @@ const ProposalCustomPage = ({
         return matchesRegion && matchesFiscalYear;
       });
 
-      // Calculate regular MOOE total
-      const mooeRegularTotal = filteredMooeData.reduce((sum, item) => {
-        // Only include submitted or draft items
-        if (
-          !isEligibleForSubmission(item.status) &&
-          item.status !== "Submitted"
-        ) {
-          return sum;
-        }
-
-        return sum + (Number(item.amount) || 0);
-      }, 0);
-
-      // Calculate IAs O&M Cost total (ALWAYS include if present)
+      const mooeBreakdownAmount = (mooeBreakdown?.amount || 0) + (iasBreakdown?.amount || 0);
+      const mooeRegularTotal = filteredMooeData.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
       const iasOMCostTotal = iasOMCostData
-        ? (Number(iasOMCostData.nis) || 0) +
-          (Number(iasOMCostData.cis) || 0) +
-          (Number(iasOMCostData.nisSubsidy) || 0) +
-          (Number(iasOMCostData.cisSubsidy) || 0)
+        ? (Number(iasOMCostData.nis) || 0) + (Number(iasOMCostData.cis) || 0) +
+          (Number(iasOMCostData.nisSubsidy) || 0) + (Number(iasOMCostData.cisSubsidy) || 0)
         : 0;
 
-      // Total MOOE is regular MOOE plus IAs O&M Cost
-      const mooeTotal = mooeRegularTotal + iasOMCostTotal;
+      const mooeTotal = mooeBreakdownAmount > 0
+        ? mooeBreakdownAmount
+        : mooeRegularTotal + iasOMCostTotal;
 
       // Filter Capital Outlay data by region and fiscal year
       const filteredCapitalOutlayData = capitalOutlayData.filter((item) => {
@@ -700,48 +702,16 @@ const ProposalCustomPage = ({
         return matchesRegion && matchesFiscalYear;
       });
 
-      const capitalOutlayTotal = filteredCapitalOutlayData.reduce(
-        (sum, item) => {
-          // Only include submitted or draft items
-          if (
-            !isEligibleForSubmission(item.status) &&
-            item.status !== "Submitted"
-          ) {
-            return sum;
-          }
+      const capitalOutlayTotal = (capitalBreakdown?.amount != null && capitalBreakdown?.amount > 0)
+        ? Number(capitalBreakdown.amount)
+        : filteredCapitalOutlayData.reduce((sum, item) => sum + (Number(item.cost) || 0), 0);
 
-          return sum + (Number(item.cost) || 0);
-        },
-        0
-      );
-
-      // Auto-calculate budgetary support total as MOOE Subsidy + Capital Outlay Subsidy
-      // This matches the BudgetarySupportTable auto-calculation logic
-      const mooeSubsidyTotal = filteredMooeData.reduce((sum, item) => {
-        if (
-          !isEligibleForSubmission(item.status) &&
-          item.status !== "Submitted"
-        ) {
-          return sum;
-        }
-        return sum + (Number(item.subsidy) || 0);
-      }, 0);
-
-      const capitalOutlaySubsidyTotal = filteredCapitalOutlayData.reduce(
-        (sum, item) => {
-          if (
-            !isEligibleForSubmission(item.status) &&
-            item.status !== "Submitted"
-          ) {
-            return sum;
-          }
-          return sum + (Number(item.subsidy) || 0);
-        },
-        0
-      );
-
-      const budgetarySupportTotal =
-        mooeSubsidyTotal + capitalOutlaySubsidyTotal;
+      const mooeSubsidyTotal = filteredMooeData.reduce((sum, item) => sum + (Number(item.subsidy) || 0), 0);
+      const capitalOutlaySubsidyTotal = filteredCapitalOutlayData.reduce((sum, item) => sum + (Number(item.subsidy) || 0), 0);
+      const breakdownSubsidySum = (mooeBreakdown?.amount || 0) + (capitalBreakdown?.amount || 0) + (iasBreakdown?.amount || 0);
+      const budgetarySupportTotal = (breakdown.length > 0 && breakdownSubsidySum > 0)
+        ? breakdownSubsidySum
+        : mooeSubsidyTotal + capitalOutlaySubsidyTotal;
 
       // If NEP with a known division/department ceiling, enforce that grand total cannot exceed the ceiling
       // Prefer division-specific ceiling over region-level ceiling
@@ -779,11 +749,14 @@ const ProposalCustomPage = ({
     mooeData,
     capitalOutlayData,
     budgetarySupportData,
+    calculatedBudgetarySupport,
     selectedFiscalYear,
     activeFiscalYear,
     regionFilter,
-    isEligibleForSubmission,
     iasOMCostData,
+    divisionCeilingAmount,
+    regionCeilingAmount,
+    activeBudgetType,
   ]);
 
   const budgetSummary = useMemo(() => {
@@ -869,13 +842,9 @@ const ProposalCustomPage = ({
         return 0;
       };
 
+      // Align with Budgetary Support: count ALL (no status filter)
       const sumFromLeaves = (leaves, keys) =>
-        leaves.reduce((sum, leaf) => {
-          if (!includeByStatus(leaf.status)) {
-            return sum;
-          }
-          return sum + pickNumber(leaf.node, keys);
-        }, 0);
+        leaves.reduce((sum, leaf) => sum + pickNumber(leaf.node, keys), 0);
 
       const incomeKeys = [
         "income",
@@ -897,11 +866,9 @@ const ProposalCustomPage = ({
       const filteredMooeData = filterByScope(mooeData);
       const filteredCapitalOutlayData = filterByScope(capitalOutlayData);
 
+      // Align with Budgetary Support: count ALL personnel (no status filter), exclude charged-to-income
       const personnelTotal = filteredPersonnelData.reduce((sum, p) => {
-        if (!includeByStatus(p.status)) {
-          return sum;
-        }
-
+        if (p.chargedToIncomeEligible === true) return sum;
         return (
           sum +
           parseNumeric(p.annualSalary) +
@@ -930,12 +897,11 @@ const ProposalCustomPage = ({
         );
       }, 0);
 
-      const mooeRegularTotal = filteredMooeData.reduce((sum, item) => {
-        if (!includeByStatus(item.status)) {
-          return sum;
-        }
-        return sum + parseNumeric(item.amount);
-      }, 0);
+      // Align with Budgetary Support: count ALL MOOE (no status filter)
+      const mooeRegularTotal = filteredMooeData.reduce(
+        (sum, item) => sum + parseNumeric(item.amount),
+        0
+      );
 
       const iasOMCostTotal = iasOMCostData
         ? parseNumeric(iasOMCostData.nis) +
@@ -946,12 +912,11 @@ const ProposalCustomPage = ({
 
       const mooeTotal = mooeRegularTotal + iasOMCostTotal;
 
-      const capitalOutlayTotal = filteredCapitalOutlayData.reduce((sum, item) => {
-        if (!includeByStatus(item.status)) {
-          return sum;
-        }
-        return sum + parseNumeric(item.cost);
-      }, 0);
+      // Align with Budgetary Support: count ALL Capital Outlay (no status filter)
+      const capitalOutlayTotal = filteredCapitalOutlayData.reduce(
+        (sum, item) => sum + parseNumeric(item.cost),
+        0
+      );
 
       const mooeLeaves = collectLeafRecords(filteredMooeData);
       const capitalLeaves = collectLeafRecords(filteredCapitalOutlayData);
@@ -966,20 +931,21 @@ const ProposalCustomPage = ({
       const combinedSubsidyTotal = mooeSubsidyTotal + capitalOutlaySubsidyTotal;
 
       const incomeTotal = parseNumeric(incomeGrandTotal) || 0;
-      const expensesTotal = mooeTotal + capitalOutlayTotal;
-      const budgetarySupportTotal =
-        calculateTotalBudget.budgetarySupportTotal || 0;
+      const bt = calculateTotalBudget;
+      const personnelTotalFinal = bt?.personnelTotal ?? personnelTotal;
+      const mooeTotalFinal = bt?.mooeTotal ?? mooeTotal;
+      const capitalOutlayTotalFinal = bt?.capitalOutlayTotal ?? capitalOutlayTotal;
+      const expensesTotal = mooeTotalFinal + capitalOutlayTotalFinal;
+      const budgetarySupportTotal = bt?.budgetarySupportTotal || 0;
 
-      const isIncomeBalanced =
-        Math.abs(incomeTotal - combinedIncomeTotal) < 0.01;
-      const isSubsidyBalanced =
-        Math.abs(budgetarySupportTotal - combinedSubsidyTotal) < 0.01;
+      const isIncomeBalanced = Math.abs(incomeTotal - combinedIncomeTotal) < 0.01;
+      const isSubsidyBalanced = Math.abs(budgetarySupportTotal - combinedSubsidyTotal) < 0.01;
       const isBalanced = Math.abs(expensesTotal - incomeTotal) < 0.01;
 
       return {
-        personnelTotal,
-        mooeTotal,
-        capitalOutlayTotal,
+        personnelTotal: personnelTotalFinal,
+        mooeTotal: mooeTotalFinal,
+        capitalOutlayTotal: capitalOutlayTotalFinal,
         expensesTotal,
         incomeTotal,
         mooeIncomeTotal,

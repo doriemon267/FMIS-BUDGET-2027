@@ -171,6 +171,10 @@ const MealAllowanceDialog = ({ row, endpoint, dataListName }) => {
       queryClient.invalidateQueries({ queryKey: ["allProposals"] });
       queryClient.invalidateQueries({ queryKey: ["proposals"] });
       queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
+      // Invalidate for BudgetarySupportTable, Comprehensive Reports
+      queryClient.invalidateQueries({ queryKey: ["personnel-services-combined"] });
+      queryClient.invalidateQueries({ queryKey: ["calculated-budgetary-support"] });
+      queryClient.invalidateQueries({ queryKey: ["comprehensive-report-data"] });
       toast.success(isEditing ? "Record updated successfully" : "Record created successfully");
       handleClose();
     },

@@ -105,6 +105,7 @@ const compensationSchema = yup.object().shape({
   courtAppearance: yup.number().min(0),
   childrenAllowance: yup.number().min(0),
   gsisPremium: yup.number().min(0),
+  providentFund: yup.number().min(0),
   philhealthPremium: yup
     .number()
     .min(0.05, "PhilHealth premium must be 5% per Circular 2019-0009")
@@ -199,6 +200,7 @@ const CompensationStandaloneDialog = ({
       courtAppearance: 0,
       childrenAllowance: 0,
       gsisPremium: 0,
+      providentFund: 0,
       philhealthPremium: 0.05,
       pagibigPremium: 0,
       employeeCompensation: 0,
@@ -502,6 +504,7 @@ const CompensationStandaloneDialog = ({
                 <Grid container spacing={2}>
                   {[
                     { name: "gsisPremium", label: "GSIS Premium (%)", component: PercentageFormatCustom },
+                    { name: "providentFund", label: "Provident Fund (%)", component: PercentageFormatCustom },
                     { name: "philhealthPremium", label: "PhilHealth Premium (%)", component: PercentageFormatCustom },
                     { name: "pagibigPremium", label: "Pag-IBIG Premium (₱)", component: NumberFormatCustom },
                     { name: "employeeCompensation", label: "Employee Compensation (₱)", component: NumberFormatCustom }

@@ -346,99 +346,42 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
 
   // Fetch Personnel Services data for Use of Funds breakdown (Combined Permanent + Casual)
   const { data: personalServicesData, error: personnelError, isLoading: isLoadingPersonnel } = useQuery({
-    queryKey: ['personnel-services-combined', fiscalYear, budgetType], // Removed regionName from queryKey
+    queryKey: ['personnel-services-combined', fiscalYear, budgetType],
     queryFn: async () => {
       if (!hasValidParams) return [];
-      
-      // Setup base parameters with proper data types and validation
-      const baseParams = {
-        fiscalYear: Number(fiscalYear), // Ensure fiscal year is a number
-        budgetType: budgetType,
-        limit: 1000,
-        page: 1
-      };
-
-      // Clean and validate parameters - let backend handle hierarchical filtering
-      if (regionName) {
-        const cleanedRegion = regionName.trim().replace(/\s+/g, ' ');
-        if (cleanedRegion) {
-          // Don't send region parameters - let hierarchical access control handle filtering
-          // baseParams.region = cleanedRegion; // REMOVED
-          // baseParams.Region = cleanedRegion; // REMOVED
-        }
-      }
 
       try {
-        // Fetch personnel data from all employment types in a single call
-        
-        const response = await api.get('/getpersonnels', { 
-          params: { 
-            ...baseParams
-            // Don't send region manually - let hierarchical access control handle it
-          } 
-        });
+        // Use the same base PersonnelServices endpoint used by Personnel Services tables,
+        // but let backend/hierarchical filters handle region and scope.
+        const params = {
+          fiscalYear: Number(fiscalYear),
+          budgetType,
+          chargedToIncomeEligible: false, // Align with Personnel Services (exclude charged-to-income)
+          limit: 1000,
+          page: 1,
+        };
 
-        const personnelData = response.data || [];
+        const response = await api.get('/personnelServices', { params });
+        const payload = response.data || {};
 
-        // Debug: Log field structure for personnel data
-        if (personnelData.length > 0) {
-          
-          // Check appointment status distribution
-          const statusCounts = {};
-          personnelData.forEach(p => {
-            const status = p.statusOfAppointment || 'Unknown';
-            statusCounts[status] = (statusCounts[status] || 0) + 1;
-          });
-        }
-        
-        // Note: Alternative endpoint fallback removed since all endpoints now properly implement submission workflow filtering
-        
-        // If no data returned, try without explicit region filter (backend handles hierarchical filtering)
-        if (personnelData.length === 0) {
-          
-          const paramsWithoutRegion = {
-            fiscalYear: Number(fiscalYear),
-            budgetType: budgetType,
-            limit: 1000,
-            page: 1
-          };
-          
-          const responseNoRegion = await api.get('/getpersonnels', { params: paramsWithoutRegion });
-          const dataNoRegion = responseNoRegion.data || [];
+        const personnelData =
+          Array.isArray(payload.personnelServices) ? payload.personnelServices :
+          Array.isArray(payload.data) ? payload.data :
+          Array.isArray(payload) ? payload :
+          [];
 
-          // Backend hierarchical filtering will handle proper data isolation
-          if (dataNoRegion.length > 0) {
-            return dataNoRegion;
-          }
-        }
-
-        // Ensure we have arrays
+        // Ensure we always return an array
         if (!Array.isArray(personnelData)) {
           throw new Error('Personnel services data is not in the expected format');
         }
-        
-        return personnelData;
-      } catch (error) {
-        // Only log if it's not a 500 error to reduce console noise
-        if (error.response?.status !== 500) {
-          console.error('Personnel services error details:', {
-            error: error,
-            response: error.response?.data,
-            status: error.response?.status,
-            config: {
-              url: error.config?.url,
-              params: error.config?.params
-            }
-          });
-        }
 
-        // Try to get data from calculatedBudgetarySupport as fallback
-        if (calculatedBudgetarySupport?.breakdown) {
-          const psBreakdown = calculatedBudgetarySupport.breakdown.find(item => 
-            item.source?.includes('PERSONNEL SERVICES') || 
-            item.source?.includes('PS')
+        // Fallback: if still empty, try using calculated-budgetary-support breakdown
+        if (personnelData.length === 0 && calculatedBudgetarySupport?.breakdown) {
+          const psBreakdown = calculatedBudgetarySupport.breakdown.find(item =>
+            (item.source || '').includes('Personnel Services') ||
+            (item.source || '').includes('B.1.1')
           );
-          
+
           if (psBreakdown) {
             return [{
               Total: psBreakdown.amount,
@@ -449,24 +392,49 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
           }
         }
 
-        // If no fallback data available, just return empty array
+        return personnelData;
+      } catch (error) {
+        if (error.response?.status !== 500) {
+          console.error('Personnel services error details (BudgetarySupportTable):', {
+            message: error.message,
+            status: error.response?.status,
+            data: error.response?.data,
+          });
+        }
+
+        // Fallback to calculated-budgetary-support when direct PS query fails
+        if (calculatedBudgetarySupport?.breakdown) {
+          const psBreakdown = calculatedBudgetarySupport.breakdown.find(item =>
+            (item.source || '').includes('Personnel Services') ||
+            (item.source || '').includes('B.1.1')
+          );
+
+          if (psBreakdown) {
+            return [{
+              Total: psBreakdown.amount,
+              region: selectedRegion,
+              employeeFullName: 'Consolidated PS',
+              description: 'Total Personnel Services from Budgetary Support Calculation'
+            }];
+          }
+        }
+
         return [];
       }
     },
     enabled: hasValidParams,
-    retry: 2, // Increase retry attempts
-    retryDelay: 2000, // Increase delay between retries to 2 seconds
+    retry: 2,
+    retryDelay: 2000,
     onError: (error) => {
-      console.error('❌ /getpersonnels failed:', {
+      console.error('❌ Personnel services combined query failed:', {
         message: error.message,
         status: error.response?.status,
         statusText: error.response?.statusText,
         data: error.response?.data,
         url: error.config?.url,
-        params: error.config?.params
       });
-      toast.error(`Error: ${error.message}`);
-    }
+      toast.error(`Error loading personnel services for budgetary support: ${error.message}`);
+    },
   });
 
   // Note: Corporate Income data is now received via callback from IncomeTable component

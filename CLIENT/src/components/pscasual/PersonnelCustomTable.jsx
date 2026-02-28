@@ -59,7 +59,11 @@ const OTHER_COMPENSATION_FIELDS = new Set([
   "hazardPay",
 ]);
 const GOVERNMENT_SHARE_FIELDS = new Set([
-  "gsisPremium", "pagibigPremium", "philhealthPremium", "employeeCompensation",
+  "gsisPremium",
+  "providentFund",
+  "pagibigPremium",
+  "philhealthPremium",
+  "employeeCompensation",
 ]);
 
 const CasualCustomTable = ({
@@ -880,7 +884,7 @@ const CasualCustomTable = ({
         </Box>
       </Zoom>
 
-      {/* Grand Total Footer with Fade Animation */}
+      {/* Grand Total Footer - use sum of displayed rows to match SUBTOTAL column (avoids API vs list filter mismatch) */}
       <Fade in={true} timeout={1000}>
         <Box
           sx={{
@@ -912,8 +916,9 @@ const CasualCustomTable = ({
               textAlign: "right",
             }}
           >
-            {grandTotal.toLocaleString(undefined, {
+            {(totals?.Total ?? grandTotal).toLocaleString(undefined, {
               minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
             })}
           </Typography>
         </Box>

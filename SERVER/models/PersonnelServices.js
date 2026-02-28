@@ -182,6 +182,10 @@ const personnelServicesSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    providentFund: {
+      type: Number,
+      required: true,
+    },
     philhealthPremium: {
       type: Number,
       required: true,
@@ -333,10 +337,11 @@ personnelServicesSchema.pre('save', function(next) {
     "terminalLeave", "hazardPay", "honoraria"
   ];
   
-  this.Total = numericFields.reduce(
+  const { roundTo2Decimals } = require('../utils/roundCurrency');
+  this.Total = roundTo2Decimals(numericFields.reduce(
     (acc, field) => acc + (Number(this[field]) || 0),
     0
-  );
+  ));
   
   next();
 });
@@ -360,10 +365,11 @@ personnelServicesSchema.statics.resetMealAllowance = async function(employeeNumb
         "terminalLeave", "hazardPay", "honoraria"
       ];
       // Calculate new total
-      doc.Total = numericFields.reduce(
+      const { roundTo2Decimals } = require('../utils/roundCurrency');
+      doc.Total = roundTo2Decimals(numericFields.reduce(
         (acc, field) => acc + (Number(doc[field]) || 0),
         0
-      );
+      ));
       await doc.save();
     }
     return { success: true, result };

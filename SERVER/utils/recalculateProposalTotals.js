@@ -164,31 +164,35 @@ async function computeModuleTotals(filterKeys, proposalId) {
   const mooeIncomeTotal = await tryMatch(MOOE, { $sum: { $toDouble: { $ifNull: ["$income", 0] } } });
   const coIncomeTotal = await tryMatch(CapitalOutlay, { $sum: { $toDouble: { $ifNull: ["$income", 0] } } });
 
-  // ADDED: Calculate PersonnelServices subsidy (all including charged-to-income)
-  // Logic: Subsidy = Total - ChargedToIncomeAmount
-  // This works for both cases:
-  // 1. Not charged: ChargedToIncomeAmount is 0, so Subsidy = Total
-  // 2. Charged: Subsidy = Total - ChargedToIncomeAmount (the remainder)
+  // ADJUSTED: Calculate PersonnelServices subsidy to MATCH Budgetary Support PS logic
+  // Logic: Subsidy for PS (B.1.1) = SUM of Total for personnel NOT charged to income.
+  // Charged-to-income amounts are handled separately as corporate income.
   let psSubsidyTotal = 0;
-  
+  const psMatchBase = proposalId
+    ? { proposalId: new mongoose.Types.ObjectId(proposalId) }
+    : { ...orgMatch };
+  const psSubsidyMatch = {
+    ...psMatchBase,
+    chargedToIncomeEligible: { $ne: true }, // mirror calculateBudgetarySupport personnelQueryConditions
+  };
+
   const psSubsidyExpr = {
     $sum: {
-      $subtract: [
-        { $toDouble: { $ifNull: ["$Total", 0] } },
-        { $toDouble: { $ifNull: ["$chargedToIncomeAmount", 0] } }
-      ]
+      $toDouble: {
+        $ifNull: [
+          "$Total",
+          {
+            $ifNull: [
+              "$total",
+              { $ifNull: ["$annualSalary", 0] }
+            ]
+          }
+        ]
+      }
     }
   };
 
-  if (proposalId) {
-    const byProposal = { 
-      proposalId: new mongoose.Types.ObjectId(proposalId)
-    };
-    psSubsidyTotal = await aggregateSum(PersonnelServices, byProposal, psSubsidyExpr);
-  } else {
-    const psMatch = { ...orgMatch };
-    psSubsidyTotal = await aggregateSum(PersonnelServices, psMatch, psSubsidyExpr);
-  }
+  psSubsidyTotal = await aggregateSum(PersonnelServices, psSubsidyMatch, psSubsidyExpr);
 
   return {
     incomeTotal,

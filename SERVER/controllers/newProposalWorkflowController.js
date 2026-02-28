@@ -14,6 +14,7 @@ const notificationController = require('./notificationController');
 const consolidationService = require('../utils/consolidationService');
 const { sendNotificationEmail } = require('../utils/emailNotification');
 const mongoose = require('mongoose');
+const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 
 // Workflow status transitions based on the specification
 const WORKFLOW_TRANSITIONS = {
@@ -1463,9 +1464,16 @@ exports.getProposals = async (req, res) => {
         amount: Number(p.amount || 0),
         totalIncome: Number(legacy?.totalIncome ?? p.totalIncome ?? 0),
         totalExpenses: Number(legacy?.totalExpenses ?? p.totalExpenses ?? 0),
-        proposedBudget: Number(legacy?.proposedBudget ?? ((Number(legacy?.totalExpenses ?? p.totalExpenses ?? 0) + Number(legacy?.totalIncome ?? p.totalIncome ?? 0)) || p.amount || 0)),
-        projectedCorporateIncome: p.projectedCorporateIncome,
-        projectedSubsidy: p.projectedSubsidy,
+        // Prefer consolidated Proposal totals when available so Workflow matches Budgetary Support & PS
+        proposedBudget: Number(
+          legacy?.proposedBudget ??
+          ((Number(legacy?.totalExpenses ?? p.totalExpenses ?? 0) +
+            Number(legacy?.totalIncome ?? p.totalIncome ?? 0)) ||
+            p.amount ||
+            0)
+        ),
+        projectedCorporateIncome: Number(legacy?.projectedCorporateIncome ?? p.projectedCorporateIncome ?? 0),
+        projectedSubsidy: Number(legacy?.projectedSubsidy ?? p.projectedSubsidy ?? 0),
         workflowHistory: p.workflowHistory || [],
         fromNewWorkflow: true
       });
@@ -1965,6 +1973,17 @@ exports.performAction = async (req, res) => {
       console.log('[PERFORM_ACTION] Synced status to all line-item collections:', legacyStatus);
     } catch (syncError) {
       console.warn('[PERFORM_ACTION] Warning: Could not sync line-item collections:', syncError.message);
+    }
+
+    // After status + line items are synced, recalculate consolidated totals so
+    // Proposal + NewProposalWorkflow reflect the same PROJECTED SUBSIDY / PROPOSED BUDGET
+    try {
+      console.log('[PERFORM_ACTION] Triggering recalculateAndSaveProposalTotals for workflowRef:', proposal._id);
+      await recalculateAndSaveProposalTotals({ workflowRef: proposal._id });
+      console.log('[PERFORM_ACTION] Recalculation completed successfully for workflowRef:', proposal._id);
+    } catch (recalcError) {
+      console.error('[PERFORM_ACTION] Error recalculating proposal totals:', recalcError.message);
+      // Do not fail the workflow action if totals recalculation fails
     }
 
     // Create notifications for relevant workflow actions

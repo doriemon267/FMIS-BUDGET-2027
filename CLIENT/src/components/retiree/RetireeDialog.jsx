@@ -303,6 +303,12 @@ const RetireeDialog = ({
       toast.success("Retiree record created successfully");
       // Invalidate queries to refresh the data
       queryClient.invalidateQueries({ queryKey: ["retiree"] });
+      queryClient.invalidateQueries({ queryKey: ["personnel-services-combined"] });
+      queryClient.invalidateQueries({ queryKey: ["calculated-budgetary-support"] });
+      queryClient.invalidateQueries({ queryKey: ["comprehensive-report-data"] });
+      queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+      queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
       handleClose();
     },
     onError: (error) => {
@@ -322,6 +328,13 @@ const RetireeDialog = ({
       queryClient.invalidateQueries({ queryKey: [dataListName] });
       // Also invalidate any related queries
       queryClient.invalidateQueries({ queryKey: ["retiree"] });
+      // Invalidate for BudgetarySupportTable, Comprehensive Reports, NewProposalWorkflowPage
+      queryClient.invalidateQueries({ queryKey: ["personnel-services-combined"] });
+      queryClient.invalidateQueries({ queryKey: ["calculated-budgetary-support"] });
+      queryClient.invalidateQueries({ queryKey: ["comprehensive-report-data"] });
+      queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+      queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
       handleClose();
     },
     onError: (error) => {

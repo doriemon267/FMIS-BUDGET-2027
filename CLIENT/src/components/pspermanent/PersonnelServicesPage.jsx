@@ -145,9 +145,14 @@ midyearBonus: {
       show: true,
     },
    
-     gsisPremium: {
+    gsisPremium: {
       type: "number",
       label: "GSIS PREMIUM",
+      show: true,
+    },
+    providentFund: {
+      type: "number",
+      label: "PROVIDENT FUND",
       show: true,
     },
     pagibigPremium: {

@@ -87,9 +87,8 @@ const PDFReportDocument = ({ fiscalYear, psSummary = {}, mooe = [], co = [] }) =
   const mooeTotal = mooeRegularTotal + iasOMCostTotal;
   
   const coTotal = co.reduce((total, item) => total + (parseFloat(item.cost) || 0), 0);
-  const psTotal = Object.values(psSummary)
-    .filter(v => typeof v !== 'object') // Filter out objects like iasOMCost
-    .reduce((a, v) => a + (parseFloat(v) || 0), 0);
+  // Use backend-computed totalPersonnelServices (sum of PersonnelServices.Total)
+  const psTotal = parseFloat(psSummary.totalPersonnelServices || 0) || 0;
   
   const grandTotal = psTotal + mooeTotal + coTotal;
 
@@ -147,6 +146,10 @@ const PDFReportDocument = ({ fiscalYear, psSummary = {}, mooe = [], co = [] }) =
         <View style={styles.row}>
           <Text style={{ width: "70%" }}>Medical Allowance</Text>
           <Text style={{ width: "30%", textAlign: "right" }}>{formatCurrency(psSummary.medical || 0, true)}</Text>
+        </View>
+        <View style={styles.row}>
+          <Text style={{ width: "70%" }}>Additional Medical Allowance</Text>
+          <Text style={{ width: "30%", textAlign: "right" }}>{formatCurrency(psSummary.additionalMedical || 0, true)}</Text>
         </View>
         <View style={styles.row}>
           <Text style={{ width: "70%" }}>Children Allowance</Text>

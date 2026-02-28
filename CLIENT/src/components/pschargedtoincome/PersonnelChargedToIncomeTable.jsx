@@ -21,6 +21,8 @@ import {
   CircularProgress,
   Checkbox,
   Paper,
+  Card,
+  CardContent,
 } from "@mui/material";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -85,14 +87,62 @@ const PersonnelChargedToIncomeTable = ({
   const refreshPersonnelData = useCallback(async () => {
     try {
       await invalidateDataList(queryClient, dataListName);
-      // Also invalidate the chargedToIncome specific query
-      await queryClient.invalidateQueries({
-        queryKey: [dataListName, "chargedToIncome"],
-      });
+      await queryClient.invalidateQueries({ queryKey: [dataListName, "chargedToIncome"] });
+      await queryClient.invalidateQueries({ queryKey: ["chargedToIncomeList"] });
     } catch (error) {
       toast.error("Error refreshing data.");
     }
   }, [queryClient, dataListName]);
+
+  // Active settings for fiscal year (for list/reset scope)
+  const { data: activeSettings } = useQuery({
+    queryKey: ["settings", "active"],
+    queryFn: () => api.get("/settings/active").then((r) => r.data),
+  });
+  const fiscalYearForScope = activeSettings?.fiscalYear || "";
+  const regionForScope = activeRegion?.name || activeRegion?.regionName || activeRegion?.Region || "";
+
+  // List charged-to-income (count + total) for info and reset
+  const { data: chargedListData, refetch: refetchChargedList } = useQuery({
+    queryKey: ["chargedToIncomeList", fiscalYearForScope, regionForScope],
+    queryFn: () => {
+      const params = {};
+      if (fiscalYearForScope) params.fiscalYear = fiscalYearForScope;
+      if (regionForScope) params.region = regionForScope;
+      return api.get("/personnelServices/charged-to-income/list", { params }).then((r) => r.data);
+    },
+    enabled: true,
+  });
+  const chargedListCount = chargedListData?.count ?? 0;
+  const chargedListTotal = chargedListData?.totalAmount ?? 0;
+
+  const [resetLoading, setResetLoading] = useState(false);
+  const handleResetAllChargedToIncome = useCallback(async () => {
+    if (chargedListCount === 0) {
+      toast.info("Walang record na naka-charged to income.");
+      return;
+    }
+    if (!window.confirm(`I-reset ang lahat ng ${chargedListCount} record(s) na naka-charged to income? Ibabalik sila sa Personnel Services.`)) return;
+    setResetLoading(true);
+    try {
+      const body = {};
+      if (fiscalYearForScope) body.fiscalYear = fiscalYearForScope;
+      if (regionForScope) body.region = regionForScope;
+      const res = await api.post("/personnelServices/charged-to-income/reset", body);
+      toast.success(res.data?.message || "Na-reset na ang charged-to-income.");
+      await queryClient.invalidateQueries({ queryKey: [dataListName, "chargedToIncome"] });
+      await queryClient.invalidateQueries({ queryKey: ["chargedToIncomeList"] });
+      await queryClient.invalidateQueries({ queryKey: ["calculated-budgetary-support"] });
+      await queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      await queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
+      refetch();
+      refetchChargedList();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Hindi na-reset.");
+    } finally {
+      setResetLoading(false);
+    }
+  }, [chargedListCount, fiscalYearForScope, regionForScope, queryClient, dataListName, refetchChargedList]);
 
   // Fetch charged to income personnel data
   const { data, isLoading, refetch } = useQuery({
@@ -230,6 +280,26 @@ const PersonnelChargedToIncomeTable = ({
 
   return (
     <>
+      {chargedListCount > 0 && (
+        <Card sx={{ mb: 2, bgcolor: '#fff8e1', border: '1px solid #ffc107' }}>
+          <CardContent>
+            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+              May <strong>{chargedListCount}</strong> record(s) na naka–Charged to Income (Kabuuan: {formatCurrency(chargedListTotal)}).
+              Kung hindi mo sinadya, puwede mong i-reset lahat para ibalik sa Personnel Services.
+            </Typography>
+            <Button
+              size="small"
+              variant="outlined"
+              color="warning"
+              onClick={handleResetAllChargedToIncome}
+              disabled={resetLoading}
+            >
+              {resetLoading ? "Ina-reset..." : "I-reset lahat (ibalik sa Personnel Services)"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <Box sx={{ mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
         <Button
           variant="contained"

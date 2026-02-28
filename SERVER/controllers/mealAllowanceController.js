@@ -43,16 +43,15 @@ async function syncPersonnelServicesMeal(employeeNumber, fiscalYear, mealAmount 
       }
     }
 
-    // Update the personnel services record
+    // Find the exact personnel document to update (avoids updating wrong doc when multiple exist for same employee+fiscalYear)
+    const personnelDoc = await PersonnelServices.findOne({ employeeNumber, fiscalYear });
+    if (!personnelDoc) return false;
     const updateResult = await PersonnelServices.updateOne(
-      { employeeNumber, fiscalYear },
+      { _id: personnelDoc._id },
       { meal: mealAmount }
     );
-    // Recalculate the Total field
-    const updatedPersonnel = await PersonnelServices.findOne({
-      employeeNumber,
-      fiscalYear,
-    });
+    // Recalculate the Total field on the SAME document (by _id) so another row's Total is not overwritten
+    const updatedPersonnel = await PersonnelServices.findOne({ _id: personnelDoc._id });
     if (updatedPersonnel) {
       const numericFields = [
         "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
@@ -67,7 +66,7 @@ async function syncPersonnelServicesMeal(employeeNumber, fiscalYear, mealAmount 
         0
       );
       await PersonnelServices.updateOne(
-        { employeeNumber, fiscalYear },
+        { _id: updatedPersonnel._id },
         { Total: newTotal }
       );
     }
@@ -158,33 +157,31 @@ exports.createMealAllowance = [
         budgetType: usedBudgetType,
       });
       await record.save();
-      // Update the personnel services record with the annual amount
-      await PersonnelServices.updateOne(
-        { employeeNumber, fiscalYear: usedFiscalYear },
-        { meal: annualAmount } // Store annual amount (792 in your example)
-      );
-      // Recalculate the Total field in PersonnelServices
-      const updatedPersonnel = await PersonnelServices.findOne({
-        employeeNumber,
-        fiscalYear: usedFiscalYear,
-      });
-      if (updatedPersonnel) {
-        const numericFields = [
-          "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
-          "medical", "meal", "cashGift", "midyearBonus", "yearEndBonus",
-          "gsisPremium", "philhealthPremium", "pagibigPremium", "employeeCompensation",
-          "subsistenceAllowanceMDS", "subsistenceAllowanceST", "overtimePay", "loyaltyAward",
-          "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
-          "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
-        ];
-        const newTotal = numericFields.reduce(
-          (acc, field) => acc + (Number(updatedPersonnel[field]) || 0),
-          0
-        );
+      // Find exact personnel doc so we update by _id (avoids overwriting another row's Total when multiple exist)
+      const personnelDoc = await PersonnelServices.findOne({ employeeNumber, fiscalYear: usedFiscalYear });
+      if (personnelDoc) {
         await PersonnelServices.updateOne(
-          { employeeNumber, fiscalYear: usedFiscalYear },
-          { Total: newTotal }
+          { _id: personnelDoc._id },
+          { meal: annualAmount }
         );
+        const updatedPersonnel = await PersonnelServices.findOne({ _id: personnelDoc._id });
+        if (updatedPersonnel) {
+          const numericFields = [
+            "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
+            "medical", "meal", "cashGift", "midyearBonus", "yearEndBonus",
+            "gsisPremium", "philhealthPremium", "pagibigPremium", "employeeCompensation",
+            "subsistenceAllowanceMDS", "subsistenceAllowanceST", "overtimePay", "loyaltyAward",
+            "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
+            "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
+          ];
+          const newTotal = numericFields.reduce(
+            (acc, field) => acc + (Number(updatedPersonnel[field]) || 0),
+            0
+          );
+          await PersonnelServices.updateOne(
+            { _id: updatedPersonnel._id },
+            { Total: newTotal }
+          );
         
         // Recalculate proposal totals if personnel has a proposalId
         if (updatedPersonnel.proposalId) {
@@ -193,6 +190,7 @@ exports.createMealAllowance = [
           } catch (recalcErr) {
             console.error('Error recalculating proposal totals:', recalcErr);
           }
+        }
         }
       }
       return res.status(201).json(record);
@@ -298,39 +296,39 @@ exports.updateMealAllowance = [
         }
       }
 
-      await PersonnelServices.updateOne(
-        { employeeNumber: updated.employeeNumber, fiscalYear: usedFiscalYear },
-        { meal: annualAmount } // Store annual amount in PersonnelServices
-      );
-      // Recalculate the Total field in PersonnelServices
-      const updatedPersonnel = await PersonnelServices.findOne({
+      const personnelDoc = await PersonnelServices.findOne({
         employeeNumber: updated.employeeNumber,
         fiscalYear: usedFiscalYear,
       });
-      if (updatedPersonnel) {
-        const numericFields = [
-          "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
-          "medical", "meal", "cashGift", "midyearBonus", "yearEndBonus",
-          "gsisPremium", "philhealthPremium", "pagibigPremium", "employeeCompensation",
-          "subsistenceAllowanceMDS", "subsistenceAllowanceST", "overtimePay", "loyaltyAward",
-          "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
-          "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
-        ];
-        const newTotal = numericFields.reduce(
-          (acc, field) => acc + (Number(updatedPersonnel[field]) || 0),
-          0
-        );
+      if (personnelDoc) {
         await PersonnelServices.updateOne(
-          { employeeNumber: updated.employeeNumber, fiscalYear: usedFiscalYear },
-          { Total: newTotal }
+          { _id: personnelDoc._id },
+          { meal: annualAmount }
         );
-        
-        // Recalculate proposal totals if personnel has a proposalId
-        if (updatedPersonnel.proposalId) {
-          try {
-            await recalculateAndSaveProposalTotals({ proposalId: updatedPersonnel.proposalId });
-          } catch (recalcErr) {
-            console.error('Error recalculating proposal totals:', recalcErr);
+        const updatedPersonnel = await PersonnelServices.findOne({ _id: personnelDoc._id });
+        if (updatedPersonnel) {
+          const numericFields = [
+            "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
+            "medical", "meal", "cashGift", "midyearBonus", "yearEndBonus",
+            "gsisPremium", "philhealthPremium", "pagibigPremium", "employeeCompensation",
+            "subsistenceAllowanceMDS", "subsistenceAllowanceST", "overtimePay", "loyaltyAward",
+            "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
+            "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
+          ];
+          const newTotal = numericFields.reduce(
+            (acc, field) => acc + (Number(updatedPersonnel[field]) || 0),
+            0
+          );
+          await PersonnelServices.updateOne(
+            { _id: updatedPersonnel._id },
+            { Total: newTotal }
+          );
+          if (updatedPersonnel.proposalId) {
+            try {
+              await recalculateAndSaveProposalTotals({ proposalId: updatedPersonnel.proposalId });
+            } catch (recalcErr) {
+              console.error('Error recalculating proposal totals:', recalcErr);
+            }
           }
         }
       }
@@ -567,41 +565,37 @@ exports.deleteMealAllowance = async (req, res) => {
       }
     }
 
-    // Delete the meal allowance record
     await MealAllowance.findByIdAndDelete(id);
-    // CRITICAL: Reset the meal value to 0 in PersonnelServices
-    const updateResult = await PersonnelServices.updateOne(
-      { employeeNumber, fiscalYear },
-      { $set: { meal: 0 } }
-    );
-    // Verify the update worked
-    const verifyDoc = await PersonnelServices.findOne({ employeeNumber, fiscalYear });
-    if (verifyDoc) {
-      // If meal is still not 0, try direct document update
-      if (verifyDoc.meal !== 0) {
-        verifyDoc.meal = 0;
-        await verifyDoc.save();
-        }
-      // Recalculate Total field
-      const numericFields = [
-        "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
-        "medical", "meal", "cashGift", "midyearBonus", "yearEndBonus",
-        "gsisPremium", "philhealthPremium", "pagibigPremium", "employeeCompensation",
-        "subsistenceAllowanceMDS", "subsistenceAllowanceST", "overtimePay", "loyaltyAward",
-        "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
-        "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
-      ];
-      const newTotal = numericFields.reduce(
-        (acc, field) => acc + (Number(verifyDoc[field]) || 0),
-        0
-      );
-      // Update the total
+    const personnelDoc = await PersonnelServices.findOne({ employeeNumber, fiscalYear });
+    if (personnelDoc) {
       await PersonnelServices.updateOne(
-        { employeeNumber, fiscalYear },
-        { $set: { Total: newTotal } }
+        { _id: personnelDoc._id },
+        { $set: { meal: 0 } }
       );
-      } else {
+      const verifyDoc = await PersonnelServices.findOne({ _id: personnelDoc._id });
+      if (verifyDoc) {
+        if (verifyDoc.meal !== 0) {
+          verifyDoc.meal = 0;
+          await verifyDoc.save();
+        }
+        const numericFields = [
+          "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
+          "medical", "meal", "cashGift", "midyearBonus", "yearEndBonus",
+          "gsisPremium", "philhealthPremium", "pagibigPremium", "employeeCompensation",
+          "subsistenceAllowanceMDS", "subsistenceAllowanceST", "overtimePay", "loyaltyAward",
+          "earnedLeaves", "retirementBenefits", "terminalLeave", "courtAppearance",
+          "hazardPay", "subsistenceAllowance", "honoraria", "childrenAllowance"
+        ];
+        const newTotal = numericFields.reduce(
+          (acc, field) => acc + (Number(verifyDoc[field]) || 0),
+          0
+        );
+        await PersonnelServices.updateOne(
+          { _id: verifyDoc._id },
+          { $set: { Total: newTotal } }
+        );
       }
+    }
     // Return success response
     return res.status(200).json({
       message: "Meal allowance deleted successfully",

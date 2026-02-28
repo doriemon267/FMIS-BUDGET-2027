@@ -11,7 +11,7 @@ import {
   Zoom,
   LinearProgress,
 } from "@mui/material";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../../config/api";
 import { toast } from "react-hot-toast";
 import SaveIcon from "@mui/icons-material/Save";
@@ -21,6 +21,7 @@ import { useRegion } from "../../context/RegionContext";
 import { green, blue } from "@mui/material/colors";
 
 const InlineOvertimeAddRow = ({ refreshData, employeeOptions }) => {
+  const queryClient = useQueryClient();
   const { currentUser, assignmentLevel } = useUser();
   const { activeRegion } = useRegion();
 
@@ -172,6 +173,12 @@ const InlineOvertimeAddRow = ({ refreshData, employeeOptions }) => {
       setWeekendHours("");
       refreshData();
       fetchExistingRecords();
+      queryClient.invalidateQueries({ queryKey: ["personnel-services-combined"] });
+      queryClient.invalidateQueries({ queryKey: ["calculated-budgetary-support"] });
+      queryClient.invalidateQueries({ queryKey: ["comprehensive-report-data"] });
+      queryClient.invalidateQueries({ queryKey: ["allProposals"] });
+      queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
     },
     onError: (err) => {
       console.error('❌ Mutation error:', err);

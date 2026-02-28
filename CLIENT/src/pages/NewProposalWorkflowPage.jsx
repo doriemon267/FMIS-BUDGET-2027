@@ -124,6 +124,7 @@ const getOtherCompensation = (p) =>
   (Number(p?.courtAppearance) || 0);
 const getGovernmentShare = (p) =>
   (Number(p?.gsisPremium) || 0) +
+  (Number(p?.providentFund) || 0) +
   (Number(p?.philhealthPremium) || 0) +
   (Number(p?.pagibigPremium) || 0) +
   (Number(p?.employeeCompensation) || 0);
@@ -3241,7 +3242,7 @@ const NewProposalWorkflowPage = () => {
                         selectedProposal?.projectedSubsidy ||
                         selectedProposal?.totalExpenses ||
                         0
-                      ).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      ).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Typography>
                   </Grid>
                   <Grid item xs={12} md={4}>
@@ -4015,19 +4016,19 @@ const NewProposalWorkflowPage = () => {
                                       )}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${(item.subsistenceAllowance || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                      {`₱${(item.subsistenceAllowance || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${getOtherCompensation(item).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                      {`₱${getOtherCompensation(item).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${(item.pagibigPremium || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                      {`₱${(item.pagibigPremium || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${getGovernmentShare(item).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                      {`₱${getGovernmentShare(item).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                      {`₱${(item.Total || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                      {`₱${(item.Total || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                   </TableRow>
                                   {isExpanded && (
@@ -4265,19 +4266,19 @@ const NewProposalWorkflowPage = () => {
                                       )}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${(item.subsistenceAllowance || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                      {`₱${(item.subsistenceAllowance || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${getOtherCompensation(item).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                      {`₱${getOtherCompensation(item).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${(item.pagibigPremium || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                      {`₱${(item.pagibigPremium || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${getGovernmentShare(item).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                      {`₱${getGovernmentShare(item).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                      {`₱${(item.Total || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                      {`₱${(item.Total || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                   </TableRow>
                                   {isExpanded && (
@@ -4515,19 +4516,19 @@ const NewProposalWorkflowPage = () => {
                                       )}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${(item.subsistenceAllowance || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                      {`₱${(item.subsistenceAllowance || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${getOtherCompensation(item).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                      {`₱${getOtherCompensation(item).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${(item.pagibigPremium || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                      {`₱${(item.pagibigPremium || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right">
-                                      {`₱${getGovernmentShare(item).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                      {`₱${getGovernmentShare(item).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                     <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                                      {`₱${(item.Total || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                                      {`₱${(item.Total || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                                     </TableCell>
                                   </TableRow>
                                   {isExpanded && (
