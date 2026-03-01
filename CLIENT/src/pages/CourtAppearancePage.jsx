@@ -691,10 +691,3 @@ const EmployeeCourtAppearancePage = () => {
 };
 
 export default EmployeeCourtAppearancePage;
-ExportPDF} disabled={loading}>
-          <ListItemIcon>
-            <PrintIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>Export to PDF</ListItemText>
-        </MenuItem>
-      </Menu
