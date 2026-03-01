@@ -198,6 +198,8 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
         grandTotal: 0,
         totalIncome: 0,
         totalSubsidy: 0,
+        department: preparerScope?.department || '',
+        division: preparerScope?.division || '',
         approverNoProposals: true // Budget Approver: no proposals passed to them yet
       },
       sections: []
@@ -285,7 +287,9 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
       totalEmployees: 0,
       grandTotal: 0,
       totalIncome: 0,
-      totalSubsidy: 0
+      totalSubsidy: 0,
+      department: preparerScope?.department || '',
+      division: preparerScope?.division || ''
     },
     sections: []
   };
@@ -1070,7 +1074,7 @@ const getComprehensiveReportPdf = async (req, res) => {
 
     const drawBorder = () => {
       pdfDoc.rectangle(MARGIN, MARGIN, PAGE_WIDTH - MARGIN * 2, PAGE_HEIGHT - MARGIN * 2, {
-        stroke: '#000000',
+        stroke: '#4d4c4c',
         lineWidth: 1.5
       });
     };
@@ -1084,49 +1088,105 @@ const getComprehensiveReportPdf = async (req, res) => {
       ? (Array.isArray(reportData.summary.regions) ? reportData.summary.regions.join(', ') : String(reportData.summary.regions))
       : '';
 
-    // Draw logos (left and right)
-    let logoPath = path.join(__dirname, '../assets/logo.png');
-    if (!fs.existsSync(logoPath)) {
-      const clientLogo = path.join(__dirname, '../../CLIENT/public/logo.png');
-      if (fs.existsSync(clientLogo)) logoPath = clientLogo;
+    // Draw logos (left: Seal.png and logo.png side by side, right: Bagong_Pilipinas.png)
+    let sealPath = path.join(__dirname, '../assets/Seal.png');
+    if (!fs.existsSync(sealPath)) {
+      const clientSeal = path.join(__dirname, '../../CLIENT/public/Seal.png');
+      if (fs.existsSync(clientSeal)) sealPath = clientSeal;
     }
-    const hasLogo = fs.existsSync(logoPath);
+    
+    let nialogoPath = path.join(__dirname, '../assets/logo.png');
+    if (!fs.existsSync(nialogoPath)) {
+      const clientNiaLogo = path.join(__dirname, '../../CLIENT/public/logo.png');
+      if (fs.existsSync(clientNiaLogo)) nialogoPath = clientNiaLogo;
+    }
+    
+    let bagongPilipinasPath = path.join(__dirname, '../assets/Bagong_Pilipinas.png');
+    if (!fs.existsSync(bagongPilipinasPath)) {
+      const clientBagong = path.join(__dirname, '../../CLIENT/public/Bagong_Pilipinas.png');
+      if (fs.existsSync(clientBagong)) bagongPilipinasPath = clientBagong;
+    }
+    
+    const hasSeal = fs.existsSync(sealPath);
+    const hasNiaLogo = fs.existsSync(nialogoPath);
+    const hasBagong = fs.existsSync(bagongPilipinasPath);
 
-    if (hasLogo) {
+    // Header section with logos
+    const logoY = currentY + 5;
+    const logoWidth = 40;
+    const logoHeight = 40;
+    
+    if (hasSeal || hasNiaLogo || hasBagong) {
       try {
-        // Left logo
-        pdfDoc.image(logoPath, CONTENT_LEFT, currentY, { width: 35, height: 35 });
-        // Right logo
-        pdfDoc.image(logoPath, CONTENT_RIGHT - 35, currentY, { width: 35, height: 35 });
+        // Left side: Seal.png and logo.png side by side
+        if (hasSeal) {
+          pdfDoc.image(sealPath, CONTENT_LEFT, logoY, { width: logoWidth, height: logoHeight });
+        }
+        if (hasNiaLogo) {
+          pdfDoc.image(nialogoPath, CONTENT_LEFT + logoWidth + 5, logoY, { width: logoWidth, height: logoHeight });
+        }
+        // Right side: Bagong_Pilipinas.png
+        if (hasBagong) {
+          pdfDoc.image(bagongPilipinasPath, CONTENT_RIGHT - logoWidth, logoY, { width: logoWidth, height: logoHeight });
+        }
       } catch (e) {
         console.warn('PDF logo load failed:', e.message);
       }
     }
 
-    // Header text (centered)
-    const headerY = currentY + 3;
+    // Header text (centered) - positioned next to logos
+    const headerTextY = currentY + 8;
     pdfDoc
-      .text('Republic of the Philippines', CENTER_X, headerY, textOpt({ fontSize: 9, align: 'center' }))
-    currentY = headerY + LINE_HEIGHT * 0.9;
-    pdfDoc
-      .text('OFFICE OF THE PRESIDENT', CENTER_X, currentY, textOpt({ fontSize: 9, bold: true, align: 'center' }));
-    currentY += LINE_HEIGHT * 0.9;
-    pdfDoc
-      .text('NATIONAL IRRIGATION ADMINISTRATION', CENTER_X, currentY, textOpt({ fontSize: 9, bold: true, align: 'center', color: '#FF0000' }));
-    currentY += LINE_HEIGHT * 0.9;
-    pdfDoc
-      .text(`${safeStr(reportData.summary.department || 'DEPARTMENT/DIVISION')}`, CENTER_X, currentY, textOpt({ fontSize: 9, align: 'center' }));
+      .text('Republic of the Philippines', CENTER_X, headerTextY, textOpt({ fontSize: 8, align: 'center' }));
     
-    // ANNEX A (upper right)
-    pdfDoc.text('ANNEX A', CONTENT_RIGHT - 55, MARGIN_TOP + 25, textOpt({ fontSize: 10, bold: true }));
+    let headerLineY = headerTextY + LINE_HEIGHT * 0.8;
+    pdfDoc
+      .text('OFFICE OF THE PRESIDENT', CENTER_X, headerLineY, textOpt({ fontSize: 8, bold: true, align: 'center' }));
     
-    currentY += LINE_HEIGHT * 2.5;
+    headerLineY += LINE_HEIGHT * 0.8;
+    pdfDoc
+      .text('NATIONAL IRRIGATION ADMINISTRATION', CENTER_X, headerLineY, textOpt({ fontSize: 8, bold: true, align: 'center', color: '#292e2a' }));
+    
+    // Determine what to display: Department/Division if available, otherwise Region
+    const departmentName = safeStr(reportData.summary.department || '');
+    const divisionName = safeStr(reportData.summary.division || '');
+    const regionsArray = Array.isArray(reportData.summary.regions) ? reportData.summary.regions : [reportData.summary.regions];
+    
+    let departmentDivisionText = '';
+    
+    // Prefer Department/Division if they exist, otherwise show Region
+    if (departmentName && divisionName) {
+      // Both department and division available
+      departmentDivisionText = `${departmentName} / ${divisionName}`;
+    } else if (departmentName) {
+      // Only department available
+      departmentDivisionText = departmentName;
+    } else if (divisionName) {
+      // Only division available
+      departmentDivisionText = divisionName;
+    } else {
+      // No department/division - show region instead
+      if (regionsArray.length > 0 && regionsArray[0]) {
+        departmentDivisionText = String(regionsArray[0]);
+      } else {
+        departmentDivisionText = 'OFFICE / DIVISION';
+      }
+    }
+    
+    headerLineY += LINE_HEIGHT * 0.8;
+    pdfDoc
+      .text(departmentDivisionText, CENTER_X, headerLineY, textOpt({ fontSize: 8, align: 'center' }));
+    
+    // ANNEX A (below Bagong_Pilipinas logo)
+    pdfDoc.text('ANNEX A', CONTENT_RIGHT - 50, logoY + logoHeight + 5, textOpt({ fontSize: 10, bold: true }));
+    
+    currentY = logoY + logoHeight + 30;
 
-    // Title
+    // Title and Fiscal Year
     pdfDoc.text('CORPORATE OPERATING BUDGET', CENTER_X, currentY, textOpt({ fontSize: 13, bold: true, align: 'center' }));
-    currentY += LINE_HEIGHT * 1.3;
-    pdfDoc.text(`FISCAL YEAR ${safeStr(reportData.summary.fiscalYear)}`, CENTER_X, currentY, textOpt({ fontSize: 11, bold: true, align: 'center' }));
     currentY += LINE_HEIGHT * 1.2;
+    pdfDoc.text(`FISCAL YEAR ${safeStr(reportData.summary.fiscalYear)}`, CENTER_X, currentY, textOpt({ fontSize: 11, bold: true, align: 'center' }));
+    currentY += LINE_HEIGHT * 1.5;
 
     // Personnel statistics section - Get actual counts from PersonnelServices
     const totalEmployees = Number(reportData.summary.totalEmployees) || 0;
