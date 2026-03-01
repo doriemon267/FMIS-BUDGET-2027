@@ -16,7 +16,7 @@ const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
 // Import old middleware for consistency with other allowance routes
 const checkDueDate = require("../middleware/checkDueDate");
 const { hierarchicalAccessControl } = require("../middleware/hierarchicalAccessControl");
-const logUserActivity = require("../middleware/logUserActivity");
+const { logUserActivity } = require("../middleware/userLogs");
 const appearanceRouter = Router();
 // Apply authentication middleware to all routes in this router
 appearanceRouter.use(tokenMiddleware);
@@ -28,7 +28,15 @@ appearanceRouter.get("/court-appearances/sum", getSumOfCourtAppearanceAmount);
 // PDF Export route with hierarchical access control
 appearanceRouter.post("/court-appearances/export-pdf", 
   hierarchicalAccessControl('read', { allowedFields: ['region', 'department', 'division'] }), 
-  logUserActivity("Export Court Appearance PDF"),
+  logUserActivity({ 
+    action: 'EXPORT', 
+    resource: 'CourtAppearance', 
+    getDetails: (req) => ({ 
+      format: 'PDF',
+      subAction: 'export-court-appearance',
+      filters: req.body.filters
+    }) 
+  }),
   exportCourtAppearancePDF
 );
 
