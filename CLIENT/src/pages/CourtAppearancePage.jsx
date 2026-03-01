@@ -87,7 +87,6 @@ const EmployeeCourtAppearancePage = () => {
   const [validationErrors, setValidationErrors] = useState({});
   const [selectedRows, setSelectedRows] = useState([]);
   const [exportMenuAnchor, setExportMenuAnchor] = useState(null);
-  const [printPreviewDialog, setPrintPreviewDialog] = useState({ open: false, content: '', data: [] });
 
   // 1) Load active settings
   useEffect(() => {
@@ -195,144 +194,49 @@ const EmployeeCourtAppearancePage = () => {
     setExportMenuAnchor(null);
   }, [tableData, activeRegion]);
 
-  // Print functionality
-  const generatePrintContent = useCallback((printData) => {
-    if (!printData || printData.length === 0) {
-      toast.error("No data available to print");
-      return null;
-    }
-
-    const currentDate = new Date().toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-
-    // Get hierarchical display for PDF
-    const hierarchicalDisplay = getHierarchicalDisplay();
-    
-    const grandTotal = printData.reduce((sum, row) => sum + (row.courtAppearanceAmount || 0), 0);
-
-    return `<!DOCTYPE html>
-<html>
-<head>
-  <title>Court Appearance Report - ${hierarchicalDisplay}</title>
-  <style>
-    @page {
-      size: A4 landscape;
-      margin: 0.5in;
-    }
-    body {
-      font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 15px;
-      font-size: 10px;
-    }
-    .watermark {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%) rotate(-45deg);
-      font-size: 80px;
-      color: rgba(255, 0, 0, 0.1);
-      font-weight: bold;
-      z-index: -1;
-      pointer-events: none;
-    }
-    .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #4a6741; padding-bottom: 10px; }
-    .header h1 { margin: 5px 0; font-size: 16px; }
-    .header h2 { margin: 5px 0; font-size: 14px; }
-    .header h3 { margin: 5px 0; font-size: 12px; }
-    .header h4 { margin: 5px 0; font-size: 11px; color: #4a6741; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 15px; border: 1px solid #000; }
-    th { background-color: #4a6741; color: white; padding: 6px; border: 1px solid #000; text-align: center; font-weight: bold; }
-    td { padding: 4px; border: 1px solid #000; font-size: 9px; }
-    .number { text-align: right; }
-    .employee-name { font-weight: bold; }
-    .total-row { background-color: #f0f0f0; font-weight: bold; }
-    .department-note { font-style: italic; color: #4a6741; text-align: center; margin-top: 5px; }
-  </style>
-</head>
-<body>
-  <div class="watermark">CONFIDENTIAL</div>
-  <div class="header">
-    <h1>NATIONAL IRRIGATION ADMINISTRATION</h1>
-    <h2>COURT APPEARANCE REPORT</h2>
-    <h3>As of ${currentDate}</h3>
-    <h4>${hierarchicalDisplay}</h4>
-    <div class="department-note">LEGAL SERVICES PERSONNEL ONLY</div>
-  </div>
-  <table>
-    <thead>
-      <tr>
-        <th>Employee Number</th>
-        <th>Full Name</th>
-        <th>Position Title</th>
-        <th>Department</th>
-        <th>Division</th>
-        <th>Region</th>
-        <th>No. of Court Appearances</th>
-        <th>Court Appearance Amount</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${printData.map(row => `
-        <tr>
-          <td>${row.employeeNumber || ''}</td>
-          <td class="employee-name">${row.employeeFullName || ''}</td>
-          <td>${row.positionTitle || ''}</td>
-          <td>${row.department || ''}</td>
-          <td>${row.division || ''}</td>
-          <td>${row.region || ''}</td>
-          <td class="number">${row.noOfCourtAppearance || 0}</td>
-          <td class="number">₱${(row.courtAppearanceAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-        </tr>
-      `).join('')}
-      <tr class="total-row">
-        <td colspan="7" style="text-align: right; font-weight: bold;">GRAND TOTAL:</td>
-        <td class="number" style="font-weight: bold;">₱${grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-      </tr>
-    </tbody>
-  </table>
-  <div style="text-align: center; margin-top: 20px;">
-    <p><strong>Total Records: ${printData.length}</strong></p>
-    <p style="font-style: italic;">Generated on: ${new Date().toLocaleString()}</p>
-    <p style="font-style: italic; color: #4a6741;">This report shows court appearances for LEGAL SERVICES personnel only.</p>
-  </div>
-</body>
-</html>`;
-  }, [activeRegion]);
-
-  const handlePrintPreview = useCallback(async () => {
+  // Export court appearance PDF - server-side Muhammara
+  const handleExportPDF = useCallback(async () => {
     try {
-      const content = generatePrintContent(tableData);
-      if (content) {
-        setPrintPreviewDialog({
-          open: true,
-          content: content,
-          data: tableData
-        });
+      if (!tableData || tableData.length === 0) {
+        toast.error("No data available to export");
+        return;
       }
+
+      setLoading(true);
+      toast.loading("Generating PDF...", { id: 'pdf-export' });
+
+      // Build filters based on current data context
+      const filters = {};
+      if (activeRegion?.name || activeRegion?.regionName) {
+        filters.region = activeRegion.name || activeRegion.regionName;
+      }
+
+      const response = await api.post(
+        '/court-appearances/export-pdf',
+        { filters },
+        { responseType: 'blob' }
+      );
+
+      // Create download link
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `court-appearance-report-${Date.now()}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast.success("PDF exported successfully", { id: 'pdf-export' });
+      setExportMenuAnchor(null);
     } catch (error) {
-      console.error('Error generating print preview:', error);
-      toast.error("Failed to generate print preview");
+      console.error('PDF export error:', error);
+      toast.error(error.response?.data?.message || "Failed to export PDF", { id: 'pdf-export' });
+    } finally {
+      setLoading(false);
     }
-  }, [tableData, generatePrintContent]);
-
-  const handleActualPrint = useCallback(() => {
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(printPreviewDialog.content);
-    printWindow.document.close();
-
-    printWindow.onload = () => {
-      setTimeout(() => {
-        printWindow.print();
-        printWindow.close();
-      }, 500);
-    };
-
-    setPrintPreviewDialog({ open: false, content: '', data: [] });
-  }, [printPreviewDialog.content]);
+  }, [tableData, activeRegion]);
 
   // Initial data fetch
   useEffect(() => {
@@ -751,66 +655,13 @@ const EmployeeCourtAppearancePage = () => {
           </ListItemIcon>
           <ListItemText>Export to CSV</ListItemText>
         </MenuItem>
-        <MenuItem onClick={handlePrintPreview}>
+        <MenuItem onClick={handleExportPDF} disabled={loading}>
           <ListItemIcon>
             <PrintIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText>Print Preview</ListItemText>
+          <ListItemText>Export to PDF</ListItemText>
         </MenuItem>
       </Menu>
-
-      {/* Print Preview Dialog */}
-      <Dialog
-        open={printPreviewDialog.open}
-        onClose={() => setPrintPreviewDialog({ open: false, content: '', data: [] })}
-        maxWidth="lg"
-        fullWidth
-        slotProps={{
-          paper: {
-            sx: { height: '90vh' }
-          }
-        }}
-      >
-        <DialogTitle>
-          <Box display="flex" justifyContent="space-between" alignItems="center">
-            <Typography variant="h6">
-              Print Preview - Court Appearance Report
-              <Typography variant="caption" display="block" color="text.secondary">
-                {getHierarchicalDisplay()} | LEGAL SERVICES Personnel Only
-              </Typography>
-            </Typography>
-            <Box>
-              <Button
-                onClick={handleActualPrint}
-                variant="contained"
-                color="primary"
-                startIcon={<PrintIcon />}
-                sx={{ mr: 1 }}
-              >
-                Print
-              </Button>
-              <Button
-                onClick={() => setPrintPreviewDialog({ open: false, content: '', data: [] })}
-                variant="outlined"
-              >
-                Close
-              </Button>
-            </Box>
-          </Box>
-        </DialogTitle>
-        <DialogContent sx={{ p: 0 }}>
-          <Box
-            component="iframe"
-            srcDoc={printPreviewDialog.content}
-            sx={{
-              width: '100%',
-              height: '100%',
-              border: 'none',
-              minHeight: '70vh'
-            }}
-          />
-        </DialogContent>
-      </Dialog>
 
       {/* Validation Errors Alert */}
       {Object.keys(validationErrors).length > 0 && (
@@ -840,3 +691,10 @@ const EmployeeCourtAppearancePage = () => {
 };
 
 export default EmployeeCourtAppearancePage;
+ExportPDF} disabled={loading}>
+          <ListItemIcon>
+            <PrintIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Export to PDF</ListItemText>
+        </MenuItem>
+      </Menu

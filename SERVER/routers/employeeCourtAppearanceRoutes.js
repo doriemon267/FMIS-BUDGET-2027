@@ -5,6 +5,7 @@ const {
   deleteAppearance,
   getSumOfCourtAppearanceAmount,
 } = require("../controllers/employeeCourtAppearanceController");
+const { exportCourtAppearancePDF } = require("../controllers/courtAppearancePDFController");
 const Router = require("express").Router;
 const checkToken = require('../middleware/check_token');
 const check_token_dev = require("../middleware/check_token_dev");
@@ -14,6 +15,8 @@ const tokenMiddleware = IS_PRODUCTION ? check_token_prod : check_token_dev;
 
 // Import old middleware for consistency with other allowance routes
 const checkDueDate = require("../middleware/checkDueDate");
+const hierarchicalAccessControl = require("../middleware/hierarchical-access-control");
+const logUserActivity = require("../middleware/logUserActivity");
 const appearanceRouter = Router();
 // Apply authentication middleware to all routes in this router
 appearanceRouter.use(tokenMiddleware);
@@ -21,6 +24,14 @@ appearanceRouter.use(tokenMiddleware);
 // GET routes without authentication (like other allowance routes)
 appearanceRouter.get("/court-appearances", getAllAppearances);
 appearanceRouter.get("/court-appearances/sum", getSumOfCourtAppearanceAmount);
+
+// PDF Export route with hierarchical access control
+appearanceRouter.post("/court-appearances/export-pdf", 
+  hierarchicalAccessControl, 
+  logUserActivity("Export Court Appearance PDF"),
+  exportCourtAppearancePDF
+);
+
 // POST/PUT/DELETE routes with due date protection only (like other allowance routes)
 appearanceRouter.post("/court-appearances", checkDueDate, addAppearance);
 appearanceRouter.put("/court-appearances/:id", checkDueDate, editAppearance);
