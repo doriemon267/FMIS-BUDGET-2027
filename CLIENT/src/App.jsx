@@ -92,7 +92,7 @@ const App = () => {
           }
         />
         <Route path="/proposal" element={<Proposals />} />
-        <Route
+        {/* <Route
           path="/myProposals"
           element={
             <ProtectedRoute
@@ -102,7 +102,7 @@ const App = () => {
               <ProposalPage />
             </ProtectedRoute>
           }
-        />
+        /> */}
         <Route
           path="/employee"
           element={

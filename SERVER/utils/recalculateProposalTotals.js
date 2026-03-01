@@ -37,6 +37,17 @@ async function aggregateSum(model, match, amountExpr) {
   return res?.[0]?.total || 0;
 }
 
+function toNumberExpr(fieldPath) {
+  return {
+    $convert: {
+      input: { $ifNull: [fieldPath, 0] },
+      to: 'double',
+      onError: 0,
+      onNull: 0
+    }
+  };
+}
+
 // Build a resilient organizational match used when module rows lack proposalId
 function buildOrgMatch(filterKeys) {
   const {
@@ -124,9 +135,56 @@ async function computeModuleTotals(filterKeys, proposalId) {
 
   // Totals by module
   const incomeTotal = await tryMatch(Income, { $sum: { $toDouble: { $ifNull: ["$amount", 0] } } });
+  const personnelComponentTotalExpr = {
+    $add: [
+      toNumberExpr("$annualSalary"),
+      toNumberExpr("$RATA"),
+      toNumberExpr("$PERA"),
+      toNumberExpr("$uniformALLOWANCE"),
+      toNumberExpr("$productivityIncentive"),
+      toNumberExpr("$medical"),
+      toNumberExpr("$meal"),
+      toNumberExpr("$cashGift"),
+      toNumberExpr("$midyearBonus"),
+      toNumberExpr("$yearEndBonus"),
+      toNumberExpr("$gsisPremium"),
+      toNumberExpr("$providentFund"),
+      toNumberExpr("$philhealthPremium"),
+      toNumberExpr("$pagibigPremium"),
+      toNumberExpr("$employeeCompensation"),
+      toNumberExpr("$subsistenceAllowanceMDS"),
+      toNumberExpr("$subsistenceAllowanceST"),
+      toNumberExpr("$overtimePay"),
+      toNumberExpr("$loyaltyAward"),
+      toNumberExpr("$earnedLeaves"),
+      toNumberExpr("$retirementBenefits"),
+      toNumberExpr("$terminalLeave"),
+      toNumberExpr("$courtAppearance"),
+      toNumberExpr("$hazardPay"),
+      toNumberExpr("$subsistenceAllowance"),
+      toNumberExpr("$additionalMedical"),
+      toNumberExpr("$honoraria"),
+      toNumberExpr("$childrenAllowance")
+    ]
+  };
+  const personnelLegacyTotalExpr = {
+    $convert: {
+      input: { $ifNull: ["$total", { $ifNull: ["$Total", 0] }] },
+      to: 'double',
+      onError: 0,
+      onNull: 0
+    }
+  };
+  const personnelLineTotalExpr = {
+    $cond: [
+      { $gt: [personnelComponentTotalExpr, 0] },
+      personnelComponentTotalExpr,
+      personnelLegacyTotalExpr
+    ]
+  };
   // CHANGED: psTotal now INCLUDES all PersonnelServices, including those marked as charged-to-income
   // We handle the charged-to-income deduction separately below
-  const psTotal = await tryMatchExcludingChargedToIncome(PersonnelServices, { $sum: { $toDouble: { $ifNull: ["$total", { $ifNull: ["$Total", 0] }] } } });
+  const psTotal = await tryMatchExcludingChargedToIncome(PersonnelServices, { $sum: personnelLineTotalExpr });
   const mooeAmountTotal = await tryMatch(MOOE, { $sum: { $toDouble: { $ifNull: ["$amount", 0] } } });
   const coAmountTotal = await tryMatch(CapitalOutlay, { $sum: { $toDouble: { $ifNull: ["$cost", { $ifNull: ["$total", 0] }] } } });
 
@@ -164,32 +222,16 @@ async function computeModuleTotals(filterKeys, proposalId) {
   const mooeIncomeTotal = await tryMatch(MOOE, { $sum: { $toDouble: { $ifNull: ["$income", 0] } } });
   const coIncomeTotal = await tryMatch(CapitalOutlay, { $sum: { $toDouble: { $ifNull: ["$income", 0] } } });
 
-  // ADJUSTED: Calculate PersonnelServices subsidy to MATCH Budgetary Support PS logic
-  // Logic: Subsidy for PS (B.1.1) = SUM of Total for personnel NOT charged to income.
-  // Charged-to-income amounts are handled separately as corporate income.
+  // ADJUSTED: Calculate PersonnelServices subsidy from actual personnel components.
+  // Include all personnel items in subsidy projection to align with Personnel Services totals.
   let psSubsidyTotal = 0;
   const psMatchBase = proposalId
     ? { proposalId: new mongoose.Types.ObjectId(proposalId) }
     : { ...orgMatch };
-  const psSubsidyMatch = {
-    ...psMatchBase,
-    chargedToIncomeEligible: { $ne: true }, // mirror calculateBudgetarySupport personnelQueryConditions
-  };
+  const psSubsidyMatch = { ...psMatchBase };
 
   const psSubsidyExpr = {
-    $sum: {
-      $toDouble: {
-        $ifNull: [
-          "$Total",
-          {
-            $ifNull: [
-              "$total",
-              { $ifNull: ["$annualSalary", 0] }
-            ]
-          }
-        ]
-      }
-    }
+    $sum: personnelLineTotalExpr
   };
 
   psSubsidyTotal = await aggregateSum(PersonnelServices, psSubsidyMatch, psSubsidyExpr);
@@ -324,7 +366,7 @@ async function persistProposalTotals(proposal) {
   // Keep Corporate Income amount for reference (not used in projectedCorporateIncome)
   const corporateIncomeTotal = incomeTotal || 0;
   
-  const adjustedPsTotal = (psTotal || 0) - (chargedToIncomeTotal || 0); // psTotal minus the amounts moved to income
+  const adjustedPsTotal = (psTotal || 0);
   // NOTE: psSubsidyTotal now correctly calculates subsidy based on charged-to-income status
   const adjustedSubsidyTotal = ((psSubsidyTotal || 0) + (mooeSubsidyTotal || 0) + (coSubsidyTotal || 0));
 

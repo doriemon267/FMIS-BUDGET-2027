@@ -6,6 +6,47 @@ const { getActiveSettingsWithCompensation } = require("../utils/settingsUtils");
 const { recalculateAndSaveProposalTotals } = require("../utils/recalculateProposalTotals");
 const { ensurePersonnelRecordEditable, findScopedPersonnelService } = require("../utils/employeeBenefitSyncUtils");
 
+/**
+ * Helper function: Calculate PersonnelServices Total correctly
+ * Sum all numeric benefit/allowance fields to get the total compensation
+ */
+function calculatePersonnelTotal(personnel) {
+  const numericFields = [
+    'annualSalary',
+    'RATA',
+    'PERA',
+    'uniformALLOWANCE',
+    'productivityIncentive',
+    'medical',
+    'meal',
+    'cashGift',
+    'midyearBonus',
+    'yearEndBonus',
+    'gsisPremium',
+    'providentFund',
+    'philhealthPremium',
+    'pagibigPremium',
+    'employeeCompensation',
+    'subsistenceAllowanceMDS',
+    'subsistenceAllowanceST',
+    'overtimePay',
+    'loyaltyAward',
+    'earnedLeaves',
+    'retirementBenefits',
+    'terminalLeave',
+    'courtAppearance',
+    'hazardPay',
+    'subsistenceAllowance',
+    'additionalMedical',
+    'honoraria',
+    'childrenAllowance'
+  ];
+  return numericFields.reduce(
+    (acc, field) => acc + (Number(personnel[field]) || 0),
+    0
+  );
+}
+
 /** Match region flexibly: DB may store "CENTRAL OFFICE" or "CENTRAL-OFFICE" */
 function regionMatch(regionValue) {
   if (!regionValue || typeof regionValue !== "string") return null;
@@ -75,6 +116,10 @@ exports.createSubsistenceAllowance = async (req, res) => {
     );
     if (personnel) {
       personnel.subsistenceAllowance = amount;
+      // CRITICAL FIX: Recalculate Total after adding subsistence allowance
+      personnel.Total = calculatePersonnelTotal(personnel);
+      // CRITICAL FIX: Recalculate Total after updating subsistence allowance
+      personnel.Total = calculatePersonnelTotal(personnel);
       await personnel.save();
       if (personnel.proposalId) {
         try {
@@ -193,6 +238,8 @@ exports.bulkCreateSubsistenceAllowance = async (req, res) => {
 
         if (personnel) {
           personnel.subsistenceAllowance = amount;
+          // CRITICAL FIX: Recalculate Total after adding subsistence allowance
+          personnel.Total = calculatePersonnelTotal(personnel);
           await personnel.save();
           if (personnel.proposalId) {
             try {

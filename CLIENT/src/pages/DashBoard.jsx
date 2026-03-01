@@ -846,7 +846,7 @@ const HomePage = () => {
                 </Grid>
               )}
 
-              {isPreparer && (
+              {/* {isPreparer && (
                 <Grid item xs={12} sm={6} md={4}>
                   <ActionCard
                     title='My Proposals'
@@ -857,7 +857,7 @@ const HomePage = () => {
                     buttonText='View Proposals'
                   />
                 </Grid>
-              )}
+              )} */}
 
               {isPreparer && (
                 <Grid item xs={12} sm={6} md={4}>

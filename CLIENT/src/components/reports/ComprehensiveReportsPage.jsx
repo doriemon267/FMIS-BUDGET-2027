@@ -73,8 +73,8 @@ const pdfTheme = {
     rowOdd: '#f8f9fa',
     success: '#28a745',
   },
-  fontSizes: { xs: 8, s: 10, m: 12, l: 16, xl: 20 },
-  spacing: { xs: 4, s: 8, m: 12, l: 16, xl: 20 },
+  fontSizes: { xs: 7, s: 8, m: 10, l: 14, xl: 18 },
+  spacing: { xs: 3, s: 6, m: 10, l: 14, xl: 18 },
 };
 
 Font.register({
@@ -424,7 +424,7 @@ const PDFReport = ({ reportData, filters }) => {
 
   return (
     <Document>
-      <Page size="A4" style={pdfStyles.page}>
+      <Page size={{ width: 595, height: 842 }} style={pdfStyles.page}>
         <ReportHeader title="Budget Summary Report" reportData={reportData} />
         <Text style={pdfStyles.sectionTitle}>Overall Summary</Text>
         <View style={pdfStyles.summaryBox}>
@@ -469,30 +469,30 @@ const PDFReport = ({ reportData, filters }) => {
             <Text style={pdfStyles.sectionTitle}>Section Breakdown</Text>
             <View style={pdfStyles.table}>
               <View style={pdfStyles.tableHeader}>
-                <Text style={{ width: '15%', padding: pdfTheme.spacing.xs }}>Code</Text>
-                <Text style={{ width: '45%', padding: pdfTheme.spacing.xs }}>Section Name</Text>
-                <Text style={{ width: '15%', padding: pdfTheme.spacing.xs, textAlign: 'right' }}>Projected Corporate Income</Text>
-                <Text style={{ width: '15%', padding: pdfTheme.spacing.xs, textAlign: 'right' }}>Projected Subsidy</Text>
-                <Text style={{ width: '10%', padding: pdfTheme.spacing.xs, textAlign: 'right' }}>Proposed Budget</Text>
+                <Text style={{ width: '12%', padding: pdfTheme.spacing.xs, fontSize: pdfTheme.fontSizes.xs }}>Code</Text>
+                <Text style={{ width: '35%', padding: pdfTheme.spacing.xs, fontSize: pdfTheme.fontSizes.xs }}>Section Name</Text>
+                <Text style={{ width: '18%', padding: pdfTheme.spacing.xs, textAlign: 'right', fontSize: pdfTheme.fontSizes.xs }}>Projected Income</Text>
+                <Text style={{ width: '18%', padding: pdfTheme.spacing.xs, textAlign: 'right', fontSize: pdfTheme.fontSizes.xs }}>Projected Subsidy</Text>
+                <Text style={{ width: '17%', padding: pdfTheme.spacing.xs, textAlign: 'right', fontSize: pdfTheme.fontSizes.xs }}>Proposed Budget</Text>
               </View>
               {overallTotals.sections.map((section, idx) => (
                 <View key={idx} style={[pdfStyles.tableRow, idx % 2 !== 0 && pdfStyles.tableRowOdd]}>
-                  <Text style={[pdfStyles.tableCell, { width: '15%' }]}>{section.code}</Text>
-                  <Text style={[pdfStyles.tableCell, { width: '45%' }]}>{truncateText(section.name, 35)}</Text>
-                  <Text style={[pdfStyles.tableCell, { width: '15%', textAlign: 'right' }]}>{formatPDFCurrency(section.income)}</Text>
-                  <Text style={[pdfStyles.tableCell, { width: '15%', textAlign: 'right' }]}>{formatPDFCurrency(section.subsidy)}</Text>
-                  <Text style={[pdfStyles.tableCell, { width: '10%', textAlign: 'right' }]}>{formatPDFCurrency(section.total)}</Text>
+                  <Text style={[pdfStyles.tableCell, { width: '12%' }]}>{section.code}</Text>
+                  <Text style={[pdfStyles.tableCell, { width: '35%' }]}>{truncateText(section.name, 35)}</Text>
+                  <Text style={[pdfStyles.tableCell, { width: '18%', textAlign: 'right' }]}>{formatPDFCurrency(section.income)}</Text>
+                  <Text style={[pdfStyles.tableCell, { width: '18%', textAlign: 'right' }]}>{formatPDFCurrency(section.subsidy)}</Text>
+                  <Text style={[pdfStyles.tableCell, { width: '17%', textAlign: 'right' }]}>{formatPDFCurrency(section.total)}</Text>
                 </View>
               ))}
               <View style={[pdfStyles.tableRow, pdfStyles.totalRow]}>
-                <Text style={[pdfStyles.tableCell, { width: '60%', textAlign: 'right', fontWeight: 'bold' }]}>TOTAL:</Text>
-                <Text style={[pdfStyles.tableCell, { width: '15%', textAlign: 'right', fontWeight: 'bold', color: pdfTheme.colors.success }]}>
+                <Text style={[pdfStyles.tableCell, { width: '47%', textAlign: 'right', fontWeight: 'bold' }]}>TOTAL:</Text>
+                <Text style={[pdfStyles.tableCell, { width: '18%', textAlign: 'right', fontWeight: 'bold', color: pdfTheme.colors.success }]}>
                   {formatPDFCurrency(overallTotals.totalIncome)}
                 </Text>
-                <Text style={[pdfStyles.tableCell, { width: '15%', textAlign: 'right', fontWeight: 'bold', color: pdfTheme.colors.success }]}>
+                <Text style={[pdfStyles.tableCell, { width: '18%', textAlign: 'right', fontWeight: 'bold', color: pdfTheme.colors.success }]}>
                   {formatPDFCurrency(overallTotals.totalSubsidy)}
                 </Text>
-                <Text style={[pdfStyles.tableCell, { width: '10%', textAlign: 'right', fontWeight: 'bold', color: pdfTheme.colors.success }]}>
+                <Text style={[pdfStyles.tableCell, { width: '17%', textAlign: 'right', fontWeight: 'bold', color: pdfTheme.colors.success }]}>
                   {formatPDFCurrency(overallTotals.totalAmount)}
                 </Text>
               </View>
@@ -502,7 +502,7 @@ const PDFReport = ({ reportData, filters }) => {
         <ReportFooter pageNumber={1} totalPages={totalPages} filters={filters} />
       </Page>
       {sectionPages.map((pageSections, pageIndex) => (
-        <Page key={pageIndex + 1} size="A4" style={pdfStyles.page}>
+        <Page key={pageIndex + 1} size={{ width: 595, height: 842 }} style={pdfStyles.page}>
           <ReportHeader title="Report Details" reportData={reportData} />
           {pageSections.map((section) => {
             let headers, widths, rows;

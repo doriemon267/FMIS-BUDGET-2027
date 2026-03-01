@@ -5,6 +5,48 @@ const PersonnelService = require('../models/PersonnelServices');  // :contentRef
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { ensurePersonnelRecordEditable } = require('../utils/employeeBenefitSyncUtils');
 const PersonnelServices = PersonnelService;
+
+/**
+ * Helper function: Calculate PersonnelServices Total correctly
+ * Sum all numeric benefit/allowance fields to get the total compensation
+ */
+function calculatePersonnelTotal(personnel) {
+  const numericFields = [
+    'annualSalary',
+    'RATA',
+    'PERA',
+    'uniformALLOWANCE',
+    'productivityIncentive',
+    'medical',
+    'meal',
+    'cashGift',
+    'midyearBonus',
+    'yearEndBonus',
+    'gsisPremium',
+    'providentFund',
+    'philhealthPremium',
+    'pagibigPremium',
+    'employeeCompensation',
+    'subsistenceAllowanceMDS',
+    'subsistenceAllowanceST',
+    'overtimePay',
+    'loyaltyAward',
+    'earnedLeaves',
+    'retirementBenefits',
+    'terminalLeave',
+    'courtAppearance',
+    'hazardPay',
+    'subsistenceAllowance',
+    'additionalMedical',
+    'honoraria',
+    'childrenAllowance'
+  ];
+  return numericFields.reduce(
+    (acc, field) => acc + (Number(personnel[field]) || 0),
+    0
+  );
+}
+
 /**
  * Helper: compute combined ST (sum of all ST entries) for an employee in a fiscal year
  */
@@ -90,6 +132,10 @@ exports.createSubsistenceST = async (req, res) => {
     );
     if (person) {
       person.subsistenceAllowanceST = combinedST;
+      // CRITICAL FIX: Recalculate Total after updating subsistence allowance ST
+      person.Total = calculatePersonnelTotal(person);
+      // CRITICAL FIX: Recalculate Total after updating subsistence allowance ST
+      person.Total = calculatePersonnelTotal(person);
       await person.save();
       
       // Trigger recalculation of proposal totals

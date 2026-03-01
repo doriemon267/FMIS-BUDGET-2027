@@ -5,6 +5,48 @@ const CapitalOutlay = require('../models/CapitalOutlay');
 const mooeProposals = require('../models/mooeProposals');
 const IAsOMCost = require('../models/IAsOMCost');
 const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+
+function calculatePersonnelLineTotal(item) {
+  const numericFields = [
+    'annualSalary',
+    'RATA',
+    'PERA',
+    'uniformALLOWANCE',
+    'productivityIncentive',
+    'medical',
+    'meal',
+    'cashGift',
+    'midyearBonus',
+    'yearEndBonus',
+    'gsisPremium',
+    'providentFund',
+    'philhealthPremium',
+    'pagibigPremium',
+    'employeeCompensation',
+    'subsistenceAllowanceMDS',
+    'subsistenceAllowanceST',
+    'overtimePay',
+    'loyaltyAward',
+    'earnedLeaves',
+    'retirementBenefits',
+    'terminalLeave',
+    'courtAppearance',
+    'hazardPay',
+    'subsistenceAllowance',
+    'additionalMedical',
+    'honoraria',
+    'childrenAllowance'
+  ];
+
+  const computedTotal = numericFields.reduce(
+    (sum, field) => sum + (Number(item?.[field]) || 0),
+    0
+  );
+
+  if (computedTotal > 0) return computedTotal;
+  return Number(item?.total) || Number(item?.Total) || 0;
+}
+
 // Get all budgetary support entries
 const getAllBudgetarySupport = async (req, res) => {
   try {
@@ -385,7 +427,6 @@ const calculateBudgetarySupport = async (req, res) => {
     // (Same query logic as buildComprehensiveReportData PS query - no budgetType, no submission status)
     const personnelQueryConditions = {};
     if (fiscalYear) personnelQueryConditions.fiscalYear = String(fiscalYear);
-    personnelQueryConditions.chargedToIncomeEligible = false;
 
     // Region/scope: mirror Comprehensive Reports - support regions or region from query, then hierarchical
     const regionsParam = req.query.regions ?? req.query.region;
@@ -439,12 +480,8 @@ const calculateBudgetarySupport = async (req, res) => {
 
       const { roundTo2Decimals } = require('../utils/roundCurrency');
       const personnelTotal = roundTo2Decimals(personnelServices.reduce((sum, item) => {
-        // CRITICAL: Only count PS that are NOT charged to income
-        if (item.chargedToIncomeEligible === true) {
-          totalChargedToIncome += (Number(item.Total) || 0);
-          return sum; // Skip - this is charged to income
-        }
-        return sum + (Number(item.Total) || Number(item.annualSalary) || Number(item.total) || 0);
+        totalChargedToIncome += (Number(item.chargedToIncomeAmount) || 0);
+        return sum + calculatePersonnelLineTotal(item);
       }, 0));
 
       if (personnelTotal > 0) {

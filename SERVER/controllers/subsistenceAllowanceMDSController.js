@@ -4,6 +4,47 @@ const Settings = require("../models/Settings");
 const PersonnelServices = require('../models/PersonnelServices');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
 const { ensurePersonnelRecordEditable } = require('../utils/employeeBenefitSyncUtils');
+
+/**
+ * Helper function: Calculate PersonnelServices Total correctly
+ * Sum all numeric benefit/allowance fields to get the total compensation
+ */
+function calculatePersonnelTotal(personnel) {
+  const numericFields = [
+    'annualSalary',
+    'RATA',
+    'PERA',
+    'uniformALLOWANCE',
+    'productivityIncentive',
+    'medical',
+    'meal',
+    'cashGift',
+    'midyearBonus',
+    'yearEndBonus',
+    'gsisPremium',
+    'providentFund',
+    'philhealthPremium',
+    'pagibigPremium',
+    'employeeCompensation',
+    'subsistenceAllowanceMDS',
+    'subsistenceAllowanceST',
+    'overtimePay',
+    'loyaltyAward',
+    'earnedLeaves',
+    'retirementBenefits',
+    'terminalLeave',
+    'courtAppearance',
+    'hazardPay',
+    'subsistenceAllowance',
+    'additionalMedical',
+    'honoraria',
+    'childrenAllowance'
+  ];
+  return numericFields.reduce(
+    (acc, field) => acc + (Number(personnel[field]) || 0),
+    0
+  );
+}
 /**
  * Create a new Subsistence Allowance MDS record,
  * then immediately update the corresponding PersonnelServices entry.
@@ -64,6 +105,8 @@ exports.createSubsistenceAllowance = async (req, res) => {
     );
     if (personnel) {
       personnel.subsistenceAllowanceMDS = amount;
+      // CRITICAL FIX: Recalculate Total after adding subsistence allowance
+      personnel.Total = calculatePersonnelTotal(personnel);
       await personnel.save();
       
       // Trigger recalculation of proposal totals
@@ -232,6 +275,8 @@ exports.updateSubsistenceAllowance = async (req, res) => {
     );
     if (personnel) {
       personnel.subsistenceAllowanceMDS = amount;
+      // CRITICAL FIX: Recalculate Total after updating subsistence allowance
+      personnel.Total = calculatePersonnelTotal(personnel);
       await personnel.save();
       
       // Trigger recalculation of proposal totals
@@ -275,10 +320,8 @@ exports.deleteSubsistenceAllowance = async (req, res) => {
     );
     if (personnel) {
       personnel.subsistenceAllowanceMDS = 0;
-      personnel.Total = Object.values(personnel.toObject()).reduce(
-        (sum, v) => (typeof v === "number" ? sum + v : sum),
-        0
-      );
+      // CRITICAL FIX: Use proper calculation instead of summing all numeric fields
+      personnel.Total = calculatePersonnelTotal(personnel);
       await personnel.save();
       
       // Trigger recalculation of proposal totals

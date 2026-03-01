@@ -55,6 +55,49 @@ const toNumber = (value) => {
   return 0;
 };
 
+const computePersonnelCanonicalTotal = (item) => {
+  if (!item) return 0;
+
+  const numericFields = [
+    'annualSalary',
+    'RATA',
+    'PERA',
+    'uniformALLOWANCE',
+    'productivityIncentive',
+    'medical',
+    'meal',
+    'cashGift',
+    'midyearBonus',
+    'yearEndBonus',
+    'gsisPremium',
+    'providentFund',
+    'philhealthPremium',
+    'pagibigPremium',
+    'employeeCompensation',
+    'subsistenceAllowanceMDS',
+    'subsistenceAllowanceST',
+    'overtimePay',
+    'loyaltyAward',
+    'earnedLeaves',
+    'retirementBenefits',
+    'terminalLeave',
+    'courtAppearance',
+    'hazardPay',
+    'subsistenceAllowance',
+    'additionalMedical',
+    'honoraria',
+    'childrenAllowance'
+  ];
+
+  const computedTotal = numericFields.reduce(
+    (sum, field) => sum + toNumber(item?.[field]),
+    0
+  );
+
+  if (computedTotal > 0) return computedTotal;
+  return toNumber(item?.Total ?? item?.total ?? item?.amount ?? item?.annualSalary ?? item?.TotalAmount);
+};
+
 const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrandTotal = 0, groupedItems = {}, onChargedToIncomeChange = null, onNonChargedPersonnelServicesChange = null, onBudgetDeficitChange = null }) => {
   const [amount, setAmount] = useState(0);
   const [exportMenuAnchor, setExportMenuAnchor] = useState(null);
@@ -238,14 +281,15 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
   // Debug props removed for cleaner console
   // Fetch calculated budgetary support from the new endpoint
   const { data: calculatedBudgetarySupport, isLoading: isLoadingCalculated, error: errorCalculated } = useQuery({
-    queryKey: ['calculated-budgetary-support', fiscalYear, budgetType], // Removed regionName from queryKey
+    queryKey: ['calculated-budgetary-support', fiscalYear, budgetType, proposalId || 'all'],
     queryFn: async () => {
       if (!hasValidParams) return null;
       
       // Prepare parameters - let backend handle hierarchical filtering
       const params = { 
         fiscalYear: Number(fiscalYear), 
-        budgetType: budgetType 
+        budgetType: budgetType,
+        ...(proposalId ? { proposalId } : {})
       };
       
       // Don't send region manually - let hierarchical access control handle it
@@ -631,18 +675,17 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
     let newAmount = 0;
     let source = 'none';
 
-    // PRIORITY: Always prefer freshly computed values from actual data
-    // This ensures that BudgetarySupportTable reflects the true state of PersonnelServices + MOOE + Capital Outlay
-    if (calculatedBudgetarySupport?.totalSubsidy) {
+    // PRIORITY: For proposal-scoped view, use proposal totals endpoint first.
+    // This endpoint triggers server-side recalculation and guarantees proposal-level accuracy.
+    if (proposalId && proposalData?.projectedSubsidy != null) {
+      newAmount = Number(proposalData.projectedSubsidy);
+      source = 'PROPOSAL (proposalData.projectedSubsidy)';
+    } else if (calculatedBudgetarySupport?.totalSubsidy) {
       newAmount = Number(calculatedBudgetarySupport.totalSubsidy);
       source = 'COMPUTED (calculatedBudgetarySupport.totalSubsidy)';
     } else if (calculatedBudgetarySupport?.amount) {
       newAmount = Number(calculatedBudgetarySupport.amount);
       source = 'COMPUTED (calculatedBudgetarySupport.amount)';
-    } else if (proposalId && proposalData?.projectedSubsidy != null) {
-      // FALLBACK: Use cached proposal total only when computed values are unavailable
-      newAmount = Number(proposalData.projectedSubsidy);
-      source = 'CACHED (proposalData.projectedSubsidy)';
     } else if (data?.amount) {
       newAmount = Number(data.amount);
       source = 'LEGACY (data.amount)';
@@ -954,7 +997,7 @@ const BudgetarySupportTable = ({ fiscalYear, budgetType, proposalId, incomeGrand
 
       personalServices = uniquePersonnel.reduce((sum, p) => {
         if (!p) return sum;
-        return sum + toNumber(p.Total ?? p.total ?? p.amount ?? p.annualSalary ?? p.TotalAmount);
+        return sum + computePersonnelCanonicalTotal(p);
       }, 0);
 
     }
