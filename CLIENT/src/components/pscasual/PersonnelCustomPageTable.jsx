@@ -1049,16 +1049,48 @@ const PSCasualCustomPageTable = ({
           Export to Excel
         </MenuItem>
         <MenuItem onClick={async () => {
-          const printData = await handleExportAllData();
-          if (printData && printData.length > 0) {
-            await handlePrintPreview(printData);
-          } else {
-            toast.error("No data available for printing");
+          try {
+            setLoading(true);
+            handleExportMenuClose();
+
+            // Call server-side PDF generation endpoint
+            const exportParams = {
+              fiscalYear: fiscalYear,
+              region: activeRegion?.name || activeRegion?.regionName,
+              office: headerConfig?.office || '',
+              division: headerConfig?.division || '',
+            };
+
+            const response = await api.post(
+              '/api/personnel-services-pdf/export-casual',
+              exportParams,
+              {
+                responseType: 'blob',
+                timeout: 60000, // 60 second timeout for large datasets
+              }
+            );
+
+            // Create download link
+            const blob = new Blob([response.data], { type: 'application/pdf' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `Personnel_Casual_FY${fiscalYear || 'N_A'}_${activeRegion?.name || 'Region'}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+
+            toast.success('PDF report generated successfully');
+          } catch (error) {
+            console.error('PDF export error:', error);
+            toast.error(error.response?.data?.message || 'Failed to generate PDF report');
+          } finally {
+            setLoading(false);
           }
-          handleExportMenuClose();
         }}>
           <PrintIcon sx={{ mr: 1 }} />
-          Print Report
+          Export to PDF
         </MenuItem>
       </Menu>
 

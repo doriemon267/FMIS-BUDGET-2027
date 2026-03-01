@@ -1103,28 +1103,48 @@ const PSPCustomPageTable = ({
         <MenuItem onClick={async () => {
           try {
             setLoading(true);
-            // Always fetch ALL data for printing, don't use current table data which might be paginated
-            const printData = await handleExportAllData();
-            // console.log('Fetched print data:', printData?.length, 'records'); // Debug log
+            handleExportMenuClose();
 
-            if (printData && printData.length > 0) {
-              await handlePrintPreview(printData);
-              toast.success(`Generated preview for ${printData.length} records`);
-            } else {
-              toast.warning("No data available to print");
-            }
+            // Call server-side PDF generation endpoint
+            const exportParams = {
+              fiscalYear: fiscalYear,
+              region: activeRegion?.name || activeRegion?.regionName,
+              office: headerConfig?.office || '',
+              responsibilityCenter: headerConfig?.responsibilityCenter || '',
+            };
+
+            const response = await api.post(
+              '/api/personnel-services-pdf/export-permanent',
+              exportParams,
+              {
+                responseType: 'blob',
+                timeout: 60000, // 60 second timeout for large datasets
+              }
+            );
+
+            // Create download link
+            const blob = new Blob([response.data], { type: 'application/pdf' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `Personnel_Permanent_FY${fiscalYear || 'N_A'}_${activeRegion?.name || 'Region'}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+
+            toast.success('PDF report generated successfully');
           } catch (error) {
-            console.error('Print preview error:', error);
-            toast.error("Failed to generate print preview");
+            console.error('PDF export error:', error);
+            toast.error(error.response?.data?.message || 'Failed to generate PDF report');
           } finally {
             setLoading(false);
           }
-          handleExportMenuClose();
         }}>
           <ListItemIcon>
             <PrintIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText>Print Table</ListItemText>
+          <ListItemText>Export to PDF</ListItemText>
         </MenuItem>
       </Menu>
 

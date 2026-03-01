@@ -211,6 +211,7 @@ const consolidatedPersonnelServicesRouter = require("./routers/consolidatedPerso
 const comprehensiveReportsRouter = require("./routers/comprehensiveReportsRoutes");
 const databaseBackupRouter = require("./routers/databaseBackupRoutes");
 const budgetOfficerEditRouter = require("./routers/budgetOfficerEditRoutes");
+const personnelServicesPDFRouter = require("./routers/personnelServicesPDFRoutes");
 const checkToken = require("./middleware/checkToken");
 const authRouter = require("./routers/auth_router");
 
@@ -981,6 +982,7 @@ app.use(apiPrefix, incomeSubcategoryRoutes);
 app.use(`${apiPrefix}/stats`, statsRouter);
 app.use(apiPrefix, childrenAllowance);
 app.use(`${apiPrefix}/export`, exportRoutes);
+app.use(`${apiPrefix}/personnel-services-pdf`, personnelServicesPDFRouter); // Mount personnel services PDF routes
 app.use(apiPrefix, medicalAllowanceRouter);
 // Income routes also benefit from unified workflowRef injection
 app.use(apiPrefix, attachWorkflowRef, incomeRouter);
