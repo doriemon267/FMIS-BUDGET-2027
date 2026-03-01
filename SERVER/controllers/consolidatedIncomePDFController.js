@@ -10,7 +10,15 @@
  * - Hierarchical access control support
  */
 
-const PDFDocument = require('pdfkit');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+let MuhammaraRecipe;
+try {
+  MuhammaraRecipe = require('muhammara').Recipe;
+} catch (e) {
+  MuhammaraRecipe = null;
+}
 const Settings = require('../models/Settings');
 const Region = require('../models/Region');
 const Income = require('../models/Income');
@@ -40,7 +48,7 @@ const FONTS = {
 
 /**
  * Format currency in Philippine Peso
- * Note: Using 'P' instead of '₱' because PDFKit's Helvetica doesn't support the peso symbol
+ * Note: Using 'P' to keep symbol rendering consistent across environments
  */
 const formatCurrency = (amount) => {
   const num = Number(amount) || 0;
@@ -583,6 +591,10 @@ const exportConsolidatedIncomePDF = async (req, res) => {
   console.error('[PDF EXPORT] Request body:', JSON.stringify(req.body, null, 2));
   
   try {
+    if (!MuhammaraRecipe) {
+      return res.status(500).json({ error: 'PDF generation library (muhammara) is not installed on the server.' });
+    }
+
     const { fiscalYear, budgetType, selectedRegions, activeTab, showPercentages } = req.body;
     console.error('[PDF EXPORT] Parsed values - fiscalYear:', fiscalYear, 'activeTab:', activeTab, 'selectedRegions:', selectedRegions);
     
@@ -792,260 +804,200 @@ const exportConsolidatedIncomePDF = async (req, res) => {
     });
     reportData.hierarchicalData.sort((a, b) => a.name.localeCompare(b.name));
     
-    // Create PDF document
-    const doc = new PDFDocument({
-      size: 'A4',
-      layout: 'landscape',
-      margin: 40,
-      autoFirstPage: true, // Only create first page automatically
-      info: {
-        Title: `Consolidated Corporate Income Report - FY${fiscalYear}`,
-        Author: reportData.generatedBy,
-        Subject: 'Corporate Income Report',
-        Keywords: 'income, budget, fiscal, report',
-        Creator: 'FMIS Budget System',
-        Producer: 'PDFKit',
-        CreationDate: new Date(),
-        ModDate: new Date()
-      }
-    });
-    
-    // Set response headers
     const filename = `Consolidated_Corporate_Income_${fiscalYear}_${queryBudgetType}_${reportData.documentId}.pdf`;
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    res.setHeader('X-Document-ID', reportData.documentId);
-    
-    // Handle PDF errors before piping
-    doc.on('error', (err) => {
-      console.error('PDF Document Error:', err);
-      if (!res.headersSent) {
-        res.status(500).json({ error: 'PDF generation failed' });
-      }
+    const tmpFilePath = path.join(os.tmpdir(), `consolidated_income_${Date.now()}.pdf`);
+
+    const pdfDoc = new MuhammaraRecipe('new', tmpFilePath, {
+      version: 1.6,
+      author: reportData.generatedBy,
+      title: `Consolidated Corporate Income Report - FY${fiscalYear}`,
+      subject: 'Corporate Income Report',
     });
-    
-    // Pipe to response
-    doc.pipe(res);
-    
-    // Calculate pages needed
-    const filteredRegions = reportData.regions;
-    const regionsPerPage = 4;
-    const regionGroups = [];
-    for (let i = 0; i < filteredRegions.length; i += regionsPerPage) {
-      regionGroups.push(filteredRegions.slice(i, i + regionsPerPage));
-    }
-    
-    const tabType = parseInt(activeTab);
-    // Handle NaN case - default to showing category table (1)
-    const effectiveTabType = isNaN(tabType) ? 1 : tabType;
-    
-    const isSingleRegion = filteredRegions.length <= 4;
-    const totalExpectedPages = isSingleRegion ? 1 : regionGroups.length;
-    
-    console.error(`[PDF DEBUG] Regions: ${filteredRegions.length}, Groups: ${regionGroups.length}`);
-    
-    const pageWidth = 842; // A4 landscape
-    const pageHeight = 595;
-    const margin = 40;
-    const tableWidth = pageWidth - (margin * 2);
-    
-    // Helper function - safe text that doesn't auto-advance cursor
-    const safeText = (text, x, y, options = {}) => {
-      doc.text(text, x, y, { lineBreak: false, height: 15, ...options });
+
+    const PAGE_WIDTH = 842;
+    const PAGE_HEIGHT = 595;
+    const MARGIN = 30;
+    const MARGIN_TOP = 40;
+    const MARGIN_BOTTOM = 40;
+    const LINE_HEIGHT = 14;
+    const CONTENT_LEFT = MARGIN + 6;
+    const CONTENT_RIGHT = PAGE_WIDTH - MARGIN - 6;
+    const TABLE_WIDTH = CONTENT_RIGHT - CONTENT_LEFT;
+
+    let currentPage = 0;
+
+    const textOpt = (opts = {}) => ({ color: '#000000', ...opts });
+    const drawBorder = () => {
+      pdfDoc.rectangle(MARGIN, MARGIN, PAGE_WIDTH - MARGIN * 2, PAGE_HEIGHT - MARGIN * 2, {
+        stroke: '#000000',
+        lineWidth: 1
+      });
     };
-    
-    // Get tab title - tabs are VIEW TYPES, not income type filters
+    const resolveLogoPath = (name) => {
+      const serverAsset = path.join(__dirname, `../assets/${name}`);
+      if (fs.existsSync(serverAsset)) return serverAsset;
+      const clientAsset = path.join(__dirname, `../../CLIENT/public/${name}`);
+      if (fs.existsSync(clientAsset)) return clientAsset;
+      return null;
+    };
+
+    const tabType = parseInt(activeTab, 10);
+    const effectiveTabType = isNaN(tabType) ? 1 : tabType;
     const getTabTitle = () => {
-      switch(effectiveTabType) {
+      switch (effectiveTabType) {
         case 0: return 'CONSOLIDATED CORPORATE INCOME - EXECUTIVE SUMMARY';
         case 1: return 'CONSOLIDATED CORPORATE INCOME - CATEGORY BREAKDOWN';
         case 2: return 'CONSOLIDATED CORPORATE INCOME - SUBCATEGORY DETAILS';
         default: return 'CONSOLIDATED CORPORATE INCOME REPORT';
       }
     };
-    
-    for (let pageIndex = 0; pageIndex < regionGroups.length; pageIndex++) {
-      if (pageIndex > 0) doc.addPage();
-      
-      const pageRegions = regionGroups[pageIndex];
-      console.error(`[PDF DEBUG] Page ${pageIndex + 1}: ${pageRegions.length} regions`);
-      
-      // ===== HEADER =====
-      doc.rect(0, 0, pageWidth, 70).fill('#1565C0');
-      doc.fill('#FFFFFF').font('Helvetica-Bold').fontSize(14);
-      safeText(getTabTitle(), margin, 15, { width: tableWidth });
-      doc.fontSize(11).font('Helvetica');
-      safeText(`Fiscal Year: ${fiscalYear} | Budget Type: ${budgetType}`, margin, 35);
-      safeText(`Page ${pageIndex + 1} of ${regionGroups.length}`, pageWidth - 150, 35);
-      safeText(`Generated: ${new Date().toLocaleString()}`, margin, 52);
-      
-      // ===== TABLE HEADER =====
-      let y = 85;
-      const colWidths = [280]; // Category column
-      const regionColWidth = Math.floor((tableWidth - 280 - 100) / pageRegions.length);
-      pageRegions.forEach(() => colWidths.push(regionColWidth));
-      colWidths.push(100); // Total column
-      
-      // Header row background
-      doc.rect(margin, y, tableWidth, 25).fill('#E3F2FD');
-      doc.rect(margin, y, tableWidth, 25).stroke('#1565C0');
-      
-      // Header text
-      doc.fill('#1565C0').font('Helvetica-Bold').fontSize(9);
-      let x = margin + 5;
-      safeText('INCOME CATEGORY', x, y + 8);
-      x = margin + colWidths[0];
-      
-      for (let i = 0; i < pageRegions.length; i++) {
-        // Show full region name, let PDF handle text wrapping if needed
-        const regionName = pageRegions[i];
-        doc.rect(x, y, regionColWidth, 25).stroke('#1565C0');
-        safeText(regionName, x + 3, y + 8, { width: regionColWidth - 6 });
-        x += regionColWidth;
-      }
-      
-      doc.rect(x, y, 100, 25).stroke('#1565C0');
-      safeText('TOTAL', x + 35, y + 8);
-      
-      // ===== TABLE DATA ROWS =====
-      y += 25;
-      const rowHeight = 22;
-      const maxRows = Math.floor((pageHeight - y - 80) / rowHeight); // Leave space for footer
-      
-      doc.font('Helvetica').fontSize(8);
-      let rowCount = 0;
-      
-      for (const category of reportData.hierarchicalData) {
-        if (rowCount >= maxRows) break;
-        
-        // Category row (bold, with background)
-        const isEven = rowCount % 2 === 0;
-        doc.rect(margin, y, tableWidth, rowHeight).fill(isEven ? '#FAFAFA' : '#FFFFFF');
-        doc.rect(margin, y, tableWidth, rowHeight).stroke('#E0E0E0');
-        
-        doc.fill('#333333').font('Helvetica-Bold').fontSize(8);
-        x = margin + 5;
-        const catName = category.name.length > 40 ? category.name.substring(0, 40) + '...' : category.name;
-        safeText(catName, x, y + 7);
-        
-        x = margin + colWidths[0];
-        doc.font('Helvetica').fontSize(8);
-        
-        // Region values
-        for (const regionName of pageRegions) {
-          const regionData = reportData.regionData[regionName] || {};
-          const catTotal = regionData.categoryAmounts?.[category.id] || 0;
-          doc.rect(x, y, regionColWidth, rowHeight).stroke('#E0E0E0');
-          safeText(formatCurrency(catTotal), x + 3, y + 7, { width: regionColWidth - 6, align: 'right' });
-          x += regionColWidth;
-        }
-        
-        // Total
-        const categoryTotal = reportData.categoryTotals[category.id] || 0;
-        doc.rect(x, y, 100, rowHeight).stroke('#E0E0E0');
-        doc.font('Helvetica-Bold');
-        safeText(formatCurrency(categoryTotal), x + 3, y + 7, { width: 94, align: 'right' });
-        
-        y += rowHeight;
-        rowCount++;
-        
-        // Subcategories (if any, indented)
-        if (category.subCategories && category.subCategories.length > 0) {
-          for (const subcat of category.subCategories) {
-            if (rowCount >= maxRows) break;
-            
-            const isSubEven = rowCount % 2 === 0;
-            doc.rect(margin, y, tableWidth, rowHeight).fill(isSubEven ? '#FAFAFA' : '#FFFFFF');
-            doc.rect(margin, y, tableWidth, rowHeight).stroke('#E0E0E0');
-            
-            doc.fill('#666666').font('Helvetica').fontSize(7);
-            x = margin + 20; // Indent
-            const subName = subcat.name.length > 38 ? subcat.name.substring(0, 38) + '...' : subcat.name;
-            safeText(`• ${subName}`, x, y + 7);
-            
-            x = margin + colWidths[0];
-            
-            for (const regionName of pageRegions) {
-              const regionData = reportData.regionData[regionName] || {};
-              const subTotal = regionData.subcategoryAmounts?.[subcat.id] || 0;
-              doc.rect(x, y, regionColWidth, rowHeight).stroke('#E0E0E0');
-              safeText(formatCurrency(subTotal), x + 3, y + 7, { width: regionColWidth - 6, align: 'right' });
-              x += regionColWidth;
-            }
-            
-            const subcatTotal = reportData.subcategoryTotals[subcat.id] || 0;
-            doc.rect(x, y, 100, rowHeight).stroke('#E0E0E0');
-            safeText(formatCurrency(subcatTotal), x + 3, y + 7, { width: 94, align: 'right' });
-            
-            y += rowHeight;
-            rowCount++;
-          }
-        }
-      }
-      
-      // ===== GRAND TOTAL ROW - Only show on the last page =====
-      const isLastPage = pageIndex === regionGroups.length - 1;
-      if (isLastPage) {
-        doc.rect(margin, y, tableWidth, 25).fill('#1565C0');
-        doc.fill('#FFFFFF').font('Helvetica-Bold').fontSize(9);
-        x = margin + 5;
-        safeText('GRAND TOTAL', x, y + 8);
-        
-        x = margin + colWidths[0];
-        for (const regionName of pageRegions) {
-          const regionData = reportData.regionData[regionName] || {};
-          const regionGrandTotal = regionData.total || 0;
-          safeText(formatCurrency(regionGrandTotal), x + 3, y + 8, { width: regionColWidth - 6, align: 'right' });
-          x += regionColWidth;
-        }
-        safeText(formatCurrency(reportData.grandTotal), x + 3, y + 8, { width: 94, align: 'right' });
-        
-        y += 25; // Add space after grand total
-      }
-      
-      // ===== FOOTER =====
-      // Position footer relative to content end, with minimum bottom margin
-      const footerY = Math.max(y + 10, pageHeight - 60);
-      doc.rect(0, footerY, pageWidth, 50).fill('#F5F5F5');
-      doc.fill('#666666').font('Helvetica').fontSize(7);
-      safeText(`Document ID: ${reportData.documentId}`, margin, footerY + 8);
-      
-      // Get user name - prefer user object, fallback to identity object
-      let userFullName = 'Unknown User';
-      let userEmail = '-';
 
-      // First try the user object (should be updated by middleware)
-      if (user?.FirstName && user?.LastName) {
-        userFullName = `${user.FirstName} ${user.LastName}`;
-        userEmail = user?.email || user?.Email || '-';
-      } else if (user?.displayName || user?.fullName) {
-        userFullName = user.displayName || user.fullName;
-        userEmail = user?.email || user?.Email || '-';
-      } else if (user?.name) {
-        userFullName = user.name;
-        userEmail = user?.email || user?.Email || '-';
-      }
-
-      // If user object doesn't have proper name, try identity object
-      if (userFullName === '909549' || userFullName === 'Unknown User') {
-        const identity = req.identity;
-        if (identity?.displayName) {
-          userFullName = identity.displayName;
-          userEmail = identity?.email || userEmail;
-        }
-      }
-
-      safeText(`Generated by: ${userFullName} (${userEmail})`, margin, footerY + 25);
-      safeText('CONFIDENTIAL - For Official Use Only', pageWidth - 200, footerY + 17);
+    const filteredRegions = reportData.regions;
+    const regionsPerGroup = 4;
+    const regionGroups = [];
+    for (let i = 0; i < filteredRegions.length; i += regionsPerGroup) {
+      regionGroups.push(filteredRegions.slice(i, i + regionsPerGroup));
     }
-    
-    console.error(`[PDF DEBUG] Done - ${regionGroups.length} pages created`);
-    
+
+    const rows = [];
+    reportData.hierarchicalData.forEach((category) => {
+      rows.push({
+        label: String(category.name || ''),
+        bold: true,
+        valuesByRegion: (regionName) => reportData.regionData?.[regionName]?.categoryAmounts?.[category.id] || 0,
+        total: reportData.categoryTotals?.[category.id] || 0,
+      });
+
+      const subcategories = Array.isArray(category.subcategories)
+        ? category.subcategories
+        : (Array.isArray(category.subCategories) ? category.subCategories : []);
+      subcategories.forEach((subcat) => {
+        rows.push({
+          label: `  • ${String(subcat.name || '')}`,
+          bold: false,
+          valuesByRegion: (regionName) => reportData.regionData?.[regionName]?.subcategoryAmounts?.[subcat.id] || 0,
+          total: reportData.subcategoryTotals?.[subcat.id] || 0,
+        });
+      });
+    });
+
+    const createPageWithHeader = (groupRegions, pageNo, totalPages, continuation = false) => {
+      if (currentPage > 0) {
+        pdfDoc.endPage();
+      }
+      pdfDoc.createPage('A4', 90);
+      currentPage += 1;
+      drawBorder();
+
+      const sealPath = resolveLogoPath('Seal.png');
+      const logoPath = resolveLogoPath('logo.png');
+      const bagongPath = resolveLogoPath('Bagong_Pilipinas.png');
+      const logoY = MARGIN_TOP - 2;
+      const logoW = 26;
+      const logoH = 26;
+      try {
+        if (sealPath) pdfDoc.image(sealPath, CONTENT_LEFT, logoY, { width: logoW, height: logoH });
+        if (logoPath) pdfDoc.image(logoPath, CONTENT_LEFT + 30, logoY, { width: logoW, height: logoH });
+        if (bagongPath) pdfDoc.image(bagongPath, CONTENT_RIGHT - logoW, logoY, { width: logoW, height: logoH });
+      } catch (e) {
+        console.warn('Consolidated header logo load failed:', e.message);
+      }
+
+      const headerY = MARGIN_TOP;
+      const title = continuation ? `${getTabTitle()} (CONT.)` : getTabTitle();
+      pdfDoc.text(title, (CONTENT_LEFT + CONTENT_RIGHT) / 2, headerY, textOpt({ fontSize: 11, bold: true, align: 'center' }));
+      pdfDoc.text(`Fiscal Year: ${fiscalYear} | Budget Type: ${budgetType}`, (CONTENT_LEFT + CONTENT_RIGHT) / 2, headerY + 12, textOpt({ fontSize: 8, align: 'center' }));
+      pdfDoc.text(`Regions: ${groupRegions.join(', ')}`, (CONTENT_LEFT + CONTENT_RIGHT) / 2, headerY + 22, textOpt({ fontSize: 8, align: 'center' }));
+      pdfDoc.text('ANNEX A', CONTENT_RIGHT - 46, headerY + 24, textOpt({ fontSize: 9, bold: true }));
+
+      pdfDoc.text(`Doc ID: ${reportData.documentId}`, CONTENT_LEFT, PAGE_HEIGHT - MARGIN - 12, textOpt({ fontSize: 7 }));
+      pdfDoc.text(`Page ${pageNo} of ${totalPages}`, CONTENT_RIGHT - 55, PAGE_HEIGHT - MARGIN - 12, textOpt({ fontSize: 7 }));
+
+      return headerY + 40;
+    };
+
+    const estimatedRowsPerPage = 24;
+    const pagesPerGroup = Math.max(1, Math.ceil(rows.length / estimatedRowsPerPage));
+    const totalPages = Math.max(1, regionGroups.length * pagesPerGroup);
+
+    const descColW = 300;
+    let pageNo = 0;
+    for (const groupRegions of regionGroups) {
+      const regionColW = Math.floor((TABLE_WIDTH - descColW - 100) / Math.max(groupRegions.length, 1));
+
+      let rowIndex = 0;
+      let continuation = false;
+      while (rowIndex < rows.length) {
+        pageNo += 1;
+        let y = createPageWithHeader(groupRegions, pageNo, totalPages, continuation);
+
+        pdfDoc.rectangle(CONTENT_LEFT, y, TABLE_WIDTH, 16, { stroke: '#1565C0', lineWidth: 0.8, fill: '#EAF2FF' });
+        let x = CONTENT_LEFT + 3;
+        pdfDoc.text('INCOME CATEGORY', x, y + 4, textOpt({ fontSize: 8, bold: true }));
+        x = CONTENT_LEFT + descColW;
+        groupRegions.forEach((regionName) => {
+          pdfDoc.text(regionName, x + 2, y + 4, textOpt({ fontSize: 7, bold: true }));
+          x += regionColW;
+        });
+        pdfDoc.text('TOTAL', CONTENT_RIGHT - 42, y + 4, textOpt({ fontSize: 8, bold: true }));
+        y += 18;
+
+        while (rowIndex < rows.length && y <= PAGE_HEIGHT - MARGIN_BOTTOM - 24) {
+          const row = rows[rowIndex];
+          pdfDoc.text(row.label, CONTENT_LEFT + 3, y, textOpt({ fontSize: row.bold ? 8 : 7, bold: row.bold }));
+
+          let colX = CONTENT_LEFT + descColW;
+          groupRegions.forEach((regionName) => {
+            const value = row.valuesByRegion(regionName);
+            pdfDoc.text(formatCurrency(value), colX + 2, y, textOpt({ fontSize: 7, align: 'right' }));
+            colX += regionColW;
+          });
+          pdfDoc.text(formatCurrency(row.total), CONTENT_RIGHT - 95, y, textOpt({ fontSize: row.bold ? 8 : 7, bold: row.bold, align: 'right' }));
+          y += 12;
+          rowIndex += 1;
+        }
+
+        if (rowIndex >= rows.length) {
+          pdfDoc.rectangle(CONTENT_LEFT, y + 2, TABLE_WIDTH, 15, { stroke: '#1565C0', lineWidth: 0.8, fill: '#1565C0' });
+          pdfDoc.text('GRAND TOTAL', CONTENT_LEFT + 3, y + 6, textOpt({ fontSize: 8, bold: true, color: '#FFFFFF' }));
+          let totalX = CONTENT_LEFT + descColW;
+          groupRegions.forEach((regionName) => {
+            const regionGrand = reportData.regionData?.[regionName]?.total || 0;
+            pdfDoc.text(formatCurrency(regionGrand), totalX + 2, y + 6, textOpt({ fontSize: 7, bold: true, color: '#FFFFFF', align: 'right' }));
+            totalX += regionColW;
+          });
+          pdfDoc.text(formatCurrency(reportData.grandTotal), CONTENT_RIGHT - 95, y + 6, textOpt({ fontSize: 8, bold: true, color: '#FFFFFF', align: 'right' }));
+        }
+
+        continuation = true;
+      }
+    }
+
     // Log audit trail
     console.log(`[AUDIT] PDF Generated: ${reportData.documentId} | User: ${reportData.generatedBy} | FY: ${fiscalYear} | Type: ${queryBudgetType}`);
-    
-    // Finalize PDF
-    doc.end();
+
+    pdfDoc.endPage().endPDF((err) => {
+      if (err) {
+        console.error('Error generating consolidated income PDF:', err);
+        return res.status(500).json({ error: 'Failed to generate PDF report' });
+      }
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('X-Document-ID', reportData.documentId);
+
+      const readStream = fs.createReadStream(tmpFilePath);
+      readStream.on('error', (streamErr) => {
+        console.error('Error streaming consolidated income PDF:', streamErr);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Failed to stream PDF report' });
+        }
+      });
+      res.on('finish', () => {
+        fs.unlink(tmpFilePath, () => {});
+      });
+      readStream.pipe(res);
+    });
     
   } catch (err) {
     console.error('Error generating consolidated income PDF:', err);

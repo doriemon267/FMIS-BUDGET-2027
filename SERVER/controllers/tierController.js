@@ -6,8 +6,15 @@ const PersonnelServices = require('../models/PersonnelServices');
 const CapitalOutlay = require('../models/CapitalOutlay');
 const mooeProposals = require('../models/mooeProposals');
 const NewProposalWorkflow = require('../models/NewProposalWorkflow');
-const PDFDocument = require('pdfkit');
-const { Writable } = require('stream');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+let MuhammaraRecipe;
+try {
+  MuhammaraRecipe = require('muhammara').Recipe;
+} catch (e) {
+  MuhammaraRecipe = null;
+}
 
 /**
  * Normalize tier scope so save and getRevisions match whether user filtered by Region only, Department, or Division.
@@ -753,8 +760,11 @@ const safeNum = (val, fallback = 0) => {
  * Accepts POST body: { fiscalYear, region, department, division, reportSummary }.
  */
 const generateTierPDF = async (req, res) => {
-  let doc;
   try {
+    if (!MuhammaraRecipe) {
+      return res.status(500).json({ message: 'PDF generation library (muhammara) is not installed on the server.' });
+    }
+
     const { fiscalYear, region, department, division, regionName, departmentName, divisionName, reportSummary, version: versionFromBody } = req.body || {};
     if (!reportSummary || !fiscalYear) {
       return res.status(400).json({ message: 'fiscalYear and reportSummary are required.' });
@@ -772,141 +782,180 @@ const generateTierPDF = async (req, res) => {
       if (cat === 'Maintenance and Other Operating Expenses' || cat === 'Capital Outlay') return total > 0;
       return true;
     });
-    doc = new PDFDocument({ size: 'A4', margin: 40, bufferPages: true });
 
     const filename = `Tier_Report_${fiscalYear}_${regionDisplay}_${departmentDisplay}_${divisionDisplay}.pdf`;
-    const chunks = [];
-    const bufferStream = new Writable({
-      write(chunk, _enc, cb) {
-        chunks.push(chunk);
-        cb();
-      },
-      final(cb) {
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
-        res.send(Buffer.concat(chunks));
-        cb();
-      },
+    const tmpFilePath = path.join(os.tmpdir(), `tier_report_${Date.now()}.pdf`);
+    const pdfDoc = new MuhammaraRecipe('new', tmpFilePath, {
+      version: 1.6,
+      author: 'FMIS-BUDGET',
+      title: 'Tier Budget Report',
+      subject: 'Tier Budget Report',
     });
-    doc.pipe(bufferStream);
 
-    const pageW = doc.page.width - 80;
-    const col1 = 40;
-    const descColWidth = pageW * 0.38;
-    const col2 = col1 + descColWidth + 8;
-    const col3 = col2 + (pageW - descColWidth - 8) * 0.22;
-    const col4 = col2 + (pageW - descColWidth - 8) * 0.44;
-    const col5 = col2 + (pageW - descColWidth - 8) * 0.66;
+    const PAGE_WIDTH = 595;
+    const PAGE_HEIGHT = 842;
+    const MARGIN = 40;
+    const MARGIN_TOP = 50;
+    const MARGIN_BOTTOM = 60;
+    const LINE_HEIGHT = 14;
+    const CONTENT_LEFT = MARGIN + 5;
+    const CONTENT_RIGHT = PAGE_WIDTH - MARGIN - 5;
+    const pageW = PAGE_WIDTH - 80;
+
+    let currentY = MARGIN_TOP;
+    let currentPage = 1;
+    const rowH = 16;
+    const descColWidth = pageW * 0.36;
+    const col1 = CONTENT_LEFT;
+    const col2 = col1 + descColWidth + 6;
+    const col3 = col2 + (pageW - descColWidth - 6) * 0.22;
+    const col4 = col2 + (pageW - descColWidth - 6) * 0.44;
+    const col5 = col2 + (pageW - descColWidth - 6) * 0.66;
     const numColW = col3 - col2 - 4;
-    const rowH = 18;
-    const minRowH = 14;
-    const footerMargin = 50;
-    const minSpaceForRow = 28;
-    const maxDescLen = 55;
 
-    const drawRow = (y, cells, bold = false) => {
-      const startY = safeNum(y, 30);
-      if (bold) doc.font('Helvetica-Bold');
-      doc.fontSize(9);
-      const descText = (cells[0] || '').toString().trim() || '—';
-      const rawEndY = doc.text(descText, col1, startY, { width: descColWidth, align: 'left' });
-      const endY = safeNum(rawEndY, startY + rowH);
-      doc.text(cells[1] || '', col2, startY, { width: numColW, align: 'right' });
-      doc.text(cells[2] || '', col3, startY, { width: numColW, align: 'right' });
-      doc.text(cells[3] || '', col4, startY, { width: numColW, align: 'right' });
-      doc.text(cells[4] || '', col5, startY, { width: numColW, align: 'right' });
-      if (bold) doc.font('Helvetica');
-      const rowHeight = Math.max(minRowH, (endY - startY) + 4);
-      return Number.isFinite(rowHeight) ? rowHeight : rowH;
+    const textOpt = (opts = {}) => ({ color: '#000000', ...opts });
+    const drawBorder = () => {
+      pdfDoc.rectangle(MARGIN, MARGIN, PAGE_WIDTH - MARGIN * 2, PAGE_HEIGHT - MARGIN * 2, {
+        stroke: '#000000',
+        lineWidth: 1.2
+      });
+    };
+    const drawFooter = () => {
+      pdfDoc.text('Tier Budget Report', CONTENT_LEFT, PAGE_HEIGHT - MARGIN - 15, textOpt({ fontSize: 8 }));
+      pdfDoc.text(`Page ${currentPage}`, CONTENT_RIGHT - 45, PAGE_HEIGHT - MARGIN - 15, textOpt({ fontSize: 8 }));
+    };
+    const resolveLogoPath = (name) => {
+      const serverAsset = path.join(__dirname, `../assets/${name}`);
+      if (fs.existsSync(serverAsset)) return serverAsset;
+      const clientAsset = path.join(__dirname, `../../CLIENT/public/${name}`);
+      if (fs.existsSync(clientAsset)) return clientAsset;
+      return null;
+    };
+    const startNewPage = (continued = false) => {
+      if (currentPage > 1 || currentY !== MARGIN_TOP) {
+        drawFooter();
+        pdfDoc.endPage();
+        currentPage += 1;
+      }
+      pdfDoc.createPage('A4');
+      currentY = MARGIN_TOP;
+      drawBorder();
+
+      const sealPath = resolveLogoPath('Seal.png');
+      const logoPath = resolveLogoPath('logo.png');
+      const bagongPath = resolveLogoPath('Bagong_Pilipinas.png');
+      const logoY = currentY + 3;
+      try {
+        if (sealPath) pdfDoc.image(sealPath, CONTENT_LEFT, logoY, { width: 34, height: 34 });
+        if (logoPath) pdfDoc.image(logoPath, CONTENT_LEFT + 38, logoY, { width: 34, height: 34 });
+        if (bagongPath) pdfDoc.image(bagongPath, CONTENT_RIGHT - 34, logoY, { width: 34, height: 34 });
+      } catch (e) {
+        console.warn('Tier header logo load failed:', e.message);
+      }
+
+      const centerX = PAGE_WIDTH / 2;
+      pdfDoc.text('TIER BUDGET REPORT', centerX, currentY + 6, textOpt({ fontSize: 12, bold: true, align: 'center' }));
+      pdfDoc.text(`Fiscal Year: ${fiscalYear} | Region: ${regionDisplay} | Department: ${departmentDisplay} | Division: ${divisionDisplay}`, centerX, currentY + 20, textOpt({ fontSize: 8, align: 'center' }));
+      pdfDoc.text(`Version ${Number.isFinite(Number(version)) ? version : 0}${continued ? ' (continued)' : ''}`, centerX, currentY + 31, textOpt({ fontSize: 8, align: 'center' }));
+      pdfDoc.text('ANNEX A', CONTENT_RIGHT - 45, currentY + 39, textOpt({ fontSize: 9, bold: true }));
+      currentY += 52;
+    };
+    const ensureSpace = (lines = 1) => {
+      if (currentY + lines * LINE_HEIGHT > PAGE_HEIGHT - MARGIN_BOTTOM) {
+        startNewPage(true);
+      }
+    };
+    const drawRow = (cells, bold = false, fontSize = 8) => {
+      ensureSpace(1);
+      const safe = (v) => (v == null ? '—' : String(v));
+      pdfDoc.text(safe(cells[0]), col1, currentY, textOpt({ fontSize, bold }));
+      pdfDoc.text(safe(cells[1]), col2, currentY, textOpt({ fontSize, bold, align: 'right' }));
+      pdfDoc.text(safe(cells[2]), col3, currentY, textOpt({ fontSize, bold, align: 'right' }));
+      pdfDoc.text(safe(cells[3]), col4, currentY, textOpt({ fontSize, bold, align: 'right' }));
+      pdfDoc.text(safe(cells[4]), col5, currentY, textOpt({ fontSize, bold, align: 'right' }));
+      currentY += rowH;
     };
 
-    const pageHeight = safeNum(doc.page?.height, 842);
-    let y = 30;
+    startNewPage(false);
 
-    doc.fontSize(16).font('Helvetica-Bold').fillColor('#1a472a');
-    doc.text('TIER BUDGET REPORT', 40, y, { align: 'center', width: pageW });
-    y = safeNum(y + 24, 30);
-    doc.fontSize(10).font('Helvetica').fillColor('black');
-    doc.text(`Fiscal Year: ${fiscalYear}  |  Region: ${regionDisplay}  |  Department: ${departmentDisplay}  |  Division: ${divisionDisplay}`, 40, y, { align: 'center', width: pageW });
-    y = safeNum(y + 14, 30);
-    doc.fontSize(9).fillColor('#555');
-    doc.text(`Version ${Number.isFinite(Number(version)) ? version : 0}`, 40, y, { align: 'center', width: pageW });
-    y = safeNum(y + 18, 30);
-
-    doc.fontSize(11).font('Helvetica-Bold').fillColor('#2e7d32');
-    doc.text('A. SOURCES OF FUNDS', 40, y);
-    y = safeNum(y + rowH + 4, y);
-    doc.font('Helvetica').fillColor('black');
-    doc.fontSize(9);
-    y = safeNum(y + drawRow(y, ['Particulars', 'Projected Corporate Income', 'Tier 1', 'Tier 2', 'Total'], true), y);
-    doc.moveTo(col1, y).lineTo(col1 + pageW, y).stroke();
-    y = safeNum(y + rowH, y);
     const src = sourcesOfFunds;
     const bs = src.budgetarySupport || {};
-    y = safeNum(y + drawRow(y, ['Projected Corporate Income', formatTierCurrency(src.corporateIncome), '—', '—', formatTierCurrency(src.corporateIncome)]), y);
-    y = safeNum(y + drawRow(y, ['Budgetary Support (Tier 1 + Tier 2)', '—', formatTierCurrency(bs.tier1), formatTierCurrency(bs.tier2), formatTierCurrency(bs.total)]), y);
-    doc.moveTo(col1, y).lineTo(col1 + pageW, y).stroke();
-    y = safeNum(y + rowH, y);
-    y = safeNum(y + drawRow(y, ['TOTAL SOURCES OF FUNDS', formatTierCurrency(src.corporateIncome), formatTierCurrency(bs.tier1), formatTierCurrency(bs.tier2), formatTierCurrency(src.proposedBudget || src.total)], true), y);
-    y = safeNum(y + 16, y);
+    const ps = usesOfFunds['Personnel Services'];
+    const mooe = usesOfFunds['Maintenance and Other Operating Expenses'];
+    const co = usesOfFunds['Capital Outlay'];
+    const tot = usesOfFunds;
+    const totalCorp = (usesCorporateIncome['Personnel Services'] || 0)
+      + (usesCorporateIncome['Maintenance and Other Operating Expenses'] || 0)
+      + (usesCorporateIncome['Capital Outlay'] || 0);
 
-    doc.fontSize(11).font('Helvetica-Bold').fillColor('#2e7d32');
-    doc.text('B. USES OF FUNDS', 40, y);
-    y = safeNum(y + rowH + 4, y);
-    doc.font('Helvetica').fillColor('black');
-    y = safeNum(y + drawRow(y, ['Particulars', 'Projected Corporate Income', 'Tier 1', 'Tier 2', 'Total'], true), y);
-    doc.moveTo(col1, y).lineTo(col1 + pageW, y).stroke();
-    y = safeNum(y + rowH, y);
+    pdfDoc.text('A. SOURCES OF FUNDS', CONTENT_LEFT, currentY, textOpt({ fontSize: 10, bold: true }));
+    currentY += LINE_HEIGHT;
+    drawRow(['Particulars', 'Projected Corporate Income', 'Tier 1', 'Tier 2', 'Total'], true);
+    pdfDoc.rectangle(col1, currentY - 4, pageW, 0.5, { stroke: '#000000', lineWidth: 0.5 });
+    drawRow(['Projected Corporate Income', formatTierCurrency(src.corporateIncome), '—', '—', formatTierCurrency(src.corporateIncome)]);
+    drawRow(['Budgetary Support (Tier 1 + Tier 2)', '—', formatTierCurrency(bs.tier1), formatTierCurrency(bs.tier2), formatTierCurrency(bs.total)]);
+    drawRow(['TOTAL SOURCES OF FUNDS', formatTierCurrency(src.corporateIncome), formatTierCurrency(bs.tier1), formatTierCurrency(bs.tier2), formatTierCurrency(src.proposedBudget || src.total)], true);
+    currentY += 6;
+
+    pdfDoc.text('B. USES OF FUNDS', CONTENT_LEFT, currentY, textOpt({ fontSize: 10, bold: true }));
+    currentY += LINE_HEIGHT;
+    drawRow(['Particulars', 'Projected Corporate Income', 'Tier 1', 'Tier 2', 'Total'], true);
+    pdfDoc.rectangle(col1, currentY - 4, pageW, 0.5, { stroke: '#000000', lineWidth: 0.5 });
 
     let currentCategory = '';
     for (const item of lineItems) {
       const cat = item.category || '';
       if (cat !== currentCategory) {
         currentCategory = cat;
-        if (y > pageHeight - footerMargin - 80) { doc.addPage(); y = 40; }
-        doc.font('Helvetica-Bold').fontSize(10);
-        const catLabel = cat.length > maxDescLen ? cat.slice(0, maxDescLen - 3) + '...' : cat;
-        doc.text(catLabel, col1, y, { width: descColWidth });
-        doc.font('Helvetica').fontSize(9);
-        y = safeNum(y + rowH + 2, y);
+        ensureSpace(2);
+        pdfDoc.text(String(cat), col1, currentY, textOpt({ fontSize: 9, bold: true }));
+        currentY += 12;
       }
-      if (y > pageHeight - footerMargin - minSpaceForRow) { doc.addPage(); y = 40; }
-      const desc = (item.description || '—').toString();
-      y = safeNum(y + drawRow(y, [desc, formatTierCurrency(item.corporateIncome), formatTierCurrency(item.tier1), formatTierCurrency(item.tier2), formatTierCurrency(item.total)]), y);
+      drawRow([
+        item.description || '—',
+        formatTierCurrency(item.corporateIncome),
+        formatTierCurrency(item.tier1),
+        formatTierCurrency(item.tier2),
+        formatTierCurrency(item.total)
+      ]);
     }
 
-    const ps = usesOfFunds['Personnel Services'];
-    const mooe = usesOfFunds['Maintenance and Other Operating Expenses'];
-    const co = usesOfFunds['Capital Outlay'];
-    if (y > pageHeight - footerMargin - 60) { doc.addPage(); y = 40; }
-    doc.moveTo(col1, y).lineTo(col1 + pageW, y).stroke();
-    y = safeNum(y + rowH, y);
-    y = safeNum(y + drawRow(y, ['Personnel Services', formatTierCurrency(usesCorporateIncome['Personnel Services']), formatTierCurrency(ps?.tier1), formatTierCurrency(ps?.tier2), formatTierCurrency(ps?.total)], true), y);
-    y = safeNum(y + drawRow(y, ['Maintenance and Other Operating Expenses', formatTierCurrency(usesCorporateIncome['Maintenance and Other Operating Expenses']), formatTierCurrency(mooe?.tier1), formatTierCurrency(mooe?.tier2), formatTierCurrency(mooe?.total)], true), y);
-    y = safeNum(y + drawRow(y, ['Capital Outlay', formatTierCurrency(usesCorporateIncome['Capital Outlay']), formatTierCurrency(co?.tier1), formatTierCurrency(co?.tier2), formatTierCurrency(co?.total)], true), y);
-    y = safeNum(y + rowH, y);
-    doc.moveTo(col1, y).lineTo(col1 + pageW, y).stroke();
-    y = safeNum(y + rowH, y);
-    const tot = usesOfFunds;
-    const totalCorp = (usesCorporateIncome['Personnel Services'] || 0) + (usesCorporateIncome['Maintenance and Other Operating Expenses'] || 0) + (usesCorporateIncome['Capital Outlay'] || 0);
-    y = safeNum(y + drawRow(y, ['TOTAL USES OF FUNDS', formatTierCurrency(tot.totalCorporateIncome ?? totalCorp), formatTierCurrency(tot.totalTier1), formatTierCurrency(tot.totalTier2), formatTierCurrency(tot.proposedBudget)], true), y);
-    y = safeNum(y + 20, y);
+    currentY += 3;
+    pdfDoc.rectangle(col1, currentY, pageW, 0.5, { stroke: '#000000', lineWidth: 0.5 });
+    currentY += 6;
+    drawRow(['Personnel Services', formatTierCurrency(usesCorporateIncome['Personnel Services']), formatTierCurrency(ps?.tier1), formatTierCurrency(ps?.tier2), formatTierCurrency(ps?.total)], true);
+    drawRow(['Maintenance and Other Operating Expenses', formatTierCurrency(usesCorporateIncome['Maintenance and Other Operating Expenses']), formatTierCurrency(mooe?.tier1), formatTierCurrency(mooe?.tier2), formatTierCurrency(mooe?.total)], true);
+    drawRow(['Capital Outlay', formatTierCurrency(usesCorporateIncome['Capital Outlay']), formatTierCurrency(co?.tier1), formatTierCurrency(co?.tier2), formatTierCurrency(co?.total)], true);
+    drawRow(['TOTAL USES OF FUNDS', formatTierCurrency(tot.totalCorporateIncome ?? totalCorp), formatTierCurrency(tot.totalTier1), formatTierCurrency(tot.totalTier2), formatTierCurrency(tot.proposedBudget)], true);
 
-    doc.font('Helvetica-Bold').fontSize(11);
-    doc.text(`Surplus/(Deficit): ${formatTierCurrency(surplusDeficit)}`, 40, y);
-    y = safeNum(y + rowH + 10, y);
+    currentY += 8;
+    ensureSpace(1);
+    pdfDoc.text(`Surplus/(Deficit): ${formatTierCurrency(surplusDeficit)}`, CONTENT_LEFT, currentY, textOpt({ fontSize: 10, bold: true }));
 
-    const range = doc.bufferedPageRange();
-    for (let i = range.start; i < range.start + range.count; i++) {
-      doc.switchToPage(i);
-      doc.font('Helvetica').fontSize(8).fillColor('#666');
-      const footerY = safeNum(doc.page?.height, pageHeight) - 30;
-      doc.text(`Page ${i - range.start + 1} of ${range.count}`, 40, footerY, { width: pageW, align: 'center' });
-    }
-    doc.end();
+    drawFooter();
+    pdfDoc.endPage().endPDF((err) => {
+      if (err) {
+        console.error('Error generating tier PDF:', err);
+        return res.status(500).json({ message: 'Error generating PDF' });
+      }
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+
+      const readStream = fs.createReadStream(tmpFilePath);
+      readStream.on('error', (streamErr) => {
+        console.error('Error streaming tier PDF:', streamErr);
+        if (!res.headersSent) {
+          res.status(500).json({ message: 'Failed to stream PDF' });
+        }
+      });
+      res.on('finish', () => {
+        fs.unlink(tmpFilePath, () => {});
+      });
+      readStream.pipe(res);
+    });
   } catch (error) {
     console.error('Error generating tier PDF:', error);
-    if (doc && typeof doc.destroy === 'function') doc.destroy();
     if (!res.headersSent) {
       res.status(500).json({ message: error.message || 'Error generating PDF' });
     }
