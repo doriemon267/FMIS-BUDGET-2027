@@ -330,6 +330,63 @@ const PSCOSCustomPageTable = ({
     handleExportMenuClose();
   }, [apiPath]);
 
+  // PDF export functionality for COS personnel
+  const handleExportPDF = useCallback(async () => {
+    try {
+      setLoading(true);
+      handleExportMenuClose();
+
+      // Get active region from localStorage (same pattern as permanent/casual exports)
+      let activeRegionVal = region;
+      if (!activeRegionVal) {
+        try {
+          const activeRegionStr = localStorage.getItem('activeRegion');
+          if (activeRegionStr) {
+            const activeRegion = JSON.parse(activeRegionStr);
+            activeRegionVal = activeRegion.name || activeRegion.regionName;
+          }
+        } catch (error) {
+          console.error('Error parsing active region:', error);
+        }
+      }
+
+      // Call server-side PDF generation endpoint
+      const exportParams = {
+        fiscalYear: fiscalYear,
+        region: activeRegionVal || '',
+        office: headerConfig?.office || '',
+        division: headerConfig?.division || '',
+      };
+
+      const response = await api.post(
+        '/api/personnel-services-pdf/export-cos',
+        exportParams,
+        {
+          responseType: 'blob',
+          timeout: 60000, // 60 second timeout for large datasets
+        }
+      );
+
+      // Create download link
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Personnel_COS_FY${fiscalYear || 'N_A'}_${activeRegionVal || 'Region'}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      toast.success('PDF report generated successfully');
+    } catch (error) {
+      console.error('PDF export error:', error);
+      toast.error(error.response?.data?.message || 'Failed to generate PDF report');
+    } finally {
+      setLoading(false);
+    }
+  }, [fiscalYear, region, headerConfig]);
+
   return (
     <>
       {/* Header Section with Title and User Access Info (hidden via env toggle) */}
@@ -476,10 +533,7 @@ const PSCOSCustomPageTable = ({
           <GetAppIcon sx={{ mr: 1 }} />
           Export to Excel
         </MenuItem>
-        <MenuItem onClick={() => {
-          toast.info("PDF export functionality to be implemented");
-          handleExportMenuClose();
-        }}>
+        <MenuItem onClick={handleExportPDF} disabled={loading}>
           <GetAppIcon sx={{ mr: 1 }} />
           Export to PDF
         </MenuItem>

@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
-import CustomTable from "../pspermanent/PersonnelCustomTable";
-import CustomMenu from "../pspermanent/PersonnelCustomMenu";
-import PropTypes from "prop-types";
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import CustomTable from '../pspermanent/PersonnelCustomTable';
+import CustomMenu from '../pspermanent/PersonnelCustomMenu';
+import PropTypes from 'prop-types';
 import {
   Button,
   Box,
@@ -23,24 +23,24 @@ import {
   Paper,
   Card,
   CardContent,
-} from "@mui/material";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
-import api from "../../config/api";
-import { useRegion } from "../../context/RegionContext";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
-import { invalidateDataList } from "../../utils/queryClientHelpers";
+} from '@mui/material';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import api from '../../config/api';
+import { useRegion } from '../../context/RegionContext';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { invalidateDataList } from '../../utils/queryClientHelpers';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import { updatePersonnelChargedToIncome } from "../../services/personnelSubsidyService";
-import { useSearch } from "../../context/SearchContext";
-import dayjs from "dayjs";
-import formatCurrency from "../../utils/formatCurrency";
+import { updatePersonnelChargedToIncome } from '../../services/personnelSubsidyService';
+import { useSearch } from '../../context/SearchContext';
+import dayjs from 'dayjs';
+import formatCurrency from '../../utils/formatCurrency';
 
 const PersonnelChargedToIncomeTable = ({
   dataListName,
   schema,
-  title = "",
-  description = "",
+  title = '',
+  description = '',
   hasEdit = true,
   hasDelete = true,
   customEditElement = null,
@@ -51,19 +51,25 @@ const PersonnelChargedToIncomeTable = ({
   const [columnVisibility, setColumnVisibility] = useState({});
   const [filteredRows, setFilteredRows] = useState([]);
   const [selectedRows, setSelectedRows] = useState([]);
-  const [chargedToIncomeDialog, setChargedToIncomeDialog] = useState({ open: false, mode: "remove" });
+  const [chargedToIncomeDialog, setChargedToIncomeDialog] = useState({
+    open: false,
+    mode: 'remove',
+  });
   const [chargedToIncomeLoading, setChargedToIncomeLoading] = useState(false);
-  const [order, setOrder] = useState("desc");
-  const [orderBy, setOrderBy] = useState("createdAt");
+  const [order, setOrder] = useState('desc');
+  const [orderBy, setOrderBy] = useState('createdAt');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(ROWS_PER_PAGE);
   const { activeRegion } = useRegion();
   const queryClient = useQueryClient();
   const { searchValue } = useSearch();
 
-  const pageTitle = useMemo(() => title || "Personnel Services - Charged to Income", [title]);
-  const pageDescription = useMemo(() => description || "Personnel tagged as Charged to Income", [description]);
-  const apiPath = useMemo(() => "/personnelServices", []);
+  const pageTitle = useMemo(() => title || 'Personnel Services - Charged to Income', [title]);
+  const pageDescription = useMemo(
+    () => description || 'Personnel tagged as Charged to Income',
+    [description]
+  );
+  const apiPath = useMemo(() => '/personnelServices', []);
 
   // DEBUG: Log what we're receiving
   useEffect(() => {
@@ -87,29 +93,30 @@ const PersonnelChargedToIncomeTable = ({
   const refreshPersonnelData = useCallback(async () => {
     try {
       await invalidateDataList(queryClient, dataListName);
-      await queryClient.invalidateQueries({ queryKey: [dataListName, "chargedToIncome"] });
-      await queryClient.invalidateQueries({ queryKey: ["chargedToIncomeList"] });
+      await queryClient.invalidateQueries({ queryKey: [dataListName, 'chargedToIncome'] });
+      await queryClient.invalidateQueries({ queryKey: ['chargedToIncomeList'] });
     } catch (error) {
-      toast.error("Error refreshing data.");
+      toast.error('Error refreshing data.');
     }
   }, [queryClient, dataListName]);
 
   // Active settings for fiscal year (for list/reset scope)
   const { data: activeSettings } = useQuery({
-    queryKey: ["settings", "active"],
-    queryFn: () => api.get("/settings/active").then((r) => r.data),
+    queryKey: ['settings', 'active'],
+    queryFn: () => api.get('/settings/active').then(r => r.data),
   });
-  const fiscalYearForScope = activeSettings?.fiscalYear || "";
-  const regionForScope = activeRegion?.name || activeRegion?.regionName || activeRegion?.Region || "";
+  const fiscalYearForScope = activeSettings?.fiscalYear || '';
+  const regionForScope =
+    activeRegion?.name || activeRegion?.regionName || activeRegion?.Region || '';
 
   // List charged-to-income (count + total) for info and reset
   const { data: chargedListData, refetch: refetchChargedList } = useQuery({
-    queryKey: ["chargedToIncomeList", fiscalYearForScope, regionForScope],
+    queryKey: ['chargedToIncomeList', fiscalYearForScope, regionForScope],
     queryFn: () => {
       const params = {};
       if (fiscalYearForScope) params.fiscalYear = fiscalYearForScope;
       if (regionForScope) params.region = regionForScope;
-      return api.get("/personnelServices/charged-to-income/list", { params }).then((r) => r.data);
+      return api.get('/personnelServices/charged-to-income/list', { params }).then(r => r.data);
     },
     enabled: true,
   });
@@ -119,34 +126,46 @@ const PersonnelChargedToIncomeTable = ({
   const [resetLoading, setResetLoading] = useState(false);
   const handleResetAllChargedToIncome = useCallback(async () => {
     if (chargedListCount === 0) {
-      toast.info("Walang record na naka-charged to income.");
+      toast.info('Walang record na naka-charged to income.');
       return;
     }
-    if (!window.confirm(`I-reset ang lahat ng ${chargedListCount} record(s) na naka-charged to income? Ibabalik sila sa Personnel Services.`)) return;
+    if (
+      !window.confirm(
+        `I-reset ang lahat ng ${chargedListCount} record(s) na naka-charged to income? Ibabalik sila sa Personnel Services.`
+      )
+    )
+      return;
     setResetLoading(true);
     try {
       const body = {};
       if (fiscalYearForScope) body.fiscalYear = fiscalYearForScope;
       if (regionForScope) body.region = regionForScope;
-      const res = await api.post("/personnelServices/charged-to-income/reset", body);
-      toast.success(res.data?.message || "Na-reset na ang charged-to-income.");
-      await queryClient.invalidateQueries({ queryKey: [dataListName, "chargedToIncome"] });
-      await queryClient.invalidateQueries({ queryKey: ["chargedToIncomeList"] });
-      await queryClient.invalidateQueries({ queryKey: ["calculated-budgetary-support"] });
-      await queryClient.invalidateQueries({ queryKey: ["proposals"] });
-      await queryClient.invalidateQueries({ queryKey: ["workflowProposals"] });
+      const res = await api.post('/personnelServices/charged-to-income/reset', body);
+      toast.success(res.data?.message || 'Na-reset na ang charged-to-income.');
+      await queryClient.invalidateQueries({ queryKey: [dataListName, 'chargedToIncome'] });
+      await queryClient.invalidateQueries({ queryKey: ['chargedToIncomeList'] });
+      await queryClient.invalidateQueries({ queryKey: ['calculated-budgetary-support'] });
+      await queryClient.invalidateQueries({ queryKey: ['proposals'] });
+      await queryClient.invalidateQueries({ queryKey: ['workflowProposals'] });
       refetch();
       refetchChargedList();
     } catch (err) {
-      toast.error(err.response?.data?.message || "Hindi na-reset.");
+      toast.error(err.response?.data?.message || 'Hindi na-reset.');
     } finally {
       setResetLoading(false);
     }
-  }, [chargedListCount, fiscalYearForScope, regionForScope, queryClient, dataListName, refetchChargedList]);
+  }, [
+    chargedListCount,
+    fiscalYearForScope,
+    regionForScope,
+    queryClient,
+    dataListName,
+    refetchChargedList,
+  ]);
 
   // Fetch charged to income personnel data
   const { data, isLoading, refetch } = useQuery({
-    queryKey: [dataListName, "chargedToIncome", page, rowsPerPage, orderBy, order, searchValue],
+    queryKey: [dataListName, 'chargedToIncome', page, rowsPerPage, orderBy, order, searchValue],
     queryFn: async () => {
       const params = {
         page: page + 1,
@@ -155,11 +174,11 @@ const PersonnelChargedToIncomeTable = ({
         order,
         chargedToIncomeEligible: true,
       };
-      
+
       if (searchValue) {
         params.search = searchValue;
       }
-      
+
       Object.keys(params).forEach(k => params[k] === undefined && delete params[k]);
       // console.log("DEBUG: Fetching charged to income with params:", { dataListName, params });
       const res = await api.get(apiPath, { params });
@@ -184,41 +203,41 @@ const PersonnelChargedToIncomeTable = ({
 
   const handleOpenRemoveDialog = useCallback(() => {
     if (!selectedRows.length) {
-      toast.error("No personnel selected.");
+      toast.error('No personnel selected.');
       return;
     }
-    setChargedToIncomeDialog({ open: true, mode: "remove" });
+    setChargedToIncomeDialog({ open: true, mode: 'remove' });
   }, [selectedRows]);
 
   const handleCloseRemoveDialog = () => {
-    setChargedToIncomeDialog({ open: false, mode: "remove" });
+    setChargedToIncomeDialog({ open: false, mode: 'remove' });
   };
 
   const handleConfirmRemove = async () => {
     if (!selectedRows.length) {
-      toast.error("No personnel selected.");
+      toast.error('No personnel selected.');
       return;
     }
 
     setChargedToIncomeLoading(true);
     try {
       const payload = {
-        items: selectedRows.map((id) => ({ _id: id })),
+        items: selectedRows.map(id => ({ _id: id })),
         chargedToIncomeEligible: false,
       };
 
       await updatePersonnelChargedToIncome(payload);
       toast.success(`${selectedRows.length} employee(s) moved back to Personnel Services`);
       setSelectedRows([]);
-      setChargedToIncomeDialog({ open: false, mode: "remove" });
-      
+      setChargedToIncomeDialog({ open: false, mode: 'remove' });
+
       // Refresh personnel data
       refetch();
-      
+
       // Invalidate proposal queries so budget totals update
-      await queryClient.invalidateQueries({ queryKey: ["proposals"] });
+      await queryClient.invalidateQueries({ queryKey: ['proposals'] });
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to remove charged to income tag");
+      toast.error(error.response?.data?.message || 'Failed to remove charged to income tag');
     } finally {
       setChargedToIncomeLoading(false);
     }
@@ -228,20 +247,18 @@ const PersonnelChargedToIncomeTable = ({
     setPage(newPage);
   };
 
-  const handleRowsPerPageChange = (event) => {
+  const handleRowsPerPageChange = event => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
   };
 
-  const handleSelectRow = (id) => {
+  const handleSelectRow = id => {
     setSelectedRows(prev =>
-      prev.includes(id)
-        ? prev.filter(rowId => rowId !== id)
-        : [...prev, id]
+      prev.includes(id) ? prev.filter(rowId => rowId !== id) : [...prev, id]
     );
   };
 
-  const handleSelectAll = (event) => {
+  const handleSelectAll = event => {
     if (event.target.checked) {
       setSelectedRows(filteredRows.map(row => row._id));
     } else {
@@ -284,8 +301,9 @@ const PersonnelChargedToIncomeTable = ({
         <Card sx={{ mb: 2, bgcolor: '#fff8e1', border: '1px solid #ffc107' }}>
           <CardContent>
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              May <strong>{chargedListCount}</strong> record(s) na naka–Charged to Income (Kabuuan: {formatCurrency(chargedListTotal)}).
-              Kung hindi mo sinadya, puwede mong i-reset lahat para ibalik sa Personnel Services.
+              There are <strong>{chargedListCount}</strong> record(s) charged to Income (Total:{' '}
+              {formatCurrency(chargedListTotal)}). If you didn't mean to do that, you can reset
+              everything to move it back to Personnel Services.
             </Typography>
             <Button
               size="small"
@@ -294,7 +312,7 @@ const PersonnelChargedToIncomeTable = ({
               onClick={handleResetAllChargedToIncome}
               disabled={resetLoading}
             >
-              {resetLoading ? "Ina-reset..." : "I-reset lahat (ibalik sa Personnel Services)"}
+              {resetLoading ? 'Resetting...' : 'Reset all (return to Personnel Services)'}
             </Button>
           </CardContent>
         </Card>
@@ -310,18 +328,15 @@ const PersonnelChargedToIncomeTable = ({
         >
           REMOVE FROM CHARGED TO INCOME
         </Button>
-        <Button
-          variant="outlined"
-          startIcon={<RefreshIcon />}
-          onClick={() => refetch()}
-        >
+        <Button variant="outlined" startIcon={<RefreshIcon />} onClick={() => refetch()}>
           REFRESH
         </Button>
       </Box>
 
       {!isLoading && filteredRows.length === 0 && (
         <Alert severity="info">
-          No personnel tagged as Charged to Income. Select personnel from PS-Permanent or PS-Casual tabs and use "Charge to Income" button to move them here.
+          No personnel tagged as Charged to Income. Select personnel from PS-Permanent or PS-Casual
+          tabs and use "Charge to Income" button to move them here.
         </Alert>
       )}
 
@@ -347,7 +362,7 @@ const PersonnelChargedToIncomeTable = ({
             color="error"
             disabled={chargedToIncomeLoading}
           >
-            {chargedToIncomeLoading ? "Processing..." : "Confirm Remove"}
+            {chargedToIncomeLoading ? 'Processing...' : 'Confirm Remove'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -359,14 +374,20 @@ const PersonnelChargedToIncomeTable = ({
               <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>
                 <Checkbox
                   checked={selectedRows.length === filteredRows.length && filteredRows.length > 0}
-                  indeterminate={selectedRows.length > 0 && selectedRows.length < filteredRows.length}
+                  indeterminate={
+                    selectedRows.length > 0 && selectedRows.length < filteredRows.length
+                  }
                   onChange={handleSelectAll}
                   sx={{ color: 'white' }}
                 />
               </TableCell>
               {Object.keys(schema)
-                .filter((key) => columnVisibility[key] !== false && (schema[key].show === true || key === "action"))
-                .map((key) => (
+                .filter(
+                  key =>
+                    columnVisibility[key] !== false &&
+                    (schema[key].show === true || key === 'action')
+                )
+                .map(key => (
                   <TableCell key={key} sx={{ color: 'white', fontWeight: 'bold' }}>
                     {schema[key].label}
                   </TableCell>
@@ -377,13 +398,25 @@ const PersonnelChargedToIncomeTable = ({
             {isLoading ? (
               Array.from({ length: 5 }).map((_, idx) => (
                 <TableRow key={`loading-${idx}`}>
-                  <TableCell colSpan={Object.keys(schema).filter((key) => columnVisibility[key] !== false).length + 1} sx={{ height: 50 }}>
-                    <Box sx={{ width: '100%', height: '100%', bgcolor: '#f0f0f0', animation: 'pulse 1s infinite' }} />
+                  <TableCell
+                    colSpan={
+                      Object.keys(schema).filter(key => columnVisibility[key] !== false).length + 1
+                    }
+                    sx={{ height: 50 }}
+                  >
+                    <Box
+                      sx={{
+                        width: '100%',
+                        height: '100%',
+                        bgcolor: '#f0f0f0',
+                        animation: 'pulse 1s infinite',
+                      }}
+                    />
                   </TableCell>
                 </TableRow>
               ))
             ) : filteredRows.length > 0 ? (
-              filteredRows.map((row) => (
+              filteredRows.map(row => (
                 <TableRow key={row._id} hover>
                   <TableCell>
                     <Checkbox
@@ -392,10 +425,14 @@ const PersonnelChargedToIncomeTable = ({
                     />
                   </TableCell>
                   {Object.keys(schema)
-                    .filter((key) => columnVisibility[key] !== false && (schema[key].show === true || key === "action"))
-                    .map((key) => (
+                    .filter(
+                      key =>
+                        columnVisibility[key] !== false &&
+                        (schema[key].show === true || key === 'action')
+                    )
+                    .map(key => (
                       <TableCell key={key}>
-                        {key === "action" ? (
+                        {key === 'action' ? (
                           <CustomMenu
                             additionalMenuOptions={enhancedMenuOptions}
                             customEditElement={customEditElement}
@@ -405,8 +442,8 @@ const PersonnelChargedToIncomeTable = ({
                             schema={schema}
                             endpoint={apiPath}
                             dataListName={dataListName}
-                            disableEdit={row.status === "Submitted" || row.status === "Approved"}
-                            disableDelete={row.status === "Submitted" || row.status === "Approved"}
+                            disableEdit={row.status === 'Submitted' || row.status === 'Approved'}
+                            disableDelete={row.status === 'Submitted' || row.status === 'Approved'}
                           />
                         ) : (
                           renderCellValue(row, key)
@@ -417,7 +454,12 @@ const PersonnelChargedToIncomeTable = ({
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={Object.keys(schema).filter((key) => columnVisibility[key] !== false).length + 1} sx={{ textAlign: 'center', py: 3 }}>
+                <TableCell
+                  colSpan={
+                    Object.keys(schema).filter(key => columnVisibility[key] !== false).length + 1
+                  }
+                  sx={{ textAlign: 'center', py: 3 }}
+                >
                   <Typography color="textSecondary">No personnel found</Typography>
                 </TableCell>
               </TableRow>

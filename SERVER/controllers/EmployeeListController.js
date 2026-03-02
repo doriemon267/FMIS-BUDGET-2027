@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Employee = require("../models/EmployeeList");
 const PersonnelService = require('../models/PersonnelServices');
+const { getActiveSettingsWithCompensation } = require('../utils/settingsUtils');
 const {
   numberFilter,
   dateFilter,
@@ -610,24 +611,45 @@ exports.getEligibleForLoyaltyPay = async (req, res) => {
     // Start with hierarchical filters as base
     const baseFilters = { ...dbHierarchicalFilters };
     // // Get active settings to determine the fiscal year
-    const Settings = require("../models/Settings");
     const {
       calculateLoyaltyPayYearsOfService,
       getEligibleLoyaltyPayYear
     } = require("../utils/loyaltyPayUtils");
-    // If a specific fiscal year was requested, find those settings
-    // Otherwise use the active settings
+    // If a specific fiscal year was requested, we need to handle it differently
+    // since getActiveSettingsWithCompensation only gets the active settings
     let settings;
     if (requestedFiscalYear) {
-      settings = await Settings.findOne({ fiscalYear: requestedFiscalYear }).lean();
-      if (!settings) {
+      // For specific fiscal year, we need to fetch settings and compensation separately
+      const Settings = require("../models/Settings");
+      const CompensationSettings = require("../models/CompensationSettings");
+      const fySettings = await Settings.findOne({ fiscalYear: requestedFiscalYear }).lean();
+      if (!fySettings) {
         return res.status(404).json({
           error: "Fiscal year settings not found",
           message: `No settings found for fiscal year ${requestedFiscalYear}`
         });
       }
+      // Fetch compensation settings for this fiscal year
+      let compensationSettings = null;
+      if (fySettings.compensationSettingsId) {
+        compensationSettings = await CompensationSettings.findById(fySettings.compensationSettingsId).lean();
+      }
+      if (!compensationSettings) {
+        compensationSettings = await CompensationSettings.findOne({
+          fiscalYear: requestedFiscalYear
+        }).lean();
+      }
+      // Merge them
+      settings = { ...fySettings };
+      if (compensationSettings) {
+        Object.keys(compensationSettings).forEach((key) => {
+          if (!key.startsWith("_") && key !== "fiscalYear" && key !== "budgetType" && key !== "notes") {
+            settings[key] = compensationSettings[key];
+          }
+        });
+      }
     } else {
-      settings = await Settings.findOne({ isActive: true }).lean();
+      settings = await getActiveSettingsWithCompensation();
     }
     if (!settings) {
       return res.status(404).json({

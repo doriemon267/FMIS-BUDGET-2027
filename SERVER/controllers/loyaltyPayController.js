@@ -3,6 +3,7 @@ const LoyaltyPay        = require("../models/loyaltyPay");
 const Settings          = require("../models/Settings");
 const PersonnelService = require('../models/PersonnelServices');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
+const { getActiveSettingsWithCompensation } = require('../utils/settingsUtils');
 const {
   calculateLoyaltyPayYearsOfService,
   isEligibleForLoyaltyPay,
@@ -39,13 +40,11 @@ exports.createLoyaltyPay = async (req, res) => {
       processBy,
       processDate,
     } = req.body;
-    // 1) Get settings
-    const settings = fiscalYear
-      ? await Settings.findOne({ fiscalYear, isActive: true }).lean()
-      : await Settings.findOne({ isActive: true }).lean();
-    if (!settings?.loyaltyPay) {
+    // 1) Get settings with compensation data
+    const settings = await getActiveSettingsWithCompensation();
+    if (!settings || !settings?.loyaltyPay) {
       return res.status(400).json({
-        message: "Active settings with loyalty pay not found."
+        message: "Active settings with loyalty pay not found. Please configure loyalty pay in compensation settings."
       });
     }
     const usedFY = fiscalYear || settings.fiscalYear;
@@ -79,7 +78,7 @@ exports.createLoyaltyPay = async (req, res) => {
     await loyalty.save();
     // 5) Sync combined loyaltyAward to PersonnelServices
     const totalLoyalty = await computeTotalLoyalty(employeeFullName, usedFY);
-    const person = await PersonnelServices.findOne({
+    const person = await PersonnelService.findOne({
       employeeFullName,
       fiscalYear: usedFY,
     });
@@ -182,7 +181,7 @@ exports.getAllLoyaltyPays = async (req, res) => {
         query.fiscalYear = fiscalYear;
       }
     } else {
-      const active = await Settings.findOne({ isActive: true }).lean();
+      const active = await getActiveSettingsWithCompensation();
       if (active) {
         if (query.$and) {
           query.$and.push({ fiscalYear: active.fiscalYear });
@@ -206,13 +205,11 @@ exports.updateLoyaltyPay = async (req, res) => {
   try {
     const { id } = req.params;
     const { yearsInService, appointmentDate, fiscalYear } = req.body;
-    // 1) Get settings
-    const settings = fiscalYear
-      ? await Settings.findOne({ fiscalYear, isActive: true }).lean()
-      : await Settings.findOne({ isActive: true }).lean();
-    if (!settings?.loyaltyPay) {
+    // 1) Get settings with compensation data
+    const settings = await getActiveSettingsWithCompensation();
+    if (!settings || !settings?.loyaltyPay) {
       return res.status(400).json({
-        message: "Active settings with loyalty pay not found."
+        message: "Active settings with loyalty pay not found. Please configure loyalty pay in compensation settings."
       });
     }
     const usedFY = fiscalYear || settings.fiscalYear;
@@ -236,7 +233,7 @@ exports.updateLoyaltyPay = async (req, res) => {
     if (!updated) return res.status(404).json({ message: "Record not found." });
     // 5) Sync to PersonnelServices
     const totalLoyalty = await computeTotalLoyalty(updated.employeeFullName, usedFY);
-    const person = await PersonnelServices.findOne({
+    const person = await PersonnelService.findOne({
       employeeFullName: updated.employeeFullName,
       fiscalYear:     usedFY,
     });
@@ -273,7 +270,7 @@ exports.deleteLoyaltyPay = async (req, res) => {
     if (!toDel) return res.status(404).json({ message: "Record not found." });
     await LoyaltyPay.findByIdAndDelete(id);
     const totalLoyalty = await computeTotalLoyalty(toDel.employeeNumber, toDel.fiscalYear);
-    const person = await PersonnelServices.findOne({
+    const person = await PersonnelService.findOne({
       employeeNumber: toDel.employeeNumber,
       fiscalYear:     toDel.fiscalYear,
     });
@@ -312,7 +309,7 @@ exports.getLoyaltyPayStats = async (req, res) => {
       query.fiscalYear = fiscalYear;
     } else {
       // Use active fiscal year from settings if not provided
-      const settings = await Settings.findOne({ isActive: true }).lean();
+      const settings = await getActiveSettingsWithCompensation();
       if (!settings) {
         return res.status(404).json({
           error: "Active settings not found",
@@ -343,7 +340,7 @@ exports.getLoyaltyPayStats = async (req, res) => {
     try {
       // Get hierarchical filters from middleware
       const hierarchicalFilters = req.hierarchicalFilters || {};
-      const settings = await Settings.findOne({ isActive: true }).lean();
+      const settings = await getActiveSettingsWithCompensation();
       if (settings) {
         // Get region from hierarchical filters
         let regionFilter = '';
@@ -366,7 +363,7 @@ exports.getLoyaltyPayStats = async (req, res) => {
             ...hierarchicalFilters
           };
           
-          const personnelServices = await PersonnelServices.find(personnelQuery).lean();
+          const personnelServices = await PersonnelService.find(personnelQuery).lean();
           const {
             calculateLoyaltyPayYearsOfService,
             getEligibleLoyaltyPayYear
@@ -420,7 +417,7 @@ exports.getLoyaltyPayStats = async (req, res) => {
  */
 exports.getSumOfLoyaltyPay = async (req, res) => {
   try {
-    const active = await Settings.findOne({ isActive: true }).lean();
+    const active = await getActiveSettingsWithCompensation();
     if (!active) {
       return res.status(400).json({ message: "Active settings not found." });
     }

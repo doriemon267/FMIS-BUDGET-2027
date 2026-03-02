@@ -585,16 +585,22 @@ exports.bulkAddPersonnelServices = async (req, res) => {
   try {
     const { statusOfAppointment, RATA, region } = req.body;
 
+    const userRoles = req.user?.Roles || [];
+    const isSuperAdmin = userRoles.some((r) => ['SUPER_ADMIN', 'SUPER ADMIN'].includes(r));
+
     // ⚠️ CRITICAL: Get user's assignment DIRECTLY to ensure proper filtering
     const userId = req.user.id;
-    const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
-    const userAssignment = await HierarchicalUserAssignment.getUserPermissions(userId);
-    
-    if (!userAssignment || userAssignment.assignmentLevel === 'NONE') {
-      return res.status(403).json({
-        message: 'No organizational assignment found. Cannot perform bulk add.',
-        code: 'NO_ORG_ASSIGNMENT'
-      });
+    let userAssignment = null;
+    if (!isSuperAdmin) {
+      const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
+      userAssignment = await HierarchicalUserAssignment.getUserPermissions(userId);
+
+      if (!userAssignment || userAssignment.assignmentLevel === 'NONE') {
+        return res.status(403).json({
+          message: 'No organizational assignment found. Cannot perform bulk add.',
+          code: 'NO_ORG_ASSIGNMENT'
+        });
+      }
     }
 
     // Get hierarchical filters from middleware (as backup)
@@ -665,12 +671,27 @@ exports.bulkAddPersonnelServices = async (req, res) => {
         console.warn('[bulkAddPersonnelServices] Org-key inference error:', infErr.message);
       }
     }
-    const userLevel = userAssignment.assignmentLevel || workflowData.userLevel;
+    const userLevel = isSuperAdmin
+      ? (workflowData.userLevel || 'REGION')
+      : (userAssignment.assignmentLevel || workflowData.userLevel);
     
     // Get the user's ACTUAL assigned organizational units
-    const userRegion = userAssignment.regions?.[0]?.regionName || workflowData.region || req.body.region;
-    const userDepartment = userAssignment.departments?.[0]?.departmentName || workflowData.department || req.body.department;
-    const userDivision = userAssignment.divisions?.[0] || workflowData.division || req.body.division;
+    const userRegion = isSuperAdmin
+      ? (req.body.region || workflowData.region)
+      : (userAssignment.regions?.[0]?.regionName || workflowData.region || req.body.region);
+    const userDepartment = isSuperAdmin
+      ? (req.body.department || workflowData.department)
+      : (userAssignment.departments?.[0]?.departmentName || workflowData.department || req.body.department);
+    const userDivision = isSuperAdmin
+      ? (req.body.division || workflowData.division)
+      : (userAssignment.divisions?.[0] || workflowData.division || req.body.division);
+
+    if (isSuperAdmin && !userRegion) {
+      return res.status(400).json({
+        message: 'Region is required for SUPER_ADMIN bulk add.',
+        code: 'REGION_REQUIRED'
+      });
+    }
     
     const ownerRegion = userRegion;
     const ownerDepartment = userDepartment;
@@ -703,7 +724,8 @@ exports.bulkAddPersonnelServices = async (req, res) => {
 
     console.log('🔍 [BULK ADD] ==================== USER ASSIGNMENT ====================');
     console.log('🔍 [BULK ADD] User ID:', userId);
-    console.log('🔍 [BULK ADD] Assignment Level:', userAssignment.assignmentLevel);
+    console.log('🔍 [BULK ADD] Is SUPER_ADMIN:', isSuperAdmin);
+    console.log('🔍 [BULK ADD] Assignment Level:', userAssignment?.assignmentLevel || userLevel);
     console.log('🔍 [BULK ADD] Assigned Region:', userRegion);
     console.log('🔍 [BULK ADD] Assigned Department:', userDepartment);
     console.log('🔍 [BULK ADD] Assigned Division:', userDivision);
@@ -754,7 +776,7 @@ exports.bulkAddPersonnelServices = async (req, res) => {
       });
     }
 
-    if (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'DIVISION') {
+    if (!isSuperAdmin && (userAssignment.assignmentLevel === 'DEPARTMENT' || userAssignment.assignmentLevel === 'DIVISION')) {
       if (userDepartment) {
         statusConditions.forEach(condition => {
           condition.Department = userDepartment;
@@ -762,7 +784,7 @@ exports.bulkAddPersonnelServices = async (req, res) => {
       }
     }
 
-    if (userAssignment.assignmentLevel === 'DIVISION') {
+    if (!isSuperAdmin && userAssignment.assignmentLevel === 'DIVISION') {
       if (userDivision) {
         statusConditions.forEach(condition => {
           condition.Division = userDivision;

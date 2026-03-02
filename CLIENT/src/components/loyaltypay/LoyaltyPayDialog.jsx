@@ -62,8 +62,9 @@ const LoyaltyPayDialog = ({ row, endpoint, dataListName, schema, onDialogClose }
       const loadData = async () => {
         const settingsData = await fetchSettings();
         // Now that settings are loaded, fetch employees
+        // Pass settingsData directly instead of relying on state update
         if (settingsData) {
-          fetchEmployees();
+          fetchEmployees(settingsData);
         }
       };
       
@@ -103,14 +104,14 @@ const LoyaltyPayDialog = ({ row, endpoint, dataListName, schema, onDialogClose }
     }
   }, [selectedEmployee, setValue, isEditing]);
 
-  const fetchEmployees = async () => {
+  const fetchEmployees = async (settingsData) => {
     try {
       if (!activeRegion) {
         toast.error("Please select a region first");
         return;
       }
       
-      if (!settings) {
+      if (!settingsData) {
         toast.error("Settings not loaded yet. Please try again.");
         return;
       }
@@ -121,7 +122,7 @@ const LoyaltyPayDialog = ({ row, endpoint, dataListName, schema, onDialogClose }
       const res = await api.get("/employees/loyalty-pay", {
         params: {
           region: activeRegion.name || activeRegion.Region,
-          fiscalYear: settings.fiscalYear
+          fiscalYear: settingsData.fiscalYear
         }
       });
       

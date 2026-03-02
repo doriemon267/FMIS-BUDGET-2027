@@ -1061,14 +1061,7 @@ const getComprehensiveReportPdf = async (req, res) => {
 
     let currentY = MARGIN_TOP;
     let currentPage = 1;
-
-    const startNewPage = () => {
-      pdfDoc.endPage();
-      pdfDoc.createPage('A4');
-      currentY = MARGIN_TOP;
-      currentPage++;
-      drawBorder();
-    };
+    let isFirstPage = true;
 
     const textOpt = (opts = {}) => ({ color: '#000000', ...opts });
 
@@ -1079,16 +1072,17 @@ const getComprehensiveReportPdf = async (req, res) => {
       });
     };
 
-    // First page — A4 portrait with Annex A format
-    pdfDoc.createPage('A4');
-    drawBorder();
+    const drawFooter = () => {
+      pdfDoc.text(`Annex A (Summary)`, CONTENT_LEFT + 10, PAGE_HEIGHT - MARGIN - 15, textOpt({ fontSize: 8 }));
+      pdfDoc.text(`Page ${currentPage}`, CONTENT_RIGHT - 60, PAGE_HEIGHT - MARGIN - 15, textOpt({ fontSize: 8 }));
+    };
 
     const safeStr = (v) => (v != null && v !== '') ? String(v) : '';
     const regionsStr = reportData.summary.regions != null
       ? (Array.isArray(reportData.summary.regions) ? reportData.summary.regions.join(', ') : String(reportData.summary.regions))
       : '';
 
-    // Draw logos (left: Seal.png and logo.png side by side, right: Bagong_Pilipinas.png)
+    // Resolve logo paths
     let sealPath = path.join(__dirname, '../assets/Seal.png');
     if (!fs.existsSync(sealPath)) {
       const clientSeal = path.join(__dirname, '../../CLIENT/public/Seal.png');
@@ -1111,82 +1105,103 @@ const getComprehensiveReportPdf = async (req, res) => {
     const hasNiaLogo = fs.existsSync(nialogoPath);
     const hasBagong = fs.existsSync(bagongPilipinasPath);
 
-    // Header section with logos
-    const logoY = currentY + 5;
-    const logoWidth = 40;
-    const logoHeight = 40;
-    
-    if (hasSeal || hasNiaLogo || hasBagong) {
-      try {
-        // Left side: Seal.png and logo.png side by side
-        if (hasSeal) {
-          pdfDoc.image(sealPath, CONTENT_LEFT, logoY, { width: logoWidth, height: logoHeight });
+    const drawHeader = (includeTitleSection = false) => {
+      // Header section with logos
+      const logoY = currentY + 5;
+      const logoWidth = 40;
+      const logoHeight = 40;
+      
+      if (hasSeal || hasNiaLogo || hasBagong) {
+        try {
+          // Left side: Seal.png and logo.png side by side
+          if (hasSeal) {
+            pdfDoc.image(sealPath, CONTENT_LEFT, logoY, { width: logoWidth, height: logoHeight });
+          }
+          if (hasNiaLogo) {
+            pdfDoc.image(nialogoPath, CONTENT_LEFT + logoWidth + 5, logoY, { width: logoWidth, height: logoHeight });
+          }
+          // Right side: Bagong_Pilipinas.png
+          if (hasBagong) {
+            pdfDoc.image(bagongPilipinasPath, CONTENT_RIGHT - logoWidth, logoY, { width: logoWidth, height: logoHeight });
+          }
+        } catch (e) {
+          console.warn('PDF logo load failed:', e.message);
         }
-        if (hasNiaLogo) {
-          pdfDoc.image(nialogoPath, CONTENT_LEFT + logoWidth + 5, logoY, { width: logoWidth, height: logoHeight });
-        }
-        // Right side: Bagong_Pilipinas.png
-        if (hasBagong) {
-          pdfDoc.image(bagongPilipinasPath, CONTENT_RIGHT - logoWidth, logoY, { width: logoWidth, height: logoHeight });
-        }
-      } catch (e) {
-        console.warn('PDF logo load failed:', e.message);
       }
-    }
 
-    // Header text (centered) - positioned next to logos
-    const headerTextY = currentY + 8;
-    pdfDoc
-      .text('Republic of the Philippines', CENTER_X, headerTextY, textOpt({ fontSize: 8, align: 'center' }));
-    
-    let headerLineY = headerTextY + LINE_HEIGHT * 0.8;
-    pdfDoc
-      .text('OFFICE OF THE PRESIDENT', CENTER_X, headerLineY, textOpt({ fontSize: 8, bold: true, align: 'center' }));
-    
-    headerLineY += LINE_HEIGHT * 0.8;
-    pdfDoc
-      .text('NATIONAL IRRIGATION ADMINISTRATION', CENTER_X, headerLineY, textOpt({ fontSize: 8, bold: true, align: 'center', color: '#292e2a' }));
-    
-    // Determine what to display: Department/Division if available, otherwise Region
-    const departmentName = safeStr(reportData.summary.department || '');
-    const divisionName = safeStr(reportData.summary.division || '');
-    const regionsArray = Array.isArray(reportData.summary.regions) ? reportData.summary.regions : [reportData.summary.regions];
-    
-    let departmentDivisionText = '';
-    
-    // Prefer Department/Division if they exist, otherwise show Region
-    if (departmentName && divisionName) {
-      // Both department and division available
-      departmentDivisionText = `${departmentName} / ${divisionName}`;
-    } else if (departmentName) {
-      // Only department available
-      departmentDivisionText = departmentName;
-    } else if (divisionName) {
-      // Only division available
-      departmentDivisionText = divisionName;
-    } else {
-      // No department/division - show region instead
-      if (regionsArray.length > 0 && regionsArray[0]) {
-        departmentDivisionText = String(regionsArray[0]);
+      // Header text (centered) - start BELOW the logos to avoid overlap
+      const headerTextY = logoY + logoHeight + 5;
+      pdfDoc.text('Republic of the Philippines', CENTER_X, headerTextY, textOpt({ fontSize: 8, align: 'center' }));
+      
+      let headerLineY = headerTextY + LINE_HEIGHT * 0.8;
+      pdfDoc.text('OFFICE OF THE PRESIDENT', CENTER_X, headerLineY, textOpt({ fontSize: 8, bold: true, align: 'center' }));
+      
+      headerLineY += LINE_HEIGHT * 0.8;
+      pdfDoc.text('NATIONAL IRRIGATION ADMINISTRATION', CENTER_X, headerLineY, textOpt({ fontSize: 8, bold: true, align: 'center', color: '#292e2a' }));
+      
+      // Department/Division or Region
+      const departmentName = safeStr(reportData.summary.department || '');
+      const divisionName = safeStr(reportData.summary.division || '');
+      const regionsArray = Array.isArray(reportData.summary.regions) ? reportData.summary.regions : [reportData.summary.regions];
+      
+      let departmentDivisionText = '';
+      if (departmentName && divisionName) {
+        departmentDivisionText = `${departmentName} / ${divisionName}`;
+      } else if (departmentName) {
+        departmentDivisionText = departmentName;
+      } else if (divisionName) {
+        departmentDivisionText = divisionName;
       } else {
-        departmentDivisionText = 'OFFICE / DIVISION';
+        if (regionsArray.length > 0 && regionsArray[0]) {
+          departmentDivisionText = String(regionsArray[0]);
+        } else {
+          departmentDivisionText = 'OFFICE / DIVISION';
+        }
       }
-    }
-    
-    headerLineY += LINE_HEIGHT * 0.8;
-    pdfDoc
-      .text(departmentDivisionText, CENTER_X, headerLineY, textOpt({ fontSize: 8, align: 'center' }));
-    
-    // ANNEX A (below Bagong_Pilipinas logo)
-    pdfDoc.text('ANNEX A', CONTENT_RIGHT - 50, logoY + logoHeight + 5, textOpt({ fontSize: 10, bold: true }));
-    
-    currentY = logoY + logoHeight + 30;
+      
+      headerLineY += LINE_HEIGHT * 0.8;
+      pdfDoc.text(departmentDivisionText, CENTER_X, headerLineY, textOpt({ fontSize: 8, align: 'center' }));
+      
+      // ANNEX A
+      pdfDoc.text('ANNEX A', CONTENT_RIGHT - 50, logoY + logoHeight + 5, textOpt({ fontSize: 10, bold: true }));
+      
+      // Set currentY below all header text
+      currentY = headerLineY + LINE_HEIGHT * 2;
 
-    // Title and Fiscal Year
-    pdfDoc.text('CORPORATE OPERATING BUDGET', CENTER_X, currentY, textOpt({ fontSize: 13, bold: true, align: 'center' }));
-    currentY += LINE_HEIGHT * 1.2;
-    pdfDoc.text(`FISCAL YEAR ${safeStr(reportData.summary.fiscalYear)}`, CENTER_X, currentY, textOpt({ fontSize: 11, bold: true, align: 'center' }));
-    currentY += LINE_HEIGHT * 1.5;
+      // Title section (only on first page or if explicitly requested)
+      if (includeTitleSection) {
+        pdfDoc.text('CORPORATE OPERATING BUDGET', CENTER_X, currentY, textOpt({ fontSize: 13, bold: true, align: 'center' }));
+        currentY += LINE_HEIGHT * 1.2;
+        pdfDoc.text(`FISCAL YEAR ${safeStr(reportData.summary.fiscalYear)}`, CENTER_X, currentY, textOpt({ fontSize: 11, bold: true, align: 'center' }));
+        currentY += LINE_HEIGHT * 1.5;
+      } else {
+        // Continuation page - add simple note
+        pdfDoc.text('(Continued)', CENTER_X, currentY, textOpt({ fontSize: 9, italic: true, align: 'center' }));
+        currentY += LINE_HEIGHT * 1.5;
+      }
+    };
+
+    const startNewPage = () => {
+      drawFooter();
+      pdfDoc.endPage();
+      pdfDoc.createPage('A4');
+      currentPage++;
+      currentY = MARGIN_TOP + 20; // Start content a bit below the top
+      drawBorder();
+      // No header on continuation pages - header only on first page
+    };
+
+    const ensureSpace = (lines = 1) => {
+      const spaceNeeded = lines * LINE_HEIGHT;
+      if (currentY + spaceNeeded > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
+        startNewPage();
+      }
+    };
+
+    // First page — A4 portrait with Annex A format
+    pdfDoc.createPage('A4');
+    drawBorder();
+    drawHeader(true); // true = include title section on first page
 
     // Personnel statistics section - Get actual counts from PersonnelServices
     const totalEmployees = Number(reportData.summary.totalEmployees) || 0;
@@ -1248,6 +1263,7 @@ const getComprehensiveReportPdf = async (req, res) => {
     currentY += LINE_HEIGHT * 1.2;
 
     // USES OF FUNDS section header
+    ensureSpace(3);
     pdfDoc.text('USES OF FUNDS', CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 10, bold: true, underline: true }));
     currentY += LINE_HEIGHT * 1;
 
@@ -1258,9 +1274,7 @@ const getComprehensiveReportPdf = async (req, res) => {
     reportData.sections.forEach((section) => {
       if (!section.categories) return;
 
-      if (currentY > PAGE_HEIGHT - MARGIN_BOTTOM * 3) {
-        startNewPage();
-      }
+      ensureSpace(4); // Ensure space for section header
 
       const sectionTotal = Number(section.sectionTotal) || 0;
       grandTotalAmount += sectionTotal;
@@ -1293,9 +1307,7 @@ const getComprehensiveReportPdf = async (req, res) => {
       const letters = 'abcdefghijklmnopqrstuvwxyz'.split('');
       
       categories.forEach((category, idx) => {
-        if (currentY > PAGE_HEIGHT - MARGIN_BOTTOM) {
-          startNewPage();
-        }
+        ensureSpace(2); // Ensure space for category line
 
         const categoryAmount = Number(
           category.total ?? category.totalSubsidy ?? category.totalIncome
@@ -1328,9 +1340,7 @@ const getComprehensiveReportPdf = async (req, res) => {
           if (category.items) {
             const itemsArray = Array.isArray(category.items) ? category.items : Object.values(category.items);
             itemsArray.forEach((item, itemIdx) => {
-              if (currentY > PAGE_HEIGHT - MARGIN_BOTTOM) {
-                startNewPage();
-              }
+              ensureSpace(1); // Ensure space for sub-item
 
               const itemAmount = Number(item?.amount ?? item?.subsidy ?? item?.income) || 0;
               if (itemAmount > 0 || item?.name) {
@@ -1392,15 +1402,18 @@ const getComprehensiveReportPdf = async (req, res) => {
         currentY,
         textOpt({ fontSize: 10, bold: true, align: 'right' })
       );
-    currentY += LINE_HEIGHT * 1.5;
+    currentY += LINE_HEIGHT * 2;
 
-    // Page footer with page number
-    pdfDoc.text(`Annex A (Summary)`, CONTENT_LEFT + 10, PAGE_HEIGHT - MARGIN - 15, textOpt({ fontSize: 8 }));
-    pdfDoc.text(`Page ${currentPage}`, CONTENT_RIGHT - 60, PAGE_HEIGHT - MARGIN - 15, textOpt({ fontSize: 8 }));
-
-    // Second page - Signature blocks
-    startNewPage();
-    currentY = MARGIN_TOP + 20;
+    // Check if NET INCOME FROM OPERATION section fits on current page (needs ~100 points)
+    if (currentY + 100 > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
+      // Not enough space, create new page without header (just border)
+      drawFooter();
+      pdfDoc.endPage();
+      pdfDoc.createPage('A4');
+      currentPage++;
+      currentY = MARGIN_TOP + 20;
+      drawBorder();
+    }
 
     // NET INCOME FROM OPERATION
     pdfDoc
@@ -1418,6 +1431,17 @@ const getComprehensiveReportPdf = async (req, res) => {
     });
     currentY += LINE_HEIGHT * 4;
 
+    // Check if signature blocks fit on current page (needs ~280 points)
+    if (currentY + 280 > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
+      // Not enough space, create new page without header for signatures
+      drawFooter();
+      pdfDoc.endPage();
+      pdfDoc.createPage('A4');
+      currentPage++;
+      currentY = MARGIN_TOP + 40;
+      drawBorder();
+    }
+
     // Signature blocks
     const sigY = currentY + 50;
     
@@ -1425,15 +1449,16 @@ const getComprehensiveReportPdf = async (req, res) => {
     pdfDoc.text('Prepared by:', CONTENT_LEFT + 20, currentY, textOpt({ fontSize: 9 }));
     pdfDoc.text('_____________________________', CONTENT_LEFT + 20, sigY, textOpt({ fontSize: 9 }));
     pdfDoc.text('Budget Officer', CONTENT_LEFT + 20, sigY + LINE_HEIGHT, textOpt({ fontSize: 8, bold: true }));
+    pdfDoc.text('Date: _______________', CONTENT_LEFT + 20, sigY + LINE_HEIGHT * 2, textOpt({ fontSize: 7 }));
     
-    currentY += LINE_HEIGHT * 8;
+    currentY += LINE_HEIGHT * 9;
 
     // Reviewed by
     pdfDoc.text('Reviewed by:', CONTENT_LEFT + 20, currentY, textOpt({ fontSize: 9 }));
     pdfDoc.text('_____________________________', CONTENT_LEFT + 20, currentY + 50, textOpt({ fontSize: 9 }));
     pdfDoc.text('Manager, Management Information Division', CONTENT_LEFT + 20, currentY + 62, textOpt({ fontSize: 8, bold: true }));
-    pdfDoc.text('BSC', CONTENT_LEFT + 20, currentY + 72, textOpt({ fontSize: 7 }));
-    pdfDoc.text('BSC', CONTENT_LEFT + 20, currentY + 80, textOpt({ fontSize: 7 }));
+    pdfDoc.text('Budget and Statistics Center', CONTENT_LEFT + 20, currentY + 72, textOpt({ fontSize: 7 }));
+    pdfDoc.text('Date: _______________', CONTENT_LEFT + 20, currentY + 82, textOpt({ fontSize: 7 }));
     
     currentY += LINE_HEIGHT * 12;
 
@@ -1441,10 +1466,10 @@ const getComprehensiveReportPdf = async (req, res) => {
     pdfDoc.text('Noted by:', CONTENT_LEFT + 20, currentY, textOpt({ fontSize: 9 }));
     pdfDoc.text('_____________________________', CONTENT_LEFT + 20, currentY + 50, textOpt({ fontSize: 9 }));
     pdfDoc.text('Manager, Corporate Planning Services', CONTENT_LEFT + 20, currentY + 62, textOpt({ fontSize: 8, bold: true }));
+    pdfDoc.text('Date: _______________', CONTENT_LEFT + 20, currentY + 72, textOpt({ fontSize: 7 }));
     
-    // Page footer
-    pdfDoc.text(`Annex A (Summary)`, CONTENT_LEFT + 10, PAGE_HEIGHT - MARGIN - 15, textOpt({ fontSize: 8 }));
-    pdfDoc.text(`Page ${currentPage}`, CONTENT_RIGHT - 60, PAGE_HEIGHT - MARGIN - 15, textOpt({ fontSize: 8 }));
+    // Final page footer
+    drawFooter();
 
     // Close last page and finalize PDF, then stream file to response
     pdfDoc.endPage().endPDF((err) => {

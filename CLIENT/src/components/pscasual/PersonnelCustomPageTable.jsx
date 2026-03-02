@@ -86,6 +86,7 @@ const PSCasualCustomPageTable = ({
   const [RATA, setRATA] = useState([]);
   const [compensation, setCompensation] = useState({});
   const { currentUser } = useUser();
+  const { activeRegion = {} } = useRegion();
   const queryClient = useQueryClient();
   const { workflowRef, headerConfig } = useWorkflowRef();
   const hasWorkflowRef = Boolean(workflowRef);
@@ -824,7 +825,7 @@ const PSCasualCustomPageTable = ({
             // Call server-side PDF generation endpoint
             const exportParams = {
               fiscalYear: fiscalYear,
-              region: activeRegion?.name || activeRegion?.regionName,
+              region: activeRegion?.name || activeRegion?.regionName || '',
               office: headerConfig?.office || '',
               division: headerConfig?.division || '',
             };
