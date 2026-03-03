@@ -25,6 +25,10 @@ import {
   Avatar,
   Tooltip,
   Collapse,
+  Dialog,
+  DialogContent,
+  AppBar,
+  Toolbar,
 } from "@mui/material";
 import {
   AccountBalance,
@@ -37,645 +41,22 @@ import {
   Summarize,
   ExpandMore,
   ExpandLess,
+  Close,
+  ZoomIn,
+  ZoomOut,
+  RestartAlt,
 } from "@mui/icons-material";
 import PesoIcon from "../icons/PesoIcon";
 import api from "../../config/api";
 import ReportPageLayout from "./ReportPageLayout";
-import {
-  PDFDownloadLink,
-  Document,
-  Page,
-  Text,
-  View,
-  StyleSheet,
-  Font,
-  Image,
-} from '@react-pdf/renderer';
+
 
 // Custom hook for user restrictions
 import { useUserRestrictions } from "../../hooks/useUserRestrictions";
 import { AccessStatusIndicator } from "../common/AccessStatusIndicator";
 import { useUser } from "../../context/UserContext";
 
-// ====================================================================================
-// START: PDF REPORTING SECTION (This part is correct and remains the same)
-// ====================================================================================
 
-const pdfTheme = {
-  colors: {
-    primary: '#1976d2',
-    secondary: '#5e35b1',
-    textPrimary: '#212121',
-    textSecondary: '#757575',
-    background: '#ffffff',
-    tableHeaderBg: '#1976d2',
-    tableHeaderText: '#ffffff',
-    rowOdd: '#f8f9fa',
-    success: '#28a745',
-  },
-  fontSizes: { xs: 7, s: 8, m: 10, l: 14, xl: 18 },
-  spacing: { xs: 3, s: 6, m: 10, l: 14, xl: 18 },
-};
-
-Font.register({
-  family: 'Roboto',
-  fonts: [
-    { src: '/fonts/Roboto-Regular.ttf' },
-    { src: '/fonts/Roboto-Bold.ttf', fontWeight: 'bold' },
-    { src: '/fonts/Roboto-Italic.ttf', fontStyle: 'italic' },
-  ],
-});
-
-const pdfStyles = StyleSheet.create({
-  page: { 
-    padding: pdfTheme.spacing.xl, 
-    fontFamily: 'Roboto', 
-    fontSize: pdfTheme.fontSizes.s, 
-    backgroundColor: pdfTheme.colors.background, 
-    color: pdfTheme.colors.textPrimary 
-  },
-  header: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: pdfTheme.spacing.l, 
-    paddingBottom: pdfTheme.spacing.s, 
-    borderBottom: `2px solid ${pdfTheme.colors.primary}` 
-  },
-  logo: { width: 45, height: 45 },
-  headerText: { textAlign: 'right' },
-  reportTitle: { 
-    fontSize: pdfTheme.fontSizes.l, 
-    fontWeight: 'bold', 
-    color: pdfTheme.colors.primary 
-  },
-  footer: { 
-    position: 'absolute', 
-    bottom: pdfTheme.spacing.m, 
-    left: pdfTheme.spacing.xl, 
-    right: pdfTheme.spacing.xl, 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    fontSize: pdfTheme.fontSizes.xs, 
-    color: pdfTheme.colors.textSecondary, 
-    borderTop: `1px solid ${pdfTheme.colors.textSecondary}`, 
-    paddingTop: pdfTheme.spacing.xs 
-  },
-  summaryBox: { 
-    backgroundColor: '#f5f5f5', 
-    border: `2px solid ${pdfTheme.colors.primary}`, 
-    borderRadius: 5, 
-    padding: pdfTheme.spacing.m, 
-    marginVertical: pdfTheme.spacing.l 
-  },
-  summaryRow: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    marginBottom: pdfTheme.spacing.xs,
-    paddingVertical: 2
-  },
-  summaryLabel: { 
-    color: pdfTheme.colors.textSecondary,
-    fontSize: pdfTheme.fontSizes.s
-  },
-  summaryValue: { 
-    fontWeight: 'bold',
-    fontSize: pdfTheme.fontSizes.s
-  },
-  grandTotal: { 
-    fontSize: pdfTheme.fontSizes.l, 
-    fontWeight: 'bold', 
-    textAlign: 'center', 
-    color: pdfTheme.colors.success, 
-    marginTop: pdfTheme.spacing.s,
-    padding: pdfTheme.spacing.xs,
-    backgroundColor: '#e8f5e8',
-    borderRadius: 3
-  },
-  table: { 
-    width: '100%', 
-    border: `2px solid #e0e0e0`, 
-    borderRadius: 5, 
-    overflow: 'hidden', 
-    marginBottom: pdfTheme.spacing.l 
-  },
-  tableHeader: { 
-    flexDirection: 'row', 
-    backgroundColor: pdfTheme.colors.tableHeaderBg, 
-    color: pdfTheme.colors.tableHeaderText, 
-    padding: pdfTheme.spacing.s, 
-    fontWeight: 'bold',
-    fontSize: pdfTheme.fontSizes.s,
-    minHeight: 25
-  },
-  tableRow: { 
-    flexDirection: 'row', 
-    borderBottom: `1px solid #e0e0e0`, 
-    padding: pdfTheme.spacing.s,
-    minHeight: 20
-  },
-  tableRowOdd: { backgroundColor: pdfTheme.colors.rowOdd },
-  tableCell: { 
-    padding: pdfTheme.spacing.xs, 
-    fontSize: pdfTheme.fontSizes.s,
-    flexWrap: 'wrap',
-    wordWrap: 'break-word'
-  },
-  subItemCell: { 
-    paddingLeft: pdfTheme.spacing.l, 
-    fontStyle: 'italic', 
-    color: pdfTheme.colors.textSecondary, 
-    fontSize: pdfTheme.fontSizes.xs,
-    flexWrap: 'wrap'
-  },
-  sectionTitle: { 
-    fontSize: pdfTheme.fontSizes.l, 
-    fontWeight: 'bold', 
-    color: pdfTheme.colors.secondary, 
-    marginBottom: pdfTheme.spacing.s, 
-    marginTop: pdfTheme.spacing.l,
-    paddingBottom: pdfTheme.spacing.xs,
-    borderBottom: `1px solid ${pdfTheme.colors.secondary}`
-  },
-  sectionSubText: { 
-    fontSize: pdfTheme.fontSizes.s, 
-    fontStyle: 'italic', 
-    color: pdfTheme.colors.textSecondary, 
-    marginBottom: pdfTheme.spacing.m 
-  },
-  sectionTotal: {
-    fontSize: pdfTheme.fontSizes.m,
-    fontWeight: 'bold',
-    color: pdfTheme.colors.primary,
-    textAlign: 'right',
-    marginTop: pdfTheme.spacing.xs,
-    marginBottom: pdfTheme.spacing.m,
-    padding: pdfTheme.spacing.xs,
-    backgroundColor: '#f0f8ff',
-    borderRadius: 3
-  },
-  totalRow: {
-    backgroundColor: '#f8f9fa',
-    border: `1px solid ${pdfTheme.colors.primary}`,
-    fontWeight: 'bold',
-    fontSize: pdfTheme.fontSizes.s
-  },
-  categoryTotalRow: {
-    backgroundColor: '#e3f2fd',
-    fontWeight: 'bold',
-    fontSize: pdfTheme.fontSizes.xs
-  }
-});
-
-const formatPDFCurrency = (amount) => {
-  const num = parseFloat(String(amount).replace(/[^\d.-]/g, ''));
-  if (isNaN(num)) return '₱0.00';
-  return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(num);
-};
-
-// Helper function to calculate section totals
-const calculateSectionTotal = (section) => {
-  if (!section.categories) return 0;
-  return Object.values(section.categories).reduce((total, category) => {
-    return total + (parseFloat(category.total) || 0);
-  }, 0);
-};
-
-// Helper function to truncate long text for better PDF layout
-const truncateText = (text, maxLength = 50) => {
-  if (!text) return '';
-  return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
-};
-
-const ReportHeader = ({ title, reportData }) => (
-  <View style={pdfStyles.header}>
-    <Image style={pdfStyles.logo} src="/images/logo_placeholder.png" />
-    <View style={pdfStyles.headerText}>
-      <Text style={pdfStyles.reportTitle}>{title}</Text>
-      <Text>Fiscal Year: {reportData.summary.fiscalYear || 'N/A'}</Text>
-      <Text>Budget Type: {reportData.summary.budgetType || 'N/A'}</Text>
-    </View>
-  </View>
-);
-
-const ReportFooter = ({ pageNumber, totalPages, filters }) => (
-  <View style={pdfStyles.footer}>
-    <Text>Generated: {new Date().toLocaleString('en-PH')} | Region: {filters.region}</Text>
-    <Text>Page {pageNumber} of {totalPages} | For Official Use Only</Text>
-  </View>
-);
-
-const DynamicTable = ({ headers, rows, widths, sectionTotal, showSectionTotal = true }) => {
-    const defaultWidth = `${100 / headers.length}%`;
-    
-    return (
-      <View style={pdfStyles.table} wrap={false}>
-        {/* Table Header */}
-        <View style={pdfStyles.tableHeader}>
-          {headers.map((header, i) => (
-            <Text key={i} style={{ 
-              width: widths ? `${widths[i]}%` : defaultWidth, 
-              textAlign: 'center',
-              padding: pdfTheme.spacing.xs
-            }}>
-              {header}
-            </Text>
-          ))}
-        </View>
-        
-        {/* Table Rows */}
-        {rows.map((row, rowIndex) => {
-          const isTotal = row.isTotal;
-          const isCategoryTotal = row.isCategoryTotal;
-          
-          return (
-            <View key={rowIndex} style={[
-              pdfStyles.tableRow, 
-              rowIndex % 2 !== 0 && !isTotal && !isCategoryTotal && pdfStyles.tableRowOdd,
-              isTotal && pdfStyles.totalRow,
-              isCategoryTotal && pdfStyles.categoryTotalRow
-            ]}>
-              {row.map ? row.map((cell, cellIndex) => {
-                const isSubItem = typeof cell === 'object' && cell.isSubItem;
-                const content = isSubItem ? cell.content : cell;
-                const isNumeric = typeof content === 'string' && content.startsWith('₱');
-                
-                return (
-                  <Text key={cellIndex} style={[
-                    pdfStyles.tableCell, 
-                    { 
-                      width: widths ? `${widths[cellIndex]}%` : defaultWidth,
-                      padding: pdfTheme.spacing.xs
-                    }, 
-                    isSubItem && pdfStyles.subItemCell, 
-                    isNumeric && { textAlign: 'right' },
-                    (isTotal || isCategoryTotal) && { fontWeight: 'bold' }
-                  ]}>
-                    {content}
-                  </Text>
-                );
-              }) : null}
-            </View>
-          );
-        })}
-        
-        {/* Section Total Row */}
-        {showSectionTotal && sectionTotal !== null && sectionTotal !== undefined && (
-          <View style={[pdfStyles.tableRow, pdfStyles.totalRow]}>
-            {headers.length === 5 ? (
-              // For 5-column tables (with Income, Subsidy, Amount)
-              <>
-                <Text style={[pdfStyles.tableCell, { width: `${widths[0] + widths[1]}%`, fontWeight: 'bold', textAlign: 'right', padding: pdfTheme.spacing.xs }]}>
-                  SECTION TOTAL:
-                </Text>
-                <Text style={[pdfStyles.tableCell, { width: `${widths[2]}%`, textAlign: 'right', fontWeight: 'bold', color: pdfTheme.colors.success, padding: pdfTheme.spacing.xs }]}>
-                  {formatPDFCurrency(sectionTotal.income || 0)}
-                </Text>
-                <Text style={[pdfStyles.tableCell, { width: `${widths[3]}%`, textAlign: 'right', fontWeight: 'bold', color: pdfTheme.colors.success, padding: pdfTheme.spacing.xs }]}>
-                  {formatPDFCurrency(sectionTotal.subsidy || 0)}
-                </Text>
-                <Text style={[pdfStyles.tableCell, { width: `${widths[4]}%`, textAlign: 'right', fontWeight: 'bold', color: pdfTheme.colors.success, padding: pdfTheme.spacing.xs }]}>
-                  {formatPDFCurrency((sectionTotal.income || 0) + (sectionTotal.subsidy || 0))}
-                </Text>
-              </>
-            ) : (
-              // For 3-column tables (Category, Description, Amount)
-              <>
-                <Text style={[
-                  pdfStyles.tableCell, 
-                  { 
-                    width: widths && widths.length > 2 ? 
-                      `${widths.slice(0, -1).reduce((a, b) => a + b, 0)}%` : 
-                      `${100 - (widths ? widths[widths.length - 1] : 100 / headers.length)}%`,
-                    fontWeight: 'bold',
-                    textAlign: 'right',
-                    padding: pdfTheme.spacing.xs
-                  }
-                ]}>
-                  SECTION TOTAL:
-                </Text>
-                <Text style={[
-                  pdfStyles.tableCell, 
-                  { 
-                    width: widths ? `${widths[widths.length - 1]}%` : `${100 / headers.length}%`,
-                    textAlign: 'right',
-                    fontWeight: 'bold',
-                    color: pdfTheme.colors.success,
-                    padding: pdfTheme.spacing.xs
-                  }
-                ]}>
-                  {formatPDFCurrency(typeof sectionTotal === 'number' ? sectionTotal : sectionTotal.total || 0)}
-                </Text>
-              </>
-            )}
-          </View>
-        )}
-      </View>
-    );
-};
-
-const PDFReport = ({ reportData, filters }) => {
-  if (!reportData || !reportData.summary) return null;
-  
-  // Debug: Check if A.2 exists in PDF
-  if (reportData.sections?.find(s => s.sectionCode === "A.2")) {
-  }
-  
-  const sectionsPerPage = 1; // Reduced to 1 section per page for better layout
-  const sectionPages = [];
-  if (reportData.sections?.length) {
-    for (let i = 0; i < reportData.sections.length; i += sectionsPerPage) {
-      sectionPages.push(reportData.sections.slice(i, i + sectionsPerPage));
-    }
-  }
-  const totalPages = 1 + sectionPages.length;
-  
-  // Calculate overall totals by column type
-  const overallTotals = reportData.sections?.reduce((acc, section) => {
-    const sectionTotal = calculateSectionTotal(section);
-    let sectionIncome = 0;
-    let sectionSubsidy = 0;
-    
-    // Calculate income and subsidy totals for each section
-    if (section.sectionCode === "A.2") {
-      // BUDGETARY SUPPORT - only subsidy, no income
-      sectionSubsidy = sectionTotal;
-    } else {
-      // Other sections - check for both income and subsidy
-      Object.values(section.categories || {}).forEach(category => {
-        sectionIncome += parseFloat(category.totalIncome || 0);
-        sectionSubsidy += parseFloat(category.totalSubsidy || 0);
-      });
-    }
-    
-    acc.totalIncome += sectionIncome;
-    acc.totalSubsidy += sectionSubsidy;
-    acc.totalAmount += (sectionIncome + sectionSubsidy);
-    
-    acc.sections.push({
-      code: section.sectionCode,
-      name: section.sectionName,
-      income: sectionIncome,
-      subsidy: sectionSubsidy,
-      total: sectionIncome + sectionSubsidy
-    });
-    return acc;
-  }, { totalIncome: 0, totalSubsidy: 0, totalAmount: 0, sections: [] }) || { totalIncome: 0, totalSubsidy: 0, totalAmount: 0, sections: [] };
-
-  return (
-    <Document>
-      <Page size={{ width: 595, height: 842 }} style={pdfStyles.page}>
-        <ReportHeader title="Budget Summary Report" reportData={reportData} />
-        <Text style={pdfStyles.sectionTitle}>Overall Summary</Text>
-        <View style={pdfStyles.summaryBox}>
-          <View style={pdfStyles.summaryRow}>
-            <Text style={pdfStyles.summaryLabel}>Total Regions:</Text>
-            <Text style={pdfStyles.summaryValue}>{reportData.summary.totalRegions || 0}</Text>
-          </View>
-          <View style={pdfStyles.summaryRow}>
-            <Text style={pdfStyles.summaryLabel}>Total Employees:</Text>
-            <Text style={pdfStyles.summaryValue}>{reportData.summary.totalEmployees?.toLocaleString() || 'N/A'}</Text>
-          </View>
-          <View style={pdfStyles.summaryRow}>
-            <Text style={pdfStyles.summaryLabel}>Total Budget Sections:</Text>
-            <Text style={pdfStyles.summaryValue}>{reportData.sections?.length || 0}</Text>
-          </View>
-          <View style={pdfStyles.summaryRow}>
-            <Text style={pdfStyles.summaryLabel}>Fiscal Year:</Text>
-            <Text style={pdfStyles.summaryValue}>{filters.fiscalYear}</Text>
-          </View>
-          <View style={pdfStyles.summaryRow}>
-            <Text style={pdfStyles.summaryLabel}>Budget Type:</Text>
-            <Text style={pdfStyles.summaryValue}>{filters.budgetType}</Text>
-          </View>
-          
-          {/* Column-wise Totals */}
-          <View style={pdfStyles.summaryRow}>
-            <Text style={pdfStyles.summaryLabel}>Projected Corporate Income:</Text>
-            <Text style={pdfStyles.summaryValue}>{formatPDFCurrency(overallTotals.totalIncome)}</Text>
-          </View>
-          <View style={pdfStyles.summaryRow}>
-            <Text style={pdfStyles.summaryLabel}>Projected Subsidy:</Text>
-            <Text style={pdfStyles.summaryValue}>{formatPDFCurrency(overallTotals.totalSubsidy)}</Text>
-          </View>
-          <Text style={pdfStyles.grandTotal}>
-            PROPOSED BUDGET: {formatPDFCurrency(overallTotals.totalAmount)}
-          </Text>
-        </View>
-        
-        {/* Section Breakdown */}
-        {overallTotals.sections.length > 0 && (
-          <View>
-            <Text style={pdfStyles.sectionTitle}>Section Breakdown</Text>
-            <View style={pdfStyles.table}>
-              <View style={pdfStyles.tableHeader}>
-                <Text style={{ width: '12%', padding: pdfTheme.spacing.xs, fontSize: pdfTheme.fontSizes.xs }}>Code</Text>
-                <Text style={{ width: '35%', padding: pdfTheme.spacing.xs, fontSize: pdfTheme.fontSizes.xs }}>Section Name</Text>
-                <Text style={{ width: '18%', padding: pdfTheme.spacing.xs, textAlign: 'right', fontSize: pdfTheme.fontSizes.xs }}>Projected Income</Text>
-                <Text style={{ width: '18%', padding: pdfTheme.spacing.xs, textAlign: 'right', fontSize: pdfTheme.fontSizes.xs }}>Projected Subsidy</Text>
-                <Text style={{ width: '17%', padding: pdfTheme.spacing.xs, textAlign: 'right', fontSize: pdfTheme.fontSizes.xs }}>Proposed Budget</Text>
-              </View>
-              {overallTotals.sections.map((section, idx) => (
-                <View key={idx} style={[pdfStyles.tableRow, idx % 2 !== 0 && pdfStyles.tableRowOdd]}>
-                  <Text style={[pdfStyles.tableCell, { width: '12%' }]}>{section.code}</Text>
-                  <Text style={[pdfStyles.tableCell, { width: '35%' }]}>{truncateText(section.name, 35)}</Text>
-                  <Text style={[pdfStyles.tableCell, { width: '18%', textAlign: 'right' }]}>{formatPDFCurrency(section.income)}</Text>
-                  <Text style={[pdfStyles.tableCell, { width: '18%', textAlign: 'right' }]}>{formatPDFCurrency(section.subsidy)}</Text>
-                  <Text style={[pdfStyles.tableCell, { width: '17%', textAlign: 'right' }]}>{formatPDFCurrency(section.total)}</Text>
-                </View>
-              ))}
-              <View style={[pdfStyles.tableRow, pdfStyles.totalRow]}>
-                <Text style={[pdfStyles.tableCell, { width: '47%', textAlign: 'right', fontWeight: 'bold' }]}>TOTAL:</Text>
-                <Text style={[pdfStyles.tableCell, { width: '18%', textAlign: 'right', fontWeight: 'bold', color: pdfTheme.colors.success }]}>
-                  {formatPDFCurrency(overallTotals.totalIncome)}
-                </Text>
-                <Text style={[pdfStyles.tableCell, { width: '18%', textAlign: 'right', fontWeight: 'bold', color: pdfTheme.colors.success }]}>
-                  {formatPDFCurrency(overallTotals.totalSubsidy)}
-                </Text>
-                <Text style={[pdfStyles.tableCell, { width: '17%', textAlign: 'right', fontWeight: 'bold', color: pdfTheme.colors.success }]}>
-                  {formatPDFCurrency(overallTotals.totalAmount)}
-                </Text>
-              </View>
-            </View>
-          </View>
-        )}
-        <ReportFooter pageNumber={1} totalPages={totalPages} filters={filters} />
-      </Page>
-      {sectionPages.map((pageSections, pageIndex) => (
-        <Page key={pageIndex + 1} size={{ width: 595, height: 842 }} style={pdfStyles.page}>
-          <ReportHeader title="Report Details" reportData={reportData} />
-          {pageSections.map((section) => {
-            let headers, widths, rows;
-            const isIncomeSection = section.sectionCode === "A.1";
-            const isBudgetarySupport = section.sectionCode === "A.2";
-            const isDetailedExpense = section.sectionCode === "B.1.2" || section.sectionCode === "B.2";
-            const isMooE = section.sectionCode === "B.1.2";
-
-            // Calculate proper section totals based on section type
-            let sectionTotal;
-            if (isBudgetarySupport) {
-              // For BUDGETARY SUPPORT - only subsidy amounts
-              sectionTotal = calculateSectionTotal(section);
-            } else if (isDetailedExpense) {
-              // For sections with Income/Subsidy columns
-              let totalIncome = 0;
-              let totalSubsidy = 0;
-              Object.values(section.categories || {}).forEach(category => {
-                totalIncome += parseFloat(category.totalIncome || 0);
-                totalSubsidy += parseFloat(category.totalSubsidy || 0);
-              });
-              sectionTotal = {
-                income: totalIncome,
-                subsidy: totalSubsidy,
-                total: totalIncome + totalSubsidy
-              };
-            } else {
-              // For simple sections with just Amount column
-              sectionTotal = calculateSectionTotal(section);
-            }
-            
-            if (isIncomeSection) {
-              headers = ["Income Category", "Description", "Proposed Budget"];
-              widths = [40, 35, 25];
-              rows = Object.values(section.categories || {}).map(catData => [
-                truncateText(catData.name || 'N/A', 30), 
-                truncateText(catData.description || '-', 40), 
-                formatPDFCurrency(catData.total)
-              ]);
-            } else if (isBudgetarySupport) {
-              headers = ["Category", "Description", "Proposed Budget"];
-              widths = [40, 35, 25];
-              rows = [];
-              
-              Object.values(section.categories || {}).forEach(catData => {
-                // Main category row for budgetary support (only subsidy, no income)
-                const mainRow = [
-                  truncateText(catData.name || 'N/A', 30), 
-                  truncateText(catData.description || '-', 40), 
-                  formatPDFCurrency(catData.totalSubsidy || catData.total || 0)
-                ];
-                rows.push(mainRow);
-                
-                // Sub-items for budgetary support
-                let itemsArray = Array.isArray(catData.items) ? catData.items : (catData.items ? Object.values(catData.items) : []);
-                
-                itemsArray.forEach(item => {
-                  const subRow = [
-                    { content: `  • ${truncateText(item?.name || 'Sub-item', 25)}`, isSubItem: true }, 
-                    truncateText(item?.description || '-', 35), 
-                    formatPDFCurrency(item?.subsidy || item?.amount || 0)
-                  ];
-                  rows.push(subRow);
-                });
-                
-                // Add spacing row between categories
-                if (itemsArray.length > 0) {
-                  const spacingRow = ['', '', ''];
-                  spacingRow.isCategoryTotal = true;
-                  rows.push(spacingRow);
-                }
-              });
-            } else if (isDetailedExpense) {
-              headers = ["Category", "Description", "Projected Corporate Income", "Projected Subsidy", "Proposed Budget"];
-              widths = [30, 25, 15, 15, 15];
-              rows = [];
-              
-              Object.values(section.categories || {}).forEach(catData => {
-                // Main category row with better formatting
-                const mainRow = [
-                  truncateText(catData.name || 'N/A', 25), 
-                  truncateText(catData.description || '-', 30), 
-                  formatPDFCurrency(catData.totalIncome || 0), 
-                  formatPDFCurrency(catData.totalSubsidy || 0), 
-                  formatPDFCurrency(catData.total || 0)
-                ];
-                rows.push(mainRow);
-                
-                // Sub-items with proper formatting
-                let itemsArray = Array.isArray(catData.items) ? catData.items : (catData.items ? Object.values(catData.items) : []);
-                if (isMooE) { itemsArray = itemsArray.filter(item => item && item.amount > 0); }
-                
-                itemsArray.forEach(item => {
-                  const subRow = [
-                    { content: `  • ${truncateText(item?.name || 'Sub-item', 20)}`, isSubItem: true }, 
-                    truncateText(item?.description || '-', 25), 
-                    formatPDFCurrency(item?.income || 0), 
-                    formatPDFCurrency(item?.subsidy || 0), 
-                    formatPDFCurrency(item?.amount || 0)
-                  ];
-                  rows.push(subRow);
-                });
-                
-                // Add spacing row between categories
-                if (itemsArray.length > 0) {
-                  const spacingRow = ['', '', '', '', ''];
-                  spacingRow.isCategoryTotal = true;
-                  rows.push(spacingRow);
-                }
-              });
-            } else {
-              headers = ["Category", "Description", "Amount"];
-              widths = [40, 35, 25];
-              rows = [];
-              
-              Object.values(section.categories || {}).forEach(catData => {
-                // Main category row
-                const mainRow = [
-                  truncateText(catData.name || 'N/A', 30), 
-                  truncateText(catData.description || '-', 40), 
-                  formatPDFCurrency(catData.total || 0)
-                ];
-                rows.push(mainRow);
-                
-                // Sub-items
-                const itemsArray = Array.isArray(catData.items) ? catData.items : (catData.items ? Object.values(catData.items) : []);
-                itemsArray.forEach(item => {
-                  const subRow = [
-                    { content: `  • ${truncateText(item?.name || 'Sub-item', 25)}`, isSubItem: true }, 
-                    truncateText(item?.description || '-', 35), 
-                    formatPDFCurrency(item?.amount || 0)
-                  ];
-                  rows.push(subRow);
-                });
-                
-                // Add spacing row between categories if there are sub-items
-                if (itemsArray.length > 0) {
-                  const spacingRow = ['', '', ''];
-                  spacingRow.isCategoryTotal = true;
-                  rows.push(spacingRow);
-                }
-              });
-            }
-            
-            return (
-              <View key={section.sectionCode} break={section.sectionCode !== pageSections[0].sectionCode}>
-                <Text style={pdfStyles.sectionTitle}>
-                  {`${section.sectionCode} - ${section.sectionName}`}
-                </Text>
-                {section.sectionDescription && (
-                  <Text style={pdfStyles.sectionSubText}>
-                    {section.sectionDescription}
-                  </Text>
-                )}
-                <DynamicTable 
-                  headers={headers} 
-                  rows={rows} 
-                  widths={widths} 
-                  sectionTotal={sectionTotal}
-                  showSectionTotal={true}
-                />
-              </View>
-            );
-          })}
-          <ReportFooter pageNumber={pageIndex + 2} totalPages={totalPages} filters={filters} />
-        </Page>
-      ))}
-    </Document>
-  );
-};
-// ====================================================================================
-// END: PDF REPORTING SECTION
-// ====================================================================================
 
 const ComprehensiveReportsPage = () => {
   const theme = useTheme();
@@ -732,6 +113,59 @@ const ComprehensiveReportsPage = () => {
   const [selectedResponsibilityCenter, setSelectedResponsibilityCenter] = useState(initialRC);
   const [autoGenerated, setAutoGenerated] = useState(false);
   const [expandedMooeCoKeys, setExpandedMooeCoKeys] = useState(() => new Set());
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
+  const [pdfZoom, setPdfZoom] = useState(100);
+  const [pdfViewMode, setPdfViewMode] = useState("zoom");
+
+  useEffect(() => {
+    return () => {
+      if (pdfPreviewUrl) {
+        window.URL.revokeObjectURL(pdfPreviewUrl);
+      }
+    };
+  }, [pdfPreviewUrl]);
+
+  const closePdfDialog = () => {
+    setPdfDialogOpen(false);
+    setPdfZoom(100);
+    setPdfViewMode("zoom");
+    if (pdfPreviewUrl) {
+      window.URL.revokeObjectURL(pdfPreviewUrl);
+      setPdfPreviewUrl("");
+    }
+  };
+
+  const zoomInPdf = () => {
+    setPdfViewMode("zoom");
+    setPdfZoom((prev) => Math.min(prev + 10, 300));
+  };
+  const zoomOutPdf = () => {
+    setPdfViewMode("zoom");
+    setPdfZoom((prev) => Math.max(prev - 10, 50));
+  };
+  const resetPdfZoom = () => {
+    setPdfViewMode("zoom");
+    setPdfZoom(100);
+  };
+  const fitPdfWidth = () => setPdfViewMode("page-width");
+  const fitPdfPage = () => setPdfViewMode("page-fit");
+
+  const getPdfViewerSrc = () => {
+    if (!pdfPreviewUrl) return "";
+    const zoomValue = pdfViewMode === "zoom" ? String(pdfZoom) : pdfViewMode;
+    return `${pdfPreviewUrl}#zoom=${zoomValue}`;
+  };
+
+  const downloadPreviewPdf = () => {
+    if (!pdfPreviewUrl) return;
+    const link = document.createElement("a");
+    link.href = pdfPreviewUrl;
+    link.download = `Comprehensive_Report_${selectedFiscalYear || "AllYears"}_${selectedBudgetType || "AllTypes"}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   useEffect(() => {
     if (!reportData?.sections) return;
@@ -990,7 +424,13 @@ const ComprehensiveReportsPage = () => {
 
       const blob = new Blob([response.data], { type: "application/pdf" });
       const url = window.URL.createObjectURL(blob);
-      window.open(url);
+      if (pdfPreviewUrl) {
+        window.URL.revokeObjectURL(pdfPreviewUrl);
+      }
+      setPdfPreviewUrl(url);
+      setPdfZoom(100);
+      setPdfViewMode("zoom");
+      setPdfDialogOpen(true);
     } catch (err) {
       console.error("Error generating PDF preview:", err);
       setError(
@@ -1331,6 +771,65 @@ const ComprehensiveReportsPage = () => {
           {/* ================================================================= */}
         </Box>
       )}
+
+      <Dialog
+        fullScreen
+        open={pdfDialogOpen}
+        onClose={closePdfDialog}
+      >
+        <AppBar sx={{ position: "relative" }}>
+          <Toolbar>
+            <IconButton edge="start" color="inherit" onClick={closePdfDialog} aria-label="close">
+              <Close />
+            </IconButton>
+            <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
+              Comprehensive Report PDF Preview
+            </Typography>
+            <Typography sx={{ mr: 1, minWidth: 56, textAlign: "right" }} variant="body2">
+              {pdfViewMode === "zoom" ? `${pdfZoom}%` : pdfViewMode === "page-width" ? "Fit Width" : "Fit Page"}
+            </Typography>
+            <Button color="inherit" size="small" onClick={fitPdfWidth} sx={{ mr: 0.5 }}>
+              Fit Width
+            </Button>
+            <Button color="inherit" size="small" onClick={fitPdfPage} sx={{ mr: 1 }}>
+              Fit Page
+            </Button>
+            <Tooltip title="Zoom Out">
+              <IconButton color="inherit" onClick={zoomOutPdf}>
+                <ZoomOut />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Zoom In">
+              <IconButton color="inherit" onClick={zoomInPdf}>
+                <ZoomIn />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Reset Zoom">
+              <IconButton color="inherit" onClick={resetPdfZoom}>
+                <RestartAlt />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Download PDF">
+              <IconButton color="inherit" onClick={downloadPreviewPdf}>
+                <FileDownload />
+              </IconButton>
+            </Tooltip>
+          </Toolbar>
+        </AppBar>
+        <DialogContent sx={{ p: 0, bgcolor: "#525659", height: "100%" }}>
+          {pdfPreviewUrl ? (
+            <iframe
+              title="Comprehensive Report PDF"
+              src={getPdfViewerSrc()}
+              style={{ width: "100%", height: "100%", border: "none" }}
+            />
+          ) : (
+            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
+              <CircularProgress />
+            </Box>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {!reportData && !loading && (
         <Card elevation={0} sx={{ borderStyle: 'dashed', borderWidth: '2px', borderColor: 'divider' }}>

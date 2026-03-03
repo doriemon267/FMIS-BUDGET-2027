@@ -183,6 +183,27 @@ const applyApproverProposalFilter = (baseQuery, approverProposalFilter) => {
 };
 
 const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, preparerScope, groupBy, offices, responsibilityCenters, approverProposalFilter }) => {
+  const normalizeList = (value) => {
+    const list = Array.isArray(value) ? value : (value ? [value] : []);
+    return list
+      .map((v) => String(v || '').trim())
+      .filter((v) => v && v.toLowerCase() !== 'all');
+  };
+
+  const selectedOffices = normalizeList(offices);
+  const selectedResponsibilityCenters = normalizeList(responsibilityCenters);
+
+  // For individual reports, prioritize selected filters for header display
+  const summaryDepartment =
+    groupBy === 'office' && selectedOffices.length > 0
+      ? selectedOffices.join(', ')
+      : (preparerScope?.department || '');
+
+  const summaryDivision =
+    groupBy === 'responsibilityCenter' && selectedResponsibilityCenters.length > 0
+      ? selectedResponsibilityCenters.join(', ')
+      : (preparerScope?.division || '');
+
   // Budget Approver: when no proposals passed to them, return empty report (page accessible, data empty)
   const isEmptyApproverScope = approverProposalFilter && !approverProposalFilter.workflowIds?.length && !approverProposalFilter.proposalIds?.length;
   if (isEmptyApproverScope) {
@@ -198,8 +219,8 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
         grandTotal: 0,
         totalIncome: 0,
         totalSubsidy: 0,
-        department: preparerScope?.department || '',
-        division: preparerScope?.division || '',
+        department: summaryDepartment,
+        division: summaryDivision,
         approverNoProposals: true // Budget Approver: no proposals passed to them yet
       },
       sections: []
@@ -288,8 +309,8 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
       grandTotal: 0,
       totalIncome: 0,
       totalSubsidy: 0,
-      department: preparerScope?.department || '',
-      division: preparerScope?.division || ''
+      department: summaryDepartment,
+      division: summaryDivision
     },
     sections: []
   };
@@ -327,6 +348,27 @@ const buildComprehensiveReportData = async ({ regions, fiscalYear, budgetType, p
     if (item.region) allRegions.add(item.region);
   });
   reportData.summary.totalRegions = allRegions.size;
+
+  // For individual reports, infer missing Department/Division from filtered data
+  const isIndividualView = groupBy === 'office' || groupBy === 'responsibilityCenter';
+  if (isIndividualView) {
+    const allDepartments = new Set();
+    const allDivisions = new Set();
+
+    [...incomeData, ...psData, ...mooeData, ...coData].forEach((item) => {
+      const dept = String(item?.department || '').trim();
+      const div = String(item?.division || '').trim();
+      if (dept) allDepartments.add(dept);
+      if (div) allDivisions.add(div);
+    });
+
+    if (!reportData.summary.department && allDepartments.size === 1) {
+      reportData.summary.department = Array.from(allDepartments)[0];
+    }
+    if (!reportData.summary.division && allDivisions.size === 1) {
+      reportData.summary.division = Array.from(allDivisions)[0];
+    }
+  }
 
   return reportData;
 };
@@ -1047,17 +1089,21 @@ const getComprehensiveReportPdf = async (req, res) => {
       subject: 'Corporate Operating Budget - Annex A',
     });
 
-    // A4 portrait: 595 x 842 points
-    const PAGE_WIDTH = 595;
-    const PAGE_HEIGHT = 842;
-    const MARGIN = 40;
-    const MARGIN_TOP = 50;
-    const MARGIN_BOTTOM = 60;
-    const LINE_HEIGHT = 12;
-    const CONTENT_LEFT = MARGIN + 10;
-    const CONTENT_RIGHT = PAGE_WIDTH - MARGIN - 10;
+    // A4 portrait dimensions in points (1/72 inch)
+    const PAGE_WIDTH = 595.28;
+    const PAGE_HEIGHT = 841.89;
+
+    // Standard "Narrow" Margin = 0.5 inch = 36 points
+    const MARGIN_SIDE = 36;
+    const MARGIN_TOP = 36;
+    const MARGIN_BOTTOM = 36;
+
+    // Text layout calculations
+    const LINE_HEIGHT = 14;
+    const CONTENT_LEFT = MARGIN_SIDE;
+    const CONTENT_RIGHT = PAGE_WIDTH - MARGIN_SIDE;
     const CENTER_X = PAGE_WIDTH / 2;
-    const AMOUNT_COL_X = CONTENT_RIGHT - 80;
+    const AMOUNT_COL_X = CONTENT_RIGHT - 10;
 
     let currentY = MARGIN_TOP;
     let currentPage = 1;
@@ -1066,15 +1112,15 @@ const getComprehensiveReportPdf = async (req, res) => {
     const textOpt = (opts = {}) => ({ color: '#000000', ...opts });
 
     const drawBorder = () => {
-      pdfDoc.rectangle(MARGIN, MARGIN, PAGE_WIDTH - MARGIN * 2, PAGE_HEIGHT - MARGIN * 2, {
+      pdfDoc.rectangle(MARGIN_SIDE, MARGIN_TOP, PAGE_WIDTH - MARGIN_SIDE * 2, PAGE_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM, {
         stroke: '#4d4c4c',
         lineWidth: 1.5
       });
     };
 
     const drawFooter = () => {
-      pdfDoc.text(`Annex A (Summary)`, CONTENT_LEFT + 10, PAGE_HEIGHT - MARGIN - 15, textOpt({ fontSize: 8 }));
-      pdfDoc.text(`Page ${currentPage}`, CONTENT_RIGHT - 60, PAGE_HEIGHT - MARGIN - 15, textOpt({ fontSize: 8 }));
+      pdfDoc.text(`Annex A (Summary)`, CONTENT_LEFT + 10, PAGE_HEIGHT - MARGIN_BOTTOM - 15, textOpt({ fontSize: 8 }));
+      pdfDoc.text(`Page ${currentPage}`, CONTENT_RIGHT - 60, PAGE_HEIGHT - MARGIN_BOTTOM - 15, textOpt({ fontSize: 8 }));
     };
 
     const safeStr = (v) => (v != null && v !== '') ? String(v) : '';
@@ -1082,62 +1128,80 @@ const getComprehensiveReportPdf = async (req, res) => {
       ? (Array.isArray(reportData.summary.regions) ? reportData.summary.regions.join(', ') : String(reportData.summary.regions))
       : '';
 
-    // Resolve logo paths
-    let sealPath = path.join(__dirname, '../assets/Seal.png');
-    if (!fs.existsSync(sealPath)) {
-      const clientSeal = path.join(__dirname, '../../CLIENT/public/Seal.png');
-      if (fs.existsSync(clientSeal)) sealPath = clientSeal;
-    }
+    const resolveExistingPath = (...candidates) => {
+      for (const candidate of candidates) {
+        if (candidate && fs.existsSync(candidate)) return candidate;
+      }
+      return null;
+    };
+
+    // Resolve logo paths with server + client + cwd fallbacks
+    const sealPath = resolveExistingPath(
+      path.join(__dirname, '../assets/Seal.png'),
+      path.join(__dirname, '../../CLIENT/public/Seal.png'),
+      path.join(process.cwd(), 'SERVER/assets/Seal.png'),
+      path.join(process.cwd(), 'CLIENT/public/Seal.png')
+    );
+
+    const nialogoPath = resolveExistingPath(
+      path.join(__dirname, '../assets/logo.png'),
+      path.join(__dirname, '../../CLIENT/public/logo.png'),
+      path.join(process.cwd(), 'SERVER/assets/logo.png'),
+      path.join(process.cwd(), 'CLIENT/public/logo.png')
+    );
+
+    const bagongPilipinasPath = resolveExistingPath(
+      path.join(__dirname, '../assets/Bagong_Pilipinas.png'),
+      path.join(__dirname, '../../CLIENT/public/Bagong_Pilipinas.png'),
+      path.join(process.cwd(), 'SERVER/assets/Bagong_Pilipinas.png'),
+      path.join(process.cwd(), 'CLIENT/public/Bagong_Pilipinas.png')
+    );
     
-    let nialogoPath = path.join(__dirname, '../assets/logo.png');
-    if (!fs.existsSync(nialogoPath)) {
-      const clientNiaLogo = path.join(__dirname, '../../CLIENT/public/logo.png');
-      if (fs.existsSync(clientNiaLogo)) nialogoPath = clientNiaLogo;
-    }
-    
-    let bagongPilipinasPath = path.join(__dirname, '../assets/Bagong_Pilipinas.png');
-    if (!fs.existsSync(bagongPilipinasPath)) {
-      const clientBagong = path.join(__dirname, '../../CLIENT/public/Bagong_Pilipinas.png');
-      if (fs.existsSync(clientBagong)) bagongPilipinasPath = clientBagong;
-    }
-    
-    const hasSeal = fs.existsSync(sealPath);
-    const hasNiaLogo = fs.existsSync(nialogoPath);
-    const hasBagong = fs.existsSync(bagongPilipinasPath);
+    const hasSeal = !!sealPath;
+    const hasNiaLogo = !!nialogoPath;
+    const hasBagong = !!bagongPilipinasPath;
 
     const drawHeader = (includeTitleSection = false) => {
       // Header section with logos
-      const logoY = currentY + 5;
-      const logoWidth = 40;
-      const logoHeight = 40;
+      const logoY = currentY + 1;
+      const logoWidth = 44;
+      const logoHeight = 44;
       
       if (hasSeal || hasNiaLogo || hasBagong) {
-        try {
-          // Left side: Seal.png and logo.png side by side
-          if (hasSeal) {
+        // Left side: Seal.png and logo.png side by side
+        if (hasSeal) {
+          try {
             pdfDoc.image(sealPath, CONTENT_LEFT, logoY, { width: logoWidth, height: logoHeight });
+          } catch (e) {
+            console.warn('PDF seal logo load failed:', e.message);
           }
-          if (hasNiaLogo) {
+        }
+        if (hasNiaLogo) {
+          try {
             pdfDoc.image(nialogoPath, CONTENT_LEFT + logoWidth + 5, logoY, { width: logoWidth, height: logoHeight });
+          } catch (e) {
+            console.warn('PDF NIA logo load failed:', e.message);
           }
-          // Right side: Bagong_Pilipinas.png
-          if (hasBagong) {
+        }
+        // Right side: Bagong_Pilipinas.png
+        if (hasBagong) {
+          try {
             pdfDoc.image(bagongPilipinasPath, CONTENT_RIGHT - logoWidth, logoY, { width: logoWidth, height: logoHeight });
+          } catch (e) {
+            console.warn('PDF Bagong Pilipinas logo load failed:', e.message);
           }
-        } catch (e) {
-          console.warn('PDF logo load failed:', e.message);
         }
       }
 
-      // Header text (centered) - start BELOW the logos to avoid overlap
-      const headerTextY = logoY + logoHeight + 5;
-      pdfDoc.text('Republic of the Philippines', CENTER_X, headerTextY, textOpt({ fontSize: 8, align: 'center' }));
+      // Header text (centered) - align higher near top section
+      const headerTextY = logoY + 8;
+      pdfDoc.text('Republic of the Philippines', CENTER_X, headerTextY, textOpt({ fontSize: 10, align: 'center' }));
       
-      let headerLineY = headerTextY + LINE_HEIGHT * 0.8;
-      pdfDoc.text('OFFICE OF THE PRESIDENT', CENTER_X, headerLineY, textOpt({ fontSize: 8, bold: true, align: 'center' }));
+      let headerLineY = headerTextY + LINE_HEIGHT * 0.95;
+      pdfDoc.text('OFFICE OF THE PRESIDENT', CENTER_X, headerLineY, textOpt({ fontSize: 10, bold: true, align: 'center' }));
       
-      headerLineY += LINE_HEIGHT * 0.8;
-      pdfDoc.text('NATIONAL IRRIGATION ADMINISTRATION', CENTER_X, headerLineY, textOpt({ fontSize: 8, bold: true, align: 'center', color: '#292e2a' }));
+      headerLineY += LINE_HEIGHT * 0.95;
+      pdfDoc.text('NATIONAL IRRIGATION ADMINISTRATION', CENTER_X, headerLineY, textOpt({ fontSize: 10, bold: true, align: 'center', color: '#292e2a' }));
       
       // Department/Division or Region
       const departmentName = safeStr(reportData.summary.department || '');
@@ -1159,24 +1223,25 @@ const getComprehensiveReportPdf = async (req, res) => {
         }
       }
       
-      headerLineY += LINE_HEIGHT * 0.8;
-      pdfDoc.text(departmentDivisionText, CENTER_X, headerLineY, textOpt({ fontSize: 8, align: 'center' }));
+      headerLineY += LINE_HEIGHT * 0.95;
+      pdfDoc.text(departmentDivisionText, CENTER_X, headerLineY, textOpt({ fontSize: 10, align: 'center' }));
       
-      // ANNEX A
-      pdfDoc.text('ANNEX A', CONTENT_RIGHT - 50, logoY + logoHeight + 5, textOpt({ fontSize: 10, bold: true }));
+      // ANNEX A (place directly below Bagong Pilipinas logo)
+      const annexAY = hasBagong ? (logoY + logoHeight + 2) : (logoY + 6);
+      pdfDoc.text('ANNEX A', CONTENT_RIGHT - 56, annexAY, textOpt({ fontSize: 13, bold: true }));
       
       // Set currentY below all header text
-      currentY = headerLineY + LINE_HEIGHT * 2;
+      currentY = headerLineY + LINE_HEIGHT * 1.1;
 
       // Title section (only on first page or if explicitly requested)
       if (includeTitleSection) {
-        pdfDoc.text('CORPORATE OPERATING BUDGET', CENTER_X, currentY, textOpt({ fontSize: 13, bold: true, align: 'center' }));
+        pdfDoc.text('CORPORATE OPERATING BUDGET', CENTER_X, currentY, textOpt({ fontSize: 16, bold: true, align: 'center' }));
         currentY += LINE_HEIGHT * 1.2;
-        pdfDoc.text(`FISCAL YEAR ${safeStr(reportData.summary.fiscalYear)}`, CENTER_X, currentY, textOpt({ fontSize: 11, bold: true, align: 'center' }));
+        pdfDoc.text(`FISCAL YEAR ${safeStr(reportData.summary.fiscalYear)}`, CENTER_X, currentY, textOpt({ fontSize: 13, bold: true, align: 'center' }));
         currentY += LINE_HEIGHT * 1.5;
       } else {
         // Continuation page - add simple note
-        pdfDoc.text('(Continued)', CENTER_X, currentY, textOpt({ fontSize: 9, italic: true, align: 'center' }));
+        pdfDoc.text('(Continued)', CENTER_X, currentY, textOpt({ fontSize: 10, italic: true, align: 'center' }));
         currentY += LINE_HEIGHT * 1.5;
       }
     };
@@ -1242,144 +1307,138 @@ const getComprehensiveReportPdf = async (req, res) => {
     const cosPersonnel = cosCount > 0 ? cosCount : 0;
 
     pdfDoc
-      .text(`No. of  Monthly Personnel Per Approved Staffing Pattern`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 7 }))
-      .text(`${totalEmployees}`, CONTENT_RIGHT - 30, currentY, textOpt({ fontSize: 7, align: 'right' }));
+      .text(`No. of  Monthly Personnel Per Approved Staffing Pattern`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
+      .text(`${totalEmployees}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
     currentY += LINE_HEIGHT * 0.75;
     pdfDoc
-      .text(`No. of  Monthly Positions Filled Up`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 7 }))
-      .text(`${filledPositions}`, CONTENT_RIGHT - 30, currentY, textOpt({ fontSize: 7, align: 'right' }));
+      .text(`No. of  Monthly Positions Filled Up`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
+      .text(`${filledPositions}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
     currentY += LINE_HEIGHT * 0.75;
     pdfDoc
-      .text(`No. of  Monthly Positions To Be Filled Up`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 7 }))
-      .text(`${toBeFilledPositions}`, CONTENT_RIGHT - 30, currentY, textOpt({ fontSize: 7, align: 'right' }));
+      .text(`No. of  Monthly Positions To Be Filled Up`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
+      .text(`${toBeFilledPositions}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
     currentY += LINE_HEIGHT * 0.75;
     pdfDoc
-      .text(`No. of  Appointive Casual Employees`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 7 }))
-      .text(`${casualEmployees}`, CONTENT_RIGHT - 30, currentY, textOpt({ fontSize: 7, align: 'right' }));
+      .text(`No. of  Appointive Casual Employees`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
+      .text(`${casualEmployees}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
     currentY += LINE_HEIGHT * 0.75;
     pdfDoc
-      .text(`No. of  COS (Contract of Service) Personnel`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 7 }))
-      .text(`${cosPersonnel}`, CONTENT_RIGHT - 30, currentY, textOpt({ fontSize: 7, align: 'right' }));
+      .text(`No. of  COS (Contract of Service) Personnel`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9 }))
+      .text(`${cosPersonnel}`, AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, align: 'right' }));
     currentY += LINE_HEIGHT * 1.2;
 
     // USES OF FUNDS section header
     ensureSpace(3);
-    pdfDoc.text('USES OF FUNDS', CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 10, bold: true, underline: true }));
+    pdfDoc.text('USES OF FUNDS', CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 12, bold: true, underline: true }));
     currentY += LINE_HEIGHT * 1;
 
-    // Render sections with hierarchical numbering
+    // Render sections with Annex-style hierarchy
+    const formatPhp = (amount) =>
+      Number(amount || 0).toLocaleString('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 });
+
+    const sectionLabelMap = {
+      'B.1.1': 'PERSONNEL SERVICES - REGULAR',
+      'B.1.2': 'MAINTENANCE AND OTHER OPERATING EXPENDITURES',
+      'B.2': 'CAPITAL OUTLAY (ANNEX E)',
+    }; 
+
+    const sectionTotalLabelMap = {
+      'B.1.1': 'TOTAL PERSONNEL SERVICES (Annex B + Annex C)',
+      'B.1.2': 'TOTAL MAINTENANCE & OTHER OPERATING EXPENDITURES',
+      'B.2': 'TOTAL CAPITAL OUTLAY',
+    };
+
+    const usesOfFundsSections = (Array.isArray(reportData.sections) ? reportData.sections : [])
+      .filter((section) => String(section?.sectionCode || '').startsWith('B'));
+    const sectionsToRender = usesOfFundsSections.length > 0
+      ? usesOfFundsSections
+      : (Array.isArray(reportData.sections) ? reportData.sections : []);
+
     let sectionNumber = 1;
     let grandTotalAmount = 0;
 
-    reportData.sections.forEach((section) => {
+    sectionsToRender.forEach((section) => {
       if (!section.categories) return;
 
       ensureSpace(4); // Ensure space for section header
 
       const sectionTotal = Number(section.sectionTotal) || 0;
       grandTotalAmount += sectionTotal;
+      const sectionDisplayName = sectionLabelMap[section.sectionCode] || `${section.sectionName || ''}`.toUpperCase();
+      const sectionTotalLabel = sectionTotalLabelMap[section.sectionCode] || `TOTAL ${section.sectionName?.toUpperCase() || 'SECTION'}`;
 
-      // Main section header (1, 2, 3)
+      // Main section header
       pdfDoc
-        .text(`${sectionNumber}`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9, bold: true }))
+        .text(`${sectionNumber}`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 11, bold: true }))
         .text(
-          `${section.sectionName || ''}`.toUpperCase(),
+          sectionDisplayName,
           CONTENT_LEFT + 25, 
           currentY,
-          textOpt({ fontSize: 9, bold: true })
+          textOpt({ fontSize: 11, bold: true })
         )
         .text(
-          sectionTotal.toLocaleString('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 }),
+          formatPhp(sectionTotal),
           AMOUNT_COL_X,
           currentY,
-          textOpt({ fontSize: 9, bold: true, align: 'right' })
+          textOpt({ fontSize: 11, bold: true, align: 'right' })
         );
-      currentY += LINE_HEIGHT;
+      currentY += LINE_HEIGHT * 0.95;
 
-      // Section description if available
-      if (section.sectionDescription) {
-        pdfDoc.text(section.sectionDescription, CONTENT_LEFT + 25, currentY, textOpt({ fontSize: 7, color: '#555555' }));
-        currentY += LINE_HEIGHT * 0.75;
-      }
-
-      // Render categories with letter numbering (a, b, c, etc.)
-      const categories = Object.values(section.categories || {});
-      const letters = 'abcdefghijklmnopqrstuvwxyz'.split('');
+      // Render categories and sub-items
+      const categoryEntries = Object.entries(section.categories || {});
       
-      categories.forEach((category, idx) => {
+      categoryEntries.forEach(([, category], idx) => {
         ensureSpace(2); // Ensure space for category line
 
         const categoryAmount = Number(
           category.total ?? category.totalSubsidy ?? category.totalIncome
         ) || 0;
 
-        // Category line with letter (a., b., c., etc.)
-        if (idx < letters.length) {
-          pdfDoc
-            .text(`${letters[idx]}.`, CONTENT_LEFT + 30, currentY, textOpt({ fontSize: 8 }))
-            .text(
-              String(category.name || ''),
-              CONTENT_LEFT + 45,
-              currentY,
-              textOpt({ fontSize: 8 })
-            );
-          
-          // Show amount if no sub-items or show total with sub-items
-          if (!category.items || (Array.isArray(category.items) && category.items.length === 0) || 
-              (typeof category.items === 'object' && Object.keys(category.items).length === 0)) {
-            pdfDoc.text(
-              categoryAmount.toLocaleString('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 }),
-              AMOUNT_COL_X,
-              currentY,
-              textOpt({ fontSize: 8, align: 'right' })
-            );
-          }
-          currentY += LINE_HEIGHT * 0.8;
+        pdfDoc
+          .text(`${idx + 1}`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 9, bold: true }))
+          .text(String(category.name || ''), CONTENT_LEFT + 30, currentY, textOpt({ fontSize: 9, bold: true }))
+          .text(formatPhp(categoryAmount), AMOUNT_COL_X, currentY, textOpt({ fontSize: 9, bold: true, align: 'right' }));
+        currentY += LINE_HEIGHT * 0.78;
 
-          // Render sub-items if available
-          if (category.items) {
-            const itemsArray = Array.isArray(category.items) ? category.items : Object.values(category.items);
-            itemsArray.forEach((item, itemIdx) => {
-              ensureSpace(1); // Ensure space for sub-item
+        const itemEntries = Array.isArray(category.items)
+          ? category.items.map((item, itemIdx) => [String.fromCharCode(97 + (itemIdx % 26)), item])
+          : Object.entries(category.items || {});
 
-              const itemAmount = Number(item?.amount ?? item?.subsidy ?? item?.income) || 0;
-              if (itemAmount > 0 || item?.name) {
-                pdfDoc
-                  .text(
-                    `${itemIdx + 1}.`,
-                    CONTENT_LEFT + 55,
-                    currentY,
-                    textOpt({ fontSize: 7 })
-                  )
-                  .text(
-                    String(item?.name || ''),
-                    CONTENT_LEFT + 65,
-                    currentY,
-                    textOpt({ fontSize: 7 })
-                  )
-                  .text(
-                    itemAmount.toLocaleString('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 }),
-                    AMOUNT_COL_X,
-                    currentY,
-                    textOpt({ fontSize: 7, align: 'right' })
-                  );
-                currentY += LINE_HEIGHT * 0.7;
-              }
-            });
+        itemEntries.forEach(([itemKey, item], itemIdx) => {
+          ensureSpace(1); // Ensure space for sub-item
+
+          const letter = /^[a-z]$/i.test(String(itemKey || ''))
+            ? String(itemKey).toLowerCase()
+            : String.fromCharCode(97 + (itemIdx % 26));
+          const itemAmount = Number(item?.amount ?? item?.subsidy ?? item?.income) || 0;
+          const itemName = String(item?.name || item?.title || '').trim();
+
+          if (itemName || itemAmount > 0) {
+            pdfDoc
+              .text(`${letter}.`, CONTENT_LEFT + 45, currentY, textOpt({ fontSize: 8 }))
+              .text(itemName || '—', CONTENT_LEFT + 58, currentY, textOpt({ fontSize: 8 }))
+              .text(formatPhp(itemAmount), AMOUNT_COL_X, currentY, textOpt({ fontSize: 8, align: 'right' }));
+            currentY += LINE_HEIGHT * 0.68;
           }
-        }
+        });
       });
 
       // Section total line
+      pdfDoc.rectangle(CONTENT_LEFT + 8, currentY - 3, CONTENT_RIGHT - CONTENT_LEFT - 16, 0.5, {
+        stroke: '#000000',
+        lineWidth: 0.5
+      });
+      currentY += LINE_HEIGHT * 0.45;
+
       pdfDoc
-        .text(`TOTAL ${section.sectionName?.toUpperCase() || 'SECTION'}:`, CONTENT_LEFT + 30, currentY, textOpt({ fontSize: 9, bold: true }))
+        .text(`${sectionTotalLabel}`, CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 10, bold: true }))
         .text(
-          sectionTotal.toLocaleString('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 }),
+          formatPhp(sectionTotal),
           AMOUNT_COL_X,
           currentY,
-          textOpt({ fontSize: 9, bold: true, align: 'right' })
+          textOpt({ fontSize: 10, bold: true, align: 'right' })
         );
-      currentY += LINE_HEIGHT * 1.2;
+      currentY += LINE_HEIGHT * 1.15;
 
       sectionNumber++;
     });
@@ -1395,17 +1454,17 @@ const getComprehensiveReportPdf = async (req, res) => {
     currentY += LINE_HEIGHT * 0.8;
     
     pdfDoc
-      .text('TOTAL USES OF FUNDS FOR OPERATION', CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 10, bold: true }))
+      .text('TOTAL USES OF FUNDS FOR OPERATION', CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 12, bold: true }))
       .text(
         grandTotalAmount.toLocaleString('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 }),
         AMOUNT_COL_X,
         currentY,
-        textOpt({ fontSize: 10, bold: true, align: 'right' })
+        textOpt({ fontSize: 12, bold: true, align: 'right' })
       );
     currentY += LINE_HEIGHT * 2;
 
-    // Check if NET INCOME FROM OPERATION section fits on current page (needs ~100 points)
-    if (currentY + 100 > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
+    // Check if NET INCOME FROM OPERATION section fits on current page (needs only line + underline area)
+    if (currentY + (LINE_HEIGHT * 3) > PAGE_HEIGHT - MARGIN_BOTTOM - 20) {
       // Not enough space, create new page without header (just border)
       drawFooter();
       pdfDoc.endPage();
@@ -1417,12 +1476,12 @@ const getComprehensiveReportPdf = async (req, res) => {
 
     // NET INCOME FROM OPERATION
     pdfDoc
-      .text('NET INCOME FROM OPERATION', CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 10, bold: true }))
+      .text('NET INCOME FROM OPERATION', CONTENT_LEFT + 10, currentY, textOpt({ fontSize: 12, bold: true }))
       .text(
         grandTotalAmount.toLocaleString('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 }),
         AMOUNT_COL_X,
         currentY,
-        textOpt({ fontSize: 10, bold: true, align: 'right' })
+        textOpt({ fontSize: 12, bold: true, align: 'right' })
       );
     
     pdfDoc.rectangle(CONTENT_LEFT + 10, currentY + 10, CONTENT_RIGHT - CONTENT_LEFT - 20, 0.5, {
@@ -1446,27 +1505,27 @@ const getComprehensiveReportPdf = async (req, res) => {
     const sigY = currentY + 50;
     
     // Prepared by
-    pdfDoc.text('Prepared by:', CONTENT_LEFT + 20, currentY, textOpt({ fontSize: 9 }));
-    pdfDoc.text('_____________________________', CONTENT_LEFT + 20, sigY, textOpt({ fontSize: 9 }));
-    pdfDoc.text('Budget Officer', CONTENT_LEFT + 20, sigY + LINE_HEIGHT, textOpt({ fontSize: 8, bold: true }));
-    pdfDoc.text('Date: _______________', CONTENT_LEFT + 20, sigY + LINE_HEIGHT * 2, textOpt({ fontSize: 7 }));
+    pdfDoc.text('Prepared by:', CONTENT_LEFT + 20, currentY, textOpt({ fontSize: 10 }));
+    pdfDoc.text('_____________________________', CONTENT_LEFT + 20, sigY, textOpt({ fontSize: 10 }));
+    pdfDoc.text('Budget Officer', CONTENT_LEFT + 20, sigY + LINE_HEIGHT, textOpt({ fontSize: 9, bold: true }));
+    pdfDoc.text('Date: _______________', CONTENT_LEFT + 20, sigY + LINE_HEIGHT * 2, textOpt({ fontSize: 8 }));
     
     currentY += LINE_HEIGHT * 9;
 
     // Reviewed by
-    pdfDoc.text('Reviewed by:', CONTENT_LEFT + 20, currentY, textOpt({ fontSize: 9 }));
-    pdfDoc.text('_____________________________', CONTENT_LEFT + 20, currentY + 50, textOpt({ fontSize: 9 }));
-    pdfDoc.text('Manager, Management Information Division', CONTENT_LEFT + 20, currentY + 62, textOpt({ fontSize: 8, bold: true }));
-    pdfDoc.text('Budget and Statistics Center', CONTENT_LEFT + 20, currentY + 72, textOpt({ fontSize: 7 }));
-    pdfDoc.text('Date: _______________', CONTENT_LEFT + 20, currentY + 82, textOpt({ fontSize: 7 }));
+    pdfDoc.text('Reviewed by:', CONTENT_LEFT + 20, currentY, textOpt({ fontSize: 10 }));
+    pdfDoc.text('_____________________________', CONTENT_LEFT + 20, currentY + 50, textOpt({ fontSize: 10 }));
+    pdfDoc.text('Manager, Management Information Division', CONTENT_LEFT + 20, currentY + 62, textOpt({ fontSize: 9, bold: true }));
+    pdfDoc.text('Budget and Statistics Center', CONTENT_LEFT + 20, currentY + 72, textOpt({ fontSize: 8 }));
+    pdfDoc.text('Date: _______________', CONTENT_LEFT + 20, currentY + 82, textOpt({ fontSize: 8 }));
     
     currentY += LINE_HEIGHT * 12;
 
     // Noted by
-    pdfDoc.text('Noted by:', CONTENT_LEFT + 20, currentY, textOpt({ fontSize: 9 }));
-    pdfDoc.text('_____________________________', CONTENT_LEFT + 20, currentY + 50, textOpt({ fontSize: 9 }));
-    pdfDoc.text('Manager, Corporate Planning Services', CONTENT_LEFT + 20, currentY + 62, textOpt({ fontSize: 8, bold: true }));
-    pdfDoc.text('Date: _______________', CONTENT_LEFT + 20, currentY + 72, textOpt({ fontSize: 7 }));
+    pdfDoc.text('Noted by:', CONTENT_LEFT + 20, currentY, textOpt({ fontSize: 10 }));
+    pdfDoc.text('_____________________________', CONTENT_LEFT + 20, currentY + 50, textOpt({ fontSize: 10 }));
+    pdfDoc.text('Manager, Corporate Planning Services', CONTENT_LEFT + 20, currentY + 62, textOpt({ fontSize: 9, bold: true }));
+    pdfDoc.text('Date: _______________', CONTENT_LEFT + 20, currentY + 72, textOpt({ fontSize: 8 }));
     
     // Final page footer
     drawFooter();
