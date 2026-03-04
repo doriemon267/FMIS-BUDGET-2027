@@ -19,6 +19,7 @@ const { recalculateAndSaveProposalTotals } = require('../utils/recalculatePropos
 const { verifyWorkflowDigitalSignature } = require('../utils/digitalSignatureService');
 
 const WORKFLOW_ACTIONS_REQUIRING_SIGNATURE = new Set([
+  'submit-to-reviewer',
   'submit-to-approver',
   'forward-to-officer',
   'forward-to-manager',
@@ -33,7 +34,6 @@ const WORKFLOW_TRANSITIONS = {
   'BUDGET PREPARER': {
     'DRAFT': {
       'submit-to-reviewer': 'FORWARDED_TO_REVIEWER',
-      // Allow direct submit to approver for PREPARER when they are Office-level (validated in performAction)
       'submit-to-approver': 'FORWARDED_TO_APPROVER'
     },
     'RETURNED_TO_PREPARER': {
@@ -1750,14 +1750,11 @@ exports.performAction = async (req, res) => {
     console.log('[PERFORM_ACTION] User:', { userRole, userId, userName });
     console.log('[PERFORM_ACTION] Request:', { proposalId: id, action, comment });
 
-    // Check assignment and override submit-to-reviewer -> submit-to-approver for Office-level PREPARER
     let userAssignment = null;
     if (action === 'submit-to-reviewer' && userRole === 'BUDGET PREPARER') {
       try {
         userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString }).lean();
-        console.debug('[PERFORM_ACTION] User assignment found:', !!userAssignment, userAssignment ? userAssignment.assignmentLevel : 'N/A');
         if (userAssignment && String(userAssignment.assignmentLevel).toUpperCase() === 'OFFICE') {
-          console.debug('[PERFORM_ACTION] Office-level Submission: overriding action to submit-to-approver');
           action = 'submit-to-approver';
         }
       } catch (assignmentErr) {
@@ -1766,6 +1763,17 @@ exports.performAction = async (req, res) => {
     }
 
     const proposal = await NewProposalWorkflow.findById(id);
+        if (action === 'submit-to-approver' && userRole === 'BUDGET PREPARER') {
+          try {
+            userAssignment = userAssignment || await HierarchicalUserAssignment.findOne({ userId: userIdString }).lean();
+            if (!userAssignment || String(userAssignment.assignmentLevel).toUpperCase() !== 'OFFICE') {
+              return res.status(403).json({ success: false, message: 'Direct submit to approver is only allowed for Office-level preparers' });
+            }
+          } catch (assignmentErr) {
+            console.warn('[PERFORM_ACTION] Error enforcing assignment level for submit-to-approver:', assignmentErr.message);
+          }
+        }
+
     if (!proposal) {
       return res.status(404).json({
         success: false,
@@ -1867,19 +1875,6 @@ exports.performAction = async (req, res) => {
           success: false,
           message: `Digital signature verification failed: ${signatureError.message}`
         });
-      }
-    }
-
-    // Final enforcement: If PREPARER is attempting submit-to-approver, ensure they are Office-level
-    if (action === 'submit-to-approver' && userRole === 'BUDGET PREPARER') {
-      try {
-        userAssignment = userAssignment || await HierarchicalUserAssignment.findOne({ userId: userIdString }).lean();
-        if (!userAssignment || String(userAssignment.assignmentLevel).toUpperCase() !== 'OFFICE') {
-          console.warn('[PERFORM_ACTION] 403 - Budget Preparer submit-to-approver is only allowed for Office-level users');
-          return res.status(403).json({ success: false, message: 'Direct submit to approver is only allowed for Office-level preparers' });
-        }
-      } catch (assignmentErr) {
-        console.warn('[PERFORM_ACTION] Error enforcing assignment level for submit-to-approver:', assignmentErr.message);
       }
     }
 

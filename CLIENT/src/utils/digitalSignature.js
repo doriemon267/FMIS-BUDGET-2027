@@ -1,4 +1,5 @@
 const SIGNATURE_REQUIRED_ACTIONS = new Set([
+  'submit-to-reviewer',
   'submit-to-approver',
   'forward-to-officer',
   'forward-to-manager',
