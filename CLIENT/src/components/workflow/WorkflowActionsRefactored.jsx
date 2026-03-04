@@ -33,7 +33,7 @@ import { toast } from 'react-toastify';
 import api from '../../config/api';
 import QuickProposalView from './QuickProposalView';
 import ProposalDetailsWithTables from './ProposalDetailsWithTables';
-import { createWorkflowDigitalSignature } from '../../utils/digitalSignature';
+import { createWorkflowDigitalSignature, actionRequiresDigitalSignature } from '../../utils/digitalSignature';
 
 const WORKFLOW_ROLES = {
   'BUDGET PREPARER': 'Preparer',
@@ -336,6 +336,7 @@ const WorkflowActionsRefactored = ({
   const [history, setHistory] = useState([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const signerMode = String(import.meta.env.VITE_PNPKI_SIGNER_MODE || '').toLowerCase() || 'disabled';
 
   const actions = getWorkflowActions(effectiveUserRole, proposal?.status, userInfo?.assignmentLevel || userInfo?.hierarchicalAccess?.assignmentLevel || userInfo?.assignmentLevel);
 
@@ -573,6 +574,12 @@ const WorkflowActionsRefactored = ({
                   disabled={loading}
                 />
               </Box>
+            )}
+
+            {commentDialog.action?.workflowAction && actionRequiresDigitalSignature(commentDialog.action.workflowAction) && (
+              <Alert severity="warning" icon={<InfoIcon />}>
+                This action requires a digital signature. Signer mode: <strong>{signerMode}</strong>.
+              </Alert>
             )}
 
             <Alert severity="info" icon={<InfoIcon />}>
