@@ -102,7 +102,7 @@ const buildWorkflowSigningPayload = ({
     proposalId: String(proposal?._id || proposal?.id || ''),
     title: String(proposal?.title || ''),
     fiscalYear: Number(proposal?.fiscalYear),
-    modelType: String(proposal?.modelType || ''),
+    modelType: String(proposal?.modelType || proposal?.budgetType || ''),
     action: String(workflowAction),
     fromStatus: String(fromStatus),
     toStatus: String(toStatus),

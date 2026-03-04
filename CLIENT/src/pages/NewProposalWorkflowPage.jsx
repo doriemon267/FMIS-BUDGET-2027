@@ -66,6 +66,7 @@ import { TableSkeleton } from '../components/common/LoadingSkeleton';
 import ErrorAlert from '../components/common/ErrorAlert';
 import { preventNegativeNumericKey, toNonNegativeNumber } from '../utils/preventNegativeInput';
 import ProposalVersionHistoryDialog from '../components/myproposal/ProposalVersionHistoryDialog';
+import { createWorkflowDigitalSignature, actionRequiresDigitalSignature } from '../utils/digitalSignature';
 
 // Brand colors aligned to Transactions Processing UI
 const BRAND_COLORS = {
@@ -174,6 +175,7 @@ const NewProposalWorkflowPage = () => {
   const [searchParams] = useSearchParams();
   const { setWorkflowRef } = useWorkflowRef();
   const queryClient = useQueryClient();
+  const signerMode = String(import.meta.env.VITE_PNPKI_SIGNER_MODE || '').toLowerCase() || 'disabled';
 
   // Check if user is BRD (Budget Revenue Division) level or SUPER ADMIN
   const isBRDUser = currentUser?.Roles?.some((role) =>
@@ -1057,6 +1059,18 @@ const NewProposalWorkflowPage = () => {
       if (backendAction === "submit-to-analyst" && targetAnalystId) {
         payload.targetAnalystId = targetAnalystId;
       }
+
+      const digitalSignature = await createWorkflowDigitalSignature({
+        proposal: selectedProposal,
+        workflowAction: backendAction,
+        comment: actionComment,
+        userInfo: currentUser
+      });
+
+      if (digitalSignature) {
+        payload.digitalSignature = digitalSignature;
+      }
+
       await api.post(`${WORKFLOW_API_BASE}/${selectedProposal._id}/action`, payload);
 
       toast.success("Action completed successfully");
@@ -3049,6 +3063,12 @@ const NewProposalWorkflowPage = () => {
               },
             }}
           />
+
+          {actionType && actionRequiresDigitalSignature(mapActionToBackend(actionType)) && (
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              This action requires a digital signature. Signer mode: <strong>{signerMode}</strong>.
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions sx={{ p: 3, gap: 1 }}>
           <Button
@@ -5762,6 +5782,17 @@ const NewProposalWorkflowPage = () => {
                       >
                         TIER VERSION
                       </TableCell>
+                      <TableCell
+                        sx={{
+                          fontWeight: "bold",
+                          color: "#333",
+                          fontSize: "0.85rem",
+                          letterSpacing: "0.5px",
+                          minWidth: 260,
+                        }}
+                      >
+                        SIGNATURE
+                      </TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -5843,6 +5874,32 @@ const NewProposalWorkflowPage = () => {
                             {typeof entry.tierVersion === "number" && entry.tierVersion > 0
                               ? `v${entry.tierVersion}`
                               : "—"}
+                          </TableCell>
+                          <TableCell sx={{ py: 1.5, fontSize: "0.8rem", color: "#333" }}>
+                            {entry.digitalSignature ? (
+                              <Box>
+                                <Chip
+                                  size="small"
+                                  color="success"
+                                  label={entry.digitalSignature.signatureAlgorithm || "Signed"}
+                                  sx={{ mb: 0.75, fontWeight: 600 }}
+                                />
+                                <Typography variant="caption" display="block" sx={{ color: "#555" }}>
+                                  {entry.digitalSignature.signedAt
+                                    ? `Signed: ${new Date(entry.digitalSignature.signedAt).toLocaleString("en-US")}`
+                                    : "Signed"}
+                                </Typography>
+                                {entry.digitalSignature.certificateFingerprint256 && (
+                                  <Tooltip title={entry.digitalSignature.certificateFingerprint256}>
+                                    <Typography variant="caption" display="block" sx={{ color: "#777" }}>
+                                      FP: {String(entry.digitalSignature.certificateFingerprint256).slice(0, 20)}...
+                                    </Typography>
+                                  </Tooltip>
+                                )}
+                              </Box>
+                            ) : (
+                              <Chip size="small" variant="outlined" label="Not signed" />
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}

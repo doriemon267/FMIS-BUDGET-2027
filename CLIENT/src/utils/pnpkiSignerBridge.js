@@ -65,6 +65,7 @@ export const installPnpkiSignerBridge = () => {
   if (typeof window === 'undefined') return;
 
   const mode = String(import.meta.env.VITE_PNPKI_SIGNER_MODE || '').toLowerCase();
+  const isProd = !!import.meta.env.PROD;
   if (!mode) return;
 
   if (window.PNPKISigner && typeof window.PNPKISigner.signWorkflowPayload === 'function') {
@@ -72,6 +73,10 @@ export const installPnpkiSignerBridge = () => {
   }
 
   if (mode === 'mock') {
+    if (isProd) {
+      console.error('[PNPKI] Mock signer bridge is disabled in production. Use real PNPKI signer integration.');
+      return;
+    }
     window.PNPKISigner = createMockSigner();
     console.warn('[PNPKI] Mock signer bridge is active. Use for development only.');
     return;
