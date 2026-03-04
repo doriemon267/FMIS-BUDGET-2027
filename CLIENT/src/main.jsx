@@ -10,12 +10,14 @@ import ToastWrapper from "./global/components/ToastWrapper.jsx";
 import ErrorBoundary from "./global/components/ErrorBoundary.jsx";
 import setupRegionInterceptor from "./middleware/regionMiddleware.jsx";
 import { setNavigate } from "./global/navigation";
+import { installPnpkiSignerBridge } from "./utils/pnpkiSignerBridge.js";
 import "./index.css";
 import "./global/silenceConsole";
 import "./global/components/GlobalNotifications"; // Initialize global notifications
 
 // Setup the region interceptor
 setupRegionInterceptor();
+installPnpkiSignerBridge();
 
 // Bridge component to capture navigate from React Router
 function NavigationBridge() {

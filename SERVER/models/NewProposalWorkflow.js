@@ -112,6 +112,39 @@ const newProposalWorkflowSchema = new mongoose.Schema({
     comment: {
       type: String
     },
+    digitalSignature: {
+      signatureAlgorithm: {
+        type: String
+      },
+      signedAt: {
+        type: Date
+      },
+      signedPayloadHash: {
+        type: String
+      },
+      certificateSubject: {
+        type: String
+      },
+      certificateIssuer: {
+        type: String
+      },
+      certificateSerialNumber: {
+        type: String
+      },
+      certificateFingerprint256: {
+        type: String
+      },
+      certificateValidFrom: {
+        type: Date
+      },
+      certificateValidTo: {
+        type: Date
+      },
+      trustBundleConfigured: {
+        type: Boolean,
+        default: false
+      }
+    },
     // Optional: snapshot of Tier version used when this action was performed
     // This links the workflow step to the specific Tier revision (Tier 1 / Tier 2 split)
     tierVersion: {

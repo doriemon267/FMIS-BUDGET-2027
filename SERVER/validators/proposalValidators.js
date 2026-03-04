@@ -35,6 +35,17 @@ const performActionSchema = Joi.object({
   ),
   comment: Joi.string().trim().max(2000).allow('', null),
   targetAnalystId: Joi.string().trim().allow('', null), // For submit-to-analyst: route to specific BPA (Central Office vs Other Region)
+  digitalSignature: Joi.object({
+    signature: Joi.string().trim().required(),
+    certificatePem: Joi.string().trim().required(),
+    certificateChainPem: Joi.alternatives().try(
+      Joi.string().trim(),
+      Joi.array().items(Joi.string().trim())
+    ).allow(null),
+    signedPayload: Joi.string().allow('', null),
+    signedAt: Joi.date().iso().required(),
+    algorithm: Joi.string().trim().valid('RSA-SHA256', 'sha256', 'sha256WithRSAEncryption').default('RSA-SHA256')
+  }).allow(null),
 }).unknown(true);
 
 module.exports = {

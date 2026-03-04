@@ -10,6 +10,9 @@
     "migrate:normalize-recipient-ids": "node ./scripts/normalize-recipient-userids.js",
     "seed:departmentdivisionmappings": "node ./migrations/seed-departmentdivisionmappings.js",
     "encrypt:env": "node ./tools/encryptEnv.js",
+    "pnpki:build-bundle:ps": "powershell -ExecutionPolicy Bypass -File ./tools/build-pnpki-bundle.ps1",
+    "pnpki:verify-bundle": "node ./tools/verifyPnpkiBundle.js",
+    "pnpki:verify-bundle:ps": "powershell -ExecutionPolicy Bypass -File ./tools/verify-pnpki.ps1",
     "format": "prettier --write \"**/*.{js,json,md}\" --ignore-path .prettierignore",
     "format:check": "prettier --check \"**/*.{js,json,md}\" --ignore-path .prettierignore"
   },

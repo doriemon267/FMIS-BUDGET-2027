@@ -14,7 +14,19 @@ const notificationController = require('./notificationController');
 const consolidationService = require('../utils/consolidationService');
 const { sendNotificationEmail } = require('../utils/emailNotification');
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 const { recalculateAndSaveProposalTotals } = require('../utils/recalculateProposalTotals');
+const { verifyWorkflowDigitalSignature } = require('../utils/digitalSignatureService');
+
+const WORKFLOW_ACTIONS_REQUIRING_SIGNATURE = new Set([
+  'submit-to-approver',
+  'forward-to-officer',
+  'forward-to-manager',
+  'finalize'
+]);
+
+const isCryptographicSignatureEnforced = () =>
+  String(process.env.PNPKI_ENFORCE_SIGNATURE || '').toLowerCase() === 'true';
 
 // Workflow status transitions based on the specification
 const WORKFLOW_TRANSITIONS = {
@@ -1728,7 +1740,8 @@ const TierRevision = require('../models/TierRevision');
 exports.performAction = async (req, res) => {
   try {
     const { id } = req.params;
-    const { action, comment } = req.body;
+    let { action } = req.body;
+    const { comment } = req.body;
     const userRole = getUserRole(req);
     const userId = req.user.id;
     const userIdString = String(userId);
@@ -1827,6 +1840,36 @@ exports.performAction = async (req, res) => {
 
     const newWorkflowStatus = transitions[workflowStatus][action];
 
+    let signatureVerification = null;
+    const requiresDigitalSignature =
+      WORKFLOW_ACTIONS_REQUIRING_SIGNATURE.has(action) && isCryptographicSignatureEnforced();
+
+    if (requiresDigitalSignature) {
+      if (!req.body.digitalSignature) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cryptographic digital signature is required for this workflow action'
+        });
+      }
+
+      try {
+        signatureVerification = verifyWorkflowDigitalSignature({
+          proposal,
+          action,
+          fromStatus: proposal.status,
+          toStatus: newWorkflowStatus,
+          comment,
+          signedBy: userIdString,
+          digitalSignature: req.body.digitalSignature
+        });
+      } catch (signatureError) {
+        return res.status(400).json({
+          success: false,
+          message: `Digital signature verification failed: ${signatureError.message}`
+        });
+      }
+    }
+
     // Final enforcement: If PREPARER is attempting submit-to-approver, ensure they are Office-level
     if (action === 'submit-to-approver' && userRole === 'BUDGET PREPARER') {
       try {
@@ -1903,6 +1946,18 @@ exports.performAction = async (req, res) => {
       performedBy: userId,
       performedByName: userName,
       comment: comment || '',
+      digitalSignature: signatureVerification ? {
+        signatureAlgorithm: req.body?.digitalSignature?.algorithm || 'RSA-SHA256',
+        signedAt: req.body?.digitalSignature?.signedAt ? new Date(req.body.digitalSignature.signedAt) : new Date(),
+        signedPayloadHash: crypto.createHash('sha256').update(signatureVerification.signedPayload).digest('hex'),
+        certificateSubject: signatureVerification.certificateSubject,
+        certificateIssuer: signatureVerification.certificateIssuer,
+        certificateSerialNumber: signatureVerification.certificateSerialNumber,
+        certificateFingerprint256: signatureVerification.certificateFingerprint256,
+        certificateValidFrom: signatureVerification.certificateValidFrom ? new Date(signatureVerification.certificateValidFrom) : undefined,
+        certificateValidTo: signatureVerification.certificateValidTo ? new Date(signatureVerification.certificateValidTo) : undefined,
+        trustBundleConfigured: signatureVerification.trustBundleConfigured
+      } : undefined,
       ...tierHistoryFields,
     });
 
@@ -2044,6 +2099,7 @@ exports.performAction = async (req, res) => {
     res.json({
       success: true,
       message: 'Action performed successfully',
+      signatureVerified: Boolean(signatureVerification),
       data: proposal
     });
   } catch (error) {

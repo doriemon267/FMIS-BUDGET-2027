@@ -33,6 +33,7 @@ import { toast } from 'react-toastify';
 import api from '../../config/api';
 import QuickProposalView from './QuickProposalView';
 import ProposalDetailsWithTables from './ProposalDetailsWithTables';
+import { createWorkflowDigitalSignature } from '../../utils/digitalSignature';
 
 const WORKFLOW_ROLES = {
   'BUDGET PREPARER': 'Preparer',
@@ -75,8 +76,8 @@ const getWorkflowActions = (userRole, proposalStatus, assignmentLevel) => {
           icon: SendIcon,
           color: 'success',
           requiresComment: false,
-          // Use platform-level action endpoint for new workflow routes - placeholder to be replaced
-          endpoint: '/api/allproposal/proposals/${proposalId}/action'
+          endpoint: '/api/allproposal/proposals/${proposalId}/action',
+          workflowAction: 'submit-to-approver'
         });
       } else {
         actions.push({
@@ -85,7 +86,8 @@ const getWorkflowActions = (userRole, proposalStatus, assignmentLevel) => {
           icon: SendIcon,
           color: 'success',
           requiresComment: false,
-          endpoint: '/api/workflow/preparer/submit-to-reviewer'
+          endpoint: '/api/allproposal/proposals/${proposalId}/action',
+          workflowAction: 'submit-to-reviewer'
         });
       }
     }
@@ -99,7 +101,8 @@ const getWorkflowActions = (userRole, proposalStatus, assignmentLevel) => {
         icon: CheckIcon,
         color: 'success',
         requiresComment: false,
-        endpoint: '/api/workflow/reviewer/approve-forward-to-approver'
+        endpoint: '/api/allproposal/proposals/${proposalId}/action',
+        workflowAction: 'submit-to-approver'
       });
       actions.push({
         id: 'save-edits',
@@ -115,7 +118,8 @@ const getWorkflowActions = (userRole, proposalStatus, assignmentLevel) => {
         icon: UndoIcon,
         color: 'error',
         requiresComment: true,
-        endpoint: '/api/workflow/reviewer/return-to-preparer'
+        endpoint: '/api/allproposal/proposals/${proposalId}/action',
+        workflowAction: 'return-to-preparer'
       });
     }
   }
@@ -128,7 +132,8 @@ const getWorkflowActions = (userRole, proposalStatus, assignmentLevel) => {
         icon: SendIcon,
         color: 'success',
         requiresComment: false,
-        endpoint: '/api/workflow/approver/approve-forward-to-analyst'
+        endpoint: '/api/allproposal/proposals/${proposalId}/action',
+        workflowAction: 'submit-to-analyst'
       });
       actions.push({
         id: 'save-edits',
@@ -152,7 +157,8 @@ const getWorkflowActions = (userRole, proposalStatus, assignmentLevel) => {
         icon: UndoIcon,
         color: 'error',
         requiresComment: true,
-        endpoint: '/api/workflow/approver/return-to-reviewer'
+        endpoint: '/api/allproposal/proposals/${proposalId}/action',
+        workflowAction: 'return-to-reviewer'
       });
     }
   }
@@ -165,7 +171,8 @@ const getWorkflowActions = (userRole, proposalStatus, assignmentLevel) => {
         icon: CheckIcon,
         color: 'success',
         requiresComment: false,
-        endpoint: '/api/workflow/analyst/validate-forward-to-officer'
+        endpoint: '/api/allproposal/proposals/${proposalId}/action',
+        workflowAction: 'forward-to-officer'
       });
       actions.push({
         id: 'save-edits',
@@ -202,7 +209,8 @@ const getWorkflowActions = (userRole, proposalStatus, assignmentLevel) => {
         icon: SendIcon,
         color: 'success',
         requiresComment: false,
-        endpoint: '/api/workflow/officer/approve-forward-to-manager'
+        endpoint: '/api/allproposal/proposals/${proposalId}/action',
+        workflowAction: 'forward-to-manager'
       });
       actions.push({
         id: 'return-proposal',
@@ -210,7 +218,8 @@ const getWorkflowActions = (userRole, proposalStatus, assignmentLevel) => {
         icon: UndoIcon,
         color: 'error',
         requiresComment: true,
-        endpoint: '/api/workflow/officer/return-proposal'
+        endpoint: '/api/allproposal/proposals/${proposalId}/action',
+        workflowAction: 'return-to-preparer'
       });
     }
   }
@@ -231,7 +240,8 @@ const getWorkflowActions = (userRole, proposalStatus, assignmentLevel) => {
         icon: CheckIcon,
         color: 'success',
         requiresComment: false,
-        endpoint: '/api/workflow/manager/finalize'
+        endpoint: '/api/allproposal/proposals/${proposalId}/action',
+        workflowAction: 'finalize'
       });
       actions.push({
         id: 'return-to-officer',
@@ -352,10 +362,29 @@ const WorkflowActionsRefactored = ({
       const proposalId = proposal?._id || proposal?.id;
       let endpoint = action.endpoint || '';
       if (endpoint.includes('${proposalId}')) endpoint = endpoint.replace('${proposalId}', proposalId);
-      const response = await api.post(endpoint, {
-        proposalId: proposalId,
+      const requestBody = {
+        proposalId,
         comment: comment || ''
-      });
+      };
+
+      if (action.workflowAction) {
+        requestBody.action = action.workflowAction;
+      }
+
+      if (action.workflowAction) {
+        const digitalSignature = await createWorkflowDigitalSignature({
+          proposal,
+          workflowAction: action.workflowAction,
+          comment: comment || '',
+          userInfo
+        });
+
+        if (digitalSignature) {
+          requestBody.digitalSignature = digitalSignature;
+        }
+      }
+
+      const response = await api.post(endpoint, requestBody);
 
       toast.success('Action completed successfully');
       setCommentDialog({ open: false, action: null, comment: '' });
