@@ -81,6 +81,7 @@ router.post('/proposals', validateJoi(createProposalSchema, { source: 'body' }),
 router.get('/proposals', newProposalWorkflowController.getProposals);
 router.get('/proposals/my-proposals', newProposalWorkflowController.getMyProposals);
 router.get('/proposals/pending-review', newProposalWorkflowController.getPendingReview);
+router.get('/proposals/preparer-create-access', newProposalWorkflowController.getPreparerCreateProposalAccess);
 // Check if there are FINALIZED proposals (optionally by fiscalYear)
 router.get('/proposals/has-finalized', newProposalWorkflowController.hasFinalizedProposals);
 // Specific routes with parameters must come BEFORE generic /:id routes

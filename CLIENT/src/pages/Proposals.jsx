@@ -18,6 +18,15 @@ const Proposals = () => {
   );
 
   const canOpenCreateProposalPage = useMemo(() => {
+    const isSuperAdminUser =
+      userRoles.includes("SUPER ADMIN") ||
+      userRoles.includes("SUPER_ADMIN") ||
+      userRoles.includes("SUPERADMIN");
+
+    if (isSuperAdminUser) {
+      return true;
+    }
+
     const hasCreatePermission =
       hasPermission(currentUser, "CreateProposals") ||
       hasPermission(currentUser, "EditOwnProposals");
@@ -47,21 +56,15 @@ const Proposals = () => {
       }
 
       try {
-        const response = await api.get("/allproposal/proposals", {
-          params: { page: 1, limit: 100 },
-        });
+        const response = await api.get(
+          "/allproposal/proposals/preparer-create-access"
+        );
 
-        const proposals = Array.isArray(response?.data?.proposals)
-          ? response.data.proposals
-          : [];
-
-        const hasSubmittedProposal = proposals.some((proposal) => {
-          const statusUpper = String(proposal?.status || "").toUpperCase();
-          return statusUpper && statusUpper !== "DRAFT";
-        });
+        const hasInProcessProposal =
+          response?.data?.hasInProcessProposal === true;
 
         if (isMounted) {
-          setBlockedBySubmission(hasSubmittedProposal);
+          setBlockedBySubmission(hasInProcessProposal);
         }
       } catch (error) {
         logger.warn("Failed to validate /proposal access", error);

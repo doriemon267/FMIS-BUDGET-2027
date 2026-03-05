@@ -1,7 +1,7 @@
 import React from "react";
 import PSCasualCustomPageTable from "./PersonnelCustomPageTable";
 
-const PersonnelCasualServicesPage = () => {
+const PersonnelCasualServicesPage = ({ proposalId }) => {
   const personnelServicesSchema = {
     action: {
       type: "action",
@@ -190,6 +190,7 @@ const PersonnelCasualServicesPage = () => {
       hasEdit={true}
       hasDelete={false}
       ROWS_PER_PAGE={10}
+      proposalId={proposalId}
     />
   );
 };

@@ -299,6 +299,15 @@ const HomePage = () => {
   );
 
   const hasCreateProposalEligibility = useMemo(() => {
+    const isSuperAdminUser =
+      userRolesUpper.includes('SUPER ADMIN') ||
+      userRolesUpper.includes('SUPER_ADMIN') ||
+      userRolesUpper.includes('SUPERADMIN');
+
+    if (isSuperAdminUser) {
+      return true;
+    }
+
     const hasCreatePermission =
       hasPermission(currentUser, 'CreateProposals') ||
       hasPermission(currentUser, 'EditOwnProposals');
@@ -328,21 +337,12 @@ const HomePage = () => {
       }
 
       try {
-        const response = await api.get('/allproposal/proposals', {
-          params: { page: 1, limit: 200 },
-        });
+        const response = await api.get('/allproposal/proposals/preparer-create-access');
 
-        const proposals = Array.isArray(response?.data?.proposals)
-          ? response.data.proposals
-          : [];
-
-        const hasSubmittedProposal = proposals.some((proposal) => {
-          const statusUpper = String(proposal?.status || '').toUpperCase();
-          return statusUpper && statusUpper !== 'DRAFT';
-        });
+        const hasInProcessProposal = response?.data?.hasInProcessProposal === true;
 
         if (isMounted) {
-          setCanAccessCreateProposal(!hasSubmittedProposal);
+          setCanAccessCreateProposal(!hasInProcessProposal);
         }
       } catch (error) {
         logger.warn('Failed to evaluate create proposal dashboard access', error);
@@ -368,7 +368,7 @@ const HomePage = () => {
 
   const handleCreateProposal = () => {
     if (!canAccessCreateProposal) {
-      toast.error('Create Proposal is not available after submission.');
+      toast.error('Create Proposal is only available while proposal is in Budget Preparer statuses.');
       navigate('/not-authorized');
       return;
     }
@@ -377,7 +377,7 @@ const HomePage = () => {
   
   const handleCreateFromTemplate = () => {
     if (!canAccessCreateProposal) {
-      toast.error('Create Proposal from template is not available after submission.');
+      toast.error('Create Proposal from template is only available while proposal is in Budget Preparer statuses.');
       navigate('/not-authorized');
       return;
     }

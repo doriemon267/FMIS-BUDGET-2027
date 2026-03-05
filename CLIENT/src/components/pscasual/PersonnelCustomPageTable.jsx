@@ -1006,6 +1006,7 @@ const PSCasualCustomPageTable = ({
         ROWS_PER_PAGE={ROWS_PER_PAGE}
         dataListName={dataListName}
         apiPath={apiPath}
+        proposalId={proposalId || workflowRef}
         rows={filteredRows}
         selectedRows={selectedRows}
         onRowSelectionChange={setSelectedRows}
@@ -1078,6 +1079,7 @@ PSCasualCustomPageTable.propTypes = {
   customEditElement: PropTypes.element,
   additionalMenuOptions: PropTypes.array,
   ROWS_PER_PAGE: PropTypes.number,
+  proposalId: PropTypes.string,
 };
 
 export default PSCasualCustomPageTable;

@@ -223,6 +223,7 @@ exports.getAllPersonnelServices = async (req, res) => {
       region, // Add region parameter
       subsidyEligible,
       chargedToIncomeEligible,
+      proposalId,
     } = req.query;
 
     console.log("DEBUG: getAllPersonnelServices called with params:", {
@@ -340,6 +341,29 @@ exports.getAllPersonnelServices = async (req, res) => {
     
     console.log("DEBUG: Final query before find:", JSON.stringify(query, null, 2));
     
+    if (proposalId) {
+      const proposalScope = [{ workflowRef: proposalId }];
+
+      if (mongoose.Types.ObjectId.isValid(String(proposalId))) {
+        proposalScope.push({ proposalId: new mongoose.Types.ObjectId(String(proposalId)) });
+      }
+
+      try {
+        const legacyProposal = await Proposal.findOne({ workflowRef: proposalId }).select('_id').lean();
+        if (legacyProposal?._id) {
+          proposalScope.push({ proposalId: legacyProposal._id });
+        }
+      } catch (scopeErr) {
+        console.warn('[getAllPersonnelServices] proposal scope fallback error:', scopeErr.message);
+      }
+
+      if (query.$and) {
+        query.$and.push({ $or: proposalScope });
+      } else {
+        query = { $and: [query, { $or: proposalScope }] };
+      }
+    }
+
     const sortByField = orderBy || "createdAt";
     const sortOrder = order.toLowerCase() === "desc" ? -1 : 1;
     const sortQuery = { [sortByField]: sortOrder };
@@ -359,7 +383,7 @@ exports.getAllPersonnelServices = async (req, res) => {
       .skip(skip)
       .limit(limitNum)
       .sort(sortQuery);
-    const totalRecords = await PersonnelServices.countDocuments(query);
+    let totalRecords = await PersonnelServices.countDocuments(query);
     
     console.log("DEBUG: Query results - found", personnelServices.length, "records out of", totalRecords, "total");
     if (chargedToIncomeFilter !== null) {
@@ -377,13 +401,12 @@ exports.getAllPersonnelServices = async (req, res) => {
     // SUPER_ADMIN must filter by the region parameter passed from frontend (from employee page)
     // BUDGET_MANAGER sees ALL records (no filtering)
     // Other users are filtered by their organizational assignment
-    if (isSuperAdmin && region) {
+    if (!proposalId && isSuperAdmin && region) {
       // SUPER_ADMIN: Filter by the region parameter (selected on employee page)
       const filteredPersonnel = personnelServices.filter(ps => ps.region === region);
-      if (filteredPersonnel.length > 0) {
-        personnelServices = filteredPersonnel;
-      }
-    } else if (!isSuperAdmin && !isBudgetManager && userIdString) {
+      personnelServices = filteredPersonnel;
+      totalRecords = filteredPersonnel.length;
+    } else if (!proposalId && !isSuperAdmin && !isBudgetManager && userIdString) {
       try {
         const HierarchicalUserAssignment = require('../models/HierarchicalUserAssignment');
         const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
@@ -418,6 +441,7 @@ exports.getAllPersonnelServices = async (req, res) => {
           
           if (filteredPersonnel.length > 0 || userAssignment.assignmentLevel !== 'FULL') {
             personnelServices = filteredPersonnel;
+            totalRecords = filteredPersonnel.length;
           }
         }
       } catch (err) {
@@ -931,6 +955,19 @@ exports.bulkAddPersonnelServices = async (req, res) => {
       } else {
         monthlyPhilhealthPremium = monthlySalary * 0.05; // 5% rate for 2025
       }
+      const orgLevelFromUser =
+        userLevel === 'DIVISION'
+          ? 'DIVISION'
+          : userLevel === 'DEPARTMENT'
+            ? 'DEPARTMENT'
+            : userLevel === 'REGION'
+              ? 'REGION'
+              : null;
+      const resolvedOriginalLevel =
+        workflowData.originalLevel || orgLevelFromUser || 'REGION';
+      const resolvedWorkflowLevel =
+        workflowData.workflowLevel || workflowData.originalLevel || orgLevelFromUser || 'BUDGET PREPARER';
+
       let personnelService = {
         processBy: req.body.processBy || "Unknown",
         processDate: new Date(),
@@ -991,8 +1028,8 @@ exports.bulkAddPersonnelServices = async (req, res) => {
         courtAppearance: 0,
         Total: 0,
         // Submission workflow tagging - tracks WHO processed this record, NOT the employee's org assignment
-        originalLevel: workflowData.originalLevel || (userLevel === 'DIVISION' ? 'DIVISION' : userLevel === 'DEPARTMENT' ? 'DEPARTMENT' : userLevel === 'REGION' ? 'REGION' : null),
-        workflowLevel: workflowData.workflowLevel || (userLevel === 'DIVISION' ? 'DIVISION' : userLevel === 'DEPARTMENT' ? 'DEPARTMENT' : userLevel === 'REGION' ? 'REGION' : null),
+        originalLevel: resolvedOriginalLevel,
+        workflowLevel: resolvedWorkflowLevel,
         status: req.body.status || 'Draft',
         // Track the user's assignment for workflow purposes (NOT the employee's org)
         processorRegion: ownerRegion || null,
@@ -2168,10 +2205,29 @@ exports.debugCheckChargedToIncome = async (req, res) => {
  */
 exports.listChargedToIncome = async (req, res) => {
   try {
-    const { fiscalYear, region } = req.query;
-    const query = { chargedToIncomeEligible: true };
+    const { fiscalYear, region, proposalId } = req.query;
+    let query = { chargedToIncomeEligible: true };
     if (fiscalYear) query.fiscalYear = String(fiscalYear).trim();
     if (region) query.region = region;
+
+    if (proposalId) {
+      const proposalScope = [{ workflowRef: proposalId }];
+
+      if (mongoose.Types.ObjectId.isValid(String(proposalId))) {
+        proposalScope.push({ proposalId: new mongoose.Types.ObjectId(String(proposalId)) });
+      }
+
+      try {
+        const legacyProposal = await Proposal.findOne({ workflowRef: proposalId }).select('_id').lean();
+        if (legacyProposal?._id) {
+          proposalScope.push({ proposalId: legacyProposal._id });
+        }
+      } catch (scopeErr) {
+        console.warn('[listChargedToIncome] proposal scope fallback error:', scopeErr.message);
+      }
+
+      query = { $and: [query, { $or: proposalScope }] };
+    }
 
     const records = await PersonnelServices.find(query)
       .select('_id employeeFullName employeeNumber positionTitle department division region fiscalYear Total chargedToIncomeAmount chargedToIncomeTaggedAt')
@@ -2198,10 +2254,29 @@ exports.listChargedToIncome = async (req, res) => {
  */
 exports.resetChargedToIncome = async (req, res) => {
   try {
-    const { fiscalYear, region } = req.body || {};
-    const query = { chargedToIncomeEligible: true };
+    const { fiscalYear, region, proposalId } = req.body || {};
+    let query = { chargedToIncomeEligible: true };
     if (fiscalYear) query.fiscalYear = String(fiscalYear).trim();
     if (region) query.region = region;
+
+    if (proposalId) {
+      const proposalScope = [{ workflowRef: proposalId }];
+
+      if (mongoose.Types.ObjectId.isValid(String(proposalId))) {
+        proposalScope.push({ proposalId: new mongoose.Types.ObjectId(String(proposalId)) });
+      }
+
+      try {
+        const legacyProposal = await Proposal.findOne({ workflowRef: proposalId }).select('_id').lean();
+        if (legacyProposal?._id) {
+          proposalScope.push({ proposalId: legacyProposal._id });
+        }
+      } catch (scopeErr) {
+        console.warn('[resetChargedToIncome] proposal scope fallback error:', scopeErr.message);
+      }
+
+      query = { $and: [query, { $or: proposalScope }] };
+    }
 
     const result = await PersonnelServices.updateMany(query, {
       $set: {
@@ -2217,8 +2292,12 @@ exports.resetChargedToIncome = async (req, res) => {
     const recalculateAndSaveProposalTotals = require('../utils/recalculateProposalTotals').recalculateAndSaveProposalTotals;
     if (result.modifiedCount > 0) {
       try {
-        const keys = { fiscalYear: query.fiscalYear, region: query.region };
-        await recalculateAndSaveProposalTotals({ keys });
+        if (proposalId) {
+          await recalculateAndSaveProposalTotals({ proposalId });
+        } else {
+          const keys = { fiscalYear: query.fiscalYear, region: query.region };
+          await recalculateAndSaveProposalTotals({ keys });
+        }
       } catch (e) {
         console.warn("Recalc proposal totals after reset:", e.message);
       }

@@ -158,7 +158,7 @@ const WORKFLOW_TRANSITIONS = {
 
 // Get user's primary budget role (silent version)
 const getUserRole = (req) => {
-  const userRoles = req.user?.Roles || [];
+  const userRoles = Array.isArray(req.user?.Roles) ? req.user.Roles : [];
   const roleMapping = {
     'BUDGET_PREPARER': 'BUDGET PREPARER',
     'BUDGET PREPARER': 'BUDGET PREPARER',
@@ -178,8 +178,27 @@ const getUserRole = (req) => {
     'SUPER_ADMIN': 'SUPER ADMIN',
     'SUPER ADMIN': 'SUPER ADMIN'
   };
-  for (const role of userRoles) {
-    if (roleMapping[role]) return roleMapping[role];
+
+  const normalizedRoles = userRoles
+    .map((role) => String(role || '').trim())
+    .filter(Boolean)
+    .map((role) => role.replace(/\s+/g, '_').toUpperCase());
+
+  const rolePriority = [
+    'BUDGET_PREPARER',
+    'BUDGET_REVIEWER',
+    'BUDGET_APPROVER',
+    'BUDGET_PLANNING_ANALYST',
+    'BUDGET_OFFICER',
+    'BUDGET_MANAGER',
+    'OVERALL_BUDGET_APPROVER',
+    'SUPER_ADMIN',
+  ];
+
+  for (const normalizedRole of rolePriority) {
+    if (normalizedRoles.includes(normalizedRole) && roleMapping[normalizedRole]) {
+      return roleMapping[normalizedRole];
+    }
   }
   return null;
 };
@@ -697,6 +716,117 @@ exports.hasFinalizedProposals = async (req, res) => {
   }
 };
 
+const normalizePreparerAccessStatus = (status) => {
+  const raw = String(status || '').trim().toUpperCase();
+  const statusMap = {
+    'DRAFT': 'DRAFT',
+    'INITIAL': 'INITIAL',
+    'RETURNED': 'RETURNED',
+    'RETURNED TO PREPARER': 'RETURNED_TO_PREPARER',
+    'RETURNED_TO_PREPARER': 'RETURNED_TO_PREPARER',
+  };
+
+  return statusMap[raw] || raw.replace(/\s+/g, '_');
+};
+
+const isPreparerEditableStatus = (status) => {
+  const normalizedStatus = normalizePreparerAccessStatus(status);
+  if (!normalizedStatus) return false;
+
+  if (
+    normalizedStatus === 'DRAFT' ||
+    normalizedStatus === 'INITIAL' ||
+    normalizedStatus === 'RETURNED' ||
+    normalizedStatus === 'RETURNED_TO_PREPARER'
+  ) {
+    return true;
+  }
+
+  return normalizedStatus.includes('PREPARER');
+};
+
+exports.getPreparerCreateProposalAccess = async (req, res) => {
+  try {
+    const roleSet = new Set(
+      (Array.isArray(req.user?.Roles) ? req.user.Roles : [])
+        .map((role) => String(role || '').toUpperCase().replace(/\s+/g, '_'))
+    );
+    const isSuperAdmin = roleSet.has('SUPER_ADMIN') || roleSet.has('SUPERADMIN');
+    const isBudgetPreparer = roleSet.has('BUDGET_PREPARER');
+
+    // Strict preparer status lock should not affect SUPER ADMIN or non-preparer roles.
+    if (isSuperAdmin || !isBudgetPreparer) {
+      return res.json({
+        success: true,
+        canAccessCreateProposal: true,
+        hasInProcessProposal: false,
+        bypassed: true,
+      });
+    }
+
+    const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
+    const userIdString = userId ? String(userId) : '';
+
+    const usernameField = Array.isArray(req.user?.Username)
+      ? req.user.Username[0]
+      : req.user?.Username;
+
+    const displayName = [
+      req.user?.name,
+      req.user?.UserName,
+      `${req.user?.FirstName || ''} ${req.user?.LastName || ''}`.trim(),
+    ].find((v) => v && String(v).trim().length > 0) || '';
+
+    const identityCandidates = [userIdString, usernameField]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean);
+
+    if (identityCandidates.length === 0) {
+      return res.json({
+        success: true,
+        canAccessCreateProposal: false,
+        hasInProcessProposal: true,
+      });
+    }
+
+    let proposals = await NewProposalWorkflow.find(
+      {
+        $or: [
+          { createdBy: { $in: identityCandidates } },
+          { createdByName: { $in: identityCandidates } },
+        ],
+      },
+      'status createdBy createdByName'
+    ).lean();
+
+    // Legacy fallback: only if strict identifiers have no hit, try displayName.
+    if ((!proposals || proposals.length === 0) && displayName) {
+      proposals = await NewProposalWorkflow.find(
+        { createdByName: displayName },
+        'status createdBy createdByName'
+      ).lean();
+    }
+
+    const hasInProcessProposal = (proposals || []).some(
+      (proposal) => !isPreparerEditableStatus(proposal?.status)
+    );
+
+    return res.json({
+      success: true,
+      canAccessCreateProposal: !hasInProcessProposal,
+      hasInProcessProposal,
+      proposalCount: proposals.length,
+    });
+  } catch (err) {
+    console.error('[getPreparerCreateProposalAccess] Error:', err.message || err);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to validate preparer create access',
+      error: err.message,
+    });
+  }
+};
+
 /**
  * Helper function to send email notifications to workflow recipients
  * @param {string} action - The workflow action performed
@@ -985,8 +1115,18 @@ exports.createProposal = async (req, res) => {
 
     // Robust user identifiers (avoid undefined createdBy)
     const userId = req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId;
-    const nameFallback = [req.user?.name, req.user?.UserName, req.user?.email, `${req.user?.FirstName || ''} ${req.user?.LastName || ''}`.trim()].find(v => v && v.length > 0);
-    const userName = nameFallback || 'UNKNOWN_USER';
+    const usernameField = Array.isArray(req.user?.Username) ? req.user.Username[0] : req.user?.Username;
+    const nameFallback = [
+      req.user?.userName,
+      req.user?.particular,
+      req.user?.name,
+      req.user?.UserName,
+      `${req.user?.FirstName || ''} ${req.user?.LastName || ''}`.trim(),
+      usernameField,
+      req.user?.email,
+      userId ? String(userId) : null,
+    ].find(v => v && String(v).trim().length > 0);
+    const userName = String(nameFallback || '').trim() || (userId ? String(userId) : 'SYSTEM_USER');
 
     // Validate/normalize modelType - accept common variants and normalize
     const validModelTypes = ['Initial', 'NEP', 'GAA'];
@@ -1284,7 +1424,27 @@ exports.getProposals = async (req, res) => {
         }
         break;
       case 'all-proposals':
-        query.status = { $ne: 'DRAFT' };  // Use DRAFT enum
+        // Show all non-draft proposals by default.
+        // For Budget Preparer, also include OWN draft proposals so newly-created items are visible on this tab.
+        if (userRole === 'BUDGET PREPARER') {
+          query.$or = [
+            { status: { $ne: 'DRAFT' } },
+            {
+              $and: [
+                { status: 'DRAFT' },
+                {
+                  $or: [
+                    { createdBy: userIdString },
+                    { createdBy: userName },
+                    { createdByName: userName }
+                  ]
+                }
+              ]
+            }
+          ];
+        } else {
+          query.status = { $ne: 'DRAFT' };  // Use DRAFT enum
+        }
         break;
       case 'monitoring':
           // Monitoring tab for Budget Manager and SUPER ADMIN: show all proposals except drafts
@@ -1425,7 +1585,7 @@ exports.getProposals = async (req, res) => {
     // RESPONSIBILITY CENTER FILTERING: Restrict visibility based on user's organizational assignment
     // Apply to all views EXCEPT 'monitoring' (which is for Budget Manager who sees all)
     // and SUPER ADMIN (who sees everything)
-    if (userRole !== 'SUPER ADMIN' && userRole !== 'BUDGET MANAGER' && view !== 'monitoring') {
+    if (userRole !== 'SUPER ADMIN' && userRole !== 'BUDGET MANAGER' && view !== 'monitoring' && view !== 'my-proposals') {
       try {
         // Get user's hierarchical assignment
         const userAssignment = await HierarchicalUserAssignment.findOne({ userId: userIdString })
@@ -1447,6 +1607,15 @@ exports.getProposals = async (req, res) => {
           console.log('[ORG_FILTER] Assigned - Dept:', assignedDepartment, 'Div:', assignedDivision, 'Region:', assignedRegion);
           
           const filteredProposals = newProposals.filter(p => {
+            const isOwnProposal =
+              String(p?.createdBy || '') === String(userIdString || '') ||
+              String(p?.createdBy || '').toLowerCase() === String(userName || '').toLowerCase() ||
+              String(p?.createdByName || '').toLowerCase() === String(userName || '').toLowerCase();
+            if (isOwnProposal) {
+              console.log('[ORG_FILTER] ✓ ALLOWED (own proposal)');
+              return true;
+            }
+
             const legacy = legacyMap.get(String(p._id));
             if (!legacy) return false;
             
@@ -1954,6 +2123,22 @@ exports.performAction = async (req, res) => {
       'RETURNED_TO_OFFICER': 'Returned to Budget Officer'
     };
 
+    const workflowLevelByStatus = {
+      'DRAFT': 'BUDGET PREPARER',
+      'FORWARDED_TO_REVIEWER': 'BUDGET REVIEWER',
+      'FORWARDED_TO_APPROVER': 'BUDGET APPROVER',
+      'FORWARDED_TO_BRD_ANALYST': 'BUDGET_PLANNING_ANALYST',
+      'FORWARDED_TO_BRD_OFFICER': 'BUDGET_OFFICER',
+      'FORWARDED_TO_BRD_MANAGER': 'BUDGET_MANAGER',
+      'FINALIZED': 'FINALIZED',
+      'RETURNED_TO_PREPARER': 'BUDGET PREPARER',
+      'RETURNED_TO_REVIEWER': 'BUDGET REVIEWER',
+      'RETURNED_TO_APPROVER': 'BUDGET APPROVER',
+      'RETURNED_TO_PLANNING_ANALYST': 'BUDGET_PLANNING_ANALYST',
+      'RETURNED_TO_OFFICER': 'BUDGET_OFFICER',
+    };
+    const mappedWorkflowLevel = workflowLevelByStatus[newWorkflowStatus] || 'BUDGET PREPARER';
+
     // Update proposal
     const oldStatus = proposal.status;
     proposal.status = newWorkflowStatus;
@@ -2042,7 +2227,7 @@ exports.performAction = async (req, res) => {
       const legacyStatus = workflowToProposalStatus[newWorkflowStatus] || newWorkflowStatus;
       const updateData = {
         status: legacyStatus,
-        workflowLevel: userRole,
+        workflowLevel: mappedWorkflowLevel,
         updatedAt: new Date()
       };
       
@@ -2069,7 +2254,7 @@ exports.performAction = async (req, res) => {
     try {
       const legacyStatus = workflowToProposalStatus[newWorkflowStatus] || newWorkflowStatus;
       const lineItemUpdateQuery = { $or: [{ workflowRef: proposal._id }, { proposalId: proposal._id }] };
-      const lineItemUpdatePayload = { status: legacyStatus, workflowLevel: userRole, updatedAt: new Date() };
+      const lineItemUpdatePayload = { status: legacyStatus, workflowLevel: mappedWorkflowLevel, updatedAt: new Date() };
 
       // Update PersonnelServices
       await PersonnelServices.updateMany(lineItemUpdateQuery, lineItemUpdatePayload);

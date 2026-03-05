@@ -47,6 +47,7 @@ const PersonnelChargedToIncomeTable = ({
   additionalMenuOptions = [],
   ROWS_PER_PAGE = 20,
   locked = false,
+  proposalId = null,
 }) => {
   const [columnVisibility, setColumnVisibility] = useState({});
   const [filteredRows, setFilteredRows] = useState([]);
@@ -111,11 +112,12 @@ const PersonnelChargedToIncomeTable = ({
 
   // List charged-to-income (count + total) for info and reset
   const { data: chargedListData, refetch: refetchChargedList } = useQuery({
-    queryKey: ['chargedToIncomeList', fiscalYearForScope, regionForScope],
+    queryKey: ['chargedToIncomeList', fiscalYearForScope, regionForScope, proposalId],
     queryFn: () => {
       const params = {};
       if (fiscalYearForScope) params.fiscalYear = fiscalYearForScope;
       if (regionForScope) params.region = regionForScope;
+      if (proposalId) params.proposalId = proposalId;
       return api.get('/personnelServices/charged-to-income/list', { params }).then(r => r.data);
     },
     enabled: true,
@@ -140,6 +142,7 @@ const PersonnelChargedToIncomeTable = ({
       const body = {};
       if (fiscalYearForScope) body.fiscalYear = fiscalYearForScope;
       if (regionForScope) body.region = regionForScope;
+      if (proposalId) body.proposalId = proposalId;
       const res = await api.post('/personnelServices/charged-to-income/reset', body);
       toast.success(res.data?.message || 'Na-reset na ang charged-to-income.');
       await queryClient.invalidateQueries({ queryKey: [dataListName, 'chargedToIncome'] });
@@ -165,7 +168,7 @@ const PersonnelChargedToIncomeTable = ({
 
   // Fetch charged to income personnel data
   const { data, isLoading, refetch } = useQuery({
-    queryKey: [dataListName, 'chargedToIncome', page, rowsPerPage, orderBy, order, searchValue],
+    queryKey: [dataListName, 'chargedToIncome', page, rowsPerPage, orderBy, order, searchValue, proposalId],
     queryFn: async () => {
       const params = {
         page: page + 1,
@@ -177,6 +180,10 @@ const PersonnelChargedToIncomeTable = ({
 
       if (searchValue) {
         params.search = searchValue;
+      }
+
+      if (proposalId) {
+        params.proposalId = proposalId;
       }
 
       Object.keys(params).forEach(k => params[k] === undefined && delete params[k]);
@@ -504,6 +511,7 @@ PersonnelChargedToIncomeTable.propTypes = {
   additionalMenuOptions: PropTypes.array,
   ROWS_PER_PAGE: PropTypes.number,
   locked: PropTypes.bool,
+  proposalId: PropTypes.string,
 };
 
 export default PersonnelChargedToIncomeTable;

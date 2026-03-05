@@ -211,6 +211,7 @@ const NewProposalWorkflowPage = () => {
 
   // State management - default to "All Proposals" (index 0)
   const [activeTab, setActiveTab] = useState(0);
+  const hasInitializedDefaultTabRef = useRef(false);
 
   // Build tabs dynamically (include Monitoring for Budget Manager and SUPER_ADMIN)
   const isBudgetManager = (currentUser?.Roles || []).some((r) => {
@@ -225,6 +226,10 @@ const NewProposalWorkflowPage = () => {
       "SUPER_ADMIN",
       "SUPER ADMIN",
     ].includes(role)
+  );
+
+  const isBudgetPreparer = (currentUser?.Roles || []).some((role) =>
+    ["BUDGET PREPARER", "BUDGET_PREPARER"].includes(String(role || "").toUpperCase())
   );
 
   // Version history: BRD Budget Officer & Budget Manager only (same as backend)
@@ -247,7 +252,10 @@ const NewProposalWorkflowPage = () => {
     // Handle tab parameter
     if (tabParam) {
       const tabIndex = tabs.findIndex((tab) => tab.value === tabParam);
-      if (tabIndex !== -1) setActiveTab(tabIndex);
+      if (tabIndex !== -1) {
+        setActiveTab(tabIndex);
+        hasInitializedDefaultTabRef.current = true;
+      }
     }
 
     // Store proposalId to auto-select it once proposals load
@@ -255,6 +263,23 @@ const NewProposalWorkflowPage = () => {
       setTargetProposalId(proposalIdParam);
     }
   }, [searchParams, tabs]);
+
+  useEffect(() => {
+    if (hasInitializedDefaultTabRef.current) return;
+
+    const tabParam = searchParams.get("tab");
+    if (tabParam) return;
+
+    const preferredTabValue = isBudgetPreparer
+      ? "my-proposals"
+      : "all-proposals";
+    const preferredIndex = tabs.findIndex((tab) => tab.value === preferredTabValue);
+
+    if (preferredIndex !== -1) {
+      setActiveTab(preferredIndex);
+      hasInitializedDefaultTabRef.current = true;
+    }
+  }, [searchParams, tabs, isBudgetPreparer, isBRDUser]);
   const [selectedProposal, setSelectedProposal] = useState(null);
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
   const [viewDetailsDialogOpen, setViewDetailsDialogOpen] = useState(false);
@@ -2052,7 +2077,7 @@ const NewProposalWorkflowPage = () => {
                 // SUPER_ADMIN sees all tabs
                 if (isSuperAdmin) return true;
                 // BRD Users don't see "my-proposals" tab
-                if (tab.value === "my-proposals" && isBRDUser) return false;
+                if (tab.value === "my-proposals" && isBRDUser && !isBudgetPreparer) return false;
                 return true;
               })
               .map((tab, index) => {
@@ -2074,7 +2099,7 @@ const NewProposalWorkflowPage = () => {
                       borderRight:
                         index <
                         tabs.filter(
-                          (t) => !(t.value === "my-proposals" && isBRDUser)
+                          (t) => !(t.value === "my-proposals" && isBRDUser && !isBudgetPreparer)
                         ).length -
                           1
                           ? "1px solid rgba(255,255,255,0.25)"

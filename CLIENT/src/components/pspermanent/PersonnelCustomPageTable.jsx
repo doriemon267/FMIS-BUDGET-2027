@@ -976,6 +976,7 @@ const PSPCustomPageTable = ({
         ROWS_PER_PAGE={ROWS_PER_PAGE}
         dataListName={dataListName}
         apiPath={apiPath}
+        proposalId={proposalId || workflowRef}
         onDataChange={setFilteredRows}
         selectedRows={selectedRows}
         onRowSelectionChange={setSelectedRows}

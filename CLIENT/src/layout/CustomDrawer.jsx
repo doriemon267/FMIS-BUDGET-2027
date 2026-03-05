@@ -115,6 +115,11 @@ const CustomDrawer = ({ collapsed = false }) => {
 
     const checkCreateProposalAccess = async () => {
       try {
+        if (isSuperAdmin(currentUser)) {
+          if (isMounted) setCanAccessCreateProposal(true);
+          return;
+        }
+
         const isCreateProposalCandidate =
           (hasPermission(currentUser, "CreateProposals") || hasPermission(currentUser, "EditOwnProposals")) &&
           !isOverallApprover &&
@@ -128,21 +133,15 @@ const CustomDrawer = ({ collapsed = false }) => {
           return;
         }
 
-        const response = await api.get("/allproposal/proposals", {
-          params: { page: 1, limit: 100 },
-        });
+        const response = await api.get(
+          "/allproposal/proposals/preparer-create-access"
+        );
 
-        const proposals = Array.isArray(response?.data?.proposals)
-          ? response.data.proposals
-          : [];
-
-        const hasSubmittedProposal = proposals.some((proposal) => {
-          const statusUpper = String(proposal?.status || "").toUpperCase();
-          return statusUpper && statusUpper !== "DRAFT";
-        });
+        const hasInProcessProposal =
+          response?.data?.hasInProcessProposal === true;
 
         if (isMounted) {
-          setCanAccessCreateProposal(!hasSubmittedProposal);
+          setCanAccessCreateProposal(!hasInProcessProposal);
         }
       } catch (err) {
         logger.warn("Failed to evaluate create proposal access", err);

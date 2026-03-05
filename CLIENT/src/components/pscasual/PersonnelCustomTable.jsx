@@ -71,6 +71,7 @@ const CasualCustomTable = ({
   ROWS_PER_PAGE = 20,
   apiPath,
   dataListName = "",
+  proposalId = null,
   orderByDefault = "updatedAt",
   onDataChange,
   selectedRows = [],
@@ -110,7 +111,7 @@ const CasualCustomTable = ({
   const [totals, setTotals] = useState({});
  const [grandTotal, setGrandTotal] = useState(0);
   const { data, isLoading, refetch } = useQuery({
-    queryKey: [dataListName, page, regionFilter],
+    queryKey: [dataListName, page, rowsPerPage, orderBy, order, fieldAndValue, searchValue, regionFilter, proposalId],
     queryFn: async () => {
       const params = {
         page: page + 1,
@@ -136,6 +137,16 @@ const CasualCustomTable = ({
       if (regionFilter) {
         params.region = regionFilter;
       }
+
+      if (proposalId) {
+        params.proposalId = proposalId;
+      }
+
+      Object.keys(params).forEach((key) => {
+        if (params[key] === undefined || params[key] === null || params[key] === "") {
+          delete params[key];
+        }
+      });
       
       const res = await api.get(apiPath, { params });
       return res.data;
@@ -207,6 +218,9 @@ const CasualCustomTable = ({
         if (regionFilter) {
           params.append('region', regionFilter);
         }
+        if (proposalId) {
+          params.append('proposalId', proposalId);
+        }
         
         const response = await api.get(`/grandtotalCasual?${params.toString()}`);
         setGrandTotal(response.data.grandTotal || 0);
@@ -215,7 +229,7 @@ const CasualCustomTable = ({
       }
     };
     fetchGrandTotal();
-  }, [data, regionFilter]); // Ensure this effect runs when personnel data or region changes
+  }, [data, regionFilter, proposalId]); // Ensure this effect runs when personnel data or region/proposal changes
 
   const handleRequestSort = (property) => {
     const isAsc = orderBy === property && order === "asc";
@@ -433,6 +447,7 @@ const CasualCustomTable = ({
             limit: 10000,
             page: 1,
             region: regionFilter || undefined,
+            proposalId: proposalId || undefined,
           },
         });
 

@@ -22,8 +22,18 @@ module.exports = async (req, res, next) => {
     // 1. DEVELOPMENT BACKDOOR LOGIC (Mock Auth)
     if (allowMockAuth && devUserId) {
       const uid = String(devUserId).trim();
-      // AUTOMATIC SUPER_ADMIN para hindi ma-block sa budget role check
-      const rolesArr = ['SUPER_ADMIN', 'DEVELOPER']; 
+      const devRolesHeader = req.headers['x-dev-roles'] || req.headers['X-Dev-Roles'];
+      let rolesArr = [];
+      if (typeof devRolesHeader === 'string' && devRolesHeader.trim()) {
+        rolesArr = devRolesHeader
+          .split(',')
+          .map((r) => String(r || '').trim())
+          .filter(Boolean)
+          .map((r) => r.replace(/\s+/g, '_').toUpperCase());
+      }
+      if (rolesArr.length === 0) {
+        rolesArr = ['BUDGET_PREPARER', 'DEVELOPER'];
+      }
       const devName = `Dev User (${uid})`;
       
       req.user = {

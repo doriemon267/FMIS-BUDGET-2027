@@ -78,6 +78,7 @@ const PermanentCustomTable = ({
   ROWS_PER_PAGE = 20,
   apiPath,
   dataListName = '',
+  proposalId = null,
   orderByDefault = 'updatedAt',
   onDataChange,
   selectedRows = [],
@@ -103,7 +104,7 @@ const PermanentCustomTable = ({
   const [, setFilteredRows] = useState([]);
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: [dataListName, page, rowsPerPage, orderBy, order, fieldAndValue, searchValue],
+    queryKey: [dataListName, page, rowsPerPage, orderBy, order, fieldAndValue, searchValue, proposalId],
     queryFn: async () => {
       const params = {
         page: page + 1,
@@ -113,6 +114,10 @@ const PermanentCustomTable = ({
         statusOfAppointment: 'PERMANENT',
         chargedToIncomeEligible: false, // Exclude charged-to-income personnel
       };
+
+      if (proposalId) {
+        params.proposalId = proposalId;
+      }
 
       // Only add search if it has a value
       if (searchValue) {
@@ -260,6 +265,7 @@ const PermanentCustomTable = ({
             statusOfAppointment: 'PERMANENT',
             limit: 10000, // Get all records
             page: 1,
+            ...(proposalId ? { proposalId } : {}),
           },
         });
 

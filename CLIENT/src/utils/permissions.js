@@ -39,6 +39,45 @@ export function hasPermission(currentUser, permissionKey) {
   return true;
 }
 
+export function normalizeWorkflowStatus(status) {
+  const raw = String(status || '').trim().toUpperCase();
+  const statusMap = {
+    'DRAFT': 'DRAFT',
+    'INITIAL': 'INITIAL',
+    'RETURNED': 'RETURNED',
+    'RETURNED TO PREPARER': 'RETURNED_TO_PREPARER',
+    'RETURNED_TO_PREPARER': 'RETURNED_TO_PREPARER',
+    'FORWARDED TO REVIEWER': 'FORWARDED_TO_REVIEWER',
+    'FORWARDED TO APPROVER': 'FORWARDED_TO_APPROVER',
+    'FORWARDED TO BUDGET PLANNING ANALYST': 'FORWARDED_TO_BRD_ANALYST',
+    'FORWARDED TO BUDGET OFFICER': 'FORWARDED_TO_BRD_OFFICER',
+    'FORWARDED TO OVERALL BUDGET APPROVER': 'FORWARDED_TO_BRD_MANAGER',
+    'RETURNED TO REVIEWER': 'RETURNED_TO_REVIEWER',
+    'RETURNED TO APPROVER': 'RETURNED_TO_APPROVER',
+    'RETURNED TO BUDGET PLANNING ANALYST': 'RETURNED_TO_PLANNING_ANALYST',
+    'RETURNED TO BUDGET OFFICER': 'RETURNED_TO_OFFICER',
+    'FINALIZED': 'FINALIZED',
+  };
+
+  return statusMap[raw] || raw.replace(/\s+/g, '_');
+}
+
+export function isBudgetPreparerEditableStatus(status) {
+  const normalizedStatus = normalizeWorkflowStatus(status);
+  if (!normalizedStatus) return false;
+
+  if (
+    normalizedStatus === 'DRAFT' ||
+    normalizedStatus === 'INITIAL' ||
+    normalizedStatus === 'RETURNED' ||
+    normalizedStatus === 'RETURNED_TO_PREPARER'
+  ) {
+    return true;
+  }
+
+  return normalizedStatus.includes('PREPARER');
+}
+
 export function getUserRestrictions(currentUser) {
   if (!currentUser) return {
     allowedBudgetTypes: ['Initial', 'NEP', 'GAA'],
