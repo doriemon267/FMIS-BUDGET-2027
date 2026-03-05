@@ -1341,9 +1341,62 @@ exports.getProposals = async (req, res) => {
     const wfIds = newProposals.map(p => p._id);
     const legacyList = await Proposal.find(
       { workflowRef: { $in: wfIds } },
-      'workflowRef region totalIncome totalExpenses proposedBudget projectedSubsidy projectedCorporateIncome department division amount'
+      'workflowRef region totalIncome totalExpenses proposedBudget projectedSubsidy projectedCorporateIncome department division originalDepartment originalDivision amount'
     ).lean();
     const legacyMap = new Map(legacyList.map(lp => [String(lp.workflowRef), lp]));
+
+    // Fallback organizational info from line-item collections when proposal-level fields are missing.
+    // This keeps Responsibility Center in list aligned with Proposal Details dialog values.
+    const orgFallbackMap = new Map();
+    const upsertOrgFallback = (rawKey, org = {}) => {
+      const key = rawKey ? String(rawKey) : '';
+      if (!key) return;
+      const existing = orgFallbackMap.get(key) || {};
+      const merged = {
+        division: existing.division || org.division || '',
+        department: existing.department || org.department || '',
+        region: existing.region || org.region || '',
+      };
+      orgFallbackMap.set(key, merged);
+    };
+
+    try {
+      const [incomeOrgRows, personnelOrgRows, mooeOrgRows, capitalOrgRows] = await Promise.all([
+        Income.find(
+          { $or: [{ workflowRef: { $in: wfIds } }, { proposalId: { $in: wfIds } }] },
+          'workflowRef proposalId division department responsibilityCenter office region'
+        ).lean(),
+        PersonnelServices.find(
+          { $or: [{ workflowRef: { $in: wfIds } }, { proposalId: { $in: wfIds } }] },
+          'workflowRef proposalId division department responsibilityCenter office region'
+        ).lean(),
+        MooeProposal.find(
+          { $or: [{ workflowRef: { $in: wfIds } }, { proposalId: { $in: wfIds } }] },
+          'workflowRef proposalId division department responsibilityCenter office region'
+        ).lean(),
+        CapitalOutlay.find(
+          { $or: [{ workflowRef: { $in: wfIds } }, { proposalId: { $in: wfIds } }] },
+          'workflowRef proposalId division department responsibilityCenter office region'
+        ).lean(),
+      ]);
+
+      const allOrgRows = [
+        ...(incomeOrgRows || []),
+        ...(personnelOrgRows || []),
+        ...(mooeOrgRows || []),
+        ...(capitalOrgRows || []),
+      ];
+
+      allOrgRows.forEach((row) => {
+        const key = row?.workflowRef || row?.proposalId;
+        const division = row?.division || row?.responsibilityCenter || '';
+        const department = row?.department || row?.office || '';
+        const region = row?.region || '';
+        upsertOrgFallback(key, { division, department, region });
+      });
+    } catch (orgErr) {
+      console.warn('[RC_FALLBACK] Failed to gather org fallback from line items:', orgErr.message);
+    }
 
     // Fallback: if my-proposals view returned none, broaden search to createdBy only (no status) then re-filter
     if (view === 'my-proposals' && newProposals.length === 0) {
@@ -1449,15 +1502,19 @@ exports.getProposals = async (req, res) => {
     // Map NewProposalWorkflow status to legacy format for consistency
     const mappedNewProposals = newProposals.map(p => {
       const legacy = legacyMap.get(String(p._id));
+      const orgFallback = orgFallbackMap.get(String(p._id)) || {};
       // Use legacy info if available, otherwise fallback to NewProposalWorkflow fields
-      const regionName = legacy?.region || p.region?.Region || p.region?.regionName || p.region?.RegionName || '';
-      const divisionName = legacy?.division || p.division || '';
-      const departmentName = legacy?.department || p.department || '';
-      // Responsibility Center: Central Office → show Division/Department; Regional → show Region (consolidated)
-      const isCentralOffice = p.isCentralOffice === true || /central\s*office/i.test(String(regionName));
-      const responsibilityCenter = isCentralOffice
-        ? [departmentName, divisionName].filter(Boolean).join(' / ') || divisionName || departmentName || undefined
-        : (regionName || divisionName || departmentName || undefined);
+      const regionName = legacy?.region || p.region?.Region || p.region?.regionName || p.region?.RegionName || orgFallback.region || '';
+      const divisionName = legacy?.division || legacy?.originalDivision || p.division || orgFallback.division || '';
+      const departmentName = legacy?.department || legacy?.originalDepartment || p.department || orgFallback.department || '';
+      // Responsibility Center display should prioritize the actual organizational unit
+      // (department/division) and only fallback to region when unit fields are unavailable.
+      const responsibilityCenter =
+        [departmentName, divisionName].filter(Boolean).join(' / ') ||
+        divisionName ||
+        departmentName ||
+        regionName ||
+        undefined;
       return ({
         _id: p._id,
         title: p.title,
@@ -1679,11 +1736,14 @@ exports.getProposalById = async (req, res) => {
     const regionName = legacy?.region || proposal.region?.Region || proposal.region?.regionName || proposal.region?.RegionName || '';
     const divisionName = legacy?.division || proposal.division || '';
     const departmentName = legacy?.department || proposal.department || '';
-    // Responsibility Center: Central Office → show Division/Department; Regional → show Region (consolidated)
-    const isCentralOffice = proposal.isCentralOffice === true || /central\s*office/i.test(String(regionName));
-    const responsibilityCenter = isCentralOffice
-      ? [departmentName, divisionName].filter(Boolean).join(' / ') || divisionName || departmentName || undefined
-      : (regionName || divisionName || departmentName || undefined);
+    // Responsibility Center display should prioritize the actual organizational unit
+    // (department/division) and only fallback to region when unit fields are unavailable.
+    const responsibilityCenter =
+      [departmentName, divisionName].filter(Boolean).join(' / ') ||
+      divisionName ||
+      departmentName ||
+      regionName ||
+      undefined;
 
     const mappedProposal = {
       ...proposal.toObject ? proposal.toObject() : proposal,
@@ -2400,10 +2460,133 @@ exports.deleteProposal = async (req, res) => {
 };
 
 // Upload attachment to proposal
+const normalizeAttachmentWorkflowStatus = (status) => {
+  const raw = String(status || '').trim().toUpperCase();
+  const statusMap = {
+    'DRAFT': 'DRAFT',
+    'FINALIZED': 'FINALIZED',
+    'FORWARDED TO REVIEWER': 'FORWARDED_TO_REVIEWER',
+    'FORWARDED TO APPROVER': 'FORWARDED_TO_APPROVER',
+    'FORWARDED TO BUDGET PLANNING ANALYST': 'FORWARDED_TO_BRD_ANALYST',
+    'FORWARDED TO BUDGET OFFICER': 'FORWARDED_TO_BRD_OFFICER',
+    'FORWARDED TO OVERALL BUDGET APPROVER': 'FORWARDED_TO_BRD_MANAGER',
+    'RETURNED TO PREPARER': 'RETURNED_TO_PREPARER',
+    'RETURNED TO REVIEWER': 'RETURNED_TO_REVIEWER',
+    'RETURNED TO APPROVER': 'RETURNED_TO_APPROVER',
+    'RETURNED TO BUDGET PLANNING ANALYST': 'RETURNED_TO_PLANNING_ANALYST',
+    'RETURNED TO BUDGET OFFICER': 'RETURNED_TO_OFFICER',
+  };
+
+  return statusMap[raw] || raw.replace(/\s+/g, '_');
+};
+
+const canUploadAttachmentByStatus = ({ userRole, proposalStatus, isProposalOwner }) => {
+  if (!userRole) return false;
+
+  if (proposalStatus === 'FINALIZED') {
+    return false;
+  }
+
+  if (userRole === 'SUPER ADMIN') {
+    return true;
+  }
+
+  if (proposalStatus === 'DRAFT' && userRole === 'BUDGET PREPARER' && isProposalOwner) {
+    return true;
+  }
+
+  if (proposalStatus === 'FORWARDED_TO_REVIEWER' && (
+    (userRole === 'BUDGET PREPARER' && isProposalOwner) ||
+    userRole === 'BUDGET REVIEWER'
+  )) {
+    return true;
+  }
+
+  if (proposalStatus === 'FORWARDED_TO_APPROVER' && userRole === 'BUDGET APPROVER') {
+    return true;
+  }
+
+  if (proposalStatus === 'FORWARDED_TO_BRD_ANALYST' && (
+    userRole === 'BUDGET APPROVER' || userRole === 'BUDGET PLANNING ANALYST'
+  )) {
+    return true;
+  }
+
+  if (proposalStatus === 'FORWARDED_TO_BRD_OFFICER' && (
+    userRole === 'BUDGET OFFICER' || userRole === 'BUDGET MANAGER'
+  )) {
+    return true;
+  }
+
+  if (proposalStatus === 'FORWARDED_TO_BRD_MANAGER' && userRole === 'BUDGET MANAGER') {
+    return true;
+  }
+
+  if (proposalStatus === 'RETURNED_TO_PREPARER' && userRole === 'BUDGET PREPARER' && isProposalOwner) {
+    return true;
+  }
+
+  if (proposalStatus === 'RETURNED_TO_REVIEWER' && userRole === 'BUDGET REVIEWER') {
+    return true;
+  }
+
+  if (proposalStatus === 'RETURNED_TO_APPROVER' && userRole === 'BUDGET APPROVER') {
+    return true;
+  }
+
+  if (proposalStatus === 'RETURNED_TO_PLANNING_ANALYST' && userRole === 'BUDGET PLANNING ANALYST') {
+    return true;
+  }
+
+  if (proposalStatus === 'RETURNED_TO_OFFICER' && userRole === 'BUDGET OFFICER') {
+    return true;
+  }
+
+  return false;
+};
+
+const getNormalizedRoleSet = (req) => {
+  const roles = Array.isArray(req.user?.Roles) ? req.user.Roles : [];
+  return new Set(roles.map((role) => String(role || '').toUpperCase().replace(/\s+/g, '_')));
+};
+
+const getAttachmentRoleFlags = (req) => {
+  const roleSet = getNormalizedRoleSet(req);
+  return {
+    isSuperAdmin: roleSet.has('SUPER_ADMIN') || roleSet.has('SUPERADMIN'),
+    isPreparer: roleSet.has('BUDGET_PREPARER'),
+    isReviewer: roleSet.has('BUDGET_REVIEWER'),
+    isApprover: roleSet.has('BUDGET_APPROVER'),
+    isPlanningAnalyst: roleSet.has('BUDGET_PLANNING_ANALYST'),
+    isBudgetOfficer: roleSet.has('BUDGET_OFFICER'),
+    isBudgetManager: roleSet.has('BUDGET_MANAGER') || roleSet.has('OVERALL_BUDGET_APPROVER'),
+  };
+};
+
+const canUploadAttachmentByRoleFlags = ({ roleFlags, proposalStatus, isProposalOwner }) => {
+  if (!roleFlags) return false;
+
+  if (proposalStatus === 'FINALIZED') return false;
+  if (roleFlags.isSuperAdmin) return true;
+
+  if ((proposalStatus === 'DRAFT' || proposalStatus === 'RETURNED_TO_PREPARER') && roleFlags.isPreparer && isProposalOwner) return true;
+  if ((proposalStatus === 'FORWARDED_TO_REVIEWER' || proposalStatus === 'RETURNED_TO_REVIEWER') && roleFlags.isReviewer) return true;
+  if ((proposalStatus === 'FORWARDED_TO_APPROVER' || proposalStatus === 'RETURNED_TO_APPROVER') && roleFlags.isApprover) return true;
+  if ((proposalStatus === 'FORWARDED_TO_BRD_ANALYST' || proposalStatus === 'RETURNED_TO_PLANNING_ANALYST') && roleFlags.isPlanningAnalyst) return true;
+  if ((proposalStatus === 'FORWARDED_TO_BRD_OFFICER' || proposalStatus === 'RETURNED_TO_OFFICER') && roleFlags.isBudgetOfficer) return true;
+  if (proposalStatus === 'FORWARDED_TO_BRD_MANAGER' && roleFlags.isBudgetManager) return true;
+
+  return false;
+};
+
 exports.uploadAttachment = async (req, res) => {
   try {
     const { id } = req.params;
     const { module = 'general' } = req.query;
+    const userRole = getUserRole(req);
+    const roleFlags = getAttachmentRoleFlags(req);
+    const requesterUserId = String(req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId || '');
+    const requesterName = String(req.user?.name || req.user?.UserName || `${req.user?.FirstName || ''} ${req.user?.LastName || ''}`.trim() || req.user?.email || '').trim();
     
     if (!req.file) {
       return res.status(400).json({
@@ -2417,6 +2600,24 @@ exports.uploadAttachment = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Proposal not found'
+      });
+    }
+
+    const normalizedStatus = normalizeAttachmentWorkflowStatus(proposal.status);
+    const isProposalOwnerById = String(proposal.createdBy || '') === requesterUserId;
+    const isProposalOwnerByName = requesterName && String(proposal.createdByName || '').toLowerCase() === requesterName.toLowerCase();
+    const isProposalOwner = isProposalOwnerById || isProposalOwnerByName;
+
+    const canUpload = canUploadAttachmentByRoleFlags({
+      roleFlags,
+      proposalStatus: normalizedStatus,
+      isProposalOwner,
+    });
+
+    if (!canUpload) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to attach files at the current workflow status'
       });
     }
 
@@ -2460,6 +2661,10 @@ exports.uploadAttachment = async (req, res) => {
 exports.deleteAttachment = async (req, res) => {
   try {
     const { id, attachmentId } = req.params;
+    const userRole = getUserRole(req);
+    const roleFlags = getAttachmentRoleFlags(req);
+    const requesterUserId = String(req.user?.id || req.user?._id || req.user?.UserId || req.user?.userId || '');
+    const requesterName = String(req.user?.name || req.user?.UserName || `${req.user?.FirstName || ''} ${req.user?.LastName || ''}`.trim() || req.user?.email || '').trim();
 
     const proposal = await NewProposalWorkflow.findById(id);
     if (!proposal) {
@@ -2484,18 +2689,23 @@ exports.deleteAttachment = async (req, res) => {
     }
 
     // At BRD Level, no one can delete attachments - view/download only
-    const brdStatuses = ['FORWARDED_TO_BRD_ANALYST', 'FORWARDED_TO_BRD_OFFICER', 'FORWARDED_TO_BRD_MANAGER'];
-    const proposalStatus = String(proposal.status || '').toUpperCase();
-    if (brdStatuses.includes(proposalStatus)) {
-      return res.status(403).json({ success: false, message: 'Deletion of attachments is not allowed when the proposal is at BRD level. You may view or download only.' });
+    const proposalStatus = normalizeAttachmentWorkflowStatus(proposal.status);
+
+    if (proposalStatus === 'FINALIZED') {
+      return res.status(403).json({ success: false, message: 'Deletion of attachments is not allowed for finalized proposals.' });
     }
 
-    // Permission: only uploader, BRD staff, or SUPER ADMIN can delete attachments (when not at BRD level)
-    const deleterUserId = String(req.user?.id);
-    const userRole = getUserRole(req);
-    const isBRDStaff = ['BUDGET PLANNING ANALYST', 'BUDGET_PLANNING_ANALYST', 'BUDGET OFFICER', 'BUDGET_OFFICER', 'BUDGET MANAGER', 'BUDGET_MANAGER'].includes(userRole);
-    const isUploader = String(targetAttachment.uploadedBy || '') === deleterUserId;
-    if (userRole !== 'SUPER ADMIN' && !isBRDStaff && !isUploader) {
+    const isProposalOwnerById = String(proposal.createdBy || '') === requesterUserId;
+    const isProposalOwnerByName = requesterName && String(proposal.createdByName || '').toLowerCase() === requesterName.toLowerCase();
+    const isProposalOwner = isProposalOwnerById || isProposalOwnerByName;
+
+    const canDeleteByStatus = canUploadAttachmentByRoleFlags({
+      roleFlags,
+      proposalStatus,
+      isProposalOwner,
+    });
+
+    if (!canDeleteByStatus) {
       return res.status(403).json({ success: false, message: 'You do not have permission to delete this attachment' });
     }
 

@@ -65,6 +65,19 @@ export function getUserRestrictions(currentUser) {
   };
 }
 
+const normalizeStringList = (values) => {
+  if (!Array.isArray(values)) return [];
+  return values
+    .map((value) => {
+      if (value && typeof value === 'object') {
+        return value.value ?? value.label ?? value.fiscalYear ?? value.year ?? value.name ?? '';
+      }
+      return value;
+    })
+    .map((value) => String(value ?? '').trim())
+    .filter(Boolean);
+};
+
 /**
  * Check if user should be in read-only mode
  */
@@ -80,12 +93,12 @@ export function canAccessBudgetType(currentUser, budgetType) {
   if (!budgetType) return true; // If no budget type specified, allow access
 
   const restrictions = getUserRestrictions(currentUser);
-  const allowedTypes = restrictions.allowedBudgetTypes;
+  const allowedTypes = normalizeStringList(restrictions.allowedBudgetTypes);
 
   // If no restrictions configured, allow all
   if (!allowedTypes || allowedTypes.length === 0) return true;
 
-  return allowedTypes.includes(budgetType);
+  return allowedTypes.includes(String(budgetType));
 }
 
 /**
@@ -95,7 +108,7 @@ export function canAccessFiscalYear(currentUser, fiscalYear) {
   if (!fiscalYear) return true; // If no fiscal year specified, allow access
 
   const restrictions = getUserRestrictions(currentUser);
-  const allowedYears = restrictions.allowedFiscalYears;
+  const allowedYears = normalizeStringList(restrictions.allowedFiscalYears);
 
   // If no restrictions configured, allow all
   if (!allowedYears || allowedYears.length === 0) return true;
@@ -110,15 +123,15 @@ export function getFilteredOptions(currentUser, options, type) {
   const restrictions = getUserRestrictions(currentUser);
 
   if (type === 'budgetType') {
-    const allowedTypes = restrictions.allowedBudgetTypes;
+    const allowedTypes = normalizeStringList(restrictions.allowedBudgetTypes);
     if (!allowedTypes || allowedTypes.length === 0) return options;
-    return options.filter(option => allowedTypes.includes(option.value || option));
+    return options.filter(option => allowedTypes.includes(String(option.value ?? option)));
   }
 
   if (type === 'fiscalYear') {
-    const allowedYears = restrictions.allowedFiscalYears;
+    const allowedYears = normalizeStringList(restrictions.allowedFiscalYears);
     if (!allowedYears || allowedYears.length === 0) return options;
-    return options.filter(option => allowedYears.includes(option.value?.toString() || option.toString()));
+    return options.filter(option => allowedYears.includes(String(option.value ?? option)));
   }
 
   return options;

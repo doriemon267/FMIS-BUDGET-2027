@@ -384,7 +384,7 @@ personnelServicesSchema.statics.resetMealAllowance = async function(employeeNumb
       // Get all numeric fields (25 components per SUBTOTAL formula)
       const numericFields = [
         "annualSalary", "RATA", "PERA", "uniformALLOWANCE", "productivityIncentive",
-        "medical", "childrenAllowance", "meal", "cashGift", 
+        "medical", "childrenAllowance", "meal", "cashGift", "additionalMedical",
         "subsistenceAllowance", "subsistenceAllowanceMDS", "subsistenceAllowanceST", "loyaltyAward", "overtimePay",
         "midyearBonus", "yearEndBonus", "gsisPremium", "philhealthPremium", "pagibigPremium", 
         "employeeCompensation", "courtAppearance", "earnedLeaves", "retirementBenefits", 

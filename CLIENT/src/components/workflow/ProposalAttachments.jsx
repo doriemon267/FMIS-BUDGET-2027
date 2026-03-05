@@ -22,13 +22,14 @@ const ProposalAttachments = ({ proposal, moduleName = 'general', userInfo, onCha
   }, [proposal]);
 
   const normalizedRoles = (userInfo?.Roles || []).map(r => String(r).toUpperCase());
-  const workflowRoles = userInfo?.hierarchicalAccess?.workflowRoles || [];
   
-  const isPreparer = normalizedRoles.includes('BUDGET PREPARER') || normalizedRoles.includes('BUDGET_PREPARER') || workflowRoles.includes('Preparer');
-  const isReviewer = normalizedRoles.includes('BUDGET REVIEWER') || normalizedRoles.includes('BUDGET_REVIEWER') || workflowRoles.includes('Reviewer');
-  const isApprover = normalizedRoles.includes('BUDGET APPROVER') || normalizedRoles.includes('BUDGET_APPROVER') || workflowRoles.includes('Approver');
-  const isManager = normalizedRoles.includes('BUDGET MANAGER') || normalizedRoles.includes('BUDGET_MANAGER') || workflowRoles.includes('Manager');
-  const isSuperAdmin = normalizedRoles.includes('SUPER ADMIN') || normalizedRoles.includes('SUPERADMIN') || workflowRoles.includes('superAdmin');
+  const isPreparer = normalizedRoles.includes('BUDGET PREPARER') || normalizedRoles.includes('BUDGET_PREPARER');
+  const isReviewer = normalizedRoles.includes('BUDGET REVIEWER') || normalizedRoles.includes('BUDGET_REVIEWER');
+  const isApprover = normalizedRoles.includes('BUDGET APPROVER') || normalizedRoles.includes('BUDGET_APPROVER');
+  const isManager = normalizedRoles.includes('BUDGET MANAGER') || normalizedRoles.includes('BUDGET_MANAGER');
+  const isPlanningAnalyst = normalizedRoles.includes('BUDGET_PLANNING_ANALYST') || normalizedRoles.includes('BUDGET PLANNING ANALYST');
+  const isBudgetOfficer = normalizedRoles.includes('BUDGET_OFFICER') || normalizedRoles.includes('BUDGET OFFICER');
+  const isSuperAdmin = normalizedRoles.includes('SUPER ADMIN') || normalizedRoles.includes('SUPERADMIN') || normalizedRoles.includes('SUPER_ADMIN');
   
   // Extract user ID from multiple possible locations
   const userId = userInfo?.Username?.[0] || 
@@ -38,63 +39,56 @@ const ProposalAttachments = ({ proposal, moduleName = 'general', userInfo, onCha
                  userInfo?.Id || 
                  userInfo?.email?.split('@')[0] ||
                  '';
+
+  const normalizeWorkflowStatus = (status) => {
+    const raw = String(status || '').trim().toUpperCase();
+    const statusMap = {
+      'DRAFT': 'DRAFT',
+      'FINALIZED': 'FINALIZED',
+      'FORWARDED TO REVIEWER': 'FORWARDED_TO_REVIEWER',
+      'FORWARDED TO APPROVER': 'FORWARDED_TO_APPROVER',
+      'FORWARDED TO BUDGET PLANNING ANALYST': 'FORWARDED_TO_BRD_ANALYST',
+      'FORWARDED TO BUDGET OFFICER': 'FORWARDED_TO_BRD_OFFICER',
+      'FORWARDED TO OVERALL BUDGET APPROVER': 'FORWARDED_TO_BRD_MANAGER',
+      'RETURNED TO PREPARER': 'RETURNED_TO_PREPARER',
+      'RETURNED TO REVIEWER': 'RETURNED_TO_REVIEWER',
+      'RETURNED TO APPROVER': 'RETURNED_TO_APPROVER',
+      'RETURNED TO BUDGET PLANNING ANALYST': 'RETURNED_TO_PLANNING_ANALYST',
+      'RETURNED TO BUDGET OFFICER': 'RETURNED_TO_OFFICER',
+    };
+
+    return statusMap[raw] || raw.replace(/\s+/g, '_');
+  };
+
+  const workflowStatus = normalizeWorkflowStatus(proposal?.status);
   
   // Check ownership - for DRAFT status, allow if user is Preparer (loosen the ownership check)
   // In DRAFT, any Budget Preparer should be able to attach since they're creating it
-  const isOwner = proposal?.status === 'DRAFT' ? isPreparer : 
+  const isOwner = workflowStatus === 'DRAFT' ? isPreparer : 
                   (String(proposal?.processBy || '').toLowerCase() === String(userId || '').toLowerCase());
   
   // Determine if user can attach files based on proposal status and their role
   const canAttachFiles = () => {
-    const status = String(proposal?.status || '').trim();
-    const statusUpper = status.toUpperCase();
-    
-    // FINALIZED - No one can attach (read-only), including Super Admin
-    if (statusUpper === 'FINALIZED') {
-      return false;
-    }
-    
-    // Super admins can attach (except when Finalized, handled above)
-    if (isSuperAdmin) {
-      return true;
-    }
-    
-    // DRAFT - Only Budget Preparer can attach
-    if (statusUpper === 'DRAFT') {
-      if (isPreparer) {
-        return true;
-      }
-    }
-    
-    // FORWARDED_TO_REVIEWER - Budget Preparer (owner) can still add docs, or Reviewer can
-    if (statusUpper === 'FORWARDED_TO_REVIEWER' && ((isPreparer && isOwner) || isReviewer)) return true;
-    
-    // FORWARDED_TO_APPROVER - Reviewer or Approver can attach
-    if (statusUpper === 'FORWARDED_TO_APPROVER' && (isReviewer || isApprover)) return true;
-    
-    // FORWARDED_TO_BRD_ANALYST - Approver or Analyst can attach
-    if (statusUpper === 'FORWARDED_TO_BRD_ANALYST' && (isApprover || normalizedRoles.includes('BUDGET_PLANNING_ANALYST') || normalizedRoles.includes('BUDGET PLANNING ANALYST'))) return true;
-    
-    // FORWARDED_TO_BRD_OFFICER - Officer can attach
-    if (statusUpper === 'FORWARDED_TO_BRD_OFFICER' && (normalizedRoles.includes('BUDGET_OFFICER') || normalizedRoles.includes('BUDGET OFFICER') || isManager)) return true;
-    
-    // FORWARDED_TO_BRD_MANAGER - Manager can attach
+    const statusUpper = workflowStatus;
+
+    if (statusUpper === 'FINALIZED') return false;
+    if (isSuperAdmin) return true;
+
+    if ((statusUpper === 'DRAFT' || statusUpper === 'RETURNED_TO_PREPARER') && isPreparer && isOwner) return true;
+    if ((statusUpper === 'FORWARDED_TO_REVIEWER' || statusUpper === 'RETURNED_TO_REVIEWER') && isReviewer) return true;
+    if ((statusUpper === 'FORWARDED_TO_APPROVER' || statusUpper === 'RETURNED_TO_APPROVER') && isApprover) return true;
+    if ((statusUpper === 'FORWARDED_TO_BRD_ANALYST' || statusUpper === 'RETURNED_TO_PLANNING_ANALYST') && isPlanningAnalyst) return true;
+    if ((statusUpper === 'FORWARDED_TO_BRD_OFFICER' || statusUpper === 'RETURNED_TO_OFFICER') && isBudgetOfficer) return true;
     if (statusUpper === 'FORWARDED_TO_BRD_MANAGER' && isManager) return true;
-    
-    // RETURNED statuses - whoever it was returned to can attach
-    if (statusUpper === 'RETURNED_TO_PREPARER' && isPreparer && isOwner) return true;
-    if (statusUpper === 'RETURNED_TO_REVIEWER' && isReviewer) return true;
-    if (statusUpper === 'RETURNED_TO_APPROVER' && isApprover) return true;
-    if (statusUpper === 'RETURNED_TO_PLANNING_ANALYST' && (normalizedRoles.includes('BUDGET_PLANNING_ANALYST') || normalizedRoles.includes('BUDGET PLANNING ANALYST'))) return true;
-    if (statusUpper === 'RETURNED_TO_OFFICER' && (normalizedRoles.includes('BUDGET_OFFICER') || normalizedRoles.includes('BUDGET OFFICER'))) return true;
-    
+
     return false;
   };
 
-  // At BRD Level, no one can delete attachments - view/download only
-  const brdStatuses = ['FORWARDED_TO_BRD_ANALYST', 'FORWARDED_TO_BRD_OFFICER', 'FORWARDED_TO_BRD_MANAGER'];
-  const isAtBRDLevel = brdStatuses.includes(String(proposal?.status || '').toUpperCase());
-  const canDeleteAttachments = !isAtBRDLevel && canAttachFiles();
+  const canDeleteFilesByStatus = () => {
+    return canAttachFiles();
+  };
+
+  const canDeleteAttachments = canDeleteFilesByStatus();
 
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];

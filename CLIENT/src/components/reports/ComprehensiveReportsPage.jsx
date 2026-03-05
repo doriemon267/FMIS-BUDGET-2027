@@ -42,9 +42,6 @@ import {
   ExpandMore,
   ExpandLess,
   Close,
-  ZoomIn,
-  ZoomOut,
-  RestartAlt,
 } from "@mui/icons-material";
 import PesoIcon from "../icons/PesoIcon";
 import api from "../../config/api";
@@ -115,8 +112,6 @@ const ComprehensiveReportsPage = () => {
   const [expandedMooeCoKeys, setExpandedMooeCoKeys] = useState(() => new Set());
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
-  const [pdfZoom, setPdfZoom] = useState(100);
-  const [pdfViewMode, setPdfViewMode] = useState("zoom");
 
   useEffect(() => {
     return () => {
@@ -128,43 +123,10 @@ const ComprehensiveReportsPage = () => {
 
   const closePdfDialog = () => {
     setPdfDialogOpen(false);
-    setPdfZoom(100);
-    setPdfViewMode("zoom");
     if (pdfPreviewUrl) {
       window.URL.revokeObjectURL(pdfPreviewUrl);
       setPdfPreviewUrl("");
     }
-  };
-
-  const zoomInPdf = () => {
-    setPdfViewMode("zoom");
-    setPdfZoom((prev) => Math.min(prev + 10, 300));
-  };
-  const zoomOutPdf = () => {
-    setPdfViewMode("zoom");
-    setPdfZoom((prev) => Math.max(prev - 10, 50));
-  };
-  const resetPdfZoom = () => {
-    setPdfViewMode("zoom");
-    setPdfZoom(100);
-  };
-  const fitPdfWidth = () => setPdfViewMode("page-width");
-  const fitPdfPage = () => setPdfViewMode("page-fit");
-
-  const getPdfViewerSrc = () => {
-    if (!pdfPreviewUrl) return "";
-    const zoomValue = pdfViewMode === "zoom" ? String(pdfZoom) : pdfViewMode;
-    return `${pdfPreviewUrl}#zoom=${zoomValue}`;
-  };
-
-  const downloadPreviewPdf = () => {
-    if (!pdfPreviewUrl) return;
-    const link = document.createElement("a");
-    link.href = pdfPreviewUrl;
-    link.download = `Comprehensive_Report_${selectedFiscalYear || "AllYears"}_${selectedBudgetType || "AllTypes"}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   useEffect(() => {
@@ -428,8 +390,6 @@ const ComprehensiveReportsPage = () => {
         window.URL.revokeObjectURL(pdfPreviewUrl);
       }
       setPdfPreviewUrl(url);
-      setPdfZoom(100);
-      setPdfViewMode("zoom");
       setPdfDialogOpen(true);
     } catch (err) {
       console.error("Error generating PDF preview:", err);
@@ -785,42 +745,13 @@ const ComprehensiveReportsPage = () => {
             <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
               Comprehensive Report PDF Preview
             </Typography>
-            <Typography sx={{ mr: 1, minWidth: 56, textAlign: "right" }} variant="body2">
-              {pdfViewMode === "zoom" ? `${pdfZoom}%` : pdfViewMode === "page-width" ? "Fit Width" : "Fit Page"}
-            </Typography>
-            <Button color="inherit" size="small" onClick={fitPdfWidth} sx={{ mr: 0.5 }}>
-              Fit Width
-            </Button>
-            <Button color="inherit" size="small" onClick={fitPdfPage} sx={{ mr: 1 }}>
-              Fit Page
-            </Button>
-            <Tooltip title="Zoom Out">
-              <IconButton color="inherit" onClick={zoomOutPdf}>
-                <ZoomOut />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Zoom In">
-              <IconButton color="inherit" onClick={zoomInPdf}>
-                <ZoomIn />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Reset Zoom">
-              <IconButton color="inherit" onClick={resetPdfZoom}>
-                <RestartAlt />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Download PDF">
-              <IconButton color="inherit" onClick={downloadPreviewPdf}>
-                <FileDownload />
-              </IconButton>
-            </Tooltip>
           </Toolbar>
         </AppBar>
         <DialogContent sx={{ p: 0, bgcolor: "#525659", height: "100%" }}>
           {pdfPreviewUrl ? (
             <iframe
               title="Comprehensive Report PDF"
-              src={getPdfViewerSrc()}
+              src={pdfPreviewUrl}
               style={{ width: "100%", height: "100%", border: "none" }}
             />
           ) : (

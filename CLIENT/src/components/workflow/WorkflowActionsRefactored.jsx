@@ -68,7 +68,6 @@ const getWorkflowActions = (userRole, proposalStatus, assignmentLevel) => {
 
   if (role === 'BUDGET PREPARER') {
     if (status === 'DRAFT' || status === 'RETURNED' || status === 'INITIAL') {
-      // If user is assigned at the OFFICE level, allow direct submit to Approver
       if (assignmentLevel && String(assignmentLevel).toUpperCase() === 'OFFICE') {
         actions.push({
           id: 'submit-to-approver',

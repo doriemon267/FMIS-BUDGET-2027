@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Box,
   Grid,
@@ -34,6 +34,7 @@ import ErrorAlert from '../components/common/ErrorAlert';
 import { useThemeContext } from '../context/ThemeContext';
 import { useUser } from '../context/UserContext';
 import { useRegion } from '../context/RegionContext';
+import { hasPermission } from '../utils/permissions';
 import WorkflowTemplateSelector from '../components/workflow/WorkflowTemplateSelector';
 import DashboardAnalytics from '../components/dashboard/DashboardAnalytics';
 import InAppHelp from '../components/common/InAppHelp';
@@ -290,6 +291,71 @@ const HomePage = () => {
 
   const [templateSelectorOpen, setTemplateSelectorOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [canAccessCreateProposal, setCanAccessCreateProposal] = useState(false);
+
+  const userRolesUpper = useMemo(
+    () => (currentUser?.Roles || []).map((role) => String(role).toUpperCase()),
+    [currentUser]
+  );
+
+  const hasCreateProposalEligibility = useMemo(() => {
+    const hasCreatePermission =
+      hasPermission(currentUser, 'CreateProposals') ||
+      hasPermission(currentUser, 'EditOwnProposals');
+
+    const hasBlockedRole =
+      userRolesUpper.includes('BUDGET MANAGER') ||
+      userRolesUpper.includes('BUDGET_MANAGER') ||
+      userRolesUpper.includes('BUDGET OFFICER') ||
+      userRolesUpper.includes('BUDGET_OFFICER') ||
+      userRolesUpper.includes('BUDGET APPROVER') ||
+      userRolesUpper.includes('BUDGET_APPROVER') ||
+      userRolesUpper.includes('BUDGET REVIEWER') ||
+      userRolesUpper.includes('BUDGET_REVIEWER') ||
+      userRolesUpper.includes('BUDGET PLANNING ANALYST') ||
+      userRolesUpper.includes('BUDGET_PLANNING_ANALYST');
+
+    return hasCreatePermission && !hasBlockedRole;
+  }, [currentUser, userRolesUpper]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const checkCreateProposalAccess = async () => {
+      if (!currentUser || !hasCreateProposalEligibility) {
+        if (isMounted) setCanAccessCreateProposal(false);
+        return;
+      }
+
+      try {
+        const response = await api.get('/allproposal/proposals', {
+          params: { page: 1, limit: 200 },
+        });
+
+        const proposals = Array.isArray(response?.data?.proposals)
+          ? response.data.proposals
+          : [];
+
+        const hasSubmittedProposal = proposals.some((proposal) => {
+          const statusUpper = String(proposal?.status || '').toUpperCase();
+          return statusUpper && statusUpper !== 'DRAFT';
+        });
+
+        if (isMounted) {
+          setCanAccessCreateProposal(!hasSubmittedProposal);
+        }
+      } catch (error) {
+        logger.warn('Failed to evaluate create proposal dashboard access', error);
+        if (isMounted) setCanAccessCreateProposal(false);
+      }
+    };
+
+    checkCreateProposalAccess();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser, hasCreateProposalEligibility]);
 
   // Fetch active settings for template selector
   const { data: activeSettings } = useQuery({
@@ -300,9 +366,21 @@ const HomePage = () => {
     },
   });
 
-  const handleCreateProposal = () => navigate('/proposal');
+  const handleCreateProposal = () => {
+    if (!canAccessCreateProposal) {
+      toast.error('Create Proposal is not available after submission.');
+      navigate('/not-authorized');
+      return;
+    }
+    navigate('/proposal');
+  };
   
   const handleCreateFromTemplate = () => {
+    if (!canAccessCreateProposal) {
+      toast.error('Create Proposal from template is not available after submission.');
+      navigate('/not-authorized');
+      return;
+    }
     setTemplateSelectorOpen(true);
   };
 
@@ -446,7 +524,7 @@ const HomePage = () => {
                   ))}
                 </Stack>
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-                  {isPreparer && (
+                  {isPreparer && canAccessCreateProposal && (
                     <>
                       <Button
                         variant='contained'
@@ -833,7 +911,7 @@ const HomePage = () => {
             </Typography>
 
             <Grid container spacing={{ xs: 2, md: 3 }}>
-              {isPreparer && (
+              {isPreparer && canAccessCreateProposal && (
                 <Grid item xs={12} sm={6} md={4}>
                   <ActionCard
                     title='Create New Proposal'

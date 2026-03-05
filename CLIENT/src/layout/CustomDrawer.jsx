@@ -47,6 +47,7 @@ import logger from "../utils/logger";
 const CustomDrawer = ({ collapsed = false }) => {
   const [openSettings, setOpenSettings] = useState(false);
   const [hasFinalizedProposals, setHasFinalizedProposals] = useState(false);
+  const [canAccessCreateProposal, setCanAccessCreateProposal] = useState(false);
   const { currentUser } = useUser();
   // Simple role flags - check both primary roles and workflow roles
   const roles = (currentUser?.Roles || []).map(String);
@@ -108,6 +109,55 @@ const CustomDrawer = ({ collapsed = false }) => {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const checkCreateProposalAccess = async () => {
+      try {
+        const isCreateProposalCandidate =
+          (hasPermission(currentUser, "CreateProposals") || hasPermission(currentUser, "EditOwnProposals")) &&
+          !isOverallApprover &&
+          !isBudgetOfficer &&
+          !isApprover &&
+          !isReviewer &&
+          !isBudgetPlanningAnalyst;
+
+        if (!isCreateProposalCandidate) {
+          if (isMounted) setCanAccessCreateProposal(false);
+          return;
+        }
+
+        const response = await api.get("/allproposal/proposals", {
+          params: { page: 1, limit: 100 },
+        });
+
+        const proposals = Array.isArray(response?.data?.proposals)
+          ? response.data.proposals
+          : [];
+
+        const hasSubmittedProposal = proposals.some((proposal) => {
+          const statusUpper = String(proposal?.status || "").toUpperCase();
+          return statusUpper && statusUpper !== "DRAFT";
+        });
+
+        if (isMounted) {
+          setCanAccessCreateProposal(!hasSubmittedProposal);
+        }
+      } catch (err) {
+        logger.warn("Failed to evaluate create proposal access", err);
+        if (isMounted) setCanAccessCreateProposal(false);
+      }
+    };
+
+    if (currentUser) {
+      checkCreateProposalAccess();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser, isOverallApprover, isBudgetOfficer, isApprover, isReviewer, isBudgetPlanningAnalyst]);
   return (
     <Box
       sx={{
@@ -145,6 +195,7 @@ const CustomDrawer = ({ collapsed = false }) => {
                 isAllow:
                   (hasPermission(currentUser, "CreateProposals") ||
                     hasPermission(currentUser, "EditOwnProposals")) &&
+                  canAccessCreateProposal &&
                   !isOverallApprover &&
                   !isBudgetOfficer &&
                   !isApprover &&

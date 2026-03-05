@@ -1679,21 +1679,10 @@ const NewProposalWorkflowPage = () => {
         "Returned",
       ];
       
-      // console.log('✅ User is BUDGET PREPARER. Status check:', {
-        // currentStatus,
-        // isDraft: draftStatusVariants.includes(currentStatus),
-        // variants: draftStatusVariants
-      // });
-      
       if (draftStatusVariants.includes(currentStatus)) {
         // If the current user is a PREPARER assigned at OFFICE level, show Submit to Approver label
         const assignmentLevel = currentUser?.hierarchicalAccess?.assignmentLevel || currentUser?.assignmentLevel;
         const isOfficePreparer = assignmentLevel && String(assignmentLevel).toUpperCase() === 'OFFICE';
-        // console.log('📤 Adding Submit action:', {
-          // label: isOfficePreparer ? "Submit to Approver" : "Submit to Budget Reviewer",
-          // assignmentLevel,
-          // isOfficePreparer
-        // });
         actions.push({
           label: isOfficePreparer ? "Submit to Approver" : "Submit to Budget Reviewer",
           value: isOfficePreparer ? "submit-to-approver" : "submit-to-reviewer",
@@ -1880,17 +1869,9 @@ const NewProposalWorkflowPage = () => {
       (proposal.status && filterDbStatus && 
         proposal.status.toLowerCase() === filterDbStatus.toLowerCase());
 
-    // Debug logging for filter issues
-    if (filterStatus !== "all" && !matchesFilter && proposal) {
-      // console.log(`Filter debug - filterStatus: ${filterStatus}, filterDbStatus: ${filterDbStatus}, proposal.status: ${proposal.status}`);
-    }
-
     return matchesSearch && matchesFilter;
   });
 
-  useEffect(() => {
-    // console.log("Capital Outlay Data:", proposalDetails?.capitalOutlay);
-  }, [proposalDetails]);
   // Render proposal status chip
   const renderStatusChip = (status) => {
     const statusColorMap = {
@@ -3196,12 +3177,22 @@ const NewProposalWorkflowPage = () => {
                       Responsibility Center
                     </Typography>
                     <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                      {selectedProposal?.responsibilityCenter ||
-                        selectedProposal?.division ||
+                      {selectedProposal?.division ||
+                        selectedProposal?.department ||
                         proposalDetails?.income?.[0]?.division ||
-                        proposalDetails?.income?.[0]?.region ||
+                        proposalDetails?.income?.[0]?.department ||
+                        proposalDetails?.income?.[0]?.responsibilityCenter ||
                         proposalDetails?.personnel?.[0]?.division ||
+                        proposalDetails?.personnel?.[0]?.department ||
                         proposalDetails?.mooe?.[0]?.division ||
+                        proposalDetails?.mooe?.[0]?.department ||
+                        proposalDetails?.capitalOutlay?.[0]?.division ||
+                        proposalDetails?.capitalOutlay?.[0]?.department ||
+                        selectedProposal?.responsibilityCenter ||
+                        proposalDetails?.income?.[0]?.region ||
+                        proposalDetails?.personnel?.[0]?.region ||
+                        proposalDetails?.mooe?.[0]?.region ||
+                        proposalDetails?.capitalOutlay?.[0]?.region ||
                         "N/A"}
                     </Typography>
                   </Grid>

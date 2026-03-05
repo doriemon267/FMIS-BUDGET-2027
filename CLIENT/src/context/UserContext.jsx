@@ -226,7 +226,8 @@ const UserProvider = ({ children }) => {
   // --- UI HELPERS ---
   const hierarchical = currentUser?.hierarchicalAccess || {};
   const workflowRoles = Array.isArray(hierarchical.workflowRoles) ? hierarchical.workflowRoles : [];
-  const isSuperAdmin = currentUser?.Roles?.includes('SUPER_ADMIN') || currentUser?.Roles?.includes('ADMIN');
+  const normalizedRoles = (currentUser?.Roles || []).map((role) => String(role || '').toUpperCase().replace(/\s+/g, '_'));
+  const isSuperAdmin = normalizedRoles.includes('SUPER_ADMIN') || normalizedRoles.includes('SUPERADMIN');
 
   const hasWorkflowRole = (role) => {
     if (isSuperAdmin) return true;
